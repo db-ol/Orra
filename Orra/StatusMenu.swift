@@ -58,8 +58,7 @@ struct StatusMenu: View {
             }
             if let transcript = pushToTalk.lastTranscript {
                 Button("Copy Last Dictation") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(transcript, forType: .string)
+                    TextInserter.copy(transcript, to: .general)
                 }
             }
         } else {
