@@ -1,0 +1,63 @@
+import Foundation
+import Qwen3ASR
+
+/// Owns Qwen3-ASR from speech-swift. An actor, so loading and transcribing run off the
+/// main actor, and the model, which speech-swift says is not thread safe, serves one
+/// dictation at a time.
+///
+/// Written against speech-swift at commit 1f54e56. Not behind #if canImport(Qwen3ASR) on
+/// purpose: without the package the build fails, instead of the engine and its test
+/// silently dropping out of the build.
+actor Qwen3Engine {
+    private var model: Qwen3ASRModel?
+
+    func load() async throws {
+        guard model == nil else { return }
+        guard SpeechModel.isOnThisMac() else { throw TranscriptionError.modelMissing }
+        // Offline mode keeps the load from touching the network. Loading also caps MLX's
+        // buffer cache (speech-swift pull request 498), so memory stays bounded across
+        // many dictations. It also raises MLX's wired limit (MetalBudget.pinMemory in
+        // speech-swift), so the model's MLX buffers stay wired in memory while Orra runs.
+        // That last point is read from the source, not measured.
+        let loaded = try await Qwen3ASRModel.fromPretrained(modelId: SpeechModel.id, offlineMode: true)
+        // One second of silence before the first dictation. MLX reads the weights only when
+        // they are first used. In a benchmark on 2026-10-05, the first launch of a program
+        // with a freshly compiled MLX Metal library also took about 2 s for its first
+        // transcription and later ones about 0.3 s, probably Metal compiling GPU programs.
+        // Silence gives no text, so this only moves such one time costs from the user's first
+        // dictation to the launch.
+        _ = run(loaded, on: [Float](repeating: 0, count: RecordingLimits.sampleRate))
+        model = loaded
+    }
+
+    func transcribe(_ samples: [Float]) throws -> String {
+        guard let model else { throw TranscriptionError.modelMissing }
+        guard !samples.isEmpty else { throw TranscriptionError.noAudio }
+        return run(model, on: samples)
+    }
+
+    private func run(_ model: Qwen3ASRModel, on samples: [Float]) -> String {
+        let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
+        // No language hint: docs/asr-baseline.md shows that a fixed hint hurts mixed
+        // Chinese and English. The token budget grows with the length of the audio.
+        // Use the options overload on purpose. The shorter overload bans any repeated
+        // three token sequence once audio passes 15 seconds, which changes repeated
+        // numbers and words. Loops are cut by TranscriptGuard and the token budget instead.
+        let options = Qwen3DecodingOptions(
+            maxTokens: max(448, Int(seconds * 12)),
+            language: nil,
+            longInputThresholdSeconds: .infinity
+        )
+        return model.transcribe(audio: samples, sampleRate: RecordingLimits.sampleRate, options: options)
+    }
+}
+
+extension Transcription {
+    static func qwen3() -> Transcription {
+        let engine = Qwen3Engine()
+        return Transcription(
+            load: { try await engine.load() },
+            transcribe: { samples in try await engine.transcribe(samples) }
+        )
+    }
+}
