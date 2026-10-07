@@ -98,6 +98,10 @@ Build and test commands, run in the repository root:
     rises and falls, and that the indicator's panel can never become key or main. It
     uses fakes, so no window opens and no sound plays. LevelMeterTests checks the peak
     the audio thread stores.
+  - SetupChecklistTests covers the welcome window's three steps: the model step for every
+    installer state and for an installed model that is loading or failed to load, the
+    microphone step for every permission state, the Accessibility step, and when setup
+    counts as complete, which decides whether launch shows the window.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -193,9 +197,9 @@ Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still 
 Fn hotkey, added on 2026-10-04, not verified yet. Since 2026-10-05 fn is no longer the
 default talk key. Turn it on under Talk Key in the menu for the fn checks:
 
-- [ ] At launch without Accessibility access, the system prompt appears, the menu bar
-  icon is a crossed out mic, and the menu shows "The talk key needs Accessibility access"
-  and "Grant Accessibility Access…".
+- [ ] At launch without Accessibility access, the welcome window appears instead of the
+  system prompt, the menu bar icon is a crossed out mic, and the menu shows "The talk
+  key needs Accessibility access" and "Grant Accessibility Access…".
 - [ ] After turning Orra on under System Settings > Privacy & Security > Accessibility,
   within a few seconds the icon becomes a plain mic and the menu shows "Hold right
   Control to talk", or the keys that are on, without relaunching.
@@ -417,6 +421,29 @@ and check connections with `lsof -nP -i -a -c Orra`:
 - [ ] Typing in other apps and opening the menu stay instant during the download and
   during "Checking the downloaded files…".
 - [ ] On a Mac with macOS 15.6, if one is at hand, repeat the first four checks.
+
+Welcome window, added on 2026-10-07, not verified yet. For a clean first launch, quit Orra,
+move ~/Library/Application Support/io.github.db-ol.Orra/Models and the two old cache
+folders named in README.md out of the way (do not delete them), and turn Orra off under
+Microphone in System Settings > Privacy & Security. Quit Orra before turning off
+Accessibility for it. Undo all of it afterwards:
+
+- [ ] At launch the welcome window opens in front of other apps, with three steps:
+  Download the speech model, Allow the microphone, Allow Accessibility. No system prompt
+  appears on its own.
+- [ ] Download Speech Model starts the download, shows a progress bar, the percentage and
+  the server, and Cancel Download stops it. The menu shows the same progress.
+- [ ] While the model downloads, Allow Microphone Access… shows the macOS prompt, and the
+  step gets its check mark after Allow.
+- [ ] With microphone access turned off in System Settings, the step offers Open
+  Microphone Settings…, and turning Orra on there gives the step its check mark within a
+  second, without a relaunch.
+- [ ] Grant Accessibility Access… shows the macOS prompt. After turning Orra on in the
+  list, the step shows "Hold right Control to talk" within a few seconds.
+- [ ] Once all three are done, the window says "Orra is ready", and Done closes it. The
+  next launch shows no window.
+- [ ] Closing the window with steps left: the menu shows Setup Guide…, which opens it again,
+  and the next launch opens it again. With all steps done, the menu has no Setup Guide….
 
 Recording indicator and sounds, added on 2026-10-07, not verified yet:
 

@@ -159,9 +159,10 @@ final class PushToTalkController {
         self.saveMicrophone = saveMicrophone
     }
 
-    /// Starts watching for the hotkey. Without Accessibility access, shows the system prompt
-    /// and installs the tap once access is granted. The speech model loads once
-    /// ModelInstaller has it in place, see AppDelegate.
+    /// Starts watching for the hotkey. Without Accessibility access it waits: the welcome
+    /// window and the menu offer the system prompt, and the tap is installed once access
+    /// is granted. The speech model loads once ModelInstaller has it in place, see
+    /// AppDelegate.
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
@@ -173,7 +174,6 @@ final class PushToTalkController {
         syncTapWithAccess()
         if !isHotkeyActive {
             logger.info("Waiting for Accessibility access")
-            promptForAccessibility()
         }
         watchAccess()
     }

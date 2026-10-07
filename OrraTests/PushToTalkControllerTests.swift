@@ -145,7 +145,7 @@ struct PushToTalkControllerTests {
     }
 
     /// A started controller whose keyboard tap is a fake, so no real tap is installed. The
-    /// fake allows the tap here, because start shows the system prompt otherwise.
+    /// fake allows the tap, so the hotkey is active.
     private func startedController() async throws -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,

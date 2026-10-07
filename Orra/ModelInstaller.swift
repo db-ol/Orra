@@ -2,9 +2,10 @@ import Foundation
 import Observation
 import os
 
-/// Puts the speech model in place and publishes where that stands, for the menu and the
-/// menu bar icon. Launch looks at local files only. Only the menu's Download Speech Model,
-/// Resume Download and Try Again go online, see docs/model-download.md.
+/// Puts the speech model in place and publishes where that stands, for the menu, the
+/// welcome window and the menu bar icon. Launch looks at local files only. Only Download
+/// Speech Model, Resume Download and Try Again, in the menu or the welcome window, go
+/// online, see docs/model-download.md.
 ///
 /// The download, the hashing and every file write run off the main actor. The main actor
 /// only reads a few file sizes and assigns the state.
@@ -81,9 +82,9 @@ final class ModelInstaller {
         }
     }
 
-    /// The menu's Download Speech Model, Resume Download and Try Again. Starts at the first
-    /// server and keeps the bytes already on disk. Does nothing unless the model is missing
-    /// or the last download failed.
+    /// Download Speech Model, Resume Download and Try Again, in the menu or the welcome
+    /// window. Starts at the first server and keeps the bytes already on disk. Does nothing
+    /// unless the model is missing or the last download failed.
     func download() {
         switch state {
         case .missing, .failed:
@@ -116,7 +117,8 @@ final class ModelInstaller {
         }
     }
 
-    /// The menu's Cancel Download. The bytes on disk stay for Resume Download.
+    /// Cancel Download, in the menu or the welcome window. The bytes on disk stay for
+    /// Resume Download.
     func cancel() {
         job?.cancel()
     }
@@ -161,7 +163,8 @@ final class ModelInstaller {
     }
 }
 
-/// The menu's text for each state, kept here so tests can read it.
+/// The text for each state, in the menu and the welcome window, kept here so tests can
+/// read it.
 nonisolated extension ModelInstaller.State {
     /// The lines above the button. Empty once the model is installed, where the speech
     /// model's own lines take over.

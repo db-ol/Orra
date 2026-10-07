@@ -6,6 +6,7 @@ struct StatusMenu: View {
     let models: ModelInstaller
     let openAtLogin: OpenAtLogin
     let inputs: AudioInputList
+    let showWelcome: () -> Void
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -86,6 +87,11 @@ struct StatusMenu: View {
 
         Divider()
 
+        if !SetupChecklist(pushToTalk, models).isComplete {
+            Button("Setup Guide…") {
+                showWelcome()
+            }
+        }
         Button("Settings…") {
             // An accessory app is not the active app when its menu is used.
             // Activate first, otherwise the settings window can open behind
