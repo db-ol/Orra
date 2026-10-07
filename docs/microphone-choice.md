@@ -131,9 +131,11 @@ records from the choice or the default and explains the silence afterwards.
 
 ## Not verified yet
 
-- Recording through the unit on real hardware. InputUnitTests builds and initializes a
-  unit for each wired input of this Mac and never starts it. On 2026-10-05 that was the
-  Brio 500 (USB, 2 channels, 48 kHz) and the built in microphone (1 channel, 48 kHz).
+- Recording through the unit on inputs other than the Brio 500. On 2026-10-05 the
+  maintainer chose the Brio 500 with the lid closed and dictated through the unit with no
+  problems. InputUnitTests builds and initializes a unit for each wired input of this Mac
+  and never starts it. On 2026-10-05 that was the Brio 500 (USB, 2 channels, 48 kHz) and
+  the built in microphone (1 channel, 48 kHz).
 - Units that record only zeros are reported on macOS 26.6.2, the build of this Mac, and
   on 27.0, with every Core Audio call succeeding. The cause is not known. Orra's silence
   check names the microphone when that happens.

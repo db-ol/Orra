@@ -1,12 +1,12 @@
 # Manual testing checklist
 
 State of the repository after the overnight session of 2026-10-02, with manual
-results added on 2026-10-03, the fn hotkey added on 2026-10-04, local dictation added
-on branch local-dictation in the night of 2026-10-04, and the choice of talk key added on
-2026-10-05. Three sections: what a build or test
-run verified, what only a person at the Mac can verify, and what does not exist yet.
+results added on 2026-10-03, 2026-10-05 and 2026-10-06, the fn hotkey added on
+2026-10-04, local dictation added in the night of 2026-10-04, and the choice of talk key
+and of microphone added on 2026-10-05. Three sections: what a build or test run verified,
+what only a person at the Mac can verify, and what does not exist yet.
 
-Build and test commands, run inside Orra/:
+Build and test commands, run in the repository root:
 
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData test
@@ -18,7 +18,7 @@ Build and test commands, run inside Orra/:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 240 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 246 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -121,7 +121,8 @@ Build and test commands, run inside Orra/:
 
 ## Needs manual verification
 
-Checked items were verified by the maintainer on 2026-10-03, running the app from
+Checked items were verified by the maintainer on 2026-10-03 unless the item gives another
+date, running the app from
 Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still open.
 
 - [x] No Dock icon at launch, and no flash was noticed. The policy is set in
@@ -210,7 +211,7 @@ below show with the log stream command under Testing notes:
   keyboard tap", "Accessibility access is gone, keyboard tap removed". If input
   freezes, take a sysdiagnose over SSH before restarting.
 
-Microphone choice, added on 2026-10-05, not verified yet. docs/microphone-choice.md
+Microphone choice, added on 2026-10-05, partly verified. docs/microphone-choice.md
 explains how it works. A chosen microphone records through its own audio unit, which no
 test starts, so these checks are the first real recordings through it:
 
@@ -243,7 +244,7 @@ test starts, so these checks are the first real recordings through it:
   shows "Recording from the chosen microphone over usb  at 48000 Hz, started in ...
   seconds" or "Recording from the system default input".
 
-Local dictation, added on 2026-10-04 on branch local-dictation, not verified by hand yet.
+Local dictation, added on 2026-10-04, partly verified by hand.
 The package, the microphone usage description, the Metal Toolchain and the plugin trust
 are in place since 2026-10-05:
 
