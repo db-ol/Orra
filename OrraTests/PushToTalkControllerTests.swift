@@ -152,9 +152,11 @@ struct PushToTalkControllerTests {
         return controller
     }
 
-    /// Waits until `condition` holds, for at most a second.
+    /// Waits until `condition` holds, for at most five seconds. It returns as soon as the
+    /// condition holds, so the long limit only matters on a slow machine, such as a
+    /// shared CI runner.
     private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<200 where !condition() {
+        for _ in 0..<1_000 where !condition() {
             try await Task.sleep(for: .milliseconds(5))
         }
     }
@@ -542,7 +544,9 @@ struct PushToTalkControllerTests {
     }
 
     @Test func holdShorterThanTheMinimumIsNotTranscribed() async throws {
-        let controller = await makeController(minimumHold: .milliseconds(300))
+        // Far longer than any hold in a test, so the hold is short on any machine. With
+        // 300 ms, a slow CI runner took longer than that just to start the fake microphone.
+        let controller = await makeController(minimumHold: .seconds(10))
         try await dictate(controller)
         #expect(controller.state == .idle)
         // The microphone is still stopped, but nothing is transcribed.

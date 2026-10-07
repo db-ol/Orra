@@ -51,6 +51,27 @@ deployment target, and do not add a dependency or a new download server, without
 maintainer's approval. If a task needs one of these, write docs/BLOCKED.md with the question
 and the options, commit it, and stop.
 
+## Continuous integration
+.github/workflows/ci.yml runs two jobs on every pull request and every push to main.
+
+- Rules check, on Linux: `python3 Tools/ci/check_rules.py`. It fails when one of the values it
+  lists at the top differs: the team, bundle IDs, deployment target, App Sandbox, hardened
+  runtime, entitlements and signing settings in project.pbxproj, the package references and
+  linked products, and the packages and revisions in Package.resolved. It also fails on an
+  .xcconfig file and when docs/dependencies.md does not name a pinned package. It covers the
+  settings it lists, not every way to change signing, so review signing changes by hand too.
+- Build and test, on the xcode-27 runner, a GitHub hosted Mac with Xcode 27.0. It runs the test
+  command above with code signing off and plugin validation skipped, downloads the Metal Toolchain
+  when the runner lacks it, and skips RealModelTests, which need the model. The wired input test
+  in InputUnitTests skips itself without microphone access.
+- Never run the tests from an unsigned build on a Mac where a person is logged in without that
+  skip in place. Setting up an audio unit asks for microphone access, and answering the prompt
+  rewrites Orra's microphone permission for the unsigned build.
+
+Changing one of the checked values still needs the maintainer's approval first. The commit that
+makes the approved change also updates the expected values in Tools/ci/check_rules.py, or the
+rules check fails.
+
 ## Git
 - Focused commits with clear messages. One concern per commit.
 - No force push, no history rewriting, and no push unless the maintainer asks for it.
