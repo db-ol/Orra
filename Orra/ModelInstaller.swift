@@ -171,23 +171,23 @@ nonisolated extension ModelInstaller.State {
     func menuLines(total: Int64) -> [String] {
         switch self {
         case .checking:
-            ["Preparing the speech model…"]
+            [String(localized: "Preparing the speech model…")]
         case .missing:
-            ["Orra needs its speech model to transcribe.", "The model comes from Hugging Face or a mirror. Your speech stays on this Mac."]
+            [String(localized: "Orra needs its speech model to transcribe."), String(localized: "The model comes from Hugging Face or a mirror. Your speech stays on this Mac.")]
         case .downloading(let bytes, let source):
-            ["Downloading the speech model: \(Self.percent(bytes, of: total))% of \(Self.size(total))"] + (source.map { ["From \($0.rawValue)"] } ?? [])
+            [String(localized: "Downloading the speech model: \(Self.percent(bytes, of: total))% of \(Self.size(total))")] + (source.map { [String(localized: "From \($0.rawValue)")] } ?? [])
         case .verifying:
-            ["Checking the downloaded files…"]
+            [String(localized: "Checking the downloaded files…")]
         case .failed(.offline):
-            ["This Mac is offline. Connect to the internet, then try again."]
+            [String(localized: "This Mac is offline. Connect to the internet, then try again.")]
         case .failed(.unreachable):
-            ["Orra could not download the model from Hugging Face or its mirrors."]
+            [String(localized: "Orra could not download the model from Hugging Face or its mirrors.")]
         case .failed(.notEnoughSpace(let needed, let available)):
-            ["The download needs \(Self.size(needed)) of free space and \(Self.size(available)) is free."]
+            [String(localized: "The download needs \(Self.size(needed)) of free space and \(Self.size(available)) is free.")]
         case .failed(.damaged):
-            ["The downloaded files did not match the expected checksums."]
+            [String(localized: "The downloaded files did not match the expected checksums.")]
         case .failed(.couldNotSave):
-            ["Orra could not save the model files."]
+            [String(localized: "Orra could not save the model files.")]
         case .installed:
             []
         }
@@ -198,13 +198,13 @@ nonisolated extension ModelInstaller.State {
     func buttonTitle(total: Int64) -> String? {
         switch self {
         case .missing(let bytes) where bytes > 0:
-            "Resume Download (\(Self.size(total - bytes)) left)"
+            String(localized: "Resume Download (\(Self.size(total - bytes)) left)")
         case .missing:
-            "Download Speech Model (\(Self.size(total)))"
+            String(localized: "Download Speech Model (\(Self.size(total)))")
         case .downloading:
-            "Cancel Download"
+            String(localized: "Cancel Download")
         case .failed:
-            "Try Again"
+            String(localized: "Try Again")
         case .checking, .verifying, .installed:
             nil
         }

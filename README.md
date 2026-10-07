@@ -19,7 +19,7 @@ Run from the repository root:
 
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
 
-Replace `build` with `test` to run the unit tests.
+Replace `build` with `-testLanguage en -testRegion US test` to run the unit tests. They compare English text, so they run in English.
 
 The first build in Xcode asks you to Trust & Enable CudaBuild, a build tool plugin of mlx-swift. After that the command above works as is, until a package update changes mlx-swift.
 
@@ -32,6 +32,8 @@ A Release build takes about a quarter less time to transcribe than a Debug build
     ditto build/DerivedData/Build/Products/Release/Orra.app ~/Applications/Orra.app
 
 Open ~/Applications/Orra.app and turn on Open at Login in its menu. If macOS asks for Accessibility or microphone access again for this copy, allow it.
+
+Orra's menu and windows are in English and Simplified Chinese, in the order of your preferred languages in System Settings > General > Language & Region. You can give Orra its own language there under Applications.
 
 While Orra listens, a small indicator at the bottom of the screen shows bars that move with your voice, and a short sound marks the start and the end of the recording. When a dictation pastes nothing, the indicator says why. Both can be turned off in Settings.
 

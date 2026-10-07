@@ -67,6 +67,7 @@ struct TalkKeyTests {
         #expect(TalkKey.holdHint(for: [.rightControl]) == "Hold right Control to talk")
         #expect(TalkKey.holdHint(for: [.fn, .rightControl]) == "Hold right Control or fn to talk")
         #expect(TalkKey.holdHint(for: [.fn, .rightOption, .rightControl]) == "Hold right Control, right Option or fn to talk")
+        #expect(TalkKey.holdHint(for: Set(TalkKey.allCases)) == "Hold right Control, right Option, right Command or fn to talk")
         #expect(TalkKey.holdHint(for: []) == "No talk key is set")
     }
 

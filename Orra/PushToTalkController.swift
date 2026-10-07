@@ -196,9 +196,9 @@ final class PushToTalkController {
             modelState = .ready
             logger.info("Speech model loaded in \(started.duration(to: .now), privacy: .public)")
         } catch TranscriptionError.modelMissing {
-            modelState = .unavailable("The speech model is not on this Mac")
+            modelState = .unavailable(String(localized: "The speech model is not on this Mac"))
         } catch {
-            modelState = .unavailable("The speech model could not be loaded")
+            modelState = .unavailable(String(localized: "The speech model could not be loaded"))
             logger.error("Speech model failed to load: \(String(describing: error), privacy: .public)")
         }
     }
@@ -322,9 +322,9 @@ final class PushToTalkController {
     private static func notReadyMessage(_ state: ModelState) -> String {
         switch state {
         case .notLoaded, .ready:
-            "The speech model is not ready yet"
+            String(localized: "The speech model is not ready yet")
         case .loading:
-            "The speech model is still loading"
+            String(localized: "The speech model is still loading")
         case .unavailable(let reason):
             reason
         }
@@ -385,10 +385,10 @@ final class PushToTalkController {
             handle(.cancelled)
             requestMicrophoneAccess()
         case .denied:
-            holdMessage = "Microphone access is off"
+            holdMessage = String(localized: "Microphone access is off")
             handle(.cancelled)
         case .notConfigured:
-            holdMessage = "This build has no microphone usage description"
+            holdMessage = String(localized: "This build has no microphone usage description")
             handle(.cancelled)
         }
     }
@@ -398,14 +398,14 @@ final class PushToTalkController {
         // A newer hold has started since. This one was cancelled and nobody waits for it.
         guard hold == holdNumber else { return }
         if case AudioRecorderError.inputUnitFailed = error, let chosen {
-            problem = "\(chosen.name) could not start"
+            problem = String(localized: "\(chosen.name) could not start")
             // System Default records another way, so it is the way out. With the lid
             // closed the default can be the internal microphone, so the device has to be
             // picked in Sound settings too.
-            microphoneNotice = "Choose System Default under Microphone, then pick \(chosen.name) in Sound settings."
+            microphoneNotice = String(localized: "Choose System Default under Microphone, then pick \(chosen.name) in Sound settings.")
             suggestsSoundSettings = true
         } else {
-            problem = "The microphone could not start"
+            problem = String(localized: "The microphone could not start")
         }
         if state == .listening {
             handle(.cancelled)
@@ -422,7 +422,7 @@ final class PushToTalkController {
         }
         let recording = await capture.stop()
         if recording.wasCut {
-            problem = "The microphone changed during the recording. Try again."
+            problem = String(localized: "The microphone changed during the recording. Try again.")
             return
         }
         guard heldFor >= minimumHold else {
@@ -432,7 +432,11 @@ final class PushToTalkController {
         onCue(.recordingStopped)
         if let chosen, recording.input?.uid != chosen.uid {
             // The chosen microphone was not connected, so the system default recorded.
-            microphoneNotice = "\(chosen.name) is not connected, so \(recording.input?.name ?? "the system default input") recorded."
+            if let name = recording.input?.name {
+                microphoneNotice = String(localized: "\(chosen.name) is not connected, so \(name) recorded.")
+            } else {
+                microphoneNotice = String(localized: "\(chosen.name) is not connected, so the system default input recorded.")
+            }
         }
         await transcribeAndInsert(recording, chosen: chosen, target: target, releasedAt: released)
     }
@@ -442,7 +446,7 @@ final class PushToTalkController {
         do {
             let (samples, silent) = await Self.prepared(recording)
             guard !samples.isEmpty else {
-                problem = "The recording could not be transcribed"
+                problem = String(localized: "The recording could not be transcribed")
                 logger.error("No samples after resampling \(recording.samples.count, privacy: .public) recorded samples")
                 return
             }
@@ -454,7 +458,7 @@ final class PushToTalkController {
                 if let chosen, recording.input?.uid == chosen.uid {
                     // The chosen microphone records whatever input Sound settings names, so
                     // the way out is Orra's own choice.
-                    microphoneNotice = "\(chosen.name) is chosen under Microphone. Choose another microphone or System Default there."
+                    microphoneNotice = String(localized: "\(chosen.name) is chosen under Microphone. Choose another microphone or System Default there.")
                 } else {
                     suggestsSoundSettings = true
                 }
@@ -464,14 +468,14 @@ final class PushToTalkController {
             let raw = try await transcription.transcribe(samples)
             let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
             guard !text.isEmpty else {
-                holdMessage = "No speech was recognized"
+                holdMessage = String(localized: "No speech was recognized")
                 logger.notice("No speech recognized in \(recording.duration, privacy: .public) s of audio")
                 return
             }
             lastTranscript = text
             // Paste only into the app that was in front when the key was released.
             if let target, let current = frontmostApp(), current != target {
-                notice = "Another app came to the front, so the text was not pasted. Use Copy Last Dictation."
+                notice = String(localized: "Another app came to the front, so the text was not pasted. Use Copy Last Dictation.")
                 return
             }
             switch await insert(text) {
@@ -480,12 +484,12 @@ final class PushToTalkController {
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(released.duration(to: .now), privacy: .public) for \(recording.duration, privacy: .public) s of audio")
             case .skippedPasswordField:
-                notice = "Orra does not paste into password fields. Use Copy Last Dictation."
+                notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
             case .nothingToInsert:
                 break
             }
         } catch {
-            problem = "The recording could not be transcribed"
+            problem = String(localized: "The recording could not be transcribed")
             logger.error("Transcription failed: \(String(describing: error), privacy: .public)")
         }
     }

@@ -25,7 +25,8 @@ Build (run in the repository root):
 
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
 
-Test: the same command with `test` in place of `build`.
+Test: the same command with `-testLanguage en -testRegion US test` in place of `build`. The
+tests compare English text, so they run in English whatever the Mac's language.
 
 The build needs Xcode's Metal Toolchain component and the CudaBuild plugin of mlx-swift
 trusted once in Xcode. docs/dependencies.md has the details.
@@ -35,6 +36,20 @@ trusted once in Xcode. docs/dependencies.md has the details.
 - Never claim behavior works unless a build or a test verified it. Say what was verified and what was not.
 - Orra/ and OrraTests/ are synchronized folder groups. New .swift files placed there are picked up
   automatically. Do not edit project.pbxproj by hand.
+
+## Localization
+- The interface is in English and Simplified Chinese. Orra/Localizable.xcstrings holds the
+  strings, and Orra/InfoPlist.xcstrings the microphone prompt.
+- SwiftUI text literals are localized on their own. Text built in code uses
+  `String(localized:)`, and SwiftUI shows text that is already localized with
+  `Text(verbatim:)`.
+- Every new or changed string needs its Chinese translation in the catalog, marked
+  translated, with full width punctuation (，。：？！（）“”) and a space between Chinese and
+  a Latin word or a number. LocalizationTests checks the strings in the catalog. Xcode adds
+  new strings to the catalog when it builds, a command line build does not. This lists
+  every string the code uses, in build/Localizations:
+
+      xcodebuild -exportLocalizations -project Orra.xcodeproj -scheme Orra -derivedDataPath build/DerivedData -localizationPath build/Localizations -exportLanguage zh-Hans ARCHS=arm64
 
 ## Runtime rules
 - The keyboard tap runs on the main thread, so every key press on the Mac waits for it. Never

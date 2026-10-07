@@ -228,11 +228,11 @@ nonisolated enum Silence {
     /// microphone, or from an input that could not be read.
     static func advice(for situation: MicrophoneSituation) -> String {
         if situation.lidClosed, situation.input?.isInternalMicrophone ?? true {
-            return "The lid is closed, so the built in microphone is off"
+            return String(localized: "The lid is closed, so the built in microphone is off")
         }
         if let input = situation.input {
-            return "No sound came from \(input.name)"
+            return String(localized: "No sound came from \(input.name)")
         }
-        return "No sound came from the microphone"
+        return String(localized: "No sound came from the microphone")
     }
 }

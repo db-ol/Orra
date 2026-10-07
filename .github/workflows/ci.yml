@@ -70,6 +70,7 @@ jobs:
       # RealModelTests need the Qwen3-ASR model, which the runner does not have.
       # The wired input test in InputUnitTests skips itself without microphone access,
       #   which an unsigned build never has, so it raises no permission prompt here.
+      # The tests compare English text, so they run in English.
       # The step has its own timeout, so a hang fails the step and the result bundle is
       #   still uploaded.
       - name: Build and test
@@ -82,6 +83,7 @@ jobs:
             -skipPackagePluginValidation \
             -resultBundlePath build/Orra.xcresult \
             -skip-testing:OrraTests/RealModelTests \
+            -testLanguage en -testRegion US \
             CODE_SIGNING_ALLOWED=NO \
             test
 

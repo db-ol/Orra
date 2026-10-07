@@ -10,7 +10,7 @@ what does not exist yet.
 Build and test commands, run in the repository root:
 
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
-    xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData test
+    xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData -testLanguage en -testRegion US test
 
 ## Automatically verified
 
@@ -102,6 +102,11 @@ Build and test commands, run in the repository root:
     installer state and for an installed model that is loading or failed to load, the
     microphone step for every permission state, the Accessibility step, and when setup
     counts as complete, which decides whether launch shows the window.
+  - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
+    translation marked translated, that each translation keeps the arguments of the
+    English string, that the Chinese uses full width punctuation, that the built app
+    carries the Chinese strings, that Chinese is chosen only when it comes before English
+    in the preferred languages, and how the talk key hints read in Chinese.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -444,6 +449,20 @@ Accessibility for it. Undo all of it afterwards:
   next launch shows no window.
 - [ ] Closing the window with steps left: the menu shows Setup Guide…, which opens it again,
   and the next launch opens it again. With all steps done, the menu has no Setup Guide….
+
+Chinese interface, added on 2026-10-07, not verified yet. Give Orra its own language under
+System Settings > General > Language & Region > Applications: add Orra with Chinese,
+Simplified, then quit and reopen it. Afterwards set it back:
+
+- [ ] The menu, its submenus, Settings, the welcome window and the recording indicator are
+  in Chinese, with full width punctuation, and no line is cut off or left in English.
+- [ ] With all four talk keys on, the menu says "按住右侧 Control 键、右侧 Option 键、右侧
+  Command 键或左下角的 fn 键说话".
+- [ ] The download lines read naturally, for example "正在下载语音模型：37%，共 2.47 GB".
+- [ ] On a Mac or a user account where Orra never had microphone access, the macOS prompt
+  shows the Chinese explanation.
+- [ ] With Orra's language set back to the system's (English first), everything is in
+  English again.
 
 Recording indicator and sounds, added on 2026-10-07, not verified yet:
 

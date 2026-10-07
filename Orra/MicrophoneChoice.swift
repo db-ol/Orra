@@ -32,17 +32,19 @@ nonisolated enum MicrophonePreference {
 /// The text of the microphone menu.
 nonisolated enum MicrophoneLabels {
     static func systemDefault(_ input: AudioInput?, lidClosed: Bool) -> String {
-        guard let input else { return "System Default" }
-        let note = lidClosed && input.isInternalMicrophone ? ", lid closed" : ""
-        return "System Default (\(input.name)\(note))"
+        guard let input else { return String(localized: "System Default") }
+        if lidClosed && input.isInternalMicrophone {
+            return String(localized: "System Default (\(input.name), lid closed)")
+        }
+        return String(localized: "System Default (\(input.name))")
     }
 
     static func device(_ input: AudioInput, lidClosed: Bool) -> String {
-        lidClosed && input.isInternalMicrophone ? "\(input.name) (lid closed)" : input.name
+        lidClosed && input.isInternalMicrophone ? String(localized: "\(input.name) (lid closed)") : input.name
     }
 
     static func missing(_ choice: MicrophoneChoice) -> String {
-        "\(choice.name) (not connected)"
+        String(localized: "\(choice.name) (not connected)")
     }
 
     /// The warning at the top of the menu, or nil. Shown when the microphone Orra would
@@ -51,7 +53,7 @@ nonisolated enum MicrophoneLabels {
     static func lidWarning(choice: MicrophoneChoice?, inputs: [AudioInput], defaultInput: AudioInput?, lidClosed: Bool) -> String? {
         guard lidClosed else { return nil }
         let inUse = choice.flatMap { choice in inputs.first { $0.uid == choice.uid } } ?? defaultInput
-        return inUse?.isInternalMicrophone == true ? "The lid is closed, so the built in microphone is off" : nil
+        return inUse?.isInternalMicrophone == true ? String(localized: "The lid is closed, so the built in microphone is off") : nil
     }
 }
 
