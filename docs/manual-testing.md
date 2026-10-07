@@ -2,9 +2,10 @@
 
 State of the repository after the overnight session of 2026-10-02, with manual
 results added on 2026-10-03, 2026-10-05 and 2026-10-06, the fn hotkey added on
-2026-10-04, local dictation added in the night of 2026-10-04, and the choice of talk key
-and of microphone added on 2026-10-05. Three sections: what a build or test run verified,
-what only a person at the Mac can verify, and what does not exist yet.
+2026-10-04, local dictation added in the night of 2026-10-04, the choice of talk key and
+of microphone added on 2026-10-05, and the model download added on 2026-10-07. Three
+sections: what a build or test run verified, what only a person at the Mac can verify, and
+what does not exist yet.
 
 Build and test commands, run in the repository root:
 
@@ -18,7 +19,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 246 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 302 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -82,23 +83,49 @@ Build and test commands, run in the repository root:
     recording without samples, empty text, loops, traditional characters, an app switch
     before the paste, failures including a failed start, a password field, presses during
     processing, cancel, microphone permission states including a build without a usage
-    description, and the 60 second limit. With a fake in place of the keyboard tap and
-    the access check, it checks that the menu shows the talk key as off as soon as the
-    system switches the tap off, that a new tap is installed after the pause while access
-    is there, and that no tap comes back when the access check says no, or still says yes
-    while the system refuses the tap. It also checks that the environment variable the
-    launch guard relies on is set while tests run.
+    description, the 60 second limit, and that start leaves loading the model to the model
+    installer. With a fake in place of the keyboard tap and the access check, it checks
+    that the menu shows the talk key as off as soon as the system switches the tap off,
+    that a new tap is installed after the pause while access is there, and that no tap
+    comes back when the access check says no, or still says yes while the system refuses
+    the tap. It also checks that the environment variable the launch guard relies on is
+    set while tests run.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
     keeps 噁, and leaves Japanese alone.
-  - SupportTests covers the test scoring helper, the memory footprint helper, and the
-    check for model files and tokenizer files in both of speech-swift's cache layouts.
+  - SupportTests covers the test scoring helper, the memory footprint helper, that the
+    model loads only from a complete installed folder, tokenizer files included, and that
+    the engine reports a missing model without loading anything.
+  - ModelFilesTests covers the pinned files, their sizes and hashes, the three server
+    addresses and their order, the Debug launch argument that forces one server, the
+    app's folder paths, the size and SHA-256 checks, and what launch does with local files
+    only: finding the installed model, finishing an install a quit interrupted, cloning
+    the old cache copy in either layout without changing it, dropping a damaged old file,
+    moving an incomplete or damaged install back to the staging folder, the backup flag,
+    and removing other revisions. It works in temporary folders.
+  - ModelDownloadTests runs the real URLSession code against stand in servers behind a
+    URLProtocol in the session configuration, so no request leaves the test process: a
+    plain download, moving on at once from a server that cannot be reached or answers 404
+    or 403, no network at all, resuming the weights with a Range request, small files
+    always fetched whole, the cut 200 body and the 502 on a ranged request that
+    modelscope.cn sends, a server that ignores ranges, a 200 that names a range, a
+    dropped connection resumed from the bytes on disk after a pause, wrong bytes fetched
+    again from the next server, every server failing and Try Again, too little space
+    without a request, cancel keeping the partial file, too many bytes, a wrong
+    Content-Range, files that cannot be written, the 8 and 30 second idle timeouts, and at
+    most one progress report per 0.25 s.
+  - ModelInstallerTests checks that launch and Try Again after a failed load never fetch,
+    the order of states from checking to installed, that each install loads the model
+    once, that Download does nothing while a download runs or before the check, cancel
+    and resume, that the Mac is kept awake only during a download, Try Again after a
+    failure, the space check, hashing the installed files after a failed load, and the
+    menu text and menu bar icon of every state.
   - OpenAtLoginTests covers reading the login item status again, telling the menu about
     every change, turning it on and off, a failed change and when its message clears, and
     an item waiting for approval, with a fake in place of the system's login items.
-  - Qwen3EngineTests loads the real Qwen3-ASR 1.7B model from the cache and transcribes
-    10 public clips, 5 from fleurs_zh and 5 from ascend_mixed. It may make at most 18
+  - Qwen3EngineTests loads the real Qwen3-ASR 1.7B model and transcribes 10 public clips,
+    5 from fleurs_zh and 5 from ascend_mixed. It may make at most 18
     errors in their 214 tokens, against 14 measured on 2026-10-05 in every run. It checks
     that the warm up read the weights, then transcribes 10 more clips and compares the
     median memory of the same five clips early and late, and against the reading after
@@ -109,7 +136,9 @@ Build and test commands, run in the repository root:
     60 s of speech in one dictation stays as accurate as the clips one by one. With
     TEST_RUNNER_ORRA_FULL_EVAL=1 it also runs all 600 evaluation clips, and with
     TEST_RUNNER_ORRA_SOAK=1 it runs 200 dictations in a row to watch memory. Both real
-    model suites sit under RealModelTests, which runs them one at a time.
+    model suites sit under RealModelTests, which runs them one at a time. They load the
+    model from Orra's installed folder, or, before a build with the model download has
+    run once, from the copy in ~/Library/Caches/qwen3-speech, which they only read.
 - The secure input check reads kCGSSessionSecureInputPID. A throwaway program turned secure
   input on and off on 2026-10-04 and saw the key appear and disappear.
 - The built app launches from the terminal, finishes launching, and reports the
@@ -321,6 +350,58 @@ are in place since 2026-10-05:
   launching Orra and after the model has loaded, because loading wires the model's
   buffers (see Limits in docs/asr-baseline.md).
 
+Model download, added on 2026-10-07, not verified yet. docs/model-download.md explains
+how it works. Watch the download with
+`/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "model-download"'`,
+and check connections with `lsof -nP -i -a -c Orra`:
+
+- [ ] Launch makes no connection. With the model installed, and again with it missing,
+  `lsof` shows no internet socket for Orra, before and after opening the menu.
+- [ ] First launch of this build on the maintainer's Mac, where ~/Library/Caches/qwen3-speech
+  holds the model. The menu shows "Preparing the speech model…" briefly, then dictation
+  works without a download. ~/Library/Application Support/io.github.db-ol.Orra/Models
+  holds Qwen3-ASR-1.7B-MLX-8bit-e5450a26 with six files, and `tmutil isexcluded` on it
+  says Excluded. `df -k /` drops by far less than 2.4 GB, the old folder is unchanged,
+  and there is still no connection.
+- [ ] Fresh state: quit Orra and rename
+  ~/Library/Application Support/io.github.db-ol.Orra/Models and
+  ~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit. At launch the
+  icon is a down arrow in a circle, and the menu shows "Orra needs its speech
+  model to transcribe.", "The model comes from Hugging Face or a mirror. Your speech stays
+  on this Mac." and "Download Speech Model (2.47 GB)", above the Accessibility line when
+  Accessibility is off. There is no connection until Download is chosen.
+- [ ] Outside mainland China, or with a VPN, the menu says "From huggingface.co" and the
+  download finishes. Note the time it took.
+- [ ] In mainland China without a VPN, "From modelscope.cn" appears within about 8 s and
+  the download finishes. Note the time it took and the average speed.
+- [ ] With a Debug build launched with `-ModelServer hf-mirror.com`, and again with
+  `-ModelServer modelscope.cn`, the menu names that server and the model installs.
+  Outside mainland China, hf-mirror.com sends every request on to huggingface.co.
+- [ ] The percentage changes while the menu stays open. If it only changes when the menu
+  is opened again, note it.
+- [ ] Cancel at about 30%. The menu offers "Resume Download (… left)", and Resume goes on
+  from the same percentage. The log shows a request at the byte reached.
+- [ ] Quit during the download, then relaunch: no connection at launch, and Resume goes on.
+- [ ] During a download, `tmutil isexcluded` on the .download folder in Models says
+  Excluded, and `pmset -g assertions` lists Orra's activity, which keeps the Mac from
+  sleeping while idle.
+- [ ] Turn Wi-Fi off and choose Download: within seconds the menu says "This Mac is
+  offline. Connect to the internet, then try again." Try Again works once Wi-Fi is back.
+- [ ] Sleep and wake the Mac during the download. It goes on, or offers Try Again, which
+  goes on from the bytes on disk.
+- [ ] Cancel after merges.txt has arrived, change one byte in
+  `.download-Qwen3-ASR-1.7B-MLX-8bit-e5450a26/merges.txt`, then Resume. merges.txt is
+  fetched again, and the model installs.
+- [ ] Quit Orra, delete vocab.json from the installed folder, and launch. The menu offers
+  Resume Download with 2.8 MB left, and Resume fetches only vocab.json.
+- [ ] Quit Orra, change the first byte of model.safetensors in the installed folder, and
+  launch. The menu says "The speech model could not be loaded" with Try Again. Try Again
+  checks the hashes: with the old cache copy still there, the model is installed again
+  from it without a download, otherwise the menu offers Resume Download for the weights.
+- [ ] Typing in other apps and opening the menu stay instant during the download and
+  during "Checking the downloaded files…".
+- [ ] On a Mac with macOS 15.6, if one is at hand, repeat the first four checks.
+
 Testing notes:
 
 - Quit Orra before turning off or removing its Accessibility access. Revoking access
@@ -342,8 +423,6 @@ Testing notes:
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
   0.5 seconds everywhere and needs a decision before it changes.
-- Downloading the model. Orra loads Qwen3-ASR 1.7B only from
-  ~/Library/Caches/qwen3-speech and reports it as missing otherwise.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
 - Key combinations and mouse buttons as talk keys, and hands free mode.
 - Rewriting, and settings other than the talk keys and the microphone.
