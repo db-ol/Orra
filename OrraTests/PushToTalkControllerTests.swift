@@ -757,7 +757,9 @@ struct PushToTalkControllerTests {
     @Test func longHoldIsProcessedAtTheTimeLimit() async throws {
         let controller = await makeController(limit: .milliseconds(50))
         controller.handle(.pressed(isRepeat: false))
-        try await Task.sleep(for: .milliseconds(300))
+        // Waits for the outcome rather than a fixed pause, because the limit's timer runs
+        // late when many tests share the main actor.
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(mic.calls == ["start", "stop"])
         #expect(controller.state == .idle)
         #expect(inserter.inserted == ["你好"])
