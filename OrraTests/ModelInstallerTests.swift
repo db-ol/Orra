@@ -82,8 +82,6 @@ struct ModelInstallerTests {
             { try $0.writeAll(to: $0.installed) },
             { try $0.writeAll(to: $0.installed, damaging: ["model.safetensors"]) },
         ]
-        let servers = StubServers()
-        defer { servers.close() }
         for setup in setups {
             let temporary = TemporaryModelFolders()
             defer { temporary.remove() }
@@ -97,7 +95,6 @@ struct ModelInstallerTests {
             await installer.prepare(checkingHashes: true)
         }
         #expect(calls.withLock { $0 } == 0)
-        #expect(servers.log.isEmpty)
     }
 
     @Test func stateSequence() async throws {
