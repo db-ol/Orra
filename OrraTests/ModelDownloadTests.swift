@@ -22,14 +22,18 @@ struct ModelDownloadTests {
         _ temporary: TemporaryModelFolders,
         sources: [ModelSource] = ModelSource.order,
         freeSpace: Int64? = 100_000_000_000,
-        fetch: FileFetch? = nil
+        fetch: FileFetch? = nil,
+        onPause: @escaping @Sendable () -> Void = {}
     ) async -> Outcome {
         let sleeps = Mutex<[Duration]>([])
         let events = Mutex<[ModelDownload.Event]>([])
         let environment = ModelDownload.Environment(
             fetch: fetch ?? servers.fetch,
             freeSpace: { _ in freeSpace },
-            sleep: { duration in sleeps.withLock { $0.append(duration) } }
+            sleep: { duration in
+                sleeps.withLock { $0.append(duration) }
+                onPause()
+            }
         )
         let result: Result<URL, any Error>
         do {
@@ -230,29 +234,48 @@ struct ModelDownloadTests {
     }
 
     @Test func droppedConnectionPausesAndResumes() async throws {
-        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(dropAfter: 1_500_000)])
+        // A short pause between pieces lets the pieces before the drop reach the file, so
+        // there are bytes on disk when the connection breaks.
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(dropAfter: 1_500_000, chunkDelay: .milliseconds(1))])
         defer { servers.close() }
         let temporary = TemporaryModelFolders()
         defer { temporary.remove() }
-        let onDisk = Mutex<[Int64]>([])
         let weights = temporary.staging.appendingPathComponent("model.safetensors")
-        servers.onRequest { request in
-            if request.file == "model.safetensors" {
-                onDisk.withLock { $0.append(ModelDisk.size(weights) ?? -1) }
-            }
+        // Read during the pause, after the drop and before the retry touches the file.
+        let atPause = Mutex<Int64?>(nil)
+        let outcome = await download(servers, temporary) {
+            atPause.withLock { $0 = ModelDisk.size(weights) }
         }
-        let outcome = await download(servers, temporary)
         #expect(try outcome.result.get() == temporary.installed)
         #expect(temporary.isInstalled())
         let log = servers.log
         #expect(log.count == 7)
-        // URLSession may drop bytes that were in flight when the connection broke, at times
-        // all of them, so the retry asks for whatever reached the disk, not for byte
-        // 1,500,000.
-        let resumedAt = try #require(onDisk.withLock { $0 }.last)
-        #expect(resumedAt >= 0 && resumedAt <= 1_500_000)
-        #expect(log.last == (resumedAt > 0 ? "huggingface.co model.safetensors bytes=\(resumedAt)-" : "huggingface.co model.safetensors -"))
+        // The retry continues from the bytes that reached the disk, not from byte 0. They
+        // can be fewer than 1,500,000, because URLSession may drop bytes in flight.
+        let kept = try #require(atPause.withLock { $0 })
+        #expect(kept > 0 && kept <= 1_500_000)
+        #expect(log.last == "huggingface.co model.safetensors bytes=\(kept)-")
         #expect(outcome.sleeps == [.seconds(2)])
+    }
+
+    /// Cancel can land just before a request starts. The task then ends before the fetch
+    /// waits for it, and the fetch must still finish instead of waiting for good.
+    @Test(.timeLimit(.minutes(1)))
+    func aRequestThatEndsBeforeTheWaitStillEndsTheFetch() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("io.github.db-ol.OrraTests.receiver-\(UUID().uuidString)")
+        #expect(FileManager.default.createFile(atPath: file.path, contents: nil))
+        defer { try? FileManager.default.removeItem(at: file) }
+        let receiver = RangeReceiver(handle: try FileHandle(forWritingTo: file), offset: 0, size: 10) { _ in }
+        // The task is never resumed, so nothing goes to the network.
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let task = session.dataTask(with: URL(string: "https://example.invalid/")!)
+        receiver.urlSession(session, task: task, didCompleteWithError: URLError(.cancelled))
+        await #expect(throws: URLError.self) {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                receiver.start(continuation)
+            }
+        }
     }
 
     @Test func wrongBytesFetchedFromNextServer() async throws {

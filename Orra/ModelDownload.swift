@@ -89,6 +89,10 @@ nonisolated final class RangeReceiver: NSObject, URLSessionDataDelegate, Sendabl
         var lastReport = ContinuousClock.now
         var failure: (any Error)?
         var continuation: CheckedContinuation<Void, any Error>?
+        /// The result of a task that ended before `start(_:)` stored the continuation. A
+        /// task cancelled before it was resumed ends that way, when Cancel lands just
+        /// before a request starts.
+        var outcome: Result<Void, any Error>?
     }
 
     private let handle: FileHandle
@@ -105,8 +109,19 @@ nonisolated final class RangeReceiver: NSObject, URLSessionDataDelegate, Sendabl
         state = Mutex(State(length: offset))
     }
 
+    /// Whichever comes second, this or the end of the task, resumes the fetch.
     func start(_ continuation: CheckedContinuation<Void, any Error>) {
-        state.withLock { $0.continuation = continuation }
+        let early: Result<Void, any Error>? = state.withLock { state in
+            guard let outcome = state.outcome else {
+                state.continuation = continuation
+                return nil
+            }
+            state.outcome = nil
+            return outcome
+        }
+        if let early {
+            continuation.resume(with: early)
+        }
     }
 
     /// Whether a Content-Range value describes bytes from `offset` to at most the end of a
@@ -192,16 +207,25 @@ nonisolated final class RangeReceiver: NSObject, URLSessionDataDelegate, Sendabl
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
         try? handle.close()
-        let (continuation, failure, wholeFile, length) = state.withLock { state in
-            defer { state.continuation = nil }
-            return (state.continuation, state.failure, state.wholeFile, state.length)
+        let size = size
+        let ready: (CheckedContinuation<Void, any Error>, Result<Void, any Error>)? = state.withLock { state in
+            let result: Result<Void, any Error>
+            if let failure = state.failure ?? error {
+                result = .failure(failure)
+            } else if state.wholeFile, state.length != size {
+                result = .failure(FetchError.incomplete)
+            } else {
+                result = .success(())
+            }
+            guard let continuation = state.continuation else {
+                state.outcome = result
+                return nil
+            }
+            state.continuation = nil
+            return (continuation, result)
         }
-        if let failure = failure ?? error {
-            continuation?.resume(throwing: failure)
-        } else if wholeFile, length != size {
-            continuation?.resume(throwing: FetchError.incomplete)
-        } else {
-            continuation?.resume()
+        if let (continuation, result) = ready {
+            continuation.resume(with: result)
         }
     }
 }
@@ -215,8 +239,10 @@ nonisolated enum ModelDownload {
     static let firstRequestTimeout: TimeInterval = 8
     /// Once a server has sent data, it may pause this long.
     static let idleTimeout: TimeInterval = 30
-    /// Pauses before asking a server again that was sending and failed. One more failure
-    /// without new bytes moves on to the next server.
+    /// Pauses before asking a server again that was sending and failed. A third failure in
+    /// a row moves on to the next server. Only a try of the weights that gets past the most
+    /// bytes this server delivered resets the count. The small files start over every time
+    /// and never reset it.
     static let retryPauses: [Duration] = [.seconds(2), .seconds(10)]
 
     enum Failure: Error, Equatable, Sendable {
@@ -314,7 +340,8 @@ nonisolated enum ModelDownload {
     private static func fetch(_ file: ModelFile, _ manifest: ModelManifest, _ staging: URL, _ servers: inout Servers, _ environment: Environment, _ events: @escaping @Sendable (Event) -> Void) async throws {
         let log = Logger.modelDownload
         let destination = staging.appendingPathComponent(file.name)
-        // Failures in a row on the current server without new bytes.
+        // Failures in a row on the current server. For the weights, getting past the most
+        // bytes this server delivered resets it.
         var failures = 0
         // The most bytes of this file on disk while the current server sent it. A server
         // makes progress only by going past it, so a server that keeps starting the file
