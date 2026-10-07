@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to a branch or pull request cancels the run that is still going for it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rules:
+    name: Rules check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Fails when a value under Needs maintainer approval in AGENTS.md changes.
+      - name: Check the values that need the maintainer's approval
+        run: python3 Tools/ci/check_rules.py
+
+  test:
+    name: Build and test
+    # The only GitHub hosted image with Xcode 27 so far. It is an arm64 Mac in public
+    # preview, and a standard runner, which is free for public repositories.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      # The image holds more than one Xcode 27 release. Orra is built with 27.0.
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Show the Xcode version
+        run: xcodebuild -version
+
+      # mlx-swift compiles Metal shaders, and the xcode-27 image does not have the Metal
+      # Toolchain component yet (actions/runner-images issue 14548).
+      - name: Install the Metal Toolchain
+        run: |
+          if ! xcrun metal --version > /dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal --version
+
+      - name: Cache Swift packages
+        uses: actions/cache@v6
+        with:
+          path: build/DerivedData/SourcePackages
+          key: swift-packages-xcode-27-${{ hashFiles('Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      # The test command from AGENTS.md, changed for a fresh runner:
+      # -onlyUsePackageVersionsFromResolvedFile fails rather than move a package off the
+      #   revision in Package.resolved, which the rules check pins.
+      # -skipPackagePluginValidation takes the place of trusting the CudaBuild plugin of
+      #   mlx-swift in Xcode (docs/dependencies.md). Macro validation stays on, because
+      #   Orra never builds the macro in mlx-swift-lm.
+      # CODE_SIGNING_ALLOWED=NO, because the runner has no certificate for the team. The
+      #   linker still signs the arm64 binaries ad hoc, so the test host runs.
+      # RealModelTests need the Qwen3-ASR model, which the runner does not have.
+      # The wired input test in InputUnitTests skips itself without microphone access,
+      #   which an unsigned build never has, so it raises no permission prompt here.
+      # The step has its own timeout, so a hang fails the step and the result bundle is
+      #   still uploaded.
+      - name: Build and test
+        timeout-minutes: 50
+        run: |
+          xcodebuild -project Orra.xcodeproj -scheme Orra \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build/DerivedData \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -skipPackagePluginValidation \
+            -resultBundlePath build/Orra.xcresult \
+            -skip-testing:OrraTests/RealModelTests \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      # The wildcard keeps the Orra.xcresult folder in the artifact, so Xcode can open it.
+      - name: Upload the result bundle
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Orra.xcresult
+          path: build/*.xcresult

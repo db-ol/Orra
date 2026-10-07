@@ -58,7 +58,12 @@ struct InputUnitTests {
     /// microphone and USB devices, and stops it without ever starting it. Nothing is
     /// recorded and the microphone indicator stays off. Wireless inputs such as an iPhone
     /// or AirPods are left alone, so the test never wakes them.
-    @Test func aUnitCanBeSetUpForEveryWiredInputWithoutRecording() throws {
+    ///
+    /// Initializing a unit already asks macOS for microphone access. A build without a
+    /// grant, such as an unsigned build in CI, gets a permission prompt there, and the test
+    /// would wait on it. So the test runs only where access is granted already.
+    @Test(.enabled(if: MicrophoneAccess.current() == .authorized, "Needs microphone access granted already"))
+    func aUnitCanBeSetUpForEveryWiredInputWithoutRecording() throws {
         let wired = AudioInput.all().filter {
             $0.transport == kAudioDeviceTransportTypeBuiltIn || $0.transport == kAudioDeviceTransportTypeUSB
         }
