@@ -19,7 +19,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 302 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 304 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -101,7 +101,9 @@ Build and test commands, run in the repository root:
     addresses and their order, the Debug launch argument that forces one server, the
     app's folder paths, the size and SHA-256 checks, and what launch does with local files
     only: finding the installed model, finishing an install a quit interrupted, cloning
-    the old cache copy in either layout without changing it, dropping a damaged old file,
+    the old cache copy in either layout without changing it and with no free space, so
+    only a clone can do it, keeping a partial download over an old copy, dropping a
+    damaged old file,
     moving an incomplete or damaged install back to the staging folder, the backup flag,
     and removing other revisions. It works in temporary folders.
   - ModelDownloadTests runs the real URLSession code against stand in servers behind a
@@ -110,17 +112,21 @@ Build and test commands, run in the repository root:
     or 403, no network at all, resuming the weights with a Range request, small files
     always fetched whole, the cut 200 body and the 502 on a ranged request that
     modelscope.cn sends, a server that ignores ranges, a 200 that names a range, a
-    dropped connection resumed from the bytes on disk after a pause, wrong bytes fetched
+    dropped connection resumed from the bytes on disk after a pause, a request that ends
+    before the fetch waits for it, as a cancel just before a request does, wrong bytes fetched
     again from the next server, every server failing and Try Again, too little space
     without a request, cancel keeping the partial file, too many bytes, a wrong
-    Content-Range, files that cannot be written, the 8 and 30 second idle timeouts, and at
+    Content-Range, files that cannot be written, the idle timeout each request is given
+    (8 s for the first request to a server, 30 s after that, not a stalled server), and at
     most one progress report per 0.25 s.
   - ModelInstallerTests checks that launch and Try Again after a failed load never fetch,
-    the order of states from checking to installed, that each install loads the model
+    the order of states from checking to installed, that each install calls onInstalled
     once, that Download does nothing while a download runs or before the check, cancel
-    and resume, that the Mac is kept awake only during a download, Try Again after a
-    failure, the space check, hashing the installed files after a failed load, and the
-    menu text and menu bar icon of every state.
+    and resume, that Orra holds a process activity only during a download, Try Again
+    after a failure, the space check, hashing the installed files after a failed load,
+    and the installer's menu text and icon symbol for every state. The wiring that loads
+    the model after an install, the activity's effect on sleep and the menu bar icon
+    itself are manual checks below.
   - OpenAtLoginTests covers reading the login item status again, telling the menu about
     every change, turning it on and off, a failed change and when its message clears, and
     an item waiting for approval, with a fake in place of the system's login items.
@@ -381,6 +387,8 @@ and check connections with `lsof -nP -i -a -c Orra`:
   is opened again, note it.
 - [ ] Cancel at about 30%. The menu offers "Resume Download (… left)", and Resume goes on
   from the same percentage. The log shows a request at the byte reached.
+- [ ] When a download finishes, the menu bar icon turns into the plain microphone within a
+  few seconds, and a dictation works, without relaunching Orra.
 - [ ] Quit during the download, then relaunch: no connection at launch, and Resume goes on.
 - [ ] During a download, `tmutil isexcluded` on the .download folder in Models says
   Excluded, and `pmset -g assertions` lists Orra's activity, which keeps the Mac from

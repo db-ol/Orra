@@ -37,11 +37,11 @@ Orra records from the system's default input unless you choose another under Mic
 
 ## Privacy
 
-Orra turns your speech into text on your Mac. Your recordings and their text never leave it. Orra has no account, no analytics and no server of its own.
+Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. The text it pastes stays on this Mac's clipboard, so Universal Clipboard does not offer it to your other devices. Orra has no account, no analytics and no server of its own.
 
 Orra uses the internet for one thing: downloading its speech model, and only after you choose Download Speech Model in the menu. Launching Orra never connects to the network. The download fetches six files, 2.47 GB in all, from Hugging Face (huggingface.co). If Hugging Face cannot be reached, for example from mainland China, Orra tries ModelScope (modelscope.cn) and then hf-mirror.com, which carry the same files. hf-mirror.com hands the large weights file on to Hugging Face's own download servers, and outside mainland China it sends every request on to huggingface.co. Like any download, these services and the networks they hand the files to see your IP address. Orra sends no account, token or cookie.
 
-Before using the files, Orra checks the size and SHA-256 hash of each one against values written in its source code, so a mirror cannot change the model. The files are kept in ~/Library/Application Support/io.github.db-ol.Orra/Models and left out of Time Machine backups. To remove the model, quit Orra and delete that folder. If ~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit or ~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-8bit exists, delete it as well, because Orra's copy shares disk space with it. docs/model-download.md has the details.
+Before using the files, Orra checks the size and SHA-256 hash of each one against values written in its source code, so a mirror cannot change the model. The files are kept in ~/Library/Application Support/io.github.db-ol.Orra/Models and left out of Time Machine backups. To remove the model, quit Orra and delete that folder. If ~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit or ~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-8bit exists, delete it as well. While it exists, Orra installs the model again from it at its next launch, and Orra's copy shares disk space with it. docs/model-download.md has the details.
 
 ## Contributing
 

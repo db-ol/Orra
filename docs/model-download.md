@@ -12,7 +12,7 @@ network) and Orra/ModelInstaller.swift (the menu's state).
   Mac. During the download it names the server in use.
 - Launching never connects. At launch Orra looks at local files only: it checks the
   installed folder by file sizes, finishes an install that a quit interrupted, or reuses
-  the copy an older build left in ~/Library/Caches/qwen3-speech.
+  the copy speech-swift left in ~/Library/Caches/qwen3-speech.
 - Loading the model uses speech-swift's offline mode on the installed folder, so it makes
   no request either.
 - The menu shows the download before Accessibility is granted, so it can start first.
@@ -59,7 +59,7 @@ Download speed from either mirror has not been measured.
 | No network at all (URLError notConnectedToInternet, dataNotAllowed or internationalRoamingOff) | Stops at once and says the Mac is offline. |
 | A server that has sent nothing in this download fails, whatever the reason | Moves to the next server at once. |
 | HTTP 4xx other than 408 and 429, a wrong Content-Range, more bytes than pinned, or an empty range | Moves to the next server at once. |
-| A server that was sending fails: dropped connection, timeout, 5xx, 408 or 429 | Pauses 2 s and asks again from the bytes on disk, then 10 s, then moves on. Any new byte resets the count. |
+| A server that was sending fails: dropped connection, timeout, 5xx, 408 or 429 | Pauses 2 s and asks again, then 10 s, then moves on, so each server gets three tries in a row. The weights continue from the bytes on disk, and a try that gets past the most bytes this server delivered for them resets the count. The five small files start over from byte 0 on every try and never reset it. |
 | The disk is full | Stops and says how much space the rest of the download needs. |
 | Any other write error | Stops and says the files could not be saved. |
 | A file does not match its SHA-256 | Deletes it and fetches it from the next server. After the last server, stops and says so. |
@@ -73,9 +73,10 @@ the Mac does not fall asleep while idle. Closing the lid or choosing Sleep still
 
 - Only model.safetensors, 2.46 GB, continues from the bytes on disk with
   `Range: bytes=<n>-`. The five small files, 2.8 MB at most, are always fetched from
-  byte 0. modelscope.cn answers a Range request on its small files with a 200 whose body
-  starts at the asked offset and ends short, or with a 502. Its weights come from its
-  download servers, which answer ranges correctly.
+  byte 0. modelscope.cn answers a Range request on config.json, tokenizer_config.json
+  and model.safetensors.index.json, which it serves itself, with a 200 whose body starts
+  at the asked offset and ends short, or with a 502. merges.txt, vocab.json and the
+  weights come from its download servers, which answer ranges correctly.
 - A 206 must start at the asked byte and end inside the file. A shorter range is fine:
   Orra asks again for the rest.
 - A 200 means the whole file, so the file starts over, but only when the answer has no
@@ -147,10 +148,11 @@ Before the download existed, Orra loaded the model from speech-swift's cache,
 
 ## Removing the model
 
-Quit Orra and delete `~/Library/Application Support/io.github.db-ol.Orra/Models`. To get
-the space back, also delete the two old cache folders named above if they exist, because
-a clone shares its space with them. The rest of ~/Library/Caches/qwen3-speech may hold
-other models that Orra does not use.
+Quit Orra and delete `~/Library/Application Support/io.github.db-ol.Orra/Models`. Also
+delete the two old cache folders named above if they exist. While either exists, Orra
+installs the model again from it at its next launch, and a clone shares its space with
+them, so the space comes back only when all copies are gone. The rest of
+~/Library/Caches/qwen3-speech may hold other models that Orra does not use.
 
 ## Log
 
