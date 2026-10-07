@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
+    let models = ModelInstaller.live()
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
     nonisolated static var isHostedByXcode: Bool {
@@ -32,8 +33,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // copies must not install the keyboard tap or show the Accessibility
         // prompt.
         guard !Self.isHostedByXcode else { return }
+        // The installer is what loads the speech model: at launch when the model is in
+        // place, and again after a download or Try Again.
+        models.onInstalled = { [pushToTalk] _ in
+            Task { await pushToTalk.loadModel() }
+        }
         pushToTalk.start()
         openAtLogin.refreshWhenMenusOpen()
         audioInputs.refreshWhenMenusOpen()
+        // Local files only. Launching never touches the network.
+        Task { [models] in
+            await models.prepare()
+        }
     }
 }

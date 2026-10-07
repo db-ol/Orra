@@ -10,16 +10,25 @@ import Qwen3ASR
 /// silently dropping out of the build.
 actor Qwen3Engine {
     private var model: Qwen3ASRModel?
+    private let folder: @Sendable () -> URL?
+
+    /// - Parameter folder: The folder to load the model from, or nil while it is not there.
+    ///   The app passes the folder ModelInstaller fills. The real model tests pass the copy
+    ///   on this Mac.
+    init(folder: @escaping @Sendable () -> URL? = { SpeechModel.installedFolder() }) {
+        self.folder = folder
+    }
 
     func load() async throws {
         guard model == nil else { return }
-        guard SpeechModel.isOnThisMac() else { throw TranscriptionError.modelMissing }
-        // Offline mode keeps the load from touching the network. Loading also caps MLX's
-        // buffer cache (speech-swift pull request 498), so memory stays bounded across
-        // many dictations. It also raises MLX's wired limit (MetalBudget.pinMemory in
+        guard let folder = folder() else { throw TranscriptionError.modelMissing }
+        // Offline mode keeps the load from touching the network, and with the folder given
+        // speech-swift makes no cache folder of its own. Loading also caps MLX's buffer
+        // cache (speech-swift pull request 498), so memory stays bounded across many
+        // dictations. It also raises MLX's wired limit (MetalBudget.pinMemory in
         // speech-swift), so the model's MLX buffers stay wired in memory while Orra runs.
         // That last point is read from the source, not measured.
-        let loaded = try await Qwen3ASRModel.fromPretrained(modelId: SpeechModel.id, offlineMode: true)
+        let loaded = try await Qwen3ASRModel.fromPretrained(modelId: SpeechModel.id, cacheDir: folder, offlineMode: true)
         // One second of silence before the first dictation. MLX reads the weights only when
         // they are first used. In a benchmark on 2026-10-05, the first launch of a program
         // with a freshly compiled MLX Metal library also took about 2 s for its first

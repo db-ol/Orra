@@ -10,39 +10,17 @@ struct Transcription {
 }
 
 /// The one speech model Orra uses for now: Qwen3-ASR 1.7B in the 8 bit MLX build. The
-/// maintainer chose it on 2026-10-04, see docs/local-asr-models.md. Kept in one place so
-/// adding Qwen3-ASR 0.6B later is a small change.
+/// maintainer chose it on 2026-10-04, see docs/local-asr-models.md. ModelManifest.qwen3
+/// pins its files. Kept in one place so adding Qwen3-ASR 0.6B later is a small change.
 nonisolated enum SpeechModel {
     static let id = "aufklarer/Qwen3-ASR-1.7B-MLX-8bit"
 
-    /// Where speech-swift keeps downloaded models.
-    static var defaultCacheBase: URL {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("qwen3-speech", isDirectory: true)
-    }
-
-    /// The folders speech-swift may use for a model: the current layout
-    /// (models/<owner>/<name>) and the legacy one (<owner>_<name>).
-    static func cacheFolders(for id: String, base: URL = defaultCacheBase) -> [URL] {
-        var folders = [base.appendingPathComponent("models", isDirectory: true)]
-        for part in id.split(separator: "/") {
-            folders[0].appendPathComponent(String(part), isDirectory: true)
-        }
-        folders.append(base.appendingPathComponent(id.replacingOccurrences(of: "/", with: "_"), isDirectory: true))
-        return folders
-    }
-
-    /// Files that must sit next to the weights. Without them the model loads but returns
-    /// token numbers or keeps its language prefix.
-    static let tokenizerFiles = ["vocab.json", "merges.txt", "tokenizer_config.json"]
-
-    /// True when the model's weights and tokenizer are on this Mac, so it can load without
-    /// a network. Reads the folders only. It never creates or downloads anything.
-    static func isOnThisMac(id: String = id, base: URL = defaultCacheBase) -> Bool {
-        cacheFolders(for: id, base: base).contains { folder in
-            let files = Set((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [])
-            return files.contains { $0.hasSuffix(".safetensors") } && tokenizerFiles.allSatisfy(files.contains)
-        }
+    /// The folder ModelInstaller installed the model in, when every pinned file is there at
+    /// its size, the tokenizer files included. Reads sizes only. It never creates or
+    /// downloads anything.
+    static func installedFolder(_ folders: ModelFolders = .live, _ manifest: ModelManifest = .qwen3) -> URL? {
+        let folder = folders.installed(manifest)
+        return ModelDisk.isComplete(folder, manifest) ? folder : nil
     }
 }
 

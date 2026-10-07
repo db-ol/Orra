@@ -93,7 +93,7 @@ extension RealModelTests {
         }
 
         @Test func holdsWithoutSpeechGiveNoText() async throws {
-            let engine = Qwen3Engine()
+            let engine = RealModel.engine()
             try await engine.load()
             var noise = SeededNoise(seed: 0x5EED)
             let inputs: [(String, [Float])] = [
@@ -112,7 +112,7 @@ extension RealModelTests {
         }
 
         @Test func pausesAroundSpeechChangeNothing() async throws {
-            let engine = Qwen3Engine()
+            let engine = RealModel.engine()
             try await engine.load()
             var noise = SeededNoise(seed: 0xA11CE)
             for (set, dropFillers) in [("fleurs_zh", false), ("ascend_mixed", true)] {
@@ -141,7 +141,7 @@ extension RealModelTests {
 
         @Test func dictationAtMicrophoneRateMatchesTheClip() async throws {
             // One engine serves both the controller and the direct comparison.
-            let engine = Qwen3Engine()
+            let engine = RealModel.engine()
             let mic = FakeMicrophone()
             let inserter = FakeInserter()
             let controller = PushToTalkController(
@@ -188,7 +188,7 @@ extension RealModelTests {
         }
 
         @Test func longDictationStaysAccurate() async throws {
-            let engine = Qwen3Engine()
+            let engine = RealModel.engine()
             try await engine.load()
             var report: [String] = []
             for (set, dropFillers, target) in [("fleurs_zh", false, 58.0), ("ascend_mixed", true, 30.0)] {
@@ -222,7 +222,7 @@ extension RealModelTests {
 
         @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_FULL_EVAL"] != nil))
         func fullEvaluation() async throws {
-            let engine = Qwen3Engine()
+            let engine = RealModel.engine()
             try await engine.load()
             var report: [String] = []
             for (set, dropFillers) in [("fleurs_zh", false), ("fleurs_en", false), ("ascend_mixed", true)] {
@@ -250,7 +250,7 @@ extension RealModelTests {
 
         @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SOAK"] != nil))
         func memoryStaysBoundedOverManyDictations() async throws {
-            let engine = Qwen3Engine()
+            let engine = RealModel.engine()
             try await engine.load()
             let afterLoad = MemoryFootprint.current()
             let clips = try EvaluationData.clips(in: "fleurs_zh", count: 50)
