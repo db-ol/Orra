@@ -89,7 +89,15 @@ Build and test commands, run in the repository root:
     that a new tap is installed after the pause while access is there, and that no tap
     comes back when the access check says no, or still says yes while the system refuses
     the tap. It also checks that the environment variable the launch guard relies on is
-    set while tests run.
+    set while tests run, the cues for the recording indicator and the sounds in order
+    for a dictation, a short hold, a cancel, a failed start, a password field and empty
+    text, the reasons a hold cannot record, and reading microphone permission again.
+  - RecordingFeedbackTests checks what the indicator shows and which sound plays for each
+    cue, a message that goes after a while without hiding the next hold, the indicator
+    and the sounds turned off, saving both choices, the level meter's scale and how it
+    rises and falls, and that the indicator's panel can never become key or main. It
+    uses fakes, so no window opens and no sound plays. LevelMeterTests checks the peak
+    the audio thread stores.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -410,6 +418,25 @@ and check connections with `lsof -nP -i -a -c Orra`:
   during "Checking the downloaded files…".
 - [ ] On a Mac with macOS 15.6, if one is at hand, repeat the first four checks.
 
+Recording indicator and sounds, added on 2026-10-07, not verified yet:
+
+- [ ] Hold the talk key in Notes: a short sound plays and a dark indicator appears at the
+  bottom of the screen with the pointer, with bars that move with your voice. Notes keeps
+  the focus: its text cursor still blinks, and the menu bar still shows Notes.
+- [ ] Release: the indicator shows "Transcribing…", a second sound plays, and the
+  indicator goes once the text is in Notes. The start sound does not show up as a word
+  at the start of the text.
+- [ ] Over a full screen app, on another Space, and on a second display with the pointer
+  there, the indicator shows the same way.
+- [ ] Clicks at the bottom of the screen pass through the indicator.
+- [ ] Before the model is ready, and with microphone access off, a hold shows the reason
+  in the indicator for a few seconds. Dictating into a password field shows "Orra does
+  not paste into password fields. Use Copy Last Dictation." Holding the key without
+  speaking shows "No speech was recognized".
+- [ ] In Settings, turning off "Show the recording indicator" and "Play sounds when
+  recording starts and stops" takes effect at the next hold, and both stay off after
+  quitting and reopening Orra.
+
 Testing notes:
 
 - Quit Orra before turning off or removing its Accessibility access. Revoking access
@@ -433,4 +460,5 @@ Testing notes:
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
 - Key combinations and mouse buttons as talk keys, and hands free mode.
-- Rewriting, and settings other than the talk keys and the microphone.
+- Rewriting, and settings other than the talk keys, the microphone, the recording
+  indicator and the sounds.

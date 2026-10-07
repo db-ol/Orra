@@ -30,9 +30,11 @@ nonisolated final class InputUnit {
     private var isClosed = false
 
     /// Builds and initializes the unit without starting it, so nothing is recorded yet.
-    /// - Parameter maximumSeconds: Room for this much audio is set aside before the
-    ///   recording starts. Audio past it is dropped.
-    init(device: AudioInput, maximumSeconds: Double) throws {
+    /// - Parameters:
+    ///   - maximumSeconds: Room for this much audio is set aside before the recording
+    ///     starts. Audio past it is dropped.
+    ///   - meter: Gets the peak of every buffer, for the recording indicator.
+    init(device: AudioInput, maximumSeconds: Double, meter: LevelMeter? = nil) throws {
         var description = AudioComponentDescription(
             componentType: kAudioUnitType_Output,
             componentSubType: kAudioUnitSubType_HALOutput,
@@ -53,7 +55,8 @@ nonisolated final class InputUnit {
             let context = InputRenderContext(
                 unit: unit,
                 capacity: Int(format.mSampleRate * maximumSeconds),
-                maximumFrames: InputUnit.maximumFrames(of: unit)
+                maximumFrames: InputUnit.maximumFrames(of: unit),
+                meter: meter
             )
             var callback = AURenderCallbackStruct(
                 inputProc: { refCon, flags, timestamp, bus, frames, _ in
@@ -198,12 +201,14 @@ nonisolated final class InputRenderContext: @unchecked Sendable {
     /// Callbacks whose audio was lost: more frames than the scratch memory holds, or a
     /// failed render.
     let lostCallbacks = Atomic<Int>(0)
+    private let meter: LevelMeter?
     private let scratch: UnsafeMutablePointer<Float>
     private let scratchFrames: Int
     private let list: UnsafeMutableAudioBufferListPointer
 
-    init(unit: AudioUnit, capacity: Int, maximumFrames: Int) {
+    init(unit: AudioUnit, capacity: Int, maximumFrames: Int, meter: LevelMeter? = nil) {
         self.unit = unit
+        self.meter = meter
         buffer = CaptureBuffer(capacity: capacity)
         scratchFrames = maximumFrames
         scratch = .allocate(capacity: maximumFrames)
@@ -235,6 +240,7 @@ nonisolated final class InputRenderContext: @unchecked Sendable {
             return status
         }
         buffer.append(scratch, count: count)
+        meter?.record(scratch, count: count)
         return noErr
     }
 }

@@ -14,6 +14,7 @@ final class FakeMicrophone {
     /// When true, only the next start fails.
     var failOnlyNextStart = false
     var startDelay: Duration = .zero
+    var level: Float = 0
     private(set) var calls: [String] = []
     /// The microphone UID each start asked for, nil for the system default.
     private(set) var preferredInputs: [String?] = []
@@ -49,8 +50,21 @@ final class FakeMicrophone {
                 self.calls.append("stop")
                 return self.recording
             },
-            cancel: { self.calls.append("cancel") }
+            cancel: { self.calls.append("cancel") },
+            level: { self.level }
         )
+    }
+}
+
+/// Collects the cues a controller sends to the recording indicator and the sounds.
+@MainActor
+final class CueRecorder {
+    private(set) var list: [DictationCue] = []
+
+    init(_ controller: PushToTalkController) {
+        controller.onCue = { [weak self] cue in
+            self?.list.append(cue)
+        }
     }
 }
 
@@ -821,6 +835,98 @@ struct PushToTalkControllerTests {
         // Orra does not keep trying.
         try await Task.sleep(for: .milliseconds(100))
         #expect(tapSystem.installAttempts == 2)
+    }
+
+    @Test func aDictationSendsEveryCueInOrder() async throws {
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        try await dictate(controller)
+        #expect(cues.list == [.listening, .transcribing, .recordingStopped, .finished(message: nil)])
+    }
+
+    @Test func aHoldBeforeTheModelIsReadyOnlySaysWhy() async throws {
+        let controller = await makeController(loadModel: false)
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        #expect(cues.list == [.finished(message: "The speech model is not ready yet")])
+    }
+
+    @Test func aHoldWithMicrophoneAccessOffSaysWhy() async throws {
+        mic.access = .denied
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        #expect(cues.list == [.finished(message: "Microphone access is off")])
+    }
+
+    @Test func theFirstHoldLeavesTheExplainingToTheSystemPrompt() async throws {
+        mic.access = .notDetermined
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        #expect(cues.list == [.finished(message: nil)])
+    }
+
+    @Test func aShortHoldHasNeitherTheSpinnerNorTheStopSound() async throws {
+        let controller = await makeController(minimumHold: .seconds(10))
+        let cues = CueRecorder(controller)
+        try await dictate(controller)
+        #expect(cues.list == [.listening, .finished(message: nil)])
+    }
+
+    @Test func aCancelledHoldEndsWithoutAMessage() async throws {
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.contains("start") }
+        controller.handle(.cancelled)
+        #expect(cues.list == [.listening, .finished(message: nil)])
+    }
+
+    @Test func aMicrophoneThatCannotStartEndsTheHoldWithTheProblem() async throws {
+        mic.startError = TestError()
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { controller.state == .idle }
+        #expect(cues.list == [.listening, .finished(message: "The microphone could not start")])
+    }
+
+    @Test func aSkippedPasswordFieldEndsTheDictationWithTheNotice() async throws {
+        inserter.result = .skippedPasswordField
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        try await dictate(controller)
+        #expect(cues.list.last == .finished(message: "Orra does not paste into password fields. Use Copy Last Dictation."))
+    }
+
+    @Test func emptyTextEndsTheDictationSayingNothingWasRecognized() async throws {
+        speech.reply = "  "
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        try await dictate(controller)
+        #expect(cues.list.last == .finished(message: "No speech was recognized"))
+        // The menu has no line for it.
+        #expect(controller.problem == nil)
+        #expect(controller.notice == nil)
+    }
+
+    @Test func theLevelComesFromTheMicrophone() async {
+        mic.level = 0.25
+        let controller = await makeController()
+        #expect(controller.inputLevel() == 0.25)
+    }
+
+    @Test func microphoneAccessCanBeReadAgain() async {
+        mic.access = .denied
+        let controller = await makeController()
+        controller.refreshMicrophoneAccess()
+        #expect(controller.microphoneAccess == .denied)
+        mic.access = .authorized
+        controller.refreshMicrophoneAccess()
+        #expect(controller.microphoneAccess == .authorized)
+        // Reading never asks.
+        #expect(mic.calls.isEmpty)
     }
 
     @Test func hostDetectionSeesTheTestEnvironment() {

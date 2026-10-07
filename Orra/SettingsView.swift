@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// The settings window: the talk keys and the microphone.
+/// The settings window: the talk keys, the microphone, and the feedback while dictating.
 struct SettingsView: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
+    @Bindable var feedback: RecordingFeedback
 
     var body: some View {
         Form {
@@ -32,6 +33,15 @@ struct SettingsView: View {
                 Text("Microphone")
             } footer: {
                 Text("Orra records from this microphone. While it is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Show the recording indicator", isOn: $feedback.showsIndicator)
+                Toggle("Play sounds when recording starts and stops", isOn: $feedback.playsSounds)
+            } header: {
+                Text("While you dictate")
+            } footer: {
+                Text("The indicator appears at the bottom of the screen while Orra listens and transcribes. When nothing is pasted, it says why.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -102,6 +112,7 @@ struct TalkKeyToggles: View {
             transcription: .qwen3(),
             insert: { _ in .nothingToInsert }
         ),
-        inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) }
+        inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) },
+        feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in })
     )
 }

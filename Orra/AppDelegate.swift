@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
     let models = ModelInstaller.live()
+    /// The recording indicator and the sounds. Lazy, because it reads the controller's
+    /// microphone level.
+    lazy var feedback = RecordingFeedback.live { [pushToTalk] in pushToTalk.inputLevel() }
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
     nonisolated static var isHostedByXcode: Bool {
@@ -37,6 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // place, and again after a download or Try Again.
         models.onInstalled = { [pushToTalk] _ in
             Task { await pushToTalk.loadModel() }
+        }
+        pushToTalk.onCue = { [feedback] cue in
+            feedback.handle(cue)
         }
         pushToTalk.start()
         openAtLogin.refreshWhenMenusOpen()

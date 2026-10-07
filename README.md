@@ -33,6 +33,8 @@ A Release build takes about a quarter less time to transcribe than a Debug build
 
 Open ~/Applications/Orra.app and turn on Open at Login in its menu. If macOS asks for Accessibility or microphone access again for this copy, allow it.
 
+While Orra listens, a small indicator at the bottom of the screen shows bars that move with your voice, and a short sound marks the start and the end of the recording. When a dictation pastes nothing, the indicator says why. Both can be turned off in Settings.
+
 Orra records from the system's default input unless you choose another under Microphone in its menu or in Settings. The choice stays until you change it, and while that microphone is unplugged the default records. With the lid closed, a MacBook turns its own microphone off, so choose another one, such as a webcam's. The menu warns about it. docs/microphone-choice.md explains how the choice works.
 
 ## Privacy

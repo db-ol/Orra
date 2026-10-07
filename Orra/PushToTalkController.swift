@@ -3,6 +3,20 @@ import ApplicationServices
 import Observation
 import os
 
+/// What the recording indicator and the sounds follow. A dictation sends listening,
+/// transcribing, recordingStopped and finished, in that order. A hold that ends early
+/// skips to finished.
+nonisolated enum DictationCue: Equatable, Sendable {
+    /// The microphone is starting for a hold.
+    case listening
+    /// The talk key was released after a hold long enough to transcribe.
+    case transcribing
+    /// The microphone stopped, and the recording will be transcribed.
+    case recordingStopped
+    /// The hold is over. The message says why nothing was pasted, when there is a reason.
+    case finished(message: String?)
+}
+
 /// Connects the talk key, the microphone, the speech model and text insertion, and
 /// publishes the state for the menu bar.
 ///
@@ -48,6 +62,8 @@ final class PushToTalkController {
     /// The text of the latest dictation, kept in memory only, so the menu can copy it when
     /// the paste missed. Never logged.
     private(set) var lastTranscript: String?
+    /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
+    @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
 
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
@@ -72,6 +88,9 @@ final class PushToTalkController {
     @ObservationIgnored private var pressedAt: ContinuousClock.Instant?
     /// The microphone chosen when the current hold started.
     @ObservationIgnored private var holdMicrophone: MicrophoneChoice?
+    /// Why the current hold ended without a paste, for the indicator, when neither
+    /// `problem` nor `notice` says it. The menu shows these states in its own lines.
+    @ObservationIgnored private var holdMessage: String?
     /// Held from the start of a recording until its text is pasted or the hold ends.
     /// Orra is a menu bar app without windows, which App Nap may throttle, and someone is
     /// waiting for this work.
@@ -245,10 +264,12 @@ final class PushToTalkController {
             notice = nil
             microphoneNotice = nil
             suggestsSoundSettings = false
+            holdMessage = nil
             // The previous hold's start belongs to that hold only.
             captureStart = nil
             guard modelState == .ready else {
-                // The menu bar icon and the menu already say why.
+                // The menu bar icon and the menu say why too.
+                holdMessage = Self.notReadyMessage(modelState)
                 handle(.cancelled)
                 return
             }
@@ -257,6 +278,9 @@ final class PushToTalkController {
             recordingLimitTask?.cancel()
             let released = ContinuousClock.now
             let heldFor = pressedAt.map { $0.duration(to: released) } ?? .zero
+            if heldFor >= minimumHold {
+                onCue(.transcribing)
+            }
             let target = frontmostApp()
             let start = captureStart
             let chosen = holdMicrophone
@@ -273,8 +297,36 @@ final class PushToTalkController {
                     await capture.cancel()
                 }
             }
+            onCue(.finished(message: holdMessage ?? problem))
         case .finished:
             endUserActivity()
+            onCue(.finished(message: holdMessage ?? problem ?? notice))
+        }
+    }
+
+    /// The peak of the latest audio while recording, from 0 to 1, for the indicator.
+    func inputLevel() -> Float {
+        capture.level()
+    }
+
+    /// Reads microphone permission again, for the welcome window while the user may be
+    /// changing it in System Settings. Reading never shows a prompt.
+    func refreshMicrophoneAccess() {
+        let access = capture.access()
+        if access != microphoneAccess {
+            microphoneAccess = access
+        }
+    }
+
+    /// Why a hold cannot record while the speech model is not ready.
+    private static func notReadyMessage(_ state: ModelState) -> String {
+        switch state {
+        case .notLoaded, .ready:
+            "The speech model is not ready yet"
+        case .loading:
+            "The speech model is still loading"
+        case .unavailable(let reason):
+            reason
         }
     }
 
@@ -327,10 +379,16 @@ final class PushToTalkController {
                 logger.info("Recording reached its maximum length")
                 handle(.released)
             }
+            onCue(.listening)
         case .notDetermined:
+            // The system prompt that follows says enough.
             handle(.cancelled)
             requestMicrophoneAccess()
-        case .denied, .notConfigured:
+        case .denied:
+            holdMessage = "Microphone access is off"
+            handle(.cancelled)
+        case .notConfigured:
+            holdMessage = "This build has no microphone usage description"
             handle(.cancelled)
         }
     }
@@ -371,6 +429,7 @@ final class PushToTalkController {
             logger.debug("Hold too short, recording discarded")
             return
         }
+        onCue(.recordingStopped)
         if let chosen, recording.input?.uid != chosen.uid {
             // The chosen microphone was not connected, so the system default recorded.
             microphoneNotice = "\(chosen.name) is not connected, so \(recording.input?.name ?? "the system default input") recorded."
@@ -405,6 +464,7 @@ final class PushToTalkController {
             let raw = try await transcription.transcribe(samples)
             let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
             guard !text.isEmpty else {
+                holdMessage = "No speech was recognized"
                 logger.notice("No speech recognized in \(recording.duration, privacy: .public) s of audio")
                 return
             }
