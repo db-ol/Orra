@@ -25,6 +25,9 @@ struct StatusMenu: View {
                 EmptyView()
             case .unavailable(let reason):
                 Text(reason)
+                Button("Try Again") {
+                    Task { await pushToTalk.loadModel() }
+                }
             }
             switch pushToTalk.microphoneAccess {
             case .authorized:

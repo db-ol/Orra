@@ -333,6 +333,20 @@ struct PushToTalkControllerTests {
         #expect(controller.suggestsSoundSettings == false)
     }
 
+    @Test func aFailedLoadCanBeTriedAgain() async {
+        speech.loadError = TranscriptionError.modelMissing
+        let controller = await makeController()
+        #expect(controller.modelState == .unavailable("The speech model is not on this Mac"))
+        // The user puts the model files in place and chooses Try Again.
+        speech.loadError = nil
+        await controller.loadModel()
+        #expect(controller.modelState == .ready)
+        #expect(speech.loads == 2)
+        // Once it is loaded, it stays loaded.
+        await controller.loadModel()
+        #expect(speech.loads == 2)
+    }
+
     @Test func modelLoadsOnce() async {
         let controller = await makeController()
         await controller.loadModel()

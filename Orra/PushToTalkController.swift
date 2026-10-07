@@ -143,9 +143,16 @@ final class PushToTalkController {
         }
     }
 
-    /// Loads the speech model once. Internal so tests can drive it.
+    /// Loads the speech model, and again after a failed load, for example once the model
+    /// files are in place. Does nothing while loading or once loaded. Internal so tests and
+    /// the menu can drive it.
     func loadModel() async {
-        guard modelState == .notLoaded else { return }
+        switch modelState {
+        case .loading, .ready:
+            return
+        case .notLoaded, .unavailable:
+            break
+        }
         modelState = .loading
         let started = ContinuousClock.now
         do {
