@@ -54,9 +54,12 @@ final class PushToTalkController {
     @ObservationIgnored private let insert: @MainActor (String) async -> InsertionResult
     @ObservationIgnored private let frontmostApp: @MainActor () -> pid_t?
     @ObservationIgnored private let lidIsClosed: @MainActor () -> Bool
+    @ObservationIgnored private let isTrusted: @MainActor () -> Bool
+    @ObservationIgnored private let installTap: HotkeyTap.Install
     @ObservationIgnored private let maximumRecordingDuration: Duration
     @ObservationIgnored private let minimumHold: Duration
     @ObservationIgnored private let releaseTail: Duration
+    @ObservationIgnored private let accessCheckDelay: Duration
     @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
     /// Starts the microphone off the main thread. Its value tells whether it started.
     @ObservationIgnored private var captureStart: Task<Bool, Never>?
@@ -88,10 +91,17 @@ final class PushToTalkController {
     ///   - frontmostApp: The process ID of the frontmost app. Tests pass fakes.
     ///   - lidIsClosed: Whether the MacBook's lid is closed, read when a recording holds
     ///     no sound at all. Tests pass fakes.
+    ///   - isTrusted: Whether Orra has Accessibility access. The app asks
+    ///     AXIsProcessTrusted, whose answer can be stale, see `watchAccess()`. Tests pass
+    ///     fakes.
+    ///   - installTap: Creates the keyboard tap, see `HotkeyTap.Install`. Tests pass fakes,
+    ///     so they never install a real tap.
     ///   - maximumRecordingDuration: A hold longer than this is processed as if the key
     ///     had been released.
     ///   - minimumHold: Holds shorter than this are discarded.
     ///   - releaseTail: How long recording goes on after the talk key is released.
+    ///   - accessCheckDelay: How long Orra waits before it checks access again, see
+    ///     `watchAccess()`.
     ///   - talkKeys: The keys that start a dictation, as saved by the user.
     ///   - saveTalkKeys: Saves the keys after the user changes them.
     ///   - microphone: The microphone the user chose, or nil for the system default.
@@ -102,9 +112,12 @@ final class PushToTalkController {
         insert: @escaping @MainActor (String) async -> InsertionResult,
         frontmostApp: @escaping @MainActor () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
         lidIsClosed: @escaping @MainActor () -> Bool = { Lid.isClosed() },
+        isTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
+        installTap: @escaping HotkeyTap.Install = HotkeyTap.installLive,
         maximumRecordingDuration: Duration = RecordingLimits.maximumDuration,
         minimumHold: Duration = RecordingLimits.minimumHold,
         releaseTail: Duration = RecordingLimits.releaseTail,
+        accessCheckDelay: Duration = .seconds(2),
         talkKeys: Set<TalkKey> = TalkKey.defaultKeys,
         saveTalkKeys: @escaping (Set<TalkKey>) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
@@ -115,9 +128,12 @@ final class PushToTalkController {
         self.insert = insert
         self.frontmostApp = frontmostApp
         self.lidIsClosed = lidIsClosed
+        self.isTrusted = isTrusted
+        self.installTap = installTap
         self.maximumRecordingDuration = maximumRecordingDuration
         self.minimumHold = minimumHold
         self.releaseTail = releaseTail
+        self.accessCheckDelay = accessCheckDelay
         self.talkKeys = talkKeys.isEmpty ? TalkKey.defaultKeys : talkKeys
         self.saveTalkKeys = saveTalkKeys
         self.microphone = microphone
@@ -129,8 +145,10 @@ final class PushToTalkController {
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
-        tap = HotkeyTap(keys: talkKeys) { [weak self] event in
+        tap = HotkeyTap(keys: talkKeys, install: installTap) { [weak self] event in
             self?.handle(event)
+        } onSwitchedOff: { [weak self] reason in
+            self?.tapWasSwitchedOff(reason)
         }
         syncTapWithAccess()
         if !isHotkeyActive {
@@ -432,16 +450,39 @@ final class PushToTalkController {
     /// gone.
     private func syncTapWithAccess() {
         guard let tap else { return }
-        let trusted = AXIsProcessTrusted()
-        if trusted, !tap.isInstalled, tap.start() {
-            logger.info("Hotkey active")
+        let trusted = isTrusted()
+        if trusted, !tap.isInstalled {
+            if tap.start() {
+                logger.info("Hotkey active")
+            } else {
+                // AXIsProcessTrusted may still say yes after access is gone.
+                logger.notice("The system refused the keyboard tap")
+            }
         } else if !trusted, tap.isInstalled {
             tap.stop()
             logger.info("Accessibility access is gone, keyboard tap removed")
         }
-        if isHotkeyActive != tap.isInstalled {
-            isHotkeyActive = tap.isInstalled
+        publishTapState()
+    }
+
+    /// Tells the menu and the icon whether the tap is installed.
+    private func publishTapState() {
+        let installed = tap?.isInstalled ?? false
+        if isHotkeyActive != installed {
+            isHotkeyActive = installed
         }
+    }
+
+    /// The system switched the keyboard tap off, and the tap removed itself, see
+    /// `HotkeyTap.handle(type:keyCode:flags:)`. The menu shows the talk key as off at
+    /// once. After the same pause as after an access change, `syncTapWithAccess` installs
+    /// a new tap, which the system refuses without access, even while AXIsProcessTrusted
+    /// still says yes.
+    private func tapWasSwitchedOff(_ reason: CGEventType) {
+        let why = reason == .tapDisabledByTimeout ? "a timeout" : "user input"
+        logger.notice("The system switched the keyboard tap off after \(why, privacy: .public), tap removed")
+        publishTapState()
+        scheduleAccessCheck()
     }
 
     /// Checks access again two seconds after the system reports a change to the
@@ -451,7 +492,8 @@ final class PushToTalkController {
     /// notification clears, and System Settings posts the notification before
     /// it writes the change. That was read from the macOS 26.6 binaries and is
     /// not documented. Reading access right away, or polling, could therefore
-    /// cache the old answer until the next change. Removing Orra from the list
+    /// cache the old answer until the next change. For the same reason the tap
+    /// does not ask when the system switches it off. Removing Orra from the list
     /// may not post the notification at all, so Orra may not notice it.
     private func watchAccess() {
         accessObserver = DistributedNotificationCenter.default().addObserver(
@@ -467,8 +509,8 @@ final class PushToTalkController {
 
     private func scheduleAccessCheck() {
         accessCheckTask?.cancel()
-        accessCheckTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+        accessCheckTask = Task { [weak self, accessCheckDelay] in
+            try? await Task.sleep(for: accessCheckDelay)
             guard !Task.isCancelled else { return }
             self?.syncTapWithAccess()
         }

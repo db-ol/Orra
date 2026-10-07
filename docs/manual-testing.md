@@ -34,7 +34,9 @@ Build and test commands, run inside Orra/:
     presses that check that only fn's own events are ever swallowed and that nothing stays
     held once every key is up.
   - HotkeyTapTests feeds the tap's handler without installing a tap: removing the held key
-    ends the recording, a click ends a right Control hold, and only fn is swallowed.
+    ends the recording, a click ends a right Control hold, only fn is swallowed, and a tap
+    the system switched off, after a timeout or on user input, ends the hold, removes
+    itself, tells its owner and does not switch itself back on.
   - TalkKeyTests checks the key codes and left and right bits against the system headers,
     the default of right Control, reading a release on keyboards without those bits, which
     keys change what a click does, the menu hint, and that only fn swallows its events.
@@ -80,8 +82,12 @@ Build and test commands, run inside Orra/:
     recording without samples, empty text, loops, traditional characters, an app switch
     before the paste, failures including a failed start, a password field, presses during
     processing, cancel, microphone permission states including a build without a usage
-    description, and the 60 second limit. It also checks that the environment variable
-    the launch guard relies on is set while tests run.
+    description, and the 60 second limit. With a fake in place of the keyboard tap and
+    the access check, it checks that the menu shows the talk key as off as soon as the
+    system switches the tap off, that a new tap is installed after the pause while access
+    is there, and that no tap comes back when the access check says no, or still says yes
+    while the system refuses the tap. It also checks that the environment variable the
+    launch guard relies on is set while tests run.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -186,6 +192,23 @@ Talk key choice, added on 2026-10-05, not verified yet:
   Pinyin input method keeps its Chinese or English mode.
 - [ ] The choice of keys is still there after quitting and reopening Orra.
 - [ ] Right Option and right Command work the same way when turned on.
+
+Tap switched off by the system, changed on 2026-10-06, not verified yet. The log lines
+below show with the log stream command under Testing notes:
+
+- [ ] Run Orra from Xcode and dictate once. Pause Orra with Debug > Pause, then press one
+  key in another app. Orra's tap cannot answer, so the key waits until macOS switches
+  the tap off. Click Continue in Xcode. The icon shows the crossed out mic for about two
+  seconds, then the plain mic, and the talk key dictates again. The log shows "The
+  system switched the keyboard tap off after a timeout, tap removed", then "Hotkey
+  active".
+- [ ] Only with a way into the Mac from another computer, such as SSH, because input can
+  freeze: while Orra runs, turn it off under Privacy & Security > Accessibility. Another
+  time, remove it from the list instead. Each time, note whether keyboard and mouse
+  input freeze, whether the icon becomes the crossed out mic, and which of these log
+  lines appear: "The system switched the keyboard tap off", "The system refused the
+  keyboard tap", "Accessibility access is gone, keyboard tap removed". If input
+  freezes, take a sysdiagnose over SSH before restarting.
 
 Microphone choice, added on 2026-10-05, not verified yet. docs/microphone-choice.md
 explains how it works. A chosen microphone records through its own audio unit, which no

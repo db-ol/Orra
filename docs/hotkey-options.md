@@ -25,15 +25,31 @@ and `Orra/HotkeyTap.swift`:
   working.
 - Fn pressed while Shift, Control, Option or Command is held is left alone.
 - When the system reports a change to the Accessibility list, Orra checks again two
-  seconds later and removes the tap if access is gone. It never switches the tap back
-  on without access.
+  seconds later and removes the tap if access is gone.
+- When the system switches the tap off, after a slow callback
+  (`kCGEventTapDisabledByTimeout`) or on certain user input
+  (`kCGEventTapDisabledByUserInput`), Orra removes the tap at once, and the menu and the
+  icon show the talk key as off. Two seconds later it tries a new tap the same way as at
+  launch, and the system refuses a new tap without access. Since 2026-10-06 it never
+  switches such a tap back on, see the known risk below.
 
 Known risk: revoking Accessibility access while an active tap is installed can freeze
 keyboard and mouse input. A September 2026 report reproduces it on macOS 15, 26 and
-27 with the same kind of tap, and Apple has not given a workaround. [11] Orra removes
-its tap when it learns that access is gone, which is not verified on hardware.
-Removing Orra from the list may not be noticed at all, because `AXIsProcessTrusted` can
-keep returning true. [12] Quit Orra before changing its Accessibility access.
+27 with the same kind of tap, and Apple has not given a workaround. In that report no
+tap disabled event arrived before input froze. [11] Orra removes its tap when it learns
+that access is gone, which is not verified on hardware. Removing Orra from the list may
+not be noticed at all, because `AXIsProcessTrusted` can keep returning true. [12] On
+macOS 26.6.2 it answers from a cache inside the process, which only the
+`com.apple.accessibility.api` distributed notification clears (read from the HIServices
+binary on 2026-10-06).
+
+A developer reports `kCGEventTapDisabledByTimeout` events again and again, and delayed
+key presses, after access was revoked from a modifier key tap. [13] Until 2026-10-06
+Orra switched its tap back on after such an event whenever `AXIsProcessTrusted` still
+said yes, which could keep a tap without access in the path of every key press. Now it
+removes the tap and tries a new one, and the system refuses a new tap without access
+(reported, [12]). This cannot help when no such event arrives, as in [11]. None of this
+is verified on hardware. Quit Orra before changing its Accessibility access.
 
 Blind spots: chords the tap cannot see look like a plain hold. Volume, media and
 brightness keys arrive as system defined events when "Use F1, F2, etc. keys as standard
@@ -243,6 +259,7 @@ hidden from the frontmost app.
 10. Community thread on secure input blocking event taps: https://www.1password.community/1password-at-work-58/secure-input-blocking-other-apps-event-taps-25015/index2.html
 11. Apple Developer Forums, system input hang when Accessibility is revoked with an active event tap: https://developer.apple.com/forums/thread/844416
 12. Apple Developer Forums, app hangs if accessibility changes while using a CGEventTap: https://developer.apple.com/forums/thread/735204
+13. Apple Developer Forums, detecting revoked Accessibility for a modifier key event tap (developer report): https://developer.apple.com/forums/thread/744440
 
 SDK references: `HIToolbox/CarbonEvents.h` (hot key API and event kinds), `HIToolbox/Events.h`
 (`kVK_Function`), `AppKit/NSEvent.h` (global monitor comment, `isARepeat`,
