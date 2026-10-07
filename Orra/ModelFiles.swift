@@ -17,7 +17,8 @@ nonisolated struct ModelFile: Sendable, Equatable {
     let sha256: String
     /// Whether an interrupted download continues from the bytes on disk with a Range
     /// request. Only the weights do. The small files are always fetched whole, because
-    /// modelscope.cn answers a Range request on them with a cut and shifted body.
+    /// modelscope.cn answers a Range request on config.json, tokenizer_config.json and
+    /// model.safetensors.index.json, which it serves itself, with a cut and shifted body.
     var resumable = false
 }
 
@@ -360,12 +361,15 @@ nonisolated enum ModelPreparation {
         return .missing(bytesPresent: ModelDisk.bytesPresent(staging, manifest))
     }
 
-    /// Fills the staging folder from an old copy, for every file it lacks whole and an old
-    /// copy has at the pinned size. The hash is checked before the install.
+    /// Fills the staging folder from an old copy, for every file it lacks and an old copy
+    /// has at the pinned size. The hash is checked before the install. A partial download
+    /// kept for Resume stays, because the old copy may still fail its hash.
     private static func reuseOldCopies(_ manifest: ModelManifest, _ folders: ModelFolders, freeSpace: @Sendable (URL) -> Int64?) throws {
         let staging = folders.staging(manifest)
         var reusable: [(file: ModelFile, old: URL)] = []
-        for file in manifest.files where ModelDisk.size(staging.appendingPathComponent(file.name)) != file.size {
+        for file in manifest.files {
+            let staged = ModelDisk.size(staging.appendingPathComponent(file.name))
+            guard staged != file.size, ModelDisk.keptBytes(file, length: staged) == 0 else { continue }
             let candidates = folders.oldCopies.map { $0.appendingPathComponent(file.name) }
             if let old = candidates.first(where: { ModelDisk.size($0) == file.size }) {
                 reusable.append((file, old))

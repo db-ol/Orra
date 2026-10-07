@@ -148,7 +148,8 @@ struct ModelFilesTests {
         try temporary.writeAll(to: old)
         let before = try Self.snapshot(old)
 
-        let result = await ModelPreparation.run(temporary.manifest, temporary.folders, freeSpace: { _ in 100_000_000_000 })
+        // No free space, so only a clone, which takes none, can fill the staging folder.
+        let result = await ModelPreparation.run(temporary.manifest, temporary.folders, freeSpace: { _ in 0 })
         #expect(result == .installed(temporary.installed))
         #expect(temporary.isInstalled())
         #expect(try temporary.isExcludedFromBackup(temporary.installed))
@@ -159,10 +160,33 @@ struct ModelFilesTests {
     @Test func launchReusesTheLegacyLayout() async throws {
         let temporary = TemporaryModelFolders()
         defer { temporary.remove() }
-        try temporary.writeAll(to: temporary.folders.oldCopies[1])
-        let result = await ModelPreparation.run(temporary.manifest, temporary.folders, freeSpace: { _ in 100_000_000_000 })
+        let old = temporary.folders.oldCopies[1]
+        try temporary.writeAll(to: old)
+        let before = try Self.snapshot(old)
+        let result = await ModelPreparation.run(temporary.manifest, temporary.folders, freeSpace: { _ in 0 })
         #expect(result == .installed(temporary.installed))
         #expect(temporary.isInstalled())
+        #expect(try Self.snapshot(old) == before)
+    }
+
+    @Test func launchKeepsAPartialDownloadOverAnOldCopy() async throws {
+        let temporary = TemporaryModelFolders()
+        defer { temporary.remove() }
+        // A download left the small files and half the weights. The old copy's weights have
+        // the pinned size but fail their hash.
+        let names = TestModel.manifest.files.map(\.name)
+        try FileManager.default.createDirectory(at: temporary.staging, withIntermediateDirectories: true)
+        try temporary.write(Array(names.dropLast()), to: temporary.staging)
+        let weights = temporary.staging.appendingPathComponent("model.safetensors")
+        let half = TestModel.weights.count / 2
+        try TestModel.weights.prefix(half).write(to: weights)
+        try temporary.writeAll(to: temporary.folders.oldCopies[0], damaging: ["model.safetensors"])
+
+        let result = await ModelPreparation.run(temporary.manifest, temporary.folders, freeSpace: { _ in 100_000_000_000 })
+        // The partial download stays for Resume.
+        #expect(ModelDisk.size(weights) == Int64(half))
+        #expect(result == .missing(bytesPresent: ModelDisk.bytesPresent(temporary.staging, temporary.manifest)))
+        #expect(!temporary.isInstalled())
     }
 
     @Test func launchDropsDamagedOldFile() async throws {
