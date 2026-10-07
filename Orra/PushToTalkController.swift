@@ -395,8 +395,8 @@ final class PushToTalkController {
                 // Notice rather than info, so the timing stays in the log store for later
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(released.duration(to: .now), privacy: .public) for \(recording.duration, privacy: .public) s of audio")
-            case .leftOnPasteboardForSecureInput:
-                notice = "Secure input is on, so the text was not pasted. It is on the clipboard."
+            case .skippedPasswordField:
+                notice = "Orra does not paste into password fields. Use Copy Last Dictation."
             case .nothingToInsert:
                 break
             }

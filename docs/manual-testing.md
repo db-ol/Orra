@@ -18,7 +18,7 @@ Build and test commands, run inside Orra/:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 229 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 239 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -63,17 +63,22 @@ Build and test commands, run inside Orra/:
     without losing the end, the sample store limit, and the length rules. They use
     synthetic buffers, not the microphone.
   - TextInserterTests covers pasting with Command V, restoring the old pasteboard, keeping
-    what the user copied afterwards, secure input, empty text, two dictations in a row,
-    restoring several items and types, reading the pasteboard off the main actor, and
-    finding the key for v in the current layout with and without Command held. They use
-    private named pasteboards and a fake key poster, so no real event is posted.
+    what the user copied afterwards, pasting while another process holds secure input,
+    leaving a password field and the pasteboard alone, leaving a field that cannot be
+    described alone when the app in front holds secure input, pasting into plain text
+    there, asking about the field only under secure input and only right before the paste,
+    telling fields apart by role and subrole, a concealed Copy Last Dictation, empty text,
+    two dictations in a row, restoring several items and types, reading the pasteboard off
+    the main actor, and finding the key for v in the current layout with and without
+    Command held. They use private named pasteboards and a fake key poster, so no real
+    event is posted.
   - PushToTalkControllerTests runs the whole flow with a fake microphone, a fake speech
     model, a fake inserter and a fake frontmost app: model loading and the ready gate,
     record, resample, transcribe and paste, a release or cancel that arrives before the
     microphone has started, a new hold that begins while a cancelled one is still
     stopping the microphone, the minimum hold, a recording cut by a device change, a
     recording without samples, empty text, loops, traditional characters, an app switch
-    before the paste, failures including a failed start, secure input, presses during
+    before the paste, failures including a failed start, a password field, presses during
     processing, cancel, microphone permission states including a build without a usage
     description, and the 60 second limit. It also checks that the environment variable
     the launch guard relies on is set while tests run.
@@ -250,12 +255,22 @@ are in place since 2026-10-05:
 - [ ] Release the talk key and switch to another app at once. The text is not pasted
   there, the menu says so, and "Copy Last Dictation" copies it.
 - [ ] Pasting works in Notes, a browser text field, VS Code and Terminal.
-- [ ] In a password field, and in Terminal with Secure Keyboard Entry on, nothing is
-  pasted. The menu says the text is on the clipboard instead.
+- [ ] In a password field, nothing is pasted, the clipboard keeps what it had, and the
+  menu says "Orra does not paste into password fields. Use Copy Last Dictation." Try a
+  login form in Safari, the password field of a System Settings sheet, a login form in
+  Chrome while chrome://accessibility shows native accessibility off, and the unlock
+  screen of a password manager built on Electron. After Copy Last Dictation, a clipboard
+  history app does not record the text.
+- [ ] With Terminal's Secure Keyboard Entry on (Terminal menu), dictate into Terminal
+  itself: the text is pasted, and the old clipboard comes back. Then bring Notes to the
+  front and run `ioreg -l -w 0 | grep SecureInput` in another window. Terminal is
+  expected to give secure input up when its window is not in front, so dictating into
+  Notes tests the new path only when kCGSSessionSecureInputPID still shows there. Write
+  down which it was.
 - [ ] Known blind spot, check how it behaves: in Terminal with Secure Keyboard Entry on,
   hold right Control for a series of Control shortcuts for more than a second while
   someone talks. Secure input hides the other keys from Orra, so this can be taken as a
-  dictation, and its text then replaces the clipboard.
+  dictation, and its text is then pasted at the prompt.
 - [ ] A quick tap of the talk key does nothing. Holding it for more than 60 seconds stops
   the recording and pastes.
 - [ ] Pressing the talk key while the previous dictation is still being processed does

@@ -293,10 +293,10 @@ struct PushToTalkControllerTests {
         #expect(controller.microphoneNotice == "Brio 500 is not connected, so MacBook Pro Microphone recorded.")
         #expect(inserter.inserted == ["你好"])
         // A paste notice does not hide it.
-        inserter.result = .leftOnPasteboardForSecureInput
+        inserter.result = .skippedPasswordField
         try await dictate(controller)
         #expect(controller.microphoneNotice == "Brio 500 is not connected, so MacBook Pro Microphone recorded.")
-        #expect(controller.notice == "Secure input is on, so the text was not pasted. It is on the clipboard.")
+        #expect(controller.notice == "Orra does not paste into password fields. Use Copy Last Dictation.")
         // The chosen microphone recorded, so there is nothing to say.
         inserter.result = .pasted
         mic.recording.input = AudioInput(id: 2, uid: "brio-uid", name: "Brio 500", isInternalMicrophone: false)
@@ -594,12 +594,13 @@ struct PushToTalkControllerTests {
         #expect(controller.problem == nil)
     }
 
-    @Test func secureInputLeavesANotice() async throws {
-        inserter.result = .leftOnPasteboardForSecureInput
+    @Test func aPasswordFieldLeavesANoticeAndTheTextForCopying() async throws {
+        inserter.result = .skippedPasswordField
         let controller = await makeController()
         try await dictate(controller)
-        #expect(controller.notice != nil)
+        #expect(controller.notice == "Orra does not paste into password fields. Use Copy Last Dictation.")
         #expect(controller.problem == nil)
+        #expect(controller.lastTranscript == "你好")
     }
 
     @Test func pressDuringProcessingIsIgnored() async throws {

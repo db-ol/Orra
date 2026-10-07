@@ -40,11 +40,33 @@ brightness keys arrive as system defined events when "Use F1, F2, etc. keys as s
 function keys" is on, and no key down reaches the tap while secure input is on, for
 example with Terminal's Secure Keyboard Entry or a focused password field. Fn itself
 keeps working under secure input because it is a modifier (reported, not tried on this
-Mac). A blind spot starts a recording. Holds without speech give no
-text, and under secure input the text is left on the clipboard instead of pasted. With
-right Control as the talk key, the likeliest case is a Control shortcut held for a while
-in a terminal with Secure Keyboard Entry, which is then taken as a dictation if someone
-is talking.
+Mac). A blind spot starts a recording. Holds without speech give no text. With right
+Control as the talk key, the likeliest case is a Control shortcut held for a while in a
+terminal with Secure Keyboard Entry, which is then taken as a dictation if someone is
+talking, and its text is pasted at the prompt.
+
+Pasting under secure input: until 2026-10-05 Orra left the text on the clipboard
+whenever any process held secure input, without putting the old clipboard back. Secure
+input is a single flag for the whole session, so a process that keeps it on in the
+background, which is reported to happen, stopped every paste in every app. On
+2026-10-05 the maintainer chose to paste as usual under secure input. Secure input keeps
+other apps from reading keys, and posting Command V is reported to still work. Orra now
+pastes and puts the old clipboard back, except where the text could land in a password
+field, which turns secure input on while it has the focus. While secure input is on,
+Orra asks Accessibility about the focused field of the app in front, right before the
+paste, with at most two reads of half a second each:
+
+- A password field (subrole AXSecureTextField) gets nothing, and the clipboard is left
+  alone.
+- A text field, text area or combo box gets the paste.
+- A field Accessibility cannot describe gets nothing when the app in front holds secure
+  input itself, and the paste otherwise. Some browsers show no elements of a web page
+  until an assistive app asks for them, while they still turn secure input on for a
+  password field, so such a field looks like this (reported).
+
+The text stays under Copy Last Dictation, which marks it concealed and keeps it on this
+Mac. Whether a posted Command V reaches an app that holds secure input, and how web
+password fields report themselves, are not tried on this Mac yet.
 
 On 2026-10-05 the maintainer asked for a choice of keys with right Control as the
 default, after the Fn key of a Logitech MX Keys did not reach Orra at all. Implemented in
