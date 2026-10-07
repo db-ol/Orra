@@ -3,11 +3,14 @@ import SwiftUI
 /// The menu shown from the menu bar item.
 struct StatusMenu: View {
     let pushToTalk: PushToTalkController
+    let models: ModelInstaller
     let openAtLogin: OpenAtLogin
     let inputs: AudioInputList
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
+        // Above the talk key, so the download can start before Accessibility is granted.
+        ModelMenuSection(models: models, pushToTalk: pushToTalk)
         if pushToTalk.isHotkeyActive {
             Text(TalkKey.holdHint(for: pushToTalk.talkKeys))
             if let warning = MicrophoneLabels.lidWarning(
@@ -17,17 +20,6 @@ struct StatusMenu: View {
                 lidClosed: inputs.lidClosed
             ), warning != pushToTalk.problem {
                 Text(warning)
-            }
-            switch pushToTalk.modelState {
-            case .notLoaded, .loading:
-                Text("Loading the speech model…")
-            case .ready:
-                EmptyView()
-            case .unavailable(let reason):
-                Text(reason)
-                Button("Try Again") {
-                    Task { await pushToTalk.loadModel() }
-                }
             }
             switch pushToTalk.microphoneAccess {
             case .authorized:
@@ -109,5 +101,44 @@ struct StatusMenu: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+}
+
+/// The speech model's lines at the top of the menu: the download until the model is in
+/// place, then whether it loaded.
+struct ModelMenuSection: View {
+    let models: ModelInstaller
+    let pushToTalk: PushToTalkController
+
+    var body: some View {
+        if case .installed = models.state {
+            switch pushToTalk.modelState {
+            case .notLoaded, .loading:
+                Text("Loading the speech model…")
+            case .ready:
+                EmptyView()
+            case .unavailable(let reason):
+                Text(reason)
+                Button("Try Again") {
+                    // Checks the files again, hashes included, then loads. A damaged or
+                    // missing file leads back to Download.
+                    Task { await models.prepare(checkingHashes: true) }
+                }
+            }
+        } else {
+            let total = models.manifest.totalBytes
+            ForEach(models.state.menuLines(total: total), id: \.self) { line in
+                Text(line)
+            }
+            if let title = models.state.buttonTitle(total: total) {
+                Button(title) {
+                    if case .downloading = models.state {
+                        models.cancel()
+                    } else {
+                        models.download()
+                    }
+                }
+            }
+        }
     }
 }

@@ -15,28 +15,27 @@ struct SupportTests {
         #expect(MemoryFootprint.current() > 0)
     }
 
-    private func makeFiles(_ names: [String], in folder: URL) throws {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        for name in names {
-            FileManager.default.createFile(atPath: folder.appendingPathComponent(name).path, contents: Data())
-        }
+    @Test func theModelLoadsOnlyFromACompleteInstalledFolder() throws {
+        let temporary = TemporaryModelFolders()
+        defer { temporary.remove() }
+        #expect(SpeechModel.installedFolder(temporary.folders, temporary.manifest) == nil)
+        // Weights without the tokenizer would paste token numbers, so they do not count.
+        try temporary.write(["model.safetensors", "config.json", "model.safetensors.index.json"], to: temporary.installed)
+        #expect(SpeechModel.installedFolder(temporary.folders, temporary.manifest) == nil)
+        try temporary.writeAll(to: temporary.installed)
+        #expect(SpeechModel.installedFolder(temporary.folders, temporary.manifest) == temporary.installed)
+        // A copy in the old cache is not loaded from. Launch installs it first.
+        let other = TemporaryModelFolders()
+        defer { other.remove() }
+        try other.writeAll(to: other.folders.oldCopies[0])
+        #expect(SpeechModel.installedFolder(other.folders, other.manifest) == nil)
     }
 
-    @Test func modelFilesAreFoundInBothCacheLayouts() throws {
-        let base = FileManager.default.temporaryDirectory.appendingPathComponent("orra-model-test-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: base) }
-        #expect(SpeechModel.isOnThisMac(id: "owner/Model", base: base) == false)
-
-        let current = base.appendingPathComponent("models/owner/Model", isDirectory: true)
-        try makeFiles(["model.safetensors"], in: current)
-        // Weights without the tokenizer would paste token numbers, so they do not count.
-        #expect(SpeechModel.isOnThisMac(id: "owner/Model", base: base) == false)
-        try makeFiles(SpeechModel.tokenizerFiles, in: current)
-        #expect(SpeechModel.isOnThisMac(id: "owner/Model", base: base))
-
-        let legacy = base.appendingPathComponent("owner_Legacy", isDirectory: true)
-        try makeFiles(["model.safetensors"] + SpeechModel.tokenizerFiles, in: legacy)
-        #expect(SpeechModel.isOnThisMac(id: "owner/Legacy", base: base))
+    @Test func theEngineReportsAMissingModelWithoutLoading() async {
+        let engine = Qwen3Engine(folder: { nil })
+        await #expect(throws: TranscriptionError.modelMissing) {
+            try await engine.load()
+        }
     }
 
     @Test func modelIdIsTheChosenOne() {

@@ -11,7 +11,7 @@ extension RealModelTests {
     @Suite
     struct Qwen3EngineTests {
         @Test func matchesTheBaselineAndKeepsMemoryBounded() async throws {
-            let engine = Qwen3Engine()
+            let engine = RealModel.engine()
             let loadStart = ContinuousClock.now
             try await engine.load()
             let loadTime = loadStart.duration(to: .now)

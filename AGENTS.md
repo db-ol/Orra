@@ -1,6 +1,6 @@
 # Orra engineering guide
 
-Orra is an open source voice input app for macOS. Everything runs on the user's Mac.
+Orra is an open source voice input app for macOS. Transcription runs on the user's Mac.
 This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Platform
@@ -41,11 +41,15 @@ trusted once in Xcode. docs/dependencies.md has the details.
   block the main thread, and keep audio and transcription work off the main actor.
 - Quit Orra before turning off or removing its Accessibility access. Revoking access while the
   tap is installed can freeze keyboard and mouse input (Apple Developer Forums thread 844416).
+- Orra goes online only for the speech model download the user starts from the menu.
+  Launching must never touch the network. Any other network use needs the maintainer's
+  approval. docs/model-download.md describes the download.
 
 ## Needs maintainer approval
 Do not change signing, the Development Team, the Bundle ID, entitlements, App Sandbox, or the
-deployment target, and do not add a dependency, without the maintainer's approval. If a task needs
-one of these, write docs/BLOCKED.md with the question and the options, commit it, and stop.
+deployment target, and do not add a dependency or a new download server, without the
+maintainer's approval. If a task needs one of these, write docs/BLOCKED.md with the question
+and the options, commit it, and stop.
 
 ## Continuous integration
 .github/workflows/ci.yml runs two jobs on every pull request and every push to main.

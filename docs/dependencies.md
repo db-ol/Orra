@@ -95,6 +95,15 @@ contribution is under one or the other, so GitHub detects no single license.
 - The build log has four warnings from Metal headers inside mlx-swift ("constexpr if is a
   C++17 extension"). They are third party code and do not affect Orra.
 
+## Model download
+
+Orra downloads the speech model itself. It uses URLSession for the download, CryptoKit for
+the hashes and a Mutex from Synchronization in the session delegate, all from the macOS SDK,
+and clonefile from the system library to reuse an older copy. No package was added for it.
+speech-swift's own downloader is not used. speech-swift only loads the model, with
+offlineMode: true, from the folder Orra installed. docs/model-download.md describes the
+download.
+
 ## Keeping speech-swift or carrying only Qwen3ASR
 
 Still the maintainer's decision. Carrying only the Apache-2.0 sources of Qwen3ASR,

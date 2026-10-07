@@ -5,9 +5,9 @@ import SwiftUI
 
     var body: some Scene {
         MenuBarExtra {
-            StatusMenu(pushToTalk: appDelegate.pushToTalk, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs)
+            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs)
         } label: {
-            MenuBarIcon(pushToTalk: appDelegate.pushToTalk)
+            MenuBarIcon(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models)
         }
 
         Settings {
@@ -16,11 +16,12 @@ import SwiftUI
     }
 }
 
-/// The menu bar icon. It shows whether the hotkey works, whether the speech model is
-/// ready, whether Orra is listening or processing, and whether the microphone is blocked
-/// or the last dictation failed.
+/// The menu bar icon. It shows whether the speech model still needs its download, whether
+/// the hotkey works, whether the model is ready, whether Orra is listening or processing,
+/// and whether the microphone is blocked or the last dictation failed.
 struct MenuBarIcon: View {
     let pushToTalk: PushToTalkController
+    let models: ModelInstaller
 
     var body: some View {
         Image(systemName: symbolName)
@@ -28,6 +29,9 @@ struct MenuBarIcon: View {
     }
 
     private var symbolName: String {
+        // Until the model is in place, the icon shows where that stands, with or without
+        // Accessibility access.
+        if let symbol = models.state.symbolName { return symbol }
         guard pushToTalk.isHotkeyActive else { return "mic.slash" }
         switch pushToTalk.state {
         case .listening:

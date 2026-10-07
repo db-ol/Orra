@@ -17,7 +17,8 @@ nonisolated enum InsertionResult: Equatable, Sendable {
 /// Puts dictated text into the frontmost app: write it to the pasteboard, post Command V,
 /// and put the old pasteboard back half a second later.
 ///
-/// The text is marked with org.nspasteboard.ConcealedType so clipboard managers skip it.
+/// The text is marked with org.nspasteboard.ConcealedType so clipboard managers skip it,
+/// and kept on this Mac, so Universal Clipboard does not offer it to other devices.
 /// The old contents come back only if nothing else changed the pasteboard meanwhile.
 /// Reading the old contents can wait on the app that copied them, so it happens off the
 /// main thread, where the keyboard tap runs.
@@ -90,7 +91,13 @@ final class TextInserter {
     /// Marked concealed, so clipboard managers skip it, and kept on this Mac, so Universal
     /// Clipboard does not offer it to other devices. Nothing restores the old contents.
     static func copy(_ text: String, to pasteboard: NSPasteboard) {
-        // Not followed by declareTypes, which would clear the host only option again.
+        write(text, to: pasteboard)
+    }
+
+    /// Writes text marked concealed and kept on this Mac, for the paste and for Copy Last
+    /// Dictation alike. Not followed by declareTypes, which would clear the host only
+    /// option again.
+    private static func write(_ text: String, to pasteboard: NSPasteboard) {
         pasteboard.prepareForNewContents(with: .currentHostOnly)
         let item = NSPasteboardItem()
         item.setString(text, forType: .string)
@@ -118,9 +125,7 @@ final class TextInserter {
         restoreTask?.cancel()
         pendingSnapshot = nil
 
-        pasteboard.declareTypes([.string, Self.concealedType], owner: nil)
-        pasteboard.setString(text, forType: .string)
-        pasteboard.setData(Data(), forType: Self.concealedType)
+        Self.write(text, to: pasteboard)
 
         let writtenChangeCount = pasteboard.changeCount
         postCommandShortcut(keyCodeForV())

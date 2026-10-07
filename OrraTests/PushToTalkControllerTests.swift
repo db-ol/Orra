@@ -146,7 +146,9 @@ struct PushToTalkControllerTests {
         )
         controller.start()
         #expect(controller.isHotkeyActive)
-        try await waitUntil { controller.modelState == .ready }
+        // In the app, ModelInstaller loads the model once its files are in place.
+        await controller.loadModel()
+        #expect(controller.modelState == .ready)
         return controller
     }
 
@@ -369,6 +371,23 @@ struct PushToTalkControllerTests {
         // Once it is loaded, it stays loaded.
         await controller.loadModel()
         #expect(speech.loads == 2)
+    }
+
+    /// Only ModelInstaller loads the model, once its files are in place. A load at start
+    /// would fail before the installer is done and report the model as missing.
+    @Test func startLeavesTheModelToTheInstaller() async throws {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            isTrusted: tapSystem.isTrusted,
+            installTap: tapSystem.install,
+            accessCheckDelay: .milliseconds(20)
+        )
+        controller.start()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(speech.loads == 0)
+        #expect(controller.modelState == .notLoaded)
     }
 
     @Test func modelLoadsOnce() async {

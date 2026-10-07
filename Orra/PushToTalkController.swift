@@ -140,8 +140,9 @@ final class PushToTalkController {
         self.saveMicrophone = saveMicrophone
     }
 
-    /// Starts watching for the hotkey and loads the speech model. Without Accessibility
-    /// access, shows the system prompt and installs the tap once access is granted.
+    /// Starts watching for the hotkey. Without Accessibility access, shows the system prompt
+    /// and installs the tap once access is granted. The speech model loads once
+    /// ModelInstaller has it in place, see AppDelegate.
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
@@ -156,14 +157,12 @@ final class PushToTalkController {
             promptForAccessibility()
         }
         watchAccess()
-        Task { [weak self] in
-            await self?.loadModel()
-        }
     }
 
     /// Loads the speech model, and again after a failed load, for example once the model
-    /// files are in place. Does nothing while loading or once loaded. Internal so tests and
-    /// the menu can drive it.
+    /// files are in place again. Does nothing while loading or once loaded. ModelInstaller
+    /// calls it through AppDelegate whenever the model is installed. Internal so tests can
+    /// drive it.
     func loadModel() async {
         switch modelState {
         case .loading, .ready:
