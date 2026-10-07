@@ -106,8 +106,8 @@ Microphone choice instead of the Sound settings, because the input picked in Sou
 settings does not change what a chosen microphone records.
 
 The engine is rebuilt only when the default input changed since the engine was made.
-Commit 084d272 compared the default input with the device read back from the engine's
-input unit instead. Orra's log on this Mac shows that unit switching from the default
+An earlier version compared the default input with the device read back from the
+engine's input unit instead. Orra's log on this Mac shows that unit switching from the default
 output to the engine's private aggregate, so the read back most likely never matched,
 and the engine was rebuilt at every hold. Not verified, because Orra did not log the
 value.

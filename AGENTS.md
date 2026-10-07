@@ -4,7 +4,7 @@ Orra is an open source voice input app for macOS. Everything runs on the user's 
 This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Platform
-- macOS 15 or later. Apple Silicon first.
+- macOS 15.6 or later. Apple Silicon first.
 - Swift 6 with strict concurrency. The project sets default actor isolation to MainActor.
 - SwiftUI by default. AppKit only where SwiftUI cannot do the job (menu bar, window control, events).
 - SwiftPM for approved dependencies only. docs/dependencies.md lists them. speech-swift
@@ -21,7 +21,7 @@ No backend, no accounts, no analytics, no database, no LLM rewriting, no cloud t
 and no platforms other than macOS.
 
 ## Build discipline
-Build (run inside Orra/):
+Build (run in the repository root):
 
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
 

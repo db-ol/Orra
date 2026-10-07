@@ -77,9 +77,9 @@ against 3.6 and 9.5 in the table above.
   than the release build of the command line tool above, 0.22 s median for 8 to 12 s. A
   Debug build compiles the MLX core without optimization.
 - Load: 0.43 to 1.49 s, and memory right after loading was 115 to 128 MB, because MLX
-  reads the weights on first use. The first dictation brought it to 3.2 to 3.3 GB. Since
-  commit 1c2b22f Orra transcribes one second of silence right after loading, so memory is
-  about 3 GB from the start. Loading with the warm up took 0.52 and 0.60 s in test runs,
+  reads the weights on first use. The first dictation brought it to 3.2 to 3.3 GB. Orra
+  now transcribes one second of silence right after loading, so memory is about 3 GB from
+  the start. Loading with the warm up took 0.52 and 0.60 s in test runs,
   measured after other real model tests in the same process, not at a cold launch. In a
   scratch benchmark, the first launch of a program with a freshly compiled MLX Metal
   library took 2.14 and 1.97 s for its first transcription, and a second launch of the
@@ -124,7 +124,8 @@ unless the line says otherwise:
   worst 2.1 to 6.3 s, and a later Debug run had a worst of 4.3 s. An earlier Debug run on
   its own had none over 1 s, the worst 0.88 s. A Release build probe outside the
   repository, with a 2 s pause before each dictation, had 5 and 4 of 60 over 1 s, the
-  worst 9.8 and 16 s. The 16 s run had the user initiated activity of commit 3576211 on.
+  worst 9.8 and 16 s. The 16 s run had the user initiated activity that keeps Orra out
+  of App Nap during a dictation.
   The stalls were not tied to particular clips, since the same clip was fast in other
   rounds, and they came in clusters. Xcode was indexing the new packages through all of
   these runs at about 70% of a core, and swap held 4.5 GB.
