@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import Orra
@@ -107,6 +108,7 @@ struct PushToTalkControllerTests {
     let speech = FakeSpeech()
     let inserter = FakeInserter()
     let workspace = FakeWorkspace()
+    let tapSystem = FakeTapSystem()
 
     private func makeController(
         limit: Duration = RecordingLimits.maximumDuration,
@@ -125,6 +127,26 @@ struct PushToTalkControllerTests {
         if loadModel {
             await controller.loadModel()
         }
+        return controller
+    }
+
+    /// A started controller whose keyboard tap is a fake, so no real tap is installed. The
+    /// fake allows the tap here, because start shows the system prompt otherwise.
+    private func startedController() async throws -> PushToTalkController {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            isTrusted: tapSystem.isTrusted,
+            installTap: tapSystem.install,
+            minimumHold: .zero,
+            releaseTail: .zero,
+            accessCheckDelay: .milliseconds(20)
+        )
+        controller.start()
+        #expect(controller.isHotkeyActive)
+        try await waitUntil { controller.modelState == .ready }
         return controller
     }
 
@@ -333,6 +355,20 @@ struct PushToTalkControllerTests {
         #expect(controller.problem == "The microphone could not start")
         #expect(controller.microphoneNotice == nil)
         #expect(controller.suggestsSoundSettings == false)
+    }
+
+    @Test func aFailedLoadCanBeTriedAgain() async {
+        speech.loadError = TranscriptionError.modelMissing
+        let controller = await makeController()
+        #expect(controller.modelState == .unavailable("The speech model is not on this Mac"))
+        // The user puts the model files in place and chooses Try Again.
+        speech.loadError = nil
+        await controller.loadModel()
+        #expect(controller.modelState == .ready)
+        #expect(speech.loads == 2)
+        // Once it is loaded, it stays loaded.
+        await controller.loadModel()
+        #expect(speech.loads == 2)
     }
 
     @Test func modelLoadsOnce() async {
@@ -713,6 +749,59 @@ struct PushToTalkControllerTests {
         controller.handle(.cancelled)
         try await waitUntil { mic.calls.count == 4 }
         #expect(mic.calls == ["start", "stop", "start", "cancel"])
+    }
+
+    @Test func aTapTheSystemSwitchedOffShowsTheTalkKeyOffUntilANewTapIsInstalled() async throws {
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        // A dictation is in progress when the system switches the tap off.
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: HotkeyTapTests.rightControlDown)
+        #expect(controller.state == .listening)
+        _ = tap.handle(type: .tapDisabledByTimeout, keyCode: 0, flags: [])
+        // The hold ends, and the menu shows the talk key as off at once.
+        #expect(controller.state == .idle)
+        #expect(controller.isHotkeyActive == false)
+        #expect(tapSystem.removals == 1)
+        // Nothing switched the tap back on, and the controller did not check access right
+        // away.
+        #expect(tapSystem.installAttempts == 1)
+        #expect(tapSystem.trustChecks == 1)
+        // After the pause a new tap is installed, because access is still there.
+        try await waitUntil { controller.isHotkeyActive }
+        #expect(controller.isHotkeyActive)
+        #expect(tapSystem.installAttempts == 2)
+        #expect(tapSystem.trustChecks == 2)
+    }
+
+    @Test func aTapTheSystemSwitchedOffStaysOffWhenTheAccessCheckSaysNo() async throws {
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        // Access is gone, and the access check knows it.
+        tapSystem.trusted = false
+        tapSystem.allowsTap = false
+        _ = tap.handle(type: .tapDisabledByUserInput, keyCode: 0, flags: [])
+        #expect(controller.isHotkeyActive == false)
+        try await waitUntil { tapSystem.trustChecks == 2 }
+        #expect(tapSystem.trustChecks == 2)
+        #expect(tapSystem.installAttempts == 1)
+        #expect(controller.isHotkeyActive == false)
+    }
+
+    @Test func aStaleYesFromTheAccessCheckDoesNotBringTheTapBack() async throws {
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        // Access is gone. The access check still says yes, as AXIsProcessTrusted can from
+        // its cache, but the system refuses a new tap.
+        tapSystem.allowsTap = false
+        _ = tap.handle(type: .tapDisabledByTimeout, keyCode: 0, flags: [])
+        #expect(controller.isHotkeyActive == false)
+        try await waitUntil { tapSystem.installAttempts == 2 }
+        #expect(tapSystem.installAttempts == 2)
+        #expect(tapSystem.installed == nil)
+        #expect(controller.isHotkeyActive == false)
+        // Orra does not keep trying.
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(tapSystem.installAttempts == 2)
     }
 
     @Test func hostDetectionSeesTheTestEnvironment() {

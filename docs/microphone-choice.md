@@ -106,8 +106,8 @@ Microphone choice instead of the Sound settings, because the input picked in Sou
 settings does not change what a chosen microphone records.
 
 The engine is rebuilt only when the default input changed since the engine was made.
-Commit 084d272 compared the default input with the device read back from the engine's
-input unit instead. Orra's log on this Mac shows that unit switching from the default
+An earlier version compared the default input with the device read back from the
+engine's input unit instead. Orra's log on this Mac shows that unit switching from the default
 output to the engine's private aggregate, so the read back most likely never matched,
 and the engine was rebuilt at every hold. Not verified, because Orra did not log the
 value.
@@ -131,9 +131,11 @@ records from the choice or the default and explains the silence afterwards.
 
 ## Not verified yet
 
-- Recording through the unit on real hardware. InputUnitTests builds and initializes a
-  unit for each wired input of this Mac and never starts it. On 2026-10-05 that was the
-  Brio 500 (USB, 2 channels, 48 kHz) and the built in microphone (1 channel, 48 kHz).
+- Recording through the unit on inputs other than the Brio 500. On 2026-10-05 the
+  maintainer chose the Brio 500 with the lid closed and dictated through the unit with no
+  problems. InputUnitTests builds and initializes a unit for each wired input of this Mac
+  and never starts it. On 2026-10-05 that was the Brio 500 (USB, 2 channels, 48 kHz) and
+  the built in microphone (1 channel, 48 kHz).
 - Units that record only zeros are reported on macOS 26.6.2, the build of this Mac, and
   on 27.0, with every Core Audio call succeeding. The cause is not known. Orra's silence
   check names the microphone when that happens.

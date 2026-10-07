@@ -1,12 +1,12 @@
 # Manual testing checklist
 
 State of the repository after the overnight session of 2026-10-02, with manual
-results added on 2026-10-03, the fn hotkey added on 2026-10-04, local dictation added
-on branch local-dictation in the night of 2026-10-04, and the choice of talk key added on
-2026-10-05. Three sections: what a build or test
-run verified, what only a person at the Mac can verify, and what does not exist yet.
+results added on 2026-10-03, 2026-10-05 and 2026-10-06, the fn hotkey added on
+2026-10-04, local dictation added in the night of 2026-10-04, and the choice of talk key
+and of microphone added on 2026-10-05. Three sections: what a build or test run verified,
+what only a person at the Mac can verify, and what does not exist yet.
 
-Build and test commands, run inside Orra/:
+Build and test commands, run in the repository root:
 
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData test
@@ -18,7 +18,7 @@ Build and test commands, run inside Orra/:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 239 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 246 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -34,7 +34,9 @@ Build and test commands, run inside Orra/:
     presses that check that only fn's own events are ever swallowed and that nothing stays
     held once every key is up.
   - HotkeyTapTests feeds the tap's handler without installing a tap: removing the held key
-    ends the recording, a click ends a right Control hold, and only fn is swallowed.
+    ends the recording, a click ends a right Control hold, only fn is swallowed, and a tap
+    the system switched off, after a timeout or on user input, ends the hold, removes
+    itself, tells its owner and does not switch itself back on.
   - TalkKeyTests checks the key codes and left and right bits against the system headers,
     the default of right Control, reading a release on keyboards without those bits, which
     keys change what a click does, the menu hint, and that only fn swallows its events.
@@ -73,15 +75,19 @@ Build and test commands, run inside Orra/:
     Command held. They use private named pasteboards and a fake key poster, so no real
     event is posted.
   - PushToTalkControllerTests runs the whole flow with a fake microphone, a fake speech
-    model, a fake inserter and a fake frontmost app: model loading and the ready gate,
+    model, a fake inserter and a fake frontmost app: model loading, trying a failed load again, and the ready gate,
     record, resample, transcribe and paste, a release or cancel that arrives before the
     microphone has started, a new hold that begins while a cancelled one is still
     stopping the microphone, the minimum hold, a recording cut by a device change, a
     recording without samples, empty text, loops, traditional characters, an app switch
     before the paste, failures including a failed start, a password field, presses during
     processing, cancel, microphone permission states including a build without a usage
-    description, and the 60 second limit. It also checks that the environment variable
-    the launch guard relies on is set while tests run.
+    description, and the 60 second limit. With a fake in place of the keyboard tap and
+    the access check, it checks that the menu shows the talk key as off as soon as the
+    system switches the tap off, that a new tap is installed after the pause while access
+    is there, and that no tap comes back when the access check says no, or still says yes
+    while the system refuses the tap. It also checks that the environment variable the
+    launch guard relies on is set while tests run.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -115,7 +121,8 @@ Build and test commands, run inside Orra/:
 
 ## Needs manual verification
 
-Checked items were verified by the maintainer on 2026-10-03, running the app from
+Checked items were verified by the maintainer on 2026-10-03 unless the item gives another
+date, running the app from
 Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still open.
 
 - [x] No Dock icon at launch, and no flash was noticed. The policy is set in
@@ -187,7 +194,24 @@ Talk key choice, added on 2026-10-05, not verified yet:
 - [ ] The choice of keys is still there after quitting and reopening Orra.
 - [ ] Right Option and right Command work the same way when turned on.
 
-Microphone choice, added on 2026-10-05, not verified yet. docs/microphone-choice.md
+Tap switched off by the system, changed on 2026-10-06, not verified yet. The log lines
+below show with the log stream command under Testing notes:
+
+- [ ] Run Orra from Xcode and dictate once. Pause Orra with Debug > Pause, then press one
+  key in another app. Orra's tap cannot answer, so the key waits until macOS switches
+  the tap off. Click Continue in Xcode. The icon shows the crossed out mic for about two
+  seconds, then the plain mic, and the talk key dictates again. The log shows "The
+  system switched the keyboard tap off after a timeout, tap removed", then "Hotkey
+  active".
+- [ ] Only with a way into the Mac from another computer, such as SSH, because input can
+  freeze: while Orra runs, turn it off under Privacy & Security > Accessibility. Another
+  time, remove it from the list instead. Each time, note whether keyboard and mouse
+  input freeze, whether the icon becomes the crossed out mic, and which of these log
+  lines appear: "The system switched the keyboard tap off", "The system refused the
+  keyboard tap", "Accessibility access is gone, keyboard tap removed". If input
+  freezes, take a sysdiagnose over SSH before restarting.
+
+Microphone choice, added on 2026-10-05, partly verified. docs/microphone-choice.md
 explains how it works. A chosen microphone records through its own audio unit, which no
 test starts, so these checks are the first real recordings through it:
 
@@ -196,10 +220,11 @@ test starts, so these checks are the first real recordings through it:
   built in microphone reads "MacBook Pro Microphone (lid closed)", and the menu shows
   "The lid is closed, so the built in microphone is off" while that microphone is the
   one Orra would record from.
-- [ ] With the lid closed and the MacBook microphone as the system default, choose the
-  Brio 500 and dictate without relaunching Orra: the text arrives, the system default
-  input in System Settings is unchanged, and the microphone indicator goes off after
-  the release. If the menu says "Brio 500 could not start", or "No sound came from Brio
+- [x] With the lid closed and the MacBook microphone as the system default, choose the
+  Brio 500 and dictate without relaunching Orra: the text arrives. The maintainer
+  reported no problems on 2026-10-05.
+- [ ] In the same setup, the system default input in System Settings is unchanged, and
+  the microphone indicator goes off after the release. If the menu says "Brio 500 could not start", or "No sound came from Brio
   500" while you spoke, the audio unit does not work on this Mac. Choose System Default
   and set the Brio in System Settings instead, and keep the log lines below. The menu
   names these steps in both cases.
@@ -219,7 +244,7 @@ test starts, so these checks are the first real recordings through it:
   shows "Recording from the chosen microphone over usb  at 48000 Hz, started in ...
   seconds" or "Recording from the system default input".
 
-Local dictation, added on 2026-10-04 on branch local-dictation, not verified by hand yet.
+Local dictation, added on 2026-10-04, partly verified by hand.
 The package, the microphone usage description, the Metal Toolchain and the plugin trust
 are in place since 2026-10-05:
 
@@ -255,18 +280,22 @@ are in place since 2026-10-05:
 - [ ] Release the talk key and switch to another app at once. The text is not pasted
   there, the menu says so, and "Copy Last Dictation" copies it.
 - [ ] Pasting works in Notes, a browser text field, VS Code and Terminal.
-- [ ] In a password field, nothing is pasted, the clipboard keeps what it had, and the
-  menu says "Orra does not paste into password fields. Use Copy Last Dictation." Try a
-  login form in Safari, the password field of a System Settings sheet, a login form in
-  Chrome while chrome://accessibility shows native accessibility off, and the unlock
-  screen of a password manager built on Electron. After Copy Last Dictation, a clipboard
-  history app does not record the text.
-- [ ] With Terminal's Secure Keyboard Entry on (Terminal menu), dictate into Terminal
-  itself: the text is pasted, and the old clipboard comes back. Then bring Notes to the
-  front and run `ioreg -l -w 0 | grep SecureInput` in another window. Terminal is
-  expected to give secure input up when its window is not in front, so dictating into
-  Notes tests the new path only when kCGSSessionSecureInputPID still shows there. Write
-  down which it was.
+- [x] In the password field of a login form in Safari and in Chrome, nothing is pasted,
+  the clipboard keeps what it had, the menu says "Orra does not paste into password
+  fields. Use Copy Last Dictation.", and Copy Last Dictation gives the text. Verified by
+  the maintainer on 2026-10-06. Dictating into Notes without secure input still pastes
+  and puts the old clipboard back.
+- [ ] The same in the password field of a System Settings sheet, in Chrome while
+  chrome://accessibility shows native accessibility off, and on the unlock screen of a
+  password manager built on Electron. After Copy Last Dictation, a clipboard history app
+  does not record the text.
+- [x] With Terminal's Secure Keyboard Entry on (Terminal menu) and ioreg showing
+  kCGSSessionSecureInputPID, dictating into Terminal itself pastes the text, and the old
+  clipboard comes back. Verified by the maintainer on 2026-10-06.
+- [ ] With Secure Keyboard Entry still on, bring Notes to the front and run
+  `ioreg -l -w 0 | grep SecureInput` in another window. Terminal is expected to give
+  secure input up when its window is not in front, so dictating into Notes tests the new
+  path only when kCGSSessionSecureInputPID still shows there. Write down which it was.
 - [ ] Known blind spot, check how it behaves: in Terminal with Secure Keyboard Entry on,
   hold right Control for a series of Control shortcuts for more than a second while
   someone talks. Secure input hides the other keys from Orra, so this can be taken as a
