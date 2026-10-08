@@ -35,6 +35,7 @@ struct SettingsView: View {
     @Bindable var feedback: RecordingFeedback
     let openAtLogin: OpenAtLogin
     let models: ModelInstaller
+    let learning: CorrectionLearning
     @State private var page: SettingsPage? = .general
 
     var body: some View {
@@ -52,7 +53,7 @@ struct SettingsView: View {
             case .microphone:
                 MicrophoneSettings(pushToTalk: pushToTalk, inputs: inputs)
             case .vocabulary:
-                VocabularySettings(pushToTalk: pushToTalk)
+                VocabularySettings(pushToTalk: pushToTalk, learning: learning)
             case .about:
                 AboutSettings(models: models, pushToTalk: pushToTalk)
             }
@@ -149,6 +150,7 @@ private struct MicrophoneSettings: View {
 /// per word.
 private struct VocabularySettings: View {
     let pushToTalk: PushToTalkController
+    @Bindable var learning: CorrectionLearning
     @State private var newTerm = ""
     @State private var filter = ""
     @FocusState private var fieldFocused: Bool
@@ -200,6 +202,32 @@ private struct VocabularySettings: View {
                 }
             } header: {
                 Text("\(terms.count) of \(Vocabulary.limit) words")
+            }
+            Section {
+                Toggle("Learn from my corrections", isOn: $learning.isOn)
+                ForEach(learning.suggestions, id: \.self) { correction in
+                    HStack {
+                        Text(verbatim: "\(correction.heard)  →  \(correction.corrected)")
+                        Spacer()
+                        Button("Ignore") {
+                            learning.dismiss(correction)
+                        }
+                        Button("Add") {
+                            learning.accept(correction)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                if !learning.store.entries.isEmpty {
+                    Button("Forget Learned Corrections") {
+                        learning.removeAll()
+                    }
+                }
+            } header: {
+                Text("Learning")
+            } footer: {
+                Text("When this is on, Orra reads the field you dictated into for up to 30 seconds after each paste. When you fix a misheard word the same way twice within a week, Orra suggests it here and in its menu. It keeps only the word pairs, on this Mac, and never reads password fields.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -326,6 +354,7 @@ struct TalkKeyToggles: View {
         inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) },
         feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in }),
         openAtLogin: .live(),
-        models: .live()
+        models: .live(),
+        learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in })
     )
 }

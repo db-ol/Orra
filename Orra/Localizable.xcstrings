@@ -103,6 +103,22 @@
         }
       }
     },
+    "Add “%@” to Vocabulary (heard as “%@”)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Add “%1$@” to Vocabulary (heard as “%2$@”)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把“%1$@”加入个人词库（之前听成“%2$@”）"
+          }
+        }
+      }
+    },
     "Allow Accessibility" : {
       "localizations" : {
         "zh-Hans" : {
@@ -280,12 +296,32 @@
         }
       }
     },
+    "Forget Learned Corrections" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除学到的纠正"
+          }
+        }
+      }
+    },
     "From %@" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "来源：%@"
+          }
+        }
+      }
+    },
+    "From your corrections" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自你的修改"
           }
         }
       }
@@ -384,6 +420,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住一个键，说话，然后松开。Orra 会把你说的话输入到你正在使用的 App 中。语音在这台 Mac 上转成文字。"
+          }
+        }
+      }
+    },
+    "Ignore" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略"
+          }
+        }
+      }
+    },
+    "Learn from my corrections" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从我的修改中学习"
+          }
+        }
+      }
+    },
+    "Learning" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学习"
           }
         }
       }
@@ -1153,6 +1219,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "欢迎使用 Orra"
+          }
+        }
+      }
+    },
+    "When this is on, Orra reads the field you dictated into for up to 30 seconds after each paste. When you fix a misheard word the same way twice within a week, Orra suggests it here and in its menu. It keeps only the word pairs, on this Mac, and never reads password fields." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开后，每次粘贴后的 30 秒内，Orra 会读取你听写的那个输入框。同一个听错的词你一周内用同样的方式改了两次，Orra 就会在这里和菜单里建议加入词库。它只保存词对，只存在这台 Mac 上，也从不读取密码框。"
           }
         }
       }

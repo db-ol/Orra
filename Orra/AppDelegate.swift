@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// microphone level.
     lazy var feedback = RecordingFeedback.live { [pushToTalk] in pushToTalk.inputLevel() }
     lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
+    lazy var learning = CorrectionLearning.live { [pushToTalk] word in
+        pushToTalk.setVocabulary(Vocabulary.adding(word, to: pushToTalk.vocabulary))
+    }
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
     nonisolated static var isHostedByXcode: Bool {
@@ -51,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 feedback.handle(cue)
             }
         }
+        pushToTalk.rewrite = { [learning] text in learning.apply(to: text) }
+        pushToTalk.onPasted = { [learning] text, app in learning.pasted(text, in: app) }
         pushToTalk.start()
         openAtLogin.refreshWhenMenusOpen()
         audioInputs.refreshWhenMenusOpen()

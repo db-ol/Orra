@@ -6,6 +6,7 @@ struct StatusMenu: View {
     let models: ModelInstaller
     let openAtLogin: OpenAtLogin
     let inputs: AudioInputList
+    let learning: CorrectionLearning
     let showWelcome: () -> Void
     @Environment(\.openSettings) private var openSettings
 
@@ -61,6 +62,16 @@ struct StatusMenu: View {
             Text("The talk key needs Accessibility access")
             Button("Grant Accessibility Access…") {
                 pushToTalk.promptForAccessibility()
+            }
+        }
+
+        if !learning.suggestions.isEmpty {
+            Divider()
+            Text("From your corrections")
+            ForEach(learning.suggestions.prefix(3), id: \.self) { correction in
+                Button("Add “\(correction.corrected)” to Vocabulary (heard as “\(correction.heard)”)") {
+                    learning.accept(correction)
+                }
             }
         }
 
