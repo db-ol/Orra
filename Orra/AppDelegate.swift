@@ -11,7 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         talkKeys: TalkKeyPreference.load(),
         saveTalkKeys: { TalkKeyPreference.save($0) },
         microphone: MicrophonePreference.load(),
-        saveMicrophone: { MicrophonePreference.save($0) }
+        saveMicrophone: { MicrophonePreference.save($0) },
+        vocabulary: VocabularyPreference.load(),
+        saveVocabulary: { VocabularyPreference.save($0) }
     )
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()

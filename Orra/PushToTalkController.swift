@@ -43,6 +43,9 @@ final class PushToTalkController {
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
     private(set) var microphone: MicrophoneChoice?
+    /// The user's words and names, which the speech model gets with every dictation. Saved
+    /// through `saveVocabulary` whenever they change. Never logged.
+    private(set) var vocabulary: [String]
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
     /// Microphone permission as last seen. Refreshed at start, on every hold, and after
@@ -107,6 +110,7 @@ final class PushToTalkController {
     @ObservationIgnored private var tap: HotkeyTap?
     @ObservationIgnored private let saveTalkKeys: (Set<TalkKey>) -> Void
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
+    @ObservationIgnored private let saveVocabulary: ([String]) -> Void
     @ObservationIgnored private var accessCheckTask: Task<Void, Never>?
     @ObservationIgnored private var accessObserver: (any NSObjectProtocol)?
     @ObservationIgnored private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
@@ -151,7 +155,9 @@ final class PushToTalkController {
         talkKeys: Set<TalkKey> = TalkKey.defaultKeys,
         saveTalkKeys: @escaping (Set<TalkKey>) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
-        saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in }
+        saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in },
+        vocabulary: [String] = [],
+        saveVocabulary: @escaping ([String]) -> Void = { _ in }
     ) {
         self.capture = capture
         self.transcription = transcription
@@ -169,6 +175,8 @@ final class PushToTalkController {
         self.saveTalkKeys = saveTalkKeys
         self.microphone = microphone
         self.saveMicrophone = saveMicrophone
+        self.vocabulary = vocabulary
+        self.saveVocabulary = saveVocabulary
     }
 
     /// Starts watching for the hotkey. Without Accessibility access it waits: the welcome
@@ -217,6 +225,13 @@ final class PushToTalkController {
 
     /// Chooses the microphone for the next dictations, or the system default for nil, and
     /// saves the choice.
+    /// Replaces the vocabulary for the next dictations and saves it.
+    func setVocabulary(_ terms: [String]) {
+        guard terms != vocabulary else { return }
+        vocabulary = terms
+        saveVocabulary(terms)
+    }
+
     func setMicrophone(_ choice: MicrophoneChoice?) {
         guard choice != microphone else { return }
         microphone = choice
@@ -506,7 +521,7 @@ final class PushToTalkController {
                 logger.notice("The microphone delivered no sound for \(recording.duration, privacy: .public) s, lid closed: \(situation.lidClosed, privacy: .public)")
                 return
             }
-            let raw = try await transcription.transcribe(samples)
+            let raw = try await transcription.transcribe(samples, Vocabulary.context(vocabulary))
             let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
             guard !text.isEmpty else {
                 holdMessage = String(localized: "No speech was recognized")

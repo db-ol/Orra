@@ -5,8 +5,9 @@ import Foundation
 struct Transcription {
     /// Loads the model. Throws when it cannot be loaded.
     var load: () async throws -> Void
-    /// Turns 16 kHz mono samples into text.
-    var transcribe: ([Float]) async throws -> String
+    /// Turns 16 kHz mono samples into text. The context is the user's vocabulary, one
+    /// term per line, or nil.
+    var transcribe: (_ samples: [Float], _ context: String?) async throws -> String
 }
 
 /// The one speech model Orra uses for now: Qwen3-ASR 1.7B in the 8 bit MLX build. The
