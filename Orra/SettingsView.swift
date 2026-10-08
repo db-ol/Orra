@@ -1,23 +1,116 @@
 import SwiftUI
 
-/// The settings window: the talk keys, the microphone, and the feedback while dictating.
+/// The pages of the settings window, in the sidebar's order.
+enum SettingsPage: String, CaseIterable, Identifiable {
+    case general
+    case microphone
+    case vocabulary
+    case about
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .general: "General"
+        case .microphone: "Microphone"
+        case .vocabulary: "Vocabulary"
+        case .about: "About"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .microphone: "mic"
+        case .vocabulary: "character.book.closed"
+        case .about: "info.circle"
+        }
+    }
+}
+
+/// The settings window: a sidebar with one page per topic, like System Settings.
 struct SettingsView: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
     @Bindable var feedback: RecordingFeedback
-    /// The vocabulary as typed, one term per line. Saved as terms on every change.
-    @State private var vocabularyText: String?
+    let openAtLogin: OpenAtLogin
+    let models: ModelInstaller
+    @State private var page: SettingsPage? = .general
+
+    var body: some View {
+        NavigationSplitView {
+            List(SettingsPage.allCases, selection: $page) { page in
+                Label(page.title, systemImage: page.symbol)
+                    .tag(page)
+            }
+            .navigationSplitViewColumnWidth(170)
+        } detail: {
+            switch page ?? .general {
+            case .general:
+                GeneralSettings(pushToTalk: pushToTalk, feedback: feedback, openAtLogin: openAtLogin)
+            case .microphone:
+                MicrophoneSettings(pushToTalk: pushToTalk, inputs: inputs)
+            case .vocabulary:
+                VocabularySettings(pushToTalk: pushToTalk)
+            case .about:
+                AboutSettings(models: models, pushToTalk: pushToTalk)
+            }
+        }
+        .toolbar(removing: .sidebarToggle)
+        .frame(width: 660, height: 460)
+    }
+}
+
+/// The talk keys, the feedback while dictating, and Open at Login.
+private struct GeneralSettings: View {
+    let pushToTalk: PushToTalkController
+    @Bindable var feedback: RecordingFeedback
+    let openAtLogin: OpenAtLogin
 
     var body: some View {
         Form {
             Section {
                 TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
             } header: {
-                Text("Hold to talk")
+                Text("Talk Key")
             } footer: {
-                Text("Hold one of these keys on its own, speak, and let go. Right Control suits most external keyboards, whose Fn key often does not reach the Mac. fn (Globe) is the key at the bottom left of a MacBook keyboard. At least one key stays on.")
+                Text("Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards.")
                     .foregroundStyle(.secondary)
             }
+            Section {
+                Toggle("Show the recording indicator", isOn: $feedback.showsIndicator)
+                Toggle("Play sounds when recording starts and stops", isOn: $feedback.playsSounds)
+            } header: {
+                Text("While you dictate")
+            }
+            Section {
+                Toggle("Open at Login", isOn: Binding(
+                    get: { openAtLogin.isOn },
+                    set: { openAtLogin.setOn($0) }
+                ))
+                if openAtLogin.needsApproval {
+                    Button("Allow Orra in Login Items…") {
+                        openAtLogin.openSettings()
+                    }
+                }
+                if let problem = openAtLogin.problem {
+                    Text(verbatim: problem)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("General")
+    }
+}
+
+/// Which microphone records.
+private struct MicrophoneSettings: View {
+    let pushToTalk: PushToTalkController
+    let inputs: AudioInputList
+
+    var body: some View {
+        Form {
             Section {
                 Picker("Microphone", selection: Binding(
                     get: { pushToTalk.microphone?.uid ?? "" },
@@ -31,43 +124,14 @@ struct SettingsView: View {
                         Text(MicrophoneLabels.missing(chosen)).tag(chosen.uid)
                     }
                 }
-            } header: {
-                Text("Microphone")
             } footer: {
-                Text("Orra records from this microphone. While it is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                TextEditor(text: Binding(
-                    get: { vocabularyText ?? pushToTalk.vocabulary.joined(separator: "\n") },
-                    set: { text in
-                        vocabularyText = text
-                        pushToTalk.setVocabulary(Vocabulary.terms(from: text))
-                    }
-                ))
-                .font(.body)
-                .frame(height: 120)
-                .accessibilityLabel("Vocabulary")
-            } header: {
-                Text("Vocabulary")
-            } footer: {
-                Text("One word or name per line, such as people, products and terms you use. Orra gives them to the speech model so it writes them your way. \(pushToTalk.vocabulary.count) of \(Vocabulary.limit) words. They stay on this Mac.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Toggle("Show the recording indicator", isOn: $feedback.showsIndicator)
-                Toggle("Play sounds when recording starts and stops", isOn: $feedback.playsSounds)
-            } header: {
-                Text("While you dictate")
-            } footer: {
-                Text("The indicator appears at the bottom of the screen while Orra listens and transcribes. When nothing is pasted, it says why.")
+                Text("While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off.")
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .navigationTitle("Microphone")
         .onAppear { inputs.refresh() }
-        .frame(width: 440)
-        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// The choice for a UID from the picker. The empty tag is the system default.
@@ -77,6 +141,121 @@ struct SettingsView: View {
             return MicrophoneChoice(uid: input.uid, name: input.name)
         }
         return pushToTalk.microphone?.uid == uid ? pushToTalk.microphone : nil
+    }
+}
+
+/// The user's words and names: a field to add one, and the list with a delete button
+/// per word.
+private struct VocabularySettings: View {
+    let pushToTalk: PushToTalkController
+    @State private var newTerm = ""
+    @State private var filter = ""
+
+    var body: some View {
+        let terms = pushToTalk.vocabulary
+        let shown = filter.isEmpty ? terms : terms.filter { $0.localizedCaseInsensitiveContains(filter) }
+        Form {
+            Section {
+                HStack {
+                    TextField("Add a word or name", text: $newTerm)
+                        .onSubmit(add)
+                    Button("Add", action: add)
+                        .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty || terms.count >= Vocabulary.limit)
+                }
+            } footer: {
+                Text("People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                if terms.count > 8 {
+                    TextField("Search", text: $filter)
+                }
+                if terms.isEmpty {
+                    Text("No words yet")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(shown, id: \.self) { term in
+                    HStack {
+                        Text(verbatim: term)
+                        Spacer()
+                        Button {
+                            pushToTalk.setVocabulary(Vocabulary.removing(term, from: terms))
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove")
+                    }
+                }
+            } header: {
+                Text("\(terms.count) of \(Vocabulary.limit) words")
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Vocabulary")
+    }
+
+    private func add() {
+        let updated = Vocabulary.adding(newTerm, to: pushToTalk.vocabulary)
+        if updated != pushToTalk.vocabulary {
+            pushToTalk.setVocabulary(updated)
+        }
+        newTerm = ""
+    }
+}
+
+/// The version, the speech model, and what Orra does with speech.
+private struct AboutSettings: View {
+    let models: ModelInstaller
+    let pushToTalk: PushToTalkController
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 14) {
+                    Image(nsImage: NSApplication.shared.applicationIconImage)
+                        .resizable()
+                        .frame(width: 48, height: 48)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: "Orra")
+                            .font(.headline)
+                        Text("Version \(Self.version)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Section {
+                LabeledContent("Speech model") {
+                    Text(modelStatus)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section {
+                Text("Speech is turned into text on this Mac. Orra goes online only to download the speech model, when you ask it to.")
+                    .foregroundStyle(.secondary)
+                Link("Source code and privacy details", destination: URL(string: "https://github.com/db-ol/Orra")!)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("About")
+    }
+
+    private static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+    }
+
+    private var modelStatus: LocalizedStringKey {
+        switch models.state {
+        case .installed:
+            pushToTalk.modelState == .ready ? "Ready" : "Loading…"
+        case .checking, .verifying:
+            "Checking…"
+        case .downloading:
+            "Downloading…"
+        case .missing, .failed:
+            "Not downloaded"
+        }
     }
 }
 
@@ -132,6 +311,8 @@ struct TalkKeyToggles: View {
             insert: { _ in .nothingToInsert }
         ),
         inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) },
-        feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in })
+        feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in }),
+        openAtLogin: .live(),
+        models: .live()
     )
 }

@@ -67,6 +67,52 @@
         }
       }
     },
+    "%lld of %lld words" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld words"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已有 %1$lld 个，最多 %2$lld 个"
+          }
+        }
+      }
+    },
+    "About" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加"
+          }
+        }
+      }
+    },
+    "Add a word or name" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加一个词或名字"
+          }
+        }
+      }
+    },
     "Allow Accessibility" : {
       "localizations" : {
         "zh-Hans" : {
@@ -137,6 +183,16 @@
         }
       }
     },
+    "Checking…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查…"
+          }
+        }
+      }
+    },
     "Choose System Default under Microphone, then pick %@ in Sound settings." : {
       "localizations" : {
         "zh-Hans" : {
@@ -203,6 +259,16 @@
         }
       }
     },
+    "Downloading…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载…"
+          }
+        }
+      }
+    },
     "fn" : {
       "comment" : "A talk key inside a sentence",
       "localizations" : {
@@ -230,6 +296,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "来源：%@"
+          }
+        }
+      }
+    },
+    "General" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用"
           }
         }
       }
@@ -302,32 +378,22 @@
         }
       }
     },
+    "Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单独按住一个键，说话，然后松开。fn（地球仪）键在 MacBook 键盘的左下角，外接键盘大多适合用右侧 Control 键。"
+          }
+        }
+      }
+    },
     "Hold a key, speak, and let go. Orra types what you said into the app you are using. Your voice is turned into text on this Mac." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住一个键，说话，然后松开。Orra 会把你说的话输入到你正在使用的 App 中。语音在这台 Mac 上转成文字。"
-          }
-        }
-      }
-    },
-    "Hold one of these keys on its own, speak, and let go. Right Control suits most external keyboards, whose Fn key often does not reach the Mac. fn (Globe) is the key at the bottom left of a MacBook keyboard. At least one key stays on." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "单独按住其中一个键，说话，然后松开。右侧 Control 键适合大多数外接键盘，因为外接键盘的 Fn 键常常传不到 Mac。fn（地球仪）键位于 MacBook 键盘的左下角。至少会保留一个键处于开启状态。"
-          }
-        }
-      }
-    },
-    "Hold to talk" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住说话"
           }
         }
       }
@@ -348,6 +414,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在载入语音模型…"
+          }
+        }
+      }
+    },
+    "Loading…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在载入…"
           }
         }
       }
@@ -422,6 +498,16 @@
         }
       }
     },
+    "No words yet" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有词"
+          }
+        }
+      }
+    },
     "Not done yet" : {
       "localizations" : {
         "zh-Hans" : {
@@ -432,28 +518,22 @@
         }
       }
     },
+    "Not downloaded" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未下载"
+          }
+        }
+      }
+    },
     "Not Now" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "以后"
-          }
-        }
-      }
-    },
-    "One word or name per line, such as people, products and terms you use. Orra gives them to the speech model so it writes them your way. %lld of %lld words. They stay on this Mac." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "One word or name per line, such as people, products and terms you use. Orra gives them to the speech model so it writes them your way. %1$lld of %2$lld words. They stay on this Mac."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "每行一个词或名字，比如人名、产品名和你常用的术语。Orra 会把它们交给语音模型，让它按你的写法输出。已有 %1$lld 个，最多 %2$lld 个。这些词只保存在这台 Mac 上。"
           }
         }
       }
@@ -588,22 +668,22 @@
         }
       }
     },
-    "Orra records from this microphone. While it is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 使用这个麦克风录音。它未连接时，Orra 使用系统默认输入。合上盖子时，MacBook 自带的麦克风会关闭。"
-          }
-        }
-      }
-    },
     "Orra records only while you hold the talk key." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 只在你按住说话键时录音。"
+          }
+        }
+      }
+    },
+    "People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你常用的人名、产品名和术语。Orra 会把它们交给语音模型，让它按你的写法输出。这些词只保存在这台 Mac 上。"
           }
         }
       }
@@ -634,6 +714,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出 Orra"
+          }
+        }
+      }
+    },
+    "Ready" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已就绪"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除"
           }
         }
       }
@@ -711,6 +811,16 @@
         }
       }
     },
+    "Search" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索"
+          }
+        }
+      }
+    },
     "Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -737,6 +847,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示录音提示"
+          }
+        }
+      }
+    },
+    "Source code and privacy details" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "源代码和隐私说明"
+          }
+        }
+      }
+    },
+    "Speech is turned into text on this Mac. Orra goes online only to download the speech model, when you ask it to." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音在这台 Mac 上转成文字。Orra 只在你要求下载语音模型时才联网。"
+          }
+        }
+      }
+    },
+    "Speech model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音模型"
           }
         }
       }
@@ -803,16 +943,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载的文件与预期的校验值不符。"
-          }
-        }
-      }
-    },
-    "The indicator appears at the bottom of the screen while Orra listens and transcribes. When nothing is pasted, it says why." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 聆听和转写时，屏幕底部会出现录音提示。没有粘贴任何内容时，提示会说明原因。"
           }
         }
       }
@@ -987,6 +1117,16 @@
         }
       }
     },
+    "Version %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本 %@"
+          }
+        }
+      }
+    },
     "Vocabulary" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1003,6 +1143,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "欢迎使用 Orra"
+          }
+        }
+      }
+    },
+    "While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个麦克风未连接时，Orra 使用系统默认输入。合上盖子时，MacBook 自带的麦克风会关闭。"
           }
         }
       }

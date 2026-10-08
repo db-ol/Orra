@@ -26,6 +26,17 @@ nonisolated enum Vocabulary {
         return result
     }
 
+    /// The list with one more term, trimmed and cut like a typed line. Unchanged when the
+    /// term is empty, already there ignoring case, or the list is full.
+    static func adding(_ term: String, to terms: [String]) -> [String] {
+        Self.terms(from: (terms + [term]).joined(separator: "\n"))
+    }
+
+    /// The list without the term.
+    static func removing(_ term: String, from terms: [String]) -> [String] {
+        terms.filter { $0 != term }
+    }
+
     /// What the model gets: one term per line, as the evaluation measured, and nothing
     /// else, since instructions in the prompt can end up in the text. Nil without terms.
     static func context(_ terms: [String]) -> String? {

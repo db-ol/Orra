@@ -22,6 +22,15 @@ struct VocabularyTests {
         #expect(Vocabulary.context(["Orra", "通义千问"]) == "Orra\n通义千问")
     }
 
+    @Test func addingAndRemovingKeepTheListClean() {
+        #expect(Vocabulary.adding("  Orra ", to: []) == ["Orra"])
+        #expect(Vocabulary.adding("orra", to: ["Orra"]) == ["Orra"])
+        #expect(Vocabulary.adding("   ", to: ["Orra"]) == ["Orra"])
+        let full = (1...Vocabulary.limit).map { "term\($0)" }
+        #expect(Vocabulary.adding("one more", to: full) == full)
+        #expect(Vocabulary.removing("Orra", from: ["Orra", "通义千问"]) == ["通义千问"])
+    }
+
     @Test func theVocabularyIsSavedOnThisMac() throws {
         let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))

@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 355 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 356 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -514,11 +514,14 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
 
 Personal vocabulary, added on 2026-10-08, not verified yet:
 
-- [ ] In Settings, type a few names and terms you use, one per line, that Orra got wrong
-  before. Dictate sentences with them: they come out spelled as in the list.
+- [ ] Settings opens with a sidebar: General, Microphone, Vocabulary and About. Each page
+  fits without scrolling, in English and in Chinese.
+- [ ] Under Vocabulary, add a few names and terms that Orra got wrong before, with the field
+  and Return or Add, and remove one with its minus button. Dictate sentences with them:
+  they come out spelled as in the list.
 - [ ] Dictate sentences without them: none of the listed words shows up.
 - [ ] Hold the talk key without speaking: no listed word appears.
-- [ ] The count in the footer follows the list, and the list is still there after
+- [ ] The count above the list follows it, and the list is still there after
   quitting and reopening Orra.
 
 App icon, added on 2026-10-07, not verified yet:
