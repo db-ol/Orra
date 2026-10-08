@@ -39,13 +39,16 @@ actor Qwen3Engine {
         model = loaded
     }
 
-    func transcribe(_ samples: [Float]) throws -> String {
+    /// - Parameter context: Words the speech is likely to contain, one per line, which
+    ///   speech-swift puts in the prompt's system turn. The app passes none yet. The context
+    ///   evaluation (ContextEvaluationTests) measures what a vocabulary does.
+    func transcribe(_ samples: [Float], context: String? = nil) throws -> String {
         guard let model else { throw TranscriptionError.modelMissing }
         guard !samples.isEmpty else { throw TranscriptionError.noAudio }
-        return run(model, on: samples)
+        return run(model, on: samples, context: context)
     }
 
-    private func run(_ model: Qwen3ASRModel, on samples: [Float]) -> String {
+    private func run(_ model: Qwen3ASRModel, on samples: [Float], context: String? = nil) -> String {
         let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
         // No language hint: docs/asr-baseline.md shows that a fixed hint hurts mixed
         // Chinese and English. The token budget grows with the length of the audio.
@@ -55,6 +58,7 @@ actor Qwen3Engine {
         let options = Qwen3DecodingOptions(
             maxTokens: max(448, Int(seconds * 12)),
             language: nil,
+            context: context,
             longInputThresholdSeconds: .infinity
         )
         return model.transcribe(audio: samples, sampleRate: RecordingLimits.sampleRate, options: options)

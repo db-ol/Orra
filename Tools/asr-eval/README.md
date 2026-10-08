@@ -45,3 +45,26 @@ extra packages.
 2. Put the WAV files in a folder under `sets/`, for example `sets/aaron_mixed`, with a
    `refs.tsv` of lines `file.wav<TAB>text exactly as it should be typed`.
 3. Run `SETS="aaron_mixed" ./run_all.sh`, then `python3 score.py aaron_mixed`.
+
+## Vocabulary as context
+
+Measures what a vocabulary does when Orra passes it to Qwen3-ASR as context. It uses
+ContextASR-Bench (MIT, huggingface.co/datasets/MrSupW/ContextASR-Bench), whose clips come
+with the terms they contain. Its speech is synthesized, so it tests the mechanism, not a
+person's voice. Your own recordings, with a `terms.tsv`, test the rest.
+
+1. Into `contextasr/` in the evaluation folder, download `ContextASR-Speech_Mandarin.jsonl`,
+   `ContextASR-Speech_English.jsonl` and one archive of each, for example
+   `audio/ContextASR-Speech/Mandarin/ContextASR-Speech_Mandarin_1.tar` (about 3 GB each).
+2. `python3 prep_contextasr.py` builds `sets/contextasr_zh` and `sets/contextasr_en`, 100
+   clips each (set `COUNT` for more), with `refs.tsv` and `terms.tsv`
+   (`file.wav<TAB>term|term|…`).
+3. Run the test command with `TEST_RUNNER_ORRA_CONTEXT_EVAL=1` and
+   `-only-testing:OrraTests/RealModelTests/ContextEvaluationTests`. The report, numbers
+   only, is in `results/context-evaluation.txt`.
+
+Every clip runs twice, without context and with its own terms mixed with ten terms of
+other clips it does not contain. The report gives the share of terms recognized, the
+share of those other terms inserted, the error rate and the latency, then the error rate
+on `ascend_mixed` with unrelated terms as context, and whether silence, hum and noise stay
+silent with a vocabulary.
