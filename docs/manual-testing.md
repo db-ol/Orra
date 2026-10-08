@@ -506,8 +506,7 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
   recording starts and stops" takes effect at the next hold, and both stay off after
   quitting and reopening Orra.
 
-App icon, added on 2026-10-07, not verified yet. It needs the App Icon setting of the Orra
-target set to AppIcon in Xcode first:
+App icon, added on 2026-10-07, not verified yet:
 
 - [ ] Finder, the Applications folder, the Accessibility list in System Settings and the
   welcome window show the violet icon with the white ring and bars, in light and dark
