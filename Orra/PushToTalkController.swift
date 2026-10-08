@@ -5,11 +5,11 @@ import os
 
 /// What the recording indicator and the sounds follow. A dictation sends listening,
 /// transcribing, recordingStopped and finished, in that order. Listening waits until the
-/// hold has lasted a moment, so a shortcut with the talk key, such as right Control+C,
-/// sends nothing. A hold that ends early skips to finished, which comes only when there is
+/// hold has lasted a moment and the microphone has started, so a shortcut with the talk
+/// key, such as right Control+C, sends nothing. A hold that ends early skips to finished, which comes only when there is
 /// a message to show or an indicator to clear.
 nonisolated enum DictationCue: Equatable, Sendable {
-    /// The hold has lasted long enough to be a dictation, and the microphone is starting.
+    /// The hold has lasted long enough to be a dictation, and the microphone is recording.
     case listening
     /// The talk key was released after a hold long enough to transcribe.
     case transcribing
@@ -410,8 +410,13 @@ final class PushToTalkController {
                 logger.info("Recording reached its maximum length")
                 handle(.released)
             }
+            let started = captureStart
             listeningCueTask = Task { [weak self, listeningCueDelay] in
                 try? await Task.sleep(for: listeningCueDelay)
+                // The cue also waits for the microphone, which can take 0.3 s for a USB
+                // microphone, so whoever starts talking at the sound is recorded from the
+                // first syllable. A microphone that fails to start sends no cue.
+                guard await started?.value == true else { return }
                 guard !Task.isCancelled, let self, holdNumber == hold, state == .listening else { return }
                 indicatorShown = true
                 onCue(.listening)
