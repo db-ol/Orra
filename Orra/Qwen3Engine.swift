@@ -40,8 +40,8 @@ actor Qwen3Engine {
     }
 
     /// - Parameter context: Words the speech is likely to contain, one per line, which
-    ///   speech-swift puts in the prompt's system turn. The app passes none yet. The context
-    ///   evaluation (ContextEvaluationTests) measures what a vocabulary does.
+    ///   speech-swift puts in the prompt's system turn. The app passes the user's
+    ///   vocabulary. ContextEvaluationTests measures what a vocabulary does.
     func transcribe(_ samples: [Float], context: String? = nil) throws -> String {
         guard let model else { throw TranscriptionError.modelMissing }
         guard !samples.isEmpty else { throw TranscriptionError.noAudio }
@@ -70,7 +70,7 @@ extension Transcription {
         let engine = Qwen3Engine()
         return Transcription(
             load: { try await engine.load() },
-            transcribe: { samples in try await engine.transcribe(samples) }
+            transcribe: { samples, context in try await engine.transcribe(samples, context: context) }
         )
     }
 }

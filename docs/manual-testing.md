@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 350 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 355 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -110,6 +110,10 @@ Build and test commands, run in the repository root:
     setup counts as complete only once the model has loaded, and that a model that is
     still loading needs nothing from the user, which decides whether launch opens the
     window and the menu shows Setup Guide….
+  - VocabularyTests checks how the vocabulary text becomes terms (trimmed, once each
+    ignoring case, cut at 40 characters, at most 100), the context string the model gets,
+    and saving the list. PushToTalkControllerTests checks that every dictation passes the
+    current vocabulary to the model, nil when it is empty, and that a change is saved.
   - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
     translation marked translated, that each translation keeps the arguments of the
     English string, that the Chinese uses full width punctuation and a space next to a
@@ -506,6 +510,15 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
   speaking shows "No speech was recognized".
 - [ ] In Settings, turning off "Show the recording indicator" and "Play sounds when
   recording starts and stops" takes effect at the next hold, and both stay off after
+  quitting and reopening Orra.
+
+Personal vocabulary, added on 2026-10-08, not verified yet:
+
+- [ ] In Settings, type a few names and terms you use, one per line, that Orra got wrong
+  before. Dictate sentences with them: they come out spelled as in the list.
+- [ ] Dictate sentences without them: none of the listed words shows up.
+- [ ] Hold the talk key without speaking: no listed word appears.
+- [ ] The count in the footer follows the list, and the list is still there after
   quitting and reopening Orra.
 
 App icon, added on 2026-10-07, not verified yet:

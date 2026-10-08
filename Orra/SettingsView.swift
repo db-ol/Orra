@@ -5,6 +5,8 @@ struct SettingsView: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
     @Bindable var feedback: RecordingFeedback
+    /// The vocabulary as typed, one term per line. Saved as terms on every change.
+    @State private var vocabularyText: String?
 
     var body: some View {
         Form {
@@ -33,6 +35,23 @@ struct SettingsView: View {
                 Text("Microphone")
             } footer: {
                 Text("Orra records from this microphone. While it is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                TextEditor(text: Binding(
+                    get: { vocabularyText ?? pushToTalk.vocabulary.joined(separator: "\n") },
+                    set: { text in
+                        vocabularyText = text
+                        pushToTalk.setVocabulary(Vocabulary.terms(from: text))
+                    }
+                ))
+                .font(.body)
+                .frame(height: 120)
+                .accessibilityLabel("Vocabulary")
+            } header: {
+                Text("Vocabulary")
+            } footer: {
+                Text("One word or name per line, such as people, products and terms you use. Orra gives them to the speech model so it writes them your way. \(pushToTalk.vocabulary.count) of \(Vocabulary.limit) words. They stay on this Mac.")
                     .foregroundStyle(.secondary)
             }
             Section {

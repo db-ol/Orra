@@ -78,6 +78,8 @@ final class FakeSpeech {
     var delay: Duration = .zero
     private(set) var loads = 0
     private(set) var receivedSampleCounts: [Int] = []
+    /// The context each transcription got.
+    private(set) var receivedContexts: [String?] = []
 
     var transcription: Transcription {
         Transcription(
@@ -88,7 +90,8 @@ final class FakeSpeech {
                 }
                 if let error = self.loadError { throw error }
             },
-            transcribe: { samples in
+            transcribe: { samples, context in
+                self.receivedContexts.append(context)
                 self.receivedSampleCounts.append(samples.count)
                 if self.delay > .zero {
                     try await Task.sleep(for: self.delay)
@@ -998,6 +1001,29 @@ struct PushToTalkControllerTests {
         // The menu has no line for it.
         #expect(controller.problem == nil)
         #expect(controller.notice == nil)
+    }
+
+    @Test func theVocabularyReachesTheModelAndIsSaved() async throws {
+        var saved: [[String]] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            vocabulary: ["Orra"],
+            saveVocabulary: { saved.append($0) }
+        )
+        await controller.loadModel()
+        try await dictate(controller)
+        controller.setVocabulary(["Orra", "通义千问"])
+        try await dictate(controller)
+        controller.setVocabulary([])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Orra", "Orra\n通义千问", nil])
+        #expect(saved == [["Orra", "通义千问"], []])
     }
 
     @Test func theLevelComesFromTheMicrophone() async {

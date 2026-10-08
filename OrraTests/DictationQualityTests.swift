@@ -146,7 +146,7 @@ extension RealModelTests {
             let inserter = FakeInserter()
             let controller = PushToTalkController(
                 capture: mic.capture,
-                transcription: Transcription(load: { try await engine.load() }, transcribe: { try await engine.transcribe($0) }),
+                transcription: Transcription(load: { try await engine.load() }, transcribe: { try await engine.transcribe($0, context: $1) }),
                 insert: inserter.insert,
                 frontmostApp: { 100 },
                 minimumHold: .zero,

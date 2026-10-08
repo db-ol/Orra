@@ -442,6 +442,22 @@
         }
       }
     },
+    "One word or name per line, such as people, products and terms you use. Orra gives them to the speech model so it writes them your way. %lld of %lld words. They stay on this Mac." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "One word or name per line, such as people, products and terms you use. Orra gives them to the speech model so it writes them your way. %1$lld of %2$lld words. They stay on this Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每行一个词或名字，比如人名、产品名和你常用的术语。Orra 会把它们交给语音模型，让它按你的写法输出。已有 %1$lld 个，最多 %2$lld 个。这些词只保存在这台 Mac 上。"
+          }
+        }
+      }
+    },
     "Open at Login" : {
       "localizations" : {
         "zh-Hans" : {
@@ -967,6 +983,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在任何 App 中试试：按住说话键，说点什么，然后松开。文字会出现在你正在输入的位置。"
+          }
+        }
+      }
+    },
+    "Vocabulary" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人词库"
           }
         }
       }
