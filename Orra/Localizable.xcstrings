@@ -103,16 +103,6 @@
         }
       }
     },
-    "Add a word or name" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加一个词或名字"
-          }
-        }
-      }
-    },
     "Allow Accessibility" : {
       "localizations" : {
         "zh-Hans" : {
@@ -454,6 +444,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风访问权限已关闭。请在系统设置的“麦克风”中打开 Orra。"
+          }
+        }
+      }
+    },
+    "New word" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新词"
           }
         }
       }
@@ -1113,6 +1113,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在任何 App 中试试：按住说话键，说点什么，然后松开。文字会出现在你正在输入的位置。"
+          }
+        }
+      }
+    },
+    "Type a word or name, then press Return" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入一个词或名字，按回车添加"
           }
         }
       }

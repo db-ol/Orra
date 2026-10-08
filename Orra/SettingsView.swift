@@ -44,6 +44,7 @@ struct SettingsView: View {
                     .tag(page)
             }
             .navigationSplitViewColumnWidth(170)
+            .toolbar(removing: .sidebarToggle)
         } detail: {
             switch page ?? .general {
             case .general:
@@ -150,17 +151,25 @@ private struct VocabularySettings: View {
     let pushToTalk: PushToTalkController
     @State private var newTerm = ""
     @State private var filter = ""
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         let terms = pushToTalk.vocabulary
         let shown = filter.isEmpty ? terms : terms.filter { $0.localizedCaseInsensitiveContains(filter) }
         Form {
             Section {
-                HStack {
-                    TextField("Add a word or name", text: $newTerm)
+                HStack(spacing: 8) {
+                    // A visible box with the hint inside it, so it reads as a place to type.
+                    TextField("New word", text: $newTerm, prompt: Text("Type a word or name, then press Return"))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .focused($fieldFocused)
                         .onSubmit(add)
-                    Button("Add", action: add)
-                        .disabled(newTerm.trimmingCharacters(in: .whitespaces).isEmpty || terms.count >= Vocabulary.limit)
+                    Button(action: add) {
+                        Label("Add", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(terms.count >= Vocabulary.limit)
                 }
             } footer: {
                 Text("People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac.")
@@ -168,7 +177,9 @@ private struct VocabularySettings: View {
             }
             Section {
                 if terms.count > 8 {
-                    TextField("Search", text: $filter)
+                    TextField("Search", text: $filter, prompt: Text("Search"))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
                 }
                 if terms.isEmpty {
                     Text("No words yet")
@@ -193,9 +204,11 @@ private struct VocabularySettings: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Vocabulary")
+        .onAppear { fieldFocused = true }
     }
 
     private func add() {
+        defer { fieldFocused = true }
         let updated = Vocabulary.adding(newTerm, to: pushToTalk.vocabulary)
         if updated != pushToTalk.vocabulary {
             pushToTalk.setVocabulary(updated)
