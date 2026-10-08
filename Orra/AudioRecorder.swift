@@ -1,3 +1,4 @@
+import Accelerate
 import AudioToolbox
 import AVFoundation
 import CoreAudio
@@ -163,6 +164,32 @@ nonisolated final class SampleStore: Sendable {
     }
 }
 
+/// How loud the latest audio from the microphone was, for the recording indicator. The
+/// audio thread stores the peak of each buffer in one atomic, so it neither locks nor
+/// allocates, and the main actor reads it.
+nonisolated final class LevelMeter: Sendable {
+    private let peakBits = Atomic<UInt32>(0)
+
+    /// The peak of the latest buffer, from 0 to 1.
+    var peak: Float {
+        let value = Float(bitPattern: peakBits.load(ordering: .relaxed))
+        return value.isFinite ? min(max(value, 0), 1) : 0
+    }
+
+    /// Stores the largest magnitude among the samples. Safe on Core Audio's real time
+    /// thread.
+    func record(_ samples: UnsafePointer<Float>, count: Int) {
+        guard count > 0 else { return }
+        var peak: Float = 0
+        vDSP_maxmgv(samples, 1, &peak, vDSP_Length(count))
+        peakBits.store(peak.bitPattern, ordering: .relaxed)
+    }
+
+    func reset() {
+        peakBits.store(0, ordering: .relaxed)
+    }
+}
+
 nonisolated enum AudioRecorderError: Error, Equatable {
     /// The default input reports a format that cannot be recorded.
     case unsupportedInput
@@ -198,6 +225,8 @@ actor AudioRecorder {
     /// The default input when `engine` was made.
     private var engineInput: AudioDeviceID?
     private let store = SampleStore()
+    /// How loud the recording in progress is, for the recording indicator.
+    nonisolated let meter = LevelMeter()
     private var sampleRate = 0.0
     /// What records the current hold. Nil between holds.
     private var source: Source?
@@ -209,6 +238,7 @@ actor AudioRecorder {
     ///   the system default. While that microphone is not connected, the default records.
     func start(preferredInput: String?) throws {
         guard source == nil else { return }
+        meter.reset()
         if let preferredInput {
             if let device = AudioInput.device(uid: preferredInput) {
                 try startUnit(on: device)
@@ -223,6 +253,8 @@ actor AudioRecorder {
     func stop() -> AudioRecording {
         guard let source else { return AudioRecording(samples: [], sampleRate: sampleRate) }
         self.source = nil
+        // After the unit or the engine has stopped, so no late buffer leaves a peak behind.
+        defer { meter.reset() }
         switch source {
         case .unit(let unit):
             let result = unit.stop()
@@ -246,6 +278,7 @@ actor AudioRecorder {
     func cancel() {
         guard let source else { return }
         self.source = nil
+        defer { meter.reset() }
         switch source {
         case .unit(let unit):
             _ = unit.stop()
@@ -257,7 +290,7 @@ actor AudioRecorder {
 
     private func startUnit(on device: AudioInput) throws {
         let began = ContinuousClock.now
-        let unit = try InputUnit(device: device, maximumSeconds: RecordingLimits.maximumSeconds)
+        let unit = try InputUnit(device: device, maximumSeconds: RecordingLimits.maximumSeconds, meter: meter)
         try unit.start()
         source = .unit(unit)
         logger.notice("Recording from the chosen microphone over \(AudioInput.fourCC(device.transport), privacy: .public) at \(Int(unit.sampleRate), privacy: .public) Hz, started in \(began.duration(to: .now), privacy: .public)")
@@ -292,7 +325,7 @@ actor AudioRecorder {
         store.begin(limit: Int(hardware.sampleRate * RecordingLimits.maximumSeconds))
         // About 100 ms per buffer, so little speech waits in a half filled buffer.
         let bufferSize = AVAudioFrameCount(hardware.sampleRate / 10)
-        input.installTap(onBus: 0, bufferSize: bufferSize, format: format, block: Self.tapBlock(store: store))
+        input.installTap(onBus: 0, bufferSize: bufferSize, format: format, block: Self.tapBlock(store: store, meter: meter))
         engine.prepare()
         do {
             try engine.start()
@@ -317,9 +350,15 @@ actor AudioRecorder {
         engineInput = nil
     }
 
-    nonisolated private static func tapBlock(store: SampleStore) -> AVAudioNodeTapBlock {
+    nonisolated private static func tapBlock(store: SampleStore, meter: LevelMeter) -> AVAudioNodeTapBlock {
         { buffer, _ in
-            store.append(MicrophoneChannel.samples(from: buffer))
+            let samples = MicrophoneChannel.samples(from: buffer)
+            samples.withUnsafeBufferPointer { pointer in
+                if let base = pointer.baseAddress {
+                    meter.record(base, count: pointer.count)
+                }
+            }
+            store.append(samples)
         }
     }
 }
@@ -333,6 +372,9 @@ struct AudioCapture {
     var start: (String?) async throws -> Void
     var stop: () async -> AudioRecording
     var cancel: () async -> Void
+    /// The peak of the latest audio while recording, from 0 to 1, for the recording
+    /// indicator. Fakes may leave it at zero.
+    var level: () -> Float = { 0 }
 
     static func live() -> AudioCapture {
         let recorder = AudioRecorder()
@@ -341,7 +383,8 @@ struct AudioCapture {
             requestAccess: { await MicrophoneAccess.request() },
             start: { preferredInput in try await recorder.start(preferredInput: preferredInput) },
             stop: { await recorder.stop() },
-            cancel: { await recorder.cancel() }
+            cancel: { await recorder.cancel() },
+            level: { recorder.meter.peak }
         )
     }
 }

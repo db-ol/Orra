@@ -23,20 +23,26 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
     /// The name on a switch in the menu or in Settings.
     var name: String {
         switch self {
-        case .rightControl: "Right Control"
-        case .rightOption: "Right Option"
-        case .rightCommand: "Right Command"
-        case .fn: "fn (Globe)"
+        case .rightControl: String(localized: "Right Control")
+        case .rightOption: String(localized: "Right Option")
+        case .rightCommand: String(localized: "Right Command")
+        case .fn: String(localized: "fn (Globe)")
         }
     }
 
     /// The name inside a sentence, such as "Hold right Control to talk".
     var nameInSentence: String {
+        sentenceName(in: .main)
+    }
+
+    /// The name inside a sentence, from the strings in `bundle`. Tests pass the Chinese
+    /// strings.
+    func sentenceName(in bundle: Bundle) -> String {
         switch self {
-        case .rightControl: "right Control"
-        case .rightOption: "right Option"
-        case .rightCommand: "right Command"
-        case .fn: "fn"
+        case .rightControl: String(localized: "right Control", bundle: bundle, comment: "A talk key inside a sentence")
+        case .rightOption: String(localized: "right Option", bundle: bundle, comment: "A talk key inside a sentence")
+        case .rightCommand: String(localized: "right Command", bundle: bundle, comment: "A talk key inside a sentence")
+        case .fn: String(localized: "fn", bundle: bundle, comment: "A talk key inside a sentence")
         }
     }
 
@@ -138,16 +144,22 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
         return flags.isDisjoint(with: downFlag.union(leftKeyFlag)) && flags.contains(sharedFlag)
     }
 
-    /// The hint in the menu, such as "Hold right Control or fn to talk".
-    static func holdHint(for keys: Set<TalkKey>) -> String {
-        let names = allCases.filter(keys.contains).map(\.nameInSentence)
+    /// The hint in the menu, such as "Hold right Control or fn to talk". One sentence per
+    /// number of keys, so each language can join the names its own way. There are four
+    /// talk keys.
+    static func holdHint(for keys: Set<TalkKey>, bundle: Bundle = .main) -> String {
+        let names = allCases.filter(keys.contains).map { $0.sentenceName(in: bundle) }
         switch names.count {
         case 0:
-            return "No talk key is set"
+            return String(localized: "No talk key is set", bundle: bundle)
         case 1:
-            return "Hold \(names[0]) to talk"
+            return String(localized: "Hold \(names[0]) to talk", bundle: bundle)
+        case 2:
+            return String(localized: "Hold \(names[0]) or \(names[1]) to talk", bundle: bundle)
+        case 3:
+            return String(localized: "Hold \(names[0]), \(names[1]) or \(names[2]) to talk", bundle: bundle)
         default:
-            return "Hold \(names.dropLast().joined(separator: ", ")) or \(names.last!) to talk"
+            return String(localized: "Hold \(names[0]), \(names[1]), \(names[2]) or \(names[3]) to talk", bundle: bundle)
         }
     }
 }

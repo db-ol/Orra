@@ -8,14 +8,15 @@ network) and Orra/ModelInstaller.swift (the menu's state).
 ## When Orra goes online
 
 - Only after the user chooses Download Speech Model, Resume Download or Try Again in the
-  menu. Before that, the menu names the size, 2.47 GB, and says that speech stays on the
-  Mac. During the download it names the server in use.
+  menu or in the welcome window. Before that, both name the size, 2.47 GB, and say that
+  speech stays on the Mac. During the download they name the server in use.
 - Launching never connects. At launch Orra looks at local files only: it checks the
   installed folder by file sizes, finishes an install that a quit interrupted, or reuses
   the copy speech-swift left in ~/Library/Caches/qwen3-speech.
 - Loading the model uses speech-swift's offline mode on the installed folder, so it makes
   no request either.
-- The menu shows the download before Accessibility is granted, so it can start first.
+- The menu and the welcome window show the download before Accessibility is granted, so
+  it can start first.
 
 ## Servers
 

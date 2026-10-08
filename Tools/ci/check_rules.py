@@ -27,9 +27,9 @@ from pathlib import Path
 # so an empty map means that nobody sets it. Conditional forms such as
 # PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*] count as the setting itself.
 EXPECTED_BUILD_SETTINGS = {
+    # Set once on the project, which both targets inherit.
     "DEVELOPMENT_TEAM": {
-        "Orra": "2ULS7D52PT",
-        "OrraTests": "2ULS7D52PT",
+        "project": "2ULS7D52PT",
     },
     "PRODUCT_BUNDLE_IDENTIFIER": {
         "Orra": "io.github.db-ol.Orra",

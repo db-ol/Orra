@@ -10,8 +10,8 @@ Early stage. While you hold the talk key, right Control unless you pick another 
 
 - macOS 15.6 or later. Apple Silicon is the primary target.
 - Xcode 27 to build, with the Metal Toolchain component (Xcode > Settings > Components). The speech-swift dependency pulls in mlx-swift, which compiles Metal shaders at build time.
-- About 3 GB of free disk space for the speech model, Qwen3-ASR 1.7B (aufklarer/Qwen3-ASR-1.7B-MLX-8bit). Orra downloads it, 2.47 GB, when you choose Download Speech Model in its menu. If ~/Library/Caches/qwen3-speech already holds it, Orra reuses that copy without downloading.
-- Accessibility access, to watch the talk key and paste, and microphone access, which Orra asks for on the first hold.
+- About 3 GB of free disk space for the speech model, Qwen3-ASR 1.7B (aufklarer/Qwen3-ASR-1.7B-MLX-8bit). Orra downloads it, 2.47 GB, when you choose Download Speech Model in its menu or in the welcome window. If ~/Library/Caches/qwen3-speech already holds it, Orra reuses that copy without downloading.
+- Accessibility access, to watch the talk key and paste, and microphone access. At launch, until Orra has its model and both permissions, a welcome window walks you through the download and the two permissions.
 
 ## Build and test
 
@@ -19,7 +19,7 @@ Run from the repository root:
 
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
 
-Replace `build` with `test` to run the unit tests.
+Replace `build` with `-testLanguage en -testRegion US test` to run the unit tests. They compare English text, so they run in English.
 
 The first build in Xcode asks you to Trust & Enable CudaBuild, a build tool plugin of mlx-swift. After that the command above works as is, until a package update changes mlx-swift.
 
@@ -31,7 +31,11 @@ A Release build takes about a quarter less time to transcribe than a Debug build
     rm -rf ~/Applications/Orra.app
     ditto build/DerivedData/Build/Products/Release/Orra.app ~/Applications/Orra.app
 
-Open ~/Applications/Orra.app and turn on Open at Login in its menu. If macOS asks for Accessibility or microphone access again for this copy, allow it.
+Open ~/Applications/Orra.app and turn on Open at Login in its menu. If the welcome window opens for this copy, grant what it lists.
+
+Orra's menu and windows are in English and Simplified Chinese, in the order of your preferred languages in System Settings > General > Language & Region. You can give Orra its own language there under Applications.
+
+While Orra listens, a small indicator at the bottom of the screen shows bars that move with your voice, and a short sound marks the start and the end of the recording. When a dictation pastes nothing, the indicator says why. Both can be turned off in Settings.
 
 Orra records from the system's default input unless you choose another under Microphone in its menu or in Settings. The choice stays until you change it, and while that microphone is unplugged the default records. With the lid closed, a MacBook turns its own microphone off, so choose another one, such as a webcam's. The menu warns about it. docs/microphone-choice.md explains how the choice works.
 
@@ -39,7 +43,7 @@ Orra records from the system's default input unless you choose another under Mic
 
 Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. The text it pastes stays on this Mac's clipboard, so Universal Clipboard does not offer it to your other devices. Orra has no account, no analytics and no server of its own.
 
-Orra uses the internet for one thing: downloading its speech model, and only after you choose Download Speech Model in the menu. Launching Orra never connects to the network. The download fetches six files, 2.47 GB in all, from Hugging Face (huggingface.co). If Hugging Face cannot be reached, for example from mainland China, Orra tries ModelScope (modelscope.cn) and then hf-mirror.com, which carry the same files. hf-mirror.com hands the large weights file on to Hugging Face's own download servers, and outside mainland China it sends every request on to huggingface.co. Like any download, these services and the networks they hand the files to see your IP address. Orra sends no account, token or cookie.
+Orra uses the internet for one thing: downloading its speech model, and only after you choose Download Speech Model in the menu or the welcome window. Launching Orra never connects to the network. The download fetches six files, 2.47 GB in all, from Hugging Face (huggingface.co). If Hugging Face cannot be reached, for example from mainland China, Orra tries ModelScope (modelscope.cn) and then hf-mirror.com, which carry the same files. hf-mirror.com hands the large weights file on to Hugging Face's own download servers, and outside mainland China it sends every request on to huggingface.co. Like any download, these services and the networks they hand the files to see your IP address. Orra sends no account, token or cookie.
 
 Before using the files, Orra checks the size and SHA-256 hash of each one against values written in its source code, so a mirror cannot change the model. The files are kept in ~/Library/Application Support/io.github.db-ol.Orra/Models and left out of Time Machine backups. To remove the model, quit Orra and delete that folder. If ~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit or ~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-8bit exists, delete it as well. While it exists, Orra installs the model again from it at its next launch, and Orra's copy shares disk space with it. docs/model-download.md has the details.
 

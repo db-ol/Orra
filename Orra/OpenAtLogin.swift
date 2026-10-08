@@ -101,7 +101,7 @@ final class OpenAtLogin {
             try register(on)
             problem = nil
         } catch {
-            problem = on ? "Orra could not add itself to Login Items" : "Orra could not remove itself from Login Items"
+            problem = on ? String(localized: "Orra could not add itself to Login Items") : String(localized: "Orra could not remove itself from Login Items")
             logger.error("Changing the login item failed: \(String(describing: error), privacy: .public)")
         }
         refresh()
