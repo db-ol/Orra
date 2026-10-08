@@ -9,6 +9,14 @@ final class RecordingIndicatorPanel {
     weak var feedback: RecordingFeedback?
     private var panel: NSPanel?
 
+    /// Builds the panel without showing it, at launch, so the first hold does not wait for
+    /// a window to be made.
+    func prepare() {
+        if panel == nil {
+            _ = makePanel()
+        }
+    }
+
     func present(_ display: RecordingFeedback.Display?) {
         guard display != nil else {
             panel?.orderOut(nil)
@@ -19,7 +27,8 @@ final class RecordingIndicatorPanel {
         panel.orderFrontRegardless()
     }
 
-    private func makePanel() -> NSPanel? {
+    /// Internal so tests can check the panel without showing it.
+    func makePanel() -> NSPanel? {
         guard let feedback else { return nil }
         let panel = NonactivatingPanel(
             contentRect: NSRect(origin: .zero, size: RecordingIndicatorView.panelSize),

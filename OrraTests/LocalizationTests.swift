@@ -68,12 +68,24 @@ struct LocalizationTests {
     }
 
     @Test(arguments: ["Localizable", "InfoPlist"])
-    func chineseUsesFullWidthPunctuation(_ name: String) throws {
-        let halfWidth = Set(",:;?!()\"")
+    func chineseUsesFullWidthPunctuationAndSpaces(_ name: String) throws {
+        let halfWidth = Set(",.:;?!()\"")
+        func isHan(_ character: Character) -> Bool {
+            character.unicodeScalars.allSatisfy { (0x4E00...0x9FFF).contains($0.value) || (0x3400...0x4DBF).contains($0.value) }
+        }
+        func isLatinOrDigit(_ character: Character) -> Bool {
+            character.isASCII && (character.isLetter || character.isNumber)
+        }
         for (key, entry) in try Self.catalog(name) {
             let value = try #require(Self.chinese(entry)?.value)
-            let found = value.filter { halfWidth.contains($0) }
+            // Arguments become a placeholder, so "按住%@说话" passes.
+            let text = Array(value.replacing(/%(?:\d+\$)?(?:@|lld|ld|d|lf|f|%)/, with: "\u{FFFC}"))
+            let found = text.filter { halfWidth.contains($0) }
             #expect(found.isEmpty, "\(key) -> \(value)")
+            let missingSpace = zip(text, text.dropFirst()).contains { pair in
+                (isHan(pair.0) && isLatinOrDigit(pair.1)) || (isLatinOrDigit(pair.0) && isHan(pair.1))
+            }
+            #expect(!missingSpace, "\(key) -> \(value)")
         }
     }
 
@@ -88,18 +100,19 @@ struct LocalizationTests {
         let available = Bundle.main.localizations
         #expect(Bundle.preferredLocalizations(from: available, forPreferences: ["en-US", "zh-Hans-US"]).first == "en")
         #expect(Bundle.preferredLocalizations(from: available, forPreferences: ["zh-Hans-CN", "en-US"]).first == "zh-Hans")
+        // Traditional Chinese does not fall back to Simplified.
+        #expect(Bundle.preferredLocalizations(from: available, forPreferences: ["zh-Hant-TW", "en-US"]).first == "en")
+        #expect(Bundle.preferredLocalizations(from: available, forPreferences: ["zh-Hant-HK", "zh-Hans-CN", "en-US"]).first == "zh-Hans")
     }
 
     @Test func talkKeyHintsReadAsChineseSentences() throws {
         let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
         let chinese = try #require(Bundle(path: path))
-        func text(_ key: String) -> String {
-            chinese.localizedString(forKey: key, value: nil, table: nil)
-        }
-        let control = text("right Control")
-        let fn = text("fn")
-        #expect(String(format: text("Hold %@ to talk"), control) == "按住右侧 Control 键说话")
-        #expect(String(format: text("Hold %@ or %@ to talk"), control, fn) == "按住右侧 Control 键或左下角的 fn 键说话")
-        #expect(String(format: text("Hold %@, %@ or %@ to talk"), control, text("right Option"), fn) == "按住右侧 Control 键、右侧 Option 键或左下角的 fn 键说话")
+        #expect(TalkKey.holdHint(for: [], bundle: chinese) == "未设置说话键")
+        #expect(TalkKey.holdHint(for: [.rightControl], bundle: chinese) == "按住右侧 Control 键说话")
+        #expect(TalkKey.holdHint(for: [.fn], bundle: chinese) == "按住地球仪（fn）键说话")
+        #expect(TalkKey.holdHint(for: [.rightControl, .fn], bundle: chinese) == "按住右侧 Control 键或地球仪（fn）键说话")
+        #expect(TalkKey.holdHint(for: [.rightControl, .rightOption, .fn], bundle: chinese) == "按住右侧 Control 键、右侧 Option 键或地球仪（fn）键说话")
+        #expect(TalkKey.holdHint(for: Set(TalkKey.allCases), bundle: chinese) == "按住右侧 Control 键、右侧 Option 键、右侧 Command 键或地球仪（fn）键说话")
     }
 }

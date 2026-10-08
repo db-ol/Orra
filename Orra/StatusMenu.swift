@@ -87,7 +87,7 @@ struct StatusMenu: View {
 
         Divider()
 
-        if !SetupChecklist(pushToTalk, models).isComplete {
+        if SetupChecklist(pushToTalk, models).needsUser {
             Button("Setup Guide…") {
                 showWelcome()
             }

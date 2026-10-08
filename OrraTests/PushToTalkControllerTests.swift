@@ -72,6 +72,7 @@ final class CueRecorder {
 @MainActor
 final class FakeSpeech {
     var loadError: (any Error)?
+    var loadDelay: Duration = .zero
     var reply = "你好"
     var transcribeError: (any Error)?
     var delay: Duration = .zero
@@ -82,6 +83,9 @@ final class FakeSpeech {
         Transcription(
             load: {
                 self.loads += 1
+                if self.loadDelay > .zero {
+                    try await Task.sleep(for: self.loadDelay)
+                }
                 if let error = self.loadError { throw error }
             },
             transcribe: { samples in
@@ -127,6 +131,7 @@ struct PushToTalkControllerTests {
     private func makeController(
         limit: Duration = RecordingLimits.maximumDuration,
         minimumHold: Duration = .zero,
+        listeningCueDelay: Duration = .zero,
         loadModel: Bool = true
     ) async -> PushToTalkController {
         let controller = PushToTalkController(
@@ -136,7 +141,8 @@ struct PushToTalkControllerTests {
             frontmostApp: { [workspace] in workspace.frontmost },
             maximumRecordingDuration: limit,
             minimumHold: minimumHold,
-            releaseTail: .zero
+            releaseTail: .zero,
+            listeningCueDelay: listeningCueDelay
         )
         if loadModel {
             await controller.loadModel()
@@ -842,15 +848,64 @@ struct PushToTalkControllerTests {
     @Test func aDictationSendsEveryCueInOrder() async throws {
         let controller = await makeController()
         let cues = CueRecorder(controller)
-        try await dictate(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] && mic.calls.contains("start") }
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
         #expect(cues.list == [.listening, .transcribing, .recordingStopped, .finished(message: nil)])
+    }
+
+    @Test func theIndicatorWaitsForTheHoldToLast() async throws {
+        let controller = await makeController(listeningCueDelay: .seconds(1))
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        // Long enough for a cue sent without the delay to arrive.
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(cues.list.isEmpty)
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.listening])
+    }
+
+    @Test func aShortcutWithTheTalkKeySendsNoCue() async throws {
+        let controller = await makeController(listeningCueDelay: .seconds(1))
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        // The second key of the shortcut comes a moment later.
+        try await Task.sleep(for: .milliseconds(50))
+        controller.handle(.cancelled)
+        // A hold that starts later, with the same delay, shows only after the first hold
+        // would have.
+        let probe = await makeController(listeningCueDelay: .seconds(1))
+        let probeCues = CueRecorder(probe)
+        probe.handle(.pressed(isRepeat: false))
+        try await waitUntil { probeCues.list == [.listening] }
+        #expect(probeCues.list == [.listening])
+        #expect(cues.list.isEmpty)
     }
 
     @Test func aHoldBeforeTheModelIsReadyOnlySaysWhy() async throws {
         let controller = await makeController(loadModel: false)
         let cues = CueRecorder(controller)
         controller.handle(.pressed(isRepeat: false))
-        #expect(cues.list == [.finished(message: "The speech model is not ready yet")])
+        #expect(cues.list == [.finished(message: "The speech model is not ready. The Orra menu shows what is missing.")])
+    }
+
+    @Test func aHoldWhileTheModelLoadsSaysSo() async throws {
+        speech.loadDelay = .seconds(1)
+        let controller = await makeController(loadModel: false)
+        let cues = CueRecorder(controller)
+        Task { await controller.loadModel() }
+        try await waitUntil { controller.modelState == .loading }
+        controller.handle(.pressed(isRepeat: false))
+        #expect(cues.list == [.finished(message: "The speech model is still loading")])
+    }
+
+    @Test func aHoldWithAModelThatFailedToLoadGivesTheReason() async throws {
+        speech.loadError = TranscriptionError.modelMissing
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        #expect(cues.list == [.finished(message: "The speech model is not on this Mac")])
     }
 
     @Test func aHoldWithMicrophoneAccessOffSaysWhy() async throws {
@@ -861,32 +916,47 @@ struct PushToTalkControllerTests {
         #expect(cues.list == [.finished(message: "Microphone access is off")])
     }
 
+    @Test func aBuildWithoutAMicrophoneUsageDescriptionSaysSo() async throws {
+        mic.access = .notConfigured
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        #expect(cues.list == [.finished(message: "This build has no microphone usage description")])
+    }
+
     @Test func theFirstHoldLeavesTheExplainingToTheSystemPrompt() async throws {
         mic.access = .notDetermined
         let controller = await makeController()
         let cues = CueRecorder(controller)
         controller.handle(.pressed(isRepeat: false))
-        #expect(cues.list == [.finished(message: nil)])
+        #expect(cues.list.isEmpty)
     }
 
-    @Test func aShortHoldHasNeitherTheSpinnerNorTheStopSound() async throws {
+    @Test func aShortHoldClearsTheIndicatorAtTheRelease() async throws {
         let controller = await makeController(minimumHold: .seconds(10))
         let cues = CueRecorder(controller)
-        try await dictate(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] && mic.calls.contains("start") }
+        controller.handle(.released)
+        // At once, before the microphone has stopped.
+        #expect(cues.list == [.listening, .finished(message: nil)])
+        try await waitUntil { controller.state == .idle }
         #expect(cues.list == [.listening, .finished(message: nil)])
     }
 
-    @Test func aCancelledHoldEndsWithoutAMessage() async throws {
+    @Test func aCancelledHoldClearsTheIndicator() async throws {
         let controller = await makeController()
         let cues = CueRecorder(controller)
         controller.handle(.pressed(isRepeat: false))
-        try await waitUntil { mic.calls.contains("start") }
+        try await waitUntil { cues.list == [.listening] && mic.calls.contains("start") }
         controller.handle(.cancelled)
         #expect(cues.list == [.listening, .finished(message: nil)])
     }
 
     @Test func aMicrophoneThatCannotStartEndsTheHoldWithTheProblem() async throws {
         mic.startError = TestError()
+        // The indicator shows before the start fails.
+        mic.startDelay = .milliseconds(50)
         let controller = await makeController()
         let cues = CueRecorder(controller)
         controller.handle(.pressed(isRepeat: false))
@@ -898,16 +968,22 @@ struct PushToTalkControllerTests {
         inserter.result = .skippedPasswordField
         let controller = await makeController()
         let cues = CueRecorder(controller)
-        try await dictate(controller)
-        #expect(cues.list.last == .finished(message: "Orra does not paste into password fields. Use Copy Last Dictation."))
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] && mic.calls.contains("start") }
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(cues.list == [.listening, .transcribing, .recordingStopped, .finished(message: "Orra does not paste into password fields. Use Copy Last Dictation.")])
     }
 
     @Test func emptyTextEndsTheDictationSayingNothingWasRecognized() async throws {
         speech.reply = "  "
         let controller = await makeController()
         let cues = CueRecorder(controller)
-        try await dictate(controller)
-        #expect(cues.list.last == .finished(message: "No speech was recognized"))
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] && mic.calls.contains("start") }
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(cues.list == [.listening, .transcribing, .recordingStopped, .finished(message: "No speech was recognized")])
         // The menu has no line for it.
         #expect(controller.problem == nil)
         #expect(controller.notice == nil)
@@ -932,8 +1008,8 @@ struct PushToTalkControllerTests {
     }
 
     @Test func hostDetectionSeesTheTestEnvironment() {
-        // AppDelegate skips the keyboard tap and the Accessibility prompt when
-        // Xcode hosts tests or previews. This checks only that the environment
+        // AppDelegate skips the keyboard tap and the welcome window when Xcode
+        // hosts tests or previews. This checks only that the environment
         // variable the guard relies on is set while tests run. It does not run
         // the guard itself.
         #expect(AppDelegate.isHostedByXcode)

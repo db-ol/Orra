@@ -10,25 +10,34 @@ nonisolated struct SetupChecklist: Equatable, Sendable {
         case done
     }
 
+    /// Done once the model is loaded. An installed model that is still loading is in
+    /// progress.
     var model: Status
     var microphone: Status
     var accessibility: Status
+    /// Whether the model is installed and has not failed to load. It may still be loading.
+    var modelInPlace: Bool
 
-    /// - Parameter modelState: Whether the installed model loaded. A model that is
-    ///   installed but still loading counts as done, so launch does not show the welcome
-    ///   window while the model loads.
     init(installer: ModelInstaller.State, modelState: PushToTalkController.ModelState, microphone: MicrophoneAccess, hotkeyActive: Bool) {
         switch installer {
         case .installed:
-            if case .unavailable = modelState {
-                model = .todo
-            } else {
+            switch modelState {
+            case .ready:
                 model = .done
+                modelInPlace = true
+            case .notLoaded, .loading:
+                model = .inProgress
+                modelInPlace = true
+            case .unavailable:
+                model = .todo
+                modelInPlace = false
             }
         case .checking, .downloading, .verifying:
             model = .inProgress
+            modelInPlace = false
         case .missing, .failed:
             model = .todo
+            modelInPlace = false
         }
         self.microphone = microphone == .authorized ? .done : .todo
         accessibility = hotkeyActive ? .done : .todo
@@ -39,8 +48,16 @@ nonisolated struct SetupChecklist: Equatable, Sendable {
         self.init(installer: models.state, modelState: pushToTalk.modelState, microphone: pushToTalk.microphoneAccess, hotkeyActive: pushToTalk.isHotkeyActive)
     }
 
+    /// Every step is done and the model is loaded, so the next hold dictates.
     var isComplete: Bool {
         model == .done && microphone == .done && accessibility == .done
+    }
+
+    /// Whether the user still has something to do. An installed model that is still
+    /// loading needs nothing from the user, so launch does not open the welcome window for
+    /// it, and the menu shows no Setup Guide.
+    var needsUser: Bool {
+        !modelInPlace || microphone != .done || accessibility != .done
     }
 }
 
@@ -65,6 +82,9 @@ final class WelcomeWindow {
         self.window = window
         NSApplication.shared.activate()
         window.makeKeyAndOrderFront(nil)
+        // macOS may decline the activation, for example at login, and the window still
+        // comes to the front.
+        window.orderFrontRegardless()
         watchMicrophoneAccess()
     }
 

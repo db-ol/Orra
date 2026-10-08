@@ -3,7 +3,8 @@
 State of the repository after the overnight session of 2026-10-02, with manual
 results added on 2026-10-03, 2026-10-05 and 2026-10-06, the fn hotkey added on
 2026-10-04, local dictation added in the night of 2026-10-04, the choice of talk key and
-of microphone added on 2026-10-05, and the model download added on 2026-10-07. Three
+of microphone added on 2026-10-05, and on 2026-10-07 the model download, the recording
+indicator and sounds, the welcome window, the Chinese interface and the app icon. Three
 sections: what a build or test run verified, what only a person at the Mac can verify, and
 what does not exist yet.
 
@@ -19,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 304 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 349 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -89,24 +90,32 @@ Build and test commands, run in the repository root:
     that a new tap is installed after the pause while access is there, and that no tap
     comes back when the access check says no, or still says yes while the system refuses
     the tap. It also checks that the environment variable the launch guard relies on is
-    set while tests run, the cues for the recording indicator and the sounds in order
-    for a dictation, a short hold, a cancel, a failed start, a password field and empty
-    text, the reasons a hold cannot record, and reading microphone permission again.
+    set while tests run, and reading microphone permission again. For the recording
+    indicator and the sounds it checks the whole list of cues for a dictation, a short
+    hold, a cancel, a failed start, a password field and empty text, that no cue comes
+    before the hold has lasted a moment, so a shortcut with the talk key sends none, and
+    the message for each reason a hold cannot record: a model that is missing, loading or
+    failed to load, and microphone access that is off or impossible in the build.
   - RecordingFeedbackTests checks what the indicator shows and which sound plays for each
     cue, a message that goes after a while without hiding the next hold, the indicator
-    and the sounds turned off, saving both choices, the level meter's scale and how it
-    rises and falls, and that the indicator's panel can never become key or main. It
-    uses fakes, so no window opens and no sound plays. LevelMeterTests checks the peak
-    the audio thread stores.
+    and the sounds turned off, saving both choices, the level meter's scale, how it rises
+    and falls, and that it reads the microphone only while it is on screen. It makes the
+    app's own indicator panel without showing it and checks that the panel can never
+    become key or main, lets clicks through, and shows on every Space and over full
+    screen apps. It uses fakes for the panel and the sounds otherwise, so no window opens
+    and no sound plays. LevelMeterTests checks the peak the audio thread stores.
   - SetupChecklistTests covers the welcome window's three steps: the model step for every
     installer state and for an installed model that is loading or failed to load, the
-    microphone step for every permission state, the Accessibility step, and when setup
-    counts as complete, which decides whether launch shows the window.
+    microphone step for every permission state, and the Accessibility step. It checks that
+    setup counts as complete only once the model has loaded, and that a model that is
+    still loading needs nothing from the user, which decides whether launch opens the
+    window and the menu shows Setup Guide….
   - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
     translation marked translated, that each translation keeps the arguments of the
-    English string, that the Chinese uses full width punctuation, that the built app
-    carries the Chinese strings, that Chinese is chosen only when it comes before English
-    in the preferred languages, and how the talk key hints read in Chinese.
+    English string, that the Chinese uses full width punctuation and a space next to a
+    Latin word or a number, that the built app carries the Chinese strings, that Chinese
+    is chosen only when it comes before English in the preferred languages and never for
+    Traditional Chinese alone, and the Chinese talk key hint for one to four keys.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -179,7 +188,8 @@ Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still 
 
 - [x] No Dock icon at launch, and no flash was noticed. The policy is set in
   applicationWillFinishLaunching rather than through LSUIElement.
-- [x] No window opens at launch. Only the mic icon appears in the menu bar.
+- [x] Once the model and both permissions are in place, no window opens at launch. Only the
+  mic icon appears in the menu bar. Since 2026-10-07 the welcome window opens until then.
 - [x] The menu shows "Settings…" and "Quit Orra". Since 2026-10-04 a hotkey status line
   sits above them, see the fn hotkey list below.
 - [x] "Settings…" opens the placeholder window and brings it to the front while another
@@ -427,28 +437,34 @@ and check connections with `lsof -nP -i -a -c Orra`:
   during "Checking the downloaded files…".
 - [ ] On a Mac with macOS 15.6, if one is at hand, repeat the first four checks.
 
-Welcome window, added on 2026-10-07, not verified yet. For a clean first launch, quit Orra,
-move ~/Library/Application Support/io.github.db-ol.Orra/Models and the two old cache
-folders named in README.md out of the way (do not delete them), and turn Orra off under
-Microphone in System Settings > Privacy & Security. Quit Orra before turning off
-Accessibility for it. Undo all of it afterwards:
+Welcome window, added on 2026-10-07, not verified yet. For a clean first launch, quit Orra
+first. With Orra quit, move ~/Library/Application Support/io.github.db-ol.Orra/Models and
+the two old cache folders named in README.md out of the way (do not delete them), run
+`tccutil reset Microphone io.github.db-ol.Orra` (Microphone only, never All), and turn
+Orra off under System Settings > Privacy & Security > Accessibility. Never turn off or
+remove Orra's Accessibility access while it runs. Undo all of it afterwards:
 
 - [ ] At launch the welcome window opens in front of other apps, with three steps:
   Download the speech model, Allow the microphone, Allow Accessibility. No system prompt
   appears on its own.
+- [ ] Before doing any step, click Not Now: the menu shows Setup Guide…, which opens the
+  window again. Quit Orra and launch it: the window opens again.
 - [ ] Download Speech Model starts the download, shows a progress bar, the percentage and
   the server, and Cancel Download stops it. The menu shows the same progress.
 - [ ] While the model downloads, Allow Microphone Access… shows the macOS prompt, and the
   step gets its check mark after Allow.
-- [ ] With microphone access turned off in System Settings, the step offers Open
-  Microphone Settings…, and turning Orra on there gives the step its check mark within a
-  second, without a relaunch.
 - [ ] Grant Accessibility Access… shows the macOS prompt. After turning Orra on in the
-  list, the step shows "Hold right Control to talk" within a few seconds.
-- [ ] Once all three are done, the window says "Orra is ready", and Done closes it. The
-  next launch shows no window.
-- [ ] Closing the window with steps left: the menu shows Setup Guide…, which opens it again,
-  and the next launch opens it again. With all steps done, the menu has no Setup Guide….
+  list, the step shows "Hold right Control to talk", or the keys that are on, within a
+  few seconds.
+- [ ] After the download, the model step shows a spinner and "Loading the speech model…",
+  then its check mark. Only then does the window say "Orra is ready", and Done closes it.
+  The menu has no Setup Guide…, and the next launch shows no window.
+- [ ] Later, quit Orra, turn it off under Microphone in System Settings > Privacy &
+  Security, and launch it: the microphone step offers Open Microphone Settings…, and
+  turning Orra on there gives the step its check mark within a second, without a
+  relaunch.
+- [ ] Launched as a login item with steps left, the welcome window still comes to the
+  front.
 
 Chinese interface, added on 2026-10-07, not verified yet. Give Orra its own language under
 System Settings > General > Language & Region > Applications: add Orra with Chinese,
@@ -457,31 +473,46 @@ Simplified, then quit and reopen it. Afterwards set it back:
 - [ ] The menu, its submenus, Settings, the welcome window and the recording indicator are
   in Chinese, with full width punctuation, and no line is cut off or left in English.
 - [ ] With all four talk keys on, the menu says "按住右侧 Control 键、右侧 Option 键、右侧
-  Command 键或左下角的 fn 键说话".
+  Command 键或地球仪（fn）键说话".
 - [ ] The download lines read naturally, for example "正在下载语音模型：37%，共 2.47 GB".
-- [ ] On a Mac or a user account where Orra never had microphone access, the macOS prompt
-  shows the Chinese explanation.
+- [ ] In a user account whose system language is Chinese and where Orra never had
+  microphone access, the macOS prompt shows the Chinese explanation. The prompt is drawn
+  by macOS, so it may follow the system language rather than Orra's own.
 - [ ] With Orra's language set back to the system's (English first), everything is in
   English again.
+- [ ] On a Mac with macOS 15.6, if one is at hand, English first and Chinese second shows
+  English, and Chinese first shows Chinese.
 
 Recording indicator and sounds, added on 2026-10-07, not verified yet:
 
-- [ ] Hold the talk key in Notes: a short sound plays and a dark indicator appears at the
-  bottom of the screen with the pointer, with bars that move with your voice. Notes keeps
-  the focus: its text cursor still blinks, and the menu bar still shows Notes.
+- [ ] Hold the talk key in Notes: a moment after the press a short sound plays and a dark
+  indicator appears at the bottom of the screen with the pointer, with bars that move
+  with your voice. Notes keeps the focus: its text cursor still blinks, and the menu bar
+  still shows Notes.
+- [ ] A shortcut with the talk key, such as right Control+C in Terminal, plays no sound and
+  shows no indicator, and neither does a quick tap of the key.
 - [ ] Release: the indicator shows "Transcribing…", a second sound plays, and the
   indicator goes once the text is in Notes. The start sound does not show up as a word
   at the start of the text.
 - [ ] Over a full screen app, on another Space, and on a second display with the pointer
   there, the indicator shows the same way.
 - [ ] Clicks at the bottom of the screen pass through the indicator.
-- [ ] Before the model is ready, and with microphone access off, a hold shows the reason
-  in the indicator for a few seconds. Dictating into a password field shows "Orra does
+- [ ] Before the model is ready, a hold shows "The speech model is not ready. The Orra menu
+  shows what is missing." in the indicator for a few seconds, and with microphone access
+  off it shows "Microphone access is off". Dictating into a password field shows "Orra does
   not paste into password fields. Use Copy Last Dictation." Holding the key without
   speaking shows "No speech was recognized".
 - [ ] In Settings, turning off "Show the recording indicator" and "Play sounds when
   recording starts and stops" takes effect at the next hold, and both stay off after
   quitting and reopening Orra.
+
+App icon, added on 2026-10-07, not verified yet. It needs the App Icon setting of the Orra
+target set to AppIcon in Xcode first:
+
+- [ ] Finder, the Applications folder, the Accessibility list in System Settings and the
+  welcome window show the violet icon with the white ring and bars, in light and dark
+  mode.
+- [ ] On a Mac with macOS 15.6, if one is at hand, Finder shows the same icon.
 
 Testing notes:
 

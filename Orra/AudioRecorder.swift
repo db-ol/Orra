@@ -253,7 +253,8 @@ actor AudioRecorder {
     func stop() -> AudioRecording {
         guard let source else { return AudioRecording(samples: [], sampleRate: sampleRate) }
         self.source = nil
-        meter.reset()
+        // After the unit or the engine has stopped, so no late buffer leaves a peak behind.
+        defer { meter.reset() }
         switch source {
         case .unit(let unit):
             let result = unit.stop()
@@ -277,7 +278,7 @@ actor AudioRecorder {
     func cancel() {
         guard let source else { return }
         self.source = nil
-        meter.reset()
+        defer { meter.reset() }
         switch source {
         case .unit(let unit):
             _ = unit.stop()

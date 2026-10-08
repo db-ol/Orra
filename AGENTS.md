@@ -26,7 +26,9 @@ Build (run in the repository root):
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
 
 Test: the same command with `-testLanguage en -testRegion US test` in place of `build`. The
-tests compare English text, so they run in English whatever the Mac's language.
+tests compare English text, so they run in English whatever the Mac's language. Product >
+Test in Xcode uses the Mac's language instead, unless the scheme's Test options set App
+Language to English.
 
 The build needs Xcode's Metal Toolchain component and the CudaBuild plugin of mlx-swift
 trusted once in Xcode. docs/dependencies.md has the details.

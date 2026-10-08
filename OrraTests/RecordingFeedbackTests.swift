@@ -11,6 +11,8 @@ final class FeedbackOutputs {
     var played: [RecordingFeedback.Sound] = []
     var saved: [FeedbackPreference.Values] = []
     var level: Float = 0
+    /// How often the feedback read the microphone level.
+    var levelReads = 0
 
     /// The latest display passed on, nil when hidden or when nothing was passed yet.
     var lastPresented: RecordingFeedback.Display? {
@@ -22,13 +24,19 @@ final class FeedbackOutputs {
 struct RecordingFeedbackTests {
     let outputs = FeedbackOutputs()
 
+    /// A feedback that reports to `outputs`, or to the test's own outputs when nil.
     private func makeFeedback(
+        _ outputs: FeedbackOutputs? = nil,
         preferences: FeedbackPreference.Values = .init(),
         messageDuration: Duration = .seconds(4)
     ) -> RecordingFeedback {
-        RecordingFeedback(
+        let outputs = outputs ?? self.outputs
+        return RecordingFeedback(
             preferences: preferences,
-            inputLevel: { [outputs] in outputs.level },
+            inputLevel: { [outputs] in
+                outputs.levelReads += 1
+                return outputs.level
+            },
             present: { [outputs] in outputs.presented.append($0) },
             play: { [outputs] in outputs.played.append($0) },
             save: { [outputs] in outputs.saved.append($0) },
@@ -82,9 +90,14 @@ struct RecordingFeedbackTests {
         let feedback = makeFeedback(messageDuration: .milliseconds(50))
         feedback.handle(.finished(message: "No speech was recognized"))
         feedback.handle(.listening)
-        try await Task.sleep(for: .milliseconds(200))
+        // A message shown later for as long goes after the first one would have.
+        let probe = makeFeedback(FeedbackOutputs(), messageDuration: .milliseconds(50))
+        probe.handle(.finished(message: "Microphone access is off"))
+        try await waitUntil { probe.display == nil }
+        #expect(probe.display == nil)
         #expect(feedback.display == .listening)
         #expect(outputs.lastPresented == .listening)
+        feedback.handle(.finished(message: nil))
     }
 
     @Test func withTheIndicatorOffNothingShowsButTheSoundsPlay() {
@@ -128,8 +141,29 @@ struct RecordingFeedbackTests {
         #expect(abs(feedback.level - 0.75) < 0.001)
         feedback.handle(.transcribing)
         #expect(feedback.level == 0)
-        try await Task.sleep(for: .milliseconds(50))
+        let readsWhenTranscribing = outputs.levelReads
+        // A meter that keeps reading meanwhile shows that time passed.
+        let probeOutputs = FeedbackOutputs()
+        let probe = makeFeedback(probeOutputs)
+        probe.handle(.listening)
+        try await waitUntil { probeOutputs.levelReads >= 5 }
+        #expect(probeOutputs.levelReads >= 5)
+        #expect(outputs.levelReads == readsWhenTranscribing)
         #expect(feedback.level == 0)
+        probe.handle(.finished(message: nil))
+    }
+
+    @Test func aHiddenIndicatorNeverReadsTheMicrophone() async throws {
+        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true))
+        feedback.handle(.listening)
+        let probeOutputs = FeedbackOutputs()
+        let probe = makeFeedback(probeOutputs)
+        probe.handle(.listening)
+        try await waitUntil { probeOutputs.levelReads >= 5 }
+        #expect(probeOutputs.levelReads >= 5)
+        #expect(outputs.levelReads == 0)
+        probe.handle(.finished(message: nil))
+        feedback.handle(.finished(message: nil))
     }
 
     @Test func theMeterFallsSlowlyAfterAPeak() async throws {
@@ -163,15 +197,21 @@ struct RecordingFeedbackTests {
         #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: false, playsSounds: true))
     }
 
-    @Test func theIndicatorPanelNeverTakesTheFocus() {
-        let panel = NonactivatingPanel(
-            contentRect: NSRect(origin: .zero, size: RecordingIndicatorView.panelSize),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: true
-        )
+    /// The panel the app shows, made but never ordered front, so no window appears.
+    @Test func theIndicatorPanelNeverTakesTheFocusOrTheClicks() throws {
+        let feedback = makeFeedback()
+        let indicator = RecordingIndicatorPanel()
+        indicator.feedback = feedback
+        let panel = try #require(indicator.makePanel())
+        #expect(panel is NonactivatingPanel)
         #expect(panel.canBecomeKey == false)
         #expect(panel.canBecomeMain == false)
+        #expect(panel.styleMask.contains(.nonactivatingPanel))
+        #expect(panel.ignoresMouseEvents)
+        #expect(panel.hidesOnDeactivate == false)
+        #expect(panel.collectionBehavior.contains(.canJoinAllSpaces))
+        #expect(panel.collectionBehavior.contains(.fullScreenAuxiliary))
+        #expect(panel.isVisible == false)
     }
 }
 

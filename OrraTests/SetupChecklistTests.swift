@@ -8,7 +8,7 @@ struct SetupChecklistTests {
 
     private func checklist(
         installer: ModelInstaller.State? = nil,
-        modelState: PushToTalkController.ModelState = .notLoaded,
+        modelState: PushToTalkController.ModelState = .ready,
         microphone: MicrophoneAccess = .authorized,
         hotkeyActive: Bool = true
     ) -> SetupChecklist {
@@ -24,9 +24,9 @@ struct SetupChecklistTests {
         #expect(checklist(installer: .failed(.offline)).model == .todo)
     }
 
-    @Test func anInstalledModelIsDoneWhileItLoadsButNotWhenItFails() {
-        #expect(checklist(modelState: .notLoaded).model == .done)
-        #expect(checklist(modelState: .loading).model == .done)
+    @Test func anInstalledModelIsDoneOnceItHasLoaded() {
+        #expect(checklist(modelState: .notLoaded).model == .inProgress)
+        #expect(checklist(modelState: .loading).model == .inProgress)
         #expect(checklist(modelState: .ready).model == .done)
         #expect(checklist(modelState: .unavailable("The speech model could not be loaded")).model == .todo)
     }
@@ -43,11 +43,26 @@ struct SetupChecklistTests {
         #expect(checklist(hotkeyActive: false).accessibility == .todo)
     }
 
-    @Test func setupIsCompleteOnlyWithAllThreeSteps() {
+    @Test func setupIsCompleteOnlyWithAllThreeStepsAndTheModelLoaded() {
         #expect(checklist().isComplete)
+        #expect(!checklist(modelState: .loading).isComplete)
         #expect(!checklist(installer: .downloading(bytes: 10, source: nil)).isComplete)
         #expect(!checklist(microphone: .notDetermined).isComplete)
         #expect(!checklist(hotkeyActive: false).isComplete)
         #expect(!checklist(modelState: .unavailable("The speech model is not on this Mac")).isComplete)
+    }
+
+    /// Decides whether launch opens the welcome window and the menu offers Setup Guide.
+    @Test func aModelThatIsStillLoadingNeedsNothingFromTheUser() {
+        #expect(!checklist().needsUser)
+        #expect(!checklist(modelState: .notLoaded).needsUser)
+        #expect(!checklist(modelState: .loading).needsUser)
+        #expect(checklist(modelState: .unavailable("The speech model could not be loaded")).needsUser)
+        #expect(checklist(installer: .checking).needsUser)
+        #expect(checklist(installer: .downloading(bytes: 10, source: nil)).needsUser)
+        #expect(checklist(installer: .missing(bytesPresent: 0)).needsUser)
+        #expect(checklist(installer: .failed(.offline)).needsUser)
+        #expect(checklist(microphone: .denied).needsUser)
+        #expect(checklist(hotkeyActive: false).needsUser)
     }
 }

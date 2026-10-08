@@ -13,7 +13,7 @@ struct SettingsView: View {
             } header: {
                 Text("Hold to talk")
             } footer: {
-                Text("Hold one of these keys on its own, speak, and let go. Right Control suits most external keyboards, whose Fn key often does not reach the Mac. fn (Globe) is the key at the bottom left of a Mac keyboard. At least one key stays on.")
+                Text("Hold one of these keys on its own, speak, and let go. Right Control suits most external keyboards, whose Fn key often does not reach the Mac. fn (Globe) is the key at the bottom left of a MacBook keyboard. At least one key stays on.")
                     .foregroundStyle(.secondary)
             }
             Section {

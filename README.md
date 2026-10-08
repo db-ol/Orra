@@ -10,7 +10,7 @@ Early stage. While you hold the talk key, right Control unless you pick another 
 
 - macOS 15.6 or later. Apple Silicon is the primary target.
 - Xcode 27 to build, with the Metal Toolchain component (Xcode > Settings > Components). The speech-swift dependency pulls in mlx-swift, which compiles Metal shaders at build time.
-- About 3 GB of free disk space for the speech model, Qwen3-ASR 1.7B (aufklarer/Qwen3-ASR-1.7B-MLX-8bit). Orra downloads it, 2.47 GB, when you choose Download Speech Model in its menu. If ~/Library/Caches/qwen3-speech already holds it, Orra reuses that copy without downloading.
+- About 3 GB of free disk space for the speech model, Qwen3-ASR 1.7B (aufklarer/Qwen3-ASR-1.7B-MLX-8bit). Orra downloads it, 2.47 GB, when you choose Download Speech Model in its menu or in the welcome window. If ~/Library/Caches/qwen3-speech already holds it, Orra reuses that copy without downloading.
 - Accessibility access, to watch the talk key and paste, and microphone access. At launch, until Orra has its model and both permissions, a welcome window walks you through the download and the two permissions.
 
 ## Build and test
@@ -31,7 +31,7 @@ A Release build takes about a quarter less time to transcribe than a Debug build
     rm -rf ~/Applications/Orra.app
     ditto build/DerivedData/Build/Products/Release/Orra.app ~/Applications/Orra.app
 
-Open ~/Applications/Orra.app and turn on Open at Login in its menu. If macOS asks for Accessibility or microphone access again for this copy, allow it.
+Open ~/Applications/Orra.app and turn on Open at Login in its menu. If the welcome window opens for this copy, grant what it lists.
 
 Orra's menu and windows are in English and Simplified Chinese, in the order of your preferred languages in System Settings > General > Language & Region. You can give Orra its own language there under Applications.
 

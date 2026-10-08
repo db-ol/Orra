@@ -89,6 +89,7 @@ final class RecordingFeedback {
             save: { FeedbackPreference.save($0) }
         )
         panel.feedback = feedback
+        panel.prepare()
         return feedback
     }
 

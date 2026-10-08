@@ -231,8 +231,8 @@ nonisolated final class RangeReceiver: NSObject, URLSessionDataDelegate, Sendabl
 }
 
 /// Downloads the pinned files into the staging folder, checks each against its hash, and
-/// installs the folder. The only caller is the menu's Download, Resume Download and Try
-/// Again, through ModelInstaller. Launch never comes here.
+/// installs the folder. The only callers are Download, Resume Download and Try Again in
+/// the menu and the welcome window, through ModelInstaller. Launch never comes here.
 nonisolated enum ModelDownload {
     /// The first request to a server must see data within this time, so a server that
     /// cannot be reached, as Hugging Face from mainland China, costs seconds, not minutes.

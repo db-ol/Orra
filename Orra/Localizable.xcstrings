@@ -209,7 +209,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "左下角的 fn 键"
+            "value" : "地球仪（fn）键"
           }
         }
       }
@@ -312,12 +312,12 @@
         }
       }
     },
-    "Hold one of these keys on its own, speak, and let go. Right Control suits most external keyboards, whose Fn key often does not reach the Mac. fn (Globe) is the key at the bottom left of a Mac keyboard. At least one key stays on." : {
+    "Hold one of these keys on its own, speak, and let go. Right Control suits most external keyboards, whose Fn key often does not reach the Mac. fn (Globe) is the key at the bottom left of a MacBook keyboard. At least one key stays on." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "单独按住其中一个键，说话，然后松开。右侧 Control 键适合大多数外接键盘，因为外接键盘的 Fn 键常常传不到 Mac。fn（地球仪）键是 Mac 键盘左下角的那个键。至少会保留一个键处于开启状态。"
+            "value" : "单独按住其中一个键，说话，然后松开。右侧 Control 键适合大多数外接键盘，因为外接键盘的 Fn 键常常传不到 Mac。fn（地球仪）键位于 MacBook 键盘的左下角。至少会保留一个键处于开启状态。"
           }
         }
       }
@@ -881,12 +881,12 @@
         }
       }
     },
-    "The speech model is not ready yet" : {
+    "The speech model is not ready. The Orra menu shows what is missing." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "语音模型尚未就绪"
+            "value" : "语音模型尚未就绪。Orra 菜单里会显示缺少什么。"
           }
         }
       }

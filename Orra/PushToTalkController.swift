@@ -4,14 +4,17 @@ import Observation
 import os
 
 /// What the recording indicator and the sounds follow. A dictation sends listening,
-/// transcribing, recordingStopped and finished, in that order. A hold that ends early
-/// skips to finished.
+/// transcribing, recordingStopped and finished, in that order. Listening waits until the
+/// hold has lasted a moment, so a shortcut with the talk key, such as right Control+C,
+/// sends nothing. A hold that ends early skips to finished, which comes only when there is
+/// a message to show or an indicator to clear.
 nonisolated enum DictationCue: Equatable, Sendable {
-    /// The microphone is starting for a hold.
+    /// The hold has lasted long enough to be a dictation, and the microphone is starting.
     case listening
     /// The talk key was released after a hold long enough to transcribe.
     case transcribing
-    /// The microphone stopped, and the recording will be transcribed.
+    /// The microphone stopped after a hold long enough to transcribe. A recording without
+    /// sound or without speech then ends with a message.
     case recordingStopped
     /// The hold is over. The message says why nothing was pasted, when there is a reason.
     case finished(message: String?)
@@ -76,6 +79,11 @@ final class PushToTalkController {
     @ObservationIgnored private let minimumHold: Duration
     @ObservationIgnored private let releaseTail: Duration
     @ObservationIgnored private let accessCheckDelay: Duration
+    @ObservationIgnored private let listeningCueDelay: Duration
+    /// Sends the listening cue once the hold has lasted `listeningCueDelay`.
+    @ObservationIgnored private var listeningCueTask: Task<Void, Never>?
+    /// Whether the current hold has shown the indicator, so its end has to clear it.
+    @ObservationIgnored private var indicatorShown = false
     @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
     /// Starts the microphone off the main thread. Its value tells whether it started.
     @ObservationIgnored private var captureStart: Task<Bool, Never>?
@@ -121,6 +129,8 @@ final class PushToTalkController {
     ///   - releaseTail: How long recording goes on after the talk key is released.
     ///   - accessCheckDelay: How long Orra waits before it checks access again, see
     ///     `watchAccess()`.
+    ///   - listeningCueDelay: How long a hold lasts before the indicator shows and the
+    ///     start sound plays. A shortcut with the talk key is over sooner.
     ///   - talkKeys: The keys that start a dictation, as saved by the user.
     ///   - saveTalkKeys: Saves the keys after the user changes them.
     ///   - microphone: The microphone the user chose, or nil for the system default.
@@ -137,6 +147,7 @@ final class PushToTalkController {
         minimumHold: Duration = RecordingLimits.minimumHold,
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
+        listeningCueDelay: Duration = .milliseconds(150),
         talkKeys: Set<TalkKey> = TalkKey.defaultKeys,
         saveTalkKeys: @escaping (Set<TalkKey>) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
@@ -153,6 +164,7 @@ final class PushToTalkController {
         self.minimumHold = minimumHold
         self.releaseTail = releaseTail
         self.accessCheckDelay = accessCheckDelay
+        self.listeningCueDelay = listeningCueDelay
         self.talkKeys = talkKeys.isEmpty ? TalkKey.defaultKeys : talkKeys
         self.saveTalkKeys = saveTalkKeys
         self.microphone = microphone
@@ -265,6 +277,7 @@ final class PushToTalkController {
             microphoneNotice = nil
             suggestsSoundSettings = false
             holdMessage = nil
+            indicatorShown = false
             // The previous hold's start belongs to that hold only.
             captureStart = nil
             guard modelState == .ready else {
@@ -276,10 +289,15 @@ final class PushToTalkController {
             startRecording()
         case .startedProcessing:
             recordingLimitTask?.cancel()
+            listeningCueTask?.cancel()
             let released = ContinuousClock.now
             let heldFor = pressedAt.map { $0.duration(to: released) } ?? .zero
             if heldFor >= minimumHold {
+                indicatorShown = true
                 onCue(.transcribing)
+            } else {
+                // Cleared at once, because a slow microphone can take seconds to stop.
+                endCue(nil)
             }
             let target = frontmostApp()
             let start = captureStart
@@ -290,6 +308,7 @@ final class PushToTalkController {
             }
         case .cancelledListening:
             recordingLimitTask?.cancel()
+            listeningCueTask?.cancel()
             endUserActivity()
             let start = captureStart
             captureCancel = Task { [capture] in
@@ -297,11 +316,23 @@ final class PushToTalkController {
                     await capture.cancel()
                 }
             }
-            onCue(.finished(message: holdMessage ?? problem))
+            endCue(holdMessage ?? problem)
         case .finished:
             endUserActivity()
-            onCue(.finished(message: holdMessage ?? problem ?? notice))
+            endCue(holdMessage ?? problem ?? notice)
         }
+    }
+
+    /// Ends the hold for the indicator: shows the message when there is one, and otherwise
+    /// clears the indicator if this hold showed it. A hold that showed nothing, such as a
+    /// shortcut, leaves an earlier message alone.
+    private func endCue(_ message: String?) {
+        if let message {
+            onCue(.finished(message: message))
+        } else if indicatorShown {
+            onCue(.finished(message: nil))
+        }
+        indicatorShown = false
     }
 
     /// The peak of the latest audio while recording, from 0 to 1, for the indicator.
@@ -322,7 +353,7 @@ final class PushToTalkController {
     private static func notReadyMessage(_ state: ModelState) -> String {
         switch state {
         case .notLoaded, .ready:
-            String(localized: "The speech model is not ready yet")
+            String(localized: "The speech model is not ready. The Orra menu shows what is missing.")
         case .loading:
             String(localized: "The speech model is still loading")
         case .unavailable(let reason):
@@ -379,7 +410,12 @@ final class PushToTalkController {
                 logger.info("Recording reached its maximum length")
                 handle(.released)
             }
-            onCue(.listening)
+            listeningCueTask = Task { [weak self, listeningCueDelay] in
+                try? await Task.sleep(for: listeningCueDelay)
+                guard !Task.isCancelled, let self, holdNumber == hold, state == .listening else { return }
+                indicatorShown = true
+                onCue(.listening)
+            }
         case .notDetermined:
             // The system prompt that follows says enough.
             handle(.cancelled)
