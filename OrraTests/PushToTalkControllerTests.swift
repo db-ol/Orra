@@ -955,13 +955,24 @@ struct PushToTalkControllerTests {
 
     @Test func aMicrophoneThatCannotStartEndsTheHoldWithTheProblem() async throws {
         mic.startError = TestError()
-        // The indicator shows before the start fails.
         mic.startDelay = .milliseconds(50)
         let controller = await makeController()
         let cues = CueRecorder(controller)
         controller.handle(.pressed(isRepeat: false))
         try await waitUntil { controller.state == .idle }
-        #expect(cues.list == [.listening, .finished(message: "The microphone could not start")])
+        // No start sound for a microphone that never recorded.
+        #expect(cues.list == [.finished(message: "The microphone could not start")])
+    }
+
+    @Test func theStartSoundWaitsForTheMicrophone() async throws {
+        mic.startDelay = .milliseconds(300)
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(cues.list.isEmpty)
+        try await waitUntil { mic.calls.contains("start") && !cues.list.isEmpty }
+        #expect(cues.list == [.listening])
     }
 
     @Test func aSkippedPasswordFieldEndsTheDictationWithTheNotice() async throws {

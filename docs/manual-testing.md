@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 349 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 350 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -485,6 +485,8 @@ Simplified, then quit and reopen it. Afterwards set it back:
 
 Recording indicator and sounds, added on 2026-10-07, not verified yet:
 
+- [ ] With a USB microphone chosen in Orra, start speaking right at the sound: the first
+  syllable is in the text. The sound comes only once the microphone records.
 - [ ] Hold the talk key in Notes: a moment after the press a short sound plays and a dark
   indicator appears at the bottom of the screen with the pointer, with bars that move
   with your voice. Notes keeps the focus: its text cursor still blinks, and the menu bar
