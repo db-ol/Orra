@@ -77,7 +77,7 @@ EXPECTED_PACKAGE_REFERENCES = {
 
 # The package products each target links, as (product, package location).
 EXPECTED_PRODUCTS = {
-    "Orra": {("Qwen3ASR", "https://github.com/soniqo/speech-swift")},
+    "Orra": {("Qwen3ASR", "https://github.com/soniqo/speech-swift"), ("SpeechVAD", "https://github.com/soniqo/speech-swift")},
     "OrraTests": set(),
 }
 

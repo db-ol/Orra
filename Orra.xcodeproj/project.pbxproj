@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		937FD6AB307413F400086B6B /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = 937FD6AA307413F400086B6B /* Qwen3ASR */; };
+		93F0DE10307813D100A80D8D /* SpeechVAD in Frameworks */ = {isa = PBXBuildFile; productRef = 93F0DE0F307813D100A80D8D /* SpeechVAD */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,6 +43,7 @@
 		000000000000000130000000 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				93F0DE10307813D100A80D8D /* SpeechVAD in Frameworks */,
 				937FD6AB307413F400086B6B /* Qwen3ASR in Frameworks */,
 			);
 		};
@@ -58,6 +60,7 @@
 			children = (
 				000000000000000000000010 /* Orra */,
 				93059C903070C22500EC5A3A /* OrraTests */,
+				93F0DE0E307813D100A80D8D /* Frameworks */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -69,6 +72,13 @@
 				93059C8F3070C22500EC5A3A /* OrraTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		93F0DE0E307813D100A80D8D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -90,6 +100,7 @@
 			name = Orra;
 			packageProductDependencies = (
 				937FD6AA307413F400086B6B /* Qwen3ASR */,
+				93F0DE0F307813D100A80D8D /* SpeechVAD */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* Orra.app */;
@@ -492,6 +503,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 937FD6A9307413F400086B6B /* XCRemoteSwiftPackageReference "speech-swift" */;
 			productName = Qwen3ASR;
+		};
+		93F0DE0F307813D100A80D8D /* SpeechVAD */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 937FD6A9307413F400086B6B /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = SpeechVAD;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
