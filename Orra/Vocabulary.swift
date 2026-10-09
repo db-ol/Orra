@@ -68,6 +68,13 @@ nonisolated enum VocabularyPreference {
     }
 }
 
+/// What happened when learning added a word to the vocabulary.
+enum VocabularyAddition: Equatable {
+    case added
+    case alreadyThere
+    case full
+}
+
 /// The copied word the menu offers to add to the vocabulary. Read once each time a menu
 /// opens, never while Orra dictates: the paste reads and restores the pasteboard off the
 /// main thread then, and NSPasteboard must not be used from two threads at once.

@@ -212,9 +212,9 @@ nonisolated enum SoundAlike {
     }
 }
 
-/// The corrections Orra saw, and what the user decided about each. Suggests one once it
-/// was seen twice within 7 days. Kept as a small JSON file on this Mac. Holds the word
-/// pairs only, never the text around them.
+/// The corrections Orra saw, and whether each was learned or undone. A pair stays seen
+/// while its word could not be added, such as when the vocabulary is full. Kept as a small
+/// JSON file on this Mac. Holds the word pairs only, never the text around them.
 nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
     nonisolated enum State: String, Codable, Sendable {
         case seen
@@ -257,6 +257,12 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
             accepted.append(entries[index].correction)
         }
         return accepted
+    }
+
+    /// Forgets a pair, unless the user undid it. For a half typed fix that the finished
+    /// one replaces.
+    mutating func forget(_ correction: Correction) {
+        entries.removeAll { $0.correction == correction && $0.state != .dismissed }
     }
 
     /// Whether any pair for the word has this state.

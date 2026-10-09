@@ -738,16 +738,6 @@
         }
       }
     },
-    "Orra now writes “%@”" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以后会写成“%@”"
-          }
-        }
-      }
-    },
     "Orra records only while you hold the talk key." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1233,6 +1223,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "个人词库"
+          }
+        }
+      }
+    },
+    "Vocabulary is full, so “%@” was not added" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人词库已满，没有加入“%@”"
           }
         }
       }

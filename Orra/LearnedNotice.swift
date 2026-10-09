@@ -125,19 +125,21 @@ struct LearnedNoticeView: View {
                     .foregroundStyle(.green)
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
-                    if learned.addedToVocabulary {
+                    switch learned.outcome {
+                    case .added:
                         Text("Added “\(learned.correction.corrected)” to Vocabulary")
-                    } else {
-                        // Already in the vocabulary, or the vocabulary is full.
-                        Text("Orra now writes “\(learned.correction.corrected)”")
+                    case .vocabularyFull:
+                        Text("Vocabulary is full, so “\(learned.correction.corrected)” was not added")
                     }
                     Text("Heard as “\(learned.correction.heard)”")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .lineLimit(1)
-                Button("Undo") {
-                    undo(learned)
+                if learned.outcome == .added {
+                    Button("Undo") {
+                        undo(learned)
+                    }
                 }
                 Button {
                     notice.close()

@@ -28,10 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     lazy var learning = CorrectionLearning.live(
         addToVocabulary: { [pushToTalk] word in
-            let updated = Vocabulary.adding(word, to: pushToTalk.vocabulary)
-            guard updated != pushToTalk.vocabulary else { return false }
+            let terms = pushToTalk.vocabulary
+            if terms.contains(where: { $0.lowercased() == word.lowercased() }) { return .alreadyThere }
+            let updated = Vocabulary.adding(word, to: terms)
+            guard updated != terms else { return .full }
             pushToTalk.setVocabulary(updated)
-            return true
+            return .added
         },
         removeFromVocabulary: { [pushToTalk] word in
             pushToTalk.setVocabulary(Vocabulary.removing(word, from: pushToTalk.vocabulary))

@@ -47,7 +47,7 @@ struct CorrectionWatcherTests {
     private func watch(_ field: ScriptedField, pasted: String) async -> Correction? {
         let watcher = CorrectionWatcher(environment: field.environment)
         var found: Correction?
-        watcher.watch(pasted: pasted, in: 42) { found = $0 }
+        watcher.watch(pasted: pasted, in: 42) { found = $0; _ = $1 }
         // Waits until a correction comes, or the reads have stopped for a while, since the
         // comparison runs off the main actor.
         var lastReads = -1
@@ -110,10 +110,10 @@ struct CorrectionWatcherTests {
         let first = ScriptedField(["我在用克劳德写代码", "我在用Claude写代码"])
         let watcher = CorrectionWatcher(environment: first.environment)
         var found: [Correction] = []
-        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0) }
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0); _ = $1 }
         for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(5)) }
         for _ in 1...CorrectionWatcher.maximumWatches {
-            watcher.watch(pasted: "不在这里", in: 42) { found.append($0) }
+            watcher.watch(pasted: "不在这里", in: 42) { found.append($0); _ = $1 }
         }
         for _ in 0..<200 where found.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
         #expect(found == [Correction(heard: "克劳德", corrected: "Claude")])
@@ -149,8 +149,8 @@ struct CorrectionWatcherTests {
         let watcher = CorrectionWatcher(environment: field.environment)
         var found: [Correction] = []
         var readsWhenFound: Int?
-        watcher.watch(pasted: "我在用克劳德写代码", in: 42) {
-            found.append($0)
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { correction, _ in
+            found.append(correction)
             readsWhenFound = readsWhenFound ?? field.reads
         }
         var lastReads = -1
@@ -165,13 +165,19 @@ struct CorrectionWatcherTests {
         #expect(readsWhenFound == 3 + CorrectionWatcher.quietReadings)
     }
 
-    @Test func goingBackAndForthOverAWordCountsEachPairOnce() async {
+    @Test func goingBackAndForthOverAWordLeavesTheLastPair() async {
         // Fixed, then a different spelling, then the first one again, each left for a while.
         let fixed = "我在用Claude写代码", other = "我在用Claud写代码"
         let field = ScriptedField(["我在用克劳德写代码", fixed, fixed, fixed, fixed, other, other, other, other, fixed])
         let watcher = CorrectionWatcher(environment: field.environment)
-        var found: [Correction] = []
-        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0) }
+        let vocabulary = CorrectionLearningTests.VocabularyBox()
+        let learning = CorrectionLearning(
+            isOn: true, store: CorrectionStore(), watcher: watcher,
+            saveSetting: { _ in }, saveStore: { _ in },
+            addToVocabulary: { vocabulary.words.append($0); return .added },
+            removeFromVocabulary: { word in vocabulary.words.removeAll { $0 == word } }
+        )
+        learning.pasted("我在用克劳德写代码", in: 42)
         var lastReads = -1
         var quiet = 0
         for _ in 0..<1_000 where quiet < 40 {
@@ -179,7 +185,26 @@ struct CorrectionWatcherTests {
             quiet = field.reads == lastReads ? quiet + 1 : 0
             lastReads = field.reads
         }
-        #expect(found.filter { $0.corrected == "Claude" }.count == 1)
+        #expect(learning.store.entries.map(\.correction) == [Correction(heard: "克劳德", corrected: "Claude")])
+        #expect(vocabulary.words == ["Claude"])
+    }
+
+    @Test func finishingAHalfTypedWordReportsItAsReplacingTheHalf() async {
+        let half = "我在用Claud写代码", done = "我在用Claude写代码"
+        let field = ScriptedField(["我在用克劳德写代码", half, half, half, half, done])
+        let watcher = CorrectionWatcher(environment: field.environment)
+        var reports: [(Correction, Correction?)] = []
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { reports.append(($0, $1)) }
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        let first = Correction(heard: "克劳德", corrected: "Claud")
+        #expect(reports.map(\.0) == [first, Correction(heard: "克劳德", corrected: "Claude")])
+        #expect(reports.map(\.1) == [nil, first])
     }
 
     @Test func aFieldWithoutThePastedTextIsLeftAlone() async {
@@ -201,9 +226,10 @@ struct CorrectionLearningTests {
             saveSetting: { _ in },
             saveStore: { _ in },
             addToVocabulary: { word in
-                guard !vocabulary.words.contains(word) else { return false }
+                guard !vocabulary.words.contains(word) else { return .alreadyThere }
+                guard vocabulary.words.count < vocabulary.limit else { return .full }
                 vocabulary.words.append(word)
-                return true
+                return .added
             },
             removeFromVocabulary: { word in vocabulary.words.removeAll { $0 == word } }
         )
@@ -211,6 +237,7 @@ struct CorrectionLearningTests {
 
     final class VocabularyBox {
         var words: [String] = []
+        var limit = 100
     }
 
     @Test func whileOffNothingIsRead() async {
@@ -232,7 +259,7 @@ struct CorrectionLearningTests {
         var learned: [CorrectionLearning.Learned] = []
         learning.onLearned = { learned.append($0) }
         learning.record(pair)
-        #expect(learned == [CorrectionLearning.Learned(correction: pair, pairs: [pair], addedToVocabulary: true)])
+        #expect(learned == [CorrectionLearning.Learned(correction: pair, pairs: [pair], outcome: .added)])
         #expect(vocabulary.words == ["Claude"])
         learning.removeAll()
         #expect(learning.store.entries.isEmpty)
@@ -291,8 +318,36 @@ struct CorrectionLearningTests {
         var learned: [CorrectionLearning.Learned] = []
         learning.onLearned = { learned.append($0) }
         learning.record(pair)
-        #expect(learned == [CorrectionLearning.Learned(correction: pair, pairs: [pair], addedToVocabulary: false)])
-        learning.undo(learned[0])
+        #expect(learned.isEmpty)
         #expect(vocabulary.words == ["Claude"])
+    }
+
+    @Test func aFullVocabularyIsReportedAndTheWordIsAddedLater() {
+        let vocabulary = VocabularyBox()
+        vocabulary.limit = 0
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.record(pair)
+        #expect(learned.map(\.outcome) == [.vocabularyFull])
+        #expect(accepted(learning).isEmpty)
+        vocabulary.limit = 100
+        learning.record(pair)
+        #expect(learned.map(\.outcome) == [.vocabularyFull, .added])
+        #expect(vocabulary.words == ["Claude"])
+    }
+
+    @Test func aHalfTypedFixIsReplacedByTheFinishedOne() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        let half = Correction(heard: "克劳德", corrected: "Claud")
+        learning.record(half)
+        learning.record(pair, replacing: half)
+        #expect(vocabulary.words == ["Claude"])
+        #expect(accepted(learning) == [pair])
+        #expect(learning.store.entries.map(\.correction) == [pair])
+        #expect(learned.map(\.correction) == [half, pair])
     }
 }
