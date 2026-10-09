@@ -2,10 +2,13 @@ import AppKit
 import Observation
 import SwiftUI
 
-/// The word Orra just learned on its own, shown for a few seconds with Undo.
+/// The word Orra just learned on its own, shown for a while with Undo. Stays while the
+/// pointer is over it.
 @Observable
 final class LearnedNotice {
-    static let duration: Duration = .seconds(8)
+    static let duration: Duration = .seconds(15)
+    /// How long it stays after the pointer leaves it.
+    static let afterHover: Duration = .seconds(4)
 
     private(set) var learned: CorrectionLearning.Learned?
 
@@ -19,15 +22,32 @@ final class LearnedNotice {
 
     /// Shows the word, in place of one shown before, and hides it after `duration`.
     func show(_ learned: CorrectionLearning.Learned) {
-        hide?.cancel()
         self.learned = learned
         onChange?(learned)
+        hide(after: Self.duration)
+    }
+
+    /// Keeps the notice while the pointer is over it.
+    func hold() {
+        hide?.cancel()
+        hide = nil
+    }
+
+    /// The pointer left: hides it a little later.
+    func release() {
+        guard learned != nil else { return }
+        hide(after: Self.afterHover)
+    }
+
+    private func hide(after duration: Duration) {
+        hide?.cancel()
         hide = Task { [weak self, sleep] in
             do {
-                try await sleep(Self.duration)
+                try await sleep(duration)
             } catch {
                 return
             }
+            guard !Task.isCancelled else { return }
             self?.close()
         }
     }
@@ -73,6 +93,13 @@ final class LearnedNoticePanel {
             undo(learned)
             notice.close()
         })
+        content.onHover = { [notice] inside in
+            if inside {
+                notice.hold()
+            } else {
+                notice.release()
+            }
+        }
         panel.contentView = content
         panel.setContentSize(content.fittingSize)
         place(panel)
@@ -110,8 +137,29 @@ final class LearnedNoticePanel {
 }
 
 /// Takes the first click, so a button in a panel that is never key works with one click.
+/// Also tells when the pointer enters and leaves, also while another app is active.
 private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    var onHover: (Bool) -> Void = { _ in }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas where area.owner === self {
+            removeTrackingArea(area)
+        }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        onHover(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onHover(false)
+    }
 }
 
 struct LearnedNoticeView: View {

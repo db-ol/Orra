@@ -21,6 +21,17 @@ struct LearnedNoticeTests {
         #expect(shown == [learned, nil])
     }
 
+    @Test func theNoticeStaysWhileThePointerIsOverIt() async {
+        let notice = LearnedNotice(sleep: { _ in await Task.yield() })
+        notice.show(learned)
+        notice.hold()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(notice.learned == learned)
+        notice.release()
+        for _ in 0..<50 where notice.learned != nil { await Task.yield() }
+        #expect(notice.learned == nil)
+    }
+
     @Test func closingHidesItAtOnce() {
         let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
         notice.show(learned)

@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 410 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 411 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -537,8 +537,8 @@ Learning from corrections, added on 2026-10-08, not verified yet. Turn on Learn 
 corrections under Vocabulary in Settings first:
 
 - [ ] Dictate a sentence with a name Orra gets wrong into Notes and fix the name by hand: a
-  few seconds later a notice above the recording indicator says the name was added to the
-  vocabulary. The app you are in keeps the focus. The next dictation is more likely to
+  second or two after you stop typing, a notice above the recording indicator says the
+  name was added to the vocabulary. It stays 15 seconds, and while the pointer is over it. The app you are in keeps the focus. The next dictation is more likely to
   write it right, and Orra never changes the text itself.
 - [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
   Chinese character such as 的 to 得, deleting words, or rewriting the sentence adds

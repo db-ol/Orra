@@ -72,7 +72,7 @@ nonisolated enum FieldReader {
 /// five at a time, so dictating several lines and then fixing them works. A watch pushed
 /// out by a sixth paste reports what it found. PasteTracker follows where each paste is while other lines
 /// change. It looks for a correction after every change and reports it once the field has
-/// not changed for 3 readings, so the user hears back soon after the fix. When the user
+/// not changed for a reading, so the user hears back a second or two after the fix. When the user
 /// keeps typing over the same misheard words, as when finishing a half typed word, the new
 /// correction is reported as replacing the earlier one. Logs states only, never text.
 @MainActor
@@ -99,9 +99,9 @@ final class CorrectionWatcher {
 
     static let readings = 180
     static let maximumWatches = 5
-    /// Readings without a change before a correction is reported, so a word still being
-    /// typed is not taken.
-    static let quietReadings = 3
+    /// Readings without a change before a correction is reported: a second after the user
+    /// stops typing. A word still being typed is replaced once it is finished.
+    static let quietReadings = 1
 
     /// Tells a running watch to end early and report what it found.
     private final class Control {
