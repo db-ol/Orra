@@ -32,6 +32,16 @@ nonisolated enum Vocabulary {
         Self.terms(from: (terms + [term]).joined(separator: "\n"))
     }
 
+    /// The copied text when it can be a vocabulary word: one line, at most
+    /// `maximumLength` characters once trimmed, and not in the list yet. Nil otherwise.
+    static func candidate(fromClipboard text: String?, in terms: [String]) -> String? {
+        guard let text else { return nil }
+        let term = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty, term.count <= maximumLength, !term.contains(where: \.isNewline),
+              !terms.contains(where: { $0.lowercased() == term.lowercased() }) else { return nil }
+        return term
+    }
+
     /// The list without the term.
     static func removing(_ term: String, from terms: [String]) -> [String] {
         terms.filter { $0 != term }

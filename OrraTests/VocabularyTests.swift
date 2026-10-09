@@ -31,6 +31,14 @@ struct VocabularyTests {
         #expect(Vocabulary.removing("Orra", from: ["Orra", "通义千问"]) == ["通义千问"])
     }
 
+    @Test func aCopiedWordCanBeAddedButNotALongText() {
+        #expect(Vocabulary.candidate(fromClipboard: "  SGLang-Omni \n", in: []) == "SGLang-Omni")
+        #expect(Vocabulary.candidate(fromClipboard: "sglang-omni", in: ["SGLang-Omni"]) == nil)
+        #expect(Vocabulary.candidate(fromClipboard: "two\nlines", in: []) == nil)
+        #expect(Vocabulary.candidate(fromClipboard: String(repeating: "a", count: 41), in: []) == nil)
+        #expect(Vocabulary.candidate(fromClipboard: nil, in: []) == nil)
+    }
+
     @Test func theVocabularyIsSavedOnThisMac() throws {
         let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))

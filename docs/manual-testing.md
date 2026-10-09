@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 397 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 398 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -544,6 +544,9 @@ corrections under Vocabulary in Settings first:
   nothing. Fixing a word and then typing a period learns the word without the period.
 - [ ] Dictate three lines with the same misheard words, then fix the first two within a
   minute: the next dictation's menu suggests adding the word.
+- [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
+  focused element is not a text field Orra can read" and nothing is learned. Copy the
+  right word there: the Orra menu offers to add it to the vocabulary.
 - [ ] In Messages or WeChat, fix a misheard name and press Return to send: the fix still
   counts. Click into another field during the watch: nothing is read from it.
 - [ ] An added pair shows under Learning with Remove, and after Remove the misheard
