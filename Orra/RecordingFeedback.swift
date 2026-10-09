@@ -5,8 +5,9 @@ import Observation
 /// controller's cues. Settings can turn either off.
 ///
 /// The indicator shows a level meter while Orra listens, a spinner while it transcribes,
-/// and for a few seconds the reason when a hold ends without a paste. In between, a small
-/// bar at the bottom of the screen shows that Orra is ready, unless Settings turns it off.
+/// and for a few seconds the reason when a hold ends without a paste. In between, while
+/// Orra can dictate, a small bar at the bottom of the screen shows that it is ready, unless
+/// Settings turns it off.
 @Observable
 final class RecordingFeedback {
     /// What the indicator shows.
@@ -44,11 +45,20 @@ final class RecordingFeedback {
     }
     /// True while the pointer is over the idle bar, which then shows how to talk.
     var pointerIsOverIdleBar = false
+    /// Whether a hold would dictate: the talk key is watched and the model is loaded.
+    /// AppDelegate keeps it current. The idle bar shows only then, so it never says Orra
+    /// is ready when it is not.
+    var canDictate = false {
+        didSet {
+            guard canDictate != oldValue else { return }
+            present(presented)
+        }
+    }
 
     /// What the panel shows: the indicator, or the idle bar when the indicator has nothing
-    /// to show.
+    /// to show and Orra can dictate.
     var presented: Display? {
-        (showsIndicator ? display : nil) ?? (showsIdleBar ? .idle : nil)
+        (showsIndicator ? display : nil) ?? (showsIdleBar && canDictate ? .idle : nil)
     }
 
     /// The hint the idle bar shows, such as "Hold right Control to talk".
@@ -117,11 +127,6 @@ final class RecordingFeedback {
         panel.feedback = feedback
         panel.prepare()
         return feedback
-    }
-
-    /// Shows the idle bar at launch, when it is on.
-    func start() {
-        present(presented)
     }
 
     func handle(_ cue: DictationCue) {

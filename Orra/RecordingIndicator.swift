@@ -24,15 +24,22 @@ final class RecordingIndicatorPanel {
     }
 
     func present(_ display: RecordingFeedback.Display?) {
-        watchPointer(display == .idle)
         guard display != nil else {
+            watchPointer(false)
             panel?.orderOut(nil)
             return
         }
         guard let panel = panel ?? makePanel() else { return }
+        // The idle bar sits just below the Dock, so a Dock that hides and shows covers it,
+        // while the indicator stays above everything.
+        panel.level = display == .idle ? Self.idleLevel : .statusBar
         place(panel)
         panel.orderFrontRegardless()
+        watchPointer(display == .idle)
     }
+
+    /// Just below the Dock, and above every app window, also in full screen.
+    static let idleLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.dockWindow)) - 1)
 
     /// Where the pointer counts as over the idle bar, in screen coordinates: the bar with
     /// a margin, so it is easy to find.
@@ -57,14 +64,22 @@ final class RecordingIndicatorPanel {
             }
             return
         }
-        guard pointerMonitors.isEmpty else { return }
         let moved: () -> Void = { [weak self] in
             guard let self, let panel = self.panel else { return }
-            let over = Self.idleBarArea(inPanelAt: panel.frame).contains(NSEvent.mouseLocation)
+            let pointer = NSEvent.mouseLocation
+            // The bar follows the pointer to another display.
+            if !NSMouseInRect(pointer, panel.screen?.frame ?? .zero, false),
+               NSScreen.screens.contains(where: { NSMouseInRect(pointer, $0.frame, false) }) {
+                self.place(panel)
+            }
+            let over = Self.idleBarArea(inPanelAt: panel.frame).contains(pointer)
             if self.feedback?.pointerIsOverIdleBar != over {
                 self.feedback?.pointerIsOverIdleBar = over
             }
         }
+        // The pointer may rest on the bar already, as after a dictation.
+        moved()
+        guard pointerMonitors.isEmpty else { return }
         // Another app's windows get the moves, and Orra's own windows, such as Settings.
         if let global = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: { _ in moved() }) {
             pointerMonitors.append(global)
@@ -148,7 +163,7 @@ struct RecordingIndicatorView: View {
     }
 
     @ViewBuilder private var content: some View {
-        switch feedback.display {
+        switch feedback.presented {
         case .listening:
             HStack(spacing: 10) {
                 Image(systemName: "mic.fill")

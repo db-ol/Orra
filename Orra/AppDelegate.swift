@@ -33,6 +33,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || environment["XCODE_RUNNING_FOR_PREVIEWS"] != nil
     }
 
+    /// Tells the feedback whether a hold would dictate, now and after every change, so the
+    /// idle bar shows only then.
+    private func followReadiness() {
+        feedback.canDictate = withObservationTracking {
+            pushToTalk.isHotkeyActive && pushToTalk.modelState == .ready
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followReadiness()
+            }
+        }
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
     }
@@ -55,7 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         pushToTalk.start()
-        feedback.start()
+        followReadiness()
         openAtLogin.refreshWhenMenusOpen()
         audioInputs.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
