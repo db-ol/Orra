@@ -1026,14 +1026,13 @@ struct PushToTalkControllerTests {
         #expect(saved == [["Orra", "通义千问"], []])
     }
 
-    @Test func thePasteGetsTheRewrittenTextAndIsReported() async throws {
+    @Test func thePasteIsReported() async throws {
         let controller = await makeController()
         var reported: [(String, pid_t)] = []
-        controller.rewrite = { $0 + "!" }
         controller.onPasted = { reported.append(($0, $1)) }
         try await dictate(controller)
-        #expect(inserter.inserted == ["你好!"])
-        #expect(reported.map(\.0) == ["你好!"])
+        #expect(inserter.inserted == ["你好"])
+        #expect(reported.map(\.0) == ["你好"])
         #expect(reported.map(\.1) == [100])
         inserter.result = .skippedPasswordField
         try await dictate(controller)

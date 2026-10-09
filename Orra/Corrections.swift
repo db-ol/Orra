@@ -230,7 +230,6 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
     }
 
     static let window: TimeInterval = 7 * 24 * 60 * 60
-    static let timesBeforeSuggesting = 2
 
     private(set) var entries: [Entry] = []
 
@@ -249,41 +248,8 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         }
     }
 
-    /// One suggestion per corrected word seen often enough, counting every way it was
-    /// misheard, since the model mishears a word differently each time. Neither added nor
-    /// ignored yet. Shows the latest misheard spelling.
-    var suggestions: [Correction] {
-        var seen: [String: (count: Int, latest: Entry)] = [:]
-        var order: [String] = []
-        for entry in entries where entry.state == .seen {
-            let word = entry.correction.corrected
-            if let current = seen[word] {
-                seen[word] = (current.count + entry.count, entry.lastSeen >= current.latest.lastSeen ? entry : current.latest)
-            } else {
-                seen[word] = (entry.count, entry)
-                order.append(word)
-            }
-        }
-        return order.compactMap { word in
-            guard let group = seen[word], group.count >= Self.timesBeforeSuggesting else { return nil }
-            return group.latest.correction
-        }
-    }
-
-    /// The corrections the user added, which Orra applies before pasting.
-    var accepted: [Correction] {
-        entries.filter { $0.state == .accepted }.map(\.correction)
-    }
-
-    /// Decides for every misheard spelling of the corrected word at once.
-    mutating func decide(_ correction: Correction, _ state: State) {
-        for index in entries.indices where entries[index].correction.corrected == correction.corrected {
-            entries[index].state = state
-        }
-    }
-
     /// Accepts the pairs for the word that were only seen so far, and gives them. Leaves the
-    /// pairs the user removed or undid alone.
+    /// pairs the user undid alone.
     mutating func acceptSeen(of word: String) -> [Correction] {
         var accepted: [Correction] = []
         for index in entries.indices where entries[index].correction.corrected == word && entries[index].state == .seen {
@@ -298,16 +264,9 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         entries.contains { $0.correction.corrected == word && $0.state == state }
     }
 
-    /// Stops applying the pairs and never suggests them again.
+    /// Marks the pairs as undone, so their word is not learned again.
     mutating func dismiss(_ corrections: [Correction]) {
         for index in entries.indices where corrections.contains(entries[index].correction) {
-            entries[index].state = .dismissed
-        }
-    }
-
-    /// Stops applying an accepted pair and never suggests it again.
-    mutating func remove(_ correction: Correction) {
-        if let index = entries.firstIndex(where: { $0.correction == correction }) {
             entries[index].state = .dismissed
         }
     }
@@ -317,7 +276,7 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
     }
 
     /// The stored pairs. A file that cannot be read is moved aside to corrections.json.bad,
-    /// so accepted pairs are not lost by overwriting it.
+    /// so learned and undone pairs are not lost by overwriting it.
     static func load(from url: URL) -> CorrectionStore {
         guard let data = try? Data(contentsOf: url) else { return CorrectionStore() }
         if let store = try? JSONDecoder().decode(CorrectionStore.self, from: data) {
@@ -332,26 +291,5 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
     func save(to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(self).write(to: url, options: .atomic)
-    }
-}
-
-/// Puts the user's accepted corrections into dictated text before the paste.
-nonisolated enum Replacements {
-    /// Replaces each heard word with its correction. A Latin word must stand alone, so
-    /// "cloud" does not change "clouds". Chinese is replaced wherever it appears, for heard
-    /// words of 2 characters or more.
-    static func apply(_ corrections: [Correction], to text: String) -> String {
-        var result = text
-        for correction in corrections.sorted(by: { $0.heard.count > $1.heard.count }) {
-            let heard = correction.heard
-            if heard.allSatisfy({ $0.isASCII }) {
-                let pattern = "(?<![A-Za-z0-9])" + NSRegularExpression.escapedPattern(for: heard) + "(?![A-Za-z0-9])"
-                guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { continue }
-                result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: NSRegularExpression.escapedTemplate(for: correction.corrected))
-            } else if heard.count >= 2 {
-                result = result.replacingOccurrences(of: heard, with: correction.corrected)
-            }
-        }
-        return result
     }
 }

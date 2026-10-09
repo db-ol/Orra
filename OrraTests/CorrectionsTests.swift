@@ -125,27 +125,18 @@ struct CorrectionStoreTests {
     private let pair = Correction(heard: "克劳德", corrected: "Claude")
     private let day: TimeInterval = 24 * 60 * 60
 
-    @Test func aCorrectionIsSuggestedTheSecondTimeWithinAWeek() {
-        var store = CorrectionStore()
-        let start = Date(timeIntervalSince1970: 1_000_000)
-        store.record(pair, at: start)
-        #expect(store.suggestions.isEmpty)
-        store.record(pair, at: start.addingTimeInterval(3 * day))
-        #expect(store.suggestions == [pair])
-    }
-
-    @Test func differentMishearingsOfOneWordCountTogether() {
+    @Test func acceptingTakesOnlyThePairsNotUndone() {
         var store = CorrectionStore()
         let now = Date(timeIntervalSince1970: 1_000_000)
-        let first = Correction(heard: "S J L Omni", corrected: "SGLang-Omni")
-        let second = Correction(heard: "S G Line Omni", corrected: "SGLang-Omni")
-        store.record(first, at: now)
-        #expect(store.suggestions.isEmpty)
-        store.record(second, at: now.addingTimeInterval(60))
-        #expect(store.suggestions == [second])
-        store.decide(second, .accepted)
-        #expect(Set(store.accepted) == [first, second])
-        #expect(Replacements.apply(store.accepted, to: "S J L Omni和S G Line Omni") == "SGLang-Omni和SGLang-Omni")
+        let other = Correction(heard: "可劳德", corrected: "Claude")
+        store.record(pair, at: now)
+        #expect(store.acceptSeen(of: "Claude") == [pair])
+        store.dismiss([pair])
+        store.record(other, at: now)
+        #expect(store.acceptSeen(of: "Claude") == [other])
+        #expect(store.has(.dismissed, for: "Claude"))
+        #expect(store.has(.accepted, for: "Claude"))
+        #expect(!store.has(.accepted, for: "Orra"))
     }
 
     @Test func aCountOlderThanAWeekStartsOver() {
@@ -153,21 +144,7 @@ struct CorrectionStoreTests {
         let start = Date(timeIntervalSince1970: 1_000_000)
         store.record(pair, at: start)
         store.record(pair, at: start.addingTimeInterval(8 * day))
-        #expect(store.suggestions.isEmpty)
-    }
-
-    @Test func aDecisionEndsTheSuggestion() {
-        var store = CorrectionStore()
-        let now = Date(timeIntervalSince1970: 1_000_000)
-        store.record(pair, at: now)
-        store.record(pair, at: now)
-        store.decide(pair, .accepted)
-        #expect(store.suggestions.isEmpty)
-        #expect(store.accepted == [pair])
-        store.decide(pair, .dismissed)
-        store.record(pair, at: now)
-        #expect(store.suggestions.isEmpty)
-        #expect(store.accepted.isEmpty)
+        #expect(store.entries.map(\.count) == [1])
     }
 
     @Test func pairsSeenOnceLongAgoAreForgotten() {
@@ -196,15 +173,5 @@ struct CorrectionStoreTests {
         try store.save(to: url)
         #expect(CorrectionStore.load(from: url) == store)
         #expect(CorrectionStore.load(from: url.appendingPathExtension("missing")) == CorrectionStore())
-    }
-}
-
-struct ReplacementsTests {
-    @Test func acceptedCorrectionsAreAppliedBeforeThePaste() {
-        let corrections = [Correction(heard: "克劳德", corrected: "Claude"), Correction(heard: "cloud", corrected: "Claude")]
-        #expect(Replacements.apply(corrections, to: "我在用克劳德") == "我在用Claude")
-        #expect(Replacements.apply(corrections, to: "open cloud code") == "open Claude code")
-        #expect(Replacements.apply(corrections, to: "clouds in the sky") == "clouds in the sky")
-        #expect(Replacements.apply([Correction(heard: "他", corrected: "她")], to: "他说") == "他说")
     }
 }

@@ -69,7 +69,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 feedback.handle(cue)
             }
         }
-        pushToTalk.rewrite = { [learning] text in learning.apply(to: text) }
         pushToTalk.onPasted = { [learning] text, app in learning.pasted(text, in: app) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         pushToTalk.start()

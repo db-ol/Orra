@@ -201,11 +201,11 @@ final class CorrectionWatcher {
 }
 
 /// Learning from the user's corrections: off until the user turns it on. Keeps the word
-/// pairs it saw. When a word was corrected to the same spelling twice within 7 days, adds
-/// it to the vocabulary on its own and tells `onLearned`, which shows a notice with Undo.
-/// A word already learned takes a new misheard spelling quietly. A word the user undid or
-/// removed a pair of is never learned on its own again, only suggested in Settings and the
-/// menu. Applies accepted pairs before each paste.
+/// pairs it saw. The first time a word is corrected, adds it to the vocabulary and tells
+/// `onLearned`, which shows a notice with Undo. A word learned before takes a new misheard
+/// spelling quietly, and is not added again when the user took it out of the vocabulary.
+/// A word the user undid is never learned again. The text itself is never changed: the
+/// vocabulary only helps the model hear the word.
 @Observable
 final class CorrectionLearning {
     var isOn: Bool {
@@ -286,8 +286,6 @@ final class CorrectionLearning {
             .appendingPathComponent("io.github.db-ol.Orra/corrections.json")
     }
 
-    var suggestions: [Correction] { store.suggestions }
-
     /// Called after each paste. Does nothing while learning is off.
     func pasted(_ text: String, in pid: pid_t) {
         guard isOn else { return }
@@ -296,33 +294,23 @@ final class CorrectionLearning {
         }
     }
 
-    /// Keeps the pair, and learns the word once it was corrected to it often enough.
+    /// Keeps the pair, and learns its word the first time.
     func record(_ correction: Correction) {
         store.record(correction, at: now())
         let word = correction.corrected
-        if store.has(.accepted, for: word) {
-            // Learned before: the new misheard spelling is written right too, quietly.
-            _ = store.acceptSeen(of: word)
+        guard !store.has(.dismissed, for: word) else {
             saveStore(store)
             return
         }
-        guard store.suggestions.contains(where: { $0.corrected == word }), !store.has(.dismissed, for: word) else {
-            saveStore(store)
-            return
-        }
+        let learnedBefore = store.has(.accepted, for: word)
         let pairs = store.acceptSeen(of: word)
         saveStore(store)
+        guard !learnedBefore else { return }
         onLearned?(Learned(correction: correction, pairs: pairs, addedToVocabulary: addToVocabulary(word)))
     }
 
-    func accept(_ correction: Correction) {
-        store.decide(correction, .accepted)
-        saveStore(store)
-        _ = addToVocabulary(correction.corrected)
-    }
-
-    /// Takes back a word learned on its own: never suggests or applies it again, and takes
-    /// it out of the vocabulary when learning put it there.
+    /// Takes back a word learned on its own: never learns it again, and takes it out of the
+    /// vocabulary when learning put it there.
     func undo(_ learned: Learned) {
         store.dismiss(learned.pairs)
         saveStore(store)
@@ -331,25 +319,9 @@ final class CorrectionLearning {
         }
     }
 
-    /// Stops applying an accepted pair.
-    func remove(_ correction: Correction) {
-        store.remove(correction)
-        saveStore(store)
-    }
-
-    func dismiss(_ correction: Correction) {
-        store.decide(correction, .dismissed)
-        saveStore(store)
-    }
-
-    /// Forgets every pair, the accepted ones too. The vocabulary keeps its words.
+    /// Forgets every pair, the undone ones too. The vocabulary keeps its words.
     func removeAll() {
         store.removeAll()
         saveStore(store)
-    }
-
-    /// The text with the accepted corrections applied.
-    func apply(to text: String) -> String {
-        Replacements.apply(store.accepted, to: text)
     }
 }

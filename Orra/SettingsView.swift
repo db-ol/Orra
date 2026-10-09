@@ -205,29 +205,6 @@ private struct VocabularySettings: View {
             }
             Section {
                 Toggle("Learn from my corrections", isOn: $learning.isOn)
-                ForEach(learning.suggestions, id: \.self) { correction in
-                    HStack {
-                        Text(verbatim: "\(correction.heard)  →  \(correction.corrected)")
-                        Spacer()
-                        Button("Ignore") {
-                            learning.dismiss(correction)
-                        }
-                        Button("Add") {
-                            learning.accept(correction)
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-                ForEach(learning.store.accepted, id: \.self) { correction in
-                    HStack {
-                        Text(verbatim: "\(correction.heard)  →  \(correction.corrected)")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Remove") {
-                            learning.remove(correction)
-                        }
-                    }
-                }
                 if !learning.store.entries.isEmpty {
                     Button("Forget Learned Corrections") {
                         learning.removeAll()
@@ -236,7 +213,7 @@ private struct VocabularySettings: View {
             } header: {
                 Text("Learning")
             } footer: {
-                Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word to the same spelling twice within a week, Orra adds it to your vocabulary, writes it that way in later dictations, and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
+                Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
                     .foregroundStyle(.secondary)
             }
         }

@@ -70,9 +70,6 @@ final class PushToTalkController {
     private(set) var lastTranscript: String?
     /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
     @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
-    /// Changes the text before the paste, with the user's accepted corrections.
-    /// AppDelegate sets it.
-    @ObservationIgnored var rewrite: (String) -> String = { $0 }
     /// Told after each paste, with the text and the app it went into, so Orra can learn
     /// from a correction. AppDelegate sets it.
     @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t) -> Void = { _, _ in }
@@ -528,7 +525,7 @@ final class PushToTalkController {
                 return
             }
             let raw = try await transcription.transcribe(samples, Vocabulary.context(vocabulary))
-            let text = rewrite(ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration)))
+            let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
             guard !text.isEmpty else {
                 holdMessage = String(localized: "No speech was recognized")
                 logger.notice("No speech recognized in \(recording.duration, privacy: .public) s of audio")

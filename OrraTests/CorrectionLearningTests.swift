@@ -222,21 +222,21 @@ struct CorrectionLearningTests {
         #expect(learning.store.entries.isEmpty)
     }
 
-    @Test func theSecondFixAddsTheWordOnItsOwnAndTellsTheUser() {
+    private var accepted: (CorrectionLearning) -> [Correction] {
+        { $0.store.entries.filter { $0.state == .accepted }.map(\.correction) }
+    }
+
+    @Test func theFirstFixAddsTheWordAndTellsTheUser() {
         let vocabulary = VocabularyBox()
         let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
         var learned: [CorrectionLearning.Learned] = []
         learning.onLearned = { learned.append($0) }
         learning.record(pair)
-        #expect(learned.isEmpty)
-        #expect(vocabulary.words.isEmpty)
-        learning.record(pair)
         #expect(learned == [CorrectionLearning.Learned(correction: pair, pairs: [pair], addedToVocabulary: true)])
         #expect(vocabulary.words == ["Claude"])
-        #expect(learning.suggestions.isEmpty)
-        #expect(learning.apply(to: "我在用克劳德") == "我在用Claude")
         learning.removeAll()
-        #expect(learning.apply(to: "我在用克劳德") == "我在用克劳德")
+        #expect(learning.store.entries.isEmpty)
+        #expect(vocabulary.words == ["Claude"])
     }
 
     @Test func turningLearningOffDuringAWatchRecordsNothing() async {
@@ -248,46 +248,19 @@ struct CorrectionLearningTests {
         #expect(learning.store.entries.isEmpty)
     }
 
-    @Test func aRemovedPairIsNoLongerApplied() {
-        let learning = makeLearning(isOn: true, field: ScriptedField([""]))
-        learning.record(pair)
-        learning.record(pair)
-        learning.accept(pair)
-        learning.remove(pair)
-        #expect(learning.apply(to: "我在用克劳德") == "我在用克劳德")
-        #expect(learning.store.accepted.isEmpty)
-    }
-
     @Test func undoTakesTheWordOutAndItStaysAway() {
         let vocabulary = VocabularyBox()
         let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
         var learned: [CorrectionLearning.Learned] = []
         learning.onLearned = { learned.append($0) }
         learning.record(pair)
-        learning.record(pair)
         learning.undo(learned[0])
         #expect(vocabulary.words.isEmpty)
         learning.record(pair)
-        learning.record(pair)
-        #expect(learned.count == 1)
-        #expect(learning.suggestions.isEmpty)
-        #expect(learning.apply(to: "克劳德") == "克劳德")
-    }
-
-    @Test func afterUndoAnotherMishearingDoesNotAddTheWordAgain() {
-        let vocabulary = VocabularyBox()
-        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
-        var learned: [CorrectionLearning.Learned] = []
-        learning.onLearned = { learned.append($0) }
-        learning.record(pair)
-        learning.record(pair)
-        learning.undo(learned[0])
-        let other = Correction(heard: "可劳德", corrected: "Claude")
-        learning.record(other)
-        learning.record(other)
+        learning.record(Correction(heard: "可劳德", corrected: "Claude"))
         #expect(learned.count == 1)
         #expect(vocabulary.words.isEmpty)
-        #expect(learning.store.accepted.isEmpty)
+        #expect(accepted(learning).isEmpty)
     }
 
     @Test func aNewMishearingOfALearnedWordIsTakenQuietly() {
@@ -296,22 +269,19 @@ struct CorrectionLearningTests {
         var learned: [CorrectionLearning.Learned] = []
         learning.onLearned = { learned.append($0) }
         learning.record(pair)
-        learning.record(pair)
         let other = Correction(heard: "可劳德", corrected: "Claude")
         learning.record(other)
         #expect(learned.count == 1)
-        #expect(Set(learning.store.accepted) == [pair, other])
+        #expect(Set(accepted(learning)) == [pair, other])
     }
 
-    @Test func learningDoesNotBringBackARemovedPair() {
-        let learning = makeLearning(isOn: true, field: ScriptedField([""]))
+    @Test func aLearnedWordTheUserTookOutIsNotAddedAgain() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
         learning.record(pair)
-        learning.record(pair)
-        learning.remove(pair)
-        let other = Correction(heard: "可劳德", corrected: "Claude")
-        learning.record(other)
-        learning.record(other)
-        #expect(!learning.store.accepted.contains(pair))
+        vocabulary.words = []
+        learning.record(Correction(heard: "可劳德", corrected: "Claude"))
+        #expect(vocabulary.words.isEmpty)
     }
 
     @Test func undoKeepsAWordTheUserHadAddedBefore() {
@@ -320,7 +290,6 @@ struct CorrectionLearningTests {
         let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
         var learned: [CorrectionLearning.Learned] = []
         learning.onLearned = { learned.append($0) }
-        learning.record(pair)
         learning.record(pair)
         #expect(learned == [CorrectionLearning.Learned(correction: pair, pairs: [pair], addedToVocabulary: false)])
         learning.undo(learned[0])
