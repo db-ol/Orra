@@ -1,4 +1,5 @@
-import Foundation
+import AppKit
+import Observation
 
 /// The user's own words and names, which the speech model gets with every dictation so it
 /// writes them the way the user does. Measured on 2026-10-08 with ContextEvaluationTests:
@@ -64,5 +65,54 @@ nonisolated enum VocabularyPreference {
 
     static func save(_ terms: [String], to defaults: UserDefaults = .standard) {
         defaults.set(terms, forKey: defaultsKey)
+    }
+}
+
+/// The copied word the menu offers to add to the vocabulary. Read once each time a menu
+/// opens, never while Orra dictates: the paste reads and restores the pasteboard off the
+/// main thread then, and NSPasteboard must not be used from two threads at once.
+@Observable
+final class ClipboardWord {
+    /// The copied text, when it can be a vocabulary word.
+    private(set) var word: String?
+
+    @ObservationIgnored private let read: () -> String?
+    @ObservationIgnored private let isDictating: () -> Bool
+    @ObservationIgnored private let vocabulary: () -> [String]
+    @ObservationIgnored private var menuObserver: (any NSObjectProtocol)?
+
+    init(read: @escaping () -> String? = { NSPasteboard.general.string(forType: .string) },
+         isDictating: @escaping () -> Bool,
+         vocabulary: @escaping () -> [String]) {
+        self.read = read
+        self.isDictating = isDictating
+        self.vocabulary = vocabulary
+    }
+
+    func refresh() {
+        let terms = vocabulary()
+        guard !isDictating(), terms.count < Vocabulary.limit else {
+            word = nil
+            return
+        }
+        word = Vocabulary.candidate(fromClipboard: read(), in: terms)
+    }
+
+    /// Forgets the word once it was added.
+    func clear() {
+        word = nil
+    }
+
+    func refreshWhenMenusOpen() {
+        guard menuObserver == nil else { return }
+        menuObserver = NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refresh()
+            }
+        }
     }
 }

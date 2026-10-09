@@ -22,6 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// microphone level.
     lazy var feedback = RecordingFeedback.live { [pushToTalk] in pushToTalk.inputLevel() }
     lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
+    lazy var clipboard = ClipboardWord(
+        isDictating: { [pushToTalk] in pushToTalk.state != .idle },
+        vocabulary: { [pushToTalk] in pushToTalk.vocabulary }
+    )
     lazy var learning = CorrectionLearning.live { [pushToTalk] word in
         pushToTalk.setVocabulary(Vocabulary.adding(word, to: pushToTalk.vocabulary))
     }
@@ -59,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.start()
         openAtLogin.refreshWhenMenusOpen()
         audioInputs.refreshWhenMenusOpen()
+        clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
         Task { [models, pushToTalk, welcome] in

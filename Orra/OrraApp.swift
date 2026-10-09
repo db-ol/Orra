@@ -5,7 +5,7 @@ import SwiftUI
 
     var body: some Scene {
         MenuBarExtra {
-            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, learning: appDelegate.learning) {
+            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, learning: appDelegate.learning, clipboard: appDelegate.clipboard) {
                 appDelegate.welcome.show()
             }
         } label: {

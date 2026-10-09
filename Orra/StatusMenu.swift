@@ -7,6 +7,7 @@ struct StatusMenu: View {
     let openAtLogin: OpenAtLogin
     let inputs: AudioInputList
     let learning: CorrectionLearning
+    let clipboard: ClipboardWord
     let showWelcome: () -> Void
     @Environment(\.openSettings) private var openSettings
 
@@ -65,12 +66,12 @@ struct StatusMenu: View {
             }
         }
 
-        if let copied = Vocabulary.candidate(fromClipboard: NSPasteboard.general.string(forType: .string), in: pushToTalk.vocabulary),
-           pushToTalk.vocabulary.count < Vocabulary.limit {
+        if let copied = clipboard.word {
             Divider()
             // Works in every app, also where Orra cannot read the text to learn from it.
             Button("Add “\(copied)” from the Clipboard to Vocabulary") {
                 pushToTalk.setVocabulary(Vocabulary.adding(copied, to: pushToTalk.vocabulary))
+                clipboard.clear()
             }
         }
         if !learning.suggestions.isEmpty {

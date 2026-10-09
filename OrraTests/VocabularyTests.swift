@@ -39,6 +39,22 @@ struct VocabularyTests {
         #expect(Vocabulary.candidate(fromClipboard: nil, in: []) == nil)
     }
 
+    @MainActor
+    @Test func theClipboardIsNotReadWhileDictating() {
+        var reads = 0
+        var dictating = true
+        let clipboard = ClipboardWord(read: { reads += 1; return "SGLang-Omni" }, isDictating: { dictating }, vocabulary: { [] })
+        clipboard.refresh()
+        #expect(reads == 0)
+        #expect(clipboard.word == nil)
+        dictating = false
+        clipboard.refresh()
+        #expect(reads == 1)
+        #expect(clipboard.word == "SGLang-Omni")
+        clipboard.clear()
+        #expect(clipboard.word == nil)
+    }
+
     @Test func theVocabularyIsSavedOnThisMac() throws {
         let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
