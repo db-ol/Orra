@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 408 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 412 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -546,7 +546,7 @@ corrections under Vocabulary in Settings first:
   come back and fix two of them within 3 minutes: a few seconds after the second fix a
   notice above the recording indicator says the name was added, even when it was
   misheard differently each time. The app you are in keeps the focus. Undo takes the
-  name out of the vocabulary, and fixing it again does not bring it back.
+  name out of the vocabulary, and fixing it again, misheard any way, does not add it again.
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the
   right word there: the Orra menu offers to add it to the vocabulary.

@@ -282,6 +282,29 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         }
     }
 
+    /// Accepts the pairs for the word that were only seen so far, and gives them. Leaves the
+    /// pairs the user removed or undid alone.
+    mutating func acceptSeen(of word: String) -> [Correction] {
+        var accepted: [Correction] = []
+        for index in entries.indices where entries[index].correction.corrected == word && entries[index].state == .seen {
+            entries[index].state = .accepted
+            accepted.append(entries[index].correction)
+        }
+        return accepted
+    }
+
+    /// Whether any pair for the word has this state.
+    func has(_ state: State, for word: String) -> Bool {
+        entries.contains { $0.correction.corrected == word && $0.state == state }
+    }
+
+    /// Stops applying the pairs and never suggests them again.
+    mutating func dismiss(_ corrections: [Correction]) {
+        for index in entries.indices where corrections.contains(entries[index].correction) {
+            entries[index].state = .dismissed
+        }
+    }
+
     /// Stops applying an accepted pair and never suggests it again.
     mutating func remove(_ correction: Correction) {
         if let index = entries.firstIndex(where: { $0.correction == correction }) {

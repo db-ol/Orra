@@ -125,7 +125,12 @@ struct LearnedNoticeView: View {
                     .foregroundStyle(.green)
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Added “\(learned.correction.corrected)” to Vocabulary")
+                    if learned.addedToVocabulary {
+                        Text("Added “\(learned.correction.corrected)” to Vocabulary")
+                    } else {
+                        // Already in the vocabulary, or the vocabulary is full.
+                        Text("Orra now writes “\(learned.correction.corrected)”")
+                    }
                     Text("Heard as “\(learned.correction.heard)”")
                         .font(.caption)
                         .foregroundStyle(.secondary)

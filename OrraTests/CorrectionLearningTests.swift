@@ -165,6 +165,23 @@ struct CorrectionWatcherTests {
         #expect(readsWhenFound == 3 + CorrectionWatcher.quietReadings)
     }
 
+    @Test func goingBackAndForthOverAWordCountsEachPairOnce() async {
+        // Fixed, then a different spelling, then the first one again, each left for a while.
+        let fixed = "我在用Claude写代码", other = "我在用Claud写代码"
+        let field = ScriptedField(["我在用克劳德写代码", fixed, fixed, fixed, fixed, other, other, other, other, fixed])
+        let watcher = CorrectionWatcher(environment: field.environment)
+        var found: [Correction] = []
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0) }
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        #expect(found.filter { $0.corrected == "Claude" }.count == 1)
+    }
+
     @Test func aFieldWithoutThePastedTextIsLeftAlone() async {
         let field = ScriptedField(["别的内容", "别的内容改了"])
         #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
@@ -214,7 +231,7 @@ struct CorrectionLearningTests {
         #expect(learned.isEmpty)
         #expect(vocabulary.words.isEmpty)
         learning.record(pair)
-        #expect(learned == [CorrectionLearning.Learned(correction: pair, addedToVocabulary: true)])
+        #expect(learned == [CorrectionLearning.Learned(correction: pair, pairs: [pair], addedToVocabulary: true)])
         #expect(vocabulary.words == ["Claude"])
         #expect(learning.suggestions.isEmpty)
         #expect(learning.apply(to: "我在用克劳德") == "我在用Claude")
@@ -257,6 +274,46 @@ struct CorrectionLearningTests {
         #expect(learning.apply(to: "克劳德") == "克劳德")
     }
 
+    @Test func afterUndoAnotherMishearingDoesNotAddTheWordAgain() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.record(pair)
+        learning.record(pair)
+        learning.undo(learned[0])
+        let other = Correction(heard: "可劳德", corrected: "Claude")
+        learning.record(other)
+        learning.record(other)
+        #expect(learned.count == 1)
+        #expect(vocabulary.words.isEmpty)
+        #expect(learning.store.accepted.isEmpty)
+    }
+
+    @Test func aNewMishearingOfALearnedWordIsTakenQuietly() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.record(pair)
+        learning.record(pair)
+        let other = Correction(heard: "可劳德", corrected: "Claude")
+        learning.record(other)
+        #expect(learned.count == 1)
+        #expect(Set(learning.store.accepted) == [pair, other])
+    }
+
+    @Test func learningDoesNotBringBackARemovedPair() {
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]))
+        learning.record(pair)
+        learning.record(pair)
+        learning.remove(pair)
+        let other = Correction(heard: "可劳德", corrected: "Claude")
+        learning.record(other)
+        learning.record(other)
+        #expect(!learning.store.accepted.contains(pair))
+    }
+
     @Test func undoKeepsAWordTheUserHadAddedBefore() {
         let vocabulary = VocabularyBox()
         vocabulary.words = ["Claude"]
@@ -265,7 +322,7 @@ struct CorrectionLearningTests {
         learning.onLearned = { learned.append($0) }
         learning.record(pair)
         learning.record(pair)
-        #expect(learned == [CorrectionLearning.Learned(correction: pair, addedToVocabulary: false)])
+        #expect(learned == [CorrectionLearning.Learned(correction: pair, pairs: [pair], addedToVocabulary: false)])
         learning.undo(learned[0])
         #expect(vocabulary.words == ["Claude"])
     }

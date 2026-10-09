@@ -148,7 +148,8 @@ final class CorrectionWatcher {
             }
             var latest = before
             var found: Correction?
-            var reported: Correction?
+            // Each pair once per watch, so going back and forth over a word counts once.
+            var reported: Set<Correction> = []
             var quiet = 0
             var readings = 0
             var paused = 0
@@ -173,13 +174,13 @@ final class CorrectionWatcher {
                     quiet += 1
                 }
                 guard !Task.isCancelled else { return }
-                if let found, found != reported, quiet >= Self.quietReadings {
-                    reported = found
+                if let found, !reported.contains(found), quiet >= Self.quietReadings {
+                    reported.insert(found)
                     onCorrection(found)
                 }
             }
             logger.notice("Learning: watch ended after \(readings, privacy: .public) readings and \(paused, privacy: .public) seconds away, correction found: \(found != nil, privacy: .public)")
-            guard !Task.isCancelled, let found, found != reported else { return }
+            guard !Task.isCancelled, let found, !reported.contains(found) else { return }
             onCorrection(found)
         }
         watches.append((id, task, control))
@@ -202,7 +203,9 @@ final class CorrectionWatcher {
 /// Learning from the user's corrections: off until the user turns it on. Keeps the word
 /// pairs it saw. When a word was corrected to the same spelling twice within 7 days, adds
 /// it to the vocabulary on its own and tells `onLearned`, which shows a notice with Undo.
-/// Applies accepted pairs before each paste.
+/// A word already learned takes a new misheard spelling quietly. A word the user undid or
+/// removed a pair of is never learned on its own again, only suggested in Settings and the
+/// menu. Applies accepted pairs before each paste.
 @Observable
 final class CorrectionLearning {
     var isOn: Bool {
@@ -214,10 +217,11 @@ final class CorrectionLearning {
     }
     private(set) var store: CorrectionStore
 
-    /// A word Orra learned on its own, and whether that put it in the vocabulary, so Undo
-    /// takes out only what learning added.
+    /// A word Orra learned on its own: the latest misheard spelling, the pairs it accepted,
+    /// and whether that put the word in the vocabulary, so Undo takes back only those.
     struct Learned: Equatable {
         let correction: Correction
+        let pairs: [Correction]
         let addedToVocabulary: Bool
     }
 
@@ -295,13 +299,20 @@ final class CorrectionLearning {
     /// Keeps the pair, and learns the word once it was corrected to it often enough.
     func record(_ correction: Correction) {
         store.record(correction, at: now())
-        guard store.suggestions.contains(where: { $0.corrected == correction.corrected }) else {
+        let word = correction.corrected
+        if store.has(.accepted, for: word) {
+            // Learned before: the new misheard spelling is written right too, quietly.
+            _ = store.acceptSeen(of: word)
             saveStore(store)
             return
         }
-        store.decide(correction, .accepted)
+        guard store.suggestions.contains(where: { $0.corrected == word }), !store.has(.dismissed, for: word) else {
+            saveStore(store)
+            return
+        }
+        let pairs = store.acceptSeen(of: word)
         saveStore(store)
-        onLearned?(Learned(correction: correction, addedToVocabulary: addToVocabulary(correction.corrected)))
+        onLearned?(Learned(correction: correction, pairs: pairs, addedToVocabulary: addToVocabulary(word)))
     }
 
     func accept(_ correction: Correction) {
@@ -313,7 +324,7 @@ final class CorrectionLearning {
     /// Takes back a word learned on its own: never suggests or applies it again, and takes
     /// it out of the vocabulary when learning put it there.
     func undo(_ learned: Learned) {
-        store.decide(learned.correction, .dismissed)
+        store.dismiss(learned.pairs)
         saveStore(store)
         if learned.addedToVocabulary {
             removeFromVocabulary(learned.correction.corrected)
