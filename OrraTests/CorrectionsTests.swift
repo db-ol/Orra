@@ -34,6 +34,12 @@ struct CorrectionFinderTests {
         #expect(find("open cloud", "open cloud", "open Claude and then more words") == nil)
     }
 
+    @Test func aNameWithJoiningMarksAndSpelledLettersIsTakenWhole() {
+        #expect(find("S J L Omni的听写能力怎么样？", "S J L Omni的听写能力怎么样？", "SGLang-Omni的听写能力怎么样？") == Correction(heard: "S J L Omni", corrected: "SGLang-Omni"))
+        #expect(find("SGlang-omni的语言能力", "SGlang-omni的语言能力", "SGLang-Omni的语言能力") == Correction(heard: "SGlang-omni", corrected: "SGLang-Omni"))
+        #expect(find("I use quen 3 now", "I use quen 3 now", "I use Qwen3 now") == Correction(heard: "quen 3", corrected: "Qwen3"))
+    }
+
     @Test func caseEndingsAndDigitsAreNotCorrections() {
         #expect(find("i like apple", "i like apple", "i like Apple") == nil)
         #expect(find("the cloud is here", "the cloud is here", "the clouds is here") == nil)

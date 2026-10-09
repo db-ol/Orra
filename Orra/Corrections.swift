@@ -44,13 +44,14 @@ nonisolated enum CorrectionFinder {
         var oldEnd = paste.count - suffix
         var newEnd = edited.count - suffix
         guard start < oldEnd, start < newEnd else { return nil }
-        // A Latin word is taken whole.
-        while start > 0, isLatin(paste[start - 1]),
-              (start < oldEnd && isLatin(paste[start])) || (start < newEnd && isLatin(edited[start])) {
+        // A Latin word is taken whole, with its digits and joining marks, so SGLang-Omni
+        // and Qwen3 stay one word.
+        while start > 0, isNamePart(paste[start - 1]),
+              (start < oldEnd && isNamePart(paste[start])) || (start < newEnd && isNamePart(edited[start])) {
             start -= 1
         }
-        while oldEnd < paste.count, isLatin(paste[oldEnd]),
-              (oldEnd > start && isLatin(paste[oldEnd - 1])) || (newEnd > start && isLatin(edited[newEnd - 1])) {
+        while oldEnd < paste.count, isNamePart(paste[oldEnd]),
+              (oldEnd > start && isNamePart(paste[oldEnd - 1])) || (newEnd > start && isNamePart(edited[newEnd - 1])) {
             oldEnd += 1
             newEnd += 1
         }
@@ -62,15 +63,26 @@ nonisolated enum CorrectionFinder {
               // as 的 and 得, and the system cannot split an unknown name into words. Such a
               // word is left for the user to add by hand.
               hanCount(heard) != 1, hanCount(corrected) != 1,
-              heard.lowercased() != corrected.lowercased(),
+              !differsOnlyInFirstLetterCase(heard, corrected),
               !differsOnlyInEnding(heard, corrected),
-              paste.count <= maximumLength || heard.count * 2 <= paste.count,
               SoundAlike.soundsAlike(heard, corrected) else { return nil }
         return Correction(heard: heard, corrected: corrected)
     }
 
     private static func isLatin(_ character: Character) -> Bool {
         character.isASCII && character.isLetter
+    }
+
+    /// Letters, digits and the marks that join a name, as in SGLang-Omni, Node.js, GPT-4o.
+    private static func isNamePart(_ character: Character) -> Bool {
+        character.isASCII && (character.isLetter || character.isNumber || "-_.+".contains(character))
+    }
+
+    /// apple and Apple: the start of a sentence, not a name. A name's own capitals, such as
+    /// sglang and SGLang, count.
+    private static func differsOnlyInFirstLetterCase(_ first: String, _ second: String) -> Bool {
+        guard first != second, first.lowercased() == second.lowercased() else { return first == second }
+        return first.dropFirst() == second.dropFirst()
     }
 
     private static func isHan(_ character: Character) -> Bool {
@@ -85,14 +97,19 @@ nonisolated enum CorrectionFinder {
         character.isWhitespace || character.isPunctuation || character.isSymbol
     }
 
-    /// Letters only: no digits, so codes and amounts are never kept, no punctuation, and
-    /// not empty.
+    /// A word or a name: some letters, no punctuation but the marks that join a name, and
+    /// no run of three digits or more, so codes, amounts and years are never kept. Names
+    /// such as Qwen3 and GPT-4o pass. Chinese numerals such as 千 and 万 are letters here.
     private static func isWordLike(_ text: String) -> Bool {
-        // Decimal digits only: Chinese numerals such as 千 and 万 are part of words.
-        !text.isEmpty && !text.contains { character in
-            character.isPunctuation || character.isSymbol || character.isNewline
-                || character.unicodeScalars.contains { $0.properties.numericType == .decimal }
+        guard text.contains(where: \.isLetter), !text.contains(where: \.isNewline) else { return false }
+        var digitRun = 0
+        for character in text {
+            let isDigit = character.unicodeScalars.contains { $0.properties.numericType == .decimal }
+            digitRun = isDigit ? digitRun + 1 : 0
+            if digitRun >= 3 { return false }
+            if !isDigit, character.isPunctuation || character.isSymbol, !"-_.+".contains(character) { return false }
         }
+        return true
     }
 
     /// cloud and clouds, work and worked: grammar, not a misheard word.

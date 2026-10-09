@@ -142,7 +142,14 @@ final class CorrectionWatcher {
                 try? await environment.sleep(.seconds(1))
                 guard !Task.isCancelled else { return }
                 readings += 1
-                guard allowed(), let text = await read() else { break }
+                guard allowed() else {
+                    logger.notice("Learning: the watch stops, the app is no longer in front or holds secure input")
+                    break
+                }
+                guard let text = await read() else {
+                    logger.notice("Learning: the watch stops, the field lost the focus or cannot be read")
+                    break
+                }
                 if text != latest {
                     latest = text
                     tracker.update(to: text)
