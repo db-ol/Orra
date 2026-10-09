@@ -20,7 +20,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let models = ModelInstaller.live()
     /// The recording indicator and the sounds. Lazy, because it reads the controller's
     /// microphone level.
-    lazy var feedback = RecordingFeedback.live { [pushToTalk] in pushToTalk.inputLevel() }
+    lazy var feedback = RecordingFeedback.live(
+        inputLevel: { [pushToTalk] in pushToTalk.inputLevel() },
+        holdHint: { [pushToTalk] in TalkKey.holdHint(for: pushToTalk.talkKeys) }
+    )
     lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
@@ -52,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         pushToTalk.start()
+        feedback.start()
         openAtLogin.refreshWhenMenusOpen()
         audioInputs.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks

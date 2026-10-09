@@ -4,10 +4,16 @@ import SwiftUI
 /// The floating panel at the bottom of the screen with the pointer. It never becomes key
 /// or main and lets clicks through, so the app the user is in keeps the focus and gets
 /// the paste. AppKit, because a SwiftUI window would take the focus.
+///
+/// While it shows the idle bar, it watches where the pointer moves, since a panel that
+/// lets clicks through gets no mouse events, and tells the feedback when the pointer is
+/// over the bar. Moving the pointer is all it watches, never a click or a key.
 final class RecordingIndicatorPanel {
     /// The feedback whose display the panel shows. RecordingFeedback.live sets it.
     weak var feedback: RecordingFeedback?
     private var panel: NSPanel?
+    private var pointerMonitors: [Any] = []
+    private var screenObserver: (any NSObjectProtocol)?
 
     /// Builds the panel without showing it, at launch, so the first hold does not wait for
     /// a window to be made.
@@ -18,6 +24,7 @@ final class RecordingIndicatorPanel {
     }
 
     func present(_ display: RecordingFeedback.Display?) {
+        watchPointer(display == .idle)
         guard display != nil else {
             panel?.orderOut(nil)
             return
@@ -25,6 +32,49 @@ final class RecordingIndicatorPanel {
         guard let panel = panel ?? makePanel() else { return }
         place(panel)
         panel.orderFrontRegardless()
+    }
+
+    /// Where the pointer counts as over the idle bar, in screen coordinates: the bar with
+    /// a margin, so it is easy to find.
+    static func idleBarArea(inPanelAt frame: NSRect) -> NSRect {
+        let bar = RecordingIndicatorView.idleBarSize
+        return NSRect(
+            x: frame.midX - bar.width / 2 - 12,
+            y: frame.minY + RecordingIndicatorView.bottomPadding - 10,
+            width: bar.width + 24,
+            height: bar.height + 20
+        )
+    }
+
+    private func watchPointer(_ on: Bool) {
+        guard on else {
+            for monitor in pointerMonitors {
+                NSEvent.removeMonitor(monitor)
+            }
+            pointerMonitors = []
+            if feedback?.pointerIsOverIdleBar == true {
+                feedback?.pointerIsOverIdleBar = false
+            }
+            return
+        }
+        guard pointerMonitors.isEmpty else { return }
+        let moved: () -> Void = { [weak self] in
+            guard let self, let panel = self.panel else { return }
+            let over = Self.idleBarArea(inPanelAt: panel.frame).contains(NSEvent.mouseLocation)
+            if self.feedback?.pointerIsOverIdleBar != over {
+                self.feedback?.pointerIsOverIdleBar = over
+            }
+        }
+        // Another app's windows get the moves, and Orra's own windows, such as Settings.
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: { _ in moved() }) {
+            pointerMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { event in
+            moved()
+            return event
+        }) {
+            pointerMonitors.append(local)
+        }
     }
 
     /// Internal so tests can check the panel without showing it.
@@ -48,6 +98,17 @@ final class RecordingIndicatorPanel {
         panel.isReleasedWhenClosed = false
         panel.contentView = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
         self.panel = panel
+        // A display added or removed, or the Dock moved: the bar stays at the bottom.
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let panel = self.panel, panel.isVisible else { return }
+                self.place(panel)
+            }
+        }
         return panel
     }
 
@@ -71,14 +132,16 @@ final class NonactivatingPanel: NSPanel {
 /// a spinner while it transcribes, or a message.
 struct RecordingIndicatorView: View {
     static let panelSize = CGSize(width: 520, height: 150)
+    static let idleBarSize = CGSize(width: 40, height: 6)
+    /// Room for the shadow below the indicator, and where the idle bar sits.
+    static let bottomPadding: CGFloat = 16
     let feedback: RecordingFeedback
 
     var body: some View {
         VStack {
             Spacer(minLength: 0)
             content
-                // Room for the shadow.
-                .padding(.bottom, 16)
+                .padding(.bottom, Self.bottomPadding)
         }
         .frame(width: Self.panelSize.width, height: Self.panelSize.height)
         .environment(\.colorScheme, .dark)
@@ -112,9 +175,33 @@ struct RecordingIndicatorView: View {
             }
             .frame(maxWidth: 440)
             .indicatorStyle()
+        case .idle:
+            VStack(spacing: 10) {
+                if feedback.pointerIsOverIdleBar {
+                    // Already in the user's language.
+                    Text(verbatim: feedback.holdHint())
+                        .indicatorStyle()
+                        .transition(.opacity)
+                }
+                IdleBar()
+            }
+            .animation(.easeOut(duration: 0.15), value: feedback.pointerIsOverIdleBar)
         case nil:
             EmptyView()
         }
+    }
+}
+
+/// The small bar that shows Orra is ready: dark with a light edge, so it shows on light
+/// and dark backgrounds alike.
+private struct IdleBar: View {
+    var body: some View {
+        Capsule()
+            .fill(.black.opacity(0.45))
+            .overlay(Capsule().strokeBorder(.white.opacity(0.55), lineWidth: 0.5))
+            .frame(width: RecordingIndicatorView.idleBarSize.width, height: RecordingIndicatorView.idleBarSize.height)
+            .accessibilityElement()
+            .accessibilityLabel("Orra is ready")
     }
 }
 

@@ -4,7 +4,7 @@ Orra is an open source voice input app for macOS. The goal is simple: hold a key
 
 ## Status
 
-Early stage. While you hold the talk key, right Control unless you pick another under Talk Key in the menu, Orra records. When you let go, it transcribes on your Mac with Qwen3-ASR 1.7B and pastes the text into the frontmost app. The parts pass automated tests, but Orra has not been tried in daily use yet. Expect the code and the design to change.
+Early stage. While you hold the talk key, right Control unless you pick another under Talk Key in the menu, Orra records. When you let go, it transcribes on your Mac with Qwen3-ASR 1.7B and pastes the text into the frontmost app. In between, a small bar at the bottom of the screen shows that Orra is ready, which Settings can turn off. The parts pass automated tests, but Orra has not been tried in daily use yet. Expect the code and the design to change.
 
 ## Requirements
 

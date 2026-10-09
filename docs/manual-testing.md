@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 356 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 360 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -98,7 +98,8 @@ Build and test commands, run in the repository root:
     failed to load, and microphone access that is off or impossible in the build.
   - RecordingFeedbackTests checks what the indicator shows and which sound plays for each
     cue, a message that goes after a while without hiding the next hold, the indicator
-    and the sounds turned off, saving both choices, the level meter's scale, how it rises
+    and the sounds turned off, the idle bar between dictations and turned off, the area
+    where the pointer counts as over the bar, saving the choices, the level meter's scale, how it rises
     and falls, and that it reads the microphone only while it is on screen. It makes the
     app's own indicator panel without showing it and checks that the panel can never
     become key or main, lets clicks through, and shows on every Space and over full
@@ -511,6 +512,20 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
 - [ ] In Settings, turning off "Show the recording indicator" and "Play sounds when
   recording starts and stops" takes effect at the next hold, and both stay off after
   quitting and reopening Orra.
+
+Idle bar, added on 2026-10-09, not verified yet:
+
+- [ ] After launch, a small dark bar with a light edge sits at the bottom center of the
+  screen with the pointer, above the Dock, on light and dark backgrounds alike.
+- [ ] Holding the talk key turns it into the recording indicator, and it comes back after
+  the paste or a message.
+- [ ] With the pointer over the bar, "Hold right Control to talk" (or the chosen keys)
+  shows above it, and goes when the pointer leaves. Clicks on the bar reach the window
+  below it, and the app in front keeps the focus.
+- [ ] Over a full screen app and on another Space the bar shows too. Adding or removing a
+  display, or moving the Dock, keeps it at the bottom.
+- [ ] Turning off "Show a small bar at the bottom of the screen while Orra is ready" in
+  Settings hides it at once, and it stays off after reopening Orra.
 
 Personal vocabulary, added on 2026-10-08, not verified yet:
 

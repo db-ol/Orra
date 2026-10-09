@@ -27,7 +27,7 @@ struct RecordingFeedbackTests {
     /// A feedback that reports to `outputs`, or to the test's own outputs when nil.
     private func makeFeedback(
         _ outputs: FeedbackOutputs? = nil,
-        preferences: FeedbackPreference.Values = .init(),
+        preferences: FeedbackPreference.Values = .init(showsIdleBar: false),
         messageDuration: Duration = .seconds(4)
     ) -> RecordingFeedback {
         let outputs = outputs ?? self.outputs
@@ -101,7 +101,7 @@ struct RecordingFeedbackTests {
     }
 
     @Test func withTheIndicatorOffNothingShowsButTheSoundsPlay() {
-        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true))
+        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true, showsIdleBar: false))
         feedback.handle(.listening)
         feedback.handle(.transcribing)
         feedback.handle(.recordingStopped)
@@ -111,7 +111,7 @@ struct RecordingFeedbackTests {
     }
 
     @Test func withTheSoundsOffNothingPlays() {
-        let feedback = makeFeedback(preferences: .init(showsIndicator: true, playsSounds: false))
+        let feedback = makeFeedback(preferences: .init(showsIndicator: true, playsSounds: false, showsIdleBar: false))
         feedback.handle(.listening)
         feedback.handle(.transcribing)
         feedback.handle(.recordingStopped)
@@ -125,11 +125,11 @@ struct RecordingFeedbackTests {
         feedback.handle(.listening)
         feedback.showsIndicator = false
         #expect(outputs.presented == [.listening, nil])
-        #expect(outputs.saved == [FeedbackPreference.Values(showsIndicator: false, playsSounds: true)])
+        #expect(outputs.saved == [FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false)])
         feedback.showsIndicator = true
         #expect(outputs.presented == [.listening, nil, .listening])
         feedback.playsSounds = false
-        #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: false))
+        #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: false, showsIdleBar: false))
     }
 
     @Test func theMeterFollowsTheMicrophoneOnlyWhileListening() async throws {
@@ -154,7 +154,7 @@ struct RecordingFeedbackTests {
     }
 
     @Test func aHiddenIndicatorNeverReadsTheMicrophone() async throws {
-        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true))
+        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true, showsIdleBar: false))
         feedback.handle(.listening)
         let probeOutputs = FeedbackOutputs()
         let probe = makeFeedback(probeOutputs)
@@ -212,6 +212,37 @@ struct RecordingFeedbackTests {
         #expect(panel.collectionBehavior.contains(.canJoinAllSpaces))
         #expect(panel.collectionBehavior.contains(.fullScreenAuxiliary))
         #expect(panel.isVisible == false)
+    }
+
+    @Test func theIdleBarShowsBetweenDictations() {
+        let feedback = makeFeedback(preferences: .init())
+        feedback.start()
+        feedback.handle(.listening)
+        feedback.handle(.transcribing)
+        feedback.handle(.finished(message: nil))
+        #expect(outputs.presented == [.idle, .listening, .transcribing, .idle])
+        #expect(feedback.display == nil)
+    }
+
+    @Test func turningTheIdleBarOffHidesItAndIsSaved() {
+        let feedback = makeFeedback(preferences: .init())
+        feedback.start()
+        feedback.showsIdleBar = false
+        #expect(outputs.presented == [.idle, nil])
+        #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: true, showsIdleBar: false))
+    }
+
+    @Test func withTheIndicatorOffTheIdleBarStays() {
+        let feedback = makeFeedback(preferences: .init(showsIndicator: false))
+        feedback.handle(.listening)
+        #expect(outputs.presented == [.idle])
+    }
+
+    @Test func theIdleBarAreaSurroundsTheBar() {
+        let area = RecordingIndicatorPanel.idleBarArea(inPanelAt: NSRect(x: 100, y: 50, width: 520, height: 150))
+        #expect(area.contains(NSPoint(x: 360, y: 50 + RecordingIndicatorView.bottomPadding + 3)))
+        #expect(!area.contains(NSPoint(x: 360, y: 150)))
+        #expect(!area.contains(NSPoint(x: 200, y: 69)))
     }
 }
 
