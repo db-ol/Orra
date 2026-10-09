@@ -249,9 +249,25 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         }
     }
 
-    /// Seen often enough, and neither added nor ignored yet.
+    /// One suggestion per corrected word seen often enough, counting every way it was
+    /// misheard, since the model mishears a word differently each time. Neither added nor
+    /// ignored yet. Shows the latest misheard spelling.
     var suggestions: [Correction] {
-        entries.filter { $0.state == .seen && $0.count >= Self.timesBeforeSuggesting }.map(\.correction)
+        var seen: [String: (count: Int, latest: Entry)] = [:]
+        var order: [String] = []
+        for entry in entries where entry.state == .seen {
+            let word = entry.correction.corrected
+            if let current = seen[word] {
+                seen[word] = (current.count + entry.count, entry.lastSeen >= current.latest.lastSeen ? entry : current.latest)
+            } else {
+                seen[word] = (entry.count, entry)
+                order.append(word)
+            }
+        }
+        return order.compactMap { word in
+            guard let group = seen[word], group.count >= Self.timesBeforeSuggesting else { return nil }
+            return group.latest.correction
+        }
     }
 
     /// The corrections the user added, which Orra applies before pasting.
@@ -259,15 +275,18 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         entries.filter { $0.state == .accepted }.map(\.correction)
     }
 
+    /// Decides for every misheard spelling of the corrected word at once.
     mutating func decide(_ correction: Correction, _ state: State) {
-        if let index = entries.firstIndex(where: { $0.correction == correction }) {
+        for index in entries.indices where entries[index].correction.corrected == correction.corrected {
             entries[index].state = state
         }
     }
 
     /// Stops applying an accepted pair and never suggests it again.
     mutating func remove(_ correction: Correction) {
-        decide(correction, .dismissed)
+        if let index = entries.firstIndex(where: { $0.correction == correction }) {
+            entries[index].state = .dismissed
+        }
     }
 
     mutating func removeAll() {

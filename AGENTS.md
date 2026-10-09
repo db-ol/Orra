@@ -59,7 +59,7 @@ trusted once in Xcode. docs/dependencies.md has the details.
 - Quit Orra before turning off or removing its Accessibility access. Revoking access while the
   tap is installed can freeze keyboard and mouse input (Apple Developer Forums thread 844416).
 - Orra reads another app's text only to learn from corrections, which is off until the user
-  turns it on: the field it pasted into, for a minute, never a password field or an app
+  turns it on: the field it pasted into, for 3 minutes and only while that field has the focus, never a password field or an app
   holding secure input. It stores the word pairs only, never the text, and never logs either.
 - Orra goes online only for the speech model download the user starts from the menu or the
   welcome window.

@@ -65,11 +65,12 @@ nonisolated enum FieldReader {
     }
 }
 
-/// Follows the field Orra just pasted into, for up to 60 seconds, and reports the user's
-/// correction of a misheard word. Reads only that field: it stops when another field or
-/// app has the focus, when secure input is on in the app, or when the field cannot be read.
-/// Each paste has its own watch, up to three at a time, so dictating several lines and
-/// then fixing them works. PasteTracker follows where each paste is while other lines
+/// Follows the field Orra just pasted into, for up to 3 minutes, and reports the user's
+/// correction of a misheard word. Reads only that field, and only while its app is in
+/// front without secure input and the field has the focus. Otherwise it waits, so
+/// switching away and coming back to fix a line works. Each paste has its own watch, up to
+/// five at a time, so dictating several lines and then fixing them works. A watch pushed
+/// out by a sixth paste reports what it found. PasteTracker follows where each paste is while other lines
 /// change. It looks for a correction after every change and keeps the latest, so sending a
 /// chat message, which empties the field, does not lose it. Logs states only, never text.
 @MainActor
@@ -94,11 +95,16 @@ final class CorrectionWatcher {
         }
     }
 
-    static let readings = 60
-    static let maximumWatches = 3
+    static let readings = 180
+    static let maximumWatches = 5
+
+    /// Tells a running watch to end early and report what it found.
+    private final class Control {
+        var finish = false
+    }
 
     private let environment: Environment
-    private var watches: [(id: Int, task: Task<Void, Never>)] = []
+    private var watches: [(id: Int, task: Task<Void, Never>, control: Control)] = []
     private var nextID = 0
     private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "learning")
 
@@ -106,13 +112,14 @@ final class CorrectionWatcher {
         self.environment = environment
     }
 
-    /// Starts following a paste. The oldest watch ends when three are running.
+    /// Starts following a paste. The oldest watch ends and reports when five are running.
     func watch(pasted: String, in pid: pid_t, onCorrection: @escaping (Correction) -> Void) {
         if watches.count >= Self.maximumWatches {
-            watches.removeFirst().task.cancel()
+            watches.removeFirst().control.finish = true
         }
         nextID += 1
         let id = nextID
+        let control = Control()
         let environment = environment
         let logger = logger
         let task = Task { @MainActor [weak self] in
@@ -138,18 +145,17 @@ final class CorrectionWatcher {
             var latest = before
             var found: Correction?
             var readings = 0
+            var paused = 0
             for _ in 1...Self.readings {
                 try? await environment.sleep(.seconds(1))
                 guard !Task.isCancelled else { return }
+                guard !control.finish else { break }
+                // Away from the field: wait for the user to come back.
+                guard allowed(), let text = await read() else {
+                    paused += 1
+                    continue
+                }
                 readings += 1
-                guard allowed() else {
-                    logger.notice("Learning: the watch stops, the app is no longer in front or holds secure input")
-                    break
-                }
-                guard let text = await read() else {
-                    logger.notice("Learning: the watch stops, the field lost the focus or cannot be read")
-                    break
-                }
                 if text != latest {
                     latest = text
                     tracker.update(to: text)
@@ -158,11 +164,11 @@ final class CorrectionWatcher {
                     }
                 }
             }
-            logger.notice("Learning: watch ended after \(readings, privacy: .public) readings, correction found: \(found != nil, privacy: .public)")
+            logger.notice("Learning: watch ended after \(readings, privacy: .public) readings and \(paused, privacy: .public) seconds away, correction found: \(found != nil, privacy: .public)")
             guard !Task.isCancelled, let found else { return }
             onCorrection(found)
         }
-        watches.append((id, task))
+        watches.append((id, task, control))
     }
 
     /// Off the main actor, because the keyboard tap runs there.

@@ -134,6 +134,20 @@ struct CorrectionStoreTests {
         #expect(store.suggestions == [pair])
     }
 
+    @Test func differentMishearingsOfOneWordCountTogether() {
+        var store = CorrectionStore()
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let first = Correction(heard: "S J L Omni", corrected: "SGLang-Omni")
+        let second = Correction(heard: "S G Line Omni", corrected: "SGLang-Omni")
+        store.record(first, at: now)
+        #expect(store.suggestions.isEmpty)
+        store.record(second, at: now.addingTimeInterval(60))
+        #expect(store.suggestions == [second])
+        store.decide(second, .accepted)
+        #expect(Set(store.accepted) == [first, second])
+        #expect(Replacements.apply(store.accepted, to: "S J L Omni和S G Line Omni") == "SGLang-Omni和SGLang-Omni")
+    }
+
     @Test func aCountOlderThanAWeekStartsOver() {
         var store = CorrectionStore()
         let start = Date(timeIntervalSince1970: 1_000_000)

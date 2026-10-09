@@ -236,7 +236,7 @@ private struct VocabularySettings: View {
             } header: {
                 Text("Learning")
             } footer: {
-                Text("When this is on, Orra reads the text of the field you dictated into for up to a minute after each paste, never a password field. When you fix a misheard word the same way twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
+                Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word to the same spelling twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
                     .foregroundStyle(.secondary)
             }
         }
