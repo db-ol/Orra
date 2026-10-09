@@ -301,7 +301,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "清除学到的纠正"
+            "value" : "清除学到的修改"
           }
         }
       }
@@ -1223,12 +1223,12 @@
         }
       }
     },
-    "When this is on, Orra reads the field you dictated into for up to 30 seconds after each paste. When you fix a misheard word the same way twice within a week, Orra suggests it here and in its menu. It keeps only the word pairs, on this Mac, and never reads password fields." : {
+    "When this is on, Orra reads the text of the field you dictated into for up to 30 seconds after each paste, never a password field. When you fix a misheard word the same way twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开后，每次粘贴后的 30 秒内，Orra 会读取你听写的那个输入框。同一个听错的词你一周内用同样的方式改了两次，Orra 就会在这里和菜单里建议加入词库。它只保存词对，只存在这台 Mac 上，也从不读取密码框。"
+            "value" : "打开后，每次粘贴后的 30 秒内，Orra 会读取你听写的那个输入框里的文字，从不读取密码框。同一个听错的词你一周内用同样的方式改了两次，Orra 就会建议加入。点“添加”会把这个词放进个人词库，以后听写也会按这个写法输出。Orra 只保存词对，只存在这台 Mac 上。"
           }
         }
       }

@@ -6,22 +6,31 @@ import Testing
 /// real app.
 @MainActor
 final class ScriptedField {
-    var texts: [String]
+    var texts: [String?]
     var frontmost: pid_t? = 42
     var secureInputHolder: pid_t?
+    /// After this many reads, another app comes to the front.
+    var leaveAfter: Int?
+    var opens = true
     private(set) var reads = 0
 
-    init(_ texts: [String]) {
+    init(_ texts: [String?]) {
         self.texts = texts
     }
 
     var environment: CorrectionWatcher.Environment {
         CorrectionWatcher.Environment(
-            read: { [self] _ in
-                defer { reads += 1 }
-                return texts[min(reads, texts.count - 1)]
+            open: { [self] _ in
+                guard opens else { return nil }
+                return { [self] in
+                    defer { reads += 1 }
+                    return texts[min(reads, texts.count - 1)]
+                }
             },
-            frontmost: { [self] in frontmost },
+            frontmost: { [self] in
+                if let leaveAfter, reads >= leaveAfter { return 7 }
+                return frontmost
+            },
             secureInputHolder: { [self] in secureInputHolder },
             sleep: { _ in await Task.yield() }
         )
@@ -34,10 +43,15 @@ struct CorrectionWatcherTests {
         let watcher = CorrectionWatcher(environment: field.environment)
         var found: Correction?
         watcher.watch(pasted: pasted, in: 42) { found = $0 }
-        for _ in 0..<500 where found == nil && field.reads < CorrectionWatcher.readings + 1 {
-            await Task.yield()
+        // Waits until a correction comes, or the reads have stopped for a while, since the
+        // comparison runs off the main actor.
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where found == nil && quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
         }
-        for _ in 0..<50 { await Task.yield() }
         return found
     }
 
@@ -56,6 +70,45 @@ struct CorrectionWatcherTests {
     @Test func secureInputInTheAppEndsTheWatch() async {
         let field = ScriptedField(["我在用克劳德写代码", "我在用Claude写代码"])
         field.secureInputHolder = 42
+        #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
+        #expect(field.reads == 0)
+    }
+
+    @Test func sendingAChatMessageKeepsTheFixMadeBefore() async {
+        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码", ""])
+        #expect(await watch(field, pasted: "我在用克劳德写代码") == Correction(heard: "克劳德", corrected: "Claude"))
+    }
+
+    @Test func leavingDuringTheWatchStopsReading() async {
+        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码"])
+        field.leaveAfter = 2
+        #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
+        #expect(field.reads == 2)
+    }
+
+    @Test func anotherFocusedFieldEndsTheWatch() async {
+        // The reader gives nil once the pasted field no longer has the focus.
+        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", nil, "我在用Claude写代码"])
+        #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
+        #expect(field.reads == 3)
+    }
+
+    @Test func theWatchStopsAfterFourQuietReadings() async {
+        let field = ScriptedField(["你好世界", "你好世界", "你好世界啊"])
+        _ = await watch(field, pasted: "你好世界")
+        // One reading before, a change at the second reading, then four the same.
+        #expect(field.reads == 1 + 2 + CorrectionWatcher.quietReadings)
+    }
+
+    @Test func theWatchEndsAfterThirtyReadings() async {
+        let field = ScriptedField((0...40).map { "你好世界" + String(repeating: "啊", count: $0) })
+        _ = await watch(field, pasted: "你好世界")
+        #expect(field.reads == 1 + CorrectionWatcher.readings)
+    }
+
+    @Test func aFieldThatIsNotPlainTextIsNeverRead() async {
+        let field = ScriptedField(["我在用克劳德写代码"])
+        field.opens = false
         #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
         #expect(field.reads == 0)
     }
@@ -104,6 +157,25 @@ struct CorrectionLearningTests {
         #expect(learning.apply(to: "我在用克劳德") == "我在用Claude")
         learning.removeAll()
         #expect(learning.apply(to: "我在用克劳德") == "我在用克劳德")
+    }
+
+    @Test func turningLearningOffDuringAWatchRecordsNothing() async {
+        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码"])
+        let learning = makeLearning(isOn: true, field: field)
+        learning.pasted("我在用克劳德写代码", in: 42)
+        learning.isOn = false
+        for _ in 0..<300 { await Task.yield() }
+        #expect(learning.store.entries.isEmpty)
+    }
+
+    @Test func aRemovedPairIsNoLongerApplied() {
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]))
+        learning.record(pair)
+        learning.record(pair)
+        learning.accept(pair)
+        learning.remove(pair)
+        #expect(learning.apply(to: "我在用克劳德") == "我在用克劳德")
+        #expect(learning.store.accepted.isEmpty)
     }
 
     @Test func anIgnoredSuggestionStaysAway() {

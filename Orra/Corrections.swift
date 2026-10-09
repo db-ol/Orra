@@ -14,55 +14,94 @@ nonisolated enum CorrectionFinder {
     static let maximumLength = 12
 
     /// The one edit made inside the pasted text, widened to whole words, when it looks like
-    /// fixing a misheard word: both sides present, short, and sounding alike. Nil for no
-    /// edit, an edit outside the pasted text, a deletion or an addition, a rewrite, or
-    /// several edits far apart.
+    /// fixing a misheard word. Nil when the text around the paste changed, for no edit, a
+    /// deletion or an addition, a rewrite, a change of case or word ending, digits, or a
+    /// change that does not sound alike.
     static func correction(pasted: String, before: String, after: String) -> Correction? {
         let old = Array(before)
         let new = Array(after)
-        let pastedCharacters = Array(pasted)
-        guard !pastedCharacters.isEmpty, old != new,
-              let pastedStart = range(of: pastedCharacters, in: old) else { return nil }
-        let pastedEnd = pastedStart + pastedCharacters.count
+        let paste = Array(pasted)
+        guard !paste.isEmpty, let pasteStart = lastRange(of: paste, in: old) else { return nil }
+        // The text around the paste must be unchanged, so the edit is inside the paste.
+        let head = old[..<pasteStart]
+        let tail = old[(pasteStart + paste.count)...]
+        guard new.count >= head.count + tail.count, new.starts(with: head), new.reversed().starts(with: tail.reversed()) else { return nil }
+        var edited = Array(new[head.count..<(new.count - tail.count)])
+        // Punctuation or spaces typed after the pasted text, such as a closing period.
+        while edited.count > paste.count, let last = edited.last, isSeparator(last), paste.last.map({ !isSeparator($0) }) ?? true {
+            edited.removeLast()
+        }
+        guard edited != paste else { return nil }
         var prefix = 0
-        while prefix < old.count, prefix < new.count, old[prefix] == new[prefix] { prefix += 1 }
+        while prefix < paste.count, prefix < edited.count, paste[prefix] == edited[prefix] { prefix += 1 }
         var suffix = 0
-        while suffix < old.count - prefix, suffix < new.count - prefix,
-              old[old.count - 1 - suffix] == new[new.count - 1 - suffix] { suffix += 1 }
-        // The edit, which starts at the same place in both texts.
+        while suffix < paste.count - prefix, suffix < edited.count - prefix,
+              paste[paste.count - 1 - suffix] == edited[edited.count - 1 - suffix] { suffix += 1 }
         var start = prefix
-        var oldEnd = old.count - suffix
-        var newEnd = new.count - suffix
-        // Whole words: an edit that touches a Latin word takes in all of its letters and
-        // digits, on both sides, since the text outside the edit is the same in both.
-        while start > 0, isWordCharacter(old[start - 1]),
-              (start < oldEnd && isWordCharacter(old[start])) || (start < newEnd && isWordCharacter(new[start])) {
+        var oldEnd = paste.count - suffix
+        var newEnd = edited.count - suffix
+        guard start < oldEnd, start < newEnd else { return nil }
+        // A Latin word is taken whole.
+        while start > 0, isLatin(paste[start - 1]),
+              (start < oldEnd && isLatin(paste[start])) || (start < newEnd && isLatin(edited[start])) {
             start -= 1
         }
-        while oldEnd < old.count, isWordCharacter(old[oldEnd]),
-              (oldEnd > start && isWordCharacter(old[oldEnd - 1])) || (newEnd > start && isWordCharacter(new[newEnd - 1])) {
+        while oldEnd < paste.count, isLatin(paste[oldEnd]),
+              (oldEnd > start && isLatin(paste[oldEnd - 1])) || (newEnd > start && isLatin(edited[newEnd - 1])) {
             oldEnd += 1
             newEnd += 1
         }
-        guard start >= pastedStart, oldEnd <= pastedEnd, start < oldEnd, start < newEnd else { return nil }
-        let heard = String(old[start..<oldEnd]).trimmingCharacters(in: .whitespaces)
-        let corrected = String(new[start..<newEnd]).trimmingCharacters(in: .whitespaces)
-        guard !heard.isEmpty, !corrected.isEmpty, heard != corrected,
+        let heard = String(paste[start..<oldEnd]).trimmingCharacters(in: .whitespaces)
+        let corrected = String(edited[start..<newEnd]).trimmingCharacters(in: .whitespaces)
+        guard isWordLike(heard), isWordLike(corrected),
               heard.count <= maximumLength, corrected.count <= maximumLength,
-              // An edit that changes half of what was pasted is a rewrite.
-              heard.count * 2 <= pastedCharacters.count || pastedCharacters.count <= maximumLength,
+              // One changed Chinese character is too little to tell a name from grammar, such
+              // as 的 and 得, and the system cannot split an unknown name into words. Such a
+              // word is left for the user to add by hand.
+              hanCount(heard) != 1, hanCount(corrected) != 1,
+              heard.lowercased() != corrected.lowercased(),
+              !differsOnlyInEnding(heard, corrected),
+              paste.count <= maximumLength || heard.count * 2 <= paste.count,
               SoundAlike.soundsAlike(heard, corrected) else { return nil }
         return Correction(heard: heard, corrected: corrected)
     }
 
-    private static func isWordCharacter(_ character: Character) -> Bool {
-        character.isASCII && (character.isLetter || character.isNumber)
+    private static func isLatin(_ character: Character) -> Bool {
+        character.isASCII && character.isLetter
+    }
+
+    private static func isHan(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { (0x3400...0x9FFF).contains($0.value) || (0xF900...0xFAFF).contains($0.value) }
+    }
+
+    private static func hanCount(_ text: String) -> Int {
+        text.filter(isHan).count
+    }
+
+    private static func isSeparator(_ character: Character) -> Bool {
+        character.isWhitespace || character.isPunctuation || character.isSymbol
+    }
+
+    /// Letters only: no digits, so codes and amounts are never kept, no punctuation, and
+    /// not empty.
+    private static func isWordLike(_ text: String) -> Bool {
+        !text.isEmpty && !text.contains { $0.isNumber || $0.isPunctuation || $0.isSymbol || $0.isNewline }
+    }
+
+    /// cloud and clouds, work and worked: grammar, not a misheard word.
+    private static func differsOnlyInEnding(_ first: String, _ second: String) -> Bool {
+        let a = first.lowercased()
+        let b = second.lowercased()
+        let (short, long) = a.count <= b.count ? (a, b) : (b, a)
+        guard long.hasPrefix(short) else { return false }
+        return ["s", "es", "ed", "d", "ing", "'s", "er", "ly"].contains(String(long.dropFirst(short.count)))
     }
 
     /// Where the pasted text is in the field, the last place if it is there twice.
-    private static func range(of needle: [Character], in haystack: [Character]) -> Int? {
+    private static func lastRange(of needle: [Character], in haystack: [Character]) -> Int? {
         guard needle.count <= haystack.count else { return nil }
-        for start in stride(from: haystack.count - needle.count, through: 0, by: -1) where Array(haystack[start..<start + needle.count]) == needle {
+        for start in stride(from: haystack.count - needle.count, through: 0, by: -1)
+        where haystack[start..<(start + needle.count)].elementsEqual(needle) {
             return start
         }
         return nil
@@ -79,13 +118,16 @@ nonisolated enum SoundAlike {
         return String(plain.lowercased().filter { $0.isLetter || $0.isNumber })
     }
 
-    /// Edit distance over the sounds, at most 40% of the longer one, or 60% when one side
-    /// is Chinese and the other Latin, since pinyin only roughly spells English.
+    /// Within one script: the same first sound, and an edit distance of at most 40% of the
+    /// longer sound, so 明天 and 今天 or Monday and Sunday do not pass. Between Chinese and
+    /// Latin text, such as 克劳德 and Claude, 60% and any first sound, since pinyin only
+    /// roughly spells English.
     static func soundsAlike(_ first: String, _ second: String) -> Bool {
         let a = Array(sound(first))
         let b = Array(sound(second))
-        guard !a.isEmpty, !b.isEmpty else { return false }
+        guard let firstA = a.first, let firstB = b.first else { return false }
         let crossesScripts = first.unicodeScalars.contains { $0.value >= 0x3400 } != second.unicodeScalars.contains { $0.value >= 0x3400 }
+        if !crossesScripts, firstA != firstB { return false }
         let limit = Double(max(a.count, b.count)) * (crossesScripts ? 0.6 : 0.4)
         return Double(distance(a, b)) <= limit
     }
@@ -127,8 +169,10 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
 
     private(set) var entries: [Entry] = []
 
-    /// Counts a correction. A count older than 7 days starts over.
+    /// Counts a correction. A count older than 7 days starts over, and pairs seen once and
+    /// not again within 7 days are forgotten.
     mutating func record(_ correction: Correction, at date: Date) {
+        entries.removeAll { $0.state == .seen && $0.correction != correction && date.timeIntervalSince($0.lastSeen) > Self.window }
         if let index = entries.firstIndex(where: { $0.correction == correction }) {
             if date.timeIntervalSince(entries[index].lastSeen) > Self.window {
                 entries[index].count = 0
@@ -156,13 +200,26 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         }
     }
 
+    /// Stops applying an accepted pair and never suggests it again.
+    mutating func remove(_ correction: Correction) {
+        decide(correction, .dismissed)
+    }
+
     mutating func removeAll() {
         entries = []
     }
 
+    /// The stored pairs. A file that cannot be read is moved aside to corrections.json.bad,
+    /// so accepted pairs are not lost by overwriting it.
     static func load(from url: URL) -> CorrectionStore {
         guard let data = try? Data(contentsOf: url) else { return CorrectionStore() }
-        return (try? JSONDecoder().decode(CorrectionStore.self, from: data)) ?? CorrectionStore()
+        if let store = try? JSONDecoder().decode(CorrectionStore.self, from: data) {
+            return store
+        }
+        let aside = url.appendingPathExtension("bad")
+        try? FileManager.default.removeItem(at: aside)
+        try? FileManager.default.moveItem(at: url, to: aside)
+        return CorrectionStore()
     }
 
     func save(to url: URL) throws {

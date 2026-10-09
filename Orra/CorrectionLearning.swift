@@ -1,50 +1,93 @@
 import AppKit
 import ApplicationServices
 import Observation
+import os
 
-/// Reads the text of the focused field in another app through the Accessibility API.
+/// One text field in another app, as the Accessibility API names it. Accessibility
+/// elements may be used from any thread.
+nonisolated final class FieldHandle: @unchecked Sendable {
+    let element: AXUIElement
+
+    init(_ element: AXUIElement) {
+        self.element = element
+    }
+}
+
+/// Reads the field Orra pasted into, through the Accessibility API. Checks that a field is a
+/// plain text field before asking for its text, so a password field's value is never
+/// requested.
 nonisolated enum FieldReader {
-    /// Longer text is not read, so a huge document is never copied.
+    /// A longer text is not read, so a big document is never copied.
     static let maximumLength = 20_000
 
-    /// The focused field's text, or nil when it cannot be read in time, is a password
-    /// field, or is too long. Off the main actor, because the app answers and may be slow.
+    /// The focused element of the app, when it is a plain text field.
     @concurrent
-    static func text(inApp pid: pid_t) async -> String? {
+    static func focusedTextField(inApp pid: pid_t) async -> FieldHandle? {
+        guard let field = focusedElement(inApp: pid), kind(of: field) == .plainText else { return nil }
+        return FieldHandle(field)
+    }
+
+    /// The field's text, while it is still the focused element of the app and a plain text
+    /// field, and no longer than `maximumLength`. Nil otherwise.
+    @concurrent
+    static func text(of field: FieldHandle, inApp pid: pid_t) async -> String? {
+        guard let focused = focusedElement(inApp: pid), CFEqual(focused, field.element),
+              kind(of: field.element) == .plainText else { return nil }
+        var count: CFTypeRef?
+        if AXUIElementCopyAttributeValue(field.element, kAXNumberOfCharactersAttribute as CFString, &count) == .success,
+           let number = count as? Int, number > maximumLength {
+            return nil
+        }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(field.element, kAXValueAttribute as CFString, &value) == .success,
+              let text = value as? String, text.count <= maximumLength else { return nil }
+        return text
+    }
+
+    private static func focusedElement(inApp pid: pid_t) -> AXUIElement? {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, FocusedField.timeout)
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
               let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
         let field = focused as! AXUIElement
+        // A timeout applies only to the element it was set on.
         AXUIElementSetMessagingTimeout(field, FocusedField.timeout)
+        return field
+    }
+
+    private static func kind(of field: AXUIElement) -> FocusedField.Kind {
         var values: CFArray?
-        let attributes = [kAXRoleAttribute, kAXSubroleAttribute, kAXValueAttribute] as CFArray
+        let attributes = [kAXRoleAttribute, kAXSubroleAttribute] as CFArray
         guard AXUIElementCopyMultipleAttributeValues(field, attributes, AXCopyMultipleAttributeOptions(), &values) == .success,
-              let read = values as? [Any], read.count == 3,
-              FocusedField.kind(role: read[0] as? String, subrole: read[1] as? String) == .plainText,
-              let text = read[2] as? String, text.count <= maximumLength else { return nil }
-        return text
+              let read = values as? [Any], read.count == 2 else { return .unknown }
+        return FocusedField.kind(role: read[0] as? String, subrole: read[1] as? String)
     }
 }
 
 /// Follows the field Orra just pasted into, for up to 30 seconds, and reports the user's
-/// correction of a misheard word. Stops when the user leaves the app, when secure input is
-/// on in it, when the field cannot be read, or 4 seconds after the last change.
+/// correction of a misheard word. Reads only that field: it stops when another field or
+/// app gets the focus, when secure input is on in the app, when the field cannot be read,
+/// or 4 seconds after the last change. It looks for a correction after every change and
+/// keeps the latest, so sending a chat message, which empties the field, does not lose it.
 @MainActor
 final class CorrectionWatcher {
     struct Environment {
-        var read: @MainActor (pid_t) async -> String?
+        /// Opens the focused text field of the app, giving a function that reads it.
+        var open: @MainActor (pid_t) async -> (@MainActor () async -> String?)?
         var frontmost: @MainActor () -> pid_t?
         var secureInputHolder: @MainActor () -> pid_t?
         var sleep: @MainActor (Duration) async throws -> Void
 
         static func live() -> Environment {
             Environment(
-            read: { pid in await FieldReader.text(inApp: pid) },
-            frontmost: { NSWorkspace.shared.frontmostApplication?.processIdentifier },
-            secureInputHolder: { SecureInput.holder() },
-            sleep: { try await Task.sleep(for: $0) }
+                open: { pid in
+                    guard let field = await FieldReader.focusedTextField(inApp: pid) else { return nil }
+                    return { await FieldReader.text(of: field, inApp: pid) }
+                },
+                frontmost: { NSWorkspace.shared.frontmostApplication?.processIdentifier },
+                secureInputHolder: { SecureInput.holder() },
+                sleep: { try await Task.sleep(for: $0) }
             )
         }
     }
@@ -64,29 +107,39 @@ final class CorrectionWatcher {
         task?.cancel()
         let environment = environment
         task = Task { @MainActor in
-            @MainActor func readable() async -> String? {
-                guard environment.frontmost() == pid, environment.secureInputHolder() != pid else { return nil }
-                return await environment.read(pid)
+            @MainActor func allowed() -> Bool {
+                environment.frontmost() == pid && environment.secureInputHolder() != pid
             }
             // The paste lands a moment after Command V.
             try? await environment.sleep(.milliseconds(900))
-            guard !Task.isCancelled, let before = await readable(), before.contains(pasted) else { return }
+            guard !Task.isCancelled, allowed(), let read = await environment.open(pid),
+                  let before = await read(), before.contains(pasted) else { return }
             var latest = before
+            var found: Correction?
             var lastChange: Int?
             for reading in 1...Self.readings {
                 try? await environment.sleep(.seconds(1))
                 guard !Task.isCancelled else { return }
-                guard let text = await readable() else { break }
+                guard allowed(), let text = await read() else { break }
                 if text != latest {
                     latest = text
                     lastChange = reading
+                    if let correction = await Self.find(pasted: pasted, before: before, after: text) {
+                        found = correction
+                    }
                 } else if let lastChange, reading - lastChange >= Self.quietReadings {
                     break
                 }
             }
-            guard !Task.isCancelled, let correction = CorrectionFinder.correction(pasted: pasted, before: before, after: latest) else { return }
-            onCorrection(correction)
+            guard !Task.isCancelled, let found else { return }
+            onCorrection(found)
         }
+    }
+
+    /// Off the main actor, because the keyboard tap runs there.
+    @concurrent
+    private static func find(pasted: String, before: String, after: String) async -> Correction? {
+        CorrectionFinder.correction(pasted: pasted, before: before, after: after)
     }
 
     func stop() {
@@ -142,7 +195,13 @@ final class CorrectionLearning {
             store: CorrectionStore.load(from: url),
             watcher: CorrectionWatcher(),
             saveSetting: { UserDefaults.standard.set($0, forKey: settingKey) },
-            saveStore: { try? $0.save(to: url) },
+            saveStore: { store in
+                do {
+                    try store.save(to: url)
+                } catch {
+                    Logger(subsystem: "io.github.db-ol.Orra", category: "learning").error("Could not save the learned corrections")
+                }
+            },
             addToVocabulary: addToVocabulary
         )
     }
@@ -172,6 +231,12 @@ final class CorrectionLearning {
         store.decide(correction, .accepted)
         saveStore(store)
         addToVocabulary(correction.corrected)
+    }
+
+    /// Stops applying an accepted pair.
+    func remove(_ correction: Correction) {
+        store.remove(correction)
+        saveStore(store)
     }
 
     func dismiss(_ correction: Correction) {

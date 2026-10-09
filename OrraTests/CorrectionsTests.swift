@@ -7,9 +7,33 @@ struct CorrectionFinderTests {
         CorrectionFinder.correction(pasted: pasted, before: before, after: after)
     }
 
-    @Test func aMisheardChineseWordIsFound() {
-        let pasted = "我用通一千问写代码"
-        #expect(find(pasted, "备注：" + pasted, "备注：我用通义千问写代码") == Correction(heard: "一", corrected: "义"))
+    @Test func aMisheardChineseNameIsFound() {
+        let pasted = "我约了迪力热吧见面"
+        #expect(find(pasted, "备注：" + pasted, "备注：我约了迪丽热巴见面") == Correction(heard: "力热吧", corrected: "丽热巴"))
+    }
+
+    @Test func oneChangedChineseCharacterIsLeftForTheUser() {
+        #expect(find("我用通一千问写代码", "我用通一千问写代码", "我用通义千问写代码") == nil)
+    }
+
+    @Test func oneChineseCharacterIsGrammarNotAName() {
+        #expect(find("我觉得他的很好", "我觉得他的很好", "我觉得他得很好") == nil)
+    }
+
+    @Test func punctuationTypedAfterTheFixIsLeftOut() {
+        #expect(find("use cloud", "use cloud", "use Claude.") == Correction(heard: "cloud", corrected: "Claude"))
+        #expect(find("我在用克劳德", "我在用克劳德", "我在用Claude。") == Correction(heard: "克劳德", corrected: "Claude"))
+    }
+
+    @Test func textTypedAroundThePasteIsNotPartOfIt() {
+        #expect(find("open cloud", "open cloud", "open Claude and then more words") == nil)
+    }
+
+    @Test func caseEndingsAndDigitsAreNotCorrections() {
+        #expect(find("i like apple", "i like apple", "i like Apple") == nil)
+        #expect(find("the cloud is here", "the cloud is here", "the clouds is here") == nil)
+        #expect(find("code 4821 now", "code 4821 now", "code 4812 now") == nil)
+        #expect(find("in 2025 we", "in 2025 we", "in 2026 we") == nil)
     }
 
     @Test func aMisheardNameAcrossScriptsIsFound() {
@@ -23,6 +47,8 @@ struct CorrectionFinderTests {
     @Test func aChangeOfMeaningIsNotACorrection() {
         #expect(find("我明天去北京", "我明天去北京", "我后天去北京") == nil)
         #expect(find("send it on Monday", "send it on Monday", "send it on Friday") == nil)
+        #expect(find("我明天去北京", "我明天去北京", "我今天去北京") == nil)
+        #expect(find("send it on Monday", "send it on Monday", "send it on Sunday") == nil)
     }
 
     @Test func deletionsAdditionsAndEditsOutsideThePasteAreIgnored() {
@@ -49,6 +75,8 @@ struct SoundAlikeTests {
         #expect(!SoundAlike.soundsAlike("明天", "后天"))
         #expect(SoundAlike.soundsAlike("cloud", "Claude"))
         #expect(!SoundAlike.soundsAlike("Monday", "Friday"))
+        #expect(!SoundAlike.soundsAlike("Monday", "Sunday"))
+        #expect(!SoundAlike.soundsAlike("明天", "今天"))
     }
 }
 
@@ -85,6 +113,24 @@ struct CorrectionStoreTests {
         store.record(pair, at: now)
         #expect(store.suggestions.isEmpty)
         #expect(store.accepted.isEmpty)
+    }
+
+    @Test func pairsSeenOnceLongAgoAreForgotten() {
+        var store = CorrectionStore()
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        store.record(pair, at: start)
+        store.record(Correction(heard: "cloud", corrected: "Claude"), at: start.addingTimeInterval(8 * day))
+        #expect(store.entries.map(\.correction) == [Correction(heard: "cloud", corrected: "Claude")])
+    }
+
+    @Test func aDamagedFileIsKeptAside() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("io.github.db-ol.OrraTests.corrections-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent("corrections.json")
+        try Data("not json".utf8).write(to: url)
+        #expect(CorrectionStore.load(from: url) == CorrectionStore())
+        #expect(FileManager.default.fileExists(atPath: url.appendingPathExtension("bad").path))
     }
 
     @Test func theStoreRoundTripsThroughItsFile() throws {
