@@ -136,7 +136,7 @@ private struct LevelMeterBars: View {
 }
 
 /// The dark, blurred background of a heads up display, as NSVisualEffectView draws it.
-private struct HUDBackground: NSViewRepresentable {
+struct HUDBackground: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = .hudWindow
@@ -148,7 +148,7 @@ private struct HUDBackground: NSViewRepresentable {
     func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
-private extension View {
+extension View {
     func indicatorStyle() -> some View {
         let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
         return font(.callout)

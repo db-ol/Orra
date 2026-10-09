@@ -129,6 +129,16 @@
         }
       }
     },
+    "Added “%@” to Vocabulary" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已把“%@”加入个人词库"
+          }
+        }
+      }
+    },
     "Allow Accessibility" : {
       "localizations" : {
         "zh-Hans" : {
@@ -215,6 +225,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请在“麦克风”中选择“系统默认”，然后在“声音”设置中选择 %@。"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
           }
         }
       }
@@ -331,6 +351,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "授予辅助功能权限…"
+          }
+        }
+      }
+    },
+    "Heard as “%@”" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原来听成了“%@”"
           }
         }
       }
@@ -1149,6 +1179,16 @@
         }
       }
     },
+    "Undo" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销"
+          }
+        }
+      }
+    },
     "Version %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1179,12 +1219,12 @@
         }
       }
     },
-    "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word to the same spelling twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu." : {
+    "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word to the same spelling twice within a week, Orra adds it to your vocabulary, writes it that way in later dictations, and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开后，每次粘贴后的 3 分钟内，只要你还在那个输入框里，Orra 就会读取它的文字，从不读取密码框。一周内你把听错的词改成同一个写法两次，Orra 就会建议加入。点“添加”会把这个词放进个人词库，以后听写也会按这个写法输出。Orra 只保存词对，只存在这台 Mac 上。它只在 macOS 能读取文字的 App 里生效，比如备忘录、邮件和 Safari，部分编辑器和终端不行。在这些 App 里，请拷贝正确的词，再从 Orra 菜单里添加。"
+            "value" : "打开后，每次粘贴后的 3 分钟内，只要你还在那个输入框里，Orra 就会读取它的文字，从不读取密码框。一周内你把听错的词改成同一个写法两次，Orra 就会把它加入个人词库，以后听写也会按这个写法输出，并弹出提示，你可以撤销。Orra 只保存词对，只存在这台 Mac 上。它只在 macOS 能读取文字的 App 里生效，比如备忘录、邮件和 Safari，部分编辑器和终端不行。在这些 App 里，请拷贝正确的词，再从 Orra 菜单里添加。"
           }
         }
       }

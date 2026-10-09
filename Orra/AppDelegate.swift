@@ -26,8 +26,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isDictating: { [pushToTalk] in pushToTalk.state != .idle },
         vocabulary: { [pushToTalk] in pushToTalk.vocabulary }
     )
-    lazy var learning = CorrectionLearning.live { [pushToTalk] word in
-        pushToTalk.setVocabulary(Vocabulary.adding(word, to: pushToTalk.vocabulary))
+    lazy var learning = CorrectionLearning.live(
+        addToVocabulary: { [pushToTalk] word in
+            let updated = Vocabulary.adding(word, to: pushToTalk.vocabulary)
+            guard updated != pushToTalk.vocabulary else { return false }
+            pushToTalk.setVocabulary(updated)
+            return true
+        },
+        removeFromVocabulary: { [pushToTalk] word in
+            pushToTalk.setVocabulary(Vocabulary.removing(word, from: pushToTalk.vocabulary))
+        }
+    )
+    lazy var learnedNotice = LearnedNoticePanel(notice: LearnedNotice()) { [learning] learned in
+        learning.undo(learned)
     }
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
@@ -60,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         pushToTalk.rewrite = { [learning] text in learning.apply(to: text) }
         pushToTalk.onPasted = { [learning] text, app in learning.pasted(text, in: app) }
+        learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         pushToTalk.start()
         openAtLogin.refreshWhenMenusOpen()
         audioInputs.refreshWhenMenusOpen()

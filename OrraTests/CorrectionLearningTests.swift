@@ -144,6 +144,27 @@ struct CorrectionWatcherTests {
         #expect(field.reads == 0)
     }
 
+    @Test func aFixIsReportedOnceSoonAfterTheFieldIsQuiet() async {
+        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码"])
+        let watcher = CorrectionWatcher(environment: field.environment)
+        var found: [Correction] = []
+        var readsWhenFound: Int?
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) {
+            found.append($0)
+            readsWhenFound = readsWhenFound ?? field.reads
+        }
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        #expect(found == [Correction(heard: "克劳德", corrected: "Claude")])
+        // The fix is the third read, reported after three quiet readings, not after 180.
+        #expect(readsWhenFound == 3 + CorrectionWatcher.quietReadings)
+    }
+
     @Test func aFieldWithoutThePastedTextIsLeftAlone() async {
         let field = ScriptedField(["别的内容", "别的内容改了"])
         #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
@@ -155,15 +176,24 @@ struct CorrectionWatcherTests {
 struct CorrectionLearningTests {
     private let pair = Correction(heard: "克劳德", corrected: "Claude")
 
-    private func makeLearning(isOn: Bool, field: ScriptedField, added: @escaping (String) -> Void = { _ in }) -> CorrectionLearning {
+    private func makeLearning(isOn: Bool, field: ScriptedField, vocabulary: VocabularyBox = VocabularyBox()) -> CorrectionLearning {
         CorrectionLearning(
             isOn: isOn,
             store: CorrectionStore(),
             watcher: CorrectionWatcher(environment: field.environment),
             saveSetting: { _ in },
             saveStore: { _ in },
-            addToVocabulary: added
+            addToVocabulary: { word in
+                guard !vocabulary.words.contains(word) else { return false }
+                vocabulary.words.append(word)
+                return true
+            },
+            removeFromVocabulary: { word in vocabulary.words.removeAll { $0 == word } }
         )
+    }
+
+    final class VocabularyBox {
+        var words: [String] = []
     }
 
     @Test func whileOffNothingIsRead() async {
@@ -175,15 +205,17 @@ struct CorrectionLearningTests {
         #expect(learning.store.entries.isEmpty)
     }
 
-    @Test func anAcceptedSuggestionJoinsTheVocabularyAndIsApplied() {
-        var added: [String] = []
-        let learning = makeLearning(isOn: true, field: ScriptedField([""])) { added.append($0) }
+    @Test func theSecondFixAddsTheWordOnItsOwnAndTellsTheUser() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
         learning.record(pair)
-        #expect(learning.suggestions.isEmpty)
+        #expect(learned.isEmpty)
+        #expect(vocabulary.words.isEmpty)
         learning.record(pair)
-        #expect(learning.suggestions == [pair])
-        learning.accept(pair)
-        #expect(added == ["Claude"])
+        #expect(learned == [CorrectionLearning.Learned(correction: pair, addedToVocabulary: true)])
+        #expect(vocabulary.words == ["Claude"])
         #expect(learning.suggestions.isEmpty)
         #expect(learning.apply(to: "我在用克劳德") == "我在用Claude")
         learning.removeAll()
@@ -209,13 +241,32 @@ struct CorrectionLearningTests {
         #expect(learning.store.accepted.isEmpty)
     }
 
-    @Test func anIgnoredSuggestionStaysAway() {
-        let learning = makeLearning(isOn: true, field: ScriptedField([""]))
+    @Test func undoTakesTheWordOutAndItStaysAway() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
         learning.record(pair)
         learning.record(pair)
-        learning.dismiss(pair)
+        learning.undo(learned[0])
+        #expect(vocabulary.words.isEmpty)
         learning.record(pair)
+        learning.record(pair)
+        #expect(learned.count == 1)
         #expect(learning.suggestions.isEmpty)
         #expect(learning.apply(to: "克劳德") == "克劳德")
+    }
+
+    @Test func undoKeepsAWordTheUserHadAddedBefore() {
+        let vocabulary = VocabularyBox()
+        vocabulary.words = ["Claude"]
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.record(pair)
+        learning.record(pair)
+        #expect(learned == [CorrectionLearning.Learned(correction: pair, addedToVocabulary: false)])
+        learning.undo(learned[0])
+        #expect(vocabulary.words == ["Claude"])
     }
 }

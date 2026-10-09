@@ -236,7 +236,7 @@ private struct VocabularySettings: View {
             } header: {
                 Text("Learning")
             } footer: {
-                Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word to the same spelling twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
+                Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word to the same spelling twice within a week, Orra adds it to your vocabulary, writes it that way in later dictations, and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -365,6 +365,6 @@ struct TalkKeyToggles: View {
         feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in }),
         openAtLogin: .live(),
         models: .live(),
-        learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in })
+        learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in false }, removeFromVocabulary: { _ in })
     )
 }

@@ -71,8 +71,9 @@ nonisolated enum FieldReader {
 /// switching away and coming back to fix a line works. Each paste has its own watch, up to
 /// five at a time, so dictating several lines and then fixing them works. A watch pushed
 /// out by a sixth paste reports what it found. PasteTracker follows where each paste is while other lines
-/// change. It looks for a correction after every change and keeps the latest, so sending a
-/// chat message, which empties the field, does not lose it. Logs states only, never text.
+/// change. It looks for a correction after every change and reports it once the field has
+/// not changed for 3 readings, so the user hears back soon after the fix. A later, different
+/// correction is reported too. Logs states only, never text.
 @MainActor
 final class CorrectionWatcher {
     struct Environment {
@@ -97,6 +98,9 @@ final class CorrectionWatcher {
 
     static let readings = 180
     static let maximumWatches = 5
+    /// Readings without a change before a correction is reported, so a word still being
+    /// typed is not taken.
+    static let quietReadings = 3
 
     /// Tells a running watch to end early and report what it found.
     private final class Control {
@@ -144,6 +148,8 @@ final class CorrectionWatcher {
             }
             var latest = before
             var found: Correction?
+            var reported: Correction?
+            var quiet = 0
             var readings = 0
             var paused = 0
             for _ in 1...Self.readings {
@@ -158,14 +164,22 @@ final class CorrectionWatcher {
                 readings += 1
                 if text != latest {
                     latest = text
+                    quiet = 0
                     tracker.update(to: text)
                     if let correction = await Self.find(pasted: pasted, edited: tracker.pasteNow) {
                         found = correction
                     }
+                } else {
+                    quiet += 1
+                }
+                guard !Task.isCancelled else { return }
+                if let found, found != reported, quiet >= Self.quietReadings {
+                    reported = found
+                    onCorrection(found)
                 }
             }
             logger.notice("Learning: watch ended after \(readings, privacy: .public) readings and \(paused, privacy: .public) seconds away, correction found: \(found != nil, privacy: .public)")
-            guard !Task.isCancelled, let found else { return }
+            guard !Task.isCancelled, let found, found != reported else { return }
             onCorrection(found)
         }
         watches.append((id, task, control))
@@ -186,8 +200,9 @@ final class CorrectionWatcher {
 }
 
 /// Learning from the user's corrections: off until the user turns it on. Keeps the word
-/// pairs it saw, suggests one after it was seen twice within 7 days, adds an accepted one
-/// to the vocabulary, and applies accepted ones before each paste.
+/// pairs it saw. When a word was corrected to the same spelling twice within 7 days, adds
+/// it to the vocabulary on its own and tells `onLearned`, which shows a notice with Undo.
+/// Applies accepted pairs before each paste.
 @Observable
 final class CorrectionLearning {
     var isOn: Bool {
@@ -199,10 +214,22 @@ final class CorrectionLearning {
     }
     private(set) var store: CorrectionStore
 
+    /// A word Orra learned on its own, and whether that put it in the vocabulary, so Undo
+    /// takes out only what learning added.
+    struct Learned: Equatable {
+        let correction: Correction
+        let addedToVocabulary: Bool
+    }
+
+    /// Called when a word was learned on its own.
+    @ObservationIgnored var onLearned: ((Learned) -> Void)?
+
     @ObservationIgnored private let watcher: CorrectionWatcher
     @ObservationIgnored private let saveSetting: (Bool) -> Void
     @ObservationIgnored private let saveStore: (CorrectionStore) -> Void
-    @ObservationIgnored private let addToVocabulary: (String) -> Void
+    /// Adds a word, and says whether it was not in the vocabulary yet.
+    @ObservationIgnored private let addToVocabulary: (String) -> Bool
+    @ObservationIgnored private let removeFromVocabulary: (String) -> Void
     @ObservationIgnored private let now: () -> Date
 
     init(
@@ -211,7 +238,8 @@ final class CorrectionLearning {
         watcher: CorrectionWatcher,
         saveSetting: @escaping (Bool) -> Void,
         saveStore: @escaping (CorrectionStore) -> Void,
-        addToVocabulary: @escaping (String) -> Void,
+        addToVocabulary: @escaping (String) -> Bool,
+        removeFromVocabulary: @escaping (String) -> Void,
         now: @escaping () -> Date = { Date() }
     ) {
         self.isOn = isOn
@@ -220,12 +248,16 @@ final class CorrectionLearning {
         self.saveSetting = saveSetting
         self.saveStore = saveStore
         self.addToVocabulary = addToVocabulary
+        self.removeFromVocabulary = removeFromVocabulary
         self.now = now
     }
 
     /// The app's learning, with the setting in UserDefaults and the pairs in
     /// ~/Library/Application Support/io.github.db-ol.Orra/corrections.json.
-    static func live(addToVocabulary: @escaping (String) -> Void) -> CorrectionLearning {
+    static func live(
+        addToVocabulary: @escaping (String) -> Bool,
+        removeFromVocabulary: @escaping (String) -> Void
+    ) -> CorrectionLearning {
         let url = storeURL
         return CorrectionLearning(
             isOn: UserDefaults.standard.bool(forKey: settingKey),
@@ -239,7 +271,8 @@ final class CorrectionLearning {
                     Logger(subsystem: "io.github.db-ol.Orra", category: "learning").error("Could not save the learned corrections")
                 }
             },
-            addToVocabulary: addToVocabulary
+            addToVocabulary: addToVocabulary,
+            removeFromVocabulary: removeFromVocabulary
         )
     }
 
@@ -259,15 +292,32 @@ final class CorrectionLearning {
         }
     }
 
+    /// Keeps the pair, and learns the word once it was corrected to it often enough.
     func record(_ correction: Correction) {
         store.record(correction, at: now())
+        guard store.suggestions.contains(where: { $0.corrected == correction.corrected }) else {
+            saveStore(store)
+            return
+        }
+        store.decide(correction, .accepted)
         saveStore(store)
+        onLearned?(Learned(correction: correction, addedToVocabulary: addToVocabulary(correction.corrected)))
     }
 
     func accept(_ correction: Correction) {
         store.decide(correction, .accepted)
         saveStore(store)
-        addToVocabulary(correction.corrected)
+        _ = addToVocabulary(correction.corrected)
+    }
+
+    /// Takes back a word learned on its own: never suggests or applies it again, and takes
+    /// it out of the vocabulary when learning put it there.
+    func undo(_ learned: Learned) {
+        store.decide(learned.correction, .dismissed)
+        saveStore(store)
+        if learned.addedToVocabulary {
+            removeFromVocabulary(learned.correction.corrected)
+        }
     }
 
     /// Stops applying an accepted pair.
