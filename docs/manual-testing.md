@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 392 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 397 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -542,6 +542,8 @@ corrections under Vocabulary in Settings first:
 - [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
   Chinese character such as 的 to 得, deleting words, or rewriting the sentence suggests
   nothing. Fixing a word and then typing a period learns the word without the period.
+- [ ] Dictate three lines with the same misheard words, then fix the first two within a
+  minute: the next dictation's menu suggests adding the word.
 - [ ] In Messages or WeChat, fix a misheard name and press Return to send: the fix still
   counts. Click into another field during the watch: nothing is read from it.
 - [ ] An added pair shows under Learning with Remove, and after Remove the misheard

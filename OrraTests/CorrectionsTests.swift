@@ -12,6 +12,11 @@ struct CorrectionFinderTests {
         #expect(find(pasted, "备注：" + pasted, "备注：我约了迪丽热巴见面") == Correction(heard: "力热吧", corrected: "丽热巴"))
     }
 
+    @Test func chineseNumeralsAreLettersNotDigits() {
+        #expect(find("同意千万。", "同意千万。", "通义千问。") == Correction(heard: "同意千万", corrected: "通义千问"))
+        #expect(find("code ４８２１ now", "code ４８２１ now", "code ４８１２ now") == nil)
+    }
+
     @Test func oneChangedChineseCharacterIsLeftForTheUser() {
         #expect(find("我用通一千问写代码", "我用通一千问写代码", "我用通义千问写代码") == nil)
     }
@@ -64,6 +69,36 @@ struct CorrectionFinderTests {
 
     @Test func textThatIsNoLongerThereFindsNothing() {
         #expect(find("你好", "", "你好") == nil)
+    }
+}
+
+struct PasteTrackerTests {
+    private func tracker(_ pasted: String, _ field: String) -> PasteTracker {
+        PasteTracker(pasted: pasted, field: field)!
+    }
+
+    @Test func anEditBeforeThePasteMovesIt() {
+        var paste = tracker("同意千万。", "第一行\n同意千万。")
+        paste.update(to: "第一行改过了\n同意千万。")
+        #expect(paste.pasteNow == "同意千万。")
+        paste.update(to: "\n同意千万。")
+        #expect(paste.pasteNow == "同意千万。")
+    }
+
+    @Test func anEditInsideThePasteChangesIt() {
+        var paste = tracker("同意千万。", "第一行\n同意千万。\n第三行")
+        paste.update(to: "第一行\n通义千问。\n第三行")
+        #expect(paste.pasteNow == "通义千问。")
+    }
+
+    @Test func textTypedAfterThePasteIsNotPartOfIt() {
+        var paste = tracker("同意千万。", "同意千万。")
+        paste.update(to: "同意千万。再打几个字")
+        #expect(paste.pasteNow == "同意千万。")
+    }
+
+    @Test func aFieldWithoutThePasteHasNoTracker() {
+        #expect(PasteTracker(pasted: "你好", field: "再见") == nil)
     }
 }
 

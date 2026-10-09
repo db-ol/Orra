@@ -13,21 +13,24 @@ nonisolated enum CorrectionFinder {
     /// The longest a heard or corrected word may be, in characters.
     static let maximumLength = 12
 
-    /// The one edit made inside the pasted text, widened to whole words, when it looks like
-    /// fixing a misheard word. Nil when the text around the paste changed, for no edit, a
-    /// deletion or an addition, a rewrite, a change of case or word ending, digits, or a
-    /// change that does not sound alike.
+    /// The correction in a field that changed from `before` to `after` in one step, as
+    /// tests and simple callers see it. The watcher follows the paste over many readings
+    /// with PasteTracker instead.
     static func correction(pasted: String, before: String, after: String) -> Correction? {
-        let old = Array(before)
-        let new = Array(after)
+        guard var tracker = PasteTracker(pasted: pasted, field: before) else { return nil }
+        tracker.update(to: after)
+        return correction(pasted: pasted, edited: tracker.pasteNow)
+    }
+
+    /// The one edit that turned the pasted text into `edited`, widened to whole words,
+    /// when it looks like fixing a misheard word. Nil for no edit, a deletion or an
+    /// addition, a rewrite, a change of case or word ending, digits, one changed Chinese
+    /// character, or a change that does not sound alike.
+    static func correction(pasted: String, edited editedText: String) -> Correction? {
         let paste = Array(pasted)
-        guard !paste.isEmpty, let pasteStart = lastRange(of: paste, in: old) else { return nil }
-        // The text around the paste must be unchanged, so the edit is inside the paste.
-        let head = old[..<pasteStart]
-        let tail = old[(pasteStart + paste.count)...]
-        guard new.count >= head.count + tail.count, new.starts(with: head), new.reversed().starts(with: tail.reversed()) else { return nil }
-        var edited = Array(new[head.count..<(new.count - tail.count)])
-        // Punctuation or spaces typed after the pasted text, such as a closing period.
+        var edited = Array(editedText)
+        guard !paste.isEmpty else { return nil }
+        // Punctuation or spaces typed right after the paste, such as a closing period.
         while edited.count > paste.count, let last = edited.last, isSeparator(last), paste.last.map({ !isSeparator($0) }) ?? true {
             edited.removeLast()
         }
@@ -85,7 +88,11 @@ nonisolated enum CorrectionFinder {
     /// Letters only: no digits, so codes and amounts are never kept, no punctuation, and
     /// not empty.
     private static func isWordLike(_ text: String) -> Bool {
-        !text.isEmpty && !text.contains { $0.isNumber || $0.isPunctuation || $0.isSymbol || $0.isNewline }
+        // Decimal digits only: Chinese numerals such as 千 and 万 are part of words.
+        !text.isEmpty && !text.contains { character in
+            character.isPunctuation || character.isSymbol || character.isNewline
+                || character.unicodeScalars.contains { $0.properties.numericType == .decimal }
+        }
     }
 
     /// cloud and clouds, work and worked: grammar, not a misheard word.
@@ -97,14 +104,55 @@ nonisolated enum CorrectionFinder {
         return ["s", "es", "ed", "d", "ing", "'s", "er", "ly"].contains(String(long.dropFirst(short.count)))
     }
 
-    /// Where the pasted text is in the field, the last place if it is there twice.
-    private static func lastRange(of needle: [Character], in haystack: [Character]) -> Int? {
-        guard needle.count <= haystack.count else { return nil }
-        for start in stride(from: haystack.count - needle.count, through: 0, by: -1)
-        where haystack[start..<(start + needle.count)].elementsEqual(needle) {
-            return start
+}
+
+/// Follows where the pasted text is in a field while the user edits it. Each reading is
+/// compared with the one before: an edit before the paste moves it, an edit after it leaves
+/// it alone, and an edit inside it changes the pasted text. So typing or fixing other lines
+/// in the same field does not lose the paste.
+nonisolated struct PasteTracker: Equatable, Sendable {
+    private(set) var field: [Character]
+    private(set) var range: Range<Int>
+
+    /// Nil when the pasted text is not in the field.
+    init?(pasted: String, field text: String) {
+        let paste = Array(pasted)
+        let characters = Array(text)
+        guard !paste.isEmpty, paste.count <= characters.count else { return nil }
+        guard let start = stride(from: characters.count - paste.count, through: 0, by: -1)
+            .first(where: { characters[$0..<($0 + paste.count)].elementsEqual(paste) }) else { return nil }
+        field = characters
+        range = start..<(start + paste.count)
+    }
+
+    /// The pasted text as it is now.
+    var pasteNow: String {
+        String(field[range])
+    }
+
+    mutating func update(to text: String) {
+        let new = Array(text)
+        guard new != field else { return }
+        var prefix = 0
+        while prefix < field.count, prefix < new.count, field[prefix] == new[prefix] { prefix += 1 }
+        var suffix = 0
+        while suffix < field.count - prefix, suffix < new.count - prefix,
+              field[field.count - 1 - suffix] == new[new.count - 1 - suffix] { suffix += 1 }
+        let oldEnd = field.count - suffix
+        let newEnd = new.count - suffix
+        let shift = newEnd - oldEnd
+        if oldEnd <= range.lowerBound {
+            // Before the paste.
+            range = (range.lowerBound + shift)..<(range.upperBound + shift)
+        } else if prefix >= range.upperBound {
+            // After the paste, a closing period typed right after it included.
+        } else {
+            // Inside the paste, or across its edge.
+            let lower = min(range.lowerBound, prefix)
+            let upper = max(range.upperBound + shift, newEnd)
+            range = lower..<max(lower, min(upper, new.count))
         }
-        return nil
+        field = new
     }
 }
 

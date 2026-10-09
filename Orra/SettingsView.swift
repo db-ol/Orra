@@ -236,7 +236,7 @@ private struct VocabularySettings: View {
             } header: {
                 Text("Learning")
             } footer: {
-                Text("When this is on, Orra reads the text of the field you dictated into for up to 30 seconds after each paste, never a password field. When you fix a misheard word the same way twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac.")
+                Text("When this is on, Orra reads the text of the field you dictated into for up to a minute after each paste, never a password field. When you fix a misheard word the same way twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac.")
                     .foregroundStyle(.secondary)
             }
         }

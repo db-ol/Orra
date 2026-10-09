@@ -93,14 +93,18 @@ struct CorrectionWatcherTests {
         #expect(field.reads == 3)
     }
 
-    @Test func theWatchStopsAfterFourQuietReadings() async {
-        let field = ScriptedField(["你好世界", "你好世界", "你好世界啊"])
-        _ = await watch(field, pasted: "你好世界")
-        // One reading before, a change at the second reading, then four the same.
-        #expect(field.reads == 1 + 2 + CorrectionWatcher.quietReadings)
+    @Test func fixingAnEarlierLineAfterMoreDictationsIsLearned() async {
+        // Three dictations of the same words, then the first line is fixed.
+        let field = ScriptedField([
+            "同意千万。",
+            "同意千万。\n同意千万。",
+            "同意千万。\n同意千万。\n同意千万。",
+            "通义千问。\n同意千万。\n同意千万。",
+        ])
+        #expect(await watch(field, pasted: "同意千万。") == Correction(heard: "同意千万", corrected: "通义千问"))
     }
 
-    @Test func theWatchEndsAfterThirtyReadings() async {
+    @Test func theWatchEndsAfterSixtyReadings() async {
         let field = ScriptedField((0...40).map { "你好世界" + String(repeating: "啊", count: $0) })
         _ = await watch(field, pasted: "你好世界")
         #expect(field.reads == 1 + CorrectionWatcher.readings)

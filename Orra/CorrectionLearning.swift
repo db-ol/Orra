@@ -65,11 +65,13 @@ nonisolated enum FieldReader {
     }
 }
 
-/// Follows the field Orra just pasted into, for up to 30 seconds, and reports the user's
+/// Follows the field Orra just pasted into, for up to 60 seconds, and reports the user's
 /// correction of a misheard word. Reads only that field: it stops when another field or
-/// app gets the focus, when secure input is on in the app, when the field cannot be read,
-/// or 4 seconds after the last change. It looks for a correction after every change and
-/// keeps the latest, so sending a chat message, which empties the field, does not lose it.
+/// app has the focus, when secure input is on in the app, or when the field cannot be read.
+/// Each paste has its own watch, up to three at a time, so dictating several lines and
+/// then fixing them works. PasteTracker follows where each paste is while other lines
+/// change. It looks for a correction after every change and keeps the latest, so sending a
+/// chat message, which empties the field, does not lose it. Logs states only, never text.
 @MainActor
 final class CorrectionWatcher {
     struct Environment {
@@ -92,59 +94,81 @@ final class CorrectionWatcher {
         }
     }
 
-    static let readings = 30
-    static let quietReadings = 4
+    static let readings = 60
+    static let maximumWatches = 3
 
     private let environment: Environment
-    private var task: Task<Void, Never>?
+    private var watches: [(id: Int, task: Task<Void, Never>)] = []
+    private var nextID = 0
+    private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "learning")
 
     init(environment: Environment = .live()) {
         self.environment = environment
     }
 
-    /// Starts following a paste, and stops following an earlier one.
+    /// Starts following a paste. The oldest watch ends when three are running.
     func watch(pasted: String, in pid: pid_t, onCorrection: @escaping (Correction) -> Void) {
-        task?.cancel()
+        if watches.count >= Self.maximumWatches {
+            watches.removeFirst().task.cancel()
+        }
+        nextID += 1
+        let id = nextID
         let environment = environment
-        task = Task { @MainActor in
+        let logger = logger
+        let task = Task { @MainActor [weak self] in
+            defer { self?.watches.removeAll { $0.id == id } }
             @MainActor func allowed() -> Bool {
                 environment.frontmost() == pid && environment.secureInputHolder() != pid
             }
             // The paste lands a moment after Command V.
             try? await environment.sleep(.milliseconds(900))
-            guard !Task.isCancelled, allowed(), let read = await environment.open(pid),
-                  let before = await read(), before.contains(pasted) else { return }
+            guard !Task.isCancelled else { return }
+            guard allowed() else {
+                logger.notice("Learning: the app is no longer in front, or holds secure input")
+                return
+            }
+            guard let read = await environment.open(pid) else {
+                logger.notice("Learning: the focused element is not a text field Orra can read")
+                return
+            }
+            guard let before = await read(), var tracker = PasteTracker(pasted: pasted, field: before) else {
+                logger.notice("Learning: the pasted text is not in the field")
+                return
+            }
             var latest = before
             var found: Correction?
-            var lastChange: Int?
-            for reading in 1...Self.readings {
+            var readings = 0
+            for _ in 1...Self.readings {
                 try? await environment.sleep(.seconds(1))
                 guard !Task.isCancelled else { return }
+                readings += 1
                 guard allowed(), let text = await read() else { break }
                 if text != latest {
                     latest = text
-                    lastChange = reading
-                    if let correction = await Self.find(pasted: pasted, before: before, after: text) {
+                    tracker.update(to: text)
+                    if let correction = await Self.find(pasted: pasted, edited: tracker.pasteNow) {
                         found = correction
                     }
-                } else if let lastChange, reading - lastChange >= Self.quietReadings {
-                    break
                 }
             }
+            logger.notice("Learning: watch ended after \(readings, privacy: .public) readings, correction found: \(found != nil, privacy: .public)")
             guard !Task.isCancelled, let found else { return }
             onCorrection(found)
         }
+        watches.append((id, task))
     }
 
     /// Off the main actor, because the keyboard tap runs there.
     @concurrent
-    private static func find(pasted: String, before: String, after: String) async -> Correction? {
-        CorrectionFinder.correction(pasted: pasted, before: before, after: after)
+    private static func find(pasted: String, edited: String) async -> Correction? {
+        CorrectionFinder.correction(pasted: pasted, edited: edited)
     }
 
     func stop() {
-        task?.cancel()
-        task = nil
+        for watch in watches {
+            watch.task.cancel()
+        }
+        watches = []
     }
 }
 

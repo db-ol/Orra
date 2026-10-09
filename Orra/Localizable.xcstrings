@@ -275,27 +275,6 @@
         }
       }
     },
-    "fn" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "地球仪（fn）键"
-          }
-        }
-      }
-    },
-    "fn (Globe)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "fn（地球仪）键"
-          }
-        }
-      }
-    },
     "Forget Learned Corrections" : {
       "localizations" : {
         "zh-Hans" : {
@@ -574,6 +553,16 @@
         }
       }
     },
+    "Not Now" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以后"
+          }
+        }
+      }
+    },
     "Not done yet" : {
       "localizations" : {
         "zh-Hans" : {
@@ -594,26 +583,6 @@
         }
       }
     },
-    "Not Now" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以后"
-          }
-        }
-      }
-    },
-    "Open at Login" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录时打开"
-          }
-        }
-      }
-    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -630,6 +599,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开声音设置…"
+          }
+        }
+      }
+    },
+    "Open at Login" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录时打开"
           }
         }
       }
@@ -814,17 +793,6 @@
         }
       }
     },
-    "right Command" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Command 键"
-          }
-        }
-      }
-    },
     "Right Command" : {
       "localizations" : {
         "zh-Hans" : {
@@ -835,34 +803,12 @@
         }
       }
     },
-    "right Control" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Control 键"
-          }
-        }
-      }
-    },
     "Right Control" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "右侧 Control 键"
-          }
-        }
-      }
-    },
-    "right Option" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Option 键"
           }
         }
       }
@@ -957,22 +903,22 @@
         }
       }
     },
-    "System Default (%@, lid closed)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系统默认（%@，已合盖）"
-          }
-        }
-      }
-    },
     "System Default (%@)" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "系统默认（%@）"
+          }
+        }
+      }
+    },
+    "System Default (%@, lid closed)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统默认（%@，已合盖）"
           }
         }
       }
@@ -1133,22 +1079,22 @@
         }
       }
     },
-    "This build has no microphone usage description" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此版本缺少麦克风用途说明"
-          }
-        }
-      }
-    },
     "This Mac is offline. Connect to the internet, then try again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "这台 Mac 没有联网。请连接互联网，然后重试。"
+          }
+        }
+      }
+    },
+    "This build has no microphone usage description" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本缺少麦克风用途说明"
           }
         }
       }
@@ -1223,12 +1169,12 @@
         }
       }
     },
-    "When this is on, Orra reads the text of the field you dictated into for up to 30 seconds after each paste, never a password field. When you fix a misheard word the same way twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac." : {
+    "When this is on, Orra reads the text of the field you dictated into for up to a minute after each paste, never a password field. When you fix a misheard word the same way twice within a week, Orra suggests it. Add puts the word in your vocabulary and writes it that way in later dictations. Orra keeps only the word pairs, on this Mac." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开后，每次粘贴后的 30 秒内，Orra 会读取你听写的那个输入框里的文字，从不读取密码框。同一个听错的词你一周内用同样的方式改了两次，Orra 就会建议加入。点“添加”会把这个词放进个人词库，以后听写也会按这个写法输出。Orra 只保存词对，只存在这台 Mac 上。"
+            "value" : "打开后，每次粘贴后的一分钟内，Orra 会读取你听写的那个输入框里的文字，从不读取密码框。同一个听错的词你一周内用同样的方式改了两次，Orra 就会建议加入。点“添加”会把这个词放进个人词库，以后听写也会按这个写法输出。Orra 只保存词对，只存在这台 Mac 上。"
           }
         }
       }
@@ -1249,6 +1195,60 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "听写时"
+          }
+        }
+      }
+    },
+    "fn" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地球仪（fn）键"
+          }
+        }
+      }
+    },
+    "fn (Globe)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "fn（地球仪）键"
+          }
+        }
+      }
+    },
+    "right Command" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Command 键"
+          }
+        }
+      }
+    },
+    "right Control" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Control 键"
+          }
+        }
+      }
+    },
+    "right Option" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Option 键"
           }
         }
       }
