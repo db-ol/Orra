@@ -36,6 +36,43 @@ not transcribed from anyone's speech. The expected outputs are the ground truth,
 by hand too. A cleanup removes fillers and applies clear self corrections. It does not
 reword, does not answer a question and does not carry out a request.
 
+## Numbers
+
+`numbers.jsonl` has 298 cases for writing spoken Chinese numbers as digits, one JSON
+object per line:
+
+- `id`: n001 and up.
+- `kind`: `convert` when some number in the input should become digits (129 cases), `keep`
+  when the input must stay exactly as it is (169 cases).
+- `input`: a dictation as Qwen3-ASR writes it, with the numbers spelled out.
+- `expected`: the text after the number rules.
+- `note`: what the case tests.
+
+The conventions, chosen to convert only where a reader clearly expects digits:
+
+- Readings digit by digit of three digits or more become digits (13800138000, 302, 999).
+  A year needs four (2026年). Two digits stay (三八妇女节, 九零后), except right after a
+  Latin letter (CA1831).
+- Numbers with 十, 百, 千, 万 or 亿 become digits before a unit or counter. 万 and 亿 stay
+  as units the way Chinese news writes them (2万人, 3.5亿元, 3.5万元 for 三万五千元).
+- A single digit before a counter stays in words (三本书, 两次, 一号线, 五块钱), unless it
+  is part of a date, a time, a percentage, a decimal or a model name.
+- Times after a time of day, or with 半, 钟, minutes or 以后 (下午3点, 3点20分, 3点半).
+  三点五分 could be a time or a score and stays.
+- A month becomes digits only in a date, before a day or 份 or after a year (10月1日,
+  9月份), so 二月春风 and 十月稻田 stay.
+- Ranges and rough numbers (七八个, 十几个, 二十多个, 三十来岁, 上千人), ordinals
+  (第十五届), set phrases, idioms, poems, names, holidays (双十一, 九一八) and book titles
+  stay.
+
+The cases merge two sets written by hand. One duplicate and 47 cases that repeated another
+with other words around the same number were dropped, and 19 were added for conventions
+neither set covered, such as 三点一刻, 十二万三千, 三百分之一 and a range of times. The two
+sets agreed on every convention.
+
+OrraTests/NumberRulesTests.swift runs every case, so Orra/NumberRules.swift gets all of
+them while the tests pass.
+
 ## Scoring
 
 Python 3.8 or later, standard library only. Run from this folder:

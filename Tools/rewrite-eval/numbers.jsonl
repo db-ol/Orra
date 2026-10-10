@@ -1,0 +1,298 @@
+{"id": "n001", "kind": "convert", "input": "我下个月想去试驾一下 Lexus RX 三五零。", "expected": "我下个月想去试驾一下 Lexus RX 350。", "note": "model number after Latin name, digit by digit, keep existing space; 一下 stays"}
+{"id": "n002", "kind": "convert", "input": "RX三五零的油耗怎么样？", "expected": "RX350的油耗怎么样？", "note": "no space in input, none added"}
+{"id": "n003", "kind": "convert", "input": "我的 iPhone 十五 电池不太行了。", "expected": "我的 iPhone 15 电池不太行了。", "note": "compound number after Latin name"}
+{"id": "n004", "kind": "convert", "input": "新买的 iPhone 十五 Pro Max 是蓝色的。", "expected": "新买的 iPhone 15 Pro Max 是蓝色的。", "note": "number between Latin words"}
+{"id": "n005", "kind": "convert", "input": "这台 MacBook 用的是 M五 Pro 芯片。", "expected": "这台 MacBook 用的是 M5 Pro 芯片。", "note": "single digit glued to Latin letter"}
+{"id": "n006", "kind": "convert", "input": "公司准备给我们换 M四 Max 的机器。", "expected": "公司准备给我们换 M4 Max 的机器。", "note": "single digit glued to Latin letter"}
+{"id": "n007", "kind": "convert", "input": "我们这边模型用的是 Qwen三，效果还可以。", "expected": "我们这边模型用的是 Qwen3，效果还可以。", "note": "model name with digit"}
+{"id": "n008", "kind": "convert", "input": "这个任务我试了一下 GPT-四o，回答比较快。", "expected": "这个任务我试了一下 GPT-4o，回答比较快。", "note": "digit between hyphen and Latin suffix"}
+{"id": "n009", "kind": "convert", "input": "显卡我想上一块 RTX 四零九零。", "expected": "显卡我想上一块 RTX 4090。", "note": "4 digit model number; 一块 stays"}
+{"id": "n010", "kind": "convert", "input": "他家里那台 PS五 还是全新的。", "expected": "他家里那台 PS5 还是全新的。", "note": "console name"}
+{"id": "n011", "kind": "convert", "input": "电脑系统升级到 Windows 十一 了吗？", "expected": "电脑系统升级到 Windows 11 了吗？", "note": "OS version"}
+{"id": "n012", "kind": "convert", "input": "华为 Mate 六十 的信号确实不错。", "expected": "华为 Mate 60 的信号确实不错。", "note": "Latin model name inside Chinese brand phrase"}
+{"id": "n013", "kind": "convert", "input": "我的 Mac 已经升到 macOS 十五点一 了。", "expected": "我的 Mac 已经升到 macOS 15.1 了。", "note": "version with decimal after Latin name"}
+{"id": "n014", "kind": "convert", "input": "记得把 iOS 十八 的测试机准备好。", "expected": "记得把 iOS 18 的测试机准备好。", "note": "OS version"}
+{"id": "n015", "kind": "convert", "input": "明天坐 CA幺八三一 去北京。", "expected": "明天坐 CA1831 去北京。", "note": "flight number with 幺"}
+{"id": "n016", "kind": "convert", "input": "我买的是 G一零二 次列车。", "expected": "我买的是 G102 次列车。", "note": "train number after Latin letter"}
+{"id": "n017", "kind": "convert", "input": "宝马 X五 的后排空间挺大的。", "expected": "宝马 X5 的后排空间挺大的。", "note": "car model"}
+{"id": "n018", "kind": "convert", "input": "我的手机号是幺三八零零幺三八零零零。", "expected": "我的手机号是13800138000。", "note": "phone number with 幺"}
+{"id": "n019", "kind": "convert", "input": "你打这个电话，一三九一二三四五六七八。", "expected": "你打这个电话，13912345678。", "note": "phone number with 一"}
+{"id": "n020", "kind": "convert", "input": "验证码是四七二九幺五，五分钟内有效。", "expected": "验证码是472915，五分钟内有效。", "note": "verification code converts, 五分钟 is a single digit with counter and stays"}
+{"id": "n021", "kind": "convert", "input": "快递单号尾号是八八六二。", "expected": "快递单号尾号是8862。", "note": "4 digit reading"}
+{"id": "n022", "kind": "convert", "input": "我住在三零二房间，你直接上来。", "expected": "我住在302房间，你直接上来。", "note": "room number"}
+{"id": "n023", "kind": "convert", "input": "密码改成了零零七零零七。", "expected": "密码改成了007007。", "note": "digit string with leading zeros"}
+{"id": "n024", "kind": "convert", "input": "座机号码是零幺零六二七八八八八八。", "expected": "座机号码是01062788888。", "note": "landline with leading zero and 幺"}
+{"id": "n025", "kind": "convert", "input": "车牌尾号三五七，今天限行。", "expected": "车牌尾号357，今天限行。", "note": "3 digit reading"}
+{"id": "n026", "kind": "convert", "input": "取件码是二四六八。", "expected": "取件码是2468。", "note": "pickup code"}
+{"id": "n027", "kind": "convert", "input": "项目要在二零二六年底之前上线。", "expected": "项目要在2026年底之前上线。", "note": "year digit by digit"}
+{"id": "n028", "kind": "convert", "input": "我是一九九八年出生的。", "expected": "我是1998年出生的。", "note": "birth year"}
+{"id": "n029", "kind": "convert", "input": "二零二六年十月十号我们正式发布。", "expected": "2026年10月10号我们正式发布。", "note": "full date"}
+{"id": "n030", "kind": "convert", "input": "国庆假期是十月一日到十月七日。", "expected": "国庆假期是10月1日到10月7日。", "note": "dates, single digit day converts in date"}
+{"id": "n031", "kind": "convert", "input": "我们约在十一月二十号见面吧。", "expected": "我们约在11月20号见面吧。", "note": "month and day"}
+{"id": "n032", "kind": "convert", "input": "三月八号那天我请假了。", "expected": "3月8号那天我请假了。", "note": "single digit month and day in date"}
+{"id": "n033", "kind": "convert", "input": "房租每个月十五号交。", "expected": "房租每个月15号交。", "note": "day of month; 每个月 stays"}
+{"id": "n034", "kind": "convert", "input": "我九月份要去日本出差。", "expected": "我9月份要去日本出差。", "note": "month with 份"}
+{"id": "n035", "kind": "convert", "input": "二零二五年第三季度的报表发我一下。", "expected": "2025年第三季度的报表发我一下。", "note": "year converts, 第三 and 一下 stay"}
+{"id": "n036", "kind": "convert", "input": "合同签到二零二八年十二月三十一日。", "expected": "合同签到2028年12月31日。", "note": "full date end of year"}
+{"id": "n037", "kind": "convert", "input": "下午三点在会议室开会。", "expected": "下午3点在会议室开会。", "note": "time with 下午"}
+{"id": "n038", "kind": "convert", "input": "明天早上八点出发，别迟到。", "expected": "明天早上8点出发，别迟到。", "note": "time with 早上"}
+{"id": "n039", "kind": "convert", "input": "我们三点二十分在门口集合。", "expected": "我们3点20分在门口集合。", "note": "hour and minute"}
+{"id": "n040", "kind": "convert", "input": "晚上十点半给你打电话。", "expected": "晚上10点半给你打电话。", "note": "half hour, 半 stays"}
+{"id": "n041", "kind": "convert", "input": "下周三下午两点有个面试。", "expected": "下周三下午2点有个面试。", "note": "两 as 2 in time, 周三 stays"}
+{"id": "n042", "kind": "convert", "input": "飞机是凌晨五点四十分起飞的。", "expected": "飞机是凌晨5点40分起飞的。", "note": "time with 凌晨"}
+{"id": "n043", "kind": "convert", "input": "会议改到上午十一点了。", "expected": "会议改到上午11点了。", "note": "11 o'clock"}
+{"id": "n044", "kind": "convert", "input": "这件衣服三百五十块，有点贵。", "expected": "这件衣服350块，有点贵。", "note": "price with 块"}
+{"id": "n045", "kind": "convert", "input": "这个耳机原价一百九十九元。", "expected": "这个耳机原价199元。", "note": "price with 元"}
+{"id": "n046", "kind": "convert", "input": "两百块钱就够了。", "expected": "200块钱就够了。", "note": "两百"}
+{"id": "n047", "kind": "convert", "input": "房租一个月三千五百元。", "expected": "房租一个月3500元。", "note": "一个月 stays, price converts"}
+{"id": "n048", "kind": "convert", "input": "机票加酒店一共两千块。", "expected": "机票加酒店一共2000块。", "note": "两千; 一共 stays"}
+{"id": "n049", "kind": "convert", "input": "这次报销一千零五十元。", "expected": "这次报销1050元。", "note": "零 inside compound number"}
+{"id": "n050", "kind": "convert", "input": "今年年终奖大概十二万。", "expected": "今年年终奖大概12万。", "note": "万 kept as unit, number at sentence end after 万"}
+{"id": "n051", "kind": "convert", "input": "这套房子总价一百二十万。", "expected": "这套房子总价120万。", "note": "万 kept as unit"}
+{"id": "n052", "kind": "convert", "input": "公司这轮融资三点五亿元。", "expected": "公司这轮融资3.5亿元。", "note": "decimal with 亿"}
+{"id": "n053", "kind": "convert", "input": "活动现场来了两万人。", "expected": "活动现场来了2万人。", "note": "两万 with 人, news style keeps 万"}
+{"id": "n054", "kind": "convert", "input": "车款三万五千元已经付了。", "expected": "车款3.5万元已经付了。", "note": "万 with remainder written as decimal 万 (news style)"}
+{"id": "n055", "kind": "convert", "input": "我们部门一共有二十八个人。", "expected": "我们部门一共有28个人。", "note": "count with 个"}
+{"id": "n056", "kind": "convert", "input": "一千二百个订单今天要发完。", "expected": "1200个订单今天要发完。", "note": "count with 个"}
+{"id": "n057", "kind": "convert", "input": "报告大概写了三十五页。", "expected": "报告大概写了35页。", "note": "大概 is fine, exact number with 页"}
+{"id": "n058", "kind": "convert", "input": "这次出差要十五天。", "expected": "这次出差要15天。", "note": "days"}
+{"id": "n059", "kind": "convert", "input": "他今年二十八岁。", "expected": "他今年28岁。", "note": "age"}
+{"id": "n060", "kind": "convert", "input": "我这周跑了四十二公里。", "expected": "我这周跑了42公里。", "note": "distance"}
+{"id": "n061", "kind": "convert", "input": "最近瘦了，现在一百二十斤。", "expected": "最近瘦了，现在120斤。", "note": "weight"}
+{"id": "n062", "kind": "convert", "input": "手机要二百五十六G的版本。", "expected": "手机要256G的版本。", "note": "storage with G"}
+{"id": "n063", "kind": "convert", "input": "内存至少要十六GB。", "expected": "内存至少要16GB。", "note": "storage with GB"}
+{"id": "n064", "kind": "convert", "input": "这次考试我考了九十五分。", "expected": "这次考试我考了95分。", "note": "score with 分"}
+{"id": "n065", "kind": "convert", "input": "会议大概开三十分钟。", "expected": "会议大概开30分钟。", "note": "duration with 分钟"}
+{"id": "n066", "kind": "convert", "input": "坐地铁十号线就能到。", "expected": "坐地铁10号线就能到。", "note": "metro line number with 十"}
+{"id": "n067", "kind": "convert", "input": "他住在十八层。", "expected": "他住在18层。", "note": "floor"}
+{"id": "n068", "kind": "convert", "input": "公司地址是中关村大街二十七号。", "expected": "公司地址是中关村大街27号。", "note": "street number"}
+{"id": "n069", "kind": "convert", "input": "这批货一共一百五十件。", "expected": "这批货一共150件。", "note": "count with 件"}
+{"id": "n070", "kind": "convert", "input": "这个月的流量用了二十多G，不对，是二十三G。", "expected": "这个月的流量用了二十多G，不对，是23G。", "note": "approximate 二十多 stays, exact 二十三 converts"}
+{"id": "n071", "kind": "convert", "input": "今年销售额增长了百分之五十。", "expected": "今年销售额增长了50%。", "note": "percentage"}
+{"id": "n072", "kind": "convert", "input": "贷款利率是百分之三点五。", "expected": "贷款利率是3.5%。", "note": "decimal percentage"}
+{"id": "n073", "kind": "convert", "input": "手续费只有百分之零点五。", "expected": "手续费只有0.5%。", "note": "percentage below one"}
+{"id": "n074", "kind": "convert", "input": "电量只剩百分之二十了。", "expected": "电量只剩20%了。", "note": "battery level"}
+{"id": "n075", "kind": "convert", "input": "从这里到公司三点五公里。", "expected": "从这里到公司3.5公里。", "note": "decimal with unit, not a time"}
+{"id": "n076", "kind": "convert", "input": "今天最高气温三十二度。", "expected": "今天最高气温32度。", "note": "temperature"}
+{"id": "n077", "kind": "convert", "input": "孩子发烧了，体温三十七点五度。", "expected": "孩子发烧了，体温37.5度。", "note": "decimal temperature"}
+{"id": "n078", "kind": "convert", "input": "明天零下十二度，多穿点。", "expected": "明天零下12度，多穿点。", "note": "零下 stays as a word, 多穿点 stays"}
+{"id": "n079", "kind": "convert", "input": "这次的分数是九十八点五分。", "expected": "这次的分数是98.5分。", "note": "decimal score"}
+{"id": "n080", "kind": "convert", "input": "这个项目要求 Python 三点十二以上。", "expected": "这个项目要求 Python 3.12以上。", "note": "version decimal after a Latin name, 3.12 not a time"}
+{"id": "n081", "kind": "convert", "input": "我新买了三星 Galaxy S二十四。", "expected": "我新买了三星 Galaxy S24。", "note": "三星 stays, number glued to S converts"}
+{"id": "n082", "kind": "convert", "input": "Q三的目标我们下周再对一下。", "expected": "Q3的目标我们下周再对一下。", "note": "single digit after a Latin letter converts, 一下 stays"}
+{"id": "n083", "kind": "convert", "input": "帮我打印十张 A四纸。", "expected": "帮我打印10张 A4纸。", "note": "十张 converts, A四 converts after Latin letter"}
+{"id": "n084", "kind": "convert", "input": "我坐的是G一零二次高铁。", "expected": "我坐的是G102次高铁。", "note": "train number after a Latin letter"}
+{"id": "n085", "kind": "convert", "input": "现在五G网络已经很普及了。", "expected": "现在5G网络已经很普及了。", "note": "fixed tech term 5G, digit followed by Latin G"}
+{"id": "n086", "kind": "convert", "input": "我的手机号是幺三八零零一三八零零零。", "expected": "我的手机号是13800138000。", "note": "phone number with 幺"}
+{"id": "n087", "kind": "convert", "input": "出事了赶紧打幺二零。", "expected": "出事了赶紧打120。", "note": "emergency number with 幺"}
+{"id": "n088", "kind": "convert", "input": "我的工号是四七二九。", "expected": "我的工号是4729。", "note": "four digit code"}
+{"id": "n089", "kind": "convert", "input": "家里常备九九九感冒灵。", "expected": "家里常备999感冒灵。", "note": "three digit reading, matches the brand spelling"}
+{"id": "n090", "kind": "convert", "input": "项目在二〇二六年上线。", "expected": "项目在2026年上线。", "note": "year with 〇"}
+{"id": "n091", "kind": "convert", "input": "我们十月一日出发，十一月十一日回来。", "expected": "我们10月1日出发，11月11日回来。", "note": "dates, 十一月十一日 is a date unlike 双十一"}
+{"id": "n092", "kind": "convert", "input": "明天早上五点起床。", "expected": "明天早上5点起床。", "note": "single digit time"}
+{"id": "n093", "kind": "convert", "input": "中午十二点半吃饭。", "expected": "中午12点半吃饭。", "note": "time with 半"}
+{"id": "n094", "kind": "convert", "input": "我们三点十分出发。", "expected": "我们3点10分出发。", "note": "十分 is ten minutes here, not very"}
+{"id": "n095", "kind": "convert", "input": "会议从下午三点五十开始。", "expected": "会议从下午3点50开始。", "note": "time, 三点五十 is not 3.50"}
+{"id": "n096", "kind": "convert", "input": "晚上十一点以后就别打电话了。", "expected": "晚上11点以后就别打电话了。", "note": "time 十一点, unlike the holiday 十一"}
+{"id": "n097", "kind": "convert", "input": "下午一点钟我有个会。", "expected": "下午1点钟我有个会。", "note": "一点 as one o'clock, 一个 stays"}
+{"id": "n098", "kind": "convert", "input": "再等我十分钟。", "expected": "再等我10分钟。", "note": "十分钟 is ten minutes, unlike 十分 very"}
+{"id": "n099", "kind": "convert", "input": "预算要增加一点五倍。", "expected": "预算要增加1.5倍。", "note": "decimal with 倍, unlike 一点 a little"}
+{"id": "n100", "kind": "convert", "input": "这家店在网上评分四点五星。", "expected": "这家店在网上评分4.5星。", "note": "decimal rating"}
+{"id": "n101", "kind": "convert", "input": "销量达到去年的百分之一百二十。", "expected": "销量达到去年的120%。", "note": "percentage above one hundred, unlike 百分之百 certainty"}
+{"id": "n102", "kind": "convert", "input": "他们投资了三千万。", "expected": "他们投资了3000万。", "note": "千万 as ten million, unlike 千万别"}
+{"id": "n103", "kind": "convert", "input": "那个人二百五十块就卖了。", "expected": "那个人250块就卖了。", "note": "二百五十块 is money, unlike 二百五 fool"}
+{"id": "n104", "kind": "convert", "input": "一共有一百零八个座位。", "expected": "一共有108个座位。", "note": "number with 零 inside, 一共 stays"}
+{"id": "n105", "kind": "convert", "input": "这家店二十四小时营业。", "expected": "这家店24小时营业。", "note": "hours"}
+{"id": "n106", "kind": "convert", "input": "这首歌是九十年代的。", "expected": "这首歌是90年代的。", "note": "decade"}
+{"id": "n107", "kind": "convert", "input": "二十一世纪是信息时代。", "expected": "21世纪是信息时代。", "note": "century"}
+{"id": "n108", "kind": "convert", "input": "他工作了二十年，一直没换过公司。", "expected": "他工作了20年，一直没换过公司。", "note": "二十年 converts, 一直 stays"}
+{"id": "n109", "kind": "convert", "input": "文件一共有十二页，你先看一下。", "expected": "文件一共有12页，你先看一下。", "note": "页 counter, 一共 and 一下 stay"}
+{"id": "n110", "kind": "convert", "input": "这台电脑有十六GB内存。", "expected": "这台电脑有16GB内存。", "note": "GB unit, no space added"}
+{"id": "n111", "kind": "convert", "input": "万一他十点才到，我们就先吃。", "expected": "万一他10点才到，我们就先吃。", "note": "万一 stays, 十点 is a time"}
+{"id": "n112", "kind": "convert", "input": "我有一点担心，他说三点半才能到。", "expected": "我有一点担心，他说3点半才能到。", "note": "一点 a little stays, 三点半 is a time"}
+{"id": "n113", "kind": "convert", "input": "这件事十分紧急，请在十五号之前完成。", "expected": "这件事十分紧急，请在15号之前完成。", "note": "十分 very stays, 十五号 converts"}
+{"id": "n114", "kind": "convert", "input": "千万记得带上二十个口罩。", "expected": "千万记得带上20个口罩。", "note": "千万 be sure to stays, 二十个 converts"}
+{"id": "n115", "kind": "convert", "input": "他三番五次催我交那份五十页的报告。", "expected": "他三番五次催我交那份50页的报告。", "note": "idiom stays, 五十页 converts"}
+{"id": "n116", "kind": "convert", "input": "王一博的演唱会门票卖了一千二百八十元。", "expected": "王一博的演唱会门票卖了1280元。", "note": "name stays, price converts"}
+{"id": "n117", "kind": "convert", "input": "我们在三亚住了十二天。", "expected": "我们在三亚住了12天。", "note": "place stays, 十二天 converts"}
+{"id": "n118", "kind": "convert", "input": "三星的新手机卖六千九百九十九元。", "expected": "三星的新手机卖6999元。", "note": "brand stays, price converts"}
+{"id": "n119", "kind": "convert", "input": "下午三点一刻到。", "expected": "下午3点一刻到。", "note": "一刻 marks a time, the hour converts and 一刻 stays"}
+{"id": "n120", "kind": "convert", "input": "凌晨零点准时上线。", "expected": "凌晨0点准时上线。", "note": "零点 after a time of day is midnight"}
+{"id": "n121", "kind": "convert", "input": "下午三点零五分开始。", "expected": "下午3点05分开始。", "note": "minutes read as 零五 before 分"}
+{"id": "n122", "kind": "convert", "input": "这台车跑了十二万三千公里。", "expected": "这台车跑了12.3万公里。", "note": "a remainder below 万 is written as a decimal of 万"}
+{"id": "n123", "kind": "convert", "input": "他存了一亿两千万。", "expected": "他存了1.2亿。", "note": "亿 with a remainder in 万 is a decimal of 亿"}
+{"id": "n124", "kind": "convert", "input": "我们三点以后再说。", "expected": "我们3点以后再说。", "note": "bare hour before 以后 is a time"}
+{"id": "n125", "kind": "convert", "input": "这里的网速有五百M。", "expected": "这里的网速有500M。", "note": "Latin unit right after the number"}
+{"id": "n126", "kind": "convert", "input": "一年有十二个月。", "expected": "一年有12个月。", "note": "个月 after a number above nine, 一年 stays"}
+{"id": "n127", "kind": "convert", "input": "百分之五的人没来。", "expected": "5%的人没来。", "note": "a percentage converts even below ten"}
+{"id": "n128", "kind": "convert", "input": "月薪三万五。", "expected": "月薪3.5万。", "note": "万 is a unit of its own, so 三万五 needs nothing after it"}
+{"id": "n129", "kind": "convert", "input": "下午三点半到四点。", "expected": "下午3点半到4点。", "note": "the end of a range of times converts with its start"}
+{"id": "n130", "kind": "keep", "input": "价格涨了两倍。", "expected": "价格涨了两倍。", "note": "single digit 两 with 倍 stays Chinese"}
+{"id": "n131", "kind": "keep", "input": "我们一起去吃饭吧。", "expected": "我们一起去吃饭吧。", "note": "一起"}
+{"id": "n132", "kind": "keep", "input": "你稍等一下，我马上来。", "expected": "你稍等一下，我马上来。", "note": "一下"}
+{"id": "n133", "kind": "keep", "input": "我一直在等你回消息。", "expected": "我一直在等你回消息。", "note": "一直"}
+{"id": "n134", "kind": "keep", "input": "这两个方案看起来一模一样。", "expected": "这两个方案看起来一模一样。", "note": "一模一样, 两个 single digit counter"}
+{"id": "n135", "kind": "keep", "input": "做事要一心一意，别三心二意。", "expected": "做事要一心一意，别三心二意。", "note": "idioms"}
+{"id": "n136", "kind": "keep", "input": "我心里七上八下的。", "expected": "我心里七上八下的。", "note": "idiom"}
+{"id": "n137", "kind": "keep", "input": "房间里乱七八糟的，先收拾一下。", "expected": "房间里乱七八糟的，先收拾一下。", "note": "idiom and 一下"}
+{"id": "n138", "kind": "keep", "input": "万一下雨了怎么办？", "expected": "万一下雨了怎么办？", "note": "万一 must not become 10000"}
+{"id": "n139", "kind": "keep", "input": "千万别忘了带护照。", "expected": "千万别忘了带护照。", "note": "千万 as be sure to"}
+{"id": "n140", "kind": "keep", "input": "这个方案已经十全十美了。", "expected": "这个方案已经十全十美了。", "note": "idiom"}
+{"id": "n141", "kind": "keep", "input": "大家三五成群地在聊天。", "expected": "大家三五成群地在聊天。", "note": "idiom with two digit reading"}
+{"id": "n142", "kind": "keep", "input": "门口站着七八个人。", "expected": "门口站着七八个人。", "note": "approximate range"}
+{"id": "n143", "kind": "keep", "input": "我大概要请三四天假。", "expected": "我大概要请三四天假。", "note": "approximate range"}
+{"id": "n144", "kind": "keep", "input": "来了十几个客户。", "expected": "来了十几个客户。", "note": "approximate with 几"}
+{"id": "n145", "kind": "keep", "input": "他看起来二三十岁的样子。", "expected": "他看起来二三十岁的样子。", "note": "approximate range of tens"}
+{"id": "n146", "kind": "keep", "input": "会场里有三百多人。", "expected": "会场里有三百多人。", "note": "approximate with 多 stays (conservative)"}
+{"id": "n147", "kind": "keep", "input": "我等了几十分钟了。", "expected": "我等了几十分钟了。", "note": "几十"}
+{"id": "n148", "kind": "keep", "input": "这件事我们得统一一下口径。", "expected": "这件事我们得统一一下口径。", "note": "统一 and 一下"}
+{"id": "n149", "kind": "keep", "input": "这是唯一的办法。", "expected": "这是唯一的办法。", "note": "唯一"}
+{"id": "n150", "kind": "keep", "input": "这家店的味道很一般。", "expected": "这家店的味道很一般。", "note": "一般"}
+{"id": "n151", "kind": "keep", "input": "我今天有一点累。", "expected": "我今天有一点累。", "note": "一点 meaning a little"}
+{"id": "n152", "kind": "keep", "input": "非常感谢，我十分满意。", "expected": "非常感谢，我十分满意。", "note": "十分 meaning very"}
+{"id": "n153", "kind": "keep", "input": "我们星期一再说吧。", "expected": "我们星期一再说吧。", "note": "星期一"}
+{"id": "n154", "kind": "keep", "input": "周五晚上一起吃个饭。", "expected": "周五晚上一起吃个饭。", "note": "周五 and 一起"}
+{"id": "n155", "kind": "keep", "input": "他在比赛里拿了第一。", "expected": "他在比赛里拿了第一。", "note": "ordinal 第一"}
+{"id": "n156", "kind": "keep", "input": "第三点我还没想清楚。", "expected": "第三点我还没想清楚。", "note": "ordinal and 点 as item counter"}
+{"id": "n157", "kind": "keep", "input": "我有两点建议。", "expected": "我有两点建议。", "note": "两点 as two points, not a time"}
+{"id": "n158", "kind": "keep", "input": "我买了三本书。", "expected": "我买了三本书。", "note": "single digit with counter"}
+{"id": "n159", "kind": "keep", "input": "我们一个人一份。", "expected": "我们一个人一份。", "note": "一个人 and 一份"}
+{"id": "n160", "kind": "keep", "input": "这个月我去了两次健身房。", "expected": "这个月我去了两次健身房。", "note": "两次"}
+{"id": "n161", "kind": "keep", "input": "我五块钱买了一瓶水。", "expected": "我五块钱买了一瓶水。", "note": "single digit money stays (consistent with counter rule)"}
+{"id": "n162", "kind": "keep", "input": "一个半小时就能到。", "expected": "一个半小时就能到。", "note": "一个半小时"}
+{"id": "n163", "kind": "keep", "input": "蛋糕吃了一半。", "expected": "蛋糕吃了一半。", "note": "一半"}
+{"id": "n164", "kind": "keep", "input": "这点钱对他来说是九牛一毛。", "expected": "这点钱对他来说是九牛一毛。", "note": "idiom"}
+{"id": "n165", "kind": "keep", "input": "你几点下班？", "expected": "你几点下班？", "note": "几点"}
+{"id": "n166", "kind": "keep", "input": "十一假期你回老家吗？", "expected": "十一假期你回老家吗？", "note": "十一 as the National Day holiday"}
+{"id": "n167", "kind": "keep", "input": "双十一的时候再买吧。", "expected": "双十一的时候再买吧。", "note": "双十一 festival"}
+{"id": "n168", "kind": "keep", "input": "五一我们去爬山。", "expected": "五一我们去爬山。", "note": "五一 holiday"}
+{"id": "n169", "kind": "keep", "input": "今天是三八妇女节。", "expected": "今天是三八妇女节。", "note": "festival name"}
+{"id": "n170", "kind": "keep", "input": "你是不是二百五啊？", "expected": "你是不是二百五啊？", "note": "slang meaning fool"}
+{"id": "n171", "kind": "keep", "input": "我用百度搜了一下。", "expected": "我用百度搜了一下。", "note": "百度 is a brand, not 100 degrees"}
+{"id": "n172", "kind": "keep", "input": "这次是百分之百确定的。", "expected": "这次是百分之百确定的。", "note": "百分之百 idiomatic, keep"}
+{"id": "n173", "kind": "keep", "input": "他儿子今年上一年级。", "expected": "他儿子今年上一年级。", "note": "grade level"}
+{"id": "n174", "kind": "keep", "input": "我女儿在读高三。", "expected": "我女儿在读高三。", "note": "grade level"}
+{"id": "n175", "kind": "keep", "input": "坐一号线换乘二号线。", "expected": "坐一号线换乘二号线。", "note": "single digit line numbers stay"}
+{"id": "n176", "kind": "keep", "input": "我用的是三星手机。", "expected": "我用的是三星手机。", "note": "brand Samsung"}
+{"id": "n177", "kind": "keep", "input": "一加的新手机挺好看的。", "expected": "一加的新手机挺好看的。", "note": "brand OnePlus"}
+{"id": "n178", "kind": "keep", "input": "十二生肖里我属龙。", "expected": "十二生肖里我属龙。", "note": "十二 not followed by unit"}
+{"id": "n179", "kind": "keep", "input": "我一定准时到。", "expected": "我一定准时到。", "note": "一定"}
+{"id": "n180", "kind": "keep", "input": "这些问题我们一一解决。", "expected": "这些问题我们一一解决。", "note": "一一 two digit reading, adverb"}
+{"id": "n181", "kind": "keep", "input": "早餐我喝了一碗八宝粥。", "expected": "早餐我喝了一碗八宝粥。", "note": "food name 八宝粥"}
+{"id": "n182", "kind": "keep", "input": "前面十字路口右转。", "expected": "前面十字路口右转。", "note": "十字路口"}
+{"id": "n183", "kind": "keep", "input": "我们已经认识三年了。", "expected": "我们已经认识三年了。", "note": "single digit with 年 as duration"}
+{"id": "n184", "kind": "keep", "input": "一分钱一分货。", "expected": "一分钱一分货。", "note": "proverb"}
+{"id": "n185", "kind": "keep", "input": "The meeting is at 3pm, room 302.", "expected": "The meeting is at 3pm, room 302.", "note": "English text left alone"}
+{"id": "n186", "kind": "keep", "input": "我已经买了 iPhone 15，不用再买了。", "expected": "我已经买了 iPhone 15，不用再买了。", "note": "already digits"}
+{"id": "n187", "kind": "keep", "input": "会议定在 2026年10月10日 下午3点。", "expected": "会议定在 2026年10月10日 下午3点。", "note": "already digits"}
+{"id": "n188", "kind": "keep", "input": "We need 16GB of RAM for the Qwen3 model.", "expected": "We need 16GB of RAM for the Qwen3 model.", "note": "English with digits"}
+{"id": "n189", "kind": "keep", "input": "这个价格是一些人接受不了的。", "expected": "这个价格是一些人接受不了的。", "note": "一些"}
+{"id": "n190", "kind": "keep", "input": "他俩长得一样高。", "expected": "他俩长得一样高。", "note": "一样"}
+{"id": "n191", "kind": "keep", "input": "我们五六个人一起去。", "expected": "我们五六个人一起去。", "note": "approximate range"}
+{"id": "n192", "kind": "keep", "input": "这事过两三天再说。", "expected": "这事过两三天再说。", "note": "approximate range"}
+{"id": "n193", "kind": "keep", "input": "一两个小时就能做完。", "expected": "一两个小时就能做完。", "note": "approximate range"}
+{"id": "n194", "kind": "keep", "input": "他是我们班的老大，我是老三。", "expected": "他是我们班的老大，我是老三。", "note": "sibling ordinal"}
+{"id": "n195", "kind": "keep", "input": "这件事十分重要，大家一定要重视。", "expected": "这件事十分重要，大家一定要重视。", "note": "十分 means very"}
+{"id": "n196", "kind": "keep", "input": "一切都准备好了，就等你来了。", "expected": "一切都准备好了，就等你来了。", "note": "一切 is a fixed word"}
+{"id": "n197", "kind": "keep", "input": "所有报销一律走线上流程。", "expected": "所有报销一律走线上流程。", "note": "一律 is a fixed word"}
+{"id": "n198", "kind": "keep", "input": "绕了一大圈，最后还是九九归一。", "expected": "绕了一大圈，最后还是九九归一。", "note": "idiom 九九归一"}
+{"id": "n199", "kind": "keep", "input": "他三番五次地迟到，老板已经很不满了。", "expected": "他三番五次地迟到，老板已经很不满了。", "note": "idiom 三番五次"}
+{"id": "n200", "kind": "keep", "input": "我们的同学来自五湖四海。", "expected": "我们的同学来自五湖四海。", "note": "idiom 五湖四海"}
+{"id": "n201", "kind": "keep", "input": "你把事情一五一十地告诉我。", "expected": "你把事情一五一十地告诉我。", "note": "idiom 一五一十 contains a three digit reading 一五一"}
+{"id": "n202", "kind": "keep", "input": "别跟那些不三不四的人来往。", "expected": "别跟那些不三不四的人来往。", "note": "idiom 不三不四"}
+{"id": "n203", "kind": "keep", "input": "这个领域我只是略知一二。", "expected": "这个领域我只是略知一二。", "note": "idiom 略知一二"}
+{"id": "n204", "kind": "keep", "input": "出了问题要第一时间通知我。", "expected": "出了问题要第一时间通知我。", "note": "第一时间 is a fixed phrase"}
+{"id": "n205", "kind": "keep", "input": "这两张表的字段要一一对应。", "expected": "这两张表的字段要一一对应。", "note": "一一对应 is a fixed phrase"}
+{"id": "n206", "kind": "keep", "input": "他说的话十有八九是真的。", "expected": "他说的话十有八九是真的。", "note": "idiom 十有八九"}
+{"id": "n207", "kind": "keep", "input": "这个价格八九不离十了。", "expected": "这个价格八九不离十了。", "note": "idiom 八九不离十"}
+{"id": "n208", "kind": "keep", "input": "这两个方案半斤八两，都差不多。", "expected": "这两个方案半斤八两，都差不多。", "note": "idiom 半斤八两 contains the unit 斤"}
+{"id": "n209", "kind": "keep", "input": "他三天两头请假。", "expected": "他三天两头请假。", "note": "idiom 三天两头 contains the unit 天"}
+{"id": "n210", "kind": "keep", "input": "他二话不说就答应了。", "expected": "他二话不说就答应了。", "note": "idiom 二话不说"}
+{"id": "n211", "kind": "keep", "input": "这样做一举两得。", "expected": "这样做一举两得。", "note": "idiom 一举两得"}
+{"id": "n212", "kind": "keep", "input": "市场上的产品五花八门。", "expected": "市场上的产品五花八门。", "note": "idiom 五花八门"}
+{"id": "n213", "kind": "keep", "input": "这次一定要万无一失。", "expected": "这次一定要万无一失。", "note": "idiom 万无一失"}
+{"id": "n214", "kind": "keep", "input": "他千方百计想拿到这个项目。", "expected": "他千方百计想拿到这个项目。", "note": "idiom 千方百计"}
+{"id": "n215", "kind": "keep", "input": "这件事十万火急，你赶紧处理一下。", "expected": "这件事十万火急，你赶紧处理一下。", "note": "idiom 十万火急, 十万 must not become 10万"}
+{"id": "n216", "kind": "keep", "input": "十年寒窗，终于考上了。", "expected": "十年寒窗，终于考上了。", "note": "idiom 十年寒窗 contains 十 plus unit 年"}
+{"id": "n217", "kind": "keep", "input": "十年树木，百年树人。", "expected": "十年树木，百年树人。", "note": "proverb, 十年 must not become 10年"}
+{"id": "n218", "kind": "keep", "input": "七七四十九天以后才能出炉。", "expected": "七七四十九天以后才能出炉。", "note": "fixed phrase from a multiplication rhyme, 四十九天 must not become 49天"}
+{"id": "n219", "kind": "keep", "input": "唐僧经历了九九八十一难。", "expected": "唐僧经历了九九八十一难。", "note": "fixed phrase, 九九八十一 must stay"}
+{"id": "n220", "kind": "keep", "input": "剩下的工作已经做得七七八八了。", "expected": "剩下的工作已经做得七七八八了。", "note": "七七八八 is four digit reading characters but means mostly"}
+{"id": "n221", "kind": "keep", "input": "屋里的东西零零散散地放着。", "expected": "屋里的东西零零散散地放着。", "note": "零零散散 is a reduplicated word"}
+{"id": "n222", "kind": "keep", "input": "他们三三两两地走进会议室。", "expected": "他们三三两两地走进会议室。", "note": "idiom 三三两两"}
+{"id": "n223", "kind": "keep", "input": "真是万万没想到会这样。", "expected": "真是万万没想到会这样。", "note": "万万 means absolutely"}
+{"id": "n224", "kind": "keep", "input": "这个项目我们五五开。", "expected": "这个项目我们五五开。", "note": "五五开 means split evenly"}
+{"id": "n225", "kind": "keep", "input": "他有三十六计，走为上计。", "expected": "他有三十六计，走为上计。", "note": "proverb, 三十六计 has no unit"}
+{"id": "n226", "kind": "keep", "input": "孔子说三十而立，四十不惑。", "expected": "孔子说三十而立，四十不惑。", "note": "quote, 三十 and 四十 must stay"}
+{"id": "n227", "kind": "keep", "input": "这次我百分百支持你。", "expected": "这次我百分百支持你。", "note": "百分百 used as certainty, keep"}
+{"id": "n228", "kind": "keep", "input": "让我去加班，我一百个不愿意。", "expected": "让我去加班，我一百个不愿意。", "note": "hyperbole 一百个, converting to 100个 reads wrong"}
+{"id": "n229", "kind": "keep", "input": "我有一万个理由不去。", "expected": "我有一万个理由不去。", "note": "hyperbole 一万个, keep"}
+{"id": "n230", "kind": "keep", "input": "先定一个小目标，比如赚它一个亿。", "expected": "先定一个小目标，比如赚它一个亿。", "note": "colloquial 一个亿, single digit with counter"}
+{"id": "n231", "kind": "keep", "input": "这人有点十三点。", "expected": "这人有点十三点。", "note": "Shanghainese 十三点 means silly, not 13点"}
+{"id": "n232", "kind": "keep", "input": "你别再搞什么幺蛾子了。", "expected": "你别再搞什么幺蛾子了。", "note": "幺蛾子 is a fixed word, 幺 is not 1 here"}
+{"id": "n233", "kind": "keep", "input": "我是家里的幺妹。", "expected": "我是家里的幺妹。", "note": "幺妹 means youngest sister"}
+{"id": "n234", "kind": "keep", "input": "他俩是一对一辅导。", "expected": "他俩是一对一辅导。", "note": "一对一 is a fixed phrase"}
+{"id": "n235", "kind": "keep", "input": "我们一起去吧，顺便买一些水果。", "expected": "我们一起去吧，顺便买一些水果。", "note": "一起 and 一些"}
+{"id": "n236", "kind": "keep", "input": "一般来说周末人比较多。", "expected": "一般来说周末人比较多。", "note": "一般 is a fixed word"}
+{"id": "n237", "kind": "keep", "input": "你能不能快一点儿。", "expected": "你能不能快一点儿。", "note": "一点儿 means a little"}
+{"id": "n238", "kind": "keep", "input": "我差一点就赶不上车了。", "expected": "我差一点就赶不上车了。", "note": "差一点 means almost"}
+{"id": "n239", "kind": "keep", "input": "我有三点建议想跟大家分享。", "expected": "我有三点建议想跟大家分享。", "note": "三点 means three points, not a time"}
+{"id": "n240", "kind": "keep", "input": "第一点，我们要控制成本。", "expected": "第一点，我们要控制成本。", "note": "第一点 is an ordinal point"}
+{"id": "n241", "kind": "keep", "input": "两点之间直线最短。", "expected": "两点之间直线最短。", "note": "geometry, 两点 is not 2点"}
+{"id": "n242", "kind": "keep", "input": "他每天都是三点一线的生活。", "expected": "他每天都是三点一线的生活。", "note": "idiom 三点一线 looks like the decimal 3.1"}
+{"id": "n243", "kind": "keep", "input": "三点水的字一般和水有关。", "expected": "三点水的字一般和水有关。", "note": "三点水 is the water radical"}
+{"id": "n244", "kind": "keep", "input": "现在已经九点多了，他还没来。", "expected": "现在已经九点多了，他还没来。", "note": "approximate time with 多, conservative keep"}
+{"id": "n245", "kind": "keep", "input": "他的绩点是三点五。", "expected": "他的绩点是三点五。", "note": "decimal without a unit, ambiguous, keep"}
+{"id": "n246", "kind": "keep", "input": "这道题评分三点五分。", "expected": "这道题评分三点五分。", "note": "ambiguous between the time 3点5分 and the score 3.5分, keep"}
+{"id": "n247", "kind": "keep", "input": "两口子吵架很正常。", "expected": "两口子吵架很正常。", "note": "两口子 is a fixed word"}
+{"id": "n248", "kind": "keep", "input": "他喝了二两白酒就醉了。", "expected": "他喝了二两白酒就醉了。", "note": "single digit with the unit 两 stays Chinese"}
+{"id": "n249", "kind": "keep", "input": "这个月我只请了一天假。", "expected": "这个月我只请了一天假。", "note": "single digit with counter"}
+{"id": "n250", "kind": "keep", "input": "我们第十五届年会在上海办。", "expected": "我们第十五届年会在上海办。", "note": "ordinals with 第 stay Chinese by convention"}
+{"id": "n251", "kind": "keep", "input": "比赛最后三比一结束。", "expected": "比赛最后三比一结束。", "note": "score with 比, conservative keep"}
+{"id": "n252", "kind": "keep", "input": "小时候我读过《十万个为什么》。", "expected": "小时候我读过《十万个为什么》。", "note": "book title"}
+{"id": "n253", "kind": "keep", "input": "她最喜欢《一千零一夜》里的故事。", "expected": "她最喜欢《一千零一夜》里的故事。", "note": "book title, 一千零一 must stay"}
+{"id": "n254", "kind": "keep", "input": "这件衣服几百块钱。", "expected": "这件衣服几百块钱。", "note": "approximate 几百"}
+{"id": "n255", "kind": "keep", "input": "他买了二十多个杯子。", "expected": "他买了二十多个杯子。", "note": "approximate with 多, conservative keep"}
+{"id": "n256", "kind": "keep", "input": "看着他也就三十来岁。", "expected": "看着他也就三十来岁。", "note": "approximate with 来"}
+{"id": "n257", "kind": "keep", "input": "现场有上千人。", "expected": "现场有上千人。", "note": "approximate 上千"}
+{"id": "n258", "kind": "keep", "input": "每年有数十万游客来这里。", "expected": "每年有数十万游客来这里。", "note": "approximate 数十万"}
+{"id": "n259", "kind": "keep", "input": "这个月涨了百分之八九十。", "expected": "这个月涨了百分之八九十。", "note": "approximate percentage range, keep"}
+{"id": "n260", "kind": "keep", "input": "我昨天在综艺里看到王一博了。", "expected": "我昨天在综艺里看到王一博了。", "note": "person name 王一博"}
+{"id": "n261", "kind": "keep", "input": "易烊千玺的新电影上映了。", "expected": "易烊千玺的新电影上映了。", "note": "person name with 千"}
+{"id": "n262", "kind": "keep", "input": "寒假我们打算去三亚。", "expected": "寒假我们打算去三亚。", "note": "place name 三亚"}
+{"id": "n263", "kind": "keep", "input": "九寨沟的秋天特别美。", "expected": "九寨沟的秋天特别美。", "note": "place name 九寨沟"}
+{"id": "n264", "kind": "keep", "input": "他老家在湖北十堰。", "expected": "他老家在湖北十堰。", "note": "place name 十堰"}
+{"id": "n265", "kind": "keep", "input": "我在五道口上班。", "expected": "我在五道口上班。", "note": "place name 五道口"}
+{"id": "n266", "kind": "keep", "input": "安徽六安的茶很有名。", "expected": "安徽六安的茶很有名。", "note": "place name 六安"}
+{"id": "n267", "kind": "keep", "input": "我们在十八里店那边租了房子。", "expected": "我们在十八里店那边租了房子。", "note": "place name 十八里店 contains 十八 plus the unit 里"}
+{"id": "n268", "kind": "keep", "input": "周末去广州十三行批发衣服。", "expected": "周末去广州十三行批发衣服。", "note": "place name 十三行 contains 十三 plus the counter 行"}
+{"id": "n269", "kind": "keep", "input": "上海五角场附近有很多大学。", "expected": "上海五角场附近有很多大学。", "note": "place name 五角场 contains the unit 角"}
+{"id": "n270", "kind": "keep", "input": "小米十四的拍照还不错。", "expected": "小米十四的拍照还不错。", "note": "Chinese brand followed by a number, no Latin anchor, conservative keep"}
+{"id": "n271", "kind": "keep", "input": "我买了一箱十月稻田的大米。", "expected": "我买了一箱十月稻田的大米。", "note": "brand 十月稻田 must not become 10月稻田"}
+{"id": "n272", "kind": "keep", "input": "过年喝的是五粮液。", "expected": "过年喝的是五粮液。", "note": "brand 五粮液"}
+{"id": "n273", "kind": "keep", "input": "两个黄鹂鸣翠柳，一行白鹭上青天。", "expected": "两个黄鹂鸣翠柳，一行白鹭上青天。", "note": "poem"}
+{"id": "n274", "kind": "keep", "input": "飞流直下三千尺，疑是银河落九天。", "expected": "飞流直下三千尺，疑是银河落九天。", "note": "poem, 三千尺 has a unit but must stay"}
+{"id": "n275", "kind": "keep", "input": "桃花潭水深千尺，不及汪伦送我情。", "expected": "桃花潭水深千尺，不及汪伦送我情。", "note": "poem"}
+{"id": "n276", "kind": "keep", "input": "千山鸟飞绝，万径人踪灭。", "expected": "千山鸟飞绝，万径人踪灭。", "note": "poem"}
+{"id": "n277", "kind": "keep", "input": "二月春风似剪刀。", "expected": "二月春风似剪刀。", "note": "poem, 二月 must not become 2月"}
+{"id": "n278", "kind": "keep", "input": "三人行，必有我师焉。", "expected": "三人行，必有我师焉。", "note": "classical quote"}
+{"id": "n279", "kind": "keep", "input": "一年之计在于春。", "expected": "一年之计在于春。", "note": "proverb"}
+{"id": "n280", "kind": "keep", "input": "阳春三月，正是踏青的好时候。", "expected": "阳春三月，正是踏青的好时候。", "note": "literary 阳春三月"}
+{"id": "n281", "kind": "keep", "input": "八月十五中秋节我们回家吃饭。", "expected": "八月十五中秋节我们回家吃饭。", "note": "lunar date stays Chinese"}
+{"id": "n282", "kind": "keep", "input": "大年三十晚上一起看春晚。", "expected": "大年三十晚上一起看春晚。", "note": "lunar date 大年三十"}
+{"id": "n283", "kind": "keep", "input": "正月十五要吃元宵。", "expected": "正月十五要吃元宵。", "note": "lunar date 正月十五"}
+{"id": "n284", "kind": "keep", "input": "九一八事变是历史课的重点。", "expected": "九一八事变是历史课的重点。", "note": "historical event, three digit reading must stay"}
+{"id": "n285", "kind": "keep", "input": "一二九运动发生在北平。", "expected": "一二九运动发生在北平。", "note": "historical event, three digit reading must stay"}
+{"id": "n286", "kind": "keep", "input": "大家一起喊一二三，茄子！", "expected": "大家一起喊一二三，茄子！", "note": "counting chant, three digit reading but not a number"}
+{"id": "n287", "kind": "keep", "input": "今天星期三，周五要交报告。", "expected": "今天星期三，周五要交报告。", "note": "weekday names"}
+{"id": "n288", "kind": "keep", "input": "我们是九零后，他是零零后。", "expected": "我们是九零后，他是零零后。", "note": "two digit generation labels, conservative keep"}
+{"id": "n289", "kind": "keep", "input": "The meeting starts at 3 PM tomorrow.", "expected": "The meeting starts at 3 PM tomorrow.", "note": "English text unchanged"}
+{"id": "n290", "kind": "keep", "input": "我们约在 3 PM 开会，地点是 Room 402。", "expected": "我们约在 3 PM 开会，地点是 Room 402。", "note": "already digits, unchanged"}
+{"id": "n291", "kind": "keep", "input": "这三点十分重要。", "expected": "这三点十分重要。", "note": "these three points are very important, not 3点10分"}
+{"id": "n292", "kind": "keep", "input": "身体好一点以后再说。", "expected": "身体好一点以后再说。", "note": "一点 a little before 以后 is not one o'clock"}
+{"id": "n293", "kind": "keep", "input": "这只是三百分之一的概率。", "expected": "这只是三百分之一的概率。", "note": "a fraction, 三百 is not 300分"}
+{"id": "n294", "kind": "keep", "input": "三四五个人一组。", "expected": "三四五个人一组。", "note": "a digit reading before a counter is a range, not 345"}
+{"id": "n295", "kind": "keep", "input": "我九八年毕业的。", "expected": "我九八年毕业的。", "note": "a two digit year stays"}
+{"id": "n296", "kind": "keep", "input": "预算三千五。", "expected": "预算三千五。", "note": "an elided number below 万 with nothing after it stays"}
+{"id": "n297", "kind": "keep", "input": "三点到五点。", "expected": "三点到五点。", "note": "a range of bare hours stays, nothing marks it as a time"}
+{"id": "n298", "kind": "keep", "input": "百分之五十多的人同意。", "expected": "百分之五十多的人同意。", "note": "an approximate percentage stays"}
