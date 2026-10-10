@@ -15,10 +15,17 @@ TEAM="X77KW5VYFJ"
 IDENTITY="Developer ID Application: Jiayao Tang ($TEAM)"
 PROFILE="orra-notary"
 
-version="${1:?usage: make-release.sh <version> <build> [--no-notarize]}"
-build="${2:?usage: make-release.sh <version> <build> [--no-notarize]}"
+usage="usage: make-release.sh <version> <build> [--no-notarize]"
+version="${1:?$usage}"
+build="${2:?$usage}"
 notarize=true
-[[ "${3:-}" == "--no-notarize" ]] && notarize=false
+# Anything else stops here, so a mistyped flag never uploads a build meant as a check.
+if [[ $# -eq 3 && "$3" == "--no-notarize" ]]; then
+    notarize=false
+elif [[ $# -ne 2 ]]; then
+    echo "$usage" >&2
+    exit 1
+fi
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "The version must look like 0.1.0" >&2; exit 1; }
 [[ "$build" =~ ^[0-9]+$ ]] || { echo "The build number must be a whole number" >&2; exit 1; }
 
@@ -87,16 +94,21 @@ echo "Signed: Developer ID, hardened runtime, audio input only, arm64, version $
 
 submit() {
     local file="$1"
+    local result="$out/notary-$(basename "$file").json"
     echo "Notarizing $(basename "$file"). A new account can wait hours for its first ones."
+    # notarytool may exit with an error for a rejected build, so its status is read from
+    # the result either way, and the log fetched for anything but Accepted.
+    local code=0
     xcrun notarytool submit "$file" --keychain-profile "$PROFILE" --wait --timeout 12h \
-        --output-format json > "$out/notary-$(basename "$file").json"
-    local status
-    status="$(plutil -extract status raw "$out/notary-$(basename "$file").json")"
+        --output-format json > "$result" || code=$?
+    local status id
+    status="$(plutil -extract status raw "$result" 2>/dev/null || echo "unknown")"
     if [[ "$status" != "Accepted" ]]; then
-        local id
-        id="$(plutil -extract id raw "$out/notary-$(basename "$file").json")"
-        xcrun notarytool log "$id" --keychain-profile "$PROFILE" "$out/notary-log-$id.json" || true
-        echo "Notarization: $status. The log is in $out." >&2
+        id="$(plutil -extract id raw "$result" 2>/dev/null || true)"
+        if [[ -n "$id" ]]; then
+            xcrun notarytool log "$id" --keychain-profile "$PROFILE" "$out/notary-log-$id.json" || true
+        fi
+        echo "Notarization: $status, notarytool exit code $code. The result and any log are in $out." >&2
         exit 1
     fi
 }
