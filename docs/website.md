@@ -21,8 +21,9 @@ no analytics and no tracker. Keep it that way.
    is still in a pull request. Make up no numbers or quotes.
 3. English text uses no em dash, en dash or semicolon. Chinese text uses full width
    punctuation (，。：？！（）“”) and a space between Chinese and a Latin word or a number.
-4. Open site/index.html in a browser to check it. Links between the pages are relative, so
-   they work from the file system too.
+4. Check the pages over HTTP, as GitHub Pages serves them. Run
+   `python3 -m http.server -d site` and open http://localhost:8000/. The language and brand
+   links point at folders, so they do not work when you open the files directly.
 5. Merge to main. The Website workflow (.github/workflows/pages.yml) deploys site/ when a
    push to main changes it. Actions > Website > Run workflow deploys it by hand.
 
@@ -56,6 +57,6 @@ Until Pages uses GitHub Actions as its source, the deploy step of the workflow f
 2. Settings > Pages > Custom domain: enter the domain and save. With a workflow as the
    source, no CNAME file is needed in site/.
 3. Once the certificate is ready, turn on Enforce HTTPS.
-4. Verify the domain for the account or organization (Settings > Pages > Verified domains),
-   so nobody else can claim it.
+4. Verify the domain in your account's or organization's Settings > Pages (not the
+   repository's), so nobody else can claim it.
 5. Update the canonical and alternate links at the top of both pages to the new address.
