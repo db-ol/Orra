@@ -83,9 +83,7 @@ struct FillerRulesTests {
         ("呃，你好。", "你好。"),
         ("我觉得呃这样不好。", "我觉得这样不好。"),
         ("我想问一下，呃，报销流程。", "我想问一下，报销流程。"),
-        ("就这样吧，嗯。", "就这样吧。"),
         ("好的，呃", "好的"),
-        ("就这样。嗯。下一个。", "就这样。下一个。"),
         ("嗯呃，我们走吧。", "我们走吧。"),
         ("我们用 uh React 吧。", "我们用 React 吧。"),
         ("这个 API 嗯 返回空值。", "这个 API 返回空值。"),
@@ -104,7 +102,7 @@ struct FillerRulesTests {
     }
 
     @Test(arguments: [
-        "嗯", "嗯嗯", "嗯。", "呃，", "Um.", "uh", "嗯，好的。", "嗯对。", "嗯，是这样。", "嗯？你说什么？",
+        "嗯", "嗯嗯", "嗯。", "呃，", "Um.", "就这样吧，嗯。", "就这样。嗯。下一个。", "uh", "嗯，好的。", "嗯对。", "嗯，是这样。", "嗯？你说什么？",
         "Um? What?", "好啊，走吧。", "是啊，对呀。", "今天天气真好啊！", "哦？真的吗？", "那个文件我看看。",
         "这个周末吧。", "他怎么还没来呢？", "别急嘛。", "金额不对。", "这个额度不够。", "额外的费用。",
         "他叫额尔敦。", "呃逆。", "Uh-huh, sure.", "Uh huh, sure.", "Uh oh, it broke.", "The UM campus.",
@@ -124,4 +122,35 @@ struct FillerRulesTests {
         FillerPreference.save(true, to: defaults)
         #expect(FillerPreference.load(from: defaults))
     }
+
+    @Test(arguments: [
+        // A change of mind keeps its 哦.
+        ("会议三点，哦，不是四点。", "会议三点，哦，不是四点。"),
+        ("啊，不对，是周二。", "啊，不对，是周二。"),
+        // An ellipsis goes with the filler.
+        ("Um... I think we should go.", "I think we should go."),
+        ("Um… I think so.", "I think so."),
+        ("呃……我想说一下。", "我想说一下。"),
+        ("呃... 我觉得可以", "我觉得可以"),
+        // 嗯 as an answer.
+        ("他问我去不去，我说嗯。", "他问我去不去，我说嗯。"),
+        ("嗯。明天见。", "嗯。明天见。"),
+        ("他说嗯", "他说嗯"),
+        // Quoted fillers are words.
+        ("He said \"um\" twice.", "He said \"um\" twice."),
+        ("他回了一个“嗯”字。", "他回了一个“嗯”字。"),
+        // Surnames.
+        ("Please email Dr. Um about it.", "Please email Dr. Um about it."),
+        ("I met Mr. Uh yesterday.", "I met Mr. Uh yesterday."),
+        // A reply must be a word of its own to keep 嗯.
+        ("嗯，好像不太对。", "好像不太对。"),
+        ("嗯，是不是应该先开会？", "是不是应该先开会？"),
+        ("嗯，好的。", "嗯，好的。"),
+        // English fillers against Chinese characters.
+        ("我uh觉得可以", "我觉得可以"),
+    ])
+    func edgeCasesFoundInReview(input: String, expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+    }
 }
+
