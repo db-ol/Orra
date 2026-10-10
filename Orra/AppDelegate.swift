@@ -25,6 +25,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         holdHint: { [pushToTalk] in TalkKey.holdHint(for: pushToTalk.talkKeys) }
     )
     lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
+    lazy var clipboard = ClipboardWord(
+        isDictating: { [pushToTalk] in pushToTalk.state != .idle },
+        vocabulary: { [pushToTalk] in pushToTalk.vocabulary }
+    )
+    lazy var learning = CorrectionLearning.live(
+        addToVocabulary: { [pushToTalk] word in
+            let terms = pushToTalk.vocabulary
+            if terms.contains(where: { $0.lowercased() == word.lowercased() }) { return .alreadyThere }
+            let updated = Vocabulary.adding(word, to: terms)
+            guard updated != terms else { return .full }
+            pushToTalk.setVocabulary(updated)
+            return .added
+        },
+        removeFromVocabulary: { [pushToTalk] word in
+            pushToTalk.setVocabulary(Vocabulary.removing(word, from: pushToTalk.vocabulary))
+        }
+    )
+    lazy var learnedNotice = LearnedNoticePanel(notice: LearnedNotice()) { [learning] learned in
+        learning.undo(learned)
+    }
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
     nonisolated static var isHostedByXcode: Bool {
@@ -66,10 +86,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 feedback.handle(cue)
             }
         }
+        pushToTalk.onPasted = { [learning] text, app in learning.pasted(text, in: app) }
+        learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         pushToTalk.start()
         followReadiness()
         openAtLogin.refreshWhenMenusOpen()
         audioInputs.refreshWhenMenusOpen()
+        clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
         Task { [models, pushToTalk, welcome] in

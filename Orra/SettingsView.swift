@@ -35,6 +35,7 @@ struct SettingsView: View {
     @Bindable var feedback: RecordingFeedback
     let openAtLogin: OpenAtLogin
     let models: ModelInstaller
+    let learning: CorrectionLearning
     @State private var page: SettingsPage? = .general
 
     var body: some View {
@@ -52,7 +53,7 @@ struct SettingsView: View {
             case .microphone:
                 MicrophoneSettings(pushToTalk: pushToTalk, inputs: inputs)
             case .vocabulary:
-                VocabularySettings(pushToTalk: pushToTalk)
+                VocabularySettings(pushToTalk: pushToTalk, learning: learning)
             case .about:
                 AboutSettings(models: models, pushToTalk: pushToTalk)
             }
@@ -150,6 +151,7 @@ private struct MicrophoneSettings: View {
 /// per word.
 private struct VocabularySettings: View {
     let pushToTalk: PushToTalkController
+    @Bindable var learning: CorrectionLearning
     @State private var newTerm = ""
     @State private var filter = ""
     @FocusState private var fieldFocused: Bool
@@ -201,6 +203,19 @@ private struct VocabularySettings: View {
                 }
             } header: {
                 Text("\(terms.count) of \(Vocabulary.limit) words")
+            }
+            Section {
+                Toggle("Learn from my corrections", isOn: $learning.isOn)
+                if !learning.store.entries.isEmpty {
+                    Button("Forget Learned Corrections") {
+                        learning.removeAll()
+                    }
+                }
+            } header: {
+                Text("Learning")
+            } footer: {
+                Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -327,6 +342,7 @@ struct TalkKeyToggles: View {
         inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) },
         feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in }),
         openAtLogin: .live(),
-        models: .live()
+        models: .live(),
+        learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in .added }, removeFromVocabulary: { _ in })
     )
 }

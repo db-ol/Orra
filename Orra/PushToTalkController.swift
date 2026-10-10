@@ -70,6 +70,9 @@ final class PushToTalkController {
     private(set) var lastTranscript: String?
     /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
     @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
+    /// Told after each paste, with the text and the app it went into, so Orra can learn
+    /// from a correction. AppDelegate sets it.
+    @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t) -> Void = { _, _ in }
 
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
@@ -539,6 +542,9 @@ final class PushToTalkController {
                 // Notice rather than info, so the timing stays in the log store for later
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(released.duration(to: .now), privacy: .public) for \(recording.duration, privacy: .public) s of audio")
+                if let app = target ?? frontmostApp() {
+                    onPasted(text, app)
+                }
             case .skippedPasswordField:
                 notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
             case .nothingToInsert:
