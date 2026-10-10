@@ -7,6 +7,21 @@ nonisolated struct Correction: Codable, Equatable, Hashable, Sendable {
     var corrected: String
 }
 
+/// A fix the user made in dictated text: a misheard word Orra learns on its own, or a word
+/// it offers to add after a fix of one Chinese character.
+nonisolated enum Finding: Equatable, Hashable, Sendable {
+    case word(Correction)
+    case suggestion(WordSuggestion)
+
+    /// The word pair, as heard and as corrected.
+    var correction: Correction {
+        switch self {
+        case .word(let correction): correction
+        case .suggestion(let suggestion): suggestion.pair
+        }
+    }
+}
+
 /// Finds the correction a user made in dictated text, from the field's text right after
 /// the paste and a little later. Pure, so tests can feed it text.
 nonisolated enum CorrectionFinder {
@@ -61,13 +76,22 @@ nonisolated enum CorrectionFinder {
         guard isWordLike(heard), isWordLike(corrected),
               heard.count <= maximumLength, corrected.count <= maximumLength,
               // One changed Chinese character is too little to tell a name from grammar, such
-              // as 的 and 得, and the system cannot split an unknown name into words. Such a
-              // word is left for the user to add by hand.
+              // as 的 and 得, and the system cannot split an unknown name into words.
+              // OneCharacterFix offers such a word to the user instead.
               hanCount(heard) != 1, hanCount(corrected) != 1,
               !differsOnlyInFirstLetterCase(heard, corrected),
               !differsOnlyInEnding(heard, corrected),
               SoundAlike.soundsAlike(heard, corrected) else { return nil }
         return Correction(heard: heard, corrected: corrected)
+    }
+
+    /// What a fix in the pasted text calls for: a word to learn, or after a fix of one
+    /// Chinese character, a word to offer.
+    static func finding(pasted: String, edited: String) -> Finding? {
+        if let correction = correction(pasted: pasted, edited: edited) {
+            return .word(correction)
+        }
+        return OneCharacterFix.suggestion(pasted: pasted, edited: edited).map(Finding.suggestion)
     }
 
     private static func isLatin(_ character: Character) -> Bool {
@@ -213,7 +237,7 @@ nonisolated enum SoundAlike {
     }
 }
 
-/// The corrections Orra saw, and whether each was learned or undone. A pair stays seen
+/// The corrections Orra saw, and whether each was learned, undone, or offered and declined. A pair stays seen
 /// while its word could not be added, such as when the vocabulary is full. Kept as a small
 /// JSON file on this Mac. Holds the word pairs only, never the text around them.
 nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
@@ -221,6 +245,9 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         case seen
         case accepted
         case dismissed
+        /// Offered after a fix of one Chinese character, and closed without adding it. The
+        /// same pair is not offered again, and its word may still be learned another way.
+        case declined
     }
 
     struct Entry: Codable, Equatable, Sendable {
@@ -260,10 +287,22 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         return accepted
     }
 
-    /// Forgets a pair, unless the user undid it. For a half typed fix that the finished
-    /// one replaces.
+    /// Forgets a pair, unless the user undid or declined it. For a half typed fix that the
+    /// finished one replaces.
     mutating func forget(_ correction: Correction) {
-        entries.removeAll { $0.correction == correction && $0.state != .dismissed }
+        entries.removeAll { $0.correction == correction && $0.state != .dismissed && $0.state != .declined }
+    }
+
+    /// The state of a pair, nil when it was not seen.
+    func state(of correction: Correction) -> State? {
+        entries.first { $0.correction == correction }?.state
+    }
+
+    /// Marks a pair the user was offered and did not add, so it is not offered again.
+    mutating func decline(_ correction: Correction) {
+        for index in entries.indices where entries[index].correction == correction && entries[index].state == .seen {
+            entries[index].state = .declined
+        }
     }
 
     /// Whether any pair for the word has this state.
