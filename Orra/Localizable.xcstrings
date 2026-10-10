@@ -708,6 +708,16 @@
         }
       }
     },
+    "Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 始终在菜单栏中。关闭此项后，只有在 Orra 的窗口打开时，程序坞里才会显示它。"
+          }
+        }
+      }
+    },
     "Orra is ready" : {
       "localizations" : {
         "zh-Hans" : {
@@ -907,6 +917,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置向导…"
+          }
+        }
+      }
+    },
+    "Show Orra in the Dock" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在程序坞中显示 Orra"
           }
         }
       }

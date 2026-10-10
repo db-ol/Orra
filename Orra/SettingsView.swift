@@ -36,6 +36,7 @@ struct SettingsView: View {
     let openAtLogin: OpenAtLogin
     let models: ModelInstaller
     let learning: CorrectionLearning
+    let dockIcon: DockIcon
     @State private var page: SettingsPage? = .general
 
     var body: some View {
@@ -49,7 +50,7 @@ struct SettingsView: View {
         } detail: {
             switch page ?? .general {
             case .general:
-                GeneralSettings(pushToTalk: pushToTalk, feedback: feedback, openAtLogin: openAtLogin)
+                GeneralSettings(pushToTalk: pushToTalk, feedback: feedback, openAtLogin: openAtLogin, dockIcon: dockIcon)
             case .microphone:
                 MicrophoneSettings(pushToTalk: pushToTalk, inputs: inputs)
             case .vocabulary:
@@ -63,11 +64,12 @@ struct SettingsView: View {
     }
 }
 
-/// The talk keys, the feedback while dictating, and Open at Login.
+/// The talk keys, the feedback while dictating, Open at Login and the Dock icon.
 private struct GeneralSettings: View {
     let pushToTalk: PushToTalkController
     @Bindable var feedback: RecordingFeedback
     let openAtLogin: OpenAtLogin
+    @Bindable var dockIcon: DockIcon
 
     var body: some View {
         Form {
@@ -99,6 +101,10 @@ private struct GeneralSettings: View {
                     Text(verbatim: problem)
                         .foregroundStyle(.secondary)
                 }
+                Toggle("Show Orra in the Dock", isOn: $dockIcon.showsInDock)
+            } footer: {
+                Text("Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -342,6 +348,7 @@ struct TalkKeyToggles: View {
         feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in }),
         openAtLogin: .live(),
         models: .live(),
-        learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in .added }, removeFromVocabulary: { _ in })
+        learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in .added }, removeFromVocabulary: { _ in }),
+        dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true })
     )
 }
