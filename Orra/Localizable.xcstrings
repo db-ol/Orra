@@ -1061,6 +1061,16 @@
         }
       }
     },
+    "Starting and finding Orra" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动和查找 Orra"
+          }
+        }
+      }
+    },
     "System Default" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1327,6 +1337,16 @@
         }
       }
     },
+    "Version, speech model, updates and privacy." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本、语音模型、更新和隐私。"
+          }
+        }
+      }
+    },
     "Vocabulary" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1367,6 +1387,16 @@
         }
       }
     },
+    "Which microphone Orra records from." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 用哪个麦克风录音。"
+          }
+        }
+      }
+    },
     "While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1383,6 +1413,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "听写时"
+          }
+        }
+      }
+    },
+    "Words and names that Orra should write your way, and learning from your corrections." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让 Orra 按你的写法输出的词和名字，以及从你的修改中学习。"
+          }
+        }
+      }
+    },
+    "Your language, the talk key, what you see and hear while dictating, and how Orra starts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "界面语言、说话键、听写时的提示，以及 Orra 如何启动。"
           }
         }
       }

@@ -20,10 +20,67 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .general: "gearshape"
-        case .microphone: "mic"
-        case .vocabulary: "character.book.closed"
-        case .about: "info.circle"
+        case .general: "gearshape.fill"
+        case .microphone: "mic.fill"
+        case .vocabulary: "character.book.closed.fill"
+        case .about: "info.circle.fill"
+        }
+    }
+
+    /// The color behind the icon, as System Settings gives each pane its own.
+    var tint: Color {
+        switch self {
+        case .general: .gray
+        case .microphone: .orange
+        case .vocabulary: .blue
+        case .about: .indigo
+        }
+    }
+
+    /// One line under the page's title.
+    var summary: LocalizedStringKey {
+        switch self {
+        case .general: "Your language, the talk key, what you see and hear while dictating, and how Orra starts."
+        case .microphone: "Which microphone Orra records from."
+        case .vocabulary: "Words and names that Orra should write your way, and learning from your corrections."
+        case .about: "Version, speech model, updates and privacy."
+        }
+    }
+}
+
+/// A symbol in a colored rounded square, as in the sidebar of System Settings.
+struct SettingsIcon: View {
+    let symbol: String
+    let tint: Color
+    var size: CGFloat = 22
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.55, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(tint.gradient))
+            .accessibilityHidden(true)
+    }
+}
+
+/// The top of each page: its icon, title and what it holds.
+private struct PageHeader: View {
+    let page: SettingsPage
+
+    var body: some View {
+        Section {
+            HStack(spacing: 14) {
+                SettingsIcon(symbol: page.symbol, tint: page.tint, size: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(page.title)
+                        .font(.title2.weight(.semibold))
+                    Text(page.summary)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 }
@@ -43,10 +100,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(SettingsPage.allCases, selection: $page) { page in
-                Label(page.title, systemImage: page.symbol)
-                    .tag(page)
+                Label {
+                    Text(page.title)
+                } icon: {
+                    SettingsIcon(symbol: page.symbol, tint: page.tint)
+                }
+                .padding(.vertical, 2)
+                .tag(page)
             }
-            .navigationSplitViewColumnWidth(170)
+            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
             .toolbar(removing: .sidebarToggle)
         } detail: {
             switch page ?? .general {
@@ -61,7 +123,8 @@ struct SettingsView: View {
             }
         }
         .toolbar(removing: .sidebarToggle)
-        .frame(width: 660, height: 460)
+        // Resizable from this size up. The Settings scene keeps the size the user picks.
+        .frame(minWidth: 700, idealWidth: 780, maxWidth: .infinity, minHeight: 500, idealHeight: 620, maxHeight: .infinity)
     }
 }
 
@@ -77,42 +140,9 @@ private struct GeneralSettings: View {
 
     var body: some View {
         Form {
+            PageHeader(page: .general)
             Section {
-                TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
-            } header: {
-                Text("Talk Key")
-            } footer: {
-                Text("Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Toggle("Show the recording indicator", isOn: $feedback.showsIndicator)
-                Toggle("Play sounds when recording starts and stops", isOn: $feedback.playsSounds)
-                Toggle("Show a small bar at the bottom of the screen while Orra is ready", isOn: $feedback.showsIdleBar)
-            } header: {
-                Text("While you dictate")
-            }
-            Section {
-                Toggle("Open at Login", isOn: Binding(
-                    get: { openAtLogin.isOn },
-                    set: { openAtLogin.setOn($0) }
-                ))
-                if openAtLogin.needsApproval {
-                    Button("Allow Orra in Login Items…") {
-                        openAtLogin.openSettings()
-                    }
-                }
-                if let problem = openAtLogin.problem {
-                    Text(verbatim: problem)
-                        .foregroundStyle(.secondary)
-                }
-                Toggle("Show Orra in the Dock", isOn: $dockIcon.showsInDock)
-            } footer: {
-                Text("Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Picker("Language", selection: $language) {
+                Picker(selection: $language) {
                     ForEach(AppLanguage.allCases) { language in
                         if let name = language.nativeName {
                             Text(verbatim: name).tag(language)
@@ -120,6 +150,8 @@ private struct GeneralSettings: View {
                             Text("Same as the Mac").tag(language)
                         }
                     }
+                } label: {
+                    Label("Language", systemImage: "globe")
                 }
                 .onChange(of: language) { _, language in
                     language.save()
@@ -132,8 +164,57 @@ private struct GeneralSettings: View {
                         Button("Restart Orra") {
                             AppLanguage.restart()
                         }
+                        .buttonStyle(.borderedProminent)
                     }
                 }
+            } header: {
+                Text("Language")
+            }
+            Section {
+                TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
+            } header: {
+                Text("Talk Key")
+            } footer: {
+                Text("Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle(isOn: $feedback.showsIndicator) {
+                    Label("Show the recording indicator", systemImage: "waveform")
+                }
+                Toggle(isOn: $feedback.playsSounds) {
+                    Label("Play sounds when recording starts and stops", systemImage: "speaker.wave.2")
+                }
+                Toggle(isOn: $feedback.showsIdleBar) {
+                    Label("Show a small bar at the bottom of the screen while Orra is ready", systemImage: "minus.rectangle")
+                }
+            } header: {
+                Text("While you dictate")
+            }
+            Section {
+                Toggle(isOn: Binding(
+                    get: { openAtLogin.isOn },
+                    set: { openAtLogin.setOn($0) }
+                )) {
+                    Label("Open at Login", systemImage: "power")
+                }
+                if openAtLogin.needsApproval {
+                    Button("Allow Orra in Login Items…") {
+                        openAtLogin.openSettings()
+                    }
+                }
+                if let problem = openAtLogin.problem {
+                    Text(verbatim: problem)
+                        .foregroundStyle(.secondary)
+                }
+                Toggle(isOn: $dockIcon.showsInDock) {
+                    Label("Show Orra in the Dock", systemImage: "dock.rectangle")
+                }
+            } header: {
+                Text("Starting and finding Orra")
+            } footer: {
+                Text("Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -148,6 +229,7 @@ private struct MicrophoneSettings: View {
 
     var body: some View {
         Form {
+            PageHeader(page: .microphone)
             Section {
                 Picker("Microphone", selection: Binding(
                     get: { pushToTalk.microphone?.uid ?? "" },
@@ -194,6 +276,7 @@ private struct VocabularySettings: View {
         let terms = pushToTalk.vocabulary
         let shown = filter.isEmpty ? terms : terms.filter { $0.localizedCaseInsensitiveContains(filter) }
         Form {
+            PageHeader(page: .vocabulary)
             Section {
                 HStack(spacing: 8) {
                     // A visible box with the hint inside it, so it reads as a place to type.
@@ -275,6 +358,7 @@ private struct AboutSettings: View {
 
     var body: some View {
         Form {
+            PageHeader(page: .about)
             Section {
                 HStack(spacing: 14) {
                     Image(nsImage: NSApplication.shared.applicationIconImage)
