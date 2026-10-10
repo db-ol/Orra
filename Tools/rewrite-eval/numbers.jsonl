@@ -391,7 +391,7 @@
 {"id": "n391", "kind": "convert", "input": "下午3点到四点。", "expected": "下午3点到4点。", "note": "range after an hour in digits"}
 {"id": "n392", "kind": "convert", "input": "一百二十八 GB 的版本。", "expected": "128 GB 的版本。", "note": "a spaced Latin unit, space kept"}
 {"id": "n393", "kind": "convert", "input": "三千五百 mAh 的电池。", "expected": "3500 mAh 的电池。", "note": "a spaced Latin unit"}
-{"id": "n394", "kind": "convert", "input": "要求 Python 三点十。", "expected": "要求 Python 3.10。", "note": "version with minor ten"}
+{"id": "n394", "kind": "keep", "input": "要求 Python 三点十。", "expected": "要求 Python 三点十。", "note": "kept in words since a version needs a model name or 以上, 以下 or 版 (Tom三点十 is a time)"}
 {"id": "n395", "kind": "convert", "input": "升级到 iOS 十八点二点一。", "expected": "升级到 iOS 18.2.1。", "note": "a version with three parts converts whole"}
 {"id": "n396", "kind": "convert", "input": "GDP 一百二十六万亿元。", "expected": "GDP 126万亿元。", "note": "万亿 is one unit"}
 {"id": "n397", "kind": "convert", "input": "两万零五十块。", "expected": "20050块。", "note": "an amount that needs many places is written whole"}
@@ -608,3 +608,65 @@
 {"id": "n608", "kind": "keep", "input": "三百多到五百元。", "expected": "三百多到五百元。", "note": "both ends of a range convert together or stay"}
 {"id": "n609", "kind": "keep", "input": "两三百到五百元。", "expected": "两三百到五百元。", "note": "both ends of a range convert together or stay"}
 {"id": "n610", "kind": "keep", "input": "十几到二十个。", "expected": "十几到二十个。", "note": "both ends of a range convert together or stay"}
+{"id": "n611", "kind": "keep", "input": "股价从三十升至五十。", "expected": "股价从三十升至五十。", "note": "升 after a number is the verb rise, not liters"}
+{"id": "n612", "kind": "keep", "input": "体温从三十六升到三十九。", "expected": "体温从三十六升到三十九。", "note": "升 after a number is the verb rise, not liters"}
+{"id": "n613", "kind": "keep", "input": "体重从一百三十升到一百五十斤。", "expected": "体重从一百三十升到一百五十斤。", "note": "升 after a number is the verb rise, not liters"}
+{"id": "n614", "kind": "keep", "input": "排名十五升到第三。", "expected": "排名十五升到第三。", "note": "升 after a number is the verb rise, not liters"}
+{"id": "n615", "kind": "keep", "input": "大家喊口号，一二三四！", "expected": "大家喊口号，一二三四！", "note": "counting stays, a code needs a word such as 验证码 right before it"}
+{"id": "n616", "kind": "keep", "input": "打拍子一二三四。", "expected": "打拍子一二三四。", "note": "counting stays, a code needs a word such as 验证码 right before it"}
+{"id": "n617", "kind": "keep", "input": "在教室里背一二三四五。", "expected": "在教室里背一二三四五。", "note": "counting stays, a code needs a word such as 验证码 right before it"}
+{"id": "n618", "kind": "keep", "input": "在舞蹈室一二三四地数拍子。", "expected": "在舞蹈室一二三四地数拍子。", "note": "counting stays, a code needs a word such as 验证码 right before it"}
+{"id": "n619", "kind": "keep", "input": "我一三五去健身房，二四六休息。", "expected": "我一三五去健身房，二四六休息。", "note": "counting stays, a code needs a word such as 验证码 right before it"}
+{"id": "n620", "kind": "keep", "input": "我们一般打二四六的球。", "expected": "我们一般打二四六的球。", "note": "counting stays, a code needs a word such as 验证码 right before it"}
+{"id": "n621", "kind": "keep", "input": "我一四七上班。", "expected": "我一四七上班。", "note": "a set of days stays"}
+{"id": "n622", "kind": "keep", "input": "他二五八有课。", "expected": "他二五八有课。", "note": "a set of days stays"}
+{"id": "n623", "kind": "keep", "input": "一三六上课，其他时间休息。", "expected": "一三六上课，其他时间休息。", "note": "a set of days stays"}
+{"id": "n624", "kind": "keep", "input": "我们一二五值班。", "expected": "我们一二五值班。", "note": "a set of days stays"}
+{"id": "n625", "kind": "keep", "input": "二五六都不在家。", "expected": "二五六都不在家。", "note": "a set of days stays"}
+{"id": "n626", "kind": "keep", "input": "我买了一千块拼图。", "expected": "我买了一千块拼图。", "note": "块 before a noun is the counter for pieces"}
+{"id": "n627", "kind": "keep", "input": "十块月饼。", "expected": "十块月饼。", "note": "块 before a noun is the counter for pieces"}
+{"id": "n628", "kind": "keep", "input": "马路上铺了一百块石板。", "expected": "马路上铺了一百块石板。", "note": "块 before a noun is the counter for pieces"}
+{"id": "n629", "kind": "keep", "input": "二月二日龙抬头。", "expected": "二月二日龙抬头。", "note": "lunar festival after a date"}
+{"id": "n630", "kind": "keep", "input": "七月十五日中元节。", "expected": "七月十五日中元节。", "note": "lunar festival after a date"}
+{"id": "n631", "kind": "keep", "input": "三月三日上巳节。", "expected": "三月三日上巳节。", "note": "lunar festival after a date"}
+{"id": "n632", "kind": "keep", "input": "十月一日寒衣节。", "expected": "十月一日寒衣节。", "note": "lunar festival after a date"}
+{"id": "n633", "kind": "keep", "input": "十天十夜。", "expected": "十天十夜。", "note": "idiom or rough pair of numbers"}
+{"id": "n634", "kind": "keep", "input": "四十天四十夜。", "expected": "四十天四十夜。", "note": "idiom or rough pair of numbers"}
+{"id": "n635", "kind": "keep", "input": "十年九不遇。", "expected": "十年九不遇。", "note": "idiom or rough pair of numbers"}
+{"id": "n636", "kind": "keep", "input": "十天半月。", "expected": "十天半月。", "note": "idiom or rough pair of numbers"}
+{"id": "n637", "kind": "keep", "input": "十年八载。", "expected": "十年八载。", "note": "idiom or rough pair of numbers"}
+{"id": "n638", "kind": "keep", "input": "十年二十年。", "expected": "十年二十年。", "note": "idiom or rough pair of numbers"}
+{"id": "n639", "kind": "keep", "input": "十年生聚，十年教训。", "expected": "十年生聚，十年教训。", "note": "idiom or rough pair of numbers"}
+{"id": "n640", "kind": "keep", "input": "这个梗我能笑一千年。", "expected": "这个梗我能笑一千年。", "note": "hyperbole before 年 or 岁"}
+{"id": "n641", "kind": "keep", "input": "这首歌我能听一百年。", "expected": "这首歌我能听一百年。", "note": "hyperbole before 年 or 岁"}
+{"id": "n642", "kind": "keep", "input": "我能活一千岁。", "expected": "我能活一千岁。", "note": "hyperbole before 年 or 岁"}
+{"id": "n643", "kind": "keep", "input": "这事他吹了一百年。", "expected": "这事他吹了一百年。", "note": "hyperbole before 年 or 岁"}
+{"id": "n644", "kind": "keep", "input": "我的iPhone十二点五十分没电了。", "expected": "我的iPhone十二点五十分没电了。", "note": "a time glued to a Latin name stays rather than join the name"}
+{"id": "n645", "kind": "keep", "input": "中秋节公司发了三十个月饼。", "expected": "中秋节公司发了三十个月饼。", "note": "个 is a plain counter before 月饼 and 月嫂"}
+{"id": "n646", "kind": "keep", "input": "我们家政公司有二十个月嫂。", "expected": "我们家政公司有二十个月嫂。", "note": "个 is a plain counter before 月饼 and 月嫂"}
+{"id": "n647", "kind": "keep", "input": "买了iPad三台。", "expected": "买了iPad三台。", "note": "a count after a Latin name stays"}
+{"id": "n648", "kind": "keep", "input": "买了iPhone十五台。", "expected": "买了iPhone十五台。", "note": "a count after a Latin name stays"}
+{"id": "n649", "kind": "keep", "input": "公司配了MacBook三台。", "expected": "公司配了MacBook三台。", "note": "a count after a Latin name stays"}
+{"id": "n650", "kind": "keep", "input": "买了AirPods三副。", "expected": "买了AirPods三副。", "note": "a count after a Latin name stays"}
+{"id": "n651", "kind": "keep", "input": "SUV三辆。", "expected": "SUV三辆。", "note": "a count after a Latin name stays"}
+{"id": "n652", "kind": "keep", "input": "维生素C三片。", "expected": "维生素C三片。", "note": "a count after a Latin name stays"}
+{"id": "n653", "kind": "keep", "input": "维生素D三粒。", "expected": "维生素D三粒。", "note": "a count after a Latin name stays"}
+{"id": "n654", "kind": "keep", "input": "这题选C三道都对。", "expected": "这题选C三道都对。", "note": "a count after a Latin name stays"}
+{"id": "n655", "kind": "keep", "input": "我投B三票。", "expected": "我投B三票。", "note": "a count after a Latin name stays"}
+{"id": "n656", "kind": "keep", "input": "Plan B三步走。", "expected": "Plan B三步走。", "note": "a count after a Latin name stays"}
+{"id": "n657", "kind": "keep", "input": "NBA三分球大赛。", "expected": "NBA三分球大赛。", "note": "a count after a Latin name stays"}
+{"id": "n658", "kind": "keep", "input": "明天约Tom三点十五。", "expected": "明天约Tom三点十五。", "note": "a time after a person's name is not a version"}
+{"id": "n659", "kind": "keep", "input": "我跟Lisa三点十二，在楼下见。", "expected": "我跟Lisa三点十二，在楼下见。", "note": "a time after a person's name is not a version"}
+{"id": "n660", "kind": "keep", "input": "等Amy四点十，然后出发", "expected": "等Amy四点十，然后出发", "note": "a time after a person's name is not a version"}
+{"id": "n661", "kind": "keep", "input": "我约了Jack三点十。", "expected": "我约了Jack三点十。", "note": "a time after a person's name is not a version"}
+{"id": "n662", "kind": "convert", "input": "下午三点二十到四点。", "expected": "下午3点20到4点。", "note": "a range of times after a time of day converts both ends in one pass"}
+{"id": "n663", "kind": "convert", "input": "晚上十点二十到十一点。", "expected": "晚上10点20到11点。", "note": "a range of times after a time of day converts both ends in one pass"}
+{"id": "n664", "kind": "convert", "input": "下午三点零五到四点。", "expected": "下午3点05到4点。", "note": "a range of times after a time of day converts both ends in one pass"}
+{"id": "n665", "kind": "convert", "input": "早上八点十五至九点。", "expected": "早上8点15至9点。", "note": "a range of times after a time of day converts both ends in one pass"}
+{"id": "n666", "kind": "convert", "input": "两千零二十六年十月发布。", "expected": "2026年10月发布。", "note": "a year with 千 and its month convert together"}
+{"id": "n667", "kind": "convert", "input": "一千九百九十八年十二月出生。", "expected": "1998年12月出生。", "note": "a year with 千 and its month convert together"}
+{"id": "n668", "kind": "convert", "input": "两千零二十六年十二月。", "expected": "2026年12月。", "note": "a year with 千 and its month convert together"}
+{"id": "n669", "kind": "convert", "input": "一九九八到二零零八年。", "expected": "1998到2008年。", "note": "both years of a range convert in one pass"}
+{"id": "n670", "kind": "convert", "input": "二零二五至二零二六赛季。", "expected": "2025至2026赛季。", "note": "both years of a range convert in one pass"}
+{"id": "n671", "kind": "convert", "input": "一九九零至一九九五年。", "expected": "1990至1995年。", "note": "both years of a range convert in one pass"}
+{"id": "n672", "kind": "convert", "input": "二零二五到二零二六年度。", "expected": "2025到2026年度。", "note": "both years of a range convert in one pass"}

@@ -8,8 +8,8 @@ import Foundation
 /// expects digits, and leave everything else as dictated:
 /// - Readings digit by digit (零〇一二三四五六七八九, and 幺 as 1) of three digits or more,
 ///   such as phone numbers, codes and model numbers: 幺三八零零幺三八零零零 is 13800138000.
-///   A year needs four digits (二零二六年). Counting (一二三四五) stays unless a word such
-///   as 验证码 comes before it.
+///   A year needs four digits (二零二六年). Counting (一二三四五) and sets of days (一四七)
+///   stay unless a word such as 验证码 comes right before them.
 /// - Dates: a month with its day and 号 or 日 (十月一日 is 10月1日), and a month after a year
 ///   in digits. A day without a month (十五号), ranges of days and lunar dates stay.
 /// - Times: an hour after a time of day such as 下午 (下午三点 is 下午3点), or with minutes
@@ -17,13 +17,14 @@ import Foundation
 ///   a time of day.
 /// - Percentages: 百分之三点五 is 3.5%.
 /// - Money: a number with 十, 百, 千, 万 or 亿 before 元, 块 or a currency word such as 美元
-///   (三百五十块 is 350块, 三万五千元 is 3.5万元).
+///   (三百五十块 is 350块, 三万五千元 is 3.5万元). 块 before a noun counts pieces and stays.
 /// - Measurements: a number with 十, 百 or 千, or a decimal, before a real unit such as 公里,
 ///   公斤, 小时, 天, 岁, 年 or GB (三点五公里 is 3.5公里). 度 is a unit only for a temperature,
-///   after 零下 or with 摄氏.
+///   after 零下 or with 摄氏. A measurement with another number after it (十天十夜) stays.
 /// - Model numbers and versions after a Latin name: M五 is M5, RX 三五零 is RX 350 and
 ///   macOS 十五点一 is macOS 15.1. After a space only when a space, punctuation, a Latin unit
-///   or the end follows. A space that was there stays, and none is added.
+///   or the end follows. A space that was there stays, and none is added. Any other number
+///   glued to a Latin word stays (iPad三台, Tom三点十五).
 ///
 /// Everything else stays in words: single digits (三本书, 五公里), numbers before a plain
 /// counter (二十个人, 十位, 十八届), 万 and 亿 without a currency (两万人, 十二万), ranges
@@ -44,18 +45,23 @@ nonisolated enum NumberRules {
     private static let currencies: Set<String> = [
         "元", "块", "美元", "欧元", "英镑", "港币", "港元", "美金", "日元", "韩元", "澳元", "加元", "人民币",
     ]
+    /// What may follow 块 for it to be money rather than the counter for pieces.
+    private static let moneyAfterKuai: [[Character]] = [
+        "钱", "的", "了", "和", "就", "吧", "呢", "啊", "吗", "呀", "左右", "以上", "以下", "以内",
+    ].map { Array($0) }
     /// Real units after which a number with 十, 百 or 千, or a decimal, becomes digits.
     private static let units: [[Character]] = (Array(currencies) + [
         "平方公里", "平方米", "立方米", "摄氏度", "公里", "千米", "厘米", "毫米", "纳米", "米", "公斤",
-        "千克", "克", "斤", "吨", "毫升", "升", "英寸", "寸", "毫安时", "毫安", "瓦", "度", "周岁", "岁",
+        "千克", "克", "斤", "吨", "毫升", "英寸", "寸", "毫安时", "毫安", "瓦", "度", "周岁", "岁",
         "小时", "分钟", "秒钟", "秒", "天", "周", "个月", "年",
     ]).map { Array($0) }.sorted { $0.count > $1.count }
     /// Words that start with a unit character but are not a unit after a number, such as 元宵
-    /// in 十五元宵节 and 年轻 in 二十年轻人.
+    /// in 十五元宵节 and 年轻 in 二十年轻人. A word that starts with the last character of a
+    /// unit counts too, as 月饼 in 三十个月饼.
     private static let notUnits: [[Character]] = [
         "元宵", "元旦", "元素", "元老", "元帅", "元月", "元气", "元首", "天才", "天下", "天干", "天外",
         "天地", "天空", "天气", "天使", "天堂", "天然", "天罡", "天兵", "年轻", "年华", "年糕", "米饭",
-        "克服", "岁月", "秒杀", "周末", "周边", "周围", "块头", "斤斤", "升级", "升职", "升学", "度假", "度过",
+        "克服", "岁月", "秒杀", "周末", "周边", "周围", "块头", "斤斤", "度假", "度过", "月饼", "月嫂", "月亮", "月光", "月球",
     ].map { Array($0) }
     /// Latin units after a number: 5G, 4K, 3D and 十六GB. A single digit takes only the ones
     /// that cannot be a word, so 做一PPT stays.
@@ -66,6 +72,8 @@ nonisolated enum NumberRules {
     /// Units of an amount that a smaller unit can follow, as in 三十块零五毛 and 一分三十秒. The
     /// two parts stay whole.
     private static let amountUnits: [[Character]] = ["块", "元", "分", "秒", "小时", "分钟", "度", "米", "斤", "公里", "公斤"].map { Array($0) }
+    /// Counters that keep a number after a Latin name a count: iPad三台, 维生素D三粒, NBA三分球.
+    private static let counters: Set<Character> = Set("个次遍位张本条只件份页种台部副辆片粒票道步支把双套盒瓶袋箱杯碗颗枚篇首句行层届期集季轮场局回趟顿批组对棵头匹架艘座间家所门节堂课名口户分笔块根")
     /// Characters after a number that make it a rough one: 二十多, 十几, 三十来岁, 十余.
     private static let roughAfter: Set<Character> = ["多", "几", "来", "余"]
     /// Characters before a number that make it an ordinal, a weekday, a nickname, a holiday, a
@@ -94,13 +102,14 @@ nonisolated enum NumberRules {
     /// Words before a lunar date, which stays in words: 腊月二十三号, 农历八月十五号.
     private static let lunarWords: [[Character]] = ["农历", "阴历", "腊月", "正月", "冬月"].map { Array($0) }
     /// Lunar festivals after a date: 七月七日是七夕.
-    private static let lunarFestivals: [[Character]] = ["七夕", "中秋", "重阳", "端午", "元宵", "乞巧", "腊八", "小年"].map { Array($0) }
-    /// Round numbers that are figures of speech before 年: 一百年都遇不到, 八百年没见了.
+    private static let lunarFestivals: [[Character]] = ["七夕", "中秋", "重阳", "端午", "元宵", "乞巧", "腊八", "小年", "龙抬头", "中元", "鬼节", "上巳", "寒衣"].map { Array($0) }
+    /// Round numbers that are figures of speech before 年 or 岁: 一百年都遇不到, 八百年没见了,
+    /// 能笑一千年, 活一千岁.
     private static let hyperboleNumbers: Set<String> = ["一百", "一千", "八百"]
     /// Sayings and titles kept wherever a number touches them. Readings such as 九一八 must
     /// match the whole number.
     private static let setPhrases: [[Character]] = [
-        "十年寒窗", "十年树木", "十天半个月", "十年如一日",
+        "十年寒窗", "十年树木", "十天半个月", "十天半月", "十年如一日", "十年生聚", "十年教训",
         "十年磨一剑", "十年生死", "十年一觉", "二十年来辨", "二十年后又是一条好汉", "五百年前是一家",
         "九千岁", "八十天环游", "一千年以后", "十年一品", "十年一刻", "一百年不动摇",
         "人过四十天过午", "十年饮冰", "十年怕井绳", "十年不晚", "十年功", "十年河东", "十年河西",
@@ -184,10 +193,29 @@ nonisolated enum NumberRules {
         if let model = afterLatinName(run, in: characters) {
             return model
         }
+        // Digits glued to a Latin word join its name, so iPhone十二点五十分 stays rather than
+        // become iPhone12点50分.
+        if start > 0, isASCIILetter(characters[start - 1]) { return nil }
         guard let spoken = parse(characters[run]) else { return nil }
         let next = end < characters.count ? characters[end] : nil
-        if endsRange(before: start, in: characters) { return nil }
+        // Both ends of a range stay, except a time after a time of day (下午三点二十到四点) and
+        // a reading of four digits or more, such as a year (一九九八到二零零八年).
+        if endsRange(before: start, in: characters) {
+            let isTimeRange = next == "点" && endsRangeOfTimes(start, in: characters)
+            var isLongReading = false
+            if case .reading(let digits) = spoken, digits.count >= 4 { isLongReading = true }
+            if !isTimeRange, !isLongReading { return nil }
+        }
         // The second part of an amount, such as 三十 in 一分三十秒, stays with the first.
+        // 二十 in 十年二十年 is the second of a pair and stays with the first.
+        let unitAfter = unitLength(at: end, in: characters)
+        if unitAfter > 0 {
+            let unitStart = start - unitAfter
+            if starts(Array(characters[end..<end + unitAfter]), at: unitStart, in: characters),
+               let beforeUnit = characters[safe: unitStart - 1], numerals.contains(beforeUnit) {
+                return nil
+            }
+        }
         if let unit = amountUnits.first(where: { starts($0, at: start - $0.count, in: characters) }) {
             // 一个小时二十分钟 has 个 between the number and its unit.
             var numberEnd = start - unit.count
@@ -212,9 +240,9 @@ nonisolated enum NumberRules {
             guard character != "两", character != "幺", next == "%" || latinUnit(at: end, in: characters, single: true) else { return nil }
             return (Array(String(value)), end)
         case .reading(let digits):
-            // 一二三四五 and 五四三二一 are counting, unless a word such as 验证码 or 房间 says
-            // it is a code.
-            guard digits.count >= 3, !isCounting(digits) || followsCodeWord(start, in: characters) else { return nil }
+            // 一二三四五 and 五四三二一 are counting and 一四七 lists weekdays, unless a word such
+            // as 验证码 says it is a code.
+            guard digits.count >= 3, !isCounting(characters[run]) || followsCodeWord(start, in: characters) else { return nil }
             if next == "年" {
                 return digits.count == 4 ? (Array(digits), end) : nil
             }
@@ -251,21 +279,20 @@ nonisolated enum NumberRules {
         if unitText == "度", !isTemperature(before: start, in: characters) { return nil }
         // 三千一个月 and 两百一小时 are a price for one month or one hour, not 3100 and 210.
         if end - start > 1, characters[end - 1] == "一", ["百", "千", "万"].contains(characters[end - 2]) { return nil }
-        // 一百年都遇不到 and 八百年没见了 are figures of speech.
-        if unitText == "年", hyperboleNumbers.contains(numberText), numberText == "八百" || following == "都" || following == "也" {
+        // 一百年都遇不到, 八百年没见了 and 活一千岁 are figures of speech.
+        if unitText == "年" || unitText == "岁", hyperboleNumbers.contains(numberText) {
             return nil
         }
         guard let following, numerals.contains(following) else { return (digits, end) }
         let followingEnd = numeralsEnd(from: afterUnit, in: characters)
-        // 十块八块 and 十年八年 are rough, like 七八个.
-        if followingEnd == afterUnit + 1, starts(Array(unitText), at: followingEnd, in: characters) { return nil }
-        // 三十块零五毛 and 九十九块九 stay whole. 两百元一张 is a price for one.
-        if amountUnits.contains(Array(unitText)) {
-            let perOne = followingEnd == afterUnit + 1 && following == "一"
-                && !(followingEnd < characters.count && "毛角分秒两".contains(characters[followingEnd]))
-            if !perOne { return nil }
-        }
-        return (digits, end)
+        // 十块八块, 十年八载, 十天十夜 and 十年九不遇 are rough or sayings, and 三十块零五毛
+        // and 九十九块九 stay whole. Only a price for one, as in 两百元一张, converts.
+        let perOne = followingEnd == afterUnit + 1 && following == "一"
+            && !(followingEnd < characters.count && "毛角分秒两".contains(characters[followingEnd]))
+            && !starts(Array(unitText), at: followingEnd, in: characters)
+        // 两千零二十六年十月 is a year and its month.
+        let isYear = unitText == "年" && digits.count == 4 && characters[safe: followingEnd] == "月"
+        return perOne || isYear ? (digits, end) : nil
     }
 
     /// Whether 度 after the number at `index` is a temperature: 零下 or 摄氏 comes before it.
@@ -315,21 +342,25 @@ nonisolated enum NumberRules {
     }
 
     /// Whether digits read one by one count up or down by one or two, as in 一二三四五,
-    /// 五四三二一 and 一三五七九.
-    private static func isCounting(_ digits: String) -> Bool {
-        let values = digits.compactMap(\.wholeNumberValue)
+    /// 五四三二一 and 一三五七九, or list days, as three or four digits read with 一 and not 幺
+    /// that go up do (一四七, 二五八, 一二四五).
+    private static func isCounting(_ reading: ArraySlice<Character>) -> Bool {
+        let values = reading.compactMap { digitValues[$0] }
         let steps = zip(values, values.dropFirst()).map { $1 - $0 }
+        if values.count <= 4, !reading.contains("幺"), steps.allSatisfy({ $0 > 0 }) { return true }
         return [1, -1, 2, -2].contains { step in steps.allSatisfy { $0 == step } }
     }
 
-    /// Whether a word such as 号码, 验证码, 电话 or 房间 comes shortly before `index`, or a group
-    /// of a code that converts, as in 幺三九 幺二三四 五六七八, where the groups after the
-    /// first convert with it.
+    /// Whether a word such as 号码, 验证码, 电话 or 尾号 comes right before `index`, or after it
+    /// 是, 为 or a colon, or a group of a code that converts, as in 幺三九 幺二三四 五六七八,
+    /// where the groups after the first convert with it.
     private static func followsCodeWord(_ index: Int, in characters: [Character]) -> Bool {
-        let words: [[Character]] = ["码", "号", "电话", "打", "拨", "房", "室"].map { Array($0) }
-        if (max(0, index - 4)..<index).contains(where: { position in
-            words.contains { starts($0, at: position, in: characters) }
-        }) {
+        let words: [[Character]] = ["码", "电话", "尾号", "单号", "工号", "账号", "编号"].map { Array($0) }
+        var wordEnd = index
+        if let before = characters[safe: index - 1], "是为：: ".contains(before) {
+            wordEnd -= 1
+        }
+        if words.contains(where: { starts($0, at: wordEnd - $0.count, in: characters) }) {
             return true
         }
         guard index > 1, characters[index - 1] == " " else { return false }
@@ -374,9 +405,13 @@ nonisolated enum NumberRules {
                 }
                 partsEnd = partEnd
             }
-            if let after = characters[safe: partsEnd], isHan(after),
-               !["以上", "以下", "版"].contains(where: { starts($0, at: partsEnd, in: characters) }) {
-                return nil
+            // Tom三点十五 is a time with a person. A version needs a name that looks like a
+            // model (macOS 十五点一) or 以上, 以下 or 版 after it (Python 三点十二以上).
+            let marked = ["以上", "以下", "版"].contains(where: { starts($0, at: partsEnd, in: characters) })
+            if !marked {
+                let isModel = before == "-" || looksLikeModel(endingAt: start - (spaced ? 2 : 1), in: characters)
+                if !isModel { return nil }
+                if let after = characters[safe: partsEnd], isHan(after) { return nil }
             }
             return parts.count > 1 ? (Array(parts.joined(separator: ".")), partsEnd) : nil
         }
@@ -397,7 +432,7 @@ nonisolated enum NumberRules {
                 let isModel = before == "-" || looksLikeModel(endingAt: start - 1, in: characters)
                 guard joined, isModel, characters[start] != "一" || run.count > 1, !(characters[start] == "十" && next == "分") else { return nil }
                 // 做PPT三个小时 counts hours. A code such as G一零二次 is not counted.
-                if case .reading = spoken {} else if unitLength(at: end, in: characters) > 0 || "个次遍位张本条只件份页种".contains(next) {
+                if case .reading = spoken {} else if unitLength(at: end, in: characters) > 0 || counters.contains(next) {
                     return nil
                 }
             } else if spaced, next != " ", isLatinOrDigit(next) || next == "%", !latinUnit(at: end, in: characters, single: false) {
@@ -508,12 +543,14 @@ nonisolated enum NumberRules {
         return lunarFestivals.contains(where: { starts($0, at: festival, in: characters) })
     }
 
-    /// Whether the year before 年 at `index` is in digits or becomes digits, as 二零二六 does
-    /// and 一九 does not.
+    /// Whether the year before 年 at `index` is in digits or becomes four digits, as 二零二六
+    /// and 两千零二十六 do and 一九 and 三十 do not.
     private static func yearConverts(endingAt index: Int, in characters: [Character]) -> Bool {
-        if index > 0, isASCIIDigit(characters[index - 1]) { return true }
-        let first = runStart(endingAt: index, in: characters) { readingDigits.contains($0) }
-        return index - first == 4 && (first == 0 || !numerals.contains(characters[first - 1]))
+        let digitsStart = runStart(endingAt: index, in: characters) { isASCIIDigit($0) }
+        if digitsStart < index { return index - digitsStart == 4 }
+        let first = runStart(endingAt: index, in: characters) { numerals.contains($0) }
+        guard first < index, let year = conversion(of: first..<index, in: characters) else { return false }
+        return year.end == index && year.text.count == 4 && year.text.allSatisfy(isASCIIDigit)
     }
 
     /// 百分之 and a number, written as a percentage. Whatever is not converted is kept along
@@ -702,8 +739,16 @@ nonisolated enum NumberRules {
 
     /// The length of the unit that starts at `index`, or 0.
     private static func unitLength(at index: Int, in characters: [Character]) -> Int {
-        guard index < characters.count, !notUnits.contains(where: { starts($0, at: index, in: characters) }) else { return 0 }
-        return units.first { starts($0, at: index, in: characters) }?.count ?? 0
+        guard index < characters.count, let unit = units.first(where: { starts($0, at: index, in: characters) }) else { return 0 }
+        let last = index + unit.count - 1
+        if notUnits.contains(where: { starts($0, at: index, in: characters) || starts($0, at: last, in: characters) }) { return 0 }
+        // 块 is also the counter for pieces (一千块拼图, 十块月饼), so it is money only before
+        // 钱, a number, a particle such as 的, 和 or 就, punctuation or the end.
+        if unit == ["块"], let after = characters[safe: index + 1], isHan(after), !numerals.contains(after),
+           !moneyAfterKuai.contains(where: { starts($0, at: index + 1, in: characters) }) {
+            return 0
+        }
+        return unit.count
     }
 
     /// Whether a Latin unit such as GB or K starts at `index`, and no other letter follows.

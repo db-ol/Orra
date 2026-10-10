@@ -95,8 +95,8 @@ struct NumberRulesTests {
         ("晚上八点至十点。", "晚上8点至10点。"),
         // Money keeps 万 and 亿.
         ("一共一千二百三十四万五千元。", "一共1234.5万元。"),
-        // A version after a Latin name.
-        ("用 Python 三点十一 跑。", "用 Python 3.11 跑。"),
+        // A version after a name that looks like a model.
+        ("用 macOS 十五点一 跑。", "用 macOS 15.1 跑。"),
         // A temperature after 零下 or with 摄氏.
         ("摄氏三十六点五度", "摄氏36.5度"),
         // Units in Latin letters.
@@ -114,6 +114,8 @@ struct NumberRulesTests {
         // day and a number after a person's name.
         "十亿", "跟 Tom 三点二十见面。", "做PPT三个小时", "十位", "东四十条", "一百二十个放心", "说了八百遍",
         "十八届三中全会", "五十度灰", "九十九道弯", "一千个读者", "十个手指头", "三十六点五度",
+        // A version needs a name that looks like a model, or 以上, 以下 or 版 after it.
+        "用 Python 三点十一 跑。",
     ])
     func keeps(_ input: String) {
         #expect(NumberRules.writingNumbersAsDigits(in: input) == input)
