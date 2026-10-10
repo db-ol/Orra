@@ -27,9 +27,10 @@ from pathlib import Path
 # so an empty map means that nobody sets it. Conditional forms such as
 # PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*] count as the setting itself.
 EXPECTED_BUILD_SETTINGS = {
-    # Set once on the project, which both targets inherit.
+    # Set once on the project, which both targets inherit. The paid team, whose Developer
+    # ID signs and notarizes the releases.
     "DEVELOPMENT_TEAM": {
-        "project": "2ULS7D52PT",
+        "project": "X77KW5VYFJ",
     },
     "PRODUCT_BUNDLE_IDENTIFIER": {
         "Orra": "io.github.db-ol.Orra",
@@ -43,7 +44,48 @@ EXPECTED_BUILD_SETTINGS = {
     "ENABLE_APP_SANDBOX": {
         "Orra": "NO",
     },
-    "ENABLE_HARDENED_RUNTIME": {},
+    # Notarization needs the hardened runtime. Under it the microphone needs the audio
+    # input entitlement, and nothing else is allowed. Xcode writes the other choices of the
+    # Hardened Runtime capability out as NO, which they must stay.
+    "ENABLE_HARDENED_RUNTIME": {
+        "Orra": "YES",
+    },
+    "ENABLE_RESOURCE_ACCESS_AUDIO_INPUT": {
+        "Orra": "YES",
+    },
+    "ENABLE_RESOURCE_ACCESS_CALENDARS": {
+        "Orra": "NO",
+    },
+    "ENABLE_RESOURCE_ACCESS_CAMERA": {
+        "Orra": "NO",
+    },
+    "ENABLE_RESOURCE_ACCESS_CONTACTS": {
+        "Orra": "NO",
+    },
+    "ENABLE_RESOURCE_ACCESS_LOCATION": {
+        "Orra": "NO",
+    },
+    "ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY": {
+        "Orra": "NO",
+    },
+    "RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES": {
+        "Orra": "NO",
+    },
+    "RUNTIME_EXCEPTION_ALLOW_JIT": {
+        "Orra": "NO",
+    },
+    "RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY": {
+        "Orra": "NO",
+    },
+    "RUNTIME_EXCEPTION_DEBUGGING_TOOL": {
+        "Orra": "NO",
+    },
+    "RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION": {
+        "Orra": "NO",
+    },
+    "RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION": {
+        "Orra": "NO",
+    },
     "CODE_SIGN_ENTITLEMENTS": {},
     "CODE_SIGN_STYLE": {
         "Orra": "Automatic",
@@ -58,13 +100,16 @@ EXPECTED_BUILD_SETTINGS = {
     "ENABLE_LIBRARY_VALIDATION": {},
     "PROVISIONING_PROFILE": {},
     "PROVISIONING_PROFILE_SPECIFIER": {},
-    "AUTOMATION_APPLE_EVENTS": {},
+    "AUTOMATION_APPLE_EVENTS": {
+        "Orra": "NO",
+    },
     "ENABLE_USER_SELECTED_FILES": {},
     "ENABLE_INCOMING_NETWORK_CONNECTIONS": {},
     "ENABLE_OUTGOING_NETWORK_CONNECTIONS": {},
 }
 
-# Families of settings that add entitlements. Nobody may set any of them.
+# Families of settings that add entitlements. Nobody may set any of them, except the ones
+# listed with their values above.
 FORBIDDEN_SETTING_PREFIXES = ("ENABLE_RESOURCE_ACCESS_", "ENABLE_FILE_ACCESS_", "RUNTIME_EXCEPTION_")
 
 # Every package the project refers to, by location, with its requirement.
@@ -257,7 +302,8 @@ def check_build_settings(project):
             problems.append(f"{where} uses an .xcconfig file, which this check does not read")
         settings = configuration.get("buildSettings", {})
         for key, value in sorted(settings.items()):
-            if key.startswith(FORBIDDEN_SETTING_PREFIXES):
+            listed = key.split("[")[0] in EXPECTED_BUILD_SETTINGS
+            if key.startswith(FORBIDDEN_SETTING_PREFIXES) and not listed:
                 problems.append(f"{where}: {key} is {value}, expected it not to be set")
         for setting, expected_by_owner in EXPECTED_BUILD_SETTINGS.items():
             expected = expected_by_owner.get(owner)
