@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orra：Mac 上的语音输入</title>
+  <meta name="description" content="Orra 是一款开源的 Mac 语音输入 App。按住一个键说话，松开后，文字就会出现在你正在输入的 App 里。语音在你自己的 Mac 上转成文字，从不经过服务器。">
+  <meta name="color-scheme" content="light dark">
+  <link rel="canonical" href="https://db-ol.github.io/Orra/zh/">
+  <link rel="alternate" hreflang="en" href="https://db-ol.github.io/Orra/">
+  <link rel="alternate" hreflang="zh-Hans" href="https://db-ol.github.io/Orra/zh/">
+  <link rel="icon" type="image/png" href="../favicon.png">
+  <link rel="apple-touch-icon" href="../icon.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header class="wrap topbar">
+    <a class="brand" href="./"><img src="../favicon.png" alt="" width="28" height="28">Orra</a>
+    <nav>
+      <a class="optional" href="#how">使用方法</a>
+      <a class="optional" href="#privacy">隐私</a>
+      <a href="https://github.com/db-ol/Orra">GitHub</a>
+      <a href="../" hreflang="en" lang="en">English</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="wrap">
+        <img class="app-icon" src="../icon.png" alt="Orra 的 App 图标" width="128" height="128">
+        <h1>Orra</h1>
+        <p class="tagline">在 Mac 上随处语音输入。语音在你的 Mac 上转成文字，从不经过服务器。</p>
+        <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">下载 Mac 版</a>
+        <p class="requirements">免费开源。需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。使用 Developer ID 签名并经过苹果公证。</p>
+        <p class="preview-note">Orra 目前是早期预览版。难免有不完善的地方，设计也还会调整。</p>
+      </div>
+    </div>
+
+    <section id="how">
+      <div class="wrap">
+        <h2>使用方法</h2>
+        <ol class="steps">
+          <li>
+            <h3>按住说话键</h3>
+            <p>默认是右 Control，也可以换成右 Option、右 Command 或 fn。</p>
+          </li>
+          <li>
+            <h3>说话</h3>
+            <p>按住时 Orra 会录音，屏幕底部的小指示条会随你的声音跳动。</p>
+          </li>
+          <li>
+            <h3>松开</h3>
+            <p>Orra 在你的 Mac 上把语音转成文字，粘贴到光标所在的位置，任何能打字的 App 都可以。</p>
+          </li>
+        </ol>
+        <p class="requirements">第一次打开时，欢迎窗口会带你下载语音模型（2.47 GB，只需一次），并允许使用麦克风和辅助功能。</p>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2>功能</h2>
+        <div class="features">
+          <div>
+            <h3>中文、英文和中英混说</h3>
+            <p>说中文、说英文，或者在一句话里中英混说都可以。</p>
+          </div>
+          <div>
+            <h3>在本机识别语音</h3>
+            <p>Qwen3-ASR 1.7B 模型在你的 Mac 上运行，你说的话不会离开这台 Mac。</p>
+          </div>
+          <div>
+            <h3>个人词库</h3>
+            <p>最多可以放 100 个名字和术语，Orra 会按你的写法输出。</p>
+          </div>
+          <div>
+            <h3>从你的修改中学习</h3>
+            <p>打开后，听写后你改正了一个听错的词，Orra 会把正确的写法加入个人词库，并弹出提示，你可以撤销。</p>
+          </div>
+          <div>
+            <h3>在 App 里更新</h3>
+            <p>在菜单里选择“检查更新…”，或者让 Orra 自动检查。每次更新都要你同意后才会安装。</p>
+          </div>
+          <div>
+            <h3>中英文界面</h3>
+            <p>菜单和窗口有英文和简体中文，默认跟随你的 Mac。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy">
+      <div class="wrap prose">
+        <h2>隐私</h2>
+        <p>Orra 在你的 Mac 上把语音转成文字，从不把录音或文字发送到任何地方。它没有账号、没有统计，也没有自己的服务器。</p>
+        <p>Orra 只在两种情况下联网：</p>
+        <ul>
+          <li><strong>下载语音模型</strong>，只在你选择“下载语音模型”之后。模型来自 Hugging Face，连不上时改用 ModelScope 或 hf-mirror.com。使用之前，Orra 会核对每个文件的大小和 SHA-256 校验值。</li>
+          <li><strong>检查更新</strong>，只在你允许之后。在此之前，启动 Orra 从不联网。</li>
+        </ul>
+        <p>“从你的修改中学习”默认关闭。打开后，Orra 也只保存词对，从不保存你的文字。详情见 <a href="https://github.com/db-ol/Orra#privacy">README</a>（英文）。</p>
+        <p>本网站不使用 Cookie，没有统计，也没有任何跟踪。</p>
+      </div>
+    </section>
+
+    <section id="open-source">
+      <div class="wrap prose">
+        <h2>开源</h2>
+        <p>Orra 用 Swift 和 SwiftUI 编写，以 MIT 许可证发布。你可以阅读源代码、自己构建，或者帮忙改进它。</p>
+        <ul class="links">
+          <li><a href="https://github.com/db-ol/Orra">GitHub 上的源代码</a></li>
+          <li><a href="https://github.com/db-ol/Orra/releases">所有版本</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="feedback">
+      <div class="wrap prose">
+        <h2>反馈</h2>
+        <p>发现了问题，或者想要什么功能？欢迎在 GitHub 上告诉我们。</p>
+        <ul class="links">
+          <li><a href="https://github.com/db-ol/Orra/issues">报告问题（Issues）</a></li>
+          <li><a href="https://github.com/db-ol/Orra/discussions">参与讨论（Discussions）</a></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Orra 以 <a href="https://github.com/db-ol/Orra/blob/main/LICENSE">MIT 许可证</a>开源。</p>
+      <p><a href="../" hreflang="en" lang="en">English</a></p>
+    </div>
+  </footer>
+</body>
+</html>
