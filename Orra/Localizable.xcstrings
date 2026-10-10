@@ -911,6 +911,16 @@
         }
       }
     },
+    "Show a small bar at the bottom of the screen while Orra is ready" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 待命时，在屏幕底部显示一条小横条"
+          }
+        }
+      }
+    },
     "Show the recording indicator" : {
       "localizations" : {
         "zh-Hans" : {

@@ -5,7 +5,9 @@ import Observation
 /// controller's cues. Settings can turn either off.
 ///
 /// The indicator shows a level meter while Orra listens, a spinner while it transcribes,
-/// and for a few seconds the reason when a hold ends without a paste.
+/// and for a few seconds the reason when a hold ends without a paste. In between, while
+/// Orra can dictate, a small bar at the bottom of the screen shows that it is ready, unless
+/// Settings turns it off.
 @Observable
 final class RecordingFeedback {
     /// What the indicator shows.
@@ -13,6 +15,8 @@ final class RecordingFeedback {
         case listening
         case transcribing
         case message(String)
+        /// The small bar while Orra waits. Only ever presented, never in `display`.
+        case idle
     }
 
     nonisolated enum Sound: Equatable, Sendable {
@@ -28,10 +32,37 @@ final class RecordingFeedback {
         didSet {
             guard showsIndicator != oldValue else { return }
             savePreferences()
-            present(showsIndicator ? display : nil)
+            present(presented)
             updateLevelTask()
         }
     }
+    var showsIdleBar: Bool {
+        didSet {
+            guard showsIdleBar != oldValue else { return }
+            savePreferences()
+            present(presented)
+        }
+    }
+    /// True while the pointer is over the idle bar, which then shows how to talk.
+    var pointerIsOverIdleBar = false
+    /// Whether a hold would dictate: the talk key is watched and the model is loaded.
+    /// AppDelegate keeps it current. The idle bar shows only then, so it never says Orra
+    /// is ready when it is not.
+    var canDictate = false {
+        didSet {
+            guard canDictate != oldValue else { return }
+            present(presented)
+        }
+    }
+
+    /// What the panel shows: the indicator, or the idle bar when the indicator has nothing
+    /// to show and Orra can dictate.
+    var presented: Display? {
+        (showsIndicator ? display : nil) ?? (showsIdleBar && canDictate ? .idle : nil)
+    }
+
+    /// The hint the idle bar shows, such as "Hold right Control to talk".
+    @ObservationIgnored let holdHint: () -> String
     var playsSounds: Bool {
         didSet {
             guard playsSounds != oldValue else { return }
@@ -56,6 +87,7 @@ final class RecordingFeedback {
     ///     never open a window.
     ///   - play: Plays a sound. Tests pass fakes.
     ///   - save: Saves the preferences after a change.
+    ///   - holdHint: How to talk, for the idle bar.
     ///   - messageDuration: How long a message stays.
     ///   - levelInterval: How often the meter reads the level.
     init(
@@ -64,12 +96,15 @@ final class RecordingFeedback {
         present: @escaping (Display?) -> Void,
         play: @escaping (Sound) -> Void,
         save: @escaping (FeedbackPreference.Values) -> Void,
+        holdHint: @escaping () -> String = { "" },
         messageDuration: Duration = .seconds(4),
         levelInterval: Duration = .milliseconds(33)
     ) {
         showsIndicator = preferences.showsIndicator
         playsSounds = preferences.playsSounds
+        showsIdleBar = preferences.showsIdleBar
         self.inputLevel = inputLevel
+        self.holdHint = holdHint
         self.present = present
         self.play = play
         self.save = save
@@ -78,7 +113,7 @@ final class RecordingFeedback {
     }
 
     /// The app's feedback: the floating panel and the system's Tink and Pop sounds.
-    static func live(inputLevel: @escaping () -> Float) -> RecordingFeedback {
+    static func live(inputLevel: @escaping () -> Float, holdHint: @escaping () -> String) -> RecordingFeedback {
         let panel = RecordingIndicatorPanel()
         let sounds = DictationSounds()
         let feedback = RecordingFeedback(
@@ -86,7 +121,8 @@ final class RecordingFeedback {
             inputLevel: inputLevel,
             present: { panel.present($0) },
             play: { sounds.play($0) },
-            save: { FeedbackPreference.save($0) }
+            save: { FeedbackPreference.save($0) },
+            holdHint: holdHint
         )
         panel.feedback = feedback
         panel.prepare()
@@ -134,7 +170,7 @@ final class RecordingFeedback {
         if newDisplay != .listening {
             level = 0
         }
-        present(showsIndicator ? newDisplay : nil)
+        present(presented)
         updateLevelTask()
     }
 
@@ -162,31 +198,35 @@ final class RecordingFeedback {
     }
 
     private func savePreferences() {
-        save(FeedbackPreference.Values(showsIndicator: showsIndicator, playsSounds: playsSounds))
+        save(FeedbackPreference.Values(showsIndicator: showsIndicator, playsSounds: playsSounds, showsIdleBar: showsIdleBar))
     }
 }
 
-/// Whether the recording indicator shows and the sounds play. Both are on until the user
-/// turns them off in Settings.
+/// Whether the recording indicator shows, the sounds play and the idle bar shows. All are
+/// on until the user turns them off in Settings.
 nonisolated enum FeedbackPreference {
     struct Values: Equatable, Sendable {
         var showsIndicator = true
         var playsSounds = true
+        var showsIdleBar = true
     }
 
     static let indicatorKey = "showsRecordingIndicator"
     static let soundsKey = "playsSounds"
+    static let idleBarKey = "showsIdleBar"
 
     static func load(from defaults: UserDefaults = .standard) -> Values {
         Values(
             showsIndicator: defaults.object(forKey: indicatorKey) as? Bool ?? true,
-            playsSounds: defaults.object(forKey: soundsKey) as? Bool ?? true
+            playsSounds: defaults.object(forKey: soundsKey) as? Bool ?? true,
+            showsIdleBar: defaults.object(forKey: idleBarKey) as? Bool ?? true
         )
     }
 
     static func save(_ values: Values, to defaults: UserDefaults = .standard) {
         defaults.set(values.showsIndicator, forKey: indicatorKey)
         defaults.set(values.playsSounds, forKey: soundsKey)
+        defaults.set(values.showsIdleBar, forKey: idleBarKey)
     }
 }
 
