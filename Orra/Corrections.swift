@@ -246,7 +246,8 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         case accepted
         case dismissed
         /// Offered after a fix of one Chinese character, and closed without adding it. The
-        /// same pair is not offered again, and its word may still be learned another way.
+        /// same pair is not offered again for 7 days, and its word may still be learned
+        /// another way.
         case declined
     }
 
@@ -262,9 +263,12 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
     private(set) var entries: [Entry] = []
 
     /// Counts a correction. A count older than 7 days starts over, and pairs seen once and
-    /// not again within 7 days are forgotten.
+    /// not again within 7 days are forgotten, as are pairs declined more than 7 days ago.
     mutating func record(_ correction: Correction, at date: Date) {
-        entries.removeAll { $0.state == .seen && $0.correction != correction && date.timeIntervalSince($0.lastSeen) > Self.window }
+        entries.removeAll {
+            ($0.state == .seen || $0.state == .declined) && $0.correction != correction
+                && date.timeIntervalSince($0.lastSeen) > Self.window
+        }
         if let index = entries.firstIndex(where: { $0.correction == correction }) {
             if date.timeIntervalSince(entries[index].lastSeen) > Self.window {
                 entries[index].count = 0

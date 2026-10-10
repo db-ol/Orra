@@ -319,13 +319,15 @@ final class CorrectionLearning {
     }
 
     /// Offers the guessed word, unless it is in the vocabulary, this pair was declined, or
-    /// the word was learned or undone before. Records nothing until the user answers.
+    /// the word was learned or undone before. A pair only seen, as when the vocabulary was
+    /// full, is offered again. Records nothing until the user answers.
     func suggest(_ suggestion: WordSuggestion, replacing earlier: Correction? = nil) {
         if let earlier, earlier != suggestion.pair {
             forget(earlier)
         }
         let word = suggestion.guess
-        guard store.state(of: suggestion.pair) == nil, !isInVocabulary(word),
+        let state = store.state(of: suggestion.pair)
+        guard state == nil || state == .seen, !isInVocabulary(word),
               !store.has(.dismissed, for: word), !store.has(.accepted, for: word) else { return }
         onSuggest?(suggestion)
     }

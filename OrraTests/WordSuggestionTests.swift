@@ -72,6 +72,20 @@ struct OneCharacterFixTests {
         #expect(guess("我想用豆包试试", at: 3) == "豆包")
     }
 
+    @Test func commonVerbsAroundANameStayOutOfTheGuess() {
+        // The pair kept for a guess holds no more of the user's words than the name.
+        #expect(suggest("找王一博签名", "找王亦博签名")?.pair == Correction(heard: "王一博", corrected: "王亦博"))
+        #expect(suggest("我们去小米之家买手机", "我们去小迷之家买手机")?.guess == "小迷之家")
+        #expect(suggest("给欧阳娜娜发消息", "给欧阳纳娜发消息")?.guess == "纳娜")
+        // 问 is not a stop, since it is part of names such as 通义千问.
+        #expect(suggest("你好，通一千问", "你好，通义千问")?.guess == "通义千问")
+    }
+
+    @Test func aNameWithAFunctionWordInItIsGuessedInPart() {
+        // 文心一言 splits as 文心 | 一 | 言, and 一 is a function word. The user edits the guess.
+        #expect(suggest("我们用文心一盐生成", "我们用文心一言生成")?.guess == "言")
+    }
+
     @Test func theGuessIsAtMostSixCharacters() {
         let text = "用焱垚犇骉焱垚犇骉焱垚吧"
         for index in 1...10 {
@@ -108,9 +122,11 @@ struct DeclinedPairTests {
         #expect(!store.has(.dismissed, for: "通义千问"))
         store.forget(pair)
         #expect(store.state(of: pair) == .declined)
-        // Kept past the week that forgets pairs seen once.
-        store.record(Correction(heard: "a", corrected: "b"), at: Date(timeIntervalSince1970: 3_000_000))
+        // Kept within the week, and forgotten after it like a pair seen once.
+        store.record(Correction(heard: "a", corrected: "b"), at: Date(timeIntervalSince1970: 1_500_000))
         #expect(store.state(of: pair) == .declined)
+        store.record(Correction(heard: "a", corrected: "b"), at: Date(timeIntervalSince1970: 3_000_000))
+        #expect(store.state(of: pair) == nil)
     }
 }
 
@@ -188,6 +204,12 @@ struct WordSuggestionLearningTests {
         learning.add(suggestion, as: "通义千问")
         #expect(learned.map(\.outcome) == [.vocabularyFull])
         #expect(learning.store.state(of: suggestion.pair) == .seen)
+        // After the user made room, the same fix offers the word again.
+        vocabulary.limit = 100
+        var offered: [WordSuggestion] = []
+        learning.onSuggest = { offered.append($0) }
+        learning.suggest(suggestion)
+        #expect(offered == [suggestion])
     }
 
     @Test func aDeclinedWordIsNotOfferedAgainButCanStillBeLearned() {

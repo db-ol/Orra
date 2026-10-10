@@ -55,8 +55,14 @@ nonisolated enum OneCharacterFix {
     ]
 
     /// Single character words that end a guess: pronouns, particles, common verbs and
-    /// prepositions, which sit next to a name rather than inside it.
-    static let functionWords: Set<Character> = Set("我你他她它的了是在和跟与用把被给叫说写去来到也都就还又很这那吗呢吧啊个一不没有让对从向为及")
+    /// prepositions, which sit next to a name rather than inside it. The verbs keep the
+    /// guess, and the pair kept for it, from taking in the user's words around a name, as
+    /// in 找王一博签名. The system's word classes cannot do this, since it tags the
+    /// characters of an unknown name as verbs too.
+    static let functionWords: Set<Character> = Set(
+        "我你他她它的了是在和跟与用把被给叫说写去来到也都就还又很这那吗呢吧啊个一不没有让对从向为及"
+            + "找发买卖看打请帮拿送听想要等吃喝查约见陪教回"
+    )
 
     static func isGrammar(_ first: Character, _ second: Character) -> Bool {
         grammarGroups.contains { $0.contains(first) && $0.contains(second) }
@@ -90,7 +96,9 @@ nonisolated enum OneCharacterFix {
     /// when it put the character in one, or else the character with the Han characters
     /// around it that the tokenizer left alone, since it splits an unknown name into single
     /// characters. Stops at punctuation, other scripts, a longer word and the function
-    /// words, and at `maximumGuessLength`.
+    /// words, and at `maximumGuessLength`. So a name with a function word in it, or next to
+    /// a word the tokenizer knows, is guessed in part: 文心一言 gives 言, and 欧阳娜娜 gives
+    /// 娜娜. The user may edit the guess before adding it.
     static func guess(in text: [Character], at index: Int) -> Range<Int> {
         let split = tokens(in: text)
         if let token = split.word(at: index) {
