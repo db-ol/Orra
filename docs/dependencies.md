@@ -6,10 +6,15 @@
   1f54e56cf137078ed681a03e0955e777f7314610, product Qwen3ASR only, linked to the Orra target
   only. Approved by the maintainer on 2026-10-04 to run Qwen3-ASR 1.7B, and added in Xcode by
   the maintainer on 2026-10-05.
+- sparkle-project/Sparkle (MIT), exact version 2.10.0, product Sparkle only, linked to the
+  Orra target only. Approved by the maintainer on 2026-10-10 for updates from inside the app,
+  and added in Xcode by the maintainer the same day. It is a prebuilt, signed framework that
+  Xcode embeds in Orra.app and signs again with the team's Developer ID on export. It reaches
+  the network only for update checks the user allowed, see the README's privacy section.
 
 ## What the build resolves
 
-Xcode resolves 40 packages, listed in
+Xcode resolves 41 packages, listed in
 Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved. SwiftPM resolves
 every package that speech-swift declares, but the build compiles only the 11 that the
 Qwen3ASR product needs. The other 29 are fetched and never built or linked. Versions come
@@ -31,6 +36,7 @@ compiled list comes from the build log of the same day.
 | apple/swift-crypto | 4.5.2 | Apache-2.0 | Crypto, used by Hub and HuggingFace |
 | ibireme/yyjson | 0.12.0 | MIT | yyjson, used by Hub |
 | apple/swift-argument-parser | 1.8.2 | Apache-2.0 | only for encuda, the tool behind the CudaBuild build plugin of mlx-swift. Not linked into the app |
+| sparkle-project/Sparkle | 2.10.0 | MIT | updates from inside the app. A binary framework, embedded rather than compiled |
 
 Everything above except swift-argument-parser is linked statically into Orra. The app bundle
 also carries three resource bundles: mlx-swift_Cmlx.bundle with the compiled Metal library,

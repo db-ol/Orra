@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
     let dockIcon = DockIcon.live()
+    let updater = AppUpdater()
     let models = ModelInstaller.live()
     /// The recording indicator and the sounds. Lazy, because it reads the controller's
     /// microphone level.
@@ -91,6 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Xcode runs this app to host unit tests and SwiftUI previews. Those
         // copies must not install the keyboard tap or show the welcome window.
         guard !Self.isHostedByXcode else { return }
+        // Checks only once the user allowed it, so launching stays offline until then.
+        updater.start()
         // The installer is what loads the speech model: at launch when the model is in
         // place, and again after a download or Try Again.
         models.onInstalled = { [pushToTalk] _ in
