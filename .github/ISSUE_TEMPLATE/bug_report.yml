@@ -1,0 +1,59 @@
+name: Bug report / 问题报告
+description: Something in Orra does not work as it should. / Orra 有地方不正常。
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please write in English or Chinese.
+        感谢你报告问题。用英文或中文填写都可以。
+
+        In Orra's menu, choose **Report a Problem…**. Orra writes a diagnostic report to a text file and opens this page with the version fields filled in. Drag the file into the box below to attach it. The report contains no dictated text and no audio.
+        在 Orra 的菜单中选择 **报告问题…**。Orra 会把诊断报告写进一个文本文件，并打开这个页面，填好版本信息。把文件拖进下面的输入框即可附上。报告中没有任何听写的文字，也没有录音。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened / 发生了什么
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected / 你预期的结果
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: input
+    id: version
+    attributes:
+      label: Orra version / Orra 版本
+      placeholder: 0.1.0 (1)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version / macOS 版本
+      placeholder: macOS 26.0
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model / Mac 机型
+      placeholder: Mac15,6 Apple M3 Pro
+  - type: textarea
+    id: report
+    attributes:
+      label: Diagnostic report / 诊断报告
+      description: |
+        Attach the file from Orra's menu, Report a Problem…. It has no dictated text and no audio.
+        请附上 Orra 菜单中“报告问题…”生成的文件。其中没有听写的文字，也没有录音。
+      placeholder: Drag Orra-Report-….txt here. / 把 Orra-Report-….txt 拖到这里。
