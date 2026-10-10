@@ -49,40 +49,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     }
 }
 
-/// Makes the window it sits in resizable down to a minimum, and has macOS keep the size
-/// the user picks. SwiftUI's Settings window is fixed in size, and windowResizability does
-/// not change that, so this reaches the NSWindow itself.
-private struct ResizableWindow: NSViewRepresentable {
-    let minimum: NSSize
-
-    func makeNSView(context: Context) -> NSView {
-        WindowWatcher(minimum: minimum)
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {}
-
-    private final class WindowWatcher: NSView {
-        let minimum: NSSize
-
-        init(minimum: NSSize) {
-            self.minimum = minimum
-            super.init(frame: .zero)
-        }
-
-        required init?(coder: NSCoder) {
-            nil
-        }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            guard let window else { return }
-            window.styleMask.insert(.resizable)
-            window.contentMinSize = minimum
-            window.setFrameAutosaveName("OrraSettings")
-        }
-    }
-}
-
 /// A symbol in a colored rounded square, as in the sidebar of System Settings.
 struct SettingsIcon: View {
     let symbol: String
@@ -159,7 +125,6 @@ struct SettingsView: View {
         }
         .toolbar(removing: .sidebarToggle)
         .frame(minWidth: 700, idealWidth: 780, maxWidth: .infinity, minHeight: 500, idealHeight: 620, maxHeight: .infinity)
-        .background(ResizableWindow(minimum: NSSize(width: 700, height: 500)))
     }
 }
 

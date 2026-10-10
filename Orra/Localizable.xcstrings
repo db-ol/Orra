@@ -808,6 +808,16 @@
         }
       }
     },
+    "Orra Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 设置"
+          }
+        }
+      }
+    },
     "Orra shows the new language after it restarts." : {
       "localizations" : {
         "zh-Hans" : {
