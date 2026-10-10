@@ -559,7 +559,7 @@ corrections under Vocabulary in Settings first:
 
 - [ ] Dictate a sentence with a name Orra gets wrong into Notes and fix the name by hand: a
   second or two after you stop typing, a notice above the recording indicator says the
-  name was added to the vocabulary. A ring counts down the 15 seconds it stays. With the
+  name was added to the vocabulary. A ring counts down the 10 seconds it stays. With the
   pointer over it the ring shows a pause sign, and after the pointer leaves it counts 4. The app you are in keeps the focus. The next dictation is more likely to
   write it right, and Orra never changes the text itself.
 - [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one

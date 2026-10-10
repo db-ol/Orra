@@ -6,7 +6,7 @@ import SwiftUI
 /// it goes. Stays while the pointer is over it.
 @Observable
 final class LearnedNotice {
-    static let duration: Duration = .seconds(15)
+    static let duration: Duration = .seconds(10)
     /// How long it stays after the pointer leaves it.
     static let afterHover: Duration = .seconds(4)
 

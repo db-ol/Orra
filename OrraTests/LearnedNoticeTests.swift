@@ -37,7 +37,7 @@ struct LearnedNoticeTests {
         let start = Date(timeIntervalSince1970: 1_000)
         let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, now: { start })
         notice.show(learned)
-        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: start.addingTimeInterval(15), seconds: 15))
+        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: start.addingTimeInterval(10), seconds: 10))
         notice.hold()
         #expect(notice.countdown == nil)
         notice.release()
