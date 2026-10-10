@@ -20,8 +20,9 @@ Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text
 Keep it simple. Do not add a protocol, layer, or abstraction without a concrete need in the code today.
 
 ## v0.1 non-goals
-No backend, no accounts, no analytics, no database, no LLM rewriting, no cloud transcription,
-and no platforms other than macOS.
+No backend, no accounts, no analytics, no database, no cloud transcription, and no platforms
+other than macOS. No cloud LLM rewriting. Optional rewriting on this Mac with a local model,
+off by default and with the dictated text always recoverable, is allowed.
 
 ## Build discipline
 Build (run in the repository root):
