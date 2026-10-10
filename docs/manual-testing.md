@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 356 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 411 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -114,6 +114,15 @@ Build and test commands, run in the repository root:
     ignoring case, cut at 40 characters, at most 100), the context string the model gets,
     and saving the list. PushToTalkControllerTests checks that every dictation passes the
     current vocabulary to the model, nil when it is empty, and that a change is saved.
+  - CorrectionFinderTests, SoundAlikeTests and CorrectionStoreTests cover finding a fixed
+    word in the pasted text (Chinese, a name across scripts, a whole Latin word), leaving
+    out changes of meaning, deletions, additions, rewrites and edits outside the paste,
+    the pinyin comparison, accepting only pairs that were not undone, and the stored file.
+    CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
+    reported fix, and no reading after leaving the app, under secure input, or in a field
+    without the pasted text. CorrectionLearningTests checks that nothing is read while
+    learning is off, that the first fix adds the word and tells the user, a quiet new
+    mishearing, and Undo. LearnedNoticeTests checks the notice and its panel.
   - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
     translation marked translated, that each translation keeps the arguments of the
     English string, that the Chinese uses full width punctuation and a space next to a
@@ -523,6 +532,30 @@ Personal vocabulary, added on 2026-10-08, not verified yet:
 - [ ] Hold the talk key without speaking: no listed word appears.
 - [ ] The count above the list follows it, and the list is still there after
   quitting and reopening Orra.
+
+Learning from corrections, added on 2026-10-08, not verified yet. Turn on Learn from my
+corrections under Vocabulary in Settings first:
+
+- [ ] Dictate a sentence with a name Orra gets wrong into Notes and fix the name by hand: a
+  second or two after you stop typing, a notice above the recording indicator says the
+  name was added to the vocabulary. It stays 15 seconds, and while the pointer is over it. The app you are in keeps the focus. The next dictation is more likely to
+  write it right, and Orra never changes the text itself.
+- [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
+  Chinese character such as 的 to 得, deleting words, or rewriting the sentence adds
+  nothing. Fixing a word and then typing a period learns the word without the period.
+- [ ] Dictate four lines with the same misheard name, switch to another app for a moment,
+  come back and fix them within 3 minutes: one notice comes. Undo takes the name out of
+  the vocabulary, and fixing it again, misheard any way, does not add it again.
+- [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
+  focused element is not a text field Orra can read" and nothing is learned. Copy the
+  right word there: the Orra menu offers to add it to the vocabulary.
+- [ ] In Messages or WeChat, fix a misheard name and press Return to send: the fix still
+  counts. Click into another field during the watch: nothing is read from it.
+- [ ] Dictating into a password field, or switching apps right after the paste, records
+  nothing.
+- [ ] With the setting off, nothing is recorded. Forget Learned Corrections deletes the
+  pairs and keeps the vocabulary.
+- [ ] Typing feels the same in the app you dictated into while Orra watches the field.
 
 App icon, added on 2026-10-07, not verified yet:
 

@@ -103,6 +103,26 @@
         }
       }
     },
+    "Add “%@” from the Clipboard to Vocabulary" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把拷贝的“%@”加入个人词库"
+          }
+        }
+      }
+    },
+    "Added “%@” to Vocabulary" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已把“%@”加入个人词库"
+          }
+        }
+      }
+    },
     "Allow Accessibility" : {
       "localizations" : {
         "zh-Hans" : {
@@ -189,6 +209,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请在“麦克风”中选择“系统默认”，然后在“声音”设置中选择 %@。"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
           }
         }
       }
@@ -280,6 +310,16 @@
         }
       }
     },
+    "Forget Learned Corrections" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除学到的修改"
+          }
+        }
+      }
+    },
     "From %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -306,6 +346,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "授予辅助功能权限…"
+          }
+        }
+      }
+    },
+    "Heard as “%@”" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原来听成了“%@”"
           }
         }
       }
@@ -384,6 +434,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住一个键，说话，然后松开。Orra 会把你说的话输入到你正在使用的 App 中。语音在这台 Mac 上转成文字。"
+          }
+        }
+      }
+    },
+    "Learn from my corrections" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从我的修改中学习"
+          }
+        }
+      }
+    },
+    "Learning" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学习"
           }
         }
       }
@@ -1127,6 +1197,16 @@
         }
       }
     },
+    "Undo" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤销"
+          }
+        }
+      }
+    },
     "Version %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1147,12 +1227,32 @@
         }
       }
     },
+    "Vocabulary is full, so “%@” was not added" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人词库已满，没有加入“%@”"
+          }
+        }
+      }
+    },
     "Welcome to Orra" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "欢迎使用 Orra"
+          }
+        }
+      }
+    },
+    "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开后，每次粘贴后的 3 分钟内，只要你还在那个输入框里，Orra 就会读取它的文字，从不读取密码框。你改正一个听错的词，Orra 就会把正确的写法加入个人词库，并弹出提示，你可以撤销。Orra 只保存词对，只存在这台 Mac 上。它只在 macOS 能读取文字的 App 里生效，比如备忘录、邮件和 Safari，部分编辑器和终端不行。在这些 App 里，请拷贝正确的词，再从 Orra 菜单里添加。"
           }
         }
       }

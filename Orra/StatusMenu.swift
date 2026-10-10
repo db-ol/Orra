@@ -6,6 +6,7 @@ struct StatusMenu: View {
     let models: ModelInstaller
     let openAtLogin: OpenAtLogin
     let inputs: AudioInputList
+    let clipboard: ClipboardWord
     let showWelcome: () -> Void
     @Environment(\.openSettings) private var openSettings
 
@@ -64,6 +65,14 @@ struct StatusMenu: View {
             }
         }
 
+        if let copied = clipboard.word {
+            Divider()
+            // Works in every app, also where Orra cannot read the text to learn from it.
+            Button("Add “\(copied)” from the Clipboard to Vocabulary") {
+                pushToTalk.setVocabulary(Vocabulary.adding(copied, to: pushToTalk.vocabulary))
+                clipboard.clear()
+            }
+        }
         Divider()
 
         Menu("Talk Key") {
