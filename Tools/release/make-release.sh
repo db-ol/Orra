@@ -47,7 +47,10 @@ if [[ -n "$(git status --porcelain)" ]]; then
     echo "The working copy has changes. Commit or stash them, so the release matches a commit." >&2
     exit 1
 fi
-security find-identity -v -p codesigning | grep -q "$IDENTITY" || {
+# Output goes to a variable before grep: with pipefail, grep -q ending the pipe early makes
+# the writer fail with SIGPIPE, which would count as no match.
+identities="$(security find-identity -v -p codesigning)"
+grep -qF "$IDENTITY" <<<"$identities" || {
     echo "The certificate \"$IDENTITY\" is not in the keychain." >&2
     exit 1
 }
@@ -110,12 +113,13 @@ entitlements="$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -
     echo "Unexpected entitlements: $entitlements" >&2
     exit 1
 }
-lipo -archs "$app/Contents/MacOS/Orra" | grep -qx "arm64" || { echo "Not an arm64 only app" >&2; exit 1; }
+[[ "$(lipo -archs "$app/Contents/MacOS/Orra")" == "arm64" ]] || { echo "Not an arm64 only app" >&2; exit 1; }
 # Sparkle and its helpers, signed again on export.
 sparkle_framework="$app/Contents/Frameworks/Sparkle.framework"
 [[ -d "$sparkle_framework" ]] || { echo "Sparkle.framework is not in the app" >&2; exit 1; }
 for code in "$sparkle_framework" "$sparkle_framework/Versions/B/Autoupdate" "$sparkle_framework/Versions/B/Updater.app"; do
-    codesign -dvv "$code" 2>&1 | grep -q "Authority=$IDENTITY" || { echo "$code is not signed with $IDENTITY" >&2; exit 1; }
+    signer="$(codesign -dvv "$code" 2>&1)"
+    grep -qF "Authority=$IDENTITY" <<<"$signer" || { echo "$code is not signed with $IDENTITY" >&2; exit 1; }
 done
 shown="$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString)"
 [[ "$shown" == "$version" ]] || { echo "The app says version $shown" >&2; exit 1; }
