@@ -97,6 +97,78 @@ struct LearnedNoticeTests {
         #expect(declined == [suggestion])
     }
 
+    @Test func addingToAFullVocabularyShowsTheNoticeThatSaysSo() {
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
+        let full = CorrectionLearning.Learned(correction: suggestion.pair, pairs: [], outcome: .vocabularyFull)
+        var added: [String] = []
+        var declined: [WordSuggestion] = []
+        notice.onDecline = { declined.append($0) }
+        // Adding tells that the vocabulary is full while the add runs, as CorrectionLearning does.
+        notice.onAdd = { _, word in
+            added.append(word)
+            notice.show(full)
+        }
+        notice.suggest(suggestion)
+        notice.draft = " 通义千问3 "
+        notice.add()
+        #expect(added == ["通义千问3"])
+        #expect(notice.learned == full)
+        #expect(declined.isEmpty)
+    }
+
+    @Test func undoClosesTheNoticeAndUndoesTheWord() {
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
+        var undone: [CorrectionLearning.Learned] = []
+        notice.onUndo = { undone.append($0) }
+        notice.show(learned)
+        notice.undo()
+        #expect(undone == [learned])
+        #expect(notice.content == nil)
+        // An empty field adds nothing.
+        var added: [String] = []
+        notice.onAdd = { added.append($1) }
+        notice.suggest(suggestion)
+        notice.draft = "  "
+        notice.add()
+        #expect(added.isEmpty)
+        #expect(notice.suggestion == suggestion)
+    }
+
+    @Test func aNewOfferWaitsWhileTheUserEditsTheWord() {
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
+        let other = WordSuggestion(
+            change: Correction(heard: "经", corrected: "京"),
+            pair: Correction(heard: "北经", corrected: "北京")
+        )
+        notice.suggest(suggestion)
+        notice.setEditing(true)
+        notice.draft = "通义"
+        notice.suggest(other)
+        #expect(notice.suggestion == suggestion)
+        #expect(notice.draft == "通义")
+        notice.setEditing(false)
+        notice.suggest(other)
+        #expect(notice.suggestion == other)
+        #expect(notice.draft == "北京")
+    }
+
+    @Test func thePanelsKeyStatusHoldsTheCountdown() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, now: { start })
+        let owner = LearnedNoticePanel(notice: notice) { _ in }
+        let panel = owner.makePanel()
+        notice.onChange = nil
+        notice.suggest(suggestion)
+        // A click into the field makes the panel key: the user edits the word.
+        NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: panel)
+        #expect(notice.countdown == nil)
+        // A click back into the user's app ends the editing, even when the field keeps its
+        // focus inside the panel.
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: panel)
+        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: start.addingTimeInterval(4), seconds: 4))
+        withExtendedLifetime(owner) {}
+    }
+
     @Test func editingTheWordHoldsTheNotice() {
         let start = Date(timeIntervalSince1970: 1_000)
         let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, now: { start })

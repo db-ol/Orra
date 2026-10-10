@@ -572,8 +572,13 @@ corrections under Vocabulary in Settings first:
   word is added, and a notice asks "Add a word to your vocabulary?" with 通义千问 in its
   field. The app you are in keeps the focus and typing there still works while the notice
   shows. Click into the field, edit the word, and press Return or Add: the word is in the
-  vocabulary and the focus is back in the app you were in. The ring pauses while you
-  edit. Close it, or let it run out, and the same fix does not offer it again.
+  vocabulary and the focus is back in the app you were in. The ring counts down from the
+  moment the notice appears, and pauses only while you edit. Click into the field, then
+  click back into Notes without pressing Add: typing goes to Notes and the ring counts 4
+  again. Close it, or let it run out, and the same fix does not offer it again for a week.
+- [ ] Fill the vocabulary to 100 words, then add an offered
+  word: the notice says the vocabulary is full and stays until it runs out. Make room and
+  fix the same character again: the word is offered again.
 - [ ] Dictate four lines with the same misheard name, switch to another app for a moment,
   come back and fix them within 3 minutes: one notice comes. Undo takes the name out of
   the vocabulary, and fixing it again, misheard any way, does not add it again.

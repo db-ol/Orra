@@ -838,6 +838,16 @@
         }
       }
     },
+    "Paused" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂停"
+          }
+        }
+      }
+    },
     "People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1057,16 +1067,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型"
-          }
-        }
-      }
-    },
-    "Stays while the pointer is over it" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "鼠标停在上面时不会关闭"
           }
         }
       }
