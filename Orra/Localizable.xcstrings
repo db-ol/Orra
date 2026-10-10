@@ -263,6 +263,16 @@
         }
       }
     },
+    "Creating the report…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成报告…"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "zh-Hans" : {
@@ -627,6 +637,26 @@
         }
       }
     },
+    "Open GitHub Issue" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 GitHub 问题页"
+          }
+        }
+      }
+    },
+    "Open GitHub Issue opens the issue form in your browser with the versions filled in. Describe the problem there and drag the report file from Finder into the form. GitHub needs an account." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“打开 GitHub 问题页”会在浏览器中打开问题表单，并填好版本信息。请在那里描述问题，再把报告文件从访达拖进表单。需要 GitHub 账号。"
+          }
+        }
+      }
+    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -777,6 +807,16 @@
         }
       }
     },
+    "Orra wrote a diagnostic report that helps find the cause: its version, your Mac’s model and macOS version, Orra’s settings and permissions, and its own log from the last hour. It never contains what you dictated, recordings, the clipboard or your vocabulary. Nothing is sent." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 生成了一份帮助查找原因的诊断报告：其中有 Orra 的版本、你的 Mac 机型和 macOS 版本、Orra 的设置和权限，以及 Orra 自己最近一小时的日志。报告中绝不包含你听写的内容、录音、剪贴板或你的词汇表。不会发送任何内容。"
+          }
+        }
+      }
+    },
     "People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac." : {
       "localizations" : {
         "zh-Hans" : {
@@ -833,6 +873,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除"
+          }
+        }
+      }
+    },
+    "Report a Problem" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告问题"
+          }
+        }
+      }
+    },
+    "Report a Problem…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告问题…"
           }
         }
       }
@@ -923,6 +983,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 待命时，在屏幕底部显示一条小横条"
+          }
+        }
+      }
+    },
+    "Show in Finder" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在访达中显示"
           }
         }
       }
@@ -1089,6 +1159,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法转写这段录音"
+          }
+        }
+      }
+    },
+    "The report could not be saved." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存报告。"
           }
         }
       }

@@ -9,6 +9,7 @@ struct StatusMenu: View {
     let clipboard: ClipboardWord
     let updater: AppUpdater
     let showWelcome: () -> Void
+    let reportProblem: () -> Void
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -111,6 +112,9 @@ struct StatusMenu: View {
                 updater.checkForUpdates()
             }
             .disabled(!updater.canCheckForUpdates)
+        }
+        Button("Report a Problem…") {
+            reportProblem()
         }
         Button("Settings…") {
             // An accessory app is not the active app when its menu is used.
