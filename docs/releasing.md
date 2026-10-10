@@ -51,10 +51,12 @@ with every release. The script:
 6. signs the DMG with the update key, writes appcast.xml with the release notes and signs it
    too, since Orra requires a signed feed, and writes the DMG's SHA-256 next to it,
 7. copies the finished DMG to Orra.dmg, byte for byte, without building it again, and
-   checks that the two files are identical.
+   checks that the two files are identical, so Orra.dmg has the same SHA-256.
 
 Output goes to build/release/<version>/, which git ignores. With `--no-notarize` as a third
-argument it stops before uploading anything, to check a build quickly. Notarization can
+argument it stops before uploading anything, to check a build quickly. Such a build gets no
+Orra.dmg, and any Orra.dmg left from an earlier run is removed, so the file named for
+uploading is always notarized. Notarization can
 take minutes, and for a new team its first submissions can wait hours.
 
 ## Publishing
