@@ -113,3 +113,108 @@ struct DeclinedPairTests {
         #expect(store.state(of: pair) == .declined)
     }
 }
+
+@MainActor
+struct WordSuggestionLearningTests {
+    private let suggestion = WordSuggestion(
+        change: Correction(heard: "一", corrected: "义"),
+        pair: Correction(heard: "通一千问", corrected: "通义千问")
+    )
+
+    private func makeLearning(_ vocabulary: CorrectionLearningTests.VocabularyBox, field: ScriptedField = ScriptedField([""])) -> CorrectionLearning {
+        CorrectionLearning(
+            isOn: true,
+            store: CorrectionStore(),
+            watcher: CorrectionWatcher(environment: field.environment),
+            saveSetting: { _ in },
+            saveStore: { _ in },
+            addToVocabulary: { word in
+                guard !vocabulary.words.contains(word) else { return .alreadyThere }
+                guard vocabulary.words.count < vocabulary.limit else { return .full }
+                vocabulary.words.append(word)
+                return .added
+            },
+            removeFromVocabulary: { word in vocabulary.words.removeAll { $0 == word } },
+            isInVocabulary: { vocabulary.words.contains($0) }
+        )
+    }
+
+    @Test func aFixOfOneCharacterOffersTheWordAndAddsNothing() async {
+        let vocabulary = CorrectionLearningTests.VocabularyBox()
+        let field = ScriptedField(["我用通一千问写代码", "我用通一千问写代码", "我用通义千问写代码"])
+        let learning = makeLearning(vocabulary, field: field)
+        var offered: [WordSuggestion] = []
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onSuggest = { offered.append($0) }
+        learning.onLearned = { learned.append($0) }
+        learning.pasted("我用通一千问写代码", in: 42)
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where offered.isEmpty && quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        learning.isOn = false
+        #expect(offered == [suggestion])
+        #expect(learned.isEmpty)
+        #expect(vocabulary.words.isEmpty)
+        #expect(learning.store.entries.isEmpty)
+    }
+
+    @Test func addingKeepsThePairAsAcceptedAndAddsTheEditedWord() {
+        let vocabulary = CorrectionLearningTests.VocabularyBox()
+        let learning = makeLearning(vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.add(suggestion, as: " 通义千问3 ")
+        #expect(vocabulary.words == ["通义千问3"])
+        #expect(learning.store.state(of: Correction(heard: "通一千问3", corrected: "通义千问3")) == .accepted)
+        #expect(learned.isEmpty)
+        // Offered again later: already there, so not offered.
+        var offered: [WordSuggestion] = []
+        learning.onSuggest = { offered.append($0) }
+        learning.add(suggestion, as: "通义千问")
+        learning.suggest(suggestion)
+        #expect(offered.isEmpty)
+    }
+
+    @Test func addingToAFullVocabularySaysSo() {
+        let vocabulary = CorrectionLearningTests.VocabularyBox()
+        vocabulary.limit = 0
+        let learning = makeLearning(vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.add(suggestion, as: "通义千问")
+        #expect(learned.map(\.outcome) == [.vocabularyFull])
+        #expect(learning.store.state(of: suggestion.pair) == .seen)
+    }
+
+    @Test func aDeclinedWordIsNotOfferedAgainButCanStillBeLearned() {
+        let vocabulary = CorrectionLearningTests.VocabularyBox()
+        let learning = makeLearning(vocabulary)
+        var offered: [WordSuggestion] = []
+        learning.onSuggest = { offered.append($0) }
+        learning.suggest(suggestion)
+        learning.decline(suggestion)
+        learning.suggest(suggestion)
+        #expect(offered == [suggestion])
+        #expect(vocabulary.words.isEmpty)
+        // A fix of more characters still learns the word on its own.
+        learning.record(Correction(heard: "同一千问", corrected: "通义千问"))
+        #expect(vocabulary.words == ["通义千问"])
+    }
+
+    @Test func aWordUndoneBeforeIsNotOffered() {
+        let vocabulary = CorrectionLearningTests.VocabularyBox()
+        let learning = makeLearning(vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        var offered: [WordSuggestion] = []
+        learning.onLearned = { learned.append($0) }
+        learning.onSuggest = { offered.append($0) }
+        learning.record(Correction(heard: "同一千问", corrected: "通义千问"))
+        learning.undo(learned[0])
+        learning.suggest(suggestion)
+        #expect(offered.isEmpty)
+    }
+}

@@ -44,9 +44,15 @@ final class ScriptedField {
 
 @MainActor
 struct CorrectionWatcherTests {
+    /// The word the watch reported to learn, nil when it reported none or a word to offer.
     private func watch(_ field: ScriptedField, pasted: String) async -> Correction? {
+        if case .word(let correction) = await finding(field, pasted: pasted) { return correction }
+        return nil
+    }
+
+    private func finding(_ field: ScriptedField, pasted: String) async -> Finding? {
         let watcher = CorrectionWatcher(environment: field.environment)
-        var found: Correction?
+        var found: Finding?
         watcher.watch(pasted: pasted, in: 42) { found = $0; _ = $1 }
         // Waits until a correction comes, or the reads have stopped for a while, since the
         // comparison runs off the main actor.
@@ -110,10 +116,10 @@ struct CorrectionWatcherTests {
         let first = ScriptedField(["我在用克劳德写代码", "我在用Claude写代码"])
         let watcher = CorrectionWatcher(environment: first.environment)
         var found: [Correction] = []
-        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0); _ = $1 }
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0.correction); _ = $1 }
         for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(5)) }
         for _ in 1...CorrectionWatcher.maximumWatches {
-            watcher.watch(pasted: "不在这里", in: 42) { found.append($0); _ = $1 }
+            watcher.watch(pasted: "不在这里", in: 42) { found.append($0.correction); _ = $1 }
         }
         for _ in 0..<200 where found.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
         #expect(found == [Correction(heard: "克劳德", corrected: "Claude")])
@@ -150,7 +156,7 @@ struct CorrectionWatcherTests {
         var found: [Correction] = []
         var readsWhenFound: Int?
         watcher.watch(pasted: "我在用克劳德写代码", in: 42) { correction, _ in
-            found.append(correction)
+            found.append(correction.correction)
             readsWhenFound = readsWhenFound ?? field.reads
         }
         var lastReads = -1
@@ -194,7 +200,7 @@ struct CorrectionWatcherTests {
         let field = ScriptedField(["我在用克劳德写代码", half, half, half, half, done])
         let watcher = CorrectionWatcher(environment: field.environment)
         var reports: [(Correction, Correction?)] = []
-        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { reports.append(($0, $1)) }
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { reports.append(($0.correction, $1?.correction)) }
         var lastReads = -1
         var quiet = 0
         for _ in 0..<1_000 where quiet < 40 {

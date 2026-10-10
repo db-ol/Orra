@@ -13,13 +13,13 @@ struct LearnedNoticeTests {
 
     @Test func theNoticeHidesAfterItsTime() async {
         let notice = LearnedNotice(sleep: { _ in await Task.yield() })
-        var shown: [CorrectionLearning.Learned?] = []
+        var shown: [LearnedNotice.Content?] = []
         notice.onChange = { shown.append($0) }
         notice.show(learned)
         #expect(notice.learned == learned)
         for _ in 0..<50 where notice.learned != nil { await Task.yield() }
         #expect(notice.learned == nil)
-        #expect(shown == [learned, nil])
+        #expect(shown == [.learned(learned), nil])
     }
 
     @Test func theNoticeStaysWhileThePointerIsOverIt() async {
@@ -58,5 +58,57 @@ struct LearnedNoticeTests {
         #expect(!panel.canBecomeKey)
         #expect(!panel.canBecomeMain)
         #expect(!panel.ignoresMouseEvents)
+        // While it offers a word, only a click into the field makes it key.
+        panel.acceptsKeyboard = true
+        #expect(panel.canBecomeKey)
+        #expect(panel.becomesKeyOnlyIfNeeded)
+        #expect(!panel.canBecomeMain)
+    }
+
+    private let suggestion = WordSuggestion(
+        change: Correction(heard: "一", corrected: "义"),
+        pair: Correction(heard: "通一千问", corrected: "通义千问")
+    )
+
+    @Test func anOfferedWordThatRunsOutIsDeclined() async {
+        let notice = LearnedNotice(sleep: { _ in await Task.yield() })
+        var declined: [WordSuggestion] = []
+        notice.onDecline = { declined.append($0) }
+        notice.suggest(suggestion)
+        #expect(notice.suggestion == suggestion)
+        #expect(notice.draft == "通义千问")
+        for _ in 0..<50 where notice.content != nil { await Task.yield() }
+        #expect(notice.content == nil)
+        #expect(declined == [suggestion])
+    }
+
+    @Test func closingAnOfferedWordDeclinesItAndAddingDoesNot() {
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
+        var declined: [WordSuggestion] = []
+        notice.onDecline = { declined.append($0) }
+        notice.suggest(suggestion)
+        notice.finish()
+        #expect(declined.isEmpty)
+        notice.suggest(suggestion)
+        notice.close()
+        #expect(declined == [suggestion])
+        notice.show(learned)
+        notice.close()
+        #expect(declined == [suggestion])
+    }
+
+    @Test func editingTheWordHoldsTheNotice() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) }, now: { start })
+        notice.suggest(suggestion)
+        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: start.addingTimeInterval(15), seconds: 15))
+        notice.setEditing(true)
+        #expect(notice.countdown == nil)
+        // The pointer leaving while the user types does not start the countdown.
+        notice.hold()
+        notice.release()
+        #expect(notice.countdown == nil)
+        notice.setEditing(false)
+        #expect(notice.countdown == LearnedNotice.Countdown(hidesAt: start.addingTimeInterval(4), seconds: 4))
     }
 }

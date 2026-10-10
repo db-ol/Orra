@@ -113,6 +113,16 @@
         }
       }
     },
+    "Add a word to your vocabulary?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要把这个词加入个人词库吗？"
+          }
+        }
+      }
+    },
     "Add “%@” from the Clipboard to Vocabulary" : {
       "localizations" : {
         "zh-Hans" : {
@@ -189,6 +199,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取消下载"
+          }
+        }
+      }
+    },
+    "Changed “%@” to “%@”" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把“%@”改成了“%@”"
           }
         }
       }
@@ -325,6 +345,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载…"
+          }
+        }
+      }
+    },
+    "Word" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "词语"
           }
         }
       }

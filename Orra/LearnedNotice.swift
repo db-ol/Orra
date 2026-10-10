@@ -3,27 +3,50 @@ import Observation
 import SwiftUI
 
 /// The word Orra just learned on its own, shown for a while with Undo and a countdown to when
-/// it goes. Stays while the pointer is over it.
+/// it goes, or a word it offers to add after a fix of one Chinese character, in a field the
+/// user may edit. Stays while the pointer is over it, or while the user edits the word. An
+/// offered word that is closed or runs out is declined.
 @Observable
 final class LearnedNotice {
     static let duration: Duration = .seconds(10)
-    /// How long it stays after the pointer leaves it.
+    /// An offered word asks the user to read and decide, so it stays longer.
+    static let suggestionDuration: Duration = .seconds(15)
+    /// How long it stays after the pointer leaves it, or after the user stops editing.
     static let afterHover: Duration = .seconds(4)
 
+    enum Content: Equatable {
+        case learned(CorrectionLearning.Learned)
+        case suggestion(WordSuggestion)
+    }
+
     /// When the notice goes and how long that countdown is in all, for the ring. Nil while
-    /// the pointer holds it.
+    /// the pointer or the user's editing holds it.
     struct Countdown: Equatable {
         let hidesAt: Date
         let seconds: TimeInterval
     }
 
-    private(set) var learned: CorrectionLearning.Learned?
+    private(set) var content: Content?
     private(set) var countdown: Countdown?
+    /// The offered word as the user edits it.
+    var draft = ""
 
-    @ObservationIgnored var onChange: ((CorrectionLearning.Learned?) -> Void)?
+    var learned: CorrectionLearning.Learned? {
+        if case .learned(let learned) = content { learned } else { nil }
+    }
+
+    var suggestion: WordSuggestion? {
+        if case .suggestion(let suggestion) = content { suggestion } else { nil }
+    }
+
+    @ObservationIgnored var onChange: ((Content?) -> Void)?
+    /// Called when an offered word is closed or runs out without being added.
+    @ObservationIgnored var onDecline: ((WordSuggestion) -> Void)?
     @ObservationIgnored private let sleep: (Duration) async throws -> Void
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var hide: Task<Void, Never>?
+    @ObservationIgnored private var pointerInside = false
+    @ObservationIgnored private var editing = false
 
     init(
         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
@@ -35,21 +58,53 @@ final class LearnedNotice {
 
     /// Shows the word, in place of one shown before, and hides it after `duration`.
     func show(_ learned: CorrectionLearning.Learned) {
-        self.learned = learned
-        onChange?(learned)
-        hide(after: Self.duration)
+        present(.learned(learned), for: Self.duration)
+    }
+
+    /// Offers the word, in place of a notice shown before, with the guess in the field.
+    func suggest(_ suggestion: WordSuggestion) {
+        draft = suggestion.guess
+        present(.suggestion(suggestion), for: Self.suggestionDuration)
+    }
+
+    private func present(_ content: Content, for duration: Duration) {
+        self.content = content
+        pointerInside = false
+        editing = false
+        onChange?(content)
+        hide(after: duration)
     }
 
     /// Keeps the notice while the pointer is over it.
     func hold() {
+        pointerInside = true
+        pause()
+    }
+
+    /// The pointer left: hides it a little later, unless the user is editing the word.
+    func release() {
+        pointerInside = false
+        resume()
+    }
+
+    /// The user started or stopped editing the offered word. Keeps it while editing.
+    func setEditing(_ isEditing: Bool) {
+        editing = isEditing
+        if isEditing {
+            pause()
+        } else {
+            resume()
+        }
+    }
+
+    private func pause() {
         hide?.cancel()
         hide = nil
         countdown = nil
     }
 
-    /// The pointer left: hides it a little later.
-    func release() {
-        guard learned != nil else { return }
+    private func resume() {
+        guard content != nil, !pointerInside, !editing else { return }
         hide(after: Self.afterHover)
     }
 
@@ -68,70 +123,141 @@ final class LearnedNotice {
         }
     }
 
+    /// Closes the notice. An offered word that was not added is declined.
     func close() {
+        let declined = suggestion
+        finish()
+        if let declined {
+            onDecline?(declined)
+        }
+    }
+
+    /// Closes the notice after the user answered it, with Undo or Add.
+    func finish() {
         hide?.cancel()
         hide = nil
         countdown = nil
-        guard learned != nil else { return }
-        learned = nil
+        pointerInside = false
+        editing = false
+        guard content != nil else { return }
+        content = nil
         onChange?(nil)
     }
 }
 
-/// The floating panel with the notice, above the recording indicator. Like the indicator,
-/// it never becomes key or main, so the app the user is in keeps the focus. It takes clicks,
-/// for Undo and Close.
+/// A panel that never becomes main, and becomes key only while it offers a word and only
+/// when the user clicks into its field, so the app the user is in keeps the focus otherwise.
+final class NoticePanel: NSPanel {
+    var acceptsKeyboard = false
+
+    override var canBecomeKey: Bool { acceptsKeyboard }
+    override var canBecomeMain: Bool { false }
+}
+
+/// The floating panel with the notice, above the recording indicator. Showing it never takes
+/// the focus. It takes clicks, for Undo, Add and Close, and the keyboard only after a click
+/// into the offered word's field. Then the focus goes back to the app the user was in once
+/// the notice closes.
 final class LearnedNoticePanel {
     let notice: LearnedNotice
     private let undo: (CorrectionLearning.Learned) -> Void
-    private var panel: NSPanel?
+    private let add: (WordSuggestion, String) -> Void
+    private var panel: NoticePanel?
+    /// The app in front when the notice appeared, given the focus back after typing.
+    private var previousApp: NSRunningApplication?
 
-    init(notice: LearnedNotice, undo: @escaping (CorrectionLearning.Learned) -> Void) {
+    init(
+        notice: LearnedNotice,
+        undo: @escaping (CorrectionLearning.Learned) -> Void,
+        add: @escaping (WordSuggestion, String) -> Void = { _, _ in },
+        decline: @escaping (WordSuggestion) -> Void = { _ in }
+    ) {
         self.notice = notice
         self.undo = undo
-        notice.onChange = { [weak self] learned in
-            self?.present(learned)
+        self.add = add
+        notice.onChange = { [weak self] content in
+            self?.present(content)
         }
+        notice.onDecline = decline
     }
 
     func show(_ learned: CorrectionLearning.Learned) {
         notice.show(learned)
     }
 
-    private func present(_ learned: CorrectionLearning.Learned?) {
-        guard learned != nil else {
+    func suggest(_ suggestion: WordSuggestion) {
+        notice.suggest(suggestion)
+    }
+
+    private func present(_ content: LearnedNotice.Content?) {
+        let wasKey = panel?.isKeyWindow ?? false
+        guard let content else {
+            panel?.acceptsKeyboard = false
             panel?.orderOut(nil)
+            if wasKey { giveFocusBack() }
             return
         }
         let panel = panel ?? makePanel()
+        if !wasKey {
+            let front = NSWorkspace.shared.frontmostApplication
+            previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : front
+        }
+        if case .suggestion = content {
+            panel.acceptsKeyboard = true
+        } else {
+            panel.acceptsKeyboard = false
+            if wasKey {
+                panel.resignKey()
+                giveFocusBack()
+            }
+        }
         // A new view for each word, so the panel is sized to it right away.
         let undo = undo
-        let content = FirstClickHostingView(rootView: LearnedNoticeView(notice: notice) { [notice] learned in
-            undo(learned)
-            notice.close()
-        })
-        content.onHover = { [notice] inside in
+        let add = add
+        let view = FirstClickHostingView(rootView: LearnedNoticeView(
+            notice: notice,
+            undo: { [notice] learned in
+                undo(learned)
+                notice.finish()
+            },
+            add: { [notice] suggestion, text in
+                add(suggestion, text)
+                notice.finish()
+            }
+        ))
+        view.onHover = { [notice] inside in
             if inside {
                 notice.hold()
             } else {
                 notice.release()
             }
         }
-        panel.contentView = content
-        panel.setContentSize(content.fittingSize)
+        panel.contentView = view
+        panel.setContentSize(view.fittingSize)
         place(panel)
         panel.orderFrontRegardless()
     }
 
+    /// Orra never activates itself for the notice, so the app the user was in normally
+    /// still has the focus. Should Orra have become active, it hands activation back.
+    private func giveFocusBack() {
+        guard NSApp.isActive, let previousApp, !previousApp.isTerminated else { return }
+        NSApp.yieldActivation(to: previousApp)
+        previousApp.activate()
+    }
+
     /// Internal so tests can check the panel without showing it.
-    func makePanel() -> NSPanel {
-        let panel = NonactivatingPanel(
+    func makePanel() -> NoticePanel {
+        let panel = NoticePanel(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 80),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: true
         )
         panel.isFloatingPanel = true
+        // A click on a button leaves the focus alone. Only a click into the field makes
+        // the panel key.
+        panel.becomesKeyOnlyIfNeeded = true
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.backgroundColor = .clear
@@ -180,40 +306,20 @@ private final class FirstClickHostingView<Content: View>: NSHostingView<Content>
 }
 
 struct LearnedNoticeView: View {
-    let notice: LearnedNotice
+    @Bindable var notice: LearnedNotice
     let undo: (CorrectionLearning.Learned) -> Void
+    let add: (WordSuggestion, String) -> Void
+    @FocusState private var editing: Bool
 
     var body: some View {
-        if let learned = notice.learned {
-            HStack(spacing: 12) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.title3)
-                VStack(alignment: .leading, spacing: 2) {
-                    switch learned.outcome {
-                    case .added:
-                        Text("Added “\(learned.correction.corrected)” to Vocabulary")
-                    case .vocabularyFull:
-                        Text("Vocabulary is full, so “\(learned.correction.corrected)” was not added")
-                    }
-                    Text("Heard as “\(learned.correction.heard)”")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        if let content = notice.content {
+            Group {
+                switch content {
+                case .learned(let learned):
+                    learnedView(learned)
+                case .suggestion(let suggestion):
+                    suggestionView(suggestion)
                 }
-                .lineLimit(1)
-                if learned.outcome == .added {
-                    Button("Undo") {
-                        undo(learned)
-                    }
-                }
-                CountdownRing(countdown: notice.countdown)
-                Button {
-                    notice.close()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Close")
             }
             .indicatorStyle()
             // Room for the shadow.
@@ -221,10 +327,81 @@ struct LearnedNoticeView: View {
             .environment(\.colorScheme, .dark)
         }
     }
+
+    private func learnedView(_ learned: CorrectionLearning.Learned) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                switch learned.outcome {
+                case .added:
+                    Text("Added “\(learned.correction.corrected)” to Vocabulary")
+                case .vocabularyFull:
+                    Text("Vocabulary is full, so “\(learned.correction.corrected)” was not added")
+                }
+                Text("Heard as “\(learned.correction.heard)”")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .lineLimit(1)
+            if learned.outcome == .added {
+                Button("Undo") {
+                    undo(learned)
+                }
+            }
+            CountdownRing(countdown: notice.countdown)
+            closeButton
+        }
+    }
+
+    private func suggestionView(_ suggestion: WordSuggestion) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "plus.circle.fill")
+                .foregroundStyle(.blue)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Add a word to your vocabulary?")
+                Text("Changed “\(suggestion.change.heard)” to “\(suggestion.change.corrected)”")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .lineLimit(1)
+            TextField("Word", text: $notice.draft)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 140)
+                .focused($editing)
+                .onSubmit(addDraft)
+                .onExitCommand { notice.close() }
+                .onChange(of: editing) { _, isEditing in
+                    notice.setEditing(isEditing)
+                }
+            Button("Add", action: addDraft)
+                .disabled(notice.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            CountdownRing(countdown: notice.countdown)
+            closeButton
+        }
+    }
+
+    private func addDraft() {
+        guard let suggestion = notice.suggestion,
+              !notice.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        add(suggestion, notice.draft)
+    }
+
+    private var closeButton: some View {
+        Button {
+            notice.close()
+        } label: {
+            Image(systemName: "xmark")
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Close")
+    }
 }
 
 /// The seconds until the notice goes, in a ring that empties, or a pause sign while the
-/// pointer holds the notice.
+/// pointer or the user's editing holds the notice.
 private struct CountdownRing: View {
     let countdown: LearnedNotice.Countdown?
 

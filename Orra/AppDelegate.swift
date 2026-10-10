@@ -42,11 +42,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         },
         removeFromVocabulary: { [pushToTalk] word in
             pushToTalk.setVocabulary(Vocabulary.removing(word, from: pushToTalk.vocabulary))
+        },
+        isInVocabulary: { [pushToTalk] word in
+            pushToTalk.vocabulary.contains { $0.lowercased() == word.lowercased() }
         }
     )
-    lazy var learnedNotice = LearnedNoticePanel(notice: LearnedNotice()) { [learning] learned in
-        learning.undo(learned)
-    }
+    lazy var learnedNotice = LearnedNoticePanel(
+        notice: LearnedNotice(),
+        undo: { [learning] learned in learning.undo(learned) },
+        add: { [learning] suggestion, word in learning.add(suggestion, as: word) },
+        decline: { [learning] suggestion in learning.decline(suggestion) }
+    )
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
     nonisolated static var isHostedByXcode: Bool {
@@ -109,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         pushToTalk.onPasted = { [learning] text, app in learning.pasted(text, in: app) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
+        learning.onSuggest = { [learnedNotice] suggestion in learnedNotice.suggest(suggestion) }
         pushToTalk.start()
         followReadiness()
         openAtLogin.refreshWhenMenusOpen()
