@@ -1,6 +1,6 @@
 # Orra
 
-Orra is an open source voice input app for macOS. The goal is simple: hold a key, speak, release, and the words land in the app you were typing in. Everything is meant to run on your own Mac.
+Orra is an open source voice input app for macOS. It sits in the menu bar and the Dock, and Settings can take it out of the Dock. The goal is simple: hold a key, speak, release, and the words land in the app you were typing in. Everything is meant to run on your own Mac.
 
 ## Status
 

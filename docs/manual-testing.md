@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 417 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 420 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -601,6 +601,16 @@ Testing notes:
   identical icons in the menu bar, and quitting one leaves the other running.
 - On macOS 26 the menu bar item windows belong to the Control Center process, so window
   listings do not show them under Orra.
+
+Dock icon, added on 2026-10-10, not verified yet:
+
+- [ ] After launch Orra is in the Dock and in Command Tab, and still in the menu bar.
+  Clicking the Dock icon opens Settings, or the welcome window while setup needs you.
+- [ ] Turning off "Show Orra in the Dock" in Settings, General keeps the icon until the
+  Settings window closes, then it goes. Opening Settings or the welcome window from the
+  menu brings it back while the window is open. The choice stays after reopening Orra.
+- [ ] Dictating into another app works the same with the icon shown, and the recording
+  indicator never makes Orra the active app.
 
 ## Not implemented
 

@@ -1,8 +1,8 @@
 import AppKit
 
-/// Orra lives in the menu bar, so it runs as an accessory app: no Dock icon and
-/// no window at launch. The policy is set here at launch rather than through
-/// LSUIElement because the Info.plist is generated from build settings.
+/// Orra lives in the menu bar, and in the Dock too unless the user turns that off, see
+/// DockIcon. The policy is set here at launch rather than through LSUIElement, so it can
+/// follow the setting.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let pushToTalk = PushToTalkController(
         capture: .live(),
@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
+    let dockIcon = DockIcon.live()
     let models = ModelInstaller.live()
     /// The recording indicator and the sounds. Lazy, because it reads the controller's
     /// microphone level.
@@ -66,7 +67,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        NSApplication.shared.setActivationPolicy(.accessory)
+        guard !Self.isHostedByXcode else {
+            NSApplication.shared.setActivationPolicy(.accessory)
+            return
+        }
+        dockIcon.update()
+        dockIcon.followWindows()
+    }
+
+    /// A click on the Dock icon, or opening Orra while it runs: the welcome window while
+    /// setup needs the user, Settings otherwise.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        guard !Self.isHostedByXcode, !hasVisibleWindows else { return true }
+        if SetupChecklist(pushToTalk, models).needsUser {
+            welcome.show()
+        } else {
+            DockIcon.openSettings()
+        }
+        return false
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
