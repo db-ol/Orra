@@ -399,3 +399,121 @@
 {"id": "n399", "kind": "convert", "input": "三十万零五百元。", "expected": "300500元。", "note": "a fraction of 万 with a zero is written whole"}
 {"id": "n400", "kind": "convert", "input": "预算三万五的方案。", "expected": "预算3.5万的方案。", "note": "万 before 的 is an amount"}
 {"id": "n401", "kind": "convert", "input": "验证码是六五四三二一。", "expected": "验证码是654321。", "note": "counting digits after a code word are a code"}
+{"id": "n402", "kind": "keep", "input": "房租三千一个月。", "expected": "房租三千一个月。", "note": "一 after 千 belongs to the counter, a price for one month"}
+{"id": "n403", "kind": "keep", "input": "工资一万一个月，不算多。", "expected": "工资一万一个月，不算多。", "note": "一 after 万 belongs to the counter"}
+{"id": "n404", "kind": "keep", "input": "按摩三百一次。", "expected": "按摩三百一次。", "note": "a price for one time, not 310"}
+{"id": "n405", "kind": "keep", "input": "家教两百一小时。", "expected": "家教两百一小时。", "note": "a price for one hour"}
+{"id": "n406", "kind": "keep", "input": "这件衣服三百一件，三件打折。", "expected": "这件衣服三百一件，三件打折。", "note": "a price for one piece"}
+{"id": "n407", "kind": "keep", "input": "演唱会门票八百一张。", "expected": "演唱会门票八百一张。", "note": "a price for one ticket"}
+{"id": "n408", "kind": "keep", "input": "保姆五千一个月包吃住。", "expected": "保姆五千一个月包吃住。", "note": "a price for one month"}
+{"id": "n409", "kind": "keep", "input": "大闸蟹一百一只。", "expected": "大闸蟹一百一只。", "note": "a price for one crab"}
+{"id": "n410", "kind": "keep", "input": "健身私教四百一节课。", "expected": "健身私教四百一节课。", "note": "a price for one lesson"}
+{"id": "n411", "kind": "keep", "input": "个位、十位、百位要对齐。", "expected": "个位、十位、百位要对齐。", "note": "十位 is the tens place"}
+{"id": "n412", "kind": "keep", "input": "这个数的十位是几？", "expected": "这个数的十位是几？", "note": "十位 is the tens place"}
+{"id": "n413", "kind": "keep", "input": "把十位上的数字加起来。", "expected": "把十位上的数字加起来。", "note": "十位 is the tens place"}
+{"id": "n414", "kind": "keep", "input": "不怕一万，就怕万一。", "expected": "不怕一万，就怕万一。", "note": "saying"}
+{"id": "n415", "kind": "keep", "input": "说一千道一万，还是得靠自己。", "expected": "说一千道一万，还是得靠自己。", "note": "idiom"}
+{"id": "n416", "kind": "keep", "input": "他住在东四十条。", "expected": "他住在东四十条。", "note": "a street in Beijing"}
+{"id": "n417", "kind": "keep", "input": "东四十条地铁站怎么走？", "expected": "东四十条地铁站怎么走？", "note": "a subway station in Beijing"}
+{"id": "n418", "kind": "keep", "input": "这事我一百二十个放心。", "expected": "这事我一百二十个放心。", "note": "intensifier"}
+{"id": "n419", "kind": "keep", "input": "我一百二十个满意。", "expected": "我一百二十个满意。", "note": "intensifier"}
+{"id": "n420", "kind": "keep", "input": "我十二个不同意。", "expected": "我十二个不同意。", "note": "intensifier"}
+{"id": "n421", "kind": "keep", "input": "我一百二十分同意。", "expected": "我一百二十分同意。", "note": "intensifier before 分 and a feeling"}
+{"id": "n422", "kind": "keep", "input": "妈妈说了八百遍不要玩手机。", "expected": "妈妈说了八百遍不要玩手机。", "note": "hyperbole 八百遍"}
+{"id": "n423", "kind": "keep", "input": "这话我说了不下八百次了。", "expected": "这话我说了不下八百次了。", "note": "hyperbole 八百次"}
+{"id": "n424", "kind": "keep", "input": "他有八百个心眼子。", "expected": "他有八百个心眼子。", "note": "figure of speech"}
+{"id": "n425", "kind": "keep", "input": "我等你一万年。", "expected": "我等你一万年。", "note": "hyperbole 一万年"}
+{"id": "n426", "kind": "keep", "input": "我就是有一百张嘴也说不清。", "expected": "我就是有一百张嘴也说不清。", "note": "figure of speech 张嘴"}
+{"id": "n427", "kind": "keep", "input": "你给我一百个胆子我也不敢。", "expected": "你给我一百个胆子我也不敢。", "note": "figure of speech 胆子"}
+{"id": "n428", "kind": "keep", "input": "借我十个胆子也不敢。", "expected": "借我十个胆子也不敢。", "note": "figure of speech 胆子 with any number"}
+{"id": "n429", "kind": "keep", "input": "我给你点一万个赞。", "expected": "我给你点一万个赞。", "note": "hyperbole 一万个赞"}
+{"id": "n430", "kind": "keep", "input": "这种人一万个里面也挑不出一个。", "expected": "这种人一万个里面也挑不出一个。", "note": "hyperbole 一万个里面"}
+{"id": "n431", "kind": "keep", "input": "真是一百年都遇不到一次。", "expected": "真是一百年都遇不到一次。", "note": "hyperbole 一百年都"}
+{"id": "n432", "kind": "keep", "input": "我们八百年没见了。", "expected": "我们八百年没见了。", "note": "hyperbole 八百年"}
+{"id": "n433", "kind": "keep", "input": "一千个读者就有一千个哈姆雷特。", "expected": "一千个读者就有一千个哈姆雷特。", "note": "saying"}
+{"id": "n434", "kind": "keep", "input": "一千个人眼里有一千个哈姆雷特。", "expected": "一千个人眼里有一千个哈姆雷特。", "note": "saying"}
+{"id": "n435", "kind": "keep", "input": "一百个人有一百种活法。", "expected": "一百个人有一百种活法。", "note": "saying with a parallel"}
+{"id": "n436", "kind": "keep", "input": "这辈子一千个一万个感谢。", "expected": "这辈子一千个一万个感谢。", "note": "two hyperboles in a row"}
+{"id": "n437", "kind": "keep", "input": "十个手指头有长有短。", "expected": "十个手指头有长有短。", "note": "saying"}
+{"id": "n438", "kind": "keep", "input": "十个男人九个花。", "expected": "十个男人九个花。", "note": "saying"}
+{"id": "n439", "kind": "keep", "input": "日本人说十人十色。", "expected": "日本人说十人十色。", "note": "saying"}
+{"id": "n440", "kind": "keep", "input": "党的十八届三中全会。", "expected": "党的十八届三中全会。", "note": "plenum names are written in characters"}
+{"id": "n441", "kind": "keep", "input": "十九届四中全会提出了这个目标。", "expected": "十九届四中全会提出了这个目标。", "note": "plenum name"}
+{"id": "n442", "kind": "keep", "input": "二十届三中全会精神。", "expected": "二十届三中全会精神。", "note": "plenum name"}
+{"id": "n443", "kind": "keep", "input": "我们在看五十度灰。", "expected": "我们在看五十度灰。", "note": "film title without title marks"}
+{"id": "n444", "kind": "keep", "input": "你看过十二道锋味吗？", "expected": "你看过十二道锋味吗？", "note": "show title without title marks"}
+{"id": "n445", "kind": "keep", "input": "最近单曲循环一千年以后。", "expected": "最近单曲循环一千年以后。", "note": "song title"}
+{"id": "n446", "kind": "keep", "input": "这首歌叫一千个伤心的理由。", "expected": "这首歌叫一千个伤心的理由。", "note": "song title"}
+{"id": "n447", "kind": "keep", "input": "一百万个可能这首歌好听。", "expected": "一百万个可能这首歌好听。", "note": "song title"}
+{"id": "n448", "kind": "keep", "input": "单数是一三五七九，双数是二四六八十。", "expected": "单数是一三五七九，双数是二四六八十。", "note": "lists of odd and even digits count by two"}
+{"id": "n449", "kind": "keep", "input": "二四六八，我们加油！", "expected": "二四六八，我们加油！", "note": "a cheer counts by two"}
+{"id": "n450", "kind": "keep", "input": "九十九道弯的山路。", "expected": "九十九道弯的山路。", "note": "folk song line"}
+{"id": "n451", "kind": "keep", "input": "黄河九十九道弯。", "expected": "黄河九十九道弯。", "note": "folk song line"}
+{"id": "n452", "kind": "keep", "input": "故宫有九千九百九十九间半房子。", "expected": "故宫有九千九百九十九间半房子。", "note": "legend"}
+{"id": "n453", "kind": "keep", "input": "这个PPT十分重要。", "expected": "这个PPT十分重要。", "note": "十分 is very after a Latin word"}
+{"id": "n454", "kind": "keep", "input": "这个bug十分严重。", "expected": "这个bug十分严重。", "note": "十分 is very after a Latin word"}
+{"id": "n455", "kind": "keep", "input": "CEO十分重视。", "expected": "CEO十分重视。", "note": "十分 is very after capitals"}
+{"id": "n456", "kind": "keep", "input": "iPad十分方便。", "expected": "iPad十分方便。", "note": "十分 is very after a model name"}
+{"id": "n457", "kind": "keep", "input": "Tom 十分开心。", "expected": "Tom 十分开心。", "note": "十分 is very, 分开 is not a unit here"}
+{"id": "n458", "kind": "keep", "input": "Tom十分开心。", "expected": "Tom十分开心。", "note": "十分 is very after a name"}
+{"id": "n459", "kind": "keep", "input": "跟Tom八点十五见。", "expected": "跟Tom八点十五见。", "note": "a time after a name is not a version"}
+{"id": "n460", "kind": "keep", "input": "Tom十点十五过来。", "expected": "Tom十点十五过来。", "note": "a time after a name is not a version"}
+{"id": "n461", "kind": "keep", "input": "Amy三点十五到。", "expected": "Amy三点十五到。", "note": "a time after a name is not a version"}
+{"id": "n462", "kind": "keep", "input": "Tom八成会来。", "expected": "Tom八成会来。", "note": "a word that starts with a numeral after a name"}
+{"id": "n463", "kind": "keep", "input": "Jack四处找你。", "expected": "Jack四处找你。", "note": "a word that starts with a numeral after a name"}
+{"id": "n464", "kind": "keep", "input": "Amy三思而后行。", "expected": "Amy三思而后行。", "note": "idiom after a name"}
+{"id": "n465", "kind": "keep", "input": "Jack九死一生。", "expected": "Jack九死一生。", "note": "idiom after a name"}
+{"id": "n466", "kind": "keep", "input": "Mike七嘴八舌地说。", "expected": "Mike七嘴八舌地说。", "note": "idiom after a name"}
+{"id": "n467", "kind": "keep", "input": "Tom五体投地。", "expected": "Tom五体投地。", "note": "idiom after a name"}
+{"id": "n468", "kind": "keep", "input": "Tom五一回来。", "expected": "Tom五一回来。", "note": "holiday after a name"}
+{"id": "n469", "kind": "keep", "input": "Tom十一回家。", "expected": "Tom十一回家。", "note": "holiday after a name"}
+{"id": "n470", "kind": "keep", "input": "有三点整改意见。", "expected": "有三点整改意见。", "note": "整改 is a word, the points of a list"}
+{"id": "n471", "kind": "keep", "input": "领导提出了两点整改要求。", "expected": "领导提出了两点整改要求。", "note": "整改 is a word"}
+{"id": "n472", "kind": "keep", "input": "以上三点整合一下。", "expected": "以上三点整合一下。", "note": "整合 is a word"}
+{"id": "n473", "kind": "keep", "input": "我提三点整体思路。", "expected": "我提三点整体思路。", "note": "整体 is a word"}
+{"id": "n474", "kind": "keep", "input": "我们晚一点整理。", "expected": "我们晚一点整理。", "note": "一点 is a little, 整理 is a word"}
+{"id": "n475", "kind": "keep", "input": "慢一点整个流程就顺了。", "expected": "慢一点整个流程就顺了。", "note": "一点 is a little"}
+{"id": "n476", "kind": "keep", "input": "看起来一点整体感都没有。", "expected": "看起来一点整体感都没有。", "note": "一点 is a little"}
+{"id": "n477", "kind": "keep", "input": "好一点半年后再复查。", "expected": "好一点半年后再复查。", "note": "一点 is a little, 半年 is a word"}
+{"id": "n478", "kind": "keep", "input": "多吃一点半个月就好了。", "expected": "多吃一点半个月就好了。", "note": "一点 is a little"}
+{"id": "n479", "kind": "keep", "input": "快一点半天就能做完。", "expected": "快一点半天就能做完。", "note": "一点 is a little"}
+{"id": "n480", "kind": "keep", "input": "我有一点半信半疑。", "expected": "我有一点半信半疑。", "note": "一点 is a little"}
+{"id": "n481", "kind": "keep", "input": "我们晚一点半夜再走。", "expected": "我们晚一点半夜再走。", "note": "一点 is a little"}
+{"id": "n482", "kind": "keep", "input": "早一点钟头。", "expected": "早一点钟头。", "note": "钟头 is a word"}
+{"id": "n483", "kind": "keep", "input": "百分之五点多。", "expected": "百分之五点多。", "note": "a rough percentage"}
+{"id": "n484", "kind": "keep", "input": "百分之三点几。", "expected": "百分之三点几。", "note": "a rough percentage"}
+{"id": "n485", "kind": "keep", "input": "增长了百分之十点多。", "expected": "增长了百分之十点多。", "note": "a rough percentage"}
+{"id": "n486", "kind": "keep", "input": "百分之五十点多。", "expected": "百分之五十点多。", "note": "a rough percentage"}
+{"id": "n487", "kind": "keep", "input": "十块十块地给。", "expected": "十块十块地给。", "note": "ten at a time, both stay"}
+{"id": "n488", "kind": "keep", "input": "他身上就十块十块的零钱。", "expected": "他身上就十块十块的零钱。", "note": "ten at a time, both stay"}
+{"id": "n489", "kind": "keep", "input": "我会爱你一万年。", "expected": "我会爱你一万年。", "note": "hyperbole 一万年"}
+{"id": "n490", "kind": "keep", "input": "三五一群。", "expected": "三五一群。", "note": "rough grouping"}
+{"id": "n491", "kind": "keep", "input": "一三五七九是奇数。", "expected": "一三五七九是奇数。", "note": "odd digits count by two"}
+{"id": "n492", "kind": "keep", "input": "双数是二四六八。", "expected": "双数是二四六八。", "note": "even digits count by two"}
+{"id": "n493", "kind": "keep", "input": "四一二政变。", "expected": "四一二政变。", "note": "date of an event"}
+{"id": "n494", "kind": "keep", "input": "八一三淞沪会战。", "expected": "八一三淞沪会战。", "note": "date of an event"}
+{"id": "n495", "kind": "convert", "input": "十月十到十二号。", "expected": "10月10到12号。", "note": "a range of days converts with its month"}
+{"id": "n496", "kind": "convert", "input": "二零二六年 十月 十日", "expected": "2026年 10月 10日", "note": "a month and day with spaces convert together"}
+{"id": "n497", "kind": "convert", "input": "十月 十日", "expected": "10月 10日", "note": "a month and day with a space convert together"}
+{"id": "n498", "kind": "keep", "input": "百分之三到五。", "expected": "百分之三到五。", "note": "a range of percentages stays whole"}
+{"id": "n499", "kind": "keep", "input": "百分之五十到六十。", "expected": "百分之五十到六十。", "note": "a range of percentages stays whole"}
+{"id": "n500", "kind": "keep", "input": "三到五月份。", "expected": "三到五月份。", "note": "the end of a range stays with its start"}
+{"id": "n501", "kind": "convert", "input": "十点到十点半。", "expected": "10点到10点半。", "note": "the start of a range of times converts with its end"}
+{"id": "n502", "kind": "convert", "input": "三点到三点半之间。", "expected": "3点到3点半之间。", "note": "the start of a range of times converts with its end"}
+{"id": "n503", "kind": "keep", "input": "气温零下五到零下十度。", "expected": "气温零下五到零下十度。", "note": "the end of a range stays with its start"}
+{"id": "n504", "kind": "keep", "input": "一共三十块零五毛。", "expected": "一共三十块零五毛。", "note": "an amount in two parts stays whole"}
+{"id": "n505", "kind": "keep", "input": "二十块零五。", "expected": "二十块零五。", "note": "an amount in two parts stays whole"}
+{"id": "n506", "kind": "keep", "input": "一百块零五毛。", "expected": "一百块零五毛。", "note": "an amount in two parts stays whole"}
+{"id": "n507", "kind": "keep", "input": "五十块五十。", "expected": "五十块五十。", "note": "an amount in two parts stays whole"}
+{"id": "n508", "kind": "keep", "input": "十五块五一斤。", "expected": "十五块五一斤。", "note": "an amount in two parts stays whole"}
+{"id": "n509", "kind": "keep", "input": "一分三十秒。", "expected": "一分三十秒。", "note": "a duration in two parts stays whole"}
+{"id": "n510", "kind": "keep", "input": "差五点才及格。", "expected": "差五点才及格。", "note": "points short, not a time"}
+{"id": "n511", "kind": "keep", "input": "我们讲了两点以后再讨论。", "expected": "我们讲了两点以后再讨论。", "note": "points of a talk, not a time"}
+{"id": "n512", "kind": "keep", "input": "我提了三点之后就没说话了。", "expected": "我提了三点之后就没说话了。", "note": "points of a talk, not a time"}
+{"id": "n513", "kind": "convert", "input": "两百元一张。", "expected": "200元一张。", "note": "a price for one after a whole amount converts"}
+{"id": "n514", "kind": "convert", "input": "三十一个人参加。", "expected": "31个人参加。", "note": "三十一 before a counter is a count"}
+{"id": "n515", "kind": "convert", "input": "十位同学来了。", "expected": "10位同学来了。", "note": "十位 before a noun counts people"}
+{"id": "n516", "kind": "convert", "input": "考了一百二十分。", "expected": "考了120分。", "note": "a score, not an intensifier"}
+{"id": "n517", "kind": "convert", "input": "M五芯片很快。", "expected": "M5芯片很快。", "note": "a model after one letter converts before Chinese"}
+{"id": "n518", "kind": "convert", "input": "iPhone十五发布了。", "expected": "iPhone15发布了。", "note": "a model after a model name converts before Chinese"}
+{"id": "n519", "kind": "convert", "input": "一点半出发。", "expected": "1点半出发。", "note": "一点半 before a verb is a time"}
