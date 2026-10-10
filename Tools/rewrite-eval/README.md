@@ -38,7 +38,7 @@ reword, does not answer a question and does not carry out a request.
 
 ## Numbers
 
-`numbers.jsonl` has 519 cases for writing spoken Chinese numbers as digits, one JSON
+`numbers.jsonl` has 610 cases for writing spoken Chinese numbers as digits, one JSON
 object per line:
 
 - `id`: n001 and up.
@@ -87,7 +87,9 @@ the first rules missed. A second review added 118 cases, n402 to n519, for price
 (三千一个月), the tens place, intensifiers and hyperbole (一百二十个放心, 八百遍, 一百个胆子),
 sayings, titles and plenum names, numbers after a person's name, 一点 as a little before
 半年 or 整理, rough percentages, amounts in two parts (三十块零五毛) and both ends of a
-range.
+range. A third review added 91 cases, n520 to n610, for 一点 as a little before a price or a
+duration (便宜一点五十块), words that end in a digit before 十 (唯一十八岁, 高三十个班, 张三十八岁),
+sayings and song titles, scores, phone numbers in groups and ranges whose ends differ.
 
 OrraTests/NumberRulesTests.swift runs every case, so Orra/NumberRules.swift gets all of
 them while the tests pass.

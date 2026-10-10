@@ -517,3 +517,94 @@
 {"id": "n517", "kind": "convert", "input": "M五芯片很快。", "expected": "M5芯片很快。", "note": "a model after one letter converts before Chinese"}
 {"id": "n518", "kind": "convert", "input": "iPhone十五发布了。", "expected": "iPhone15发布了。", "note": "a model after a model name converts before Chinese"}
 {"id": "n519", "kind": "convert", "input": "一点半出发。", "expected": "1点半出发。", "note": "一点半 before a verb is a time"}
+{"id": "n520", "kind": "keep", "input": "他是全班唯一十八岁就考上清华的。", "expected": "他是全班唯一十八岁就考上清华的。", "note": "一 at the end of a word such as 唯一 or 之一 does not start a number with 十"}
+{"id": "n521", "kind": "keep", "input": "这是重要原因之一十分关键。", "expected": "这是重要原因之一十分关键。", "note": "一 at the end of a word such as 唯一 or 之一 does not start a number with 十"}
+{"id": "n522", "kind": "keep", "input": "这本书是世界名著之一十分畅销。", "expected": "这本书是世界名著之一十分畅销。", "note": "一 at the end of a word such as 唯一 or 之一 does not start a number with 十"}
+{"id": "n523", "kind": "keep", "input": "这是原因之一十年前就有了。", "expected": "这是原因之一十年前就有了。", "note": "一 at the end of a word such as 唯一 or 之一 does not start a number with 十"}
+{"id": "n524", "kind": "keep", "input": "统一十个人一组。", "expected": "统一十个人一组。", "note": "一 at the end of a word such as 唯一 or 之一 does not start a number with 十"}
+{"id": "n525", "kind": "keep", "input": "我们是同一十年的同学。", "expected": "我们是同一十年的同学。", "note": "一 at the end of a word such as 唯一 or 之一 does not start a number with 十"}
+{"id": "n526", "kind": "keep", "input": "高三十个班。", "expected": "高三十个班。", "note": "a school year before a count with 十 stays"}
+{"id": "n527", "kind": "keep", "input": "高二十个班。", "expected": "高二十个班。", "note": "a school year before a count with 十 stays"}
+{"id": "n528", "kind": "keep", "input": "高一十个班。", "expected": "高一十个班。", "note": "a school year before a count with 十 stays"}
+{"id": "n529", "kind": "keep", "input": "大三十个学生。", "expected": "大三十个学生。", "note": "a school year before a count with 十 stays"}
+{"id": "n530", "kind": "keep", "input": "大二十个人报名。", "expected": "大二十个人报名。", "note": "a school year before a count with 十 stays"}
+{"id": "n531", "kind": "keep", "input": "研二十个人。", "expected": "研二十个人。", "note": "a school year before a count with 十 stays"}
+{"id": "n532", "kind": "keep", "input": "张三十八岁那年去了深圳。", "expected": "张三十八岁那年去了深圳。", "note": "a stock name such as 张三 before a number with 十 stays"}
+{"id": "n533", "kind": "keep", "input": "李四十年前就来过这里。", "expected": "李四十年前就来过这里。", "note": "a stock name such as 张三 before a number with 十 stays"}
+{"id": "n534", "kind": "keep", "input": "王五十岁生日。", "expected": "王五十岁生日。", "note": "a stock name such as 张三 before a number with 十 stays"}
+{"id": "n535", "kind": "keep", "input": "人过四十天过午。", "expected": "人过四十天过午。", "note": "天 starts another word here"}
+{"id": "n536", "kind": "keep", "input": "孙悟空一个跟头翻到三十三天外。", "expected": "孙悟空一个跟头翻到三十三天外。", "note": "天 starts another word here"}
+{"id": "n537", "kind": "keep", "input": "十天干和十二地支。", "expected": "十天干和十二地支。", "note": "天 starts another word here"}
+{"id": "n538", "kind": "keep", "input": "我在三十间房那边租房。", "expected": "我在三十间房那边租房。", "note": "间 is left out of the units because of place names"}
+{"id": "n539", "kind": "keep", "input": "十间房村。", "expected": "十间房村。", "note": "间 is left out of the units because of place names"}
+{"id": "n540", "kind": "keep", "input": "十年饮冰，难凉热血。", "expected": "十年饮冰，难凉热血。", "note": "a saying with 十年"}
+{"id": "n541", "kind": "keep", "input": "一朝被蛇咬，十年怕井绳。", "expected": "一朝被蛇咬，十年怕井绳。", "note": "a saying with 十年"}
+{"id": "n542", "kind": "keep", "input": "君子报仇，十年不晚。", "expected": "君子报仇，十年不晚。", "note": "a saying with 十年"}
+{"id": "n543", "kind": "keep", "input": "台上一分钟，台下十年功。", "expected": "台上一分钟，台下十年功。", "note": "a saying with 十年"}
+{"id": "n544", "kind": "keep", "input": "十年河东十年河西，别太得意。", "expected": "十年河东十年河西，别太得意。", "note": "a saying with 十年"}
+{"id": "n545", "kind": "keep", "input": "十年一剑，终于成功了。", "expected": "十年一剑，终于成功了。", "note": "a saying with 十年"}
+{"id": "n546", "kind": "keep", "input": "十年修得同船渡，百年修得共枕眠。", "expected": "十年修得同船渡，百年修得共枕眠。", "note": "a saying with 十年"}
+{"id": "n547", "kind": "keep", "input": "我们定个十年之约吧。", "expected": "我们定个十年之约吧。", "note": "a saying with 十年"}
+{"id": "n548", "kind": "keep", "input": "人生能有几个十年。", "expected": "人生能有几个十年。", "note": "a figure of speech or a slogan"}
+{"id": "n549", "kind": "keep", "input": "人生有几个二十年？", "expected": "人生有几个二十年？", "note": "a figure of speech or a slogan"}
+{"id": "n550", "kind": "keep", "input": "十个人十个样。", "expected": "十个人十个样。", "note": "a figure of speech or a slogan"}
+{"id": "n551", "kind": "keep", "input": "一百年不动摇。", "expected": "一百年不动摇。", "note": "a figure of speech or a slogan"}
+{"id": "n552", "kind": "keep", "input": "刘德华唱过一首十七岁。", "expected": "刘德华唱过一首十七岁。", "note": "a song or show title"}
+{"id": "n553", "kind": "keep", "input": "你看过七十二层奇楼吗？", "expected": "你看过七十二层奇楼吗？", "note": "a song or show title"}
+{"id": "n554", "kind": "keep", "input": "最近在追十年一品温如言。", "expected": "最近在追十年一品温如言。", "note": "a song or show title"}
+{"id": "n555", "kind": "keep", "input": "赵雷那首三十岁的女人我很喜欢。", "expected": "赵雷那首三十岁的女人我很喜欢。", "note": "a song or show title"}
+{"id": "n556", "kind": "keep", "input": "苏打绿的十年一刻。", "expected": "苏打绿的十年一刻。", "note": "a song or show title"}
+{"id": "n557", "kind": "keep", "input": "那首九十九次我爱他是谁唱的？", "expected": "那首九十九次我爱他是谁唱的？", "note": "a song or show title"}
+{"id": "n558", "kind": "keep", "input": "十二届全国人大。", "expected": "十二届全国人大。", "note": "届 without 第 is an ordinal"}
+{"id": "n559", "kind": "keep", "input": "十四届全运会。", "expected": "十四届全运会。", "note": "届 without 第 is an ordinal"}
+{"id": "n560", "kind": "keep", "input": "刘翔十二秒八八破纪录。", "expected": "刘翔十二秒八八破纪录。", "note": "a time in two parts stays whole"}
+{"id": "n561", "kind": "keep", "input": "十秒八。", "expected": "十秒八。", "note": "a time in two parts stays whole"}
+{"id": "n562", "kind": "keep", "input": "百米跑了十秒零八。", "expected": "百米跑了十秒零八。", "note": "a time in two parts stays whole"}
+{"id": "n563", "kind": "keep", "input": "一个小时二十分钟。", "expected": "一个小时二十分钟。", "note": "a time in two parts stays whole"}
+{"id": "n564", "kind": "keep", "input": "逐一十个十个地数。", "expected": "逐一十个十个地数。", "note": "counting by tens stays in both halves"}
+{"id": "n565", "kind": "keep", "input": "二十三号是小年，记得回来。", "expected": "二十三号是小年，记得回来。", "note": "a day before 小年 is a lunar date"}
+{"id": "n566", "kind": "keep", "input": "便宜一点五十块卖你。", "expected": "便宜一点五十块卖你。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n567", "kind": "keep", "input": "再便宜一点五十块拿走。", "expected": "再便宜一点五十块拿走。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n568", "kind": "keep", "input": "贵一点二十块也行。", "expected": "贵一点二十块也行。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n569", "kind": "keep", "input": "多给一点三十块。", "expected": "多给一点三十块。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n570", "kind": "keep", "input": "这个好一点二十块钱。", "expected": "这个好一点二十块钱。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n571", "kind": "keep", "input": "快一点二十分钟就到了。", "expected": "快一点二十分钟就到了。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n572", "kind": "keep", "input": "你快一点十分钟后出发。", "expected": "你快一点十分钟后出发。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n573", "kind": "keep", "input": "早一点十五分钟出门。", "expected": "早一点十五分钟出门。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n574", "kind": "keep", "input": "晚一点二十分钟再来。", "expected": "晚一点二十分钟再来。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n575", "kind": "keep", "input": "你再走快一点二十分钟肯定到。", "expected": "你再走快一点二十分钟肯定到。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n576", "kind": "keep", "input": "再快一点三十秒就够了。", "expected": "再快一点三十秒就够了。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n577", "kind": "keep", "input": "便宜一点五块钱卖你。", "expected": "便宜一点五块钱卖你。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n578", "kind": "keep", "input": "慢一点三公里就到了。", "expected": "慢一点三公里就到了。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n579", "kind": "keep", "input": "多吃一点五个饺子不够。", "expected": "多吃一点五个饺子不够。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n580", "kind": "keep", "input": "快一点五个小时就到了。", "expected": "快一点五个小时就到了。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n581", "kind": "keep", "input": "往前一点五米。", "expected": "往前一点五米。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n582", "kind": "keep", "input": "轻一点三公斤就好了。", "expected": "轻一点三公斤就好了。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n583", "kind": "keep", "input": "多少有一点十几个。", "expected": "多少有一点十几个。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n584", "kind": "keep", "input": "我想早一点十点出发。", "expected": "我想早一点十点出发。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n585", "kind": "keep", "input": "有一点二十个人没来。", "expected": "有一点二十个人没来。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n586", "kind": "keep", "input": "稍微多一点三十个人也坐得下。", "expected": "稍微多一点三十个人也坐得下。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n587", "kind": "keep", "input": "高一点三十厘米左右。", "expected": "高一点三十厘米左右。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n588", "kind": "keep", "input": "往左一点十厘米。", "expected": "往左一点十厘米。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n589", "kind": "keep", "input": "再少放一点十克糖。", "expected": "再少放一点十克糖。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n590", "kind": "keep", "input": "声音小一点五十分贝就够了。", "expected": "声音小一点五十分贝就够了。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n591", "kind": "keep", "input": "音量调大一点三十就行。", "expected": "音量调大一点三十就行。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n592", "kind": "keep", "input": "差一点五十分。", "expected": "差一点五十分。", "note": "一点 after a word is a little and the number after it is separate"}
+{"id": "n593", "kind": "keep", "input": "十二点五十块。", "expected": "十二点五十块。", "note": "a unit after the minutes rules out a time"}
+{"id": "n594", "kind": "keep", "input": "我用的是三点十二版本。", "expected": "我用的是三点十二版本。", "note": "a version without a Latin name is not a time"}
+{"id": "n595", "kind": "keep", "input": "版本三点十二。", "expected": "版本三点十二。", "note": "a version without a Latin name is not a time"}
+{"id": "n596", "kind": "keep", "input": "以下三点十分的关键。", "expected": "以下三点十分的关键。", "note": "points of a list after 以下"}
+{"id": "n597", "kind": "convert", "input": "我电话幺三九 幺二三四 五六七八。", "expected": "我电话139 1234 5678。", "note": "a phone number in groups converts whole"}
+{"id": "n598", "kind": "convert", "input": "零幺零 六二三四 五六七八", "expected": "010 6234 5678", "note": "a phone number in groups converts whole"}
+{"id": "n599", "kind": "keep", "input": "二十五比二十三分。", "expected": "二十五比二十三分。", "note": "both sides of a score stay together"}
+{"id": "n600", "kind": "keep", "input": "九十比八十五分。", "expected": "九十比八十五分。", "note": "both sides of a score stay together"}
+{"id": "n601", "kind": "keep", "input": "我九十八比一百零二分输了。", "expected": "我九十八比一百零二分输了。", "note": "both sides of a score stay together"}
+{"id": "n602", "kind": "keep", "input": "三十到五十万。", "expected": "三十到五十万。", "note": "both ends of a range convert together or stay"}
+{"id": "n603", "kind": "convert", "input": "一万到两万。", "expected": "1万到2万。", "note": "both ends of a range convert together or stay"}
+{"id": "n604", "kind": "convert", "input": "九点半到十点。", "expected": "9点半到10点。", "note": "both ends of a range convert together or stay"}
+{"id": "n605", "kind": "convert", "input": "零下十到零下二十度。", "expected": "零下10到零下20度。", "note": "both ends of a range convert together or stay"}
+{"id": "n606", "kind": "convert", "input": "十月一号至七号放假。", "expected": "10月1号至7号放假。", "note": "both ends of a range convert together or stay"}
+{"id": "n607", "kind": "convert", "input": "一月二十到二月三号。", "expected": "1月20到2月3号。", "note": "both ends of a range convert together or stay"}
+{"id": "n608", "kind": "keep", "input": "三百多到五百元。", "expected": "三百多到五百元。", "note": "both ends of a range convert together or stay"}
+{"id": "n609", "kind": "keep", "input": "两三百到五百元。", "expected": "两三百到五百元。", "note": "both ends of a range convert together or stay"}
+{"id": "n610", "kind": "keep", "input": "十几到二十个。", "expected": "十几到二十个。", "note": "both ends of a range convert together or stay"}
