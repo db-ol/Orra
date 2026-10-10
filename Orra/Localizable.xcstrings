@@ -837,22 +837,22 @@
         }
       }
     },
-    "Remove filler words such as um and 呃" : {
+    "Remove filler words such as um and uh" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "去掉 um、呃等填充词"
+            "value" : "去掉“呃”“嗯”这类语气词"
           }
         }
       }
     },
-    "Removes 呃, 额, um, uh and erm, and 嗯, 啊 and 哦 where they only fill a pause. Words that carry meaning, such as 好啊, 吧 and 那个, and replies such as 嗯对 stay as you said them." : {
+    "Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "去掉呃、额、um、uh、erm，以及只用来停顿的嗯、啊和哦。有意义的词，比如好啊、吧和那个，还有嗯对这样的回答，会照原样保留。"
+            "value" : "去掉只用来停顿的“呃”“额”“嗯”“啊”“哦”，英文里的同类词也会去掉。有意义的词，比如“好啊”“吧”“那个”，以及“嗯，好的”这样的回答，会照原样保留。"
           }
         }
       }
