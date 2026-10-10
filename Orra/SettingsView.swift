@@ -90,11 +90,18 @@ private struct GeneralSettings: View {
                     get: { pushToTalk.removesFillerWords },
                     set: { pushToTalk.setRemovesFillerWords($0) }
                 ))
+                Toggle("Write numbers as digits", isOn: Binding(
+                    get: { pushToTalk.writesNumbersAsDigits },
+                    set: { pushToTalk.setWritesNumbersAsDigits($0) }
+                ))
             } header: {
                 Text("While you dictate")
             } footer: {
-                Text("Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.")
+                    Text("Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words.")
+                }
+                .foregroundStyle(.secondary)
             }
             Section {
                 Toggle("Open at Login", isOn: Binding(
