@@ -10,6 +10,9 @@ This file is the guide for anyone, human or agent, who changes this repository.
 - SwiftPM for approved dependencies only. docs/dependencies.md lists them. speech-swift
   (product Qwen3ASR, pinned commit) is approved for Qwen3-ASR 1.7B.
 - Distributed outside the Mac App Store. App Sandbox is off because Orra will use Accessibility APIs.
+- Signed by team X77KW5VYFJ. Releases use its Developer ID and are notarized. The hardened
+  runtime is on, with the audio input entitlement as its only exception, which the
+  microphone needs.
 
 ## Intended flow
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
