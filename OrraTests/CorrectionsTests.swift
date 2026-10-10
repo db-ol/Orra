@@ -25,6 +25,16 @@ struct CorrectionFinderTests {
         #expect(find("我觉得他的很好", "我觉得他的很好", "我觉得他得很好") == nil)
     }
 
+    @Test func aLetterTypedIntoANameIsFound() {
+        #expect(find("Ora，你觉得好用吗？", "Ora，你觉得好用吗？", "Orra，你觉得好用吗？") == Correction(heard: "Ora", corrected: "Orra"))
+        #expect(find("I use Kubernettes daily", "I use Kubernettes daily", "I use Kubernetes daily") == Correction(heard: "Kubernettes", corrected: "Kubernetes"))
+    }
+
+    @Test func aWordTypedBetweenWordsIsNotACorrection() {
+        #expect(find("I like apples", "I like apples", "I really like apples") == nil)
+        #expect(find("我喜欢苹果", "我喜欢苹果", "我很喜欢苹果") == nil)
+    }
+
     @Test func punctuationTypedAfterTheFixIsLeftOut() {
         #expect(find("use cloud", "use cloud", "use Claude.") == Correction(heard: "cloud", corrected: "Claude"))
         #expect(find("我在用克劳德", "我在用克劳德", "我在用Claude。") == Correction(heard: "克劳德", corrected: "Claude"))
