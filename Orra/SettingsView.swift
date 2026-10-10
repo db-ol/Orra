@@ -84,6 +84,7 @@ private struct GeneralSettings: View {
             Section {
                 Toggle("Show the recording indicator", isOn: $feedback.showsIndicator)
                 Toggle("Play sounds when recording starts and stops", isOn: $feedback.playsSounds)
+                Toggle("Show a small bar at the bottom of the screen while Orra is ready", isOn: $feedback.showsIdleBar)
             } header: {
                 Text("While you dictate")
             }

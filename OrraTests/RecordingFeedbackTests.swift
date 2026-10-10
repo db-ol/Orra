@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import Orra
 
@@ -27,7 +28,7 @@ struct RecordingFeedbackTests {
     /// A feedback that reports to `outputs`, or to the test's own outputs when nil.
     private func makeFeedback(
         _ outputs: FeedbackOutputs? = nil,
-        preferences: FeedbackPreference.Values = .init(),
+        preferences: FeedbackPreference.Values = .init(showsIdleBar: false),
         messageDuration: Duration = .seconds(4)
     ) -> RecordingFeedback {
         let outputs = outputs ?? self.outputs
@@ -101,7 +102,7 @@ struct RecordingFeedbackTests {
     }
 
     @Test func withTheIndicatorOffNothingShowsButTheSoundsPlay() {
-        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true))
+        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true, showsIdleBar: false))
         feedback.handle(.listening)
         feedback.handle(.transcribing)
         feedback.handle(.recordingStopped)
@@ -111,7 +112,7 @@ struct RecordingFeedbackTests {
     }
 
     @Test func withTheSoundsOffNothingPlays() {
-        let feedback = makeFeedback(preferences: .init(showsIndicator: true, playsSounds: false))
+        let feedback = makeFeedback(preferences: .init(showsIndicator: true, playsSounds: false, showsIdleBar: false))
         feedback.handle(.listening)
         feedback.handle(.transcribing)
         feedback.handle(.recordingStopped)
@@ -125,11 +126,11 @@ struct RecordingFeedbackTests {
         feedback.handle(.listening)
         feedback.showsIndicator = false
         #expect(outputs.presented == [.listening, nil])
-        #expect(outputs.saved == [FeedbackPreference.Values(showsIndicator: false, playsSounds: true)])
+        #expect(outputs.saved == [FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false)])
         feedback.showsIndicator = true
         #expect(outputs.presented == [.listening, nil, .listening])
         feedback.playsSounds = false
-        #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: false))
+        #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: false, showsIdleBar: false))
     }
 
     @Test func theMeterFollowsTheMicrophoneOnlyWhileListening() async throws {
@@ -154,7 +155,7 @@ struct RecordingFeedbackTests {
     }
 
     @Test func aHiddenIndicatorNeverReadsTheMicrophone() async throws {
-        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true))
+        let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true, showsIdleBar: false))
         feedback.handle(.listening)
         let probeOutputs = FeedbackOutputs()
         let probe = makeFeedback(probeOutputs)
@@ -188,13 +189,13 @@ struct RecordingFeedbackTests {
         #expect(RecordingFeedback.meterLevel(peak: 1) == 1)
     }
 
-    @Test func bothPreferencesAreOnUntilTurnedOff() throws {
+    @Test func thePreferencesAreOnUntilTurnedOff() throws {
         let suite = "io.github.db-ol.OrraTests.feedback-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: true, playsSounds: true))
-        FeedbackPreference.save(FeedbackPreference.Values(showsIndicator: false, playsSounds: true), to: defaults)
-        #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: false, playsSounds: true))
+        #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: true, playsSounds: true, showsIdleBar: true))
+        FeedbackPreference.save(FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false), to: defaults)
+        #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false))
     }
 
     /// The panel the app shows, made but never ordered front, so no window appears.
@@ -212,6 +213,69 @@ struct RecordingFeedbackTests {
         #expect(panel.collectionBehavior.contains(.canJoinAllSpaces))
         #expect(panel.collectionBehavior.contains(.fullScreenAuxiliary))
         #expect(panel.isVisible == false)
+    }
+
+    @Test func theIdleBarShowsBetweenDictations() {
+        let feedback = makeFeedback(preferences: .init())
+        feedback.canDictate = true
+        feedback.handle(.listening)
+        feedback.handle(.transcribing)
+        feedback.handle(.finished(message: nil))
+        #expect(outputs.presented == [.idle, .listening, .transcribing, .idle])
+        #expect(feedback.display == nil)
+    }
+
+    @Test func turningTheIdleBarOffHidesItAndIsSaved() {
+        let feedback = makeFeedback(preferences: .init())
+        feedback.canDictate = true
+        feedback.showsIdleBar = false
+        #expect(outputs.presented == [.idle, nil])
+        #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: true, showsIdleBar: false))
+    }
+
+    @Test func withTheIndicatorOffTheIdleBarStays() {
+        let feedback = makeFeedback(preferences: .init(showsIndicator: false))
+        feedback.canDictate = true
+        feedback.handle(.listening)
+        #expect(outputs.presented == [.idle, .idle])
+        #expect(feedback.presented == .idle)
+    }
+
+    /// The opacity of the indicator view's pixel at the bottom center, where the bar is.
+    private func opacityAtTheBar(_ feedback: RecordingFeedback) throws -> CGFloat {
+        let view = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
+        view.frame = NSRect(origin: .zero, size: RecordingIndicatorView.panelSize)
+        view.layoutSubtreeIfNeeded()
+        let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: image)
+        let scale = CGFloat(image.pixelsWide) / view.bounds.width
+        // Image rows count from the top. The bar's middle is 3 points above its bottom.
+        let fromBottom = RecordingIndicatorView.bottomPadding + RecordingIndicatorView.idleBarSize.height / 2
+        let color = try #require(image.colorAt(x: image.pixelsWide / 2, y: image.pixelsHigh - Int(fromBottom * scale)))
+        return color.alphaComponent
+    }
+
+    @Test func theViewDrawsTheIdleBarOnlyWhenItIsPresented() throws {
+        let feedback = makeFeedback(preferences: .init())
+        #expect(try opacityAtTheBar(feedback) == 0)
+        feedback.canDictate = true
+        #expect(try opacityAtTheBar(feedback) > 0.3)
+    }
+
+    @Test func theIdleBarWaitsUntilOrraCanDictate() {
+        let feedback = makeFeedback(preferences: .init())
+        #expect(feedback.presented == nil)
+        feedback.canDictate = true
+        #expect(feedback.presented == .idle)
+        feedback.canDictate = false
+        #expect(outputs.presented == [.idle, nil])
+    }
+
+    @Test func theIdleBarAreaSurroundsTheBar() {
+        let area = RecordingIndicatorPanel.idleBarArea(inPanelAt: NSRect(x: 100, y: 50, width: 520, height: 150))
+        #expect(area.contains(NSPoint(x: 360, y: 50 + RecordingIndicatorView.bottomPadding + 3)))
+        #expect(!area.contains(NSPoint(x: 360, y: 150)))
+        #expect(!area.contains(NSPoint(x: 200, y: 69)))
     }
 }
 

@@ -21,7 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let models = ModelInstaller.live()
     /// The recording indicator and the sounds. Lazy, because it reads the controller's
     /// microphone level.
-    lazy var feedback = RecordingFeedback.live { [pushToTalk] in pushToTalk.inputLevel() }
+    lazy var feedback = RecordingFeedback.live(
+        inputLevel: { [pushToTalk] in pushToTalk.inputLevel() },
+        holdHint: { [pushToTalk] in TalkKey.holdHint(for: pushToTalk.talkKeys) }
+    )
     lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
     lazy var clipboard = ClipboardWord(
         isDictating: { [pushToTalk] in pushToTalk.state != .idle },
@@ -49,6 +52,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let environment = ProcessInfo.processInfo.environment
         return environment["XCTestConfigurationFilePath"] != nil
             || environment["XCODE_RUNNING_FOR_PREVIEWS"] != nil
+    }
+
+    /// Tells the feedback whether a hold would dictate, now and after every change, so the
+    /// idle bar shows only then.
+    private func followReadiness() {
+        feedback.canDictate = withObservationTracking {
+            pushToTalk.isHotkeyActive && pushToTalk.modelState == .ready
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followReadiness()
+            }
+        }
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -92,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.onPasted = { [learning] text, app in learning.pasted(text, in: app) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         pushToTalk.start()
+        followReadiness()
         openAtLogin.refreshWhenMenusOpen()
         audioInputs.refreshWhenMenusOpen()
         clipboard.refreshWhenMenusOpen()
