@@ -93,12 +93,12 @@ struct NumberRulesTests {
         // Ranges of times.
         ("下午三点半到四点开会。", "下午3点半到4点开会。"),
         ("晚上八点至十点。", "晚上8点至10点。"),
-        // Large numbers keep 万 and 亿.
+        // Money keeps 万 and 亿.
         ("一共一千二百三十四万五千元。", "一共1234.5万元。"),
-        ("十亿", "10亿"),
-        // A version after a Latin name, and a time after a name.
-        ("跟 Tom 三点二十见面。", "跟 Tom 3点20见面。"),
+        // A version after a Latin name.
         ("用 Python 三点十一 跑。", "用 Python 3.11 跑。"),
+        // A temperature after 零下 or with 摄氏.
+        ("摄氏三十六点五度", "摄氏36.5度"),
         // Units in Latin letters.
         ("四K屏幕和三D打印。", "4K屏幕和3D打印。"),
     ])
@@ -110,6 +110,10 @@ struct NumberRulesTests {
         "Starbucks 三个人", "我们 team 三五天", "用Excel三五天", "做PPT三个小时", "跟 Amy 四处走走",
         "十二月很冷", "去年十月", "十点建议", "有十点建议", "三号", "零点五", "两G", "三点到五点", "五点前",
         "《一千零一夜》", "七七四十九天", "一", "幺", "万", "第二十一点",
+        // Patterns the narrowing dropped: counters, 万 without money, times without a time of
+        // day and a number after a person's name.
+        "十亿", "跟 Tom 三点二十见面。", "做PPT三个小时", "十位", "东四十条", "一百二十个放心", "说了八百遍",
+        "十八届三中全会", "五十度灰", "九十九道弯", "一千个读者", "十个手指头", "三十六点五度",
     ])
     func keeps(_ input: String) {
         #expect(NumberRules.writingNumbersAsDigits(in: input) == input)

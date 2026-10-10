@@ -42,41 +42,45 @@ reword, does not answer a question and does not carry out a request.
 object per line:
 
 - `id`: n001 and up.
-- `kind`: `convert` when some number in the input should become digits (175 cases), `keep`
-  when the input must stay exactly as it is (344 cases).
+- `kind`: `convert` when some number in the input should become digits (121 cases), `keep`
+  when the input must stay exactly as it is (489 cases).
 - `input`: a dictation as Qwen3-ASR writes it, with the numbers spelled out.
 - `expected`: the text after the number rules.
 - `note`: what the case tests.
 
-The conventions, chosen to convert only where a reader clearly expects digits:
+A wrong conversion is far worse than a missed one, so the rules convert only patterns where a
+reader clearly expects digits:
 
-- Readings digit by digit of three digits or more become digits (13800138000, 302, 999).
-  A year needs four (2026年). Two digits stay (三八妇女节, 九零后), except right after a
-  Latin letter (CA1831). Counting by one or two (一二三四五, 五四三二一, 二四六八), weekdays
-  (一三五) and dates of events (五一二, 八一三) stay unless a word such as 验证码 or 房间 says it is a code.
-- Numbers with 十, 百, 千, 万 or 亿 become digits before a unit or counter. 万 and 亿 stay
-  as units the way Chinese news writes them (2万人, 3.5亿元, 3.5万元 for 三万五千元), and
-  so does 万亿 (126万亿元). An amount that needs more places is written whole (13888元),
-  and stays in words above 1亿. Without a unit, a number with 万 or 亿 converts only at the
-  end of a phrase or before a word such as 的 or 左右, so 十万大山 and 九万里 stay. A word
-  that starts with a unit character is not a unit (十五元宵节, 二十年轻人, 十一期间).
-- The start of a range converts with its end (300到500元, 10点到10点半), and the end
-  stays when the start does (三到五月份, 百分之三到五). A digit after 度 or 块 joins the
-  number (36.5度, 99块9), and other amounts in two parts stay whole (三十块零五毛,
-  一分三十秒). A price for one stays (三千一个月). Rough pairs (十块八块), figures of
-  speech (说了一百遍, 一百个不愿意, 十二分满意, 一百个胆子) and the tens place (十位) stay.
-- A single digit before a counter stays in words (三本书, 两次, 一号线, 五块钱), unless it
-  is part of a date, a time, a percentage, a decimal or a model name.
-- Times after a time of day, or with 半, 钟, minutes or 以后 (下午3点, 3点20分, 3点半).
-  三点五分 could be a time or a score and stays, but 下午3点5分 is a time. 一点 after a
-  time of day stays when it means a little (晚上一点都不冷), and 十分 before an adjective
-  is very (三点十分重要).
-- A month becomes digits only in a date, before a day or 份 or after a year (10月1日,
-  9月份), so 二月春风 and 十月稻田 stay. Lunar dates (农历八月十五号, 腊月二十三号) and
-  dates of lunar festivals (七月七日是七夕) stay.
-- Ranges and rough numbers (七八个, 十几个, 二十多个, 三十来岁, 上千人), ordinals
-  (第十五届), set phrases, idioms, poems, names, holidays (双十一, 九一八) and book titles
-  stay.
+- Readings digit by digit of three digits or more (13800138000, 302, 999), and a year of four
+  before 年 (2026年). Two digits stay (三八妇女节, 九零后), except right after a Latin letter
+  (CA1831). Counting (一二三四五, 二四六八) and dates of events (五一二, 八一三) stay unless
+  a word such as 验证码 or 房间 says it is a code.
+- Full dates: a month with its day and 号 or 日 (10月1日), and a month after a year in digits
+  (2026年10月). A day without a month (十五号), a month alone (九月份, 二月春风), ranges of
+  days (十月一号至七号) and lunar dates (农历八月十五号, 七月七日是七夕) stay.
+- Clock times after a time of day such as 下午 or 晚上 (下午3点, 晚上10点半, 下午3点半到4点),
+  or with minutes and 分 (3点20分). 三点半, 三点以后, 十点到十点半 and 三点十分 (which can
+  mean very) need a time of day. 一点 after a time of day stays when it means a little
+  (晚上一点都不冷).
+- Percentages (50%, 3.5%), except rough ones and ranges (百分之五十多, 百分之三到五).
+- Money: a number with 十, 百, 千, 万 or 亿 before 元, 块 or a currency word (350块, 300美元,
+  3.5万元, 3.5亿元, 126万亿元). An amount that needs more places is written whole (13888元),
+  and stays in words above 1亿.
+- Measurements with a real unit: 公里, 米, 公斤, 斤, 吨, 升, 英寸, 寸, 毫安, 岁, 小时, 分钟,
+  秒, 天, 周, 个月, 年 and Latin units such as GB, G and K (42公里, 28岁, 15天, 16GB, 5G).
+  度 counts only for a temperature after 零下 or with 摄氏 (零下12度). Decimals before such a
+  unit convert (3.5公里). Figures of speech with 年 (一百年都遇不到, 八百年没见了) stay.
+- Model numbers glued to a Latin name (M5, iPhone15, RX350), and after a space when a space,
+  punctuation, a Latin unit or the end follows (RX 350, iPhone 15 Pro). Versions after a Latin
+  name (macOS 15.1, Python 3.12以上). After a person's name (Tom八成, Tom十一回家), before a
+  counter (PPT三个小时) and when the time could be a version (Tom三点十五到) the number stays.
+
+Everything else stays in words: single digits (三本书, 五公里), numbers before a plain counter
+(二十个人, 十位同学, 三十五页, 十八层, 十八届), 万 and 亿 without money (两万人, 十二万,
+三千万), scores (九十五分), ranges (三百到五百元, 三十至四十岁), rough numbers (七八个, 十几个),
+ordinals, idioms, poems, names, holidays and book titles. 61 cases that converted under the
+earlier, wider rules became keep cases with the note "kept in words since the narrowing", and
+n083 keeps 十张 in words while A四 still converts.
 
 The cases merge two sets written by hand. One duplicate and 47 cases that repeated another
 with other words around the same number were dropped, and 19 were added for conventions
