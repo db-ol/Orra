@@ -76,6 +76,7 @@ final class ProblemReporter {
         facts.speechModelBytes = folderSize(modelFolder)
         let log = readLog(since: created.addingTimeInterval(-60 * 60))
         let crashes = crashReports(now: created)
+        facts = ProblemReport.redactDeviceNames(facts, nameParts: NSFullUserName().split(whereSeparator: \.isWhitespace).map(String.init))
         let text = redact(ProblemReport.format(facts, log: log.lines, logSource: log.source, crashReports: crashes, created: created))
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(ProblemReport.fileName(for: created))
         do {
@@ -88,8 +89,7 @@ final class ProblemReporter {
     }
 
     nonisolated private static func redact(_ text: String) -> String {
-        let fullName = NSFullUserName()
-        let names = [NSUserName(), fullName] + fullName.split(whereSeparator: \.isWhitespace).map(String.init)
+        let names = [NSUserName(), NSFullUserName()]
         let computer = SCDynamicStoreCopyComputerName(nil, nil) as String?
         return ProblemReport.redact(text, home: NSHomeDirectory(), userNames: names, computerName: computer)
     }
@@ -302,7 +302,7 @@ struct ReportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Orra wrote a diagnostic report that helps find the cause: its version, your Mac’s model and macOS version, Orra’s settings and permissions, and its own log from the last hour. It never contains what you dictated, recordings, the clipboard or your vocabulary. Nothing is sent.")
+            Text("Orra creates a diagnostic report that helps find the cause. It holds Orra’s version, settings and permissions, your Mac’s model, memory, macOS version and preferred languages, the microphone’s name, Orra’s own log from the last hour and its crash reports from the last 7 days. It never holds what you dictated, recordings, the clipboard or your vocabulary. Your name and your Mac’s name are taken out. Nothing is sent.")
                 .fixedSize(horizontal: false, vertical: true)
             switch reporter.state {
             case .creating:

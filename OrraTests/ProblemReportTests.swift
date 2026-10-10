@@ -37,6 +37,22 @@ struct ProblemReportTests {
         """)
     }
 
+    @Test func redactsNamesNextToChineseCharacters() {
+        let text = "Microphone: Jane Doe的AirPods Pro, 田傲然的AirPods, 张伟的 iPhone 麦克风, Janet的AirPods"
+        let redacted = ProblemReport.redact(text, home: "/Users/jane", userNames: ["jane", "Jane Doe", "田傲然", "张伟"], computerName: nil)
+        #expect(redacted == "Microphone: <user>的AirPods Pro, <user>的AirPods, <user>的 iPhone 麦克风, Janet的AirPods")
+    }
+
+    @Test func redactsNamePartsInTheMicrophoneOnly() {
+        var facts = Self.facts
+        facts.microphone = "Mark的AirPods Pro, Mark’s iPhone"
+        let redacted = ProblemReport.redactDeviceNames(facts, nameParts: ["Mark", "Lee"])
+        #expect(redacted.microphone == "<user>的AirPods Pro, <user>’s iPhone")
+        // The rest of the report keeps ordinary words that are also a name part.
+        let report = ProblemReport.redact("Will mark the Mac", home: "/Users/mark", userNames: ["mark", "Mark Will"], computerName: nil)
+        #expect(report == "Will <user> the Mac")
+    }
+
     @Test func leavesShortNamesAndOtherPathsAlone() {
         let text = "/Users/joe/file and /Users/jo, /Users/jo/x, jo"
         let redacted = ProblemReport.redact(text, home: "/Users/jo/", userNames: ["jo"], computerName: nil)

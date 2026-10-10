@@ -807,12 +807,12 @@
         }
       }
     },
-    "Orra wrote a diagnostic report that helps find the cause: its version, your Mac’s model and macOS version, Orra’s settings and permissions, and its own log from the last hour. It never contains what you dictated, recordings, the clipboard or your vocabulary. Nothing is sent." : {
+    "Orra creates a diagnostic report that helps find the cause. It holds Orra’s version, settings and permissions, your Mac’s model, memory, macOS version and preferred languages, the microphone’s name, Orra’s own log from the last hour and its crash reports from the last 7 days. It never holds what you dictated, recordings, the clipboard or your vocabulary. Your name and your Mac’s name are taken out. Nothing is sent." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 生成了一份帮助查找原因的诊断报告：其中有 Orra 的版本、你的 Mac 机型和 macOS 版本、Orra 的设置和权限，以及 Orra 自己最近一小时的日志。报告中绝不包含你听写的内容、录音、剪贴板或你的词汇表。不会发送任何内容。"
+            "value" : "Orra 会生成一份帮助查找原因的诊断报告。其中有 Orra 的版本、设置和权限，你的 Mac 机型、内存、macOS 版本和首选语言，麦克风的名称，Orra 自己最近一小时的日志，以及最近 7 天的崩溃报告。报告中绝不包含你听写的内容、录音、剪贴板或你的词汇表。你的名字和 Mac 的名称会被去掉。不会发送任何内容。"
           }
         }
       }

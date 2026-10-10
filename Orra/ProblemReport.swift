@@ -56,8 +56,10 @@ nonisolated enum ProblemReport {
 
     /// Takes the user out of `text`: the home folder becomes ~, and the account name, the
     /// full name and the computer name become placeholders. Names shorter than three
-    /// characters are left, since they would match inside too many words. Matching ignores
-    /// case, and a name matches as a whole word only.
+    /// characters are left, since they would match inside too many words, except Chinese,
+    /// Japanese and Korean names of two. Matching ignores case, and a name matches as a
+    /// whole word only. Chinese, Japanese and Korean characters count as a word boundary,
+    /// since a Mac set up in Chinese names devices like Jane的AirPods.
     static func redact(_ text: String, home: String, userNames: [String], computerName: String?) -> String {
         var result = text
         let trimmedHome = home.hasSuffix("/") ? String(home.dropLast()) : home
@@ -78,11 +80,28 @@ nonisolated enum ProblemReport {
         return result
     }
 
+    /// Takes the given and family names out of the microphone name, where a device name
+    /// such as Jane’s AirPods holds them. They are not taken out of the rest of the report,
+    /// since a name like Mark or Will is also a word there.
+    static func redactDeviceNames(_ facts: Facts, nameParts: [String]) -> Facts {
+        var facts = facts
+        for name in nameParts.sorted(by: { $0.count > $1.count }) {
+            facts.microphone = replaceWord(name, with: "<user>", in: facts.microphone)
+        }
+        return facts
+    }
+
+    /// A letter or digit that joins a name into a longer word. Chinese, Japanese and Korean
+    /// characters do not, since those languages write no spaces between words.
+    private static let wordCharacter = "[[\\p{L}\\p{N}]-[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}]]"
+
     private static func replaceWord(_ word: String, with placeholder: String, in text: String) -> String {
         let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard word.count >= 3 else { return text }
+        let cjk = word.range(of: "^[\\p{Han}\\p{Hiragana}\\p{Katakana}\\p{Hangul}]+$", options: .regularExpression) != nil
+        let minimum = cjk ? 2 : 3
+        guard word.count >= minimum else { return text }
         let escaped = NSRegularExpression.escapedPattern(for: word)
-        guard let expression = try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}])\(escaped)(?![\\p{L}\\p{N}])", options: [.caseInsensitive]) else {
+        guard let expression = try? NSRegularExpression(pattern: "(?<!\(wordCharacter))\(escaped)(?!\(wordCharacter))", options: [.caseInsensitive]) else {
             return text
         }
         let range = NSRange(text.startIndex..., in: text)
