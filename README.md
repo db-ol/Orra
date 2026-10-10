@@ -6,6 +6,14 @@ Orra is an open source voice input app for the Mac. Hold a key, speak, let go, a
 
 Orra is an early preview. Expect rough edges, and expect the design to change.
 
+<p align="center">
+  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/Download-Orra%20for%20macOS-0A84FF?style=for-the-badge&logo=apple&logoColor=white" alt="Download Orra for macOS" height="40"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><strong>Download Orra.dmg</strong></a><br>
+  For Macs with Apple Silicon and macOS 15.6 or later
+</p>
+
 ## What it does
 
 - Dictate in Chinese, English, or both mixed in one sentence, into any app that takes text.
@@ -16,7 +24,7 @@ Orra is an early preview. Expect rough edges, and expect the design to change.
 
 ## Download
 
-Download `Orra-<version>.dmg` from [the latest release](https://github.com/db-ol/Orra/releases/latest), open it, and drag Orra to Applications.
+Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg), the newest version, open it, and drag Orra to Applications. Older versions and the release notes are on [the releases page](https://github.com/db-ol/Orra/releases).
 
 - Needs a Mac with Apple Silicon and macOS 15.6 or later, and about 3 GB of free disk space.
 - Orra is signed with a Developer ID and notarized by Apple, so it opens without a warning.
@@ -55,6 +63,11 @@ Orra turns your speech into text on your Mac and never sends your recordings or 
 Launching Orra never connects to the network until you allowed update checks. Like any download, these services see your IP address, and an update check also shows Orra's version and, as every web request does, your preferred languages. Orra sends no account, token or cookie, and nothing else about your Mac.
 
 To remove the model, quit Orra and delete the Models folder above. If ~/Library/Caches/qwen3-speech holds a copy from another app, delete that too, or Orra installs the model again from it. docs/model-download.md has the details.
+
+## Feedback and help
+
+- **Found a problem?** [Report it on GitHub Issues](https://github.com/db-ol/Orra/issues/new/choose). Say which version of Orra and macOS you use, and what you expected to happen. Please leave out anything private you dictated.
+- **Have a question or an idea?** Ask in [Discussions](https://github.com/db-ol/Orra/discussions).
 
 ## For developers
 

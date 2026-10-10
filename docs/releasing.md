@@ -49,7 +49,9 @@ with every release. The script:
 4. puts it in a DMG with a link to Applications, signs the DMG, notarizes and staples it,
 5. checks both with Gatekeeper,
 6. signs the DMG with the update key, writes appcast.xml with the release notes and signs it
-   too, since Orra requires a signed feed, and writes the DMG's SHA-256 next to it.
+   too, since Orra requires a signed feed, and writes the DMG's SHA-256 next to it,
+7. copies the finished DMG to Orra.dmg, byte for byte, without building it again, and
+   checks that the two files are identical.
 
 Output goes to build/release/<version>/, which git ignores. With `--no-notarize` as a third
 argument it stops before uploading anything, to check a build quickly. Notarization can
@@ -63,7 +65,16 @@ be an asset of the release, since SUFeedURL reads releases/latest:
     git tag v0.1.0 "$(cat build/release/0.1.0/commit)" && git push origin v0.1.0
     gh release create v0.1.0 --title "Orra 0.1.0" --notes-file docs/release-notes/0.1.0.md \
         build/release/0.1.0/Orra-0.1.0.dmg build/release/0.1.0/Orra-0.1.0.dmg.sha256 \
-        build/release/0.1.0/appcast.xml
+        build/release/0.1.0/Orra.dmg build/release/0.1.0/appcast.xml
+
+Every release carries the same DMG twice. Orra-<version>.dmg is the one the feed names, and
+appcast.xml keeps pointing at it, so updates always fetch a file whose name says its
+version. Orra.dmg is a byte identical copy for the download link in the README,
+https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg, which always serves the
+newest release. A release without Orra.dmg breaks that link. To add it to a release that
+lacks it:
+
+    gh release upload v0.1.0 build/release/0.1.0/Orra.dmg
 
 Do not mark it as a pre-release: GitHub leaves pre-releases out of releases/latest, so no
 installed Orra would see it. Once the release is out, every Orra that checks for updates

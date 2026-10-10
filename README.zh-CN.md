@@ -6,6 +6,14 @@ Orra 是一款开源的 Mac 语音输入 App。按住一个键说话，松开后
 
 Orra 目前是早期预览版。难免有不完善的地方，设计也还会调整。
 
+<p align="center">
+  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Orra%20for%20macOS-0A84FF?style=for-the-badge&logo=apple&logoColor=white" alt="下载 Orra for macOS" height="40"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><strong>下载 Orra.dmg</strong></a><br>
+  适用于搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac
+</p>
+
 ## 功能
 
 - 支持中文、英文，以及一句话里中英混说，可以输入到任何能打字的 App。
@@ -16,7 +24,7 @@ Orra 目前是早期预览版。难免有不完善的地方，设计也还会调
 
 ## 下载
 
-在[最新版本](https://github.com/db-ol/Orra/releases/latest)页面下载 `Orra-<版本号>.dmg`，打开后把 Orra 拖进“应用程序”。
+下载最新版本的 [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)，打开后把 Orra 拖进“应用程序”。旧版本和更新说明在[版本发布页面](https://github.com/db-ol/Orra/releases)。
 
 - 需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。
 - Orra 使用 Developer ID 签名并经过苹果公证，打开时不会出现安全警告。
@@ -55,6 +63,11 @@ Orra 在你的 Mac 上把语音转成文字，从不把录音或文字发送到�
 在你允许检查更新之前，启动 Orra 从不联网。和所有下载一样，这些服务能看到你的 IP 地址。检查更新时还会看到 Orra 的版本号，以及和所有网页请求一样带上的偏好语言。Orra 不发送账号、令牌或 Cookie，也不发送任何其他关于你的 Mac 的信息。
 
 要删除模型，请先退出 Orra，再删除上面的 Models 文件夹。如果 ~/Library/Caches/qwen3-speech 里有其他 App 留下的副本，也请一并删除，否则 Orra 会从那里重新安装模型。详情见 docs/model-download.md。
+
+## 反馈与帮助
+
+- **遇到问题？** 请在 [GitHub Issues](https://github.com/db-ol/Orra/issues/new/choose) 报告。请写明你使用的 Orra 和 macOS 版本，以及你预期的结果。请不要附上你听写的私人内容。
+- **有疑问或建议？** 欢迎在 [Discussions](https://github.com/db-ol/Orra/discussions) 提问。
 
 ## 开发者
 
