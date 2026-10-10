@@ -41,6 +41,8 @@ Orra's menu and windows are in English and Simplified Chinese, in the order of y
 
 While Orra listens, a small indicator at the bottom of the screen shows bars that move with your voice, and a short sound marks the start and the end of the recording. When a dictation pastes nothing, the indicator says why. Both can be turned off in Settings.
 
+Before it pastes, Orra removes filler words that never carry meaning: 呃, 额, um, uh and erm, 嗯 unless it is a reply such as 嗯，好的, and 啊 or 哦 that opens a sentence before a comma. Words that can mean something, such as 好啊, 吧, 呢, 那个 and like, stay as you said them. Self corrections such as "三点，哦不是四点" are not applied. Settings, General turns filler removal off.
+
 In Settings, the Vocabulary page takes the words and names you use, up to 100. Orra gives them to the speech model with every dictation, so it writes them your way. On synthetic test speech this raised the share of such terms written correctly from about 84% to 99% in Chinese and from 83% to 96% in English, and words from the list were almost never inserted when they were not said. The list stays on your Mac.
 
 Orra records from the system's default input unless you choose another under Microphone in its menu or in Settings. The choice stays until you change it, and while that microphone is unplugged the default records. With the lid closed, a MacBook turns its own microphone off, so choose another one, such as a webcam's. The menu warns about it. docs/microphone-choice.md explains how the choice works.

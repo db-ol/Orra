@@ -837,6 +837,26 @@
         }
       }
     },
+    "Remove filler words such as um and 呃" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去掉 um、呃等填充词"
+          }
+        }
+      }
+    },
+    "Removes 呃, 额, um, uh and erm, and 嗯, 啊 and 哦 where they only fill a pause. Words that carry meaning, such as 好啊, 吧 and 那个, and replies such as 嗯对 stay as you said them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去掉呃、额、um、uh、erm，以及只用来停顿的嗯、啊和哦。有意义的词，比如好啊、吧和那个，还有嗯对这样的回答，会照原样保留。"
+          }
+        }
+      }
+    },
     "Resume Download (%@ left)" : {
       "localizations" : {
         "zh-Hans" : {

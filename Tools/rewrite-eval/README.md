@@ -58,3 +58,23 @@ Per category the script reports:
   answered or carried out the dictation.
 - For cleanup, the cases in control_keep and particle_keep that changed, and the share of
   their words or Chinese characters that went missing.
+
+## Results
+
+The filler rules alone, Orra/FillerRules.swift as of this commit, exact match on cleanup.
+OrraTests/FillerRulesTests.swift checks every case marked `rules` in the filler, particle
+and control categories, so these numbers hold while the tests pass.
+
+| Category | Exact |
+| --- | --- |
+| filler_zh | 20 of 25 |
+| filler_en | 11 of 15 |
+| filler_mixed | 12 of 15 |
+| particle_keep | 20 of 20 |
+| control_keep | 28 of 28 |
+| translate (cleanup only) | 40 of 40 |
+| correction_* | 0 of 35, rules do not apply corrections |
+
+The misses are fillers that only a model can judge (那个, like, 就是说, a repeated
+然后) and fillers between two commas that only mark a pause, where the rules keep one
+comma ("I was, wondering").

@@ -86,8 +86,15 @@ private struct GeneralSettings: View {
                 Toggle("Show the recording indicator", isOn: $feedback.showsIndicator)
                 Toggle("Play sounds when recording starts and stops", isOn: $feedback.playsSounds)
                 Toggle("Show a small bar at the bottom of the screen while Orra is ready", isOn: $feedback.showsIdleBar)
+                Toggle("Remove filler words such as um and 呃", isOn: Binding(
+                    get: { pushToTalk.removesFillerWords },
+                    set: { pushToTalk.setRemovesFillerWords($0) }
+                ))
             } header: {
                 Text("While you dictate")
+            } footer: {
+                Text("Removes 呃, 额, um, uh and erm, and 嗯, 啊 and 哦 where they only fill a pause. Words that carry meaning, such as 好啊, 吧 and 那个, and replies such as 嗯对 stay as you said them.")
+                    .foregroundStyle(.secondary)
             }
             Section {
                 Toggle("Open at Login", isOn: Binding(
