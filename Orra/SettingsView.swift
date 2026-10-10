@@ -71,6 +71,9 @@ private struct GeneralSettings: View {
     @Bindable var feedback: RecordingFeedback
     let openAtLogin: OpenAtLogin
     @Bindable var dockIcon: DockIcon
+    /// The language this copy of Orra started with, to tell when a restart is due.
+    @State private var startedWith = AppLanguage.load()
+    @State private var language = AppLanguage.load()
 
     var body: some View {
         Form {
@@ -107,6 +110,30 @@ private struct GeneralSettings: View {
             } footer: {
                 Text("Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.")
                     .foregroundStyle(.secondary)
+            }
+            Section {
+                Picker("Language", selection: $language) {
+                    ForEach(AppLanguage.allCases) { language in
+                        if let name = language.nativeName {
+                            Text(verbatim: name).tag(language)
+                        } else {
+                            Text("Same as the Mac").tag(language)
+                        }
+                    }
+                }
+                .onChange(of: language) { _, language in
+                    language.save()
+                }
+                if language != startedWith {
+                    HStack {
+                        Text("Orra shows the new language after it restarts.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Restart Orra") {
+                            AppLanguage.restart()
+                        }
+                    }
+                }
             }
         }
         .formStyle(.grouped)
