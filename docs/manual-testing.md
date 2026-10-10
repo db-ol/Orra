@@ -186,6 +186,14 @@ Build and test commands, run in the repository root:
     model suites sit under RealModelTests, which runs them one at a time. They load the
     model from Orra's installed folder, or, before a build with the model download has
     run once, from the copy in ~/Library/Caches/qwen3-speech, which they only read.
+- ProblemReportTests covers the diagnostic report of Report a Problem…: the home folder,
+  account name, full name and computer name are taken out, names under three characters
+  and other users' folders stay, the report lists the facts and only counts of the
+  vocabulary and the learned pairs, keeps the newest 2000 log lines, picks at most three
+  Orra crash reports from the last 7 days, and the issue link fills the form fields the
+  bug report form defines. A one off run on 2026-10-10 wrote a report on this Mac from
+  the local log store, with a crash report, and without the home folder or the account
+  name in it.
 - The secure input check reads kCGSSessionSecureInputPID. A throwaway program turned secure
   input on and off on 2026-10-04 and saw the key appear and disappear.
 - The built app launches from the terminal, finishes launching, and reports the
@@ -624,6 +632,20 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
 - [ ] An update found by an automatic check does not come in front of the app you are in.
   The menu offers Install Orra with its version, and the update window shows once you
   switch to Orra. There is no checkbox to install updates automatically.
+
+Report a Problem, added on 2026-10-10, not verified yet:
+
+- [ ] Report a Problem… in the menu bar menu, and in the Help menu while Orra is in the
+  Dock, opens the Report a Problem window. It shows the report after a few seconds.
+- [ ] The report lists Orra's version, macOS, the Mac model and chip, the settings, the
+  permissions and Orra's log from the last hour. It contains no dictated text, no
+  vocabulary words or learned pairs, no clipboard, and neither your home folder path nor
+  your account name. No permission prompt appears.
+- [ ] Show in Finder selects Orra-Report-<date>.txt. Open GitHub Issue also opens the bug
+  report form in the browser with Orra version, macOS version and Mac model filled in.
+  Dragging the file into the form attaches it. Nothing is sent without you submitting
+  the form.
+- [ ] With the interface in Chinese, the menu item and the window read in Chinese.
 
 ## Not implemented
 

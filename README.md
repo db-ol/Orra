@@ -45,6 +45,8 @@ In Settings, the Vocabulary page takes the words and names you use, up to 100. O
 
 Orra records from the system's default input unless you choose another under Microphone in its menu or in Settings. The choice stays until you change it, and while that microphone is unplugged the default records. With the lid closed, a MacBook turns its own microphone off, so choose another one, such as a webcam's. The menu warns about it. docs/microphone-choice.md explains how the choice works.
 
+If something goes wrong, choose Report a Problem… in Orra's menu. Orra writes a diagnostic report, without anything you dictated, and opens a GitHub issue form for you to attach it to. Nothing is sent unless you submit the form.
+
 ## Privacy
 
 Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. The text it pastes stays on this Mac's clipboard, so Universal Clipboard does not offer it to your other devices. Orra has no account, no analytics and no server of its own.
