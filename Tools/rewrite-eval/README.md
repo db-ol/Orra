@@ -38,12 +38,12 @@ reword, does not answer a question and does not carry out a request.
 
 ## Numbers
 
-`numbers.jsonl` has 298 cases for writing spoken Chinese numbers as digits, one JSON
+`numbers.jsonl` has 401 cases for writing spoken Chinese numbers as digits, one JSON
 object per line:
 
 - `id`: n001 and up.
-- `kind`: `convert` when some number in the input should become digits (129 cases), `keep`
-  when the input must stay exactly as it is (169 cases).
+- `kind`: `convert` when some number in the input should become digits (163 cases), `keep`
+  when the input must stay exactly as it is (238 cases).
 - `input`: a dictation as Qwen3-ASR writes it, with the numbers spelled out.
 - `expected`: the text after the number rules.
 - `note`: what the case tests.
@@ -52,15 +52,26 @@ The conventions, chosen to convert only where a reader clearly expects digits:
 
 - Readings digit by digit of three digits or more become digits (13800138000, 302, 999).
   A year needs four (2026年). Two digits stay (三八妇女节, 九零后), except right after a
-  Latin letter (CA1831).
+  Latin letter (CA1831). Counting (一二三四五, 五四三二一), weekdays (一三五) and dates of
+  events (五一二) stay unless a word such as 验证码 or 房间 says it is a code.
 - Numbers with 十, 百, 千, 万 or 亿 become digits before a unit or counter. 万 and 亿 stay
-  as units the way Chinese news writes them (2万人, 3.5亿元, 3.5万元 for 三万五千元).
+  as units the way Chinese news writes them (2万人, 3.5亿元, 3.5万元 for 三万五千元), and
+  so does 万亿 (126万亿元). An amount that needs more places is written whole (13888元),
+  and stays in words above 1亿. Without a unit, a number with 万 or 亿 converts only at the
+  end of a phrase or before a word such as 的 or 左右, so 十万大山 and 九万里 stay. A word
+  that starts with a unit character is not a unit (十五元宵节, 二十年轻人, 十一期间).
+- The start of a range converts with its end (300到500元). A digit after 度 or 块 joins
+  the number (36.5度, 99块9). Rough pairs (十块八块) and figures of speech (说了一百遍,
+  一百个不愿意, 十二分满意) stay.
 - A single digit before a counter stays in words (三本书, 两次, 一号线, 五块钱), unless it
   is part of a date, a time, a percentage, a decimal or a model name.
 - Times after a time of day, or with 半, 钟, minutes or 以后 (下午3点, 3点20分, 3点半).
-  三点五分 could be a time or a score and stays.
+  三点五分 could be a time or a score and stays, but 下午3点5分 is a time. 一点 after a
+  time of day stays when it means a little (晚上一点都不冷), and 十分 before an adjective
+  is very (三点十分重要).
 - A month becomes digits only in a date, before a day or 份 or after a year (10月1日,
-  9月份), so 二月春风 and 十月稻田 stay.
+  9月份), so 二月春风 and 十月稻田 stay. Lunar dates (农历八月十五号, 腊月二十三号) and
+  dates of lunar festivals (七月七日是七夕) stay.
 - Ranges and rough numbers (七八个, 十几个, 二十多个, 三十来岁, 上千人), ordinals
   (第十五届), set phrases, idioms, poems, names, holidays (双十一, 九一八) and book titles
   stay.
@@ -68,7 +79,9 @@ The conventions, chosen to convert only where a reader clearly expects digits:
 The cases merge two sets written by hand. One duplicate and 47 cases that repeated another
 with other words around the same number were dropped, and 19 were added for conventions
 neither set covered, such as 三点一刻, 十二万三千, 三百分之一 and a range of times. The two
-sets agreed on every convention.
+sets agreed on every convention. Review added 103 cases, n299 to n401, for idioms, poems
+and titles, words that start with a unit character, lunar dates, counting, ranges and units
+the first rules missed.
 
 OrraTests/NumberRulesTests.swift runs every case, so Orra/NumberRules.swift gets all of
 them while the tests pass.

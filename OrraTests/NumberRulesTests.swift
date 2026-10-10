@@ -38,7 +38,9 @@ struct NumberRulesTests {
     }()
 
     @Test func theEvaluationSetIsRead() {
-        #expect(Self.cases.count >= 290)
+        // Every line decodes, so a case with a typo cannot drop out unnoticed.
+        #expect(Self.cases.count == Self.lines(of: "numbers.jsonl").filter { !$0.allSatisfy(\.isWhitespace) }.count)
+        #expect(Self.cases.count >= 400)
         #expect(Set(Self.cases.map(\.id)).count == Self.cases.count)
         #expect(Self.cases.allSatisfy { $0.kind == "convert" || $0.kind == "keep" })
         // A case to keep expects its input, and a case to convert expects a change.

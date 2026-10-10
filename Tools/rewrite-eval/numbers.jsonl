@@ -296,3 +296,106 @@
 {"id": "n296", "kind": "keep", "input": "预算三千五。", "expected": "预算三千五。", "note": "an elided number below 万 with nothing after it stays"}
 {"id": "n297", "kind": "keep", "input": "三点到五点。", "expected": "三点到五点。", "note": "a range of bare hours stays, nothing marks it as a time"}
 {"id": "n298", "kind": "keep", "input": "百分之五十多的人同意。", "expected": "百分之五十多的人同意。", "note": "an approximate percentage stays"}
+{"id": "n299", "kind": "keep", "input": "晚上一点都不冷。", "expected": "晚上一点都不冷。", "note": "一点 after a time of day as not at all stays"}
+{"id": "n300", "kind": "keep", "input": "早上一点也不困。", "expected": "早上一点也不困。", "note": "一点也不 is not at all"}
+{"id": "n301", "kind": "keep", "input": "下午一点点进步都没有。", "expected": "下午一点点进步都没有。", "note": "一点点 is a little"}
+{"id": "n302", "kind": "keep", "input": "中午一点东西都没吃。", "expected": "中午一点东西都没吃。", "note": "一点 before a noun is a little"}
+{"id": "n303", "kind": "keep", "input": "晚上一点儿也不冷。", "expected": "晚上一点儿也不冷。", "note": "一点儿 is a little"}
+{"id": "n304", "kind": "keep", "input": "有两点十分重要。", "expected": "有两点十分重要。", "note": "十分 before an adjective is very, the points of a list"}
+{"id": "n305", "kind": "keep", "input": "我觉得以上三点十分有道理。", "expected": "我觉得以上三点十分有道理。", "note": "十分 is very after the points of a list"}
+{"id": "n306", "kind": "keep", "input": "三点十分关键。", "expected": "三点十分关键。", "note": "十分 before an adjective is very even without a list word"}
+{"id": "n307", "kind": "keep", "input": "以上三点之前都提过。", "expected": "以上三点之前都提过。", "note": "以上 before N点 marks the points of a list"}
+{"id": "n308", "kind": "keep", "input": "正月十五元宵节。", "expected": "正月十五元宵节。", "note": "lunar date, and 元宵 is not yuan"}
+{"id": "n309", "kind": "keep", "input": "十五元宵节吃汤圆。", "expected": "十五元宵节吃汤圆。", "note": "元宵 starts with 元 but is not a unit"}
+{"id": "n310", "kind": "keep", "input": "三十元旦放假吗？", "expected": "三十元旦放假吗？", "note": "元旦 is not a unit"}
+{"id": "n311", "kind": "keep", "input": "十一期间人很多。", "expected": "十一期间人很多。", "note": "十一 is the National Day holiday, 期间 is not a unit"}
+{"id": "n312", "kind": "keep", "input": "来了二十年轻人。", "expected": "来了二十年轻人。", "note": "年轻人 is not 年"}
+{"id": "n313", "kind": "keep", "input": "二十日本人参加了比赛。", "expected": "二十日本人参加了比赛。", "note": "日本 is not 日"}
+{"id": "n314", "kind": "keep", "input": "十天才少年。", "expected": "十天才少年。", "note": "天才 is not 天"}
+{"id": "n315", "kind": "keep", "input": "二十个性鲜明的角色。", "expected": "二十个性鲜明的角色。", "note": "个性 is not 个"}
+{"id": "n316", "kind": "keep", "input": "三十分公司。", "expected": "三十分公司。", "note": "分公司 is not 分"}
+{"id": "n317", "kind": "keep", "input": "今年三十只想躺平。", "expected": "今年三十只想躺平。", "note": "只想 is not the counter 只"}
+{"id": "n318", "kind": "keep", "input": "十万大山。", "expected": "十万大山。", "note": "place name, 万 before a word that is not a unit stays"}
+{"id": "n319", "kind": "keep", "input": "九万里风鹏正举。", "expected": "九万里风鹏正举。", "note": "poem"}
+{"id": "n320", "kind": "keep", "input": "八万四千法门。", "expected": "八万四千法门。", "note": "Buddhist saying"}
+{"id": "n321", "kind": "keep", "input": "一句顶一万句。", "expected": "一句顶一万句。", "note": "set saying"}
+{"id": "n322", "kind": "keep", "input": "八十万禁军教头林冲。", "expected": "八十万禁军教头林冲。", "note": "novel"}
+{"id": "n323", "kind": "keep", "input": "二万五千里长征。", "expected": "二万五千里长征。", "note": "term from history, 里 is not a unit"}
+{"id": "n324", "kind": "keep", "input": "有一万种方法。", "expected": "有一万种方法。", "note": "万 before a word that is not a unit stays"}
+{"id": "n325", "kind": "keep", "input": "十二万分的感谢。", "expected": "十二万分的感谢。", "note": "十二万分 is utterly"}
+{"id": "n326", "kind": "keep", "input": "十二分满意。", "expected": "十二分满意。", "note": "十二分 is utterly"}
+{"id": "n327", "kind": "keep", "input": "付出一百二十分的努力。", "expected": "付出一百二十分的努力。", "note": "N分的 plus an abstract noun is a figure of speech"}
+{"id": "n328", "kind": "keep", "input": "一万分的努力。", "expected": "一万分的努力。", "note": "万分 is utterly"}
+{"id": "n329", "kind": "keep", "input": "十年如一日。", "expected": "十年如一日。", "note": "idiom"}
+{"id": "n330", "kind": "keep", "input": "十年磨一剑。", "expected": "十年磨一剑。", "note": "saying"}
+{"id": "n331", "kind": "keep", "input": "后宫佳丽三千人。", "expected": "后宫佳丽三千人。", "note": "poem"}
+{"id": "n332", "kind": "keep", "input": "五百年前是一家。", "expected": "五百年前是一家。", "note": "saying"}
+{"id": "n333", "kind": "keep", "input": "十五个吊桶打水，七上八下。", "expected": "十五个吊桶打水，七上八下。", "note": "saying"}
+{"id": "n334", "kind": "keep", "input": "一万年太久，只争朝夕。", "expected": "一万年太久，只争朝夕。", "note": "poem"}
+{"id": "n335", "kind": "keep", "input": "一年三百六十日，风刀霜剑严相逼。", "expected": "一年三百六十日，风刀霜剑严相逼。", "note": "poem"}
+{"id": "n336", "kind": "keep", "input": "二十四节气之一。", "expected": "二十四节气之一。", "note": "fixed term"}
+{"id": "n337", "kind": "keep", "input": "十八层地狱。", "expected": "十八层地狱。", "note": "fixed term"}
+{"id": "n338", "kind": "keep", "input": "三十六天罡七十二地煞。", "expected": "三十六天罡七十二地煞。", "note": "fixed term, neither half converts"}
+{"id": "n339", "kind": "keep", "input": "九千岁。", "expected": "九千岁。", "note": "a title, not an age"}
+{"id": "n340", "kind": "keep", "input": "七十二家房客。", "expected": "七十二家房客。", "note": "film title"}
+{"id": "n341", "kind": "keep", "input": "二十号人马。", "expected": "二十号人马。", "note": "号人 counts people, not a label"}
+{"id": "n342", "kind": "keep", "input": "一二三四五，上山打老虎。", "expected": "一二三四五，上山打老虎。", "note": "counting up is not a code"}
+{"id": "n343", "kind": "keep", "input": "五四三二一，发射！", "expected": "五四三二一，发射！", "note": "counting down is not a code"}
+{"id": "n344", "kind": "keep", "input": "一二一，一二一，齐步走。", "expected": "一二一，一二一，齐步走。", "note": "marching cadence"}
+{"id": "n345", "kind": "keep", "input": "我一三五上班，二四六休息。", "expected": "我一三五上班，二四六休息。", "note": "weekdays"}
+{"id": "n346", "kind": "keep", "input": "一二八淞沪抗战。", "expected": "一二八淞沪抗战。", "note": "date of an event"}
+{"id": "n347", "kind": "keep", "input": "五一二地震。", "expected": "五一二地震。", "note": "date of an event"}
+{"id": "n348", "kind": "keep", "input": "三一五晚会。", "expected": "三一五晚会。", "note": "date of an event"}
+{"id": "n349", "kind": "keep", "input": "三六九等。", "expected": "三六九等。", "note": "idiom"}
+{"id": "n350", "kind": "keep", "input": "腊月二十三号小年。", "expected": "腊月二十三号小年。", "note": "lunar date"}
+{"id": "n351", "kind": "keep", "input": "农历八月十五号。", "expected": "农历八月十五号。", "note": "lunar date"}
+{"id": "n352", "kind": "keep", "input": "七月七日是七夕。", "expected": "七月七日是七夕。", "note": "date of a lunar festival"}
+{"id": "n353", "kind": "keep", "input": "九月九日忆山东兄弟。", "expected": "九月九日忆山东兄弟。", "note": "poem title"}
+{"id": "n354", "kind": "keep", "input": "十块九毛九。", "expected": "十块九毛九。", "note": "a price in words with 毛 stays whole"}
+{"id": "n355", "kind": "keep", "input": "十块八块的。", "expected": "十块八块的。", "note": "rough pair like 七八个"}
+{"id": "n356", "kind": "keep", "input": "十年八年也做不完。", "expected": "十年八年也做不完。", "note": "rough pair like 七八个"}
+{"id": "n357", "kind": "keep", "input": "我跟你说了一百遍了。", "expected": "我跟你说了一百遍了。", "note": "figure of speech"}
+{"id": "n358", "kind": "keep", "input": "我说了一百次了。", "expected": "我说了一百次了。", "note": "figure of speech"}
+{"id": "n359", "kind": "keep", "input": "一千万个小心。", "expected": "一千万个小心。", "note": "figure of speech"}
+{"id": "n360", "kind": "keep", "input": "App一打开就闪退。", "expected": "App一打开就闪退。", "note": "一 plus a verb is as soon as"}
+{"id": "n361", "kind": "keep", "input": "用AI一键生成。", "expected": "用AI一键生成。", "note": "一键 is a word"}
+{"id": "n362", "kind": "keep", "input": "我跟Amy一说她就懂了。", "expected": "我跟Amy一说她就懂了。", "note": "一 plus a verb is as soon as"}
+{"id": "n363", "kind": "keep", "input": "跟Tom三言两语就说清楚了。", "expected": "跟Tom三言两语就说清楚了。", "note": "idiom after a name"}
+{"id": "n364", "kind": "keep", "input": "做一PPT给老板看。", "expected": "做一PPT给老板看。", "note": "一 plus a Latin noun is a count"}
+{"id": "n365", "kind": "keep", "input": "买一iPhone送给他。", "expected": "买一iPhone送给他。", "note": "一 plus a Latin noun is a count"}
+{"id": "n366", "kind": "keep", "input": "一九年三月我换了工作。", "expected": "一九年三月我换了工作。", "note": "a two digit year stays, so the month stays too"}
+{"id": "n367", "kind": "keep", "input": "九千九百九十九亿九千九百九十九万九千九百九十九元。", "expected": "九千九百九十九亿九千九百九十九万九千九百九十九元。", "note": "no readable form with 亿, stays"}
+{"id": "n368", "kind": "convert", "input": "下午一点开会。", "expected": "下午1点开会。", "note": "one o'clock before a verb after a time of day"}
+{"id": "n369", "kind": "convert", "input": "晚上一点的飞机。", "expected": "晚上1点的飞机。", "note": "one o'clock before 的"}
+{"id": "n370", "kind": "convert", "input": "三点十分出发。", "expected": "3点10分出发。", "note": "ten minutes before a verb"}
+{"id": "n371", "kind": "convert", "input": "A股三千点。", "expected": "A股3000点。", "note": "index points above 24 are not a time"}
+{"id": "n372", "kind": "convert", "input": "三十六度五。", "expected": "36.5度。", "note": "the digit after 度 is the decimal"}
+{"id": "n373", "kind": "convert", "input": "体温三十七度二。", "expected": "体温37.2度。", "note": "the digit after 度 is the decimal"}
+{"id": "n374", "kind": "convert", "input": "九十九块九。", "expected": "99块9。", "note": "the digit after 块 is the jiao"}
+{"id": "n375", "kind": "convert", "input": "三百到五百元。", "expected": "300到500元。", "note": "a range converts on both sides"}
+{"id": "n376", "kind": "convert", "input": "一百到两百块。", "expected": "100到200块。", "note": "a range converts on both sides"}
+{"id": "n377", "kind": "convert", "input": "三十至四十岁。", "expected": "30至40岁。", "note": "a range with 至"}
+{"id": "n378", "kind": "convert", "input": "价格从三百降到两百五十块。", "expected": "价格从300降到250块。", "note": "a range with 降到"}
+{"id": "n379", "kind": "convert", "input": "下午三点零五。", "expected": "下午3点05。", "note": "minutes 零五 after a time of day"}
+{"id": "n380", "kind": "convert", "input": "下午三点五分。", "expected": "下午3点5分。", "note": "single digit minutes after a time of day"}
+{"id": "n381", "kind": "convert", "input": "这个包三百美元。", "expected": "这个包300美元。", "note": "currency word"}
+{"id": "n382", "kind": "convert", "input": "买了二十瓶水。", "expected": "买了20瓶水。", "note": "counter 瓶"}
+{"id": "n383", "kind": "convert", "input": "五十五寸电视。", "expected": "55寸电视。", "note": "unit 寸"}
+{"id": "n384", "kind": "convert", "input": "六点一英寸。", "expected": "6.1英寸。", "note": "decimal before 英寸"}
+{"id": "n385", "kind": "convert", "input": "电池五千毫安。", "expected": "电池5000毫安。", "note": "unit 毫安"}
+{"id": "n386", "kind": "convert", "input": "三十所学校。", "expected": "30所学校。", "note": "counter 所"}
+{"id": "n387", "kind": "convert", "input": "一百个人报名。", "expected": "100个人报名。", "note": "一百个 before a noun is a count"}
+{"id": "n388", "kind": "convert", "input": "一万个订单。", "expected": "1万个订单。", "note": "一万个 before a noun is a count"}
+{"id": "n389", "kind": "convert", "input": "考了一百分。", "expected": "考了100分。", "note": "a score of 100"}
+{"id": "n390", "kind": "convert", "input": "3点二十分见。", "expected": "3点20分见。", "note": "minutes after an hour in digits"}
+{"id": "n391", "kind": "convert", "input": "下午3点到四点。", "expected": "下午3点到4点。", "note": "range after an hour in digits"}
+{"id": "n392", "kind": "convert", "input": "一百二十八 GB 的版本。", "expected": "128 GB 的版本。", "note": "a spaced Latin unit, space kept"}
+{"id": "n393", "kind": "convert", "input": "三千五百 mAh 的电池。", "expected": "3500 mAh 的电池。", "note": "a spaced Latin unit"}
+{"id": "n394", "kind": "convert", "input": "要求 Python 三点十。", "expected": "要求 Python 3.10。", "note": "version with minor ten"}
+{"id": "n395", "kind": "convert", "input": "升级到 iOS 十八点二点一。", "expected": "升级到 iOS 18.2.1。", "note": "a version with three parts converts whole"}
+{"id": "n396", "kind": "convert", "input": "GDP 一百二十六万亿元。", "expected": "GDP 126万亿元。", "note": "万亿 is one unit"}
+{"id": "n397", "kind": "convert", "input": "两万零五十块。", "expected": "20050块。", "note": "an amount that needs many places is written whole"}
+{"id": "n398", "kind": "convert", "input": "一万三千八百八十八元。", "expected": "13888元。", "note": "an amount that needs many places is written whole"}
+{"id": "n399", "kind": "convert", "input": "三十万零五百元。", "expected": "300500元。", "note": "a fraction of 万 with a zero is written whole"}
+{"id": "n400", "kind": "convert", "input": "预算三万五的方案。", "expected": "预算3.5万的方案。", "note": "万 before 的 is an amount"}
+{"id": "n401", "kind": "convert", "input": "验证码是六五四三二一。", "expected": "验证码是654321。", "note": "counting digits after a code word are a code"}
