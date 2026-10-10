@@ -51,6 +51,17 @@ security find-identity -v -p codesigning | grep -q "$IDENTITY" || {
     echo "The certificate \"$IDENTITY\" is not in the keychain." >&2
     exit 1
 }
+# Installed copies of Orra accept only updates signed with the key whose public half is in
+# Orra/Info.plist. A different key in this keychain would ship a feed that all of them reject.
+if $notarize; then
+    [[ -x "$sparkle/generate_keys" ]] || { echo "Build Orra once, so Sparkle's tools are at $sparkle" >&2; exit 1; }
+    keychain_key="$("$sparkle/generate_keys" --account "$UPDATE_KEY_ACCOUNT" -p 2>/dev/null || true)"
+    app_key="$(plutil -extract SUPublicEDKey raw Orra/Info.plist)"
+    [[ -n "$keychain_key" && "$keychain_key" == "$app_key" ]] || {
+        echo "The update key in the keychain (account $UPDATE_KEY_ACCOUNT) does not match SUPublicEDKey. docs/releasing.md says how to import it." >&2
+        exit 1
+    }
+fi
 if $notarize && [[ ! -s "$notes" ]]; then
     echo "Write the release notes in $notes first. The update window shows them." >&2
     exit 1
@@ -58,6 +69,8 @@ fi
 
 rm -rf "$out"
 mkdir -p "$out"
+# The commit to tag when publishing.
+git rev-parse HEAD > "$out/commit"
 echo "Building Orra $version ($build) from $(git rev-parse --short HEAD)"
 
 xcodebuild archive \
@@ -98,6 +111,12 @@ entitlements="$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -
     exit 1
 }
 lipo -archs "$app/Contents/MacOS/Orra" | grep -qx "arm64" || { echo "Not an arm64 only app" >&2; exit 1; }
+# Sparkle and its helpers, signed again on export.
+sparkle_framework="$app/Contents/Frameworks/Sparkle.framework"
+[[ -d "$sparkle_framework" ]] || { echo "Sparkle.framework is not in the app" >&2; exit 1; }
+for code in "$sparkle_framework" "$sparkle_framework/Versions/B/Autoupdate" "$sparkle_framework/Versions/B/Updater.app"; do
+    codesign -dvv "$code" 2>&1 | grep -q "Authority=$IDENTITY" || { echo "$code is not signed with $IDENTITY" >&2; exit 1; }
+done
 shown="$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString)"
 [[ "$shown" == "$version" ]] || { echo "The app says version $shown" >&2; exit 1; }
 echo "Signed: Developer ID, hardened runtime, audio input only, arm64, version $version"

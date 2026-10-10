@@ -13,6 +13,7 @@ struct AppUpdaterTests {
         #expect(info["SURequireSignedFeed"] as? Bool == true)
         #expect(info["SUVerifyUpdateBeforeExtraction"] as? Bool == true)
         #expect(info["SUEnableSystemProfiling"] as? Bool == false)
+        #expect(info["SUAllowsAutomaticUpdates"] as? Bool == false)
         // Sparkle asks the user before the first automatic check.
         #expect(info["SUEnableAutomaticChecks"] == nil)
     }

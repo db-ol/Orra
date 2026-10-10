@@ -93,12 +93,12 @@
         }
       }
     },
-    "About once a day Orra asks GitHub for the latest version, and sends nothing about your Mac. An update is installed only after you choose to." : {
+    "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 大约每天向 GitHub 查询一次最新版本，不发送任何关于你的 Mac 的信息。只有你同意后才会安装更新。"
+            "value" : "Orra 大约每天向 GitHub 查询一次最新版本。和所有网页请求一样，查询会带上你偏好的语言，除此之外不发送任何关于你的 Mac 的信息。每次更新都要你同意后才会安装。"
           }
         }
       }

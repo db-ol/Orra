@@ -8,13 +8,15 @@ import Sparkle
 ///
 /// Orra never checks on its own until the user allows it: Sparkle asks at the second
 /// launch, and Settings has the choice. A check sends no information about the Mac, since
-/// SUEnableSystemProfiling is off. Check for Updates… in the menu checks at any time.
+/// SUEnableSystemProfiling is off, beyond the preferred languages every web request
+/// carries. An update is installed only when the user chooses it each time, since
+/// SUAllowsAutomaticUpdates is off. Check for Updates… in the menu checks at any time.
 @Observable
 final class AppUpdater: NSObject {
     /// False while a check or an update runs, when the menu item does nothing.
     private(set) var canCheckForUpdates = false
     /// The version of an update found by a scheduled check that the user has not looked at
-    /// yet, for the menu. Sparkle shows its window behind other apps then, see
+    /// yet, for the menu. Sparkle may wait to show it until the user comes to Orra, see
     /// standardUserDriverShouldHandleShowingScheduledUpdate.
     private(set) var waitingUpdate: String?
 
@@ -60,8 +62,9 @@ final class AppUpdater: NSObject {
 extension AppUpdater: @preconcurrency SPUStandardUserDriverDelegate {
     var supportsGentleScheduledUpdateReminders: Bool { true }
 
-    /// Sparkle shows a scheduled update itself, behind other apps when the user is busy,
-    /// so a dictation is never interrupted. The menu then offers it too.
+    /// Sparkle shows a scheduled update itself. While another app is in front it waits for
+    /// the user to come to Orra, or orders its window behind that app when Orra is not in the
+    /// Dock, so a dictation is not interrupted. The menu offers the update meanwhile.
     func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
         true
     }

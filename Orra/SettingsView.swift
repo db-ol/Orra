@@ -275,7 +275,7 @@ private struct AboutSettings: View {
                 }
                 .disabled(!updater.canCheckForUpdates)
             } footer: {
-                Text("About once a day Orra asks GitHub for the latest version, and sends nothing about your Mac. An update is installed only after you choose to.")
+                Text("About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it.")
                     .foregroundStyle(.secondary)
             }
             Section {

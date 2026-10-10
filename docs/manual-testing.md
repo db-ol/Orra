@@ -621,8 +621,9 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
 - [ ] Check for Updates in the menu says Orra is up to date for the newest release, and
   offers the newer one with its notes from an older release. Installing it replaces Orra
   and opens the new version, which keeps Accessibility and the microphone.
-- [ ] An update found by an automatic check shows behind the app you are in, and the menu
-  then offers Install Orra with its version.
+- [ ] An update found by an automatic check does not come in front of the app you are in.
+  The menu offers Install Orra with its version, and the update window shows once you
+  switch to Orra. There is no checkbox to install updates automatically.
 
 ## Not implemented
 

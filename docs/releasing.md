@@ -60,7 +60,7 @@ take minutes, and for a new team its first submissions can wait hours.
 Publish a release only after trying its DMG. The tag names the version, and the feed must
 be an asset of the release, since SUFeedURL reads releases/latest:
 
-    git tag v0.1.0 && git push origin v0.1.0
+    git tag v0.1.0 "$(cat build/release/0.1.0/commit)" && git push origin v0.1.0
     gh release create v0.1.0 --title "Orra 0.1.0" --notes-file docs/release-notes/0.1.0.md \
         build/release/0.1.0/Orra-0.1.0.dmg build/release/0.1.0/Orra-0.1.0.dmg.sha256 \
         build/release/0.1.0/appcast.xml

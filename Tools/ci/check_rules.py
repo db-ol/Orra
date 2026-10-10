@@ -195,6 +195,8 @@ INFO_PLIST = {
     "SURequireSignedFeed": True,
     "SUVerifyUpdateBeforeExtraction": True,
     "SUEnableSystemProfiling": False,
+    # Every install waits for the user's choice: Sparkle offers no automatic installs.
+    "SUAllowsAutomaticUpdates": False,
 }
 RESOLVED_FILE = "Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 DEPENDENCIES_DOC = "docs/dependencies.md"
