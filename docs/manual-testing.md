@@ -125,6 +125,9 @@ Build and test commands, run in the repository root:
     without the pasted text. CorrectionLearningTests checks that nothing is read while
     learning is off, that the first fix adds the word and tells the user, a quiet new
     mishearing, and Undo. LearnedNoticeTests checks the notice and its panel.
+    OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
+    character: grammar pairs never offered, the guessed word from the system tokenizer,
+    and adding, editing and declining the offered word.
   - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
     translation marked translated, that each translation keeps the arguments of the
     English string, that the Chinese uses full width punctuation and a space next to a
@@ -563,8 +566,14 @@ corrections under Vocabulary in Settings first:
   pointer over it the ring shows a pause sign, and after the pointer leaves it counts 4. The app you are in keeps the focus. The next dictation is more likely to
   write it right, and Orra never changes the text itself.
 - [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
-  Chinese character such as 的 to 得, deleting words, or rewriting the sentence adds
-  nothing. Fixing a word and then typing a period learns the word without the period.
+  Chinese character as grammar such as 的 to 得, deleting words, or rewriting the sentence
+  adds nothing. Fixing a word and then typing a period learns the word without the period.
+- [ ] Dictate 我用通义千问写代码 so it comes out as 通一千问 and fix the one character: no
+  word is added, and a notice asks "Add a word to your vocabulary?" with 通义千问 in its
+  field. The app you are in keeps the focus and typing there still works while the notice
+  shows. Click into the field, edit the word, and press Return or Add: the word is in the
+  vocabulary and the focus is back in the app you were in. The ring pauses while you
+  edit. Close it, or let it run out, and the same fix does not offer it again.
 - [ ] Dictate four lines with the same misheard name, switch to another app for a moment,
   come back and fix them within 3 minutes: one notice comes. Undo takes the name out of
   the vocabulary, and fixing it again, misheard any way, does not add it again.
