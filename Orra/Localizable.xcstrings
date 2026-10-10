@@ -93,6 +93,16 @@
         }
       }
     },
+    "About once a day Orra asks GitHub for the latest version, and sends nothing about your Mac. An update is installed only after you choose to." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 大约每天向 GitHub 查询一次最新版本，不发送任何关于你的 Mac 的信息。只有你同意后才会安装更新。"
+          }
+        }
+      }
+    },
     "Add" : {
       "localizations" : {
         "zh-Hans" : {
@@ -179,6 +189,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取消下载"
+          }
+        }
+      }
+    },
+    "Check for Updates…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新…"
+          }
+        }
+      }
+    },
+    "Check for updates automatically" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
           }
         }
       }
@@ -413,6 +443,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住一个键，说话，然后松开。Orra 会把你说的话输入到你正在使用的 App 中。语音在这台 Mac 上转成文字。"
+          }
+        }
+      }
+    },
+    "Install Orra %@…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装 Orra %@…"
           }
         }
       }
@@ -907,12 +947,12 @@
         }
       }
     },
-    "Speech is turned into text on this Mac. Orra goes online only to download the speech model, when you ask it to." : {
+    "Speech is turned into text on this Mac. Orra goes online only to download the speech model when you ask it to, and to check for updates when you allow it." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "语音在这台 Mac 上转成文字。Orra 只在你要求下载语音模型时才联网。"
+            "value" : "语音在这台 Mac 上转成文字。Orra 只在两种情况下联网：你要求下载语音模型时，以及你允许后检查更新时。"
           }
         }
       }

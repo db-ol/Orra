@@ -37,6 +37,7 @@ struct SettingsView: View {
     let models: ModelInstaller
     let learning: CorrectionLearning
     let dockIcon: DockIcon
+    let updater: AppUpdater
     @State private var page: SettingsPage? = .general
 
     var body: some View {
@@ -56,7 +57,7 @@ struct SettingsView: View {
             case .vocabulary:
                 VocabularySettings(pushToTalk: pushToTalk, learning: learning)
             case .about:
-                AboutSettings(models: models, pushToTalk: pushToTalk)
+                AboutSettings(models: models, pushToTalk: pushToTalk, updater: updater)
             }
         }
         .toolbar(removing: .sidebarToggle)
@@ -243,6 +244,7 @@ private struct VocabularySettings: View {
 private struct AboutSettings: View {
     let models: ModelInstaller
     let pushToTalk: PushToTalkController
+    @Bindable var updater: AppUpdater
 
     var body: some View {
         Form {
@@ -267,7 +269,17 @@ private struct AboutSettings: View {
                 }
             }
             Section {
-                Text("Speech is turned into text on this Mac. Orra goes online only to download the speech model, when you ask it to.")
+                Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
+                Button("Check for Updates…") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
+            } footer: {
+                Text("About once a day Orra asks GitHub for the latest version, and sends nothing about your Mac. An update is installed only after you choose to.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Text("Speech is turned into text on this Mac. Orra goes online only to download the speech model when you ask it to, and to check for updates when you allow it.")
                     .foregroundStyle(.secondary)
                 Link("Source code and privacy details", destination: URL(string: "https://github.com/db-ol/Orra")!)
             }
@@ -350,6 +362,7 @@ struct TalkKeyToggles: View {
         openAtLogin: .live(),
         models: .live(),
         learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in .added }, removeFromVocabulary: { _ in }),
-        dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true })
+        dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
+        updater: AppUpdater()
     )
 }

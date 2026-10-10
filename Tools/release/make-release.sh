@@ -1,19 +1,22 @@
 #!/bin/bash
 # Builds a release of Orra: an Apple Silicon app signed with the team's Developer ID,
-# notarized and stapled, in a signed, notarized and stapled DMG.
+# notarized and stapled, in a signed, notarized and stapled DMG, and the Sparkle feed
+# appcast.xml that offers the DMG to earlier versions, signed with the update key.
 #
 #     Tools/release/make-release.sh 0.1.0 1
 #
 # The arguments are the version users see and the build number, which must grow with every
 # release. Output goes to build/release/<version>/. docs/releasing.md has the setup: the
-# Developer ID Application certificate in the login keychain and the notarytool profile
-# "orra-notary". Pass --no-notarize as a third argument to stop before the upload, to check
+# Developer ID Application certificate and the Sparkle update key in the login keychain, and
+# the notarytool profile "orra-notary". The release notes come from
+# docs/release-notes/<version>.md, in Markdown, and show in the update window. Pass --no-notarize as a third argument to stop before the upload, to check
 # a build quickly.
 set -euo pipefail
 
 TEAM="X77KW5VYFJ"
 IDENTITY="Developer ID Application: Jiayao Tang ($TEAM)"
 PROFILE="orra-notary"
+UPDATE_KEY_ACCOUNT="io.github.db-ol.Orra"
 
 usage="usage: make-release.sh <version> <build> [--no-notarize]"
 version="${1:?$usage}"
@@ -35,6 +38,9 @@ archive="$out/Orra.xcarchive"
 export_dir="$out/export"
 app="$export_dir/Orra.app"
 dmg="$out/Orra-$version.dmg"
+notes="$root/docs/release-notes/$version.md"
+# Sparkle's tools, from the package Xcode resolves into the derived data below.
+sparkle="$root/build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin"
 
 cd "$root"
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -45,6 +51,10 @@ security find-identity -v -p codesigning | grep -q "$IDENTITY" || {
     echo "The certificate \"$IDENTITY\" is not in the keychain." >&2
     exit 1
 }
+if $notarize && [[ ! -s "$notes" ]]; then
+    echo "Write the release notes in $notes first. The update window shows them." >&2
+    exit 1
+fi
 
 rm -rf "$out"
 mkdir -p "$out"
@@ -135,6 +145,16 @@ if $notarize; then
     xcrun stapler staple "$dmg"
     spctl --assess --type open --context context:primary-signature -v "$dmg"
     spctl --assess --type execute -v "$app"
+
+    # The feed. Orra installs only a DMG whose signature matches its SUPublicEDKey, from a
+    # feed that is signed too.
+    [[ -x "$sparkle/sign_update" ]] || { echo "Sparkle's sign_update is not at $sparkle" >&2; exit 1; }
+    signature="$("$sparkle/sign_update" --account "$UPDATE_KEY_ACCOUNT" -p "$dmg")"
+    "$sparkle/sign_update" --account "$UPDATE_KEY_ACCOUNT" --verify "$dmg" "$signature"
+    python3 -I "$root/Tools/release/appcast.py" "$version" "$build" "$dmg" "$signature" "$notes" > "$out/appcast.xml"
+    "$sparkle/sign_update" --account "$UPDATE_KEY_ACCOUNT" "$out/appcast.xml"
+    "$sparkle/sign_update" --account "$UPDATE_KEY_ACCOUNT" --verify "$out/appcast.xml"
+    echo "Feed: $out/appcast.xml"
 fi
 
 shasum -a 256 "$dmg" | tee "$dmg.sha256"

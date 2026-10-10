@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 420 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 422 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -611,6 +611,18 @@ Dock icon, added on 2026-10-10, not verified yet:
   menu brings it back while the window is open. The choice stays after reopening Orra.
 - [ ] Dictating into another app works the same with the icon shown, and the recording
   indicator never makes Orra the active app.
+
+Updates from inside the app, added on 2026-10-10, not verified yet:
+
+- [ ] A release DMG installs by dragging Orra to Applications and opens without a warning.
+  The first launch reaches no network until you download the model.
+- [ ] At the second launch Orra asks whether to check for updates automatically. Settings,
+  About shows the answer and changes it.
+- [ ] Check for Updates in the menu says Orra is up to date for the newest release, and
+  offers the newer one with its notes from an older release. Installing it replaces Orra
+  and opens the new version, which keeps Accessibility and the microphone.
+- [ ] An update found by an automatic check shows behind the app you are in, and the menu
+  then offers Install Orra with its version.
 
 ## Not implemented
 

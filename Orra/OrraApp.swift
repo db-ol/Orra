@@ -5,7 +5,7 @@ import SwiftUI
 
     var body: some Scene {
         MenuBarExtra {
-            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, clipboard: appDelegate.clipboard) {
+            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, clipboard: appDelegate.clipboard, updater: appDelegate.updater) {
                 appDelegate.welcome.show()
             }
         } label: {
@@ -13,7 +13,7 @@ import SwiftUI
         }
 
         Settings {
-            SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon)
+            SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
         }
     }
 }

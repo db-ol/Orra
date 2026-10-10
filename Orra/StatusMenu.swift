@@ -7,6 +7,7 @@ struct StatusMenu: View {
     let openAtLogin: OpenAtLogin
     let inputs: AudioInputList
     let clipboard: ClipboardWord
+    let updater: AppUpdater
     let showWelcome: () -> Void
     @Environment(\.openSettings) private var openSettings
 
@@ -100,6 +101,16 @@ struct StatusMenu: View {
             Button("Setup Guide…") {
                 showWelcome()
             }
+        }
+        if let version = updater.waitingUpdate {
+            Button("Install Orra \(version)…") {
+                updater.checkForUpdates()
+            }
+        } else {
+            Button("Check for Updates…") {
+                updater.checkForUpdates()
+            }
+            .disabled(!updater.canCheckForUpdates)
         }
         Button("Settings…") {
             // An accessory app is not the active app when its menu is used.

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		937FD6AB307413F400086B6B /* Qwen3ASR in Frameworks */ = {isa = PBXBuildFile; productRef = 937FD6AA307413F400086B6B /* Qwen3ASR */; };
+		93F0DFA6307A196E00A80D8D /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 93F0DFA5307A196E00A80D8D /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,9 +26,22 @@
 		93059C8F3070C22500EC5A3A /* OrraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OrraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		93F0DFA3307A191300A80D8D /* Exceptions for "Orra" folder in "Orra" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 000000000000000100000000 /* Orra */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* Orra */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				93F0DFA3307A191300A80D8D /* Exceptions for "Orra" folder in "Orra" target */,
+			);
 			path = Orra;
 			sourceTree = "<group>";
 		};
@@ -43,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				937FD6AB307413F400086B6B /* Qwen3ASR in Frameworks */,
+				93F0DFA6307A196E00A80D8D /* Sparkle in Frameworks */,
 			);
 		};
 		93059C8C3070C22500EC5A3A /* Frameworks */ = {
@@ -58,6 +73,7 @@
 			children = (
 				000000000000000000000010 /* Orra */,
 				93059C903070C22500EC5A3A /* OrraTests */,
+				93F0DFA4307A196E00A80D8D /* Frameworks */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -69,6 +85,13 @@
 				93059C8F3070C22500EC5A3A /* OrraTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		93F0DFA4307A196E00A80D8D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -90,6 +113,7 @@
 			name = Orra;
 			packageProductDependencies = (
 				937FD6AA307413F400086B6B /* Qwen3ASR */,
+				93F0DFA5307A196E00A80D8D /* Sparkle */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* Orra.app */;
@@ -146,6 +170,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				937FD6A9307413F400086B6B /* XCRemoteSwiftPackageReference "speech-swift" */,
+				93F0DFA1307A187000A80D8D /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -344,6 +369,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Orra/Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orra records your voice while you hold the talk key and turns it into text on this Mac.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -397,6 +423,7 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Orra/Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orra records your voice while you hold the talk key and turns it into text on this Mac.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -513,6 +540,14 @@
 				revision = 1f54e56cf137078ed681a03e0955e777f7314610;
 			};
 		};
+		93F0DFA1307A187000A80D8D /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -520,6 +555,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 937FD6A9307413F400086B6B /* XCRemoteSwiftPackageReference "speech-swift" */;
 			productName = Qwen3ASR;
+		};
+		93F0DFA5307A196E00A80D8D /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 93F0DFA1307A187000A80D8D /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

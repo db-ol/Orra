@@ -4,8 +4,8 @@
 AGENTS.md says that signing, the Development Team, the bundle IDs, entitlements, App
 Sandbox, the deployment target and the dependencies change only with the maintainer's
 approval. This script compares the build settings, package references and linked
-products listed below with project.pbxproj, the pins with Package.resolved, and checks
-that docs/dependencies.md names every pinned package. It covers the settings listed here,
+products listed below with project.pbxproj, the pins with Package.resolved, the update
+keys with Orra/Info.plist, and checks that docs/dependencies.md names every pinned package. It covers the settings listed here,
 not every way a build can change signing. When the maintainer approves a change, the same
 commit updates the expected values here.
 
@@ -15,6 +15,7 @@ Run from anywhere, with Python 3.8 or later and nothing outside the standard lib
 """
 
 import json
+import plistlib
 import re
 import sys
 from pathlib import Path
@@ -87,6 +88,10 @@ EXPECTED_BUILD_SETTINGS = {
         "Orra": "NO",
     },
     "CODE_SIGN_ENTITLEMENTS": {},
+    # The Info.plist file whose update keys INFO_PLIST below checks.
+    "INFOPLIST_FILE": {
+        "Orra": "Orra/Info.plist",
+    },
     "CODE_SIGN_STYLE": {
         "Orra": "Automatic",
         "OrraTests": "Automatic",
@@ -118,16 +123,24 @@ EXPECTED_PACKAGE_REFERENCES = {
         "kind": "revision",
         "revision": "1f54e56cf137078ed681a03e0955e777f7314610",
     },
+    "https://github.com/sparkle-project/Sparkle": {
+        "kind": "exactVersion",
+        "version": "2.10.0",
+    },
 }
 
 # The package products each target links, as (product, package location).
 EXPECTED_PRODUCTS = {
-    "Orra": {("Qwen3ASR", "https://github.com/soniqo/speech-swift")},
+    "Orra": {
+        ("Qwen3ASR", "https://github.com/soniqo/speech-swift"),
+        ("Sparkle", "https://github.com/sparkle-project/Sparkle"),
+    },
     "OrraTests": set(),
 }
 
 # Every package in Package.resolved, by identity, with the revision it is pinned to.
 EXPECTED_PINS = {
+    "sparkle": "eef1a539a373c1f1a320624b1130fc5de7b2e100",
     "async-http-client": "4c005f955e83f888d5616e579717a36d2dfc6301",
     "compress-nio": "e1caa19077dda4b00441142ef57da3db02acd466",
     "eventsource": "86b5096ac59ab46e66bd1f6377c604bc1dab0bc2",
@@ -171,6 +184,18 @@ EXPECTED_PINS = {
 }
 
 PROJECT_FILE = "Orra.xcodeproj/project.pbxproj"
+INFO_PLIST_FILE = "Orra/Info.plist"
+
+# The whole Info.plist that Xcode merges into the generated one. Its keys decide where
+# updates come from and which key must have signed them, so a changed feed or key would
+# hand the users' Macs to whoever holds it.
+INFO_PLIST = {
+    "SUFeedURL": "https://github.com/db-ol/Orra/releases/latest/download/appcast.xml",
+    "SUPublicEDKey": "knDawRcymzzet6JvlPGr9OstB1K25ERxKr3nwdGLsZw=",
+    "SURequireSignedFeed": True,
+    "SUVerifyUpdateBeforeExtraction": True,
+    "SUEnableSystemProfiling": False,
+}
 RESOLVED_FILE = "Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 DEPENDENCIES_DOC = "docs/dependencies.md"
 
@@ -401,6 +426,19 @@ def repository_name(location):
     return "/".join(path.split("/")[-2:])
 
 
+def check_info_plist(info):
+    problems = []
+    for key in sorted(set(info) | set(INFO_PLIST)):
+        expected = INFO_PLIST.get(key)
+        if key not in info:
+            problems.append(f"{INFO_PLIST_FILE}: {key} is not set, expected {expected!r}")
+        elif expected is None:
+            problems.append(f"{INFO_PLIST_FILE}: {key} is {info[key]!r}, expected it not to be set")
+        elif info[key] != expected:
+            problems.append(f"{INFO_PLIST_FILE}: {key} is {info[key]!r}, expected {expected!r}")
+    return problems
+
+
 def check_dependency_doc(doc, pins):
     problems = []
     for identity, pin in sorted(pins.items()):
@@ -417,14 +455,16 @@ def main(arguments):
         project = PropertyListParser((root / PROJECT_FILE).read_text(encoding="utf-8")).parse()
         resolved = json.loads((root / RESOLVED_FILE).read_text(encoding="utf-8"))
         doc = (root / DEPENDENCIES_DOC).read_text(encoding="utf-8")
+        info = plistlib.loads((root / INFO_PLIST_FILE).read_bytes())
         setting_problems, configuration_count = check_build_settings(project)
         package_problems = check_packages(project)
         pin_problems, pins = check_pins(resolved)
         doc_problems = check_dependency_doc(doc, pins)
-    except (OSError, ValueError, KeyError, TypeError, AttributeError, ParseError) as error:
+        info_problems = check_info_plist(info)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, ParseError, plistlib.InvalidFileException) as error:
         print(f"Rules check could not read the repository at {root}. {type(error).__name__}: {error}")
         return 2
-    problems = setting_problems + package_problems + pin_problems + doc_problems
+    problems = setting_problems + package_problems + pin_problems + doc_problems + info_problems
     if problems:
         print("Rules check failed:")
         for problem in problems:
@@ -435,8 +475,9 @@ def main(arguments):
         return 1
     print(
         f"Rules check passed: {len(EXPECTED_BUILD_SETTINGS)} build settings in {configuration_count} "
-        f"build configurations, {len(EXPECTED_PACKAGE_REFERENCES)} package reference with its "
-        f"linked products, {len(pins)} pinned packages, all named in {DEPENDENCIES_DOC}."
+        f"build configurations, {len(EXPECTED_PACKAGE_REFERENCES)} package references with their "
+        f"linked products, {len(pins)} pinned packages, all named in {DEPENDENCIES_DOC}, and the "
+        f"update keys in {INFO_PLIST_FILE}."
     )
     return 0
 
