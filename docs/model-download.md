@@ -220,16 +220,20 @@ the weights in their APIs. The whole weights were not downloaded from each serve
 2. modelscope.cn, a mirror in its mlx-community organization, whose weights come from
    cdn-lfs-cn-1.modelscope.cn:
    `https://modelscope.cn/models/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/ec7ca96008a45bebdd03ad3d09d86f6e61a3e4af/<file>`
-3. hf-mirror.com, which hands the weights on to Hugging Face's own download servers:
+3. hf-mirror.com, which hands the weights and tokenizer.json on to Hugging Face's own
+   download servers:
    `https://hf-mirror.com/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b/<file>`
 
 Hugging Face main was at 50d42775 on 2026-10-10. It changed only tokenizer_config.json
 after the upload in 7494131f. ModelScope's ec7ca960 has the same change.
 
 chat_template.jinja and model.safetensors.index.json are left out: Orra writes the chat
-prompt itself, and the weights are in one file. tokenizer.json, 11 MB and fetched whole
-like the small files, is for the tokenizer of swift-transformers. vocab.json and
-merges.txt hold the same vocabulary and merges and are fetched as before.
+prompt itself, and the weights are in one file. tokenizer.json, 11 MB, is for the
+tokenizer of swift-transformers. Like the small files it is fetched whole, without a Range
+request. Like the weights it is a large stored file, so huggingface.co and hf-mirror.com
+redirect it to Hugging Face's download servers (us.aws.cdn.hf.co on 2026-10-11), and
+modelscope.cn serves it itself. vocab.json and merges.txt hold the same vocabulary and
+merges and are fetched as before.
 
 | File | Bytes | SHA-256 |
 |---|---|---|
