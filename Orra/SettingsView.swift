@@ -201,6 +201,7 @@ private struct VocabularySettings: View {
                         Spacer()
                         Button {
                             pushToTalk.setVocabulary(Vocabulary.removing(term, from: terms))
+                            learning.removedFromVocabulary(term)
                         } label: {
                             Image(systemName: "minus.circle")
                         }

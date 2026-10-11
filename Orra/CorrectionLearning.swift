@@ -222,8 +222,9 @@ final class CorrectionWatcher {
 /// Learning from the user's corrections: off until the user turns it on. Keeps the word
 /// pairs it saw. The first time a word is corrected, adds it to the vocabulary and tells
 /// `onLearned`, which shows a notice with Undo. A word learned before takes a new misheard
-/// spelling quietly, and is not added again when the user took it out of the vocabulary.
-/// A word the user undid is never learned again. After a fix of one Chinese character it
+/// spelling quietly. A learned word the user takes out of the vocabulary is forgotten, so
+/// the next fix learns it again with the notice. A word the user undid is never learned
+/// again. After a fix of one Chinese character it
 /// adds nothing on its own, and tells `onSuggest`, which offers the guessed word for the
 /// user to add. The text itself is never changed: the vocabulary only helps the model hear
 /// the word.
@@ -297,7 +298,7 @@ final class CorrectionLearning {
         isInVocabulary: @escaping (String) -> Bool
     ) -> CorrectionLearning {
         let url = storeURL
-        return CorrectionLearning(
+        let learning = CorrectionLearning(
             isOn: UserDefaults.standard.bool(forKey: settingKey),
             store: CorrectionStore.load(from: url),
             watcher: CorrectionWatcher(),
@@ -313,6 +314,8 @@ final class CorrectionLearning {
             removeFromVocabulary: removeFromVocabulary,
             isInVocabulary: isInVocabulary
         )
+        learning.forgetRemovedWords()
+        return learning
     }
 
     static let settingKey = "learnsFromCorrections"
@@ -380,8 +383,9 @@ final class CorrectionLearning {
         }
         store.record(correction, at: now())
         let word = correction.corrected
-        // Undone before: never again. Learned before: the new mishearing is kept quietly,
-        // and a word the user took out of the vocabulary stays out.
+        // Undone before: never again. Learned before: the new mishearing is kept quietly.
+        // A word the user took out of the vocabulary has no accepted pairs left, so it is
+        // learned again.
         guard !store.has(.dismissed, for: word), !store.has(.accepted, for: word) else {
             if !store.has(.dismissed, for: word) {
                 _ = store.acceptSeen(of: word)
@@ -427,6 +431,27 @@ final class CorrectionLearning {
               !store.has(.accepted, for: word) else { return }
         added.remove(at: index)
         removeFromVocabulary(word)
+    }
+
+    /// The user took a word out of the vocabulary: forgets its accepted pairs, so the next
+    /// fix learns it again and shows the notice. A word the user undid stays undone.
+    func removedFromVocabulary(_ word: String) {
+        let lowered = word.lowercased()
+        added.removeAll { $0.correction.corrected.lowercased() == lowered }
+        guard store.acceptedWords.contains(where: { $0.lowercased() == lowered }) else { return }
+        store.forgetAccepted(of: word)
+        saveStore(store)
+    }
+
+    /// Forgets the accepted pairs of learned words that are no longer in the vocabulary,
+    /// such as words removed before Orra forgot them on removal.
+    func forgetRemovedWords() {
+        let removed = store.acceptedWords.filter { !isInVocabulary($0) }
+        guard !removed.isEmpty else { return }
+        for word in removed {
+            store.forgetAccepted(of: word)
+        }
+        saveStore(store)
     }
 
     /// Forgets every pair, the undone ones too. The vocabulary keeps its words.

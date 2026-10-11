@@ -345,13 +345,64 @@ struct CorrectionLearningTests {
         #expect(Set(accepted(learning)) == [pair, other])
     }
 
-    @Test func aLearnedWordTheUserTookOutIsNotAddedAgain() {
+    @Test func aLearnedWordTheUserRemovesIsLearnedAgainWithTheNotice() {
         let vocabulary = VocabularyBox()
         let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
         learning.record(pair)
-        vocabulary.words = []
         learning.record(Correction(heard: "可劳德", corrected: "Claude"))
+        // Removed in Settings, in another case than learned.
+        vocabulary.words = []
+        learning.removedFromVocabulary("claude")
+        #expect(accepted(learning).isEmpty)
+        learning.record(pair)
+        #expect(vocabulary.words == ["Claude"])
+        #expect(learned.map(\.correction) == [pair, pair])
+        #expect(learned.last?.pairs == [pair])
+        // Undo after that is still for good.
+        learning.undo(learned[1])
+        learning.removedFromVocabulary("Claude")
+        learning.record(pair)
         #expect(vocabulary.words.isEmpty)
+        #expect(learned.count == 2)
+    }
+
+    @Test func removingAWordThatWasNeverLearnedChangesNothing() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.record(pair)
+        learning.undo(learned[0])
+        let before = learning.store
+        learning.removedFromVocabulary("Claude")
+        learning.removedFromVocabulary("Orra")
+        #expect(learning.store == before)
+    }
+
+    @Test func learnedWordsRemovedBeforeAreForgottenAtLaunch() {
+        // A store from before removal forgot words: Claude was taken out of the vocabulary,
+        // Orra is still there.
+        var store = CorrectionStore()
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let orra = Correction(heard: "Ora", corrected: "Orra")
+        store.record(pair, at: now)
+        store.record(orra, at: now)
+        _ = store.acceptSeen(of: "Claude")
+        _ = store.acceptSeen(of: "Orra")
+        var saved: [CorrectionStore] = []
+        let learning = CorrectionLearning(
+            isOn: true, store: store, watcher: CorrectionWatcher(environment: ScriptedField([""]).environment),
+            saveSetting: { _ in }, saveStore: { saved.append($0) },
+            addToVocabulary: { _ in .added }, removeFromVocabulary: { _ in },
+            isInVocabulary: { $0.lowercased() == "orra" }
+        )
+        learning.forgetRemovedWords()
+        #expect(learning.store.entries.map(\.correction) == [orra])
+        #expect(saved.count == 1)
+        learning.forgetRemovedWords()
+        #expect(saved.count == 1)
     }
 
     @Test func separateFixesInOnePasteAreEachKept() async {

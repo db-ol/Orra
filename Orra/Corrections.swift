@@ -467,6 +467,19 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         entries.contains { $0.correction.corrected == word && $0.state == state }
     }
 
+    /// Forgets the accepted pairs of a word the user took out of the vocabulary, ignoring
+    /// case as the vocabulary does, so the next fix learns it again. Pairs the user undid
+    /// stay, so an undone word is still never learned again.
+    mutating func forgetAccepted(of word: String) {
+        let word = word.lowercased()
+        entries.removeAll { $0.state == .accepted && $0.correction.corrected.lowercased() == word }
+    }
+
+    /// The words that have accepted pairs.
+    var acceptedWords: Set<String> {
+        Set(entries.filter { $0.state == .accepted }.map(\.correction.corrected))
+    }
+
     /// Marks the pairs as undone, so their word is not learned again.
     mutating func dismiss(_ corrections: [Correction]) {
         for index in entries.indices where corrections.contains(entries[index].correction) {

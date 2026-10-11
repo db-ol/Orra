@@ -126,7 +126,8 @@ Build and test commands, run in the repository root:
     reported fix, and no reading after leaving the app, under secure input, or in a field
     without the pasted text. CorrectionLearningTests checks that nothing is read while
     learning is off, that the first fix adds the word and tells the user, a quiet new
-    mishearing, and Undo. LearnedNoticeTests checks the notice and its panel.
+    mishearing, Undo, and that a learned word removed from the vocabulary is learned
+    again. LearnedNoticeTests checks the notice and its panel.
     OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
     character: grammar pairs never offered, the guessed word from the system tokenizer,
     and adding, editing and declining the offered word.
@@ -584,6 +585,9 @@ corrections under Vocabulary in Settings first:
 - [ ] Dictate four lines with the same misheard name, switch to another app for a moment,
   come back and fix them within 3 minutes: one notice comes. Undo takes the name out of
   the vocabulary, and fixing it again, misheard any way, does not add it again.
+- [ ] Fix a misheard name so it is learned, then remove it with the minus button under
+  Vocabulary in Settings. Fix the same name again: it is added again and the notice with
+  Undo shows.
 - [ ] When a dictation comes out as 陈阳写的那些文档一样嘛, fix it to 晨阳写的那些文档一样吗:
   only the name 晨阳 is offered, never the whole sentence. Fix 通一千万 to
   通义千问: 通义千问 is learned, not 义千问.
