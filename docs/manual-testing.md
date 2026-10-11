@@ -549,7 +549,7 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
 - [ ] With a USB microphone chosen in Orra, start speaking right at the sound: the first
   syllable is in the text. The sound comes only once the microphone records.
 - [ ] Hold the talk key in Notes: a moment after the press a short sound plays and a dark
-  indicator appears at the bottom of the screen with the pointer, with bars that move
+  indicator appears at the bottom of the screen with the pointer, a green microphone with bars that move
   with your voice. Notes keeps the focus: its text cursor still blinks, and the menu bar
   still shows Notes.
 - [ ] A shortcut with the talk key, such as right Control+C in Terminal, plays no sound and
@@ -605,7 +605,8 @@ corrections under Vocabulary in Settings first:
 
 - [ ] Dictate a sentence with a name Orra gets wrong into Notes and fix the name by hand: a
   second or two after you stop typing, a notice above the recording indicator says the
-  name was added to the vocabulary. It stays 15 seconds, and while the pointer is over it. The app you are in keeps the focus. The next dictation is more likely to
+  name was added to the vocabulary. A ring counts down the 10 seconds it stays. With the
+  pointer over it the ring shows a pause sign, and after the pointer leaves it counts 4. The app you are in keeps the focus. The next dictation is more likely to
   write it right, and Orra never changes the text itself.
 - [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
   Chinese character such as 的 to 得, deleting words, or rewriting the sentence adds

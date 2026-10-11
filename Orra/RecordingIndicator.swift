@@ -167,7 +167,7 @@ struct RecordingIndicatorView: View {
         case .listening:
             HStack(spacing: 10) {
                 Image(systemName: "mic.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(.green)
                 LevelMeterBars(level: feedback.level)
             }
             .indicatorStyle()
