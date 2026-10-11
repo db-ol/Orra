@@ -261,16 +261,24 @@ struct IndicatorBars: View {
             return minimumHeight + waveHeight * CGFloat(0.5 + 0.5 * sin(angle))
         }
     }
+
+    /// The bar heights while Orra transcribes with Reduce Motion on: one still frame of the
+    /// wave, so the bars do not move but still look different from listening in silence,
+    /// where every bar sits at the minimum.
+    nonisolated static var restingWaveHeights: [CGFloat] {
+        waveHeights(phase: 0.25)
+    }
 }
 
-/// The bars while Orra transcribes. With Reduce Motion on they rest at the minimum.
+/// The bars while Orra transcribes. With Reduce Motion on they hold one still frame of
+/// the wave.
 private struct TranscribingBars: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private static let period = 1.2
 
     var body: some View {
         if reduceMotion {
-            IndicatorBars(heights: IndicatorBars.heights(level: 0))
+            IndicatorBars(heights: IndicatorBars.restingWaveHeights)
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
                 let phase = context.date.timeIntervalSinceReferenceDate / Self.period

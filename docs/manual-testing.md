@@ -20,8 +20,8 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 1219 test cases passed, 145 of them filler
-  rule cases and 633 number rule cases, including the real model tests below. Three heavier real model tests are
+- The test command ends in TEST SUCCEEDED with 2080 test cases passed, 162 of them filler
+  rule cases and 1394 number rule cases, including the real model tests below. Three heavier real model tests are
   skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -277,7 +277,10 @@ Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still 
   committed unchanged in the baseline commit.
 
 Fn hotkey, added on 2026-10-04, not verified yet. Since 2026-10-05 fn is no longer the
-default talk key. Turn it on under Talk Key in the menu for the fn checks:
+default talk key. Turn it on under Talk Key in the menu for the fn checks, and keep "Show
+the recording indicator" on in Settings. The indicator shows only once the microphone
+records, so for the checks that expect no indicator, also listen for no start sound and
+look for no orange microphone indicator in the menu bar:
 
 - [ ] At launch without Accessibility access, the welcome window appears instead of the
   system prompt, the menu bar icon is a crossed out mic, and the menu shows "The talk
@@ -290,7 +293,8 @@ default talk key. Turn it on under Talk Key in the menu for the fn checks:
   System Settings > Keyboard, such as switching the input source.
 - [ ] Fn+Delete still deletes forward and Fn+arrows still jump, and no recording
   indicator stays on screen.
-- [ ] Fn pressed while Command or Shift is already held shows no recording indicator.
+- [ ] Fn pressed while Command or Shift is already held shows no recording indicator,
+  plays no start sound, and turns on no orange microphone indicator.
 - [ ] Typing in other apps feels the same while Orra runs.
 - [ ] After quitting Orra, the fn key behaves as before.
 - [ ] Running the tests shows no Accessibility prompt.
@@ -579,11 +583,17 @@ Calmer recording indicator, added on 2026-10-10, not verified yet:
 
 - [ ] While you hold the talk key, the Orra icon in the menu bar stays the plain mic, and
   macOS shows its orange microphone indicator in the menu bar. While Orra transcribes, the
-  Orra icon stays the same too.
+  Orra icon stays the same too. If the icon showed a warning triangle from the last
+  dictation, it turns into the plain mic when you press the key, since a new hold clears
+  the last problem.
+- [ ] With "Show the recording indicator" off in Settings, a dictation fills the Orra icon
+  while you hold the key and turns it into a waveform after release until the text is
+  pasted. Then it is the plain mic again.
 - [ ] The capsule, the bars and the messages read well over a white page and over a dark
   window, in light and in dark mode.
-- [ ] With Reduce Motion on (System Settings, Accessibility, Display), the bars rest low
-  while Orra transcribes instead of moving.
+- [ ] With Reduce Motion on (System Settings, Accessibility, Display), the bars hold a
+  still, low wave while Orra transcribes instead of moving, and it looks different from
+  the flat row of bars while you hold the key in silence.
 - [ ] VoiceOver reads "Listening" while you hold the key, "Transcribing…" after release,
   and the message text when a dictation pastes nothing.
 

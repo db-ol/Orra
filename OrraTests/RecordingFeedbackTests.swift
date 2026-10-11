@@ -378,6 +378,10 @@ struct IndicatorBarsTests {
         // Well below a voice, so the bars clearly settle.
         #expect(high < IndicatorBars.maximumHeight / 2)
         #expect(IndicatorBars.waveHeights(phase: 0) != IndicatorBars.waveHeights(phase: 0.25))
+        let resting = IndicatorBars.restingWaveHeights
+        #expect(resting != IndicatorBars.heights(level: 0))
+        #expect(Set(resting).count > 1)
+        #expect(resting.allSatisfy { $0 >= low - 0.001 && $0 <= high + 0.001 })
         let a = IndicatorBars.waveHeights(phase: 0.3)
         let b = IndicatorBars.waveHeights(phase: 1.3)
         #expect(zip(a, b).allSatisfy { abs($0 - $1) < 0.001 })
@@ -389,6 +393,8 @@ struct MenuBarIconTests {
     private func symbol(
         modelSymbol: String? = nil,
         isHotkeyActive: Bool = true,
+        dictation: PushToTalkStateMachine.State = .idle,
+        showsIndicator: Bool = true,
         modelState: PushToTalkController.ModelState = .ready,
         microphoneAccess: MicrophoneAccess = .authorized,
         hasProblem: Bool = false
@@ -396,6 +402,8 @@ struct MenuBarIconTests {
         MenuBarIcon.symbolName(
             modelSymbol: modelSymbol,
             isHotkeyActive: isHotkeyActive,
+            dictation: dictation,
+            showsIndicator: showsIndicator,
             modelState: modelState,
             microphoneAccess: microphoneAccess,
             hasProblem: hasProblem
@@ -404,6 +412,22 @@ struct MenuBarIconTests {
 
     @Test func readyIsThePlainMicrophone() {
         #expect(symbol() == "mic")
+    }
+
+    @Test func withTheIndicatorOnTheIconStaysTheSameDuringADictation() {
+        #expect(symbol(dictation: .listening) == "mic")
+        #expect(symbol(dictation: .processing) == "mic")
+        #expect(symbol(dictation: .processing, hasProblem: true) == "exclamationmark.triangle")
+    }
+
+    @Test func withTheIndicatorOffTheIconShowsListeningAndTranscribing() {
+        #expect(symbol(dictation: .listening, showsIndicator: false) == "mic.fill")
+        #expect(symbol(dictation: .processing, showsIndicator: false) == "waveform")
+        #expect(symbol(dictation: .idle, showsIndicator: false) == "mic")
+        #expect(symbol(dictation: .idle, showsIndicator: false, hasProblem: true) == "exclamationmark.triangle")
+        // The download and the missing hotkey still come first.
+        #expect(symbol(modelSymbol: "arrow.down.circle", dictation: .processing, showsIndicator: false) == "arrow.down.circle")
+        #expect(symbol(isHotkeyActive: false, dictation: .listening, showsIndicator: false) == "mic.slash")
     }
 
     @Test func theModelDownloadComesFirst() {

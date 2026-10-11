@@ -11,7 +11,7 @@ import SwiftUI
                 appDelegate.report.show()
             }
         } label: {
-            MenuBarIcon(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models)
+            MenuBarIcon(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, feedback: appDelegate.feedback)
         }
 
         // A plain window rather than SwiftUI's Settings scene, whose window cannot be
@@ -57,17 +57,22 @@ struct SettingsMenuItem: View {
 
 /// The menu bar icon. It shows whether the speech model still needs its download, whether
 /// the hotkey works, whether the model is ready, and whether the microphone is blocked or
-/// the last dictation failed. It stays the same while Orra listens and transcribes: macOS
-/// shows its own microphone indicator in the menu bar while Orra records, and the
-/// indicator at the bottom of the screen shows the rest.
+/// the last dictation failed. While the recording indicator is on, the icon does not show
+/// listening or transcribing: macOS shows its own microphone indicator in the menu bar
+/// while Orra records, and the indicator at the bottom of the screen shows the rest. With
+/// the indicator turned off in Settings, the icon is the only sign left, so it fills while
+/// Orra listens and turns into a waveform while Orra transcribes.
 struct MenuBarIcon: View {
     let pushToTalk: PushToTalkController
     let models: ModelInstaller
+    let feedback: RecordingFeedback
 
     var body: some View {
         Image(systemName: Self.symbolName(
             modelSymbol: models.state.symbolName,
             isHotkeyActive: pushToTalk.isHotkeyActive,
+            dictation: pushToTalk.state,
+            showsIndicator: feedback.showsIndicator,
             modelState: pushToTalk.modelState,
             microphoneAccess: pushToTalk.microphoneAccess,
             hasProblem: pushToTalk.problem != nil
@@ -75,11 +80,14 @@ struct MenuBarIcon: View {
         .accessibilityLabel("Orra")
     }
 
-    /// The symbol for the given state. Whether Orra is listening or transcribing plays no
-    /// part, so the icon never changes during a dictation.
+    /// The symbol for the given state. With the recording indicator on, the dictation plays
+    /// no part, so the icon does not show listening or transcribing. A press still clears
+    /// the last dictation's problem, so a warning triangle turns into the plain mic then.
     static func symbolName(
         modelSymbol: String?,
         isHotkeyActive: Bool,
+        dictation: PushToTalkStateMachine.State,
+        showsIndicator: Bool,
         modelState: PushToTalkController.ModelState,
         microphoneAccess: MicrophoneAccess,
         hasProblem: Bool
@@ -88,6 +96,13 @@ struct MenuBarIcon: View {
         // Accessibility access.
         if let modelSymbol { return modelSymbol }
         guard isHotkeyActive else { return "mic.slash" }
+        if !showsIndicator {
+            switch dictation {
+            case .listening: return "mic.fill"
+            case .processing: return "waveform"
+            case .idle: break
+            }
+        }
         switch modelState {
         case .notLoaded, .loading:
             return "hourglass"
