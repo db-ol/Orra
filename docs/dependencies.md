@@ -11,6 +11,12 @@
   and added in Xcode by the maintainer the same day. It is a prebuilt, signed framework that
   Xcode embeds in Orra.app and signs again with the team's Developer ID on export. It reaches
   the network only for update checks the user allowed, see the README's privacy section.
+- ml-explore/mlx-swift-lm (MIT), exact version 3.31.4, products MLXLLM and MLXLMCommon,
+  linked to the Orra target only. Approved by the maintainer on 2026-10-10 to run a local
+  text model for optional cleanup and translation, and added in Xcode by the maintainer the
+  same day. speech-swift already resolved it and pins it with exact 3.31.4, so the version
+  cannot move ahead of speech-swift. It adds no network use of its own: Orra downloads the
+  text model itself, as it does the speech model.
 
 ## What the build resolves
 
