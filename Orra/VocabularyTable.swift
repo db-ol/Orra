@@ -5,8 +5,9 @@ nonisolated struct VocabularyRow: Identifiable, Equatable, Sendable {
     /// The word ignoring case, as `VocabularyWord.id`.
     let id: String
     let word: String
-    /// True when Orra learned the word from a correction: the learning store holds accepted
-    /// pairs for it.
+    /// True when Orra learned the word, from a correction or as an offered word the user
+    /// added. For a word kept from Orra 0.1.0, which did not record how a word came, true
+    /// when the learning store holds accepted pairs for it.
     let isLearned: Bool
     /// The misheard spellings learning saw for the word, comma separated. Empty for words
     /// the user added.
@@ -14,6 +15,19 @@ nonisolated struct VocabularyRow: Identifiable, Equatable, Sendable {
     let lastUsed: Date?
     /// When the word was added or last used, the order the speech model chooses by.
     let lastActive: Date
+
+    /// The word and its misheard spellings in lowercase, for the search field.
+    let searchKey: String
+
+    init(id: String, word: String, isLearned: Bool, heardAs: String, lastUsed: Date?, lastActive: Date) {
+        self.id = id
+        self.word = word
+        self.isLearned = isLearned
+        self.heardAs = heardAs
+        self.lastUsed = lastUsed
+        self.lastActive = lastActive
+        searchKey = (word + "\n" + heardAs).lowercased()
+    }
 
     /// For sorting by Last used, with words never used last.
     var lastUsedOrder: Date { lastUsed ?? .distantPast }
@@ -36,12 +50,19 @@ enum VocabularyList {
             return VocabularyRow(
                 id: word.id,
                 word: word.text,
-                isLearned: !spellings.isEmpty,
+                isLearned: word.source.map { $0 == .learned } ?? !spellings.isEmpty,
                 heardAs: spellings.joined(separator: ", "),
                 lastUsed: word.lastUsed,
                 lastActive: word.lastActive
             )
         }
+    }
+
+    /// The rows whose word or misheard spellings hold the search, ignoring case. All rows
+    /// for an empty search.
+    static func filter(_ rows: [VocabularyRow], by search: String) -> [VocabularyRow] {
+        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        return query.isEmpty ? rows : rows.filter { $0.searchKey.contains(query) }
     }
 
     /// Takes the words out of the vocabulary through the same path as before, so learning
@@ -70,19 +91,20 @@ enum VocabularyList {
 
 /// The words in a table, as System Settings shows text replacements: sortable by word and
 /// last use, searchable, and with several rows selected at once removed by the minus
-/// button or the Delete key.
+/// button or the Delete key. The rows are built and sorted only when the words, the
+/// learning store or the order change, not on every redraw or search keystroke, since the
+/// main thread also runs the keyboard tap.
 struct VocabularyTable: View {
     let pushToTalk: PushToTalkController
     let learning: CorrectionLearning
     @State private var search = ""
     @State private var selection = Set<VocabularyRow.ID>()
     @State private var sortOrder = [KeyPathComparator(\VocabularyRow.lastActive, order: .reverse)]
+    /// All rows in the chosen order.
+    @State private var sorted: [VocabularyRow] = []
 
     var body: some View {
-        let all = VocabularyList.rows(pushToTalk.vocabulary, store: learning.store)
-        let shown = (search.isEmpty ? all : all.filter {
-            $0.word.localizedCaseInsensitiveContains(search) || $0.heardAs.localizedCaseInsensitiveContains(search)
-        }).sorted(using: sortOrder)
+        let shown = VocabularyList.filter(sorted, by: search)
         VStack(alignment: .leading, spacing: 8) {
             TextField("Search", text: $search, prompt: Text("Search"))
                 .labelsHidden()
@@ -116,7 +138,7 @@ struct VocabularyTable: View {
             .frame(height: 280)
             .onDeleteCommand(perform: removeSelected)
             .overlay {
-                if all.isEmpty {
+                if sorted.isEmpty {
                     Text("No words yet")
                         .foregroundStyle(.secondary)
                 }
@@ -130,11 +152,19 @@ struct VocabularyTable: View {
             .help("Remove the selected words")
             .accessibilityLabel("Remove")
         }
+        .onAppear(perform: rebuild)
+        .onChange(of: learning.store) { rebuild() }
+        .onChange(of: sortOrder) { rebuild() }
         .onChange(of: pushToTalk.vocabulary) {
+            rebuild()
             // Rows that left the list, such as an undone learned word, are not selected.
             let ids = Set(pushToTalk.vocabulary.map(\.id))
             selection.formIntersection(ids)
         }
+    }
+
+    private func rebuild() {
+        sorted = VocabularyList.rows(pushToTalk.vocabulary, store: learning.store).sorted(using: sortOrder)
     }
 
     private func removeSelected() {

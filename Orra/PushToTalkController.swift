@@ -264,12 +264,12 @@ final class PushToTalkController {
     /// Adds a word, typed, copied or learned, dated now. Refused only at the sanity cap,
     /// `Vocabulary.maximumCount`. An empty word adds nothing and counts as already there.
     @discardableResult
-    func addToVocabulary(_ term: String) -> VocabularyAddition {
+    func addToVocabulary(_ term: String, source: VocabularyWord.Source = .user) -> VocabularyAddition {
         guard let word = Vocabulary.cleaned(term), !Vocabulary.contains(word, in: vocabulary) else {
             return .alreadyThere
         }
         guard vocabulary.count < Vocabulary.maximumCount else { return .full }
-        setVocabulary(Vocabulary.adding(word, to: vocabulary, at: now()))
+        setVocabulary(Vocabulary.adding(word, to: vocabulary, at: now(), source: source))
         return .added
     }
 

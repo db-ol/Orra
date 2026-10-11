@@ -117,10 +117,13 @@ Build and test commands, run in the repository root:
     ignoring case, cut at 40 characters, capped only at 5,000 against runaway data), the
     context string the model gets, and the choice of the 200 words added or used most
     recently, with ties going to the word added later. It checks that a paste dates the
-    words it holds ignoring case, but not a word inside a longer Latin word, that the
-    words and their dates are saved, that the string list of 0.1.0 is taken over without
-    losing a word, and the rows, header and removal of the table in Settings, where removing a
-    learned word lets learning add it again. PushToTalkControllerTests checks that every
+    words it holds ignoring case, but not a word inside a longer Latin word, also among
+    5,000 words, that the words, their dates and their source are saved, also from a
+    background queue in order, that the string list of 0.1.0 is taken over and saved
+    without losing a word, that every save also writes that list, so words added after
+    going back to 0.1.0 and the words of an unreadable save are kept, and the rows, search,
+    header and removal of the table in Settings, where removing a learned word lets
+    learning add it again. PushToTalkControllerTests checks that every
     dictation passes the vocabulary to the model, nil when it is empty, only the 200 most
     recent of a longer list, that a paste dates the words it holds while a text that was not
     pasted dates none, that a change is saved, and that learning is refused only at the cap.
@@ -622,13 +625,18 @@ Vocabulary without the 100 word limit, added on 2026-10-10, not verified yet:
 - [ ] Clicking the Word and Last used headers sorts the table both ways. The search
   field filters by word and by misheard spelling.
 - [ ] A word added in the field shows "Added by you" and a dash under Last used. A word
-  learned from a correction shows "Learned" and the misheard spelling under Heard as.
+  learned from a correction shows "Learned" and the misheard spelling under Heard as. It
+  still shows "Learned" after Forget Learned Corrections, and a word you added still shows
+  "Added by you" after you fix a mishearing of it. A word kept from 0.1.0 shows "Learned"
+  only when learning holds a fix of it, since 0.1.0 did not record where a word came from.
 - [ ] Dictate a sentence with a listed word, in another case too: its Last used becomes
   "now" and stays after quitting and reopening Orra.
 - [ ] Select several rows with Command or Shift and remove them with the minus button,
   then another with the Delete key: they leave the list. Fix a removed learned word
   again: it is learned again with the notice.
-- [ ] After updating from 0.1.0, every word of the old list is still there.
+- [ ] After updating from 0.1.0, every word of the old list is still there. Go back to
+  0.1.0, add a word, then update again: the new word is there and so is every word added
+  before.
 - [ ] With more than 200 words (paste a list into the field one by one, or let a test
   build fill it), the header says how many words there are and that Orra gives the 200
   most recently added or used to the speech model, and dictation feels as quick as with

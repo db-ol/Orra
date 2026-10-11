@@ -2,18 +2,30 @@ import AppKit
 import Observation
 import os
 
-/// One word or name of the vocabulary, with when it was added and when a pasted transcript
-/// last held it. Holds the word and the two dates, never any other text.
+/// One word or name of the vocabulary, with when it was added, when a pasted transcript
+/// last held it, and how it came. Holds the word, the two dates and the source, never any
+/// other text.
 nonisolated struct VocabularyWord: Codable, Equatable, Hashable, Sendable, Identifiable {
+    /// How a word came into the vocabulary.
+    enum Source: String, Codable, Sendable {
+        /// Typed in Settings or added from the clipboard.
+        case user
+        /// Learned from a correction, or an offered word the user added.
+        case learned
+    }
+
     var text: String
     var added: Date
     /// When a pasted transcript last held the word, ignoring case. Nil until then.
     var lastUsed: Date?
+    /// Nil for words taken over from Orra 0.1.0, which did not keep it.
+    var source: Source?
 
-    init(_ text: String, added: Date, lastUsed: Date? = nil) {
+    init(_ text: String, added: Date, lastUsed: Date? = nil, source: Source? = nil) {
         self.text = text
         self.added = added
         self.lastUsed = lastUsed
+        self.source = source
     }
 
     /// The word ignoring case, which is unique in the list.
@@ -75,10 +87,15 @@ nonisolated enum Vocabulary {
     /// The list with one more word, trimmed and cut like a typed line, added at `date`.
     /// Unchanged when the word is empty, already there ignoring case, or the list holds
     /// `maximumCount` words.
-    static func adding(_ term: String, to words: [VocabularyWord], at date: Date) -> [VocabularyWord] {
+    static func adding(
+        _ term: String,
+        to words: [VocabularyWord],
+        at date: Date,
+        source: VocabularyWord.Source = .user
+    ) -> [VocabularyWord] {
         guard let term = cleaned(term), words.count < maximumCount,
               !contains(term, in: words) else { return words }
-        return words + [VocabularyWord(term, added: date)]
+        return words + [VocabularyWord(term, added: date, source: source)]
     }
 
     /// Whether the list holds the term, ignoring case.
@@ -119,20 +136,39 @@ nonisolated enum Vocabulary {
     /// case. A word that starts or ends with a Latin letter or digit counts only where
     /// the transcript has no Latin letter or digit right next to it, so "Orra" is not used
     /// in "Orrange". Keeps nothing of the transcript.
+    ///
+    /// Runs on the main actor right after a paste, while the user may already type, so it
+    /// must stay fast with thousands of words. Most words are ruled out by a set lookup:
+    /// each of their characters must be in the transcript, and a Latin run at either end
+    /// must be a whole Latin run of the transcript. Only the few words left are searched.
     static func markingUsed(in transcript: String, _ words: [VocabularyWord], at date: Date) -> [VocabularyWord] {
-        words.map { word in
-            guard holds(transcript, word.text) else { return word }
+        let lowered = transcript.lowercased()
+        let characters = Set(lowered)
+        let runs = Set(lowered.split { !isLatin($0) })
+        return words.map { word in
+            guard mayHold(characters, runs, word.text.lowercased()), holds(transcript, word.text) else { return word }
             var used = word
             used.lastUsed = date
             return used
         }
     }
 
+    private static func isLatin(_ character: Character?) -> Bool {
+        guard let character else { return false }
+        return character.isASCII && (character.isLetter || character.isNumber)
+    }
+
+    /// False when the lowercased term cannot be in the transcript: a character of it is
+    /// missing, or its Latin run at the start or the end is not a whole run of the
+    /// transcript, as `holds` asks for.
+    private static func mayHold(_ characters: Set<Character>, _ runs: Set<Substring>, _ term: String) -> Bool {
+        guard term.allSatisfy(characters.contains) else { return false }
+        if isLatin(term.first), !runs.contains(term.prefix(while: isLatin)) { return false }
+        if isLatin(term.last), !runs.contains(Substring(term.reversed().prefix(while: isLatin).reversed())) { return false }
+        return true
+    }
+
     private static func holds(_ text: String, _ term: String) -> Bool {
-        func isLatin(_ character: Character?) -> Bool {
-            guard let character else { return false }
-            return character.isASCII && (character.isLetter || character.isNumber)
-        }
         let checksStart = isLatin(term.first)
         let checksEnd = isLatin(term.last)
         var searchStart = text.startIndex
@@ -202,29 +238,62 @@ nonisolated enum VocabularyEcho {
 
 /// Keeps the vocabulary in UserDefaults, on this Mac only: the words with their dates as
 /// JSON under `defaultsKey`. Orra 0.1.0 kept the words alone as a string array under
-/// `legacyKey`. Those are taken over once, dated the moment they are, and the old value is
-/// left as it was, so going back to 0.1.0 still finds the words it knew.
+/// `legacyKey`, and read at most 100 of them. Every save writes the words to both, so no
+/// way between the versions loses a word:
+/// - The first launch after 0.1.0 takes its words over, dated then, and saves them.
+/// - Going back to 0.1.0 finds the words. Words added there are taken over on the way back,
+///   and words beyond its first 100 are kept, since the new list still holds them. A word
+///   removed there comes back, which is safer than losing one.
+/// - When the JSON cannot be read, the words of the last save are still there.
 nonisolated enum VocabularyPreference {
     static let defaultsKey = "vocabularyWords"
     static let legacyKey = "vocabulary"
 
     static func load(from defaults: UserDefaults = .standard, now: Date = Date()) -> [VocabularyWord] {
+        let legacy = Vocabulary.terms(from: defaults.stringArray(forKey: legacyKey) ?? [])
+        var words: [VocabularyWord] = []
+        var hasSaved = false
         if let data = defaults.data(forKey: defaultsKey) {
-            if let words = try? JSONDecoder().decode([VocabularyWord].self, from: data) {
-                return cleaned(words)
+            if let saved = try? JSONDecoder().decode([VocabularyWord].self, from: data) {
+                words = cleaned(saved)
+                hasSaved = true
+            } else {
+                // Counts nothing and names no word.
+                Logger(subsystem: "io.github.db-ol.Orra", category: "vocabulary").error("The saved vocabulary could not be read, using the plain list")
             }
-            // Counts nothing and names no word.
-            Logger(subsystem: "io.github.db-ol.Orra", category: "vocabulary").error("The saved vocabulary could not be read, using the older list")
         }
-        return Vocabulary.terms(from: defaults.stringArray(forKey: legacyKey) ?? []).map {
-            VocabularyWord($0, added: now)
+        var ids = Set(words.map(\.id))
+        let before = words.count
+        for term in legacy where words.count < Vocabulary.maximumCount && ids.insert(term.lowercased()).inserted {
+            words.append(VocabularyWord(term, added: now))
         }
+        if words.count != before || (!hasSaved && defaults.object(forKey: defaultsKey) != nil) {
+            save(words, to: defaults)
+        }
+        return words
     }
 
     static func save(_ words: [VocabularyWord], to defaults: UserDefaults = .standard) {
         guard let data = try? JSONEncoder().encode(words) else { return }
         defaults.set(data, forKey: defaultsKey)
+        defaults.set(words.map(\.text), forKey: legacyKey)
     }
+
+    /// Saves on a serial queue, so encoding thousands of words after a paste does not hold
+    /// up the main thread and the keyboard tap. Saves keep their order. `flush()` waits for
+    /// the last one. Tests pass the name of their own defaults suite.
+    static func saveInBackground(_ words: [VocabularyWord], suiteName: String? = nil) {
+        queue.async {
+            save(words, to: suiteName.flatMap(UserDefaults.init(suiteName:)) ?? .standard)
+        }
+    }
+
+    /// Waits until every save started by `saveInBackground` is written, as before quitting.
+    static func flush() {
+        queue.sync {}
+    }
+
+    private static let queue = DispatchQueue(label: "io.github.db-ol.Orra.vocabulary-save", qos: .utility)
 
     /// The saved words trimmed and cut, each once ignoring case, at most `maximumCount`.
     private static func cleaned(_ words: [VocabularyWord]) -> [VocabularyWord] {

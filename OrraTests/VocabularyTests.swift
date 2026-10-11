@@ -37,7 +37,8 @@ struct VocabularyTests {
 
     @Test func addingAndRemovingKeepTheListClean() {
         let now = Date(timeIntervalSince1970: 1_000)
-        #expect(Vocabulary.adding("  Orra ", to: [], at: now) == [VocabularyWord("Orra", added: now)])
+        #expect(Vocabulary.adding("  Orra ", to: [], at: now) == [VocabularyWord("Orra", added: now, source: .user)])
+        #expect(Vocabulary.adding("Qwen", to: [], at: now, source: .learned).map(\.source) == [.learned])
         let orra = vocabularyWords("Orra")
         #expect(Vocabulary.adding("orra", to: orra, at: now) == orra)
         #expect(Vocabulary.adding("   ", to: orra, at: now) == orra)
@@ -93,6 +94,40 @@ struct VocabularyTests {
         #expect(Vocabulary.markingUsed(in: "Orrange and Orra", words, at: now)[0].lastUsed == now)
     }
 
+    @Test func wordsAtEitherEndOfLatinOrWithSymbolsAreFoundOnlyWhole() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let cases: [(term: String, text: String, used: Bool)] = [
+            ("Qwen3-ASR", "we use QWEN3-asr now", true),
+            ("Qwen3-ASR", "Qwen3-ASRs", false),
+            ("Claude Code", "Ask claude code.", true),
+            ("Claude Code", "claude coder", false),
+            ("C++", "learn c++ today", true),
+            ("C++", "learn objc++", false),
+            ("AI", "用AI写字", true),
+            ("AI", "AIs", false),
+            ("iOS 18", "新的 iOS 18。", true),
+            ("通义千问", "我用通义千问写", true),
+            ("通义千问", "通义问千", false),
+            ("瑞麒 G 六", "瑞麒 g 六", true),
+            ("Orra", "", false)
+        ]
+        for (term, text, used) in cases {
+            let marked = Vocabulary.markingUsed(in: text, vocabularyWords(term), at: now)
+            #expect((marked[0].lastUsed == now) == used, "\(term) in \(text)")
+        }
+    }
+
+    @Test func aPasteFindsItsWordsAmongThousands() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        var texts = (0..<2_500).map { "term\($0)" }
+        texts += (0..<2_499).map { "词\(Character(UnicodeScalar(0x4E00 + $0)!))语" }
+        texts.append("通义千问")
+        let words = vocabularyWords(texts)
+        let marked = Vocabulary.markingUsed(in: "Term42 和 term2499，还有通义千问，term25000 不算，词丁语也算。", words, at: now)
+        let used = Set(marked.filter { $0.lastUsed == now }.map(\.text))
+        #expect(used == ["term42", "term2499", "通义千问", "词\(Character(UnicodeScalar(0x4E01)!))语"])
+    }
+
     @Test func aCopiedWordCanBeAddedButNotALongText() {
         #expect(Vocabulary.candidate(fromClipboard: "  SGLang-Omni \n", in: []) == "SGLang-Omni")
         #expect(Vocabulary.candidate(fromClipboard: "sglang-omni", in: ["SGLang-Omni"]) == nil)
@@ -139,21 +174,55 @@ struct VocabularyTests {
         let moved = Date(timeIntervalSince1970: 5_000)
         let words = VocabularyPreference.load(from: defaults, now: moved)
         #expect(words.map(\.text) == old)
-        #expect(words.allSatisfy { $0.added == moved && $0.lastUsed == nil })
-        // Once saved, the new list is what loads, and the old one stays for 0.1.0.
+        #expect(words.allSatisfy { $0.added == moved && $0.lastUsed == nil && $0.source == nil })
+        // Saved at once, so a later launch keeps the dates of the move.
+        #expect(defaults.data(forKey: VocabularyPreference.defaultsKey) != nil)
+        #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == words)
+        // Every save also writes the plain list, which 0.1.0 reads.
         let later = Vocabulary.adding("Qwen", to: words, at: moved.addingTimeInterval(1))
         VocabularyPreference.save(later, to: defaults)
         #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == later)
-        #expect(defaults.stringArray(forKey: VocabularyPreference.legacyKey) == old)
+        #expect(defaults.stringArray(forKey: VocabularyPreference.legacyKey) == old + ["Qwen"])
     }
 
-    @Test func anUnreadableSaveFallsBackToTheOlderList() throws {
+    @Test func wordsAddedAfterGoingBackToOrra010AreKept() throws {
         let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(["Orra"], forKey: VocabularyPreference.legacyKey)
+        let added = Date(timeIntervalSince1970: 1_000)
+        let words = vocabularyWords((1...150).map { "term\($0)" }, added: added)
+        VocabularyPreference.save(words, to: defaults)
+        // 0.1.0 read the first 100, the user added one and it saved those 101 words.
+        defaults.set((1...100).map { "term\($0)" } + ["Orra"], forKey: VocabularyPreference.legacyKey)
+        let back = Date(timeIntervalSince1970: 9_000)
+        let loaded = VocabularyPreference.load(from: defaults, now: back)
+        #expect(loaded.map(\.text) == words.map(\.text) + ["Orra"])
+        #expect(loaded.dropLast().allSatisfy { $0.added == added })
+        #expect(loaded.last?.added == back)
+        #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == loaded)
+    }
+
+    @Test func anUnreadableSaveFallsBackToTheWordsOfTheLastSave() throws {
+        let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        VocabularyPreference.save(vocabularyWords("Orra", "Qwen"), to: defaults)
         defaults.set(Data("not json".utf8), forKey: VocabularyPreference.defaultsKey)
-        #expect(VocabularyPreference.load(from: defaults).map(\.text) == ["Orra"])
+        let now = Date(timeIntervalSince1970: 7_000)
+        #expect(VocabularyPreference.load(from: defaults, now: now) == vocabularyWords("Orra", "Qwen", added: now))
+        // The unreadable value is replaced.
+        #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == vocabularyWords("Orra", "Qwen", added: now))
+    }
+
+    @Test func savesInTheBackgroundKeepTheirOrder() throws {
+        let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for count in 1...20 {
+            VocabularyPreference.saveInBackground(vocabularyWords((0..<count).map { "term\($0)" }), suiteName: suite)
+        }
+        VocabularyPreference.flush()
+        #expect(VocabularyPreference.load(from: defaults).count == 20)
     }
 
     @MainActor
@@ -169,10 +238,28 @@ struct VocabularyTests {
         let used = Date(timeIntervalSince1970: 9_000)
         let words = [VocabularyWord("orra", added: date), VocabularyWord("Qwen", added: date, lastUsed: used)]
         let rows = VocabularyList.rows(words, store: store)
+        // Words kept from 0.1.0 do not know their source: accepted pairs decide.
         #expect(rows.map(\.isLearned) == [true, false])
         #expect(rows.map(\.heardAs) == ["Aura, Ora", ""])
         #expect(rows.map(\.lastUsed) == [nil, used])
         #expect(rows[1].lastActive == used)
+        // A word the user typed stays theirs after a correction of it is accepted, and a
+        // learned word stays learned after the learning store is cleared.
+        let sourced = [VocabularyWord("Orra", added: date, source: .user), VocabularyWord("Qwen", added: date, source: .learned)]
+        #expect(VocabularyList.rows(sourced, store: store).map(\.isLearned) == [false, true])
+        #expect(VocabularyList.rows(sourced, store: CorrectionStore()).map(\.isLearned) == [false, true])
+    }
+
+    @MainActor
+    @Test func theSearchMatchesWordsAndMisheardSpellingsIgnoringCase() {
+        var store = CorrectionStore()
+        store.record(Correction(heard: "Aura", corrected: "Orra"), at: .distantPast)
+        _ = store.acceptSeen(of: "Orra")
+        let rows = VocabularyList.rows(vocabularyWords("Orra", "通义千问", "Qwen"), store: store)
+        #expect(VocabularyList.filter(rows, by: "").map(\.word) == ["Orra", "通义千问", "Qwen"])
+        #expect(VocabularyList.filter(rows, by: " AUR ").map(\.word) == ["Orra"])
+        #expect(VocabularyList.filter(rows, by: "千问").map(\.word) == ["通义千问"])
+        #expect(VocabularyList.filter(rows, by: "q").map(\.word) == ["Qwen"])
     }
 
     @MainActor
@@ -184,7 +271,7 @@ struct VocabularyTests {
             watcher: CorrectionWatcher(),
             saveSetting: { _ in },
             saveStore: { _ in },
-            addToVocabulary: { controller.addToVocabulary($0) },
+            addToVocabulary: { controller.addToVocabulary($0, source: .learned) },
             removeFromVocabulary: { controller.removeFromVocabulary([$0]) },
             isInVocabulary: { controller.vocabularyContains($0) }
         )
@@ -194,6 +281,7 @@ struct VocabularyTests {
         controller.addToVocabulary("通义千问")
         learning.record(Correction(heard: "Aura", corrected: "Orra"))
         #expect(controller.vocabulary.map(\.text) == ["Qwen", "通义千问", "Orra"])
+        #expect(controller.vocabulary.map(\.source) == [.user, .user, .learned])
         #expect(learning.store.acceptedWords == ["Orra"])
         VocabularyList.remove(["orra", "qwen"], pushToTalk: controller, learning: learning)
         #expect(controller.vocabulary.map(\.text) == ["通义千问"])

@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         microphone: MicrophonePreference.load(),
         saveMicrophone: { MicrophonePreference.save($0) },
         vocabulary: VocabularyPreference.load(),
-        saveVocabulary: { VocabularyPreference.save($0) },
+        saveVocabulary: { VocabularyPreference.saveInBackground($0) },
         removesFillerWords: FillerPreference.load(),
         saveRemovesFillerWords: { FillerPreference.save($0) },
         writesNumbersAsDigits: NumberPreference.load(),
@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vocabulary: { [pushToTalk] in pushToTalk.vocabulary.map(\.text) }
     )
     lazy var learning = CorrectionLearning.live(
-        addToVocabulary: { [pushToTalk] word in pushToTalk.addToVocabulary(word) },
+        addToVocabulary: { [pushToTalk] word in pushToTalk.addToVocabulary(word, source: .learned) },
         removeFromVocabulary: { [pushToTalk] word in pushToTalk.removeFromVocabulary([word]) },
         isInVocabulary: { [pushToTalk] word in pushToTalk.vocabularyContains(word) }
     )
@@ -95,6 +95,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DockIcon.openSettings()
         }
         return false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // The vocabulary saves on a background queue. The last save must be written.
+        VocabularyPreference.flush()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
