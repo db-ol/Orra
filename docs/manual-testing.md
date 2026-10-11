@@ -117,9 +117,19 @@ Build and test commands, run in the repository root:
     still loading needs nothing from the user, which decides whether launch opens the
     window and the menu shows Setup Guide….
   - VocabularyTests checks how the vocabulary text becomes terms (trimmed, once each
-    ignoring case, cut at 40 characters, at most 100), the context string the model gets,
-    and saving the list. PushToTalkControllerTests checks that every dictation passes the
-    current vocabulary to the model, nil when it is empty, and that a change is saved.
+    ignoring case, cut at 40 characters, capped only at 5,000 against runaway data), the
+    context string the model gets, and the choice of the 200 words added or used most
+    recently, with ties going to the word added later. It checks that a paste dates the
+    words it holds ignoring case, but not a word inside a longer Latin word, also among
+    5,000 words, that the words, their dates and their source are saved, also from a
+    background queue in order, that the string list of 0.1.0 is taken over and saved
+    without losing a word, that every save also writes that list, so words added after
+    going back to 0.1.0 and the words of an unreadable save are kept, and the rows, search,
+    header and removal of the table in Settings, where removing a learned word lets
+    learning add it again. PushToTalkControllerTests checks that every
+    dictation passes the vocabulary to the model, nil when it is empty, only the 200 most
+    recent of a longer list, that a paste dates the words it holds while a text that was not
+    pasted dates none, that a change is saved, and that learning is refused only at the cap.
   - CorrectionFinderTests, SoundAlikeTests and CorrectionStoreTests cover finding a fixed
     word in the pasted text (Chinese, a name across scripts, a whole Latin word), leaving
     out changes of meaning, deletions, additions, rewrites and edits outside the paste,
@@ -351,7 +361,10 @@ Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still 
   committed unchanged in the baseline commit.
 
 Fn hotkey, added on 2026-10-04, not verified yet. Since 2026-10-05 fn is no longer the
-default talk key. Turn it on under Talk Key in the menu for the fn checks:
+default talk key. Turn it on under Talk Key in the menu for the fn checks, and keep "Show
+the recording indicator" on in Settings. The indicator shows only once the microphone
+records, so for the checks that expect no indicator, also listen for no start sound and
+look for no orange microphone indicator in the menu bar:
 
 - [ ] At launch without Accessibility access, the welcome window appears instead of the
   system prompt, the menu bar icon is a crossed out mic, and the menu shows "The talk
@@ -359,27 +372,28 @@ default talk key. Turn it on under Talk Key in the menu for the fn checks:
 - [ ] After turning Orra on under System Settings > Privacy & Security > Accessibility,
   within a few seconds the icon becomes a plain mic and the menu shows "Hold right
   Control to talk", or the keys that are on, without relaunching.
-- [ ] Holding fn alone fills the mic icon, and releasing it brings back the plain mic.
+- [ ] Holding fn alone shows the recording indicator, and releasing it ends the dictation.
 - [ ] Holding or tapping fn no longer triggers the "Press fn key to" action set under
   System Settings > Keyboard, such as switching the input source.
-- [ ] Fn+Delete still deletes forward and Fn+arrows still jump, and the icon returns to
-  the plain mic.
-- [ ] Fn pressed while Command or Shift is already held does not fill the icon.
+- [ ] Fn+Delete still deletes forward and Fn+arrows still jump, and no recording
+  indicator stays on screen.
+- [ ] Fn pressed while Command or Shift is already held shows no recording indicator,
+  plays no start sound, and turns on no orange microphone indicator.
 - [ ] Typing in other apps feels the same while Orra runs.
 - [ ] After quitting Orra, the fn key behaves as before.
 - [ ] Running the tests shows no Accessibility prompt.
 - [ ] Opening the SettingsView preview shows no Accessibility prompt, and Orra run from
   Xcode still reacts to fn while the preview is open.
 - [ ] Known blind spot, check how it behaves: with Terminal > Secure Keyboard Entry on,
-  holding fn still fills the icon, and Fn+arrows fill it too instead of being ignored.
+  holding fn still shows the indicator, and Fn+arrows show it too instead of being ignored.
 - [ ] Known blind spot, check how it behaves: with "Use F1, F2, etc. keys as standard
-  function keys" on, Fn+F12 still changes the volume, and the icon fills while fn is
-  held.
+  function keys" on, Fn+F12 still changes the volume, and the indicator shows while
+  fn is held.
 
 Talk key choice, added on 2026-10-05, not verified yet:
 
 - [ ] With the default, holding right Control on an external keyboard such as a Logitech
-  MX Keys fills the mic icon, and a dictation works.
+  MX Keys shows the recording indicator, and a dictation works.
 - [ ] Talk Key in the menu and the Settings window show the same switches. Turning on fn
   changes the menu to "Hold right Control or fn to talk", and fn on the Mac keyboard then
   works too. The last key that is on cannot be turned off.
@@ -629,12 +643,12 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
 - [ ] With a USB microphone chosen in Orra, start speaking right at the sound: the first
   syllable is in the text. The sound comes only once the microphone records.
 - [ ] Hold the talk key in Notes: a moment after the press a short sound plays and a dark
-  indicator appears at the bottom of the screen with the pointer, a green microphone with bars that move
-  with your voice. Notes keeps the focus: its text cursor still blinks, and the menu bar
-  still shows Notes.
+  indicator appears at the bottom of the screen with the pointer: a small dark capsule with
+  white bars that move with your voice, and no microphone or color. Notes keeps the focus:
+  its text cursor still blinks, and the menu bar still shows Notes.
 - [ ] A shortcut with the talk key, such as right Control+C in Terminal, plays no sound and
   shows no indicator, and neither does a quick tap of the key.
-- [ ] Release: the indicator shows "Transcribing…", a second sound plays, and the
+- [ ] Release: the bars settle into a slow, low wave, a second sound plays, and the
   indicator goes once the text is in Notes. The start sound does not show up as a word
   at the start of the text.
 - [ ] Over a full screen app, on another Space, and on a second display with the pointer
@@ -648,6 +662,24 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
 - [ ] In Settings, turning off "Show the recording indicator" and "Play sounds when
   recording starts and stops" takes effect at the next hold, and both stay off after
   quitting and reopening Orra.
+
+Calmer recording indicator, added on 2026-10-10, not verified yet:
+
+- [ ] While you hold the talk key, the Orra icon in the menu bar stays the plain mic, and
+  macOS shows its orange microphone indicator in the menu bar. While Orra transcribes, the
+  Orra icon stays the same too. If the icon showed a warning triangle from the last
+  dictation, it turns into the plain mic when you press the key, since a new hold clears
+  the last problem.
+- [ ] With "Show the recording indicator" off in Settings, a dictation fills the Orra icon
+  while you hold the key and turns it into a waveform after release until the text is
+  pasted. Then it is the plain mic again.
+- [ ] The capsule, the bars and the messages read well over a white page and over a dark
+  window, in light and in dark mode.
+- [ ] With Reduce Motion on (System Settings, Accessibility, Display), the bars hold a
+  still, low wave while Orra transcribes instead of moving, and it looks different from
+  the flat row of bars while you hold the key in silence.
+- [ ] VoiceOver reads "Listening" while you hold the key, "Transcribing…" after release,
+  and the message text when a dictation pastes nothing.
 
 Idle bar, added on 2026-10-09, not verified yet:
 
@@ -680,6 +712,32 @@ Personal vocabulary, added on 2026-10-08, not verified yet:
 - [ ] The count above the list follows it, and the list is still there after
   quitting and reopening Orra.
 
+Vocabulary without the 100 word limit, added on 2026-10-10, not verified yet:
+
+- [ ] Settings, Vocabulary shows the learning switch with its explanation first, then the
+  field to add a word, then a table about 280 points high that scrolls, with the columns
+  Word, Source, Heard as and Last used, in English and in Chinese. It fits the window
+  without clipping and looks at home in the grouped page, in light and dark mode.
+- [ ] Clicking the Word and Last used headers sorts the table both ways. The search
+  field filters by word and by misheard spelling.
+- [ ] A word added in the field shows "Added by you" and a dash under Last used. A word
+  learned from a correction shows "Learned" and the misheard spelling under Heard as. It
+  still shows "Learned" after Forget Learned Corrections, and a word you added still shows
+  "Added by you" after you fix a mishearing of it. A word kept from 0.1.0 shows "Learned"
+  only when learning holds a fix of it, since 0.1.0 did not record where a word came from.
+- [ ] Dictate a sentence with a listed word, in another case too: its Last used becomes
+  "now" and stays after quitting and reopening Orra.
+- [ ] Select several rows with Command or Shift and remove them with the minus button,
+  then another with the Delete key: they leave the list. Fix a removed learned word
+  again: it is learned again with the notice.
+- [ ] After updating from 0.1.0, every word of the old list is still there. Go back to
+  0.1.0, add a word, then update again: the new word is there and so is every word added
+  before.
+- [ ] With more than 200 words (paste a list into the field one by one, or let a test
+  build fill it), the header says how many words there are and that Orra gives the 200
+  most recently added or used to the speech model, and dictation feels as quick as with
+  200.
+
 Learning from corrections, added on 2026-10-08, not verified yet. Turn on Learn from my
 corrections under Vocabulary in Settings first:
 
@@ -699,9 +757,9 @@ corrections under Vocabulary in Settings first:
   moment the notice appears, and pauses only while you edit. Click into the field, then
   click back into Notes without pressing Add: typing goes to Notes and the ring counts 4
   again. Close it, or let it run out, and the same fix does not offer it again for a week.
-- [ ] Fill the vocabulary to 100 words, then add an offered
-  word: the notice says the vocabulary is full and stays until it runs out. Make room and
-  fix the same character again: the word is offered again.
+- [ ] With more than 200 words in the vocabulary, an offered word and a learned word
+  are still added. Only at the cap of 5,000 words, which needs a test build, does the
+  notice say the vocabulary is full.
 - [ ] Dictate four lines with the same misheard name, switch to another app for a moment,
   come back and fix them within 3 minutes: one notice comes. Undo takes the name out of
   the vocabulary, and fixing it again, misheard any way, does not add it again.
