@@ -71,10 +71,14 @@ nonisolated enum FieldReader {
 /// switching away and coming back to fix a line works. Each paste has its own watch, up to
 /// five at a time, so dictating several lines and then fixing them works. A watch pushed
 /// out by a sixth paste reports what it found. PasteTracker follows where each paste is while other lines
-/// change. It looks for a correction after every change and reports it once the field has
-/// not changed for a reading, so the user hears back a second or two after the fix. When the user
-/// keeps typing over the same misheard words, as when finishing a half typed word, the new
-/// correction is reported as replacing the earlier one. Logs states only, never text.
+/// change. It looks for corrections after every change and reports them once the field has
+/// not changed for a reading, so the user hears back a second or two after the fix. Separate
+/// fixes in one paste are followed apart, by the span of the pasted text they cover. A later
+/// fix over the same span replaces the earlier one, so a word the user typed past without
+/// a pause is never learned. When the user changes the same span again, as when finishing a half
+/// typed word, the new correction is reported as replacing the earlier one. Offered words are reported before
+/// learned ones, and the notice shows them in turn. Logs states only,
+/// never text.
 @MainActor
 final class CorrectionWatcher {
     struct Environment {
@@ -118,8 +122,8 @@ final class CorrectionWatcher {
     }
 
     /// Starts following a paste. The oldest watch ends and reports when five are running.
-    /// `onCorrection` gets the correction and the earlier one it replaces, if any.
-    func watch(pasted: String, in pid: pid_t, onCorrection: @escaping (Correction, Correction?) -> Void) {
+    /// `onCorrection` gets each finding and the earlier one it replaces, if any.
+    func watch(pasted: String, in pid: pid_t, onCorrection: @escaping (Finding, Finding?) -> Void) {
         if watches.count >= Self.maximumWatches {
             watches.removeFirst().control.finish = true
         }
@@ -149,10 +153,26 @@ final class CorrectionWatcher {
                 return
             }
             var latest = before
-            var found: Correction?
-            // The latest correction reported for each misheard span, so going back and forth
-            // over a word leaves one pair.
-            var reported: [String: Correction] = [:]
+            // The findings so far. A later finding over the same text of the paste replaces
+            // the earlier one, so a word the user typed past, such as a half typed word, is
+            // dropped. A finding stays when the paste is gone, as after sending a message.
+            var found: [CorrectionFinder.Located] = []
+            // The findings reported, by the span of the pasted text they cover. A finding
+            // over the same text replaces the earlier one, so going back and forth over a
+            // word leaves one pair.
+            var reported: [CorrectionFinder.Located] = []
+            @MainActor func report() {
+                let waiting = found.filter { item in
+                    !reported.contains { $0.finding == item.finding && $0.span.overlaps(item.span) }
+                }
+                // Offered words first. The notice shows them in turn.
+                for item in waiting.filter({ !$0.finding.isWord }) + waiting.filter(\.finding.isWord) {
+                    let earlier = reported.last { $0.span.overlaps(item.span) }?.finding
+                    reported.removeAll { $0.span.overlaps(item.span) }
+                    reported.append(item)
+                    onCorrection(item.finding, earlier)
+                }
+            }
             var quiet = 0
             var readings = 0
             var paused = 0
@@ -170,29 +190,28 @@ final class CorrectionWatcher {
                     latest = text
                     quiet = 0
                     tracker.update(to: text)
-                    if let correction = await Self.find(pasted: pasted, edited: tracker.pasteNow) {
-                        found = correction
-                    }
+                    let latest = await Self.find(pasted: pasted, edited: tracker.pasteNow)
+                    found.removeAll { earlier in latest.contains { $0.span.overlaps(earlier.span) } }
+                    found += latest
                 } else {
                     quiet += 1
                 }
                 guard !Task.isCancelled else { return }
-                if let found, reported[found.heard] != found, quiet >= Self.quietReadings {
-                    let earlier = reported.updateValue(found, forKey: found.heard)
-                    onCorrection(found, earlier)
+                if quiet >= Self.quietReadings {
+                    report()
                 }
             }
-            logger.notice("Learning: watch ended after \(readings, privacy: .public) readings and \(paused, privacy: .public) seconds away, correction found: \(found != nil, privacy: .public)")
-            guard !Task.isCancelled, let found, reported[found.heard] != found else { return }
-            onCorrection(found, reported[found.heard])
+            logger.notice("Learning: watch ended after \(readings, privacy: .public) readings and \(paused, privacy: .public) seconds away, corrections found: \(found.count, privacy: .public)")
+            guard !Task.isCancelled else { return }
+            report()
         }
         watches.append((id, task, control))
     }
 
     /// Off the main actor, because the keyboard tap runs there.
     @concurrent
-    private static func find(pasted: String, edited: String) async -> Correction? {
-        CorrectionFinder.correction(pasted: pasted, edited: edited)
+    private static func find(pasted: String, edited: String) async -> [CorrectionFinder.Located] {
+        CorrectionFinder.locatedFindings(pasted: pasted, edited: edited)
     }
 
     func stop() {
@@ -206,9 +225,12 @@ final class CorrectionWatcher {
 /// Learning from the user's corrections: off until the user turns it on. Keeps the word
 /// pairs it saw. The first time a word is corrected, adds it to the vocabulary and tells
 /// `onLearned`, which shows a notice with Undo. A word learned before takes a new misheard
-/// spelling quietly, and is not added again when the user took it out of the vocabulary.
-/// A word the user undid is never learned again. The text itself is never changed: the
-/// vocabulary only helps the model hear the word.
+/// spelling quietly. A learned word the user takes out of the vocabulary is forgotten, so
+/// the next fix learns it again with the notice. A word the user undid is never learned
+/// again. After a fix of one Chinese character it
+/// adds nothing on its own, and tells `onSuggest`, which offers the guessed word for the
+/// user to add. The text itself is never changed: the vocabulary only helps the model hear
+/// the word.
 @Observable
 final class CorrectionLearning {
     var isOn: Bool {
@@ -235,6 +257,8 @@ final class CorrectionLearning {
 
     /// Called when a word was added on its own, or could not be added.
     @ObservationIgnored var onLearned: ((Learned) -> Void)?
+    /// Called with a word to offer after a fix of one Chinese character.
+    @ObservationIgnored var onSuggest: ((WordSuggestion) -> Void)?
     /// Words added in this session, so a half typed fix that a finished one replaces can be
     /// taken back.
     @ObservationIgnored private var added: [Learned] = []
@@ -244,6 +268,7 @@ final class CorrectionLearning {
     @ObservationIgnored private let saveStore: (CorrectionStore) -> Void
     @ObservationIgnored private let addToVocabulary: (String) -> VocabularyAddition
     @ObservationIgnored private let removeFromVocabulary: (String) -> Void
+    @ObservationIgnored private let isInVocabulary: (String) -> Bool
     @ObservationIgnored private let now: () -> Date
 
     init(
@@ -254,6 +279,7 @@ final class CorrectionLearning {
         saveStore: @escaping (CorrectionStore) -> Void,
         addToVocabulary: @escaping (String) -> VocabularyAddition,
         removeFromVocabulary: @escaping (String) -> Void,
+        isInVocabulary: @escaping (String) -> Bool = { _ in false },
         now: @escaping () -> Date = { Date() }
     ) {
         self.isOn = isOn
@@ -263,6 +289,7 @@ final class CorrectionLearning {
         self.saveStore = saveStore
         self.addToVocabulary = addToVocabulary
         self.removeFromVocabulary = removeFromVocabulary
+        self.isInVocabulary = isInVocabulary
         self.now = now
     }
 
@@ -270,10 +297,11 @@ final class CorrectionLearning {
     /// ~/Library/Application Support/io.github.db-ol.Orra/corrections.json.
     static func live(
         addToVocabulary: @escaping (String) -> VocabularyAddition,
-        removeFromVocabulary: @escaping (String) -> Void
+        removeFromVocabulary: @escaping (String) -> Void,
+        isInVocabulary: @escaping (String) -> Bool
     ) -> CorrectionLearning {
         let url = storeURL
-        return CorrectionLearning(
+        let learning = CorrectionLearning(
             isOn: UserDefaults.standard.bool(forKey: settingKey),
             store: CorrectionStore.load(from: url),
             watcher: CorrectionWatcher(),
@@ -286,8 +314,11 @@ final class CorrectionLearning {
                 }
             },
             addToVocabulary: addToVocabulary,
-            removeFromVocabulary: removeFromVocabulary
+            removeFromVocabulary: removeFromVocabulary,
+            isInVocabulary: isInVocabulary
         )
+        learning.forgetRemovedWords()
+        return learning
     }
 
     static let settingKey = "learnsFromCorrections"
@@ -299,9 +330,52 @@ final class CorrectionLearning {
     /// Called after each paste. Does nothing while learning is off.
     func pasted(_ text: String, in pid: pid_t) {
         guard isOn else { return }
-        watcher.watch(pasted: text, in: pid) { [weak self] correction, earlier in
-            self?.record(correction, replacing: earlier)
+        watcher.watch(pasted: text, in: pid) { [weak self] finding, earlier in
+            switch finding {
+            case .word(let correction):
+                self?.record(correction, replacing: earlier?.correction)
+            case .suggestion(let suggestion):
+                self?.suggest(suggestion, replacing: earlier?.correction)
+            }
         }
+    }
+
+    /// Offers the guessed word, unless it is in the vocabulary, this pair was declined, or
+    /// the word was learned or undone before. A pair only seen, as when the vocabulary was
+    /// full, is offered again. Records nothing until the user answers.
+    func suggest(_ suggestion: WordSuggestion, replacing earlier: Correction? = nil) {
+        if let earlier, earlier != suggestion.pair {
+            forget(earlier)
+        }
+        let word = suggestion.guess
+        let state = store.state(of: suggestion.pair)
+        guard state == nil || state == .seen, !isInVocabulary(word),
+              !store.has(.dismissed, for: word), !store.has(.accepted, for: word) else { return }
+        onSuggest?(suggestion)
+    }
+
+    /// The user added an offered word, maybe edited: keeps its pair as accepted and puts the
+    /// word in the vocabulary. Tells `onLearned` only when the vocabulary is full.
+    func add(_ suggestion: WordSuggestion, as text: String) {
+        let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty else { return }
+        let pair = suggestion.pair(for: word)
+        store.record(pair, at: now())
+        switch addToVocabulary(word) {
+        case .added, .alreadyThere:
+            _ = store.acceptSeen(of: word)
+            saveStore(store)
+        case .full:
+            saveStore(store)
+            onLearned?(Learned(correction: pair, pairs: [], outcome: .vocabularyFull))
+        }
+    }
+
+    /// The user closed an offered word, or let it go: the same pair is not offered again.
+    func decline(_ suggestion: WordSuggestion) {
+        store.record(suggestion.pair, at: now())
+        store.decline(suggestion.pair)
+        saveStore(store)
     }
 
     /// Keeps the pair, and learns its word the first time. An earlier correction of the same
@@ -312,8 +386,9 @@ final class CorrectionLearning {
         }
         store.record(correction, at: now())
         let word = correction.corrected
-        // Undone before: never again. Learned before: the new mishearing is kept quietly,
-        // and a word the user took out of the vocabulary stays out.
+        // Undone before: never again. Learned before: the new mishearing is kept quietly.
+        // A word the user took out of the vocabulary has no accepted pairs left, so it is
+        // learned again.
         guard !store.has(.dismissed, for: word), !store.has(.accepted, for: word) else {
             if !store.has(.dismissed, for: word) {
                 _ = store.acceptSeen(of: word)
@@ -341,7 +416,7 @@ final class CorrectionLearning {
     /// Takes back a word learned on its own: never learns it again, and takes it out of the
     /// vocabulary when learning put it there.
     func undo(_ learned: Learned) {
-        store.dismiss(learned.pairs)
+        store.dismiss(learned.pairs, at: now())
         saveStore(store)
         if learned.outcome == .added {
             removeFromVocabulary(learned.correction.corrected)
@@ -359,6 +434,27 @@ final class CorrectionLearning {
               !store.has(.accepted, for: word) else { return }
         added.remove(at: index)
         removeFromVocabulary(word)
+    }
+
+    /// The user took a word out of the vocabulary: forgets its accepted pairs, so the next
+    /// fix learns it again and shows the notice. A word the user undid stays undone.
+    func removedFromVocabulary(_ word: String) {
+        let lowered = word.lowercased()
+        added.removeAll { $0.correction.corrected.lowercased() == lowered }
+        guard store.acceptedWords.contains(where: { $0.lowercased() == lowered }) else { return }
+        store.forgetAccepted(of: word)
+        saveStore(store)
+    }
+
+    /// Forgets the accepted pairs of learned words that are no longer in the vocabulary,
+    /// such as words removed before Orra forgot them on removal.
+    func forgetRemovedWords() {
+        let removed = store.acceptedWords.filter { !isInVocabulary($0) }
+        guard !removed.isEmpty else { return }
+        for word in removed {
+            store.forgetAccepted(of: word)
+        }
+        saveStore(store)
     }
 
     /// Forgets every pair, the undone ones too. The vocabulary keeps its words.

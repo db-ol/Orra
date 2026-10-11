@@ -121,11 +121,17 @@ Build and test commands, run in the repository root:
     word in the pasted text (Chinese, a name across scripts, a whole Latin word), leaving
     out changes of meaning, deletions, additions, rewrites and edits outside the paste,
     the pinyin comparison, accepting only pairs that were not undone, and the stored file.
+    They also cover separate fixes in one sentence judged one by one, a Chinese name
+    widened to its unchanged characters, and the cap of 8 Chinese characters.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, and no reading after leaving the app, under secure input, or in a field
     without the pasted text. CorrectionLearningTests checks that nothing is read while
     learning is off, that the first fix adds the word and tells the user, a quiet new
-    mishearing, and Undo. LearnedNoticeTests checks the notice and its panel.
+    mishearing, Undo, and that a learned word removed from the vocabulary is learned
+    again. LearnedNoticeTests checks the notice and its panel.
+    OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
+    character: grammar pairs never offered, the guessed word from the system tokenizer,
+    and adding, editing and declining the offered word.
   - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
     translation marked translated, that each translation keeps the arguments of the
     English string, that the Chinese uses full width punctuation and a space next to a
@@ -609,11 +615,28 @@ corrections under Vocabulary in Settings first:
   pointer over it the ring shows a pause sign, and after the pointer leaves it counts 4. The app you are in keeps the focus. The next dictation is more likely to
   write it right, and Orra never changes the text itself.
 - [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
-  Chinese character such as 的 to 得, deleting words, or rewriting the sentence adds
-  nothing. Fixing a word and then typing a period learns the word without the period.
+  Chinese character as grammar such as 的 to 得, deleting words, or rewriting the sentence
+  adds nothing. Fixing a word and then typing a period learns the word without the period.
+- [ ] Dictate 我用通义千问写代码 so it comes out as 通一千问 and fix the one character: no
+  word is added, and a notice asks "Add a word to your vocabulary?" with 通义千问 in its
+  field. The app you are in keeps the focus and typing there still works while the notice
+  shows. Click into the field, edit the word, and press Return or Add: the word is in the
+  vocabulary and the focus is back in the app you were in. The ring counts down from the
+  moment the notice appears, and pauses only while you edit. Click into the field, then
+  click back into Notes without pressing Add: typing goes to Notes and the ring counts 4
+  again. Close it, or let it run out, and the same fix does not offer it again for a week.
+- [ ] Fill the vocabulary to 100 words, then add an offered
+  word: the notice says the vocabulary is full and stays until it runs out. Make room and
+  fix the same character again: the word is offered again.
 - [ ] Dictate four lines with the same misheard name, switch to another app for a moment,
   come back and fix them within 3 minutes: one notice comes. Undo takes the name out of
   the vocabulary, and fixing it again, misheard any way, does not add it again.
+- [ ] Fix a misheard name so it is learned, then remove it with the minus button under
+  Vocabulary in Settings. Fix the same name again: it is added again and the notice with
+  Undo shows.
+- [ ] When a dictation comes out as 陈阳写的那些文档一样嘛, fix it to 晨阳写的那些文档一样吗:
+  only the name 晨阳 is offered, never the whole sentence. Fix 通一千万 to
+  通义千问: 通义千问 is learned, not 义千问.
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the
   right word there: the Orra menu offers to add it to the vocabulary.
