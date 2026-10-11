@@ -73,11 +73,11 @@ final class ModelInstaller {
         let result = await ModelPreparation.run(manifest, folders, checkingHashes: checkingHashes, freeSpace: environment.freeSpace)
         switch result {
         case .installed(let folder):
-            logger.notice("The speech model is installed")
+            logger.notice("\(self.manifest.name, privacy: .public) is installed")
             state = .installed(folder)
             onInstalled(folder)
         case .missing(let bytes):
-            logger.notice("The speech model is not installed, \(bytes, privacy: .public) of \(self.manifest.totalBytes, privacy: .public) bytes on disk")
+            logger.notice("\(self.manifest.name, privacy: .public) is not installed, \(bytes, privacy: .public) of \(self.manifest.totalBytes, privacy: .public) bytes on disk")
             state = .missing(bytesPresent: bytes)
         }
     }
@@ -95,7 +95,7 @@ final class ModelInstaller {
         guard job == nil, !isPreparing else { return }
         let start = ModelDisk.bytesPresent(folders.staging(manifest), manifest)
         state = .downloading(bytes: start, source: nil)
-        activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "Downloading the speech model")
+        activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "Downloading a model the user asked for")
         let (events, continuation) = AsyncStream<ModelDownload.Event>.makeStream(bufferingPolicy: .bufferingNewest(8))
         job = Task { [manifest, folders, sources, environment] in
             async let installed = Self.run(manifest, folders, sources, environment, continuation)

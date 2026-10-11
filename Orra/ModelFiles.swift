@@ -255,7 +255,7 @@ nonisolated enum ModelDisk {
             try FileManager.default.removeItem(at: installed)
         }
         try FileManager.default.moveItem(at: staging, to: installed)
-        Logger.modelDownload.notice("Installed the speech model, \(manifest.totalBytes, privacy: .public) bytes")
+        Logger.modelDownload.notice("Installed \(manifest.name, privacy: .public), \(manifest.totalBytes, privacy: .public) bytes")
         return []
     }
 
