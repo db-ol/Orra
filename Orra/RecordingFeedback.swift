@@ -4,8 +4,8 @@ import Observation
 /// Shows the recording indicator and plays the start and stop sounds, following the
 /// controller's cues. Settings can turn either off.
 ///
-/// The indicator shows a level meter while Orra listens, with how to finish during a hands
-/// free dictation, a spinner while it transcribes,
+/// The indicator shows white bars that move with the voice while Orra listens, with how to
+/// finish during a hands free dictation, a slow wave of the same bars while it transcribes,
 /// and for a few seconds the reason when a hold ends without a paste. In between, while
 /// Orra can dictate, a small bar at the bottom of the screen shows that it is ready, unless
 /// Settings turns it off.
@@ -14,7 +14,7 @@ final class RecordingFeedback {
     /// What the indicator shows.
     nonisolated enum Display: Equatable, Sendable {
         case listening
-        /// The level meter during a hands free dictation, with how to finish it.
+        /// The bars during a hands free dictation, with how to finish it.
         case handsFree(finishHint: String)
         case transcribing
         case message(String)

@@ -35,7 +35,7 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
    - **Allow the microphone.**
    - **Allow Accessibility**, which Orra needs to notice the talk key and to paste the text.
    - **Choose your talk key** by pressing it. On a Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn.
-2. Hold the talk key, right Control unless you pick another, and speak. Let go, and the text appears where your cursor is.
+2. Hold the talk key, right Control unless you pick another, and speak. Let go, and the text appears where your cursor is. While you speak, white bars in a small dark capsule at the bottom of the screen move with your voice (unless you turn this off in Settings), and macOS shows its orange microphone indicator in the menu bar.
 3. Orra lives in the menu bar and the Dock. Its menu and Settings hold everything else.
 
 ## Using Orra

@@ -21,7 +21,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 2176 test cases passed on 2026-10-10, 162
+- The test command ends in TEST SUCCEEDED with 2190 test cases passed on 2026-10-10, 162
   of them filler rule cases and 1394 number rule cases, including the real model tests
   below. Three heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
@@ -312,7 +312,10 @@ Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still 
   committed unchanged in the baseline commit.
 
 Fn hotkey, added on 2026-10-04, not verified yet. Since 2026-10-05 fn is no longer the
-default talk key. Turn it on under Talk Key in the menu for the fn checks:
+default talk key. Turn it on under Talk Key in the menu for the fn checks, and keep "Show
+the recording indicator" on in Settings. The indicator shows only once the microphone
+records, so for the checks that expect no indicator, also listen for no start sound and
+look for no orange microphone indicator in the menu bar:
 
 - [ ] At launch without Accessibility access, the welcome window appears instead of the
   system prompt, the menu bar icon is a crossed out mic, and the menu shows "The talk
@@ -320,27 +323,28 @@ default talk key. Turn it on under Talk Key in the menu for the fn checks:
 - [ ] After turning Orra on under System Settings > Privacy & Security > Accessibility,
   within a few seconds the icon becomes a plain mic and the menu shows "Hold right
   Control to talk", or the keys that are on, without relaunching.
-- [ ] Holding fn alone fills the mic icon, and releasing it brings back the plain mic.
+- [ ] Holding fn alone shows the recording indicator, and releasing it ends the dictation.
 - [ ] Holding or tapping fn no longer triggers the "Press fn key to" action set under
   System Settings > Keyboard, such as switching the input source.
-- [ ] Fn+Delete still deletes forward and Fn+arrows still jump, and the icon returns to
-  the plain mic.
-- [ ] Fn pressed while Command or Shift is already held does not fill the icon.
+- [ ] Fn+Delete still deletes forward and Fn+arrows still jump, and no recording
+  indicator stays on screen.
+- [ ] Fn pressed while Command or Shift is already held shows no recording indicator,
+  plays no start sound, and turns on no orange microphone indicator.
 - [ ] Typing in other apps feels the same while Orra runs.
 - [ ] After quitting Orra, the fn key behaves as before.
 - [ ] Running the tests shows no Accessibility prompt.
 - [ ] Opening the SettingsView preview shows no Accessibility prompt, and Orra run from
   Xcode still reacts to fn while the preview is open.
 - [ ] Known blind spot, check how it behaves: with Terminal > Secure Keyboard Entry on,
-  holding fn still fills the icon, and Fn+arrows fill it too instead of being ignored.
+  holding fn still shows the indicator, and Fn+arrows show it too instead of being ignored.
 - [ ] Known blind spot, check how it behaves: with "Use F1, F2, etc. keys as standard
-  function keys" on, Fn+F12 still changes the volume, and the icon fills while fn is
-  held.
+  function keys" on, Fn+F12 still changes the volume, and the indicator shows while
+  fn is held.
 
 Talk key choice, added on 2026-10-05, not verified yet:
 
 - [ ] With the default, holding right Control on an external keyboard such as a Logitech
-  MX Keys fills the mic icon, and a dictation works.
+  MX Keys shows the recording indicator, and a dictation works.
 - [ ] Talk Key in the menu and the Settings window show the same switches. Turning on fn
   changes the menu to "Hold right Control or fn to talk", and fn on the Mac keyboard then
   works too. The last key that is on cannot be turned off.
@@ -376,8 +380,9 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
   the recommended key is the default already. The check mark stays after a relaunch.
   Closing Settings while the welcome window waits for a key leaves that wait alone. Try it
   before granting Accessibility too.
-- [ ] Double press the talk key in Notes and let go: the indicator shows "Press right
-  Control to finish", or the key used, and keeps recording. Type and click in Notes: it
+- [ ] Double press the talk key in Notes and let go: the indicator shows the white bars and
+  "Press right Control to finish", or the key used, in white text in the same dark
+  capsule, with no microphone or color, and keeps recording. Type and click in Notes: it
   goes on. Press the key once: the text is pasted, including the words said right after
   the double press.
 - [ ] During hands free, Escape cancels without pasting and does not reach Notes. After
@@ -629,12 +634,12 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
 - [ ] With a USB microphone chosen in Orra, start speaking right at the sound: the first
   syllable is in the text. The sound comes only once the microphone records.
 - [ ] Hold the talk key in Notes: a moment after the press a short sound plays and a dark
-  indicator appears at the bottom of the screen with the pointer, a green microphone with bars that move
-  with your voice. Notes keeps the focus: its text cursor still blinks, and the menu bar
-  still shows Notes.
+  indicator appears at the bottom of the screen with the pointer: a small dark capsule with
+  white bars that move with your voice, and no microphone or color. Notes keeps the focus:
+  its text cursor still blinks, and the menu bar still shows Notes.
 - [ ] A shortcut with the talk key, such as right Control+C in Terminal, plays no sound and
   shows no indicator, and neither does a quick tap of the key.
-- [ ] Release: the indicator shows "Transcribing…", a second sound plays, and the
+- [ ] Release: the bars settle into a slow, low wave, a second sound plays, and the
   indicator goes once the text is in Notes. The start sound does not show up as a word
   at the start of the text.
 - [ ] Over a full screen app, on another Space, and on a second display with the pointer
@@ -648,6 +653,27 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
 - [ ] In Settings, turning off "Show the recording indicator" and "Play sounds when
   recording starts and stops" takes effect at the next hold, and both stay off after
   quitting and reopening Orra.
+
+Calmer recording indicator, added on 2026-10-10, not verified yet:
+
+- [ ] While you hold the talk key, the Orra icon in the menu bar stays the plain mic, and
+  macOS shows its orange microphone indicator in the menu bar. While Orra transcribes, the
+  Orra icon stays the same too. If the icon showed a warning triangle from the last
+  dictation, it turns into the plain mic when you press the key, since a new hold clears
+  the last problem.
+- [ ] With "Show the recording indicator" off in Settings, a dictation fills the Orra icon
+  while you hold the key and turns it into a waveform after release until the text is
+  pasted. Then it is the plain mic again.
+- [ ] During hands free, the Orra icon behaves as during a hold: it stays the plain mic
+  with the indicator on, and with the indicator off it stays filled from the double press
+  until the press that finishes, and then turns into a waveform.
+- [ ] The capsule, the bars and the messages read well over a white page and over a dark
+  window, in light and in dark mode.
+- [ ] With Reduce Motion on (System Settings, Accessibility, Display), the bars hold a
+  still, low wave while Orra transcribes instead of moving, and it looks different from
+  the flat row of bars while you hold the key in silence.
+- [ ] VoiceOver reads "Listening" while you hold the key, "Transcribing…" after release,
+  and the message text when a dictation pastes nothing.
 
 Idle bar, added on 2026-10-09, not verified yet:
 
