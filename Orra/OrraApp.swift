@@ -56,37 +56,46 @@ struct SettingsMenuItem: View {
 }
 
 /// The menu bar icon. It shows whether the speech model still needs its download, whether
-/// the hotkey works, whether the model is ready, whether Orra is listening or processing,
-/// and whether the microphone is blocked or the last dictation failed.
+/// the hotkey works, whether the model is ready, and whether the microphone is blocked or
+/// the last dictation failed. It stays the same while Orra listens and transcribes: macOS
+/// shows its own microphone indicator in the menu bar while Orra records, and the
+/// indicator at the bottom of the screen shows the rest.
 struct MenuBarIcon: View {
     let pushToTalk: PushToTalkController
     let models: ModelInstaller
 
     var body: some View {
-        Image(systemName: symbolName)
-            .accessibilityLabel("Orra")
+        Image(systemName: Self.symbolName(
+            modelSymbol: models.state.symbolName,
+            isHotkeyActive: pushToTalk.isHotkeyActive,
+            modelState: pushToTalk.modelState,
+            microphoneAccess: pushToTalk.microphoneAccess,
+            hasProblem: pushToTalk.problem != nil
+        ))
+        .accessibilityLabel("Orra")
     }
 
-    private var symbolName: String {
+    /// The symbol for the given state. Whether Orra is listening or transcribing plays no
+    /// part, so the icon never changes during a dictation.
+    static func symbolName(
+        modelSymbol: String?,
+        isHotkeyActive: Bool,
+        modelState: PushToTalkController.ModelState,
+        microphoneAccess: MicrophoneAccess,
+        hasProblem: Bool
+    ) -> String {
         // Until the model is in place, the icon shows where that stands, with or without
         // Accessibility access.
-        if let symbol = models.state.symbolName { return symbol }
-        guard pushToTalk.isHotkeyActive else { return "mic.slash" }
-        switch pushToTalk.state {
-        case .listening:
-            return "mic.fill"
-        case .processing:
-            return "waveform"
-        case .idle:
-            switch pushToTalk.modelState {
-            case .notLoaded, .loading:
-                return "hourglass"
-            case .unavailable:
-                return "exclamationmark.triangle"
-            case .ready:
-                let microphoneBlocked = pushToTalk.microphoneAccess == .denied || pushToTalk.microphoneAccess == .notConfigured
-                return pushToTalk.problem == nil && !microphoneBlocked ? "mic" : "exclamationmark.triangle"
-            }
+        if let modelSymbol { return modelSymbol }
+        guard isHotkeyActive else { return "mic.slash" }
+        switch modelState {
+        case .notLoaded, .loading:
+            return "hourglass"
+        case .unavailable:
+            return "exclamationmark.triangle"
+        case .ready:
+            let microphoneBlocked = microphoneAccess == .denied || microphoneAccess == .notConfigured
+            return !hasProblem && !microphoneBlocked ? "mic" : "exclamationmark.triangle"
         }
     }
 }

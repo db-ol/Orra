@@ -34,7 +34,7 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
    - **Download the speech model**, 2.47 GB, once.
    - **Allow the microphone.**
    - **Allow Accessibility**, which Orra needs to notice the talk key and to paste the text.
-2. Hold the talk key, right Control unless you pick another, and speak. Let go, and the text appears where your cursor is.
+2. Hold the talk key, right Control unless you pick another, and speak. Let go, and the text appears where your cursor is. While you speak, white bars in a small dark capsule at the bottom of the screen move with your voice, and macOS shows its orange microphone indicator in the menu bar.
 3. Orra lives in the menu bar and the Dock. Its menu and Settings hold everything else.
 
 ## Using Orra

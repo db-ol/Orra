@@ -143,8 +143,10 @@ final class NonactivatingPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// The indicator, drawn at the bottom of a clear panel: a level meter while Orra listens,
-/// a spinner while it transcribes, or a message.
+/// The indicator, drawn at the bottom of a clear panel: a small dark capsule with white
+/// bars that move with the voice while Orra listens and settle into a slow wave while it
+/// transcribes, or a message. No microphone and no color, since macOS already shows its
+/// orange microphone indicator in the menu bar while Orra records.
 struct RecordingIndicatorView: View {
     static let panelSize = CGSize(width: 520, height: 150)
     static let idleBarSize = CGSize(width: 40, height: 6)
@@ -165,37 +167,36 @@ struct RecordingIndicatorView: View {
     @ViewBuilder private var content: some View {
         switch feedback.presented {
         case .listening:
-            HStack(spacing: 10) {
-                Image(systemName: "mic.fill")
-                    .foregroundStyle(.green)
-                LevelMeterBars(level: feedback.level)
-            }
-            .indicatorStyle()
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Listening")
+            IndicatorBars(heights: IndicatorBars.heights(level: feedback.level))
+                .animation(.linear(duration: 0.08), value: feedback.level)
+                .barCapsuleStyle()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Listening")
         case .transcribing:
-            HStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Transcribing…")
-            }
-            .indicatorStyle()
+            TranscribingBars()
+                .barCapsuleStyle()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Transcribing…")
         case .message(let text):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.yellow)
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(.white.opacity(0.75))
+                    .accessibilityHidden(true)
                 // Already in the user's language, so shown as it is.
                 Text(verbatim: text)
+                    .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: 440)
-            .indicatorStyle()
+            .messageStyle()
+            .accessibilityElement(children: .combine)
         case .idle:
             VStack(spacing: 10) {
                 if feedback.pointerIsOverIdleBar {
                     // Already in the user's language.
                     Text(verbatim: feedback.holdHint())
-                        .indicatorStyle()
+                        .foregroundStyle(.white)
+                        .messageStyle()
                         .transition(.opacity)
                 }
                 IdleBar()
@@ -220,20 +221,92 @@ private struct IdleBar: View {
     }
 }
 
-/// Five bars that grow with the level, highest in the middle.
-private struct LevelMeterBars: View {
-    let level: Double
-    private static let weights = [0.5, 0.8, 1.0, 0.8, 0.5]
+/// White bars, highest in the middle, as tall as `heights` says.
+struct IndicatorBars: View {
+    let heights: [CGFloat]
+
+    nonisolated static let count = 7
+    nonisolated static let barWidth: CGFloat = 3
+    nonisolated static let spacing: CGFloat = 3
+    nonisolated static let minimumHeight: CGFloat = 4
+    nonisolated static let maximumHeight: CGFloat = 18
+    /// How much of the level each bar shows, so the middle moves most.
+    nonisolated private static let weights = [0.45, 0.7, 0.9, 1.0, 0.9, 0.7, 0.45]
+    /// How far the bars rise in the wave while Orra transcribes, well below a voice.
+    nonisolated static let waveHeight: CGFloat = 4
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(Self.weights.indices, id: \.self) { index in
+        HStack(spacing: Self.spacing) {
+            ForEach(heights.indices, id: \.self) { index in
                 Capsule()
-                    .frame(width: 4, height: 6 + 14 * level * Self.weights[index])
+                    .fill(.white)
+                    .frame(width: Self.barWidth, height: heights[index])
             }
         }
-        .frame(height: 20)
-        .animation(.linear(duration: 0.08), value: level)
+        .frame(height: Self.maximumHeight)
+    }
+
+    /// The bar heights for a level from 0 to 1: all at the minimum in silence, and the
+    /// middle bar at the maximum at full level.
+    nonisolated static func heights(level: Double) -> [CGFloat] {
+        let level = min(max(level, 0), 1)
+        return weights.map { minimumHeight + (maximumHeight - minimumHeight) * CGFloat(level * $0) }
+    }
+
+    /// The bar heights while Orra transcribes: a low wave that runs from left to right
+    /// once per period. `phase` is the time in periods, so only its fraction matters.
+    nonisolated static func waveHeights(phase: Double) -> [CGFloat] {
+        (0..<count).map { index in
+            let angle = 2 * Double.pi * (phase - Double(index) / Double(count))
+            return minimumHeight + waveHeight * CGFloat(0.5 + 0.5 * sin(angle))
+        }
+    }
+}
+
+/// The bars while Orra transcribes. With Reduce Motion on they rest at the minimum.
+private struct TranscribingBars: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private static let period = 1.2
+
+    var body: some View {
+        if reduceMotion {
+            IndicatorBars(heights: IndicatorBars.heights(level: 0))
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                let phase = context.date.timeIntervalSinceReferenceDate / Self.period
+                IndicatorBars(heights: IndicatorBars.waveHeights(phase: phase))
+            }
+        }
+    }
+}
+
+/// The dark capsule and the dark rounded box of the recording indicator: nearly black with
+/// a light edge, so it shows on light and dark backgrounds alike.
+private struct IndicatorBackground<S: InsettableShape>: View {
+    let shape: S
+
+    var body: some View {
+        shape
+            .fill(.black.opacity(0.85))
+            .overlay(shape.strokeBorder(.white.opacity(0.25), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+    }
+}
+
+extension View {
+    /// The compact capsule around the bars.
+    fileprivate func barCapsuleStyle() -> some View {
+        padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(IndicatorBackground(shape: Capsule()))
+    }
+
+    /// The dark box around a message, which may take two lines.
+    fileprivate func messageStyle() -> some View {
+        font(.callout)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(IndicatorBackground(shape: RoundedRectangle(cornerRadius: 14, style: .continuous)))
     }
 }
 

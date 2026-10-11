@@ -271,6 +271,46 @@ struct RecordingFeedbackTests {
         #expect(outputs.presented == [.idle, nil])
     }
 
+    /// The colors the indicator view draws near the bottom of the panel, where the
+    /// indicator sits, in sRGB.
+    private func colorsNearTheBottom(_ feedback: RecordingFeedback) throws -> [NSColor] {
+        let view = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
+        view.frame = NSRect(origin: .zero, size: RecordingIndicatorView.panelSize)
+        view.layoutSubtreeIfNeeded()
+        let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: image)
+        let scale = CGFloat(image.pixelsWide) / view.bounds.width
+        let rows = Int(60 * scale)
+        var colors: [NSColor] = []
+        for y in stride(from: image.pixelsHigh - rows, to: image.pixelsHigh, by: 1) {
+            for x in stride(from: image.pixelsWide / 2 - Int(40 * scale), to: image.pixelsWide / 2 + Int(40 * scale), by: 1) {
+                if let color = image.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) {
+                    colors.append(color)
+                }
+            }
+        }
+        return colors
+    }
+
+    @Test(arguments: [DictationCue.listening, .transcribing, .finished(message: "No speech was recognized")])
+    func theIndicatorDrawsWhiteOnDarkWithoutColor(_ cue: DictationCue) throws {
+        let feedback = makeFeedback()
+        if cue == .transcribing {
+            feedback.handle(.listening)
+        }
+        feedback.handle(cue)
+        let colors = try colorsNearTheBottom(feedback)
+        let visible = colors.filter { $0.alphaComponent > 0.5 }
+        // Gray only: no green microphone and no other color.
+        for color in visible {
+            #expect(abs(color.redComponent - color.greenComponent) < 0.08)
+            #expect(abs(color.greenComponent - color.blueComponent) < 0.08)
+        }
+        // A dark capsule or box, and white bars or text on it.
+        #expect(visible.contains { $0.redComponent < 0.2 })
+        #expect(visible.contains { $0.redComponent > 0.9 })
+    }
+
     @Test func theIdleBarAreaSurroundsTheBar() {
         let area = RecordingIndicatorPanel.idleBarArea(inPanelAt: NSRect(x: 100, y: 50, width: 520, height: 150))
         #expect(area.contains(NSPoint(x: 360, y: 50 + RecordingIndicatorView.bottomPadding + 3)))
@@ -301,5 +341,82 @@ struct LevelMeterTests {
         let empty: [Float] = [0]
         empty.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: 0) }
         #expect(meter.peak == 1)
+    }
+}
+
+struct IndicatorBarsTests {
+    @Test func silenceLeavesEveryBarAtTheMinimum() {
+        let heights = IndicatorBars.heights(level: 0)
+        #expect(heights.count == IndicatorBars.count)
+        #expect(heights.allSatisfy { $0 == IndicatorBars.minimumHeight })
+    }
+
+    @Test func aFullLevelRaisesTheMiddleBarToTheMaximum() {
+        let heights = IndicatorBars.heights(level: 1)
+        #expect(heights[IndicatorBars.count / 2] == IndicatorBars.maximumHeight)
+        #expect(heights.allSatisfy { $0 <= IndicatorBars.maximumHeight })
+        #expect(heights.first! < heights[IndicatorBars.count / 2])
+        #expect(heights.first! == heights.last!)
+    }
+
+    @Test func louderIsTallerAndTheLevelIsClamped() {
+        let quiet = IndicatorBars.heights(level: 0.3)
+        let loud = IndicatorBars.heights(level: 0.7)
+        #expect(zip(quiet, loud).allSatisfy { $0 < $1 })
+        #expect(IndicatorBars.heights(level: 2) == IndicatorBars.heights(level: 1))
+        #expect(IndicatorBars.heights(level: -1) == IndicatorBars.heights(level: 0))
+    }
+
+    @Test func theWaveStaysLowAndMoves() {
+        let low = IndicatorBars.minimumHeight
+        let high = IndicatorBars.minimumHeight + IndicatorBars.waveHeight
+        for phase in stride(from: 0.0, to: 2.0, by: 0.05) {
+            let heights = IndicatorBars.waveHeights(phase: phase)
+            #expect(heights.count == IndicatorBars.count)
+            #expect(heights.allSatisfy { $0 >= low - 0.001 && $0 <= high + 0.001 })
+        }
+        // Well below a voice, so the bars clearly settle.
+        #expect(high < IndicatorBars.maximumHeight / 2)
+        #expect(IndicatorBars.waveHeights(phase: 0) != IndicatorBars.waveHeights(phase: 0.25))
+        let a = IndicatorBars.waveHeights(phase: 0.3)
+        let b = IndicatorBars.waveHeights(phase: 1.3)
+        #expect(zip(a, b).allSatisfy { abs($0 - $1) < 0.001 })
+    }
+}
+
+@MainActor
+struct MenuBarIconTests {
+    private func symbol(
+        modelSymbol: String? = nil,
+        isHotkeyActive: Bool = true,
+        modelState: PushToTalkController.ModelState = .ready,
+        microphoneAccess: MicrophoneAccess = .authorized,
+        hasProblem: Bool = false
+    ) -> String {
+        MenuBarIcon.symbolName(
+            modelSymbol: modelSymbol,
+            isHotkeyActive: isHotkeyActive,
+            modelState: modelState,
+            microphoneAccess: microphoneAccess,
+            hasProblem: hasProblem
+        )
+    }
+
+    @Test func readyIsThePlainMicrophone() {
+        #expect(symbol() == "mic")
+    }
+
+    @Test func theModelDownloadComesFirst() {
+        #expect(symbol(modelSymbol: "arrow.down.circle", isHotkeyActive: false) == "arrow.down.circle")
+    }
+
+    @Test func otherStatesKeepTheirSymbols() {
+        #expect(symbol(isHotkeyActive: false) == "mic.slash")
+        #expect(symbol(modelState: .loading) == "hourglass")
+        #expect(symbol(modelState: .notLoaded) == "hourglass")
+        #expect(symbol(modelState: .unavailable("x")) == "exclamationmark.triangle")
+        #expect(symbol(microphoneAccess: .denied) == "exclamationmark.triangle")
+        #expect(symbol(microphoneAccess: .notConfigured) == "exclamationmark.triangle")
+        #expect(symbol(hasProblem: true) == "exclamationmark.triangle")
     }
 }
