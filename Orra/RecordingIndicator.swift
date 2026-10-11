@@ -144,9 +144,10 @@ final class NonactivatingPanel: NSPanel {
 }
 
 /// The indicator, drawn at the bottom of a clear panel: a small dark capsule with white
-/// bars that move with the voice while Orra listens and settle into a slow wave while it
-/// transcribes, or a message. No microphone and no color, since macOS already shows its
-/// orange microphone indicator in the menu bar while Orra records.
+/// bars that move with the voice while Orra listens, with how to finish in white text
+/// during a hands free dictation, and that settle into a slow wave while it transcribes,
+/// or a message. No microphone and no color, since macOS already shows its orange
+/// microphone indicator in the menu bar while Orra records.
 struct RecordingIndicatorView: View {
     static let panelSize = CGSize(width: 520, height: 150)
     static let idleBarSize = CGSize(width: 40, height: 6)
@@ -172,6 +173,18 @@ struct RecordingIndicatorView: View {
                 .barCapsuleStyle()
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Listening")
+        case .handsFree(let hint):
+            HStack(spacing: 10) {
+                IndicatorBars(heights: IndicatorBars.heights(level: feedback.level))
+                    .animation(.linear(duration: 0.08), value: feedback.level)
+                // Already in the user's language, so shown as it is.
+                Text(verbatim: hint)
+                    .font(.callout)
+                    .foregroundStyle(.white)
+            }
+            .barCapsuleStyle()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: hint))
         case .transcribing:
             TranscribingBars()
                 .barCapsuleStyle()

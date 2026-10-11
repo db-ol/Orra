@@ -3,9 +3,10 @@
 State of the repository after the overnight session of 2026-10-02, with manual
 results added on 2026-10-03, 2026-10-05 and 2026-10-06, the fn hotkey added on
 2026-10-04, local dictation added in the night of 2026-10-04, the choice of talk key and
-of microphone added on 2026-10-05, and on 2026-10-07 the model download, the recording
+of microphone added on 2026-10-05, on 2026-10-07 the model download, the recording
 indicator and sounds, the welcome window, the Chinese interface and the app icon, and on
-2026-10-10 the optional cleanup with a local model. Three
+2026-10-10 the left hand talk keys, choosing the key by pressing it and hands free, one
+talk key set in a recorder field, and the optional cleanup with a local model. Three
 sections: what a build or test run verified, what only a person at the Mac can verify, and
 what does not exist yet.
 
@@ -21,13 +22,32 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED. On 2026-10-10 the result bundle counted 510
-  tests passed and 4 skipped, and the log 2109 passed test cases, which counts each
-  argument of a test, among them the filler and number rule cases and the real speech
-  model tests below. The three heavier real speech model tests and the cleanup model
-  evaluation are skipped unless asked for.
-  - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
-    15 rows) and each edge case decision, including cancel.
+- The test command ends in TEST SUCCEEDED with 2190 test cases passed on 2026-10-10, 162
+  of them filler rule cases and 1394 number rule cases, including the real model tests
+  below. Three heavier real model tests are skipped unless asked for. After the change to
+  one talk key, the test command with `-skip-testing:OrraTests/RealModelTests` ended in
+  TEST SUCCEEDED with 2190 test cases passed on 2026-10-10. The real model tests were not
+  run for that change, which does not touch transcription.
+  - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
+    35 rows) and each edge case decision, including cancel, a tap that waits for a second
+    press, a second press that resumes listening and ends as a double press or a hold, a
+    double press from idle and after a tap, and presses during hands free and during
+    processing.
+  - TalkKeyHandsFreeTests drives the detector with a clock the test moves: a quick double
+    press that starts hands free at the second release, a tap whose window closes, a slow
+    second press that is an ordinary hold, a tap followed by a hold for a right and a left
+    key, a shortcut or a click during the second press, another talk key during the
+    window, a long hold that is never a tap, a stale timer, another key, another modifier
+    or a click between the presses, turning hands free off during a window, fn
+    staying hidden throughout, typing and clicks during hands free, Escape with the key up
+    and down and Escape outside hands free, a shortcut with a left key and the key with
+    another modifier that do not finish, a Control click and an fn click, a change of keys,
+    the owner ending hands free, and reset. For the left keys it covers the delay, a
+    shortcut, a click and another modifier before the delay that stay silent, a double
+    press that starts hands free without recording the tap, a lone tap, and telling a left
+    key from its right twin. Thousands of random presses with hands free on check that only
+    fn's events and Escape during hands free are swallowed and that the detector and the
+    state model agree on hands free.
   - TalkKeyDetectorTests covers, for fn as before, a hold of fn alone, Caps Lock, fn with
     another modifier, modifier rollover, a key or modifier during a hold (Fn+Delete), key
     code 179, arrows carrying the fn flag, release without press, repeated presses, that
@@ -37,18 +57,40 @@ Build and test commands, run in the repository root:
     right bits in both orders of the two Control keys. It also covers right Option and
     right Command, fn passing through when it is not a talk key, two talk keys at once,
     changing the keys during a hold, runs into the state model, and thousands of random
-    presses that check that only fn's own events are ever swallowed and that nothing stays
-    held once every key is up.
+    presses, including the left keys and their delay, that check that only fn's own events
+    are ever swallowed and that nothing stays held once every key is up. These run with
+    double press for hands free off, so a press released at once is a hold.
   - HotkeyTapTests feeds the tap's handler without installing a tap: removing the held key
     ends the recording, a click ends a right Control hold, only fn is swallowed, and a tap
     the system switched off, after a timeout or on user input, ends the hold, removes
-    itself, tells its owner and does not switch itself back on.
-  - TalkKeyTests checks the key codes and left and right bits against the system headers,
-    the default of right Control, reading a release on keyboards without those bits, which
-    keys change what a click does, the menu hint, and that only fn swallows its events.
-    TalkKeyPreferenceTests saves and loads the choice in UserDefaults suites of its own,
-    never Orra's. PushToTalkControllerTests checks that changes are saved and that the
-    last key stays on.
+    itself, tells its owner and does not switch itself back on. It also checks that a left
+    key's timer starts the hold and a shortcut cancels it, that a tap's window ends when its
+    timer fires, also with the real wait, and that while the user records a key the tap
+    reports the events and swallows fn and every key down only while Orra is active, ends
+    a hold, and that a key chosen at its release starts nothing.
+  - TalkKeyTests checks the key codes and left and right bits of all seven keys and the
+    Escape and Shift key codes against the system headers, that the saved raw values never
+    change, that only the left keys wait, the default of right Control, reading a release
+    on keyboards without those bits, which keys change what a click does, the names with
+    their symbols and the labels of other keyboards ("⌥ Right Option (Alt)", "⌘ Left
+    Command (Windows key)", "fn (Globe 🌐)"), the menu hint, the hands free hint, the
+    recommended key, that only fn swallows its events, and the fixed order that keeps one
+    of several keys. KeyRecorderTests covers each key chosen at its release on its own,
+    keyboards without left and right bits, shortcuts and modifiers held together as
+    combinations, Shift, Caps Lock, letters, arrows, Escape and key code 179, and the
+    reason shown for each. KeyNameTests covers the names of keys that type no character
+    and that a letter key is named by one capital. HandsFreePreferenceTests checks that
+    hands free is on until turned off.
+    TalkKeyPreferenceTests saves and loads the key in UserDefaults suites of its own,
+    never Orra's, as a list of one, and keeps one of several saved keys as Orra 0.1.0
+    saved them. PushToTalkControllerTests checks that changes are saved, recording a key
+    by pressing it with Shift, Return, Caps Lock, Command C and Escape, that stopping
+    clears a half press, a
+    double press that keeps the recording and pastes at the next press, a tap then a hold
+    that pastes at the release, keeping the default key, a double press from
+    idle with the hint at once, a tap without a second press, cancelling hands free, the
+    limit during hands free with its message, a double press without the model, Escape
+    through the tap, and a double press during processing that leaves Escape alone.
   - MicrophoneCheckTests covers telling a microphone that delivers zeros from a quiet one,
     that none of the 600 evaluation clips counts as silent, the menu line for a closed
     lid, another input or an unknown one, and reading the default input and the lid state.
@@ -151,7 +193,15 @@ Build and test commands, run in the repository root:
     English string, that the Chinese uses full width punctuation and a space next to a
     Latin word or a number, that the built app carries the Chinese strings, that Chinese
     is chosen only when it comes before English in the preferred languages and never for
-    Traditional Chinese alone, and the Chinese talk key hint for one to four keys.
+    Traditional Chinese alone, the Chinese talk key hint, the Chinese form of a key name
+    with its other label, and the Chinese hint that finishes a hands free dictation.
+  - WelcomeLanguageTests covers the language picked in the welcome window: the
+    localization of each choice, Same as the Mac for English, Chinese, Traditional
+    Chinese and French first, Chinese text built in code while Orra runs in English, that
+    SwiftUI draws a text literal in the language of the environment's locale, and that
+    closing the window restarts Orra only with setup complete, no dictation running, a
+    language picked in the window other than the one it started with, and no other Orra
+    window open.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -361,7 +411,7 @@ Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still 
   committed unchanged in the baseline commit.
 
 Fn hotkey, added on 2026-10-04, not verified yet. Since 2026-10-05 fn is no longer the
-default talk key. Turn it on under Talk Key in the menu for the fn checks, and keep "Show
+default talk key. Set it in Settings, General for the fn checks, and keep "Show
 the recording indicator" on in Settings. The indicator shows only once the microphone
 records, so for the checks that expect no indicator, also listen for no start sound and
 look for no orange microphone indicator in the menu bar:
@@ -394,9 +444,9 @@ Talk key choice, added on 2026-10-05, not verified yet:
 
 - [ ] With the default, holding right Control on an external keyboard such as a Logitech
   MX Keys shows the recording indicator, and a dictation works.
-- [ ] Talk Key in the menu and the Settings window show the same switches. Turning on fn
-  changes the menu to "Hold right Control or fn to talk", and fn on the Mac keyboard then
-  works too. The last key that is on cannot be turned off.
+- [ ] Since the second change of 2026-10-10 there is one talk key, see the checks for the
+  recorder field below. Setting fn changes the menu to "Hold fn to talk", and right
+  Control then starts nothing.
 - [ ] While fn is not a talk key, it keeps its "Press fn key to" action and is never
   swallowed.
 - [ ] Left Control does not start a dictation, and right Control+A still moves the cursor
@@ -409,7 +459,80 @@ Talk key choice, added on 2026-10-05, not verified yet:
 - [ ] Holding right Control alone does not disturb the frontmost app, and the Chinese
   Pinyin input method keeps its Chinese or English mode.
 - [ ] The choice of keys is still there after quitting and reopening Orra.
-- [ ] Right Option and right Command work the same way when turned on.
+- [ ] Right Option and right Command work the same way when set.
+
+Left hand keys, choosing the key and hands free, added on 2026-10-10, not verified yet:
+
+- [ ] Talk Key in the menu shows the "Double Press for Hands Free" switch. Since the
+  second change of 2026-10-10 the key itself is set in the recorder field, see below.
+- [ ] With left Command as the talk key, Command C, Command V and Command Tab work as
+  before, play no sound and show no indicator. Holding left Command alone plays the sound
+  after about 0.3 seconds, and the dictation works. Try left Control with a Control click
+  in Finder and left Option with an accented character too.
+- [ ] Replaced by the recorder field checks below: the Press a Key… button is gone.
+- [ ] Welcome window: the step "Choose your talk key" shows the recorder field and
+  recommends fn on a MacBook with the
+  lid open, and right Control on a Mac without a built in keyboard or with the lid closed.
+  Use fn or Use right Control changes the key, and the step gets its check mark, also when
+  the recommended key is the default already. The check mark stays after a relaunch.
+  Try it before granting Accessibility too.
+- [ ] Double press the talk key in Notes and let go: the indicator shows the white bars and
+  "Press right Control to finish", or the key used, in white text in the same dark
+  capsule, with no microphone or color, and keeps recording. Type and click in Notes: it
+  goes on. Press the key once: the text is pasted, including the words said right after
+  the double press.
+- [ ] During hands free, Escape cancels without pasting and does not reach Notes. After
+  that, Escape works in Notes again.
+- [ ] A double press with a slow second press is an ordinary hold. Note whether 0.3 and 0.4
+  seconds feel right.
+- [ ] Tap the talk key, then at once hold it and say a sentence: the text is pasted at the
+  release, and Orra does not go on recording.
+- [ ] With left Command as the talk key, tap Command, then press Command V at once: the
+  paste happens, and Orra plays no sound and does not record.
+- [ ] Hands free with left Command: Command Tab to another app does not finish the
+  dictation. A press of left Command alone then pastes into the app in front.
+- [ ] With Keyboard > Dictation > Shortcut set to "Press Control Key Twice", double press
+  right Control. Note whether macOS Dictation starts as well.
+- [ ] Hands free stops at 60 seconds, pastes, and says why.
+- [ ] With "Double press for hands free" off, a double press does nothing.
+- [ ] In Chinese, the indicator says "按右侧 Control 键结束", and the welcome step and the
+  Settings explanation read naturally.
+
+One talk key in a recorder field, added later on 2026-10-10, not verified yet:
+
+- [ ] Settings, General shows one field with the talk key, such as "⌃ Right Control", and
+  under it "Recommended: fn on a Mac's built in keyboard, right Control on an external
+  keyboard." Option shows a small "(Alt)", Command "(Windows key)" and fn "(Globe 🌐)".
+  The same in Chinese, with full width parentheses.
+- [ ] Clicking the field, or Change…, shows "Press the key you want to hold" with a blue
+  border. Pressing and releasing fn alone makes it the talk key, without the emoji picker
+  or an input source switch, and the field shows "fn (Globe 🌐)". Right Option alone
+  shows "⌥ Right Option (Alt)".
+- [ ] While recording, Shift, Caps Lock, A, Return, Space, an arrow key, F5 and Command C
+  each show a reason under the field, such as "The Return key can't be the talk key…",
+  type nothing into the window and keep the recording on. Shift and Caps Lock still do
+  what they always do, because Orra passes modifier presses on: with Pinyin on, Shift
+  switches it between Chinese and English, and Caps Lock turns capitals on or switches to
+  ABC. Escape cancels without a change and leaves the window open. A click elsewhere in
+  the window, or a switch to another app, cancels too, so closing Settings or the welcome
+  window ends a recording first. The current talk key starts no dictation while recording.
+- [ ] Holding Command and pressing right Option is turned down as a combination.
+- [ ] On a Windows layout keyboard, the key printed Alt records as Option and the Windows
+  key as Command. Note which side each one records as.
+- [ ] With an earlier version that had right Control, right Option and fn on, the update
+  keeps fn. With right Control and right Command on, it keeps right Control.
+- [ ] Talk Key in the menu shows "Talk Key: ⌃ Right Control" as a line that cannot be
+  clicked, and Change Talk Key… opens Settings on General, also when Settings was open on
+  another page.
+- [ ] The welcome step "Choose your talk key" records the key the same way.
+- [ ] VoiceOver reads the Settings row as "Talk key" once, with the key as its value.
+  Starting the recording says "Press the key you want to hold" and the keys to use, and
+  each refused press, such as Return or Command C, is read out.
+- [ ] A refused press leaves its note until a key that can be the talk key goes down.
+  Press Return, then hold right Option: the note goes away while the key is held.
+- [ ] Command C shows "⌘ C is a key combination…", and right Option with Command held
+  shows "⌥ ⌘ is a key combination…".
+- [ ] The note text is easy to read in light and dark mode, with an orange icon.
 
 Tap switched off by the system, changed on 2026-10-06, not verified yet. The log lines
 below show with the log stream command under Testing notes:
@@ -518,7 +641,7 @@ are in place since 2026-10-05:
   someone talks. Secure input hides the other keys from Orra, so this can be taken as a
   dictation, and its text is then pasted at the prompt.
 - [ ] A quick tap of the talk key does nothing. Holding it for more than 60 seconds stops
-  the recording and pastes.
+  the recording, pastes, and the indicator says that Orra records up to 1 minute.
 - [ ] Pressing the talk key while the previous dictation is still being processed does
   nothing.
 - [ ] Command V still pastes with the Pinyin, ABC, Dvorak and Dvorak QWERTY Command
@@ -627,7 +750,7 @@ Simplified, then quit and reopen it. Afterwards set it back:
 
 - [ ] The menu, its submenus, Settings, the welcome window and the recording indicator are
   in Chinese, with full width punctuation, and no line is cut off or left in English.
-- [ ] With all four talk keys on, the menu says "按住右侧 Control 键、右侧 Option 键、右侧
+- [ ] With right Control, right Option, right Command and fn on, the menu says "按住右侧 Control 键、右侧 Option 键、右侧
   Command 键或地球仪（fn）键说话".
 - [ ] The download lines read naturally, for example "正在下载语音模型：37%，共 2.47 GB".
 - [ ] In a user account whose system language is Chinese and where Orra never had
@@ -673,6 +796,9 @@ Calmer recording indicator, added on 2026-10-10, not verified yet:
 - [ ] With "Show the recording indicator" off in Settings, a dictation fills the Orra icon
   while you hold the key and turns it into a waveform after release until the text is
   pasted. Then it is the plain mic again.
+- [ ] During hands free, the Orra icon behaves as during a hold: it stays the plain mic
+  with the indicator on, and with the indicator off it stays filled from the double press
+  until the press that finishes, and then turns into a waveform.
 - [ ] The capsule, the bars and the messages read well over a white page and over a dark
   window, in light and in dark mode.
 - [ ] With Reduce Motion on (System Settings, Accessibility, Display), the bars hold a
@@ -848,12 +974,39 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
 Interface language, added on 2026-10-10, not verified yet:
 
 - [ ] Settings, General, Language offers Same as the Mac, English and 简体中文. Choosing one
-  shows Restart Orra, and after the restart the menu, Settings, the welcome window and the
-  indicator use that language. Same as the Mac follows System Settings again.
+  other than the language Orra shows now brings up Restart Orra, and after the restart
+  the menu, Settings, the welcome window and the indicator use that language. Same as the
+  Mac follows System Settings again. Choosing English on a Mac in English shows no Restart
+  Orra.
 - [ ] Settings looks like System Settings: colored icons in the sidebar, a header with icon,
   title and summary on every page, and icons on the rows of General. Language is the first
   section of General. The window can be made larger, keeps its size, and cannot be made
   smaller than its content.
+
+Language in the welcome window, added on 2026-10-10, not verified yet. Prepare a first
+launch as for the welcome window above, with the Mac in English:
+
+- [ ] Under the header, the welcome window shows Language with Same as the Mac, English and
+  简体中文, and under it "You can change this later in Settings, General."
+- [ ] Choosing 简体中文 turns the whole window Chinese at once, without a restart: the
+  title, the header, the language note, every step with its buttons and status lines (the
+  download's progress too), the talk key field, a refused key's note while recording, the
+  recommendation with its Use button, and Not Now. The menu stays in English.
+- [ ] Choosing English or Same as the Mac turns the window back to English.
+- [ ] With Settings open at the same time, its Language picker follows the welcome window,
+  and shows Restart Orra once the language differs from the one Orra shows.
+- [ ] With a step left, choose 简体中文 and click Not Now, with a download running: Orra
+  does not restart and the download goes on. The next launch shows the menu, Settings and
+  the welcome window in Chinese.
+- [ ] With setup complete, a talk key chosen and 简体中文 picked, click Done: Orra quits and
+  opens again within a few seconds, in Chinese, with no welcome window, the same talk key,
+  and the speech model loading.
+- [ ] Done without a change of language does not restart Orra.
+- [ ] With setup complete, choose 简体中文 in Settings, leave Restart Orra unclicked, close
+  Settings and click Done in the welcome window: Orra does not restart.
+- [ ] With setup complete and 简体中文 picked in the welcome window, open Report a Problem,
+  type a few words and click Done in the welcome window: Orra does not restart and the
+  report keeps its text. The same with Settings open.
 
 Report a Problem, added on 2026-10-10, not verified yet:
 
@@ -911,7 +1064,7 @@ Cleanup with a local model, added on 2026-10-10, not verified yet:
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
-- Key combinations and mouse buttons as talk keys, and hands free mode.
+- Key combinations and mouse buttons as talk keys.
 - Translation with the local model. A cache of the fixed part of the cleanup prompt,
   which is most of its 940 tokens and of the 0.36 s the benchmark waited for the first
   token.

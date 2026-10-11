@@ -292,7 +292,12 @@ struct RecordingFeedbackTests {
         return colors
     }
 
-    @Test(arguments: [DictationCue.listening, .transcribing, .finished(message: "No speech was recognized")])
+    @Test(arguments: [
+        DictationCue.listening,
+        .handsFree(finishHint: "Press right Control to finish"),
+        .transcribing,
+        .finished(message: "No speech was recognized"),
+    ])
     func theIndicatorDrawsWhiteOnDarkWithoutColor(_ cue: DictationCue) throws {
         let feedback = makeFeedback()
         if cue == .transcribing {
@@ -430,6 +435,14 @@ struct MenuBarIconTests {
         #expect(symbol(isHotkeyActive: false, dictation: .listening, showsIndicator: false) == "mic.slash")
     }
 
+    @Test func handsFreeCountsAsListening() {
+        #expect(symbol(dictation: .waitingForSecondPress) == "mic")
+        #expect(symbol(dictation: .handsFree) == "mic")
+        #expect(symbol(dictation: .waitingForSecondPress, showsIndicator: false) == "mic.fill")
+        #expect(symbol(dictation: .handsFree, showsIndicator: false) == "mic.fill")
+        #expect(symbol(dictation: .handsFree, showsIndicator: false, hasProblem: true) == "mic.fill")
+    }
+
     @Test func theModelDownloadComesFirst() {
         #expect(symbol(modelSymbol: "arrow.down.circle", isHotkeyActive: false) == "arrow.down.circle")
     }
@@ -438,7 +451,7 @@ struct MenuBarIconTests {
         #expect(symbol(isHotkeyActive: false) == "mic.slash")
         #expect(symbol(modelState: .loading) == "hourglass")
         #expect(symbol(modelState: .notLoaded) == "hourglass")
-        #expect(symbol(modelState: .unavailable("x")) == "exclamationmark.triangle")
+        #expect(symbol(modelState: .unavailable(.failedToLoad)) == "exclamationmark.triangle")
         #expect(symbol(microphoneAccess: .denied) == "exclamationmark.triangle")
         #expect(symbol(microphoneAccess: .notConfigured) == "exclamationmark.triangle")
         #expect(symbol(hasProblem: true) == "exclamationmark.triangle")

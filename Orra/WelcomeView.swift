@@ -1,14 +1,61 @@
+import Combine
 import SwiftUI
 
-/// The welcome window's content: the three steps that make Orra ready, in any order, then
-/// how to dictate. The download comes first because it takes longest, and it goes on
-/// while the user grants the permissions.
+/// The welcome window's content: the language, the three steps that make Orra ready, in
+/// any order, the choice of the talk key, then how to dictate. The download comes first
+/// because it takes longest, and it goes on while the user grants the permissions.
+///
+/// The window shows the language picked in it right away, without a restart: SwiftUI looks
+/// up text literals in the `locale` of the environment, and text built in code is looked
+/// up in `interfaceLocale`. The rest of Orra keeps the language it started with, see
+/// WelcomeWindow for the restart.
 struct WelcomeView: View {
     let pushToTalk: PushToTalkController
     let models: ModelInstaller
     let close: () -> Void
+    /// Tells the window the localization shown, so its title follows.
+    let localizationChanged: (String) -> Void
+    /// Tells the window the language the user picked in it, not one that came from
+    /// Settings, so only a choice made here can restart Orra when the window closes.
+    let languagePicked: (AppLanguage) -> Void
+    @State private var language: AppLanguage
+    /// The localization the window shows, such as "zh-Hans". Kept, so a redraw for the
+    /// download's progress does not read the Mac's languages again.
+    @State private var localization: String
+
+    init(pushToTalk: PushToTalkController, models: ModelInstaller, language: AppLanguage, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void) {
+        self.pushToTalk = pushToTalk
+        self.models = models
+        self.close = close
+        self.localizationChanged = localizationChanged
+        self.languagePicked = languagePicked
+        _language = State(initialValue: language)
+        _localization = State(initialValue: language.localization())
+    }
 
     var body: some View {
+        let locale = Locale(identifier: localization)
+        content
+            .environment(\.locale, locale)
+            .environment(\.interfaceLocale, locale)
+            .onChange(of: language) { _, language in
+                language.save()
+                localization = language.localization()
+            }
+            .onChange(of: localization) { _, localization in
+                localizationChanged(localization)
+            }
+            // Settings can change the language while the window is open. The vocabulary is
+            // saved on another thread, so changes are read on the main one.
+            .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: DispatchQueue.main)) { _ in
+                let saved = AppLanguage.load()
+                if saved != language {
+                    language = saved
+                }
+            }
+    }
+
+    @ViewBuilder private var content: some View {
         let checklist = SetupChecklist(pushToTalk, models)
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top, spacing: 16) {
@@ -24,6 +71,12 @@ struct WelcomeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            LanguageRow(language: Binding {
+                language
+            } set: { picked in
+                language = picked
+                languagePicked(picked)
+            })
             SetupStepRow(number: 1, status: checklist.model, title: "Download the speech model") {
                 ModelStepDetail(models: models, pushToTalk: pushToTalk)
             }
@@ -33,12 +86,20 @@ struct WelcomeView: View {
             SetupStepRow(number: 3, status: checklist.accessibility, title: "Allow Accessibility") {
                 AccessibilityStepDetail(pushToTalk: pushToTalk)
             }
+            // Not part of the checklist: right Control works when the user skips it.
+            SetupStepRow(number: 4, status: pushToTalk.hasChosenTalkKey ? .done : .todo, title: "Choose your talk key") {
+                TalkKeyStepDetail(pushToTalk: pushToTalk)
+            }
             if checklist.isComplete {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Orra is ready")
                         .font(.headline)
                     Text("Try it in any app: hold the talk key, say something, and let go. The text appears where you are typing.")
                         .fixedSize(horizontal: false, vertical: true)
+                    if pushToTalk.handsFreeOn {
+                        Text("For a longer text, press the talk key twice quickly and talk hands free. Press it once more to paste.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -57,6 +118,33 @@ struct WelcomeView: View {
         }
         .padding(28)
         .frame(width: 520)
+    }
+}
+
+/// The language of Orra, with the same choices as in Settings. Each language reads in its
+/// own name, so a user who cannot read the window's language still finds theirs.
+private struct LanguageRow: View {
+    @Binding var language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker(selection: $language) {
+                ForEach(AppLanguage.allCases) { language in
+                    if let name = language.nativeName {
+                        Text(verbatim: name).tag(language)
+                    } else {
+                        Text("Same as the Mac").tag(language)
+                    }
+                }
+            } label: {
+                Label("Language", systemImage: "globe")
+            }
+            .fixedSize()
+            Text("You can change this later in Settings, General.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -112,6 +200,7 @@ private struct StepBadge: View {
 private struct ModelStepDetail: View {
     let models: ModelInstaller
     let pushToTalk: PushToTalkController
+    @Environment(\.interfaceLocale) private var interfaceLocale
 
     var body: some View {
         let total = models.manifest.totalBytes
@@ -125,8 +214,8 @@ private struct ModelStepDetail: View {
                 case .notLoaded, .loading:
                     Text("Loading the speech model…")
                         .foregroundStyle(.secondary)
-                case .unavailable(let reason):
-                    Text(verbatim: reason)
+                case .unavailable(let problem):
+                    Text(verbatim: problem.message(in: interfaceLocale))
                         .foregroundStyle(.secondary)
                     Button("Try Again") {
                         // As in the menu: checks the files again, hashes included.
@@ -136,11 +225,11 @@ private struct ModelStepDetail: View {
             case .downloading(let bytes, _):
                 ProgressView(value: Double(min(bytes, total)), total: Double(max(total, 1)))
                     .frame(maxWidth: 360)
-                lines(models.state.menuLines(total: total))
+                lines(models.state.menuLines(total: total, locale: interfaceLocale))
             default:
-                lines(models.state.menuLines(total: total))
+                lines(models.state.menuLines(total: total, locale: interfaceLocale))
             }
-            if let title = models.state.buttonTitle(total: total) {
+            if let title = models.state.buttonTitle(total: total, locale: interfaceLocale) {
                 Button(title) {
                     if case .downloading = models.state {
                         models.cancel()
@@ -154,7 +243,7 @@ private struct ModelStepDetail: View {
 
     private func lines(_ lines: [String]) -> some View {
         ForEach(lines, id: \.self) { line in
-            // Already in the user's language, so shown as it is.
+            // Already in the window's language, so shown as it is.
             Text(verbatim: line)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -192,13 +281,62 @@ private struct MicrophoneStepDetail: View {
     }
 }
 
+/// The talk key: the recorder that shows the key and changes it, and which key suits this
+/// Mac's keyboard.
+private struct TalkKeyStepDetail: View {
+    let pushToTalk: PushToTalkController
+    /// Read once when the step appears, not in an initial value, which SwiftUI would
+    /// evaluate again each time the window redraws, such as for download progress.
+    /// Reading the registry needs no permission. Nil until then.
+    @State private var keyboard: KeyboardKind?
+    @Environment(\.interfaceLocale) private var interfaceLocale
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TalkKeyRecorder(pushToTalk: pushToTalk)
+            if let keyboard {
+                recommendation(for: keyboard)
+            }
+        }
+        .task {
+            if keyboard == nil {
+                keyboard = KeyboardKind.current()
+            }
+        }
+    }
+
+    @ViewBuilder private func recommendation(for keyboard: KeyboardKind) -> some View {
+        let recommended = keyboard.recommendedKey
+        Group {
+            Group {
+                switch keyboard {
+                case .builtIn:
+                    Text("On this Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, choose right Control, because some, such as the Logitech MX Keys, never send fn.")
+                case .external:
+                    Text("On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn. On a Mac's built in keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse.")
+                }
+            }
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            // Also shown while the recommended key is only the default, so keeping it
+            // completes the step.
+            if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKey != recommended || !pushToTalk.hasChosenTalkKey {
+                Button("Use \(recommended.sentenceName(in: interfaceLocale))") {
+                    pushToTalk.chooseTalkKey(recommended)
+                }
+            }
+        }
+    }
+}
+
 private struct AccessibilityStepDetail: View {
     let pushToTalk: PushToTalkController
+    @Environment(\.interfaceLocale) private var interfaceLocale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if pushToTalk.isHotkeyActive {
-                Text(verbatim: TalkKey.holdHint(for: pushToTalk.talkKeys))
+                Text(verbatim: pushToTalk.talkKey.holdHint(in: interfaceLocale))
                     .foregroundStyle(.secondary)
             } else {
                 Text("Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here.")

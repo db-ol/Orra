@@ -89,6 +89,26 @@ struct LocalizationTests {
         }
     }
 
+    /// Xcode rewrites the catalog in this order whenever it builds, so a catalog kept in
+    /// another order shows up as a change after every build in Xcode.
+    @Test(arguments: ["Localizable", "InfoPlist"])
+    func catalogKeepsXcodesOrder(_ name: String) throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Orra/\(name).xcstrings")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        // The keys of "strings" are the only lines indented by four spaces that open an
+        // object. Each is decoded as a JSON string to undo its escapes.
+        let keys = try text.split(separator: "\n").compactMap { line -> String? in
+            guard let match = line.wholeMatch(of: /\ {4}("(?:[^"\\]|\\.)*") : \{/) else { return nil }
+            return try JSONDecoder().decode(String.self, from: Data(match.output.1.utf8))
+        }
+        #expect(!keys.isEmpty)
+        let sorted = keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        #expect(keys == sorted, "\(name): sort the keys with localizedStandardCompare, as Xcode does")
+    }
+
     @Test func theAppCarriesTheChineseStrings() throws {
         let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
         let chinese = try #require(Bundle(path: path))
@@ -108,11 +128,12 @@ struct LocalizationTests {
     @Test func talkKeyHintsReadAsChineseSentences() throws {
         let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
         let chinese = try #require(Bundle(path: path))
-        #expect(TalkKey.holdHint(for: [], bundle: chinese) == "未设置说话键")
-        #expect(TalkKey.holdHint(for: [.rightControl], bundle: chinese) == "按住右侧 Control 键说话")
-        #expect(TalkKey.holdHint(for: [.fn], bundle: chinese) == "按住地球仪（fn）键说话")
-        #expect(TalkKey.holdHint(for: [.rightControl, .fn], bundle: chinese) == "按住右侧 Control 键或地球仪（fn）键说话")
-        #expect(TalkKey.holdHint(for: [.rightControl, .rightOption, .fn], bundle: chinese) == "按住右侧 Control 键、右侧 Option 键或地球仪（fn）键说话")
-        #expect(TalkKey.holdHint(for: Set(TalkKey.allCases), bundle: chinese) == "按住右侧 Control 键、右侧 Option 键、右侧 Command 键或地球仪（fn）键说话")
+        let locale = Locale(identifier: "zh-Hans")
+        #expect(TalkKey.rightControl.holdHint(in: locale) == "按住右侧 Control 键说话")
+        #expect(TalkKey.fn.holdHint(in: locale) == "按住地球仪（fn）键说话")
+        #expect(chinese.localizedString(forKey: "%@ (%@)", value: nil, table: nil) == "%@（%@）")
+        #expect(chinese.localizedString(forKey: "Windows key", value: nil, table: nil) == "Windows 键")
+        #expect(TalkKey.leftCommand.finishHint(in: locale) == "按左侧 Command 键结束")
+        #expect(TalkKey.fn.finishHint(in: locale) == "按地球仪（fn）键结束")
     }
 }

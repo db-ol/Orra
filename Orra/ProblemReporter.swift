@@ -235,7 +235,7 @@ final class ProblemReporter {
                 // Reads the permission only, never asks for it.
                 accessibilityTrusted: AXIsProcessTrusted(),
                 talkKeyActive: pushToTalk.isHotkeyActive,
-                talkKeys: TalkKey.allCases.filter(pushToTalk.talkKeys.contains).map(\.rawValue),
+                talkKey: pushToTalk.talkKey.rawValue,
                 microphone: microphone,
                 settings: [
                     .init(name: "Recording indicator", on: feedback.showsIndicator),
@@ -266,7 +266,7 @@ final class ProblemReporter {
             case .notLoaded: return "installed, not loaded"
             case .loading: return "installed, loading"
             case .ready: return "installed, loaded"
-            case .unavailable(let reason): return "installed, failed to load: \(reason)"
+            case .unavailable(let problem): return "installed, failed to load: \(problem)"
             }
         }
     }

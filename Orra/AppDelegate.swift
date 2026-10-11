@@ -11,8 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         transcription: .qwen3(),
         cleanup: cleanup.model,
         insert: TextInserter.live().insert,
-        talkKeys: TalkKeyPreference.load(),
-        saveTalkKeys: { TalkKeyPreference.save($0) },
+        talkKey: TalkKeyPreference.load(),
+        saveTalkKey: { TalkKeyPreference.save($0) },
+        talkKeyChosen: TalkKeyPreference.isSaved(),
+        handsFree: HandsFreePreference.load(),
+        saveHandsFree: { HandsFreePreference.save($0) },
         microphone: MicrophonePreference.load(),
         saveMicrophone: { MicrophonePreference.save($0) },
         vocabulary: VocabularyPreference.load(),
@@ -31,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// microphone level.
     lazy var feedback = RecordingFeedback.live(
         inputLevel: { [pushToTalk] in pushToTalk.inputLevel() },
-        holdHint: { [pushToTalk] in TalkKey.holdHint(for: pushToTalk.talkKeys) }
+        holdHint: { [pushToTalk] in pushToTalk.talkKey.holdHint() }
     )
     lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
     lazy var clipboard = ClipboardWord(

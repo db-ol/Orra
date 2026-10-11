@@ -16,7 +16,7 @@ struct StatusMenu: View {
         // Above the talk key, so the download can start before Accessibility is granted.
         ModelMenuSection(models: models, pushToTalk: pushToTalk)
         if pushToTalk.isHotkeyActive {
-            Text(TalkKey.holdHint(for: pushToTalk.talkKeys))
+            Text(pushToTalk.talkKey.holdHint())
             if let warning = MicrophoneLabels.lidWarning(
                 choice: pushToTalk.microphone,
                 inputs: inputs.inputs,
@@ -84,7 +84,19 @@ struct StatusMenu: View {
         Divider()
 
         Menu("Talk Key") {
-            TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
+            // A menu shows text as a line that cannot be clicked. The key is chosen by
+            // pressing it, which a menu cannot do, so Settings does that.
+            Text("Talk Key: \(pushToTalk.talkKey.fullName())")
+            Button("Change Talk Key…") {
+                NSApplication.shared.activate()
+                openWindow(id: SettingsWindow.id)
+                SettingsWindow.showGeneral()
+            }
+            Divider()
+            Toggle("Double Press for Hands Free", isOn: Binding(
+                get: { pushToTalk.handsFreeOn },
+                set: { pushToTalk.setHandsFreeOn($0) }
+            ))
         }
         Menu("Microphone") {
             MicrophoneToggles(inputs: inputs, chosen: pushToTalk.microphone, choose: pushToTalk.setMicrophone)
@@ -152,8 +164,8 @@ struct ModelMenuSection: View {
                 Text("Loading the speech model…")
             case .ready:
                 EmptyView()
-            case .unavailable(let reason):
-                Text(reason)
+            case .unavailable(let problem):
+                Text(verbatim: problem.message())
                 Button("Try Again") {
                     // Checks the files again, hashes included, then loads. A damaged or
                     // missing file leads back to Download.

@@ -205,51 +205,25 @@ struct PushToTalkControllerTests {
         #expect(controller.modelState == .notLoaded)
     }
 
-    @Test func talkKeysDefaultToRightControl() async {
+    @Test func theTalkKeyDefaultsToRightControl() async {
         let controller = await makeController(loadModel: false)
-        #expect(controller.talkKeys == [.rightControl])
+        #expect(controller.talkKey == .rightControl)
     }
 
-    @Test func talkKeysChangeAndAreSaved() {
-        var saved: [Set<TalkKey>] = []
+    @Test func theTalkKeyChangesAndIsSaved() {
+        var saved: [TalkKey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
-            talkKeys: [.rightControl],
-            saveTalkKeys: { saved.append($0) }
+            talkKey: .rightControl,
+            saveTalkKey: { saved.append($0) }
         )
-        controller.setTalkKey(.fn, on: true)
-        #expect(controller.talkKeys == [.rightControl, .fn])
-        controller.setTalkKey(.rightControl, on: false)
-        #expect(controller.talkKeys == [.fn])
-        #expect(saved == [[.rightControl, .fn], [.fn]])
-    }
-
-    @Test func theLastTalkKeyStaysOn() {
-        var saves = 0
-        let controller = PushToTalkController(
-            capture: mic.capture,
-            transcription: speech.transcription,
-            insert: inserter.insert,
-            talkKeys: [.fn],
-            saveTalkKeys: { _ in saves += 1 }
-        )
-        controller.setTalkKey(.fn, on: false)
-        #expect(controller.talkKeys == [.fn])
-        // Turning on a key that is already on changes nothing either.
-        controller.setTalkKey(.fn, on: true)
-        #expect(saves == 0)
-    }
-
-    @Test func anEmptySavedChoiceFallsBackToTheDefault() {
-        let controller = PushToTalkController(
-            capture: mic.capture,
-            transcription: speech.transcription,
-            insert: inserter.insert,
-            talkKeys: []
-        )
-        #expect(controller.talkKeys == TalkKey.defaultKeys)
+        controller.chooseTalkKey(.fn)
+        #expect(controller.talkKey == .fn)
+        controller.chooseTalkKey(.leftOption)
+        #expect(controller.talkKey == .leftOption)
+        #expect(saved == [.fn, .leftOption])
     }
 
     @Test func theChosenMicrophoneIsSavedAndUsedForTheNextRecording() async throws {
@@ -392,7 +366,7 @@ struct PushToTalkControllerTests {
     @Test func aFailedLoadCanBeTriedAgain() async {
         speech.loadError = TranscriptionError.modelMissing
         let controller = await makeController()
-        #expect(controller.modelState == .unavailable("The speech model is not on this Mac"))
+        #expect(controller.modelState == .unavailable(.missing))
         // The user puts the model files in place and chooses Try Again.
         speech.loadError = nil
         await controller.loadModel()
@@ -430,7 +404,7 @@ struct PushToTalkControllerTests {
     @Test func missingModelFilesMakeTheModelUnavailable() async {
         speech.loadError = TranscriptionError.modelMissing
         let controller = await makeController()
-        #expect(controller.modelState == .unavailable("The speech model is not on this Mac"))
+        #expect(controller.modelState == .unavailable(.missing))
     }
 
     @Test func holdBeforeTheModelIsReadyRecordsNothing() async throws {
@@ -779,6 +753,7 @@ struct PushToTalkControllerTests {
         #expect(mic.calls == ["start", "stop"])
         #expect(controller.state == .idle)
         #expect(inserter.inserted == ["你好"])
+        #expect(controller.notice == "Orra records up to 1 minute at a time, so the recording stopped there.")
         // The real release that follows later changes nothing.
         controller.handle(.released)
         #expect(mic.calls == ["start", "stop"])
@@ -1336,5 +1311,273 @@ struct PushToTalkControllerTests {
         // variable the guard relies on is set while tests run. It does not run
         // the guard itself.
         #expect(AppDelegate.isHostedByXcode)
+    }
+
+    // MARK: Hands free
+
+    @Test func aDoublePressRecordsHandsFreeUntilTheNextPress() async throws {
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] }
+        controller.handle(.tapped)
+        #expect(controller.state == .waitingForSecondPress)
+        // The second press, then its quick release.
+        controller.handle(.pressed(isRepeat: false))
+        #expect(controller.state == .listening)
+        controller.handle(.doublePressed)
+        #expect(controller.state == .handsFree)
+        try await waitUntil { cues.list.count == 2 }
+        // The same recording goes on: the microphone started once.
+        #expect(cues.list == [.listening, .handsFree(finishHint: "Press right Control to finish")])
+        #expect(mic.calls == ["start"])
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(mic.calls == ["start", "stop"])
+        #expect(inserter.inserted == ["你好"])
+        #expect(cues.list.last == .finished(message: nil))
+    }
+
+    @Test func aTapThenAHoldPastesAtTheRelease() async throws {
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] }
+        controller.handle(.tapped)
+        // The second press is held, so it is an ordinary hold on the same recording.
+        controller.handle(.pressed(isRepeat: false))
+        #expect(controller.state == .listening)
+        try await waitUntil { cues.list == [.listening, .listening] }
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(mic.calls == ["start", "stop"])
+        #expect(inserter.inserted == ["你好"])
+    }
+
+    @Test func aDoublePressFromIdleStartsTheMicrophoneAndShowsTheHintAtOnce() async throws {
+        let controller = await makeController(listeningCueDelay: .seconds(10))
+        let cues = CueRecorder(controller)
+        controller.handle(.doublePressed)
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.handsFree(finishHint: "Press right Control to finish")])
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(inserter.inserted == ["你好"])
+    }
+
+    @Test func aTapWithoutASecondPressIsDiscarded() async throws {
+        let controller = await makeController()
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.contains("start") }
+        controller.handle(.tapped)
+        // The window ends without a second press.
+        controller.handle(.cancelled)
+        try await waitUntil { mic.calls.contains("cancel") }
+        #expect(controller.state == .idle)
+        #expect(mic.calls == ["start", "cancel"])
+        #expect(inserter.inserted.isEmpty)
+    }
+
+    @Test func cancellingHandsFreePastesNothing() async throws {
+        let controller = await makeController()
+        controller.handle(.doublePressed)
+        try await waitUntil { mic.calls.contains("start") }
+        // Escape, or a change of keys.
+        controller.handle(.cancelled)
+        try await waitUntil { mic.calls.contains("cancel") }
+        #expect(controller.state == .idle)
+        #expect(inserter.inserted.isEmpty)
+        #expect(speech.receivedSampleCounts.isEmpty)
+    }
+
+    @Test func handsFreeStopsAtTheTimeLimitAndSaysWhy() async throws {
+        let controller = await makeController(limit: .milliseconds(50))
+        let cues = CueRecorder(controller)
+        controller.handle(.doublePressed)
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        #expect(inserter.inserted == ["你好"])
+        #expect(cues.list.last == .finished(message: "Orra records up to 1 minute at a time, so the recording stopped there."))
+    }
+
+    @Test func aDoublePressWithoutTheModelSaysWhy() async throws {
+        let controller = await makeController(loadModel: false)
+        let cues = CueRecorder(controller)
+        controller.handle(.doublePressed)
+        #expect(controller.state == .idle)
+        #expect(mic.calls.isEmpty)
+        #expect(cues.list.count == 1)
+    }
+
+    @Test func handsFreeThroughTheTapEndsWithEscape() async throws {
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        let key = TalkKey.rightControl
+        let down = HotkeyTapTests.rightControlDown
+        var now = ContinuousClock.now
+        #expect(tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now) == false)
+        now = now.advanced(by: .milliseconds(80))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        #expect(controller.state == .waitingForSecondPress)
+        now = now.advanced(by: .milliseconds(100))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now)
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        #expect(controller.state == .handsFree)
+        #expect(tap.activeKey == .rightControl)
+        // Escape is swallowed and cancels.
+        #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now))
+        #expect(controller.state == .idle)
+        #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now) == false)
+        try await waitUntil { mic.calls.contains("cancel") }
+        #expect(inserter.inserted.isEmpty)
+    }
+
+    @Test func aDoublePressDuringProcessingLeavesEscapeAlone() async throws {
+        speech.delay = .milliseconds(300)
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.contains("start") }
+        controller.handle(.released)
+        #expect(controller.state == .processing)
+        let key = TalkKey.fn
+        controller.chooseTalkKey(key)
+        var now = ContinuousClock.now
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: .maskSecondaryFn, at: now)
+        now = now.advanced(by: .milliseconds(50))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: .maskSecondaryFn, at: now)
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        // The state model ignored the double press, so the tap holds no dictation.
+        #expect(controller.state == .processing)
+        #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now) == false)
+        try await waitUntil { controller.state == .idle }
+    }
+
+    @Test func handsFreeIsSaved() {
+        var saved: [Bool] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            handsFree: true,
+            saveHandsFree: { saved.append($0) }
+        )
+        controller.setHandsFreeOn(false)
+        controller.setHandsFreeOn(false)
+        #expect(controller.handsFreeOn == false)
+        #expect(saved == [false])
+    }
+
+    // MARK: Choosing the talk key by pressing it
+
+    @Test func pressingAKeyMakesItTheTalkKey() {
+        var saved: [TalkKey] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .rightOption,
+            saveTalkKey: { saved.append($0) }
+        )
+        #expect(controller.hasChosenTalkKey == false)
+        controller.startChoosingTalkKey()
+        #expect(controller.isChoosingTalkKey)
+        controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: .maskShift)
+        #expect(controller.keyChoiceNote == "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
+        controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: [])
+        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
+        #expect(controller.keyChoiceNote == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
+        controller.keyChoice(type: .flagsChanged, keyCode: 0x39, flags: .maskAlphaShift)
+        #expect(controller.keyChoiceNote == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
+        // Command+Return is a shortcut, not Command. Return has the same name on every
+        // keyboard layout, unlike a letter.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
+        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
+        #expect(controller.keyChoiceNote == "⌘ Return is a key combination and can't be the talk key.")
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [])
+        #expect(controller.isChoosingTalkKey)
+        #expect(controller.talkKey == .rightOption)
+        // Left Option pressed and released on its own.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftOption.keyCode, flags: [.maskAlternate, TalkKey.leftOption.downFlag])
+        #expect(controller.isChoosingTalkKey)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftOption.keyCode, flags: [])
+        #expect(controller.isChoosingTalkKey == false)
+        #expect(controller.keyChoiceNote == nil)
+        #expect(controller.talkKey == .leftOption)
+        #expect(saved == [.leftOption])
+        #expect(controller.hasChosenTalkKey)
+        // A press after the choice changes nothing.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [])
+        #expect(controller.talkKey == .leftOption)
+    }
+
+    @Test func aTalkKeyGoingDownClearsTheNoteAboutAnEarlierPress() {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .rightControl
+        )
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
+        #expect(controller.keyChoiceNote == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
+        // A key up or other event that decides nothing keeps the note.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [])
+        #expect(controller.keyChoiceNote != nil)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [.maskAlternate, TalkKey.rightOption.downFlag])
+        #expect(controller.keyChoiceNote == nil)
+        #expect(controller.isChoosingTalkKey)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [])
+        #expect(controller.talkKey == .rightOption)
+    }
+
+    @Test func escapeStopsChoosingWithoutAChange() {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .fn
+        )
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .keyDown, keyCode: 0x00, flags: [])
+        #expect(controller.keyChoiceNote != nil)
+        controller.keyChoice(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [])
+        #expect(controller.isChoosingTalkKey == false)
+        #expect(controller.keyChoiceNote == nil)
+        #expect(controller.talkKey == .fn)
+    }
+
+    @Test func stoppingTheRecordingClearsTheNoteAndAHalfPress() {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .fn
+        )
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [.maskControl, TalkKey.rightControl.downFlag])
+        controller.stopChoosingTalkKey()
+        // A new recording starts afresh, so the earlier press's release chooses nothing.
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [])
+        #expect(controller.isChoosingTalkKey)
+        #expect(controller.talkKey == .fn)
+        controller.stopChoosingTalkKey()
+    }
+
+    @Test func keepingTheDefaultKeySavesIt() {
+        var saved: [TalkKey] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .rightControl,
+            saveTalkKey: { saved.append($0) }
+        )
+        #expect(controller.hasChosenTalkKey == false)
+        controller.chooseTalkKey(.rightControl)
+        #expect(controller.hasChosenTalkKey)
+        #expect(saved == [.rightControl])
     }
 }

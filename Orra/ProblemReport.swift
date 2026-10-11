@@ -25,7 +25,7 @@ nonisolated enum ProblemReport {
         var microphoneAccess: String
         var accessibilityTrusted: Bool
         var talkKeyActive: Bool
-        var talkKeys: [String]
+        var talkKey: String
         var microphone: String
         var settings: [Setting]
         /// The cleanup model's download and loading, as the speech model's state reads.
@@ -141,7 +141,7 @@ nonisolated enum ProblemReport {
         lines.append("Talk key listening: \(yesNo(facts.talkKeyActive))")
         lines.append("")
         lines.append("## Settings")
-        lines.append("Talk keys: \(facts.talkKeys.isEmpty ? "none" : facts.talkKeys.joined(separator: ", "))")
+        lines.append("Talk key: \(facts.talkKey)")
         lines.append("Microphone: \(facts.microphone)")
         for setting in facts.settings {
             lines.append("\(setting.name): \(setting.on ? "on" : "off")")

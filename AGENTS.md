@@ -51,7 +51,9 @@ trusted once in Xcode. docs/dependencies.md has the details.
   `Text(verbatim:)`.
 - Every new or changed string needs its Chinese translation in the catalog, marked
   translated, with full width punctuation (，。：？！（）“”) and a space between Chinese and
-  a Latin word or a number. LocalizationTests checks the strings in the catalog. Xcode adds
+  a Latin word or a number. Keep the keys in the order Xcode writes them, sorted with
+  `localizedStandardCompare`, and remove a string the code no longer uses, which Xcode marks
+  stale. LocalizationTests checks the strings in the catalog and their order. Xcode adds
   new strings to the catalog when it builds, a command line build does not. This lists
   every string the code uses, in build/Localizations:
 

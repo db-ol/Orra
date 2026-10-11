@@ -142,6 +142,21 @@ struct CorrectionFinderTests {
         #expect(find("I use quen 3 now", "I use quen 3 now", "I use Qwen3 now") == Correction(heard: "quen 3", corrected: "Qwen3"))
     }
 
+    @Test func joiningOrSplittingWordsTakesInBothWords() {
+        // Real case: read me was fixed to readme by taking out the space.
+        #expect(find("Update the read me file", "Update the read me file", "Update the readme file") == Correction(heard: "read me", corrected: "readme"))
+        #expect(find("更新 read me 文件", "更新 read me 文件", "更新 readme 文件") == Correction(heard: "read me", corrected: "readme"))
+        #expect(find("I use Qwen 3 now", "I use Qwen 3 now", "I use Qwen3 now") == Correction(heard: "Qwen 3", corrected: "Qwen3"))
+        #expect(find("open the airpodspro case", "open the airpodspro case", "open the airpods pro case") == Correction(heard: "airpodspro", corrected: "airpods pro"))
+    }
+
+    @Test func spacesOutsideAWordAreNotCorrections() {
+        // Only a space taken out after a period, or a line break put in, is no word.
+        #expect(find("It is done. Then we go", "It is done. Then we go", "It is done.Then we go") == nil)
+        #expect(find("first line second line", "first line second line", "first line\nsecond line") == nil)
+        #expect(find("我们  走吧", "我们  走吧", "我们 走吧") == nil)
+    }
+
     @Test func caseEndingsAndDigitsAreNotCorrections() {
         #expect(find("i like apple", "i like apple", "i like Apple") == nil)
         #expect(find("the cloud is here", "the cloud is here", "the clouds is here") == nil)

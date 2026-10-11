@@ -28,7 +28,7 @@ struct SetupChecklistTests {
         #expect(checklist(modelState: .notLoaded).model == .inProgress)
         #expect(checklist(modelState: .loading).model == .inProgress)
         #expect(checklist(modelState: .ready).model == .done)
-        #expect(checklist(modelState: .unavailable("The speech model could not be loaded")).model == .todo)
+        #expect(checklist(modelState: .unavailable(.failedToLoad)).model == .todo)
     }
 
     @Test func onlyGrantedMicrophoneAccessCompletesItsStep() {
@@ -49,7 +49,7 @@ struct SetupChecklistTests {
         #expect(!checklist(installer: .downloading(bytes: 10, source: nil)).isComplete)
         #expect(!checklist(microphone: .notDetermined).isComplete)
         #expect(!checklist(hotkeyActive: false).isComplete)
-        #expect(!checklist(modelState: .unavailable("The speech model is not on this Mac")).isComplete)
+        #expect(!checklist(modelState: .unavailable(.missing)).isComplete)
     }
 
     /// Decides whether launch opens the welcome window and the menu offers Setup Guide.
@@ -57,7 +57,7 @@ struct SetupChecklistTests {
         #expect(!checklist().needsUser)
         #expect(!checklist(modelState: .notLoaded).needsUser)
         #expect(!checklist(modelState: .loading).needsUser)
-        #expect(checklist(modelState: .unavailable("The speech model could not be loaded")).needsUser)
+        #expect(checklist(modelState: .unavailable(.failedToLoad)).needsUser)
         #expect(checklist(installer: .checking).needsUser)
         #expect(checklist(installer: .downloading(bytes: 10, source: nil)).needsUser)
         #expect(checklist(installer: .missing(bytesPresent: 0)).needsUser)
