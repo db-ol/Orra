@@ -193,6 +193,16 @@
         }
       }
     },
+    "Attach the diagnostic report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附上诊断报告"
+          }
+        }
+      }
+    },
     "Cancel Download" : {
       "localizations" : {
         "zh-Hans" : {
@@ -283,12 +293,42 @@
         }
       }
     },
+    "Continue on GitHub" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 GitHub 上继续"
+          }
+        }
+      }
+    },
     "Copy Last Dictation" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "拷贝上次听写"
+          }
+        }
+      }
+    },
+    "Copy Report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝报告"
+          }
+        }
+      }
+    },
+    "Creating the report…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成报告…"
           }
         }
       }
@@ -483,6 +523,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装 Orra %@…"
+          }
+        }
+      }
+    },
+    "It holds Orra’s version, settings, permissions and log from the last hour, facts about your Mac and recent crash reports. It holds no dictated text and no audio. Your name and your Mac’s name are taken out." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其中有 Orra 的版本、设置、权限和最近一小时的日志，你的 Mac 的信息，以及最近的崩溃报告。其中没有听写的文字，也没有录音。你的名字和 Mac 的名称会被去掉。"
           }
         }
       }
@@ -737,6 +787,16 @@
         }
       }
     },
+    "Orra changes your clipboard only when you choose Copy Report, or when your text is too long for the link." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有在你选择“拷贝报告”，或者你的内容太长、链接放不下时，Orra 才会改动剪贴板。"
+          }
+        }
+      }
+    },
     "Orra could not add itself to Login Items" : {
       "localizations" : {
         "zh-Hans" : {
@@ -823,6 +883,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 需要语音模型才能转写。"
+          }
+        }
+      }
+    },
+    "Orra opens the folder with the report file. Drag the file into the page on GitHub." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 会打开报告文件所在的文件夹，请把文件拖进 GitHub 页面。"
           }
         }
       }
@@ -937,6 +1007,36 @@
         }
       }
     },
+    "Report a Problem" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告问题"
+          }
+        }
+      }
+    },
+    "Report a Problem…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告问题…"
+          }
+        }
+      }
+    },
+    "Reports go to GitHub and are public, so leave out private details. You need a free GitHub account. If you are not signed in, GitHub asks you to sign in or to create an account. After you sign in, GitHub shows the form with your text filled in. After creating an account, choose Continue on GitHub again if the form is empty." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告会发到 GitHub 上并公开显示，请不要写入隐私信息。你需要一个免费的 GitHub 账户。如果你没有登录，GitHub 会请你登录或注册账户。登录后，GitHub 会显示已填好你的内容的表单。注册账户后，如果表单是空的，请再选择一次“在 GitHub 上继续”。"
+          }
+        }
+      }
+    },
     "Restart Orra" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1037,6 +1137,16 @@
         }
       }
     },
+    "Show Report File" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示报告文件"
+          }
+        }
+      }
+    },
     "Show a small bar at the bottom of the screen while Orra is ready" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1053,6 +1163,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示录音提示"
+          }
+        }
+      }
+    },
+    "Show the report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看报告"
           }
         }
       }
@@ -1093,6 +1213,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "启动和查找 Orra"
+          }
+        }
+      }
+    },
+    "Stays while the pointer is over it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鼠标停在上面时不会关闭"
           }
         }
       }
@@ -1223,6 +1353,26 @@
         }
       }
     },
+    "The report could not be saved." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存报告。"
+          }
+        }
+      }
+    },
+    "The report could not be saved. Try again, or turn off Attach the diagnostic report to go on without it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存报告。请再试一次，或关闭“附上诊断报告”，不附报告继续。"
+          }
+        }
+      }
+    },
     "The speech model could not be loaded" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1299,6 +1449,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此版本缺少麦克风用途说明"
+          }
+        }
+      }
+    },
+    "Title (optional)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标题（可选）"
           }
         }
       }
@@ -1403,6 +1563,26 @@
         }
       }
     },
+    "What happened?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发生了什么？"
+          }
+        }
+      }
+    },
+    "What you did, what you expected, and what happened instead." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你做了什么，预期的结果是什么，实际发生了什么。"
+          }
+        }
+      }
+    },
     "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1479,6 +1659,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "界面语言、说话键、听写时的提示，以及 Orra 如何启动。"
+          }
+        }
+      }
+    },
+    "Your text was too long for the link, so GitHub shows only its start. The full text is on your clipboard. On GitHub, select all the text in the What happened box and paste." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的内容太长，链接放不下，所以 GitHub 只显示开头部分。完整内容已放到剪贴板上。请在 GitHub 上全选“发生了什么”框里的文字，再粘贴。"
           }
         }
       }

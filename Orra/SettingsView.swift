@@ -65,6 +65,28 @@ struct SettingsIcon: View {
     }
 }
 
+/// A setting's name with what it does in smaller text right under it, as System Settings
+/// shows them, so the explanation sits next to its switch.
+private struct DescribedLabel: View {
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
+    let systemImage: String
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: systemImage)
+        }
+    }
+}
+
 /// The top of each page: its icon, title and what it holds.
 private struct PageHeader: View {
     let page: SettingsPage
@@ -192,22 +214,24 @@ private struct GeneralSettings: View {
                     get: { pushToTalk.removesFillerWords },
                     set: { pushToTalk.setRemovesFillerWords($0) }
                 )) {
-                    Label("Remove filler words such as um and uh", systemImage: "text.badge.minus")
+                    DescribedLabel(
+                        title: "Remove filler words such as um and uh",
+                        detail: "Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.",
+                        systemImage: "text.badge.minus"
+                    )
                 }
                 Toggle(isOn: Binding(
                     get: { pushToTalk.writesNumbersAsDigits },
                     set: { pushToTalk.setWritesNumbersAsDigits($0) }
                 )) {
-                    Label("Write numbers as digits", systemImage: "number")
+                    DescribedLabel(
+                        title: "Write numbers as digits",
+                        detail: "Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words.",
+                        systemImage: "number"
+                    )
                 }
             } header: {
                 Text("While you dictate")
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.")
-                    Text("Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words.")
-                }
-                .foregroundStyle(.secondary)
             }
             Section {
                 Toggle(isOn: Binding(
@@ -226,13 +250,14 @@ private struct GeneralSettings: View {
                         .foregroundStyle(.secondary)
                 }
                 Toggle(isOn: $dockIcon.showsInDock) {
-                    Label("Show Orra in the Dock", systemImage: "dock.rectangle")
+                    DescribedLabel(
+                        title: "Show Orra in the Dock",
+                        detail: "Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.",
+                        systemImage: "dock.rectangle"
+                    )
                 }
             } header: {
                 Text("Starting and finding Orra")
-            } footer: {
-                Text("Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.")
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -341,7 +366,13 @@ private struct VocabularySettings: View {
                 Text("\(terms.count) of \(Vocabulary.limit) words")
             }
             Section {
-                Toggle("Learn from my corrections", isOn: $learning.isOn)
+                Toggle(isOn: $learning.isOn) {
+                    DescribedLabel(
+                        title: "Learn from my corrections",
+                        detail: "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.",
+                        systemImage: "character.cursor.ibeam"
+                    )
+                }
                 if !learning.store.entries.isEmpty {
                     Button("Forget Learned Corrections") {
                         learning.removeAll()
@@ -349,9 +380,6 @@ private struct VocabularySettings: View {
                 }
             } header: {
                 Text("Learning")
-            } footer: {
-                Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -399,14 +427,17 @@ private struct AboutSettings: View {
                 }
             }
             Section {
-                Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
+                Toggle(isOn: $updater.checksAutomatically) {
+                    DescribedLabel(
+                        title: "Check for updates automatically",
+                        detail: "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it.",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                }
                 Button("Check for Updates…") {
                     updater.checkForUpdates()
                 }
                 .disabled(!updater.canCheckForUpdates)
-            } footer: {
-                Text("About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it.")
-                    .foregroundStyle(.secondary)
             }
             Section {
                 Text("Speech is turned into text on this Mac. Orra goes online only to download the speech model when you ask it to, and to check for updates when you allow it.")

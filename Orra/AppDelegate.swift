@@ -51,6 +51,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pushToTalk.vocabulary.contains { $0.lowercased() == word.lowercased() }
         }
     )
+    lazy var report = ReportWindow(reporter: .live(
+        pushToTalk: pushToTalk,
+        models: models,
+        inputs: audioInputs,
+        feedback: feedback,
+        openAtLogin: openAtLogin,
+        dockIcon: dockIcon,
+        learning: learning,
+        updater: updater
+    ))
     lazy var learnedNotice = LearnedNoticePanel(
         notice: LearnedNotice(),
         undo: { [learning] learned in learning.undo(learned) },

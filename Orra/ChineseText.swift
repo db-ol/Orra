@@ -19,6 +19,12 @@ nonisolated enum ChineseText {
 
     static func simplified(_ text: String) -> String {
         guard isMostlyChinese(text) else { return text }
+        return simplifiedCharacters(text)
+    }
+
+    /// Converts traditional characters as `simplified(_:)` does, whatever else the text
+    /// holds. For comparing text, not for text the user sees.
+    static func simplifiedCharacters(_ text: String) -> String {
         var result = ""
         for character in text {
             let isTraditional = alwaysConverted.contains(character)

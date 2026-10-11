@@ -1,68 +1,80 @@
 # Orra
 
-Orra is an open source voice input app for macOS. It sits in the menu bar and the Dock, and Settings can take it out of the Dock. The goal is simple: hold a key, speak, release, and the words land in the app you were typing in. Everything is meant to run on your own Mac.
+English | [简体中文](README.zh-CN.md)
 
-## Status
+Orra is an open source voice input app for the Mac. Hold a key, speak, let go, and the words land in the app you are typing in. Your speech is turned into text on your own Mac, never on a server.
 
-Early stage. While you hold the talk key, right Control unless you pick another under Talk Key in the menu, Orra records. When you let go, it transcribes on your Mac with Qwen3-ASR 1.7B and pastes the text into the frontmost app. In between, a small bar at the bottom of the screen shows that Orra is ready, which Settings can turn off. The parts pass automated tests, but Orra has not been tried in daily use yet. Expect the code and the design to change.
+Orra is an early preview. Expect rough edges, and expect the design to change.
 
-## Requirements
+<p align="center">
+  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/Download-Orra%20for%20macOS-0A84FF?style=for-the-badge&logo=apple&logoColor=white" alt="Download Orra for macOS" height="40"></a><br>
+  For Macs with Apple Silicon and macOS 15.6 or later
+</p>
 
-- macOS 15.6 or later. Apple Silicon is the primary target.
-- Xcode 27 to build, with the Metal Toolchain component (Xcode > Settings > Components). The speech-swift dependency pulls in mlx-swift, which compiles Metal shaders at build time.
-- About 3 GB of free disk space for the speech model, Qwen3-ASR 1.7B (aufklarer/Qwen3-ASR-1.7B-MLX-8bit). Orra downloads it, 2.47 GB, when you choose Download Speech Model in its menu or in the welcome window. If ~/Library/Caches/qwen3-speech already holds it, Orra reuses that copy without downloading.
-- Accessibility access, to watch the talk key and paste, and microphone access. At launch, until Orra has its model and both permissions, a welcome window walks you through the download and the two permissions.
+## What it does
+
+- Dictate in Chinese, English, or both mixed in one sentence, into any app that takes text.
+- Speech becomes text on your Mac with the Qwen3-ASR 1.7B model. Nothing you say leaves the Mac.
+- A personal vocabulary of up to 100 names and terms, so Orra writes them your way. Optionally, Orra learns the words you fix after a dictation.
+- Filler words such as 呃, um and uh are removed, and numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits.
+- A small bar at the bottom of the screen shows that Orra is ready, and while you speak it shows your voice level.
+- Updates install from inside the app.
 
 ## Download
 
-Download the DMG from [the latest release](https://github.com/db-ol/Orra/releases/latest), open it, and drag Orra to Applications. It is signed with a Developer ID and notarized by Apple, and runs on Apple Silicon Macs with macOS 15.6 or later. Orra asks for the microphone and for Accessibility, which it needs to notice the talk key and paste the text. Later versions install from inside the app.
+Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg), the newest version, open it, and drag Orra to Applications. Older versions and the release notes are on [the releases page](https://github.com/db-ol/Orra/releases).
 
-## Build and test
+- Needs a Mac with Apple Silicon and macOS 15.6 or later, and about 3 GB of free disk space.
+- Orra is signed with a Developer ID and notarized by Apple, so it opens without a warning.
+- It is not in the Mac App Store, because the App Store's sandbox does not let an app notice a key in other apps or paste into them.
 
-Run from the repository root:
+## Getting started
 
-    xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
+1. Open Orra. A welcome window walks you through three steps:
+   - **Download the speech model**, 2.47 GB, once.
+   - **Allow the microphone.**
+   - **Allow Accessibility**, which Orra needs to notice the talk key and to paste the text.
+2. Hold the talk key, right Control unless you pick another, and speak. Let go, and the text appears where your cursor is.
+3. Orra lives in the menu bar and the Dock. Its menu and Settings hold everything else.
 
-Replace `build` with `-testLanguage en -testRegion US test` to run the unit tests. They compare English text, so they run in English.
+## Using Orra
 
-The first build in Xcode asks you to Trust & Enable CudaBuild, a build tool plugin of mlx-swift. After that the command above works as is, until a package update changes mlx-swift.
-
-## Daily use
-
-A Release build takes about a quarter less time to transcribe than a Debug build. To keep one in ~/Applications, quit Orra, then run from the repository root:
-
-    xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
-    rm -rf ~/Applications/Orra.app
-    ditto build/DerivedData/Build/Products/Release/Orra.app ~/Applications/Orra.app
-
-Open ~/Applications/Orra.app and turn on Open at Login in its menu. If the welcome window opens for this copy, grant what it lists.
-
-Orra's menu and windows are in English and Simplified Chinese, in the order of your preferred languages in System Settings > General > Language & Region. You can give Orra its own language there under Applications.
-
-While Orra listens, a small indicator at the bottom of the screen shows bars that move with your voice, and a short sound marks the start and the end of the recording. When a dictation pastes nothing, the indicator says why. Both can be turned off in Settings.
-
-Before it pastes, Orra removes filler words that never carry meaning: 呃, 额, um, uh and erm, 嗯 unless it is an answer or comes before a reply such as 嗯，好的, and 啊 or 哦 that opens a clause before a comma, unless a correction such as 不是 follows. A filler in quotation marks stays. Words that can mean something, such as 好啊, 吧, 呢, 那个 and like, stay as you said them. Self corrections such as "三点，哦不是四点" are not applied. Settings, General turns filler removal off.
-
-Orra also writes numbers that the speech model spelled out in Chinese as digits, only where a reader clearly expects digits: 二零二六年十月十号 becomes 2026年10月10号, 下午三点半 becomes 下午3点半, 百分之五十 becomes 50%, 三百五十块 becomes 350块, 四十二公里 becomes 42公里 and Lexus RX 三五零 becomes Lexus RX 350. Small counts such as 三本书, numbers before a counter such as 二十个人, rough numbers such as 十几个, ordinals such as 第三, and idioms such as 一心一意 and 三五成群 stay in words. Settings, General turns this off too.
-
-In Settings, the Vocabulary page takes the words and names you use, up to 100. Orra gives them to the speech model with every dictation, so it writes them your way. On synthetic test speech this raised the share of such terms written correctly from about 84% to 99% in Chinese and from 83% to 96% in English, and words from the list were almost never inserted when they were not said. The list stays on your Mac.
-
-Orra records from the system's default input unless you choose another under Microphone in its menu or in Settings. The choice stays until you change it, and while that microphone is unplugged the default records. With the lid closed, a MacBook turns its own microphone off, so choose another one, such as a webcam's. The menu warns about it. docs/microphone-choice.md explains how the choice works.
+- **Talk key.** Choose right Control, right Option, right Command or fn (Globe) under Talk Key in the menu or in Settings, General.
+- **Vocabulary.** In Settings, Vocabulary, add the words and names you use. Orra gives them to the speech model with every dictation. On test speech this raised the share of such terms written correctly from about 84% to 99% in Chinese and from 83% to 96% in English, and listed words were almost never inserted when nobody said them.
+- **Learning from your corrections.** Turn on "Learn from my corrections" under Vocabulary. When you fix a misheard word right after a dictation, Orra adds the right spelling to your vocabulary and shows a notice with Undo. When you fix one Chinese character of a name, such as 陈阳 to 晨阳, Orra asks instead and offers its guess of the whole word for you to edit and add. A word you remove from the vocabulary is learned again the next time you fix it, while a word you undid is not. It works in apps that let macOS read their text, such as Notes, Mail and Safari. In other apps, copy the word and choose the add item in Orra's menu.
+- **Fillers and numbers.** Before it pastes, Orra removes fillers that only fill a pause, such as 呃, 额, um and uh, and keeps words that carry meaning, such as 好啊, 吧 and 那个. It also writes numbers spoken in Chinese as digits where a reader expects them: 二零二六年十月十号 becomes 2026年10月10号, 百分之五十 becomes 50% and Lexus RX 三五零 becomes Lexus RX 350. Small counts such as 三本书, rough numbers and idioms stay in words. Settings, General turns each of them off.
+- **Microphone.** Orra records from the system's default input unless you choose another under Microphone. With the lid of a MacBook closed, its own microphone is off, so choose another one, such as a webcam's.
+- **Sounds, indicator, bar and Dock icon.** Settings, General turns each of them off.
+- **Language.** Orra's menus and windows are in English and Simplified Chinese, following your Mac. To give Orra its own language, use System Settings, General, Language & Region, Applications.
+- **Updates.** Choose Check for Updates in the menu, or let Orra check by itself under Settings, About.
+- **Reporting a problem.** Choose Report a Problem… in Orra's menu and describe what happened. Continue on GitHub opens a new issue with your text, Orra's version, macOS and your Mac model filled in. GitHub needs a free account, and issues there are public. Orra also writes a diagnostic report for you to drag into the issue.
 
 ## Privacy
 
-Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. The text it pastes stays on this Mac's clipboard, so Universal Clipboard does not offer it to your other devices. Orra has no account, no analytics and no server of its own.
+Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own. The text it pastes stays on this Mac's clipboard, so Universal Clipboard does not offer it to your other devices.
 
-Learning from your corrections is off until you turn it on under Vocabulary in Settings. While it is on, Orra reads the text of the field it pasted into, through macOS Accessibility, once a second for up to 3 minutes after each paste, following each of the last five pastes, so you can dictate several lines and fix them afterwards, to see whether you fixed a misheard word. While you are in another app or field, it waits and reads nothing. It reads only that field, up to 20,000 characters, keeps the text in memory during those minutes only, and never writes it anywhere. It never reads password fields or an app with secure input on. It keeps only the word pairs, such as 克劳德 and Claude, with how often and when each was seen, in ~/Library/Application Support/io.github.db-ol.Orra/corrections.json, and forgets a pair seen once after a week. Runs of three or more digits, such as codes, amounts and years, are never kept, while names such as Qwen3 are. Fixes in different places of a sentence are judged one by one, so fixing a name and a particle such as 嘛 to 吗 learns the name only. A Chinese fix takes in the unchanged characters of the same name, so 通一千万 to 通义千问 learns 通义千问. A learned word has at most 8 Chinese characters or 12 characters in all. The first time you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice with Undo for 10 seconds, longer while the pointer is over it. It never changes the dictated text itself, the vocabulary only helps the model hear the word. Undo takes the word back, and Orra does not learn it again. A learned word you remove from the vocabulary is forgotten, so the next time you fix it Orra adds it again and shows the notice with Undo. Forget Learned Corrections deletes all pairs and keeps the vocabulary. Learning works only in apps that let macOS read their text, such as Notes, Mail and Safari, not in some editors and terminals. In any app, copy a word and the Orra menu offers to add it to your vocabulary. A fix of a single Chinese character is not learned on its own, since it is too often grammar. When the two characters sound alike and are not a common grammar pair such as 的 and 得, Orra offers the word around it, such as 通义千问, in a notice where you can edit it and add it, or close it. A word you close is not offered again for a week. When several notices come at once, they show one after another.
+**Learning from your corrections** is off until you turn it on. While it is on, Orra reads the text of the field it just pasted into, through macOS Accessibility, once a second for up to 3 minutes after each paste, and only while you are in that field. It reads at most 20,000 characters, keeps the text in memory during those minutes only, and never writes it anywhere. It never reads password fields or an app with secure input on. It keeps only the word pairs, such as 克劳德 and Claude, with how often and when each was seen, in ~/Library/Application Support/io.github.db-ol.Orra/corrections.json, and forgets a pair seen once after a week. Runs of three or more digits, such as codes, amounts and years, are never kept. Orra never changes the dictated text itself. Forget Learned Corrections in Settings deletes all pairs.
 
-Orra uses the internet for two things: downloading its speech model, only after you choose Download Speech Model in the menu or the welcome window, and checking for updates, only after you allow it. Launching Orra never connects to the network until you allowed update checks. At its second launch Orra asks whether to check automatically, and the choice is under About in Settings. A check reads https://github.com/db-ol/Orra/releases/latest/download/appcast.xml about once a day. GitHub sees your IP address, Orra's version and, as with any web request, your preferred languages, and nothing else about your Mac. Check for Updates in the menu checks at any time. Orra installs an update only when you choose it, each time, and only when the feed and the DMG are signed with the project's update key. The download fetches six files, 2.47 GB in all, from Hugging Face (huggingface.co). If Hugging Face cannot be reached, for example from mainland China, Orra tries ModelScope (modelscope.cn) and then hf-mirror.com, which carry the same files. hf-mirror.com hands the large weights file on to Hugging Face's own download servers, and outside mainland China it sends every request on to huggingface.co. Like any download, these services and the networks they hand the files to see your IP address. Orra sends no account, token or cookie.
+**Orra uses the internet for two things only.**
 
-Before using the files, Orra checks the size and SHA-256 hash of each one against values written in its source code, so a mirror cannot change the model. The files are kept in ~/Library/Application Support/io.github.db-ol.Orra/Models and left out of Time Machine backups. To remove the model, quit Orra and delete that folder. If ~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit or ~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-8bit exists, delete it as well. While it exists, Orra installs the model again from it at its next launch, and Orra's copy shares disk space with it. docs/model-download.md has the details.
+- **The speech model**, only after you choose Download Speech Model. It fetches six files, 2.47 GB in all, from Hugging Face (huggingface.co). If Hugging Face cannot be reached, for example from mainland China, Orra tries ModelScope (modelscope.cn) and then hf-mirror.com, which carry the same files. hf-mirror.com hands the large weights file on to Hugging Face's own servers, and outside mainland China it sends every request on to huggingface.co. Before using the files, Orra checks the size and SHA-256 hash of each against values in its source code, so a mirror cannot change the model. The files are kept in ~/Library/Application Support/io.github.db-ol.Orra/Models and left out of Time Machine backups.
+- **Update checks**, only after you allow them. At its second launch Orra asks whether to check automatically, and Settings, About has the choice. A check reads https://github.com/db-ol/Orra/releases/latest/download/appcast.xml about once a day. Orra installs an update only when you choose it, each time, and only when the update and its feed are signed with the project's update key.
 
-## Contributing
+Launching Orra never connects to the network until you allowed update checks. Like any download, these services see your IP address, and an update check also shows Orra's version and, as every web request does, your preferred languages. Orra sends no account, token or cookie, and nothing else about your Mac.
 
-Read AGENTS.md before making changes. It describes the platform choices, the intended flow, and the rules for builds and commits.
+**Report a Problem** writes a text file on your Mac with Orra's version, settings and permissions, the Mac's model, chip, memory, macOS version and languages, the microphone's name, Orra's own log from the last hour and its crash reports from the last 7 days. It holds no dictated text, audio, clipboard, vocabulary or learned words. Your home folder, account name, full name and computer name are taken out. Orra sends nothing itself. It opens the GitHub page in your browser, and the file reaches GitHub only if you attach it.
+
+To remove the model, quit Orra and delete the Models folder above. If ~/Library/Caches/qwen3-speech holds a copy from another app, delete that too, or Orra installs the model again from it. docs/model-download.md has the details.
+
+## Feedback and help
+
+- **Found a problem?** Choose Report a Problem… in Orra's menu, or [open an issue on GitHub](https://github.com/db-ol/Orra/issues/new/choose). Please leave out anything private you dictated.
+- **Have a question or an idea?** Ask in [Discussions](https://github.com/db-ol/Orra/discussions).
+
+## For developers
+
+Orra is written in Swift and SwiftUI. [docs/development.md](docs/development.md) explains how to build and test it, how the code is organized, and how releases are made. Read [AGENTS.md](AGENTS.md) before changing the code.
 
 ## License
 
-MIT. See LICENSE.
+MIT. See [LICENSE](LICENSE).

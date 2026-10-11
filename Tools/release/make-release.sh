@@ -1,7 +1,8 @@
 #!/bin/bash
 # Builds a release of Orra: an Apple Silicon app signed with the team's Developer ID,
 # notarized and stapled, in a signed, notarized and stapled DMG, and the Sparkle feed
-# appcast.xml that offers the DMG to earlier versions, signed with the update key.
+# appcast.xml that offers the DMG to earlier versions, signed with the update key. The DMG
+# is also copied, byte for byte, to Orra.dmg for the README's stable download link.
 #
 #     Tools/release/make-release.sh 0.1.0 1
 #
@@ -180,5 +181,21 @@ if $notarize; then
     echo "Feed: $out/appcast.xml"
 fi
 
-shasum -a 256 "$dmg" | tee "$dmg.sha256"
-echo "Done: $dmg"
+# The checksum file names the DMG without a folder, so that `shasum -c` works wherever the
+# file was downloaded and no local path ends up in a public release.
+(cd "$out" && shasum -a 256 "$(basename "$dmg")") | tee "$dmg.sha256"
+
+# The same DMG under a name that stays the same from release to release, so that
+# releases/latest/download/Orra.dmg, the link in the README, always fetches the newest one.
+# It is a copy of the finished, stapled file, not a new build, so it has the same SHA-256.
+# The feed keeps pointing at the versioned name. Only a notarized build gets it, because
+# Orra.dmg is the name that gets uploaded, and a check build removes any older copy.
+stable="$out/Orra.dmg"
+if $notarize; then
+    cp "$dmg" "$stable"
+    cmp -s "$dmg" "$stable" || { echo "$stable differs from $dmg" >&2; exit 1; }
+    echo "Done: $dmg and the same file as $stable"
+else
+    rm -f "$stable"
+    echo "Done: $dmg, not notarized, so not for publishing"
+fi
