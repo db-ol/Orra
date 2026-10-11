@@ -857,6 +857,16 @@
         }
       }
     },
+    "Orra opens the folder with the report file. Drag the file into the page on GitHub." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 会打开报告文件所在的文件夹，请把文件拖进 GitHub 页面。"
+          }
+        }
+      }
+    },
     "Orra records only while you hold the talk key." : {
       "localizations" : {
         "zh-Hans" : {
@@ -873,16 +883,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 重新启动后才会显示新的语言。"
-          }
-        }
-      }
-    },
-    "Orra shows the report file in Finder. Drag it into the page on GitHub." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 会在访达中显示报告文件。请把它拖进 GitHub 页面。"
           }
         }
       }
@@ -1097,22 +1097,22 @@
         }
       }
     },
+    "Show Report File" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示报告文件"
+          }
+        }
+      }
+    },
     "Show a small bar at the bottom of the screen while Orra is ready" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 待命时，在屏幕底部显示一条小横条"
-          }
-        }
-      }
-    },
-    "Show in Finder" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在访达中显示"
           }
         }
       }

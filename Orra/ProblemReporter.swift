@@ -377,7 +377,7 @@ struct ReportView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Reports go to GitHub and are public, so leave out private details. You need a free GitHub account. If you are not signed in, GitHub asks you to sign in or to create an account. After you sign in, GitHub shows the form with your text filled in. After creating an account, choose Continue on GitHub again if the form is empty.")
                 if attachesReport {
-                    Text("Orra shows the report file in Finder. Drag it into the page on GitHub.")
+                    Text("Orra opens the folder with the report file. Drag the file into the page on GitHub.")
                 }
                 Text("Orra changes your clipboard only when you choose Copy Report, or when your text is too long for the link.")
             }
@@ -396,7 +396,7 @@ struct ReportView: View {
                     reporter.copyReport()
                 }
                 .disabled(!reportReady)
-                Button("Show in Finder") {
+                Button("Show Report File") {
                     reporter.showInFinder()
                 }
                 .disabled(!reportReady)
