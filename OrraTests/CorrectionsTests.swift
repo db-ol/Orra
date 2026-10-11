@@ -17,9 +17,16 @@ struct CorrectionFinderTests {
         CorrectionFinder.findings(pasted: pasted, edited: edited)
     }
 
-    @Test func aMisheardChineseNameIsFound() {
+    @Test func aMisheardChineseNameIsFoundWhole() {
+        // 迪 did not change, and it is part of the name.
         let pasted = "我约了迪力热吧见面"
-        #expect(find(pasted, "备注：" + pasted, "备注：我约了迪丽热巴见面") == Correction(heard: "力热吧", corrected: "丽热巴"))
+        #expect(find(pasted, "备注：" + pasted, "备注：我约了迪丽热巴见面") == Correction(heard: "迪力热吧", corrected: "迪丽热巴"))
+    }
+
+    @Test func aNameWithItsFirstCharacterRightIsLearnedWhole() {
+        // Real case: 义千问 was learned, since 通 had not changed.
+        #expect(findings("通一千万", "通义千问") == [.word(Correction(heard: "通一千万", corrected: "通义千问"))])
+        #expect(findings("我在用通一千万写代码", "我在用通义千问写代码") == [.word(Correction(heard: "通一千万", corrected: "通义千问"))])
     }
 
     @Test func separateFixesInOneSentenceAreJudgedApart() {

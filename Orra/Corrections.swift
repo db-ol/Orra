@@ -216,7 +216,9 @@ nonisolated enum CorrectionFinder {
 
     /// What one edit calls for. One changed Chinese character is too little to tell a name
     /// from grammar, such as 的 and 得, and the system cannot split an unknown name into
-    /// words, so OneCharacterFix offers such a word to the user instead.
+    /// words, so OneCharacterFix offers such a word to the user instead. An edit of Chinese
+    /// characters only takes in the single characters around it, as the offered word does,
+    /// so 通一千万 to 通义千问 learns the whole name although 通 did not change.
     private static func judge(_ hunk: Hunk, _ paste: [Character], _ edited: [Character], within bounds: Range<Int>) -> Finding? {
         if hunk.old.count == 1, hunk.new.count == 1, isHan(paste[hunk.old.lowerBound]), isHan(edited[hunk.new.lowerBound]) {
             return OneCharacterFix.suggestion(paste: paste, edited: edited, at: hunk.old.lowerBound, hunk.new.lowerBound, within: bounds)
@@ -230,7 +232,12 @@ nonisolated enum CorrectionFinder {
               !differsOnlyInFirstLetterCase(heard, corrected),
               !differsOnlyInEnding(heard, corrected),
               SoundAlike.soundsAlike(heard, corrected) else { return nil }
-        return .word(Correction(heard: heard, corrected: corrected))
+        guard paste[hunk.old].allSatisfy(isHan), edited[hunk.new].allSatisfy(isHan) else {
+            return .word(Correction(heard: heard, corrected: corrected))
+        }
+        let word = OneCharacterFix.widen(hunk.new, in: edited, within: bounds)
+        let old = (hunk.old.lowerBound - (hunk.new.lowerBound - word.lowerBound))..<(hunk.old.upperBound + (word.upperBound - hunk.new.upperBound))
+        return .word(Correction(heard: String(paste[old]), corrected: String(edited[word])))
     }
 
     private static func isLatin(_ character: Character) -> Bool {

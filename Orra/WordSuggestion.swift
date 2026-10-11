@@ -106,12 +106,26 @@ nonisolated enum OneCharacterFix {
             let fits = token.count <= maximumGuessLength && bounds.lowerBound <= token.lowerBound && token.upperBound <= bounds.upperBound
             return fits ? token : index..<(index + 1)
         }
+        return grow(index..<(index + 1), in: text, split, within: bounds, takingItsTokens: false)
+    }
+
+    /// An edit of two or more Han characters, such as 一千万 to 义千问 in 通义千问, widened
+    /// the same way to the single characters around it that are not function words, and to
+    /// the rest of a word the tokenizer found across its edge. Stays within `bounds` and
+    /// grows to no more than `maximumGuessLength`, so 迪力热吧 to 迪丽热巴 gives 迪丽热巴.
+    static func widen(_ range: Range<Int>, in text: [Character], within bounds: Range<Int>) -> Range<Int> {
+        grow(range, in: text, tokens(in: text), within: bounds, takingItsTokens: true)
+    }
+
+    private static func grow(_ range: Range<Int>, in text: [Character], _ split: Tokens, within bounds: Range<Int>, takingItsTokens: Bool) -> Range<Int> {
+        var lower = range.lowerBound
+        var upper = range.upperBound
         func joins(_ position: Int) -> Bool {
-            bounds.contains(position) && isHan(text[position]) && split.isSingle(position)
-                && !functionWords.contains(text[position])
+            guard bounds.contains(position), isHan(text[position]), !functionWords.contains(text[position]) else { return false }
+            if split.isSingle(position) { return true }
+            guard takingItsTokens, let token = split.ranges[position] else { return false }
+            return token.overlaps(lower..<upper)
         }
-        var lower = index
-        var upper = index + 1
         var growing = true
         while growing, upper - lower < maximumGuessLength {
             growing = false
