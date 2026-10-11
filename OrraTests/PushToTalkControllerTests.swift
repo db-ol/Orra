@@ -1204,6 +1204,9 @@ struct PushToTalkControllerTests {
         try await waitUntil { cues.list == [.listening] }
         controller.handle(.tapped)
         #expect(controller.state == .waitingForSecondPress)
+        // The second press, then its quick release.
+        controller.handle(.pressed(isRepeat: false))
+        #expect(controller.state == .listening)
         controller.handle(.doublePressed)
         #expect(controller.state == .handsFree)
         try await waitUntil { cues.list.count == 2 }
@@ -1215,6 +1218,22 @@ struct PushToTalkControllerTests {
         #expect(mic.calls == ["start", "stop"])
         #expect(inserter.inserted == ["你好"])
         #expect(cues.list.last == .finished(message: nil))
+    }
+
+    @Test func aTapThenAHoldPastesAtTheRelease() async throws {
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] }
+        controller.handle(.tapped)
+        // The second press is held, so it is an ordinary hold on the same recording.
+        controller.handle(.pressed(isRepeat: false))
+        #expect(controller.state == .listening)
+        try await waitUntil { cues.list == [.listening, .listening] }
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(mic.calls == ["start", "stop"])
+        #expect(inserter.inserted == ["你好"])
     }
 
     @Test func aDoublePressFromIdleStartsTheMicrophoneAndShowsTheHintAtOnce() async throws {
@@ -1372,5 +1391,20 @@ struct PushToTalkControllerTests {
         controller.keyChoice(.escape)
         #expect(controller.isChoosingTalkKey == false)
         #expect(controller.talkKeys == [.fn])
+    }
+
+    @Test func keepingTheDefaultKeySavesIt() {
+        var saved: [Set<TalkKey>] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKeys: [.rightControl],
+            saveTalkKeys: { saved.append($0) }
+        )
+        #expect(controller.hasChosenTalkKeys == false)
+        controller.chooseTalkKey(.rightControl)
+        #expect(controller.hasChosenTalkKeys)
+        #expect(saved == [[.rightControl]])
     }
 }

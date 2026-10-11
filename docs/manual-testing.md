@@ -21,17 +21,20 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 2165 test cases passed on 2026-10-10, 162
+- The test command ends in TEST SUCCEEDED with 2176 test cases passed on 2026-10-10, 162
   of them filler rule cases and 1394 number rule cases, including the real model tests
   below. Three heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
     35 rows) and each edge case decision, including cancel, a tap that waits for a second
-    press, a double press from idle and after a tap, and presses during hands free and
-    during processing.
+    press, a second press that resumes listening and ends as a double press or a hold, a
+    double press from idle and after a tap, and presses during hands free and during
+    processing.
   - TalkKeyHandsFreeTests drives the detector with a clock the test moves: a quick double
-    press that starts hands free, a tap whose window closes, a slow second press that is
-    an ordinary hold, a long hold that is never a tap, a stale timer, another key, another
-    modifier or a click between the presses, turning hands free off during a window, fn
+    press that starts hands free at the second release, a tap whose window closes, a slow
+    second press that is an ordinary hold, a tap followed by a hold for a right and a left
+    key, a shortcut or a click during the second press, another talk key during the
+    window, a long hold that is never a tap, a stale timer, another key, another modifier
+    or a click between the presses, turning hands free off during a window, fn
     staying hidden throughout, typing and clicks during hands free, Escape with the key up
     and down and Escape outside hands free, a shortcut with a left key and the key with
     another modifier that do not finish, a Control click and an fn click, a change of keys,
@@ -59,7 +62,8 @@ Build and test commands, run in the repository root:
     itself, tells its owner and does not switch itself back on. It also checks that a left
     key's timer starts the hold and a shortcut cancels it, that a tap's window ends when its
     timer fires, also with the real wait, and that while the user chooses a key the tap
-    reports presses and swallows fn and Escape only while Orra is active, and ends a hold.
+    reports presses and swallows fn and Escape only while Orra is active, ends a hold, and
+    swallows the release of the chosen fn without starting anything.
   - TalkKeyTests checks the key codes and left and right bits of all seven keys and the
     Escape and Shift key codes against the system headers, that the saved raw values never
     change, that only the left keys wait, the default of right Control, reading a release
@@ -71,7 +75,8 @@ Build and test commands, run in the repository root:
     TalkKeyPreferenceTests saves and loads the choice in UserDefaults suites of its own,
     never Orra's. PushToTalkControllerTests checks that changes are saved and that the
     last key stays on, choosing a key by pressing it with Shift, other keys and Escape, a
-    double press that keeps the recording and pastes at the next press, a double press from
+    double press that keeps the recording and pastes at the next press, a tap then a hold
+    that pastes at the release, keeping the default key, a double press from
     idle with the hint at once, a tap without a second press, cancelling hands free, the
     limit during hands free with its message, a double press without the model, Escape
     through the tap, and a double press during processing that leaves Escape alone.
@@ -367,7 +372,9 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
   key starts no dictation while Orra waits for the key.
 - [ ] Welcome window: the step "Choose your talk key" recommends fn on a MacBook with the
   lid open, and right Control on a Mac without a built in keyboard or with the lid closed.
-  Use fn or Use right Control changes the key, and the step gets its check mark. Try it
+  Use fn or Use right Control changes the key, and the step gets its check mark, also when
+  the recommended key is the default already. The check mark stays after a relaunch.
+  Closing Settings while the welcome window waits for a key leaves that wait alone. Try it
   before granting Accessibility too.
 - [ ] Double press the talk key in Notes and let go: the indicator shows "Press right
   Control to finish", or the key used, and keeps recording. Type and click in Notes: it
@@ -377,6 +384,10 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
   that, Escape works in Notes again.
 - [ ] A double press with a slow second press is an ordinary hold. Note whether 0.3 and 0.4
   seconds feel right.
+- [ ] Tap the talk key, then at once hold it and say a sentence: the text is pasted at the
+  release, and Orra does not go on recording.
+- [ ] With left Command as the talk key, tap Command, then press Command V at once: the
+  paste happens, and Orra plays no sound and does not record.
 - [ ] Hands free with left Command: Command Tab to another app does not finish the
   dictation. A press of left Command alone then pastes into the app in front.
 - [ ] With Keyboard > Dictation > Shortcut set to "Press Control Key Twice", double press

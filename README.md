@@ -30,7 +30,7 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
 
 ## Getting started
 
-1. Open Orra. A welcome window walks you through three steps, and lets you choose your talk key:
+1. Open Orra. A welcome window walks you through four steps. The first three make Orra ready, and the last one is up to you:
    - **Download the speech model**, 2.47 GB, once.
    - **Allow the microphone.**
    - **Allow Accessibility**, which Orra needs to notice the talk key and to paste the text.

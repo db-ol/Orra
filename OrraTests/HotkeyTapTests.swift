@@ -189,6 +189,26 @@ struct HotkeyTapTests {
         #expect(presses.count == 4)
     }
 
+    @Test func theChosenKeysReleaseIsSwallowedAndStartsNothing() {
+        var events: [PushToTalkStateMachine.Event] = []
+        let tap = HotkeyTap(keys: [.rightControl], install: { _ in nil }, wait: Self.neverFires, isAppActive: { true }) { events.append($0) }
+        // The owner ends the choice and makes fn the talk key, as the controller does.
+        tap.chooseKey { press in
+            if case .talkKey(let key) = press {
+                tap.chooseKey(nil)
+                tap.setKeys([key])
+            }
+        }
+        #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn))
+        // fn's release is hidden like its press, so its system action does not fire.
+        #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: []))
+        #expect(events.isEmpty)
+        #expect(tap.activeKey == nil)
+        // The next press records.
+        #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn))
+        #expect(events == [.pressed(isRepeat: false)])
+    }
+
     @Test func choosingAKeyEndsAHold() {
         var events: [PushToTalkStateMachine.Event] = []
         let tap = HotkeyTap(keys: [.rightControl], install: { _ in nil }, wait: Self.neverFires, isAppActive: { true }) { events.append($0) }

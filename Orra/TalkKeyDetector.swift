@@ -55,11 +55,19 @@ import CoreGraphics
 /// Decisions about hands free, while `handsFreeEnabled` is on:
 /// - A press released within `tapLimit` is a tap, not a hold. Its recording goes on for
 ///   `doublePressWindow` (event `.tapped`), and a second press of the same key on its own
-///   within that window starts a hands free dictation (event `.doublePressed`) that keeps
-///   the recording. A left hand key released before `leftKeyDelay` has not recorded, so a
-///   double press of it starts the recording at the second press. A second press after the
-///   window is an ordinary hold. Any other key, modifier or click inside the window ends
-///   it, so a tap followed by a shortcut is no double press.
+///   may start within that window. That press is a hold like the first, under the same
+///   rules: a right hand key or fn records at once (event `.pressed`, which keeps the
+///   tap's recording), and a left hand key waits for `leftKeyDelay`. Any key, modifier or
+///   click while it is down makes it a shortcut, which records nothing more and plays no
+///   cue. Only when the second press is released within `tapLimit` does it start a hands
+///   free dictation (event `.doublePressed`), which keeps the recording. A longer second
+///   press is an ordinary hold that is processed at its release, so a tap followed by a
+///   hold never leaves Orra recording. A left hand key released before `leftKeyDelay` has
+///   not recorded, so its double press starts the recording at the second release. A
+///   second press after the window is an ordinary hold. Any other key, modifier or click
+///   inside the window ends it, so a tap followed by a shortcut is no double press. A
+///   press of another talk key inside the window ends it too, and starts that key's own
+///   hold.
 /// - During a hands free dictation the key may come up. A later press of the same key on
 ///   its own ends the dictation and pastes at its release (event `.released`). A release is
 ///   used rather than the press, so a shortcut with the key, such as left Command+Tab,
@@ -96,15 +104,15 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         case cancelled(TalkKey)
         /// The key went down as part of another shortcut. Its release passes through.
         case passingThrough(TalkKey)
-        /// The key was tapped and is up. A second press within `doublePressWindow` starts
-        /// a hands free dictation. `recording` is true when the tap sent `.pressed`, so the
+        /// The key was tapped and is up. A second press within `doublePressWindow` that is
+        /// released within `tapLimit` starts a hands free dictation. `recording` is true when the tap sent `.pressed`, so the
         /// end of the window has to cancel that recording.
         case tapped(TalkKey, recording: Bool)
         /// A hands free dictation runs and the key is up.
         case handsFree(TalkKey)
         /// A hands free dictation runs and the key is down. Its release ends the dictation
-        /// when `finishes` is true: the press came on its own, was not the double press
-        /// that started the dictation, and no key, modifier or click came since.
+        /// when `finishes` is true: the press came on its own, and no key, modifier or
+        /// click came since.
         case handsFreeKeyDown(TalkKey, finishes: Bool)
 
         /// The talk key this phase is about, if any.
@@ -177,6 +185,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     private(set) var generation = 0
     /// When the key of the current press went down.
     private var pressedAt: ContinuousClock.Instant?
+    /// Whether the current press came within a tap's window, so its quick release is a
+    /// double press.
+    private var isSecondPress = false
 
     init(keys: Set<TalkKey>, handsFreeEnabled: Bool = true) {
         self.keys = keys
@@ -200,6 +211,16 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         return reset()
     }
 
+    /// The user chose `key` as the talk key by pressing it, and it is still down. Its
+    /// release starts or ends nothing and, for fn, is swallowed like its press, so the
+    /// "Press fn key to" action does not fire. Returns `.cancelled` when a recording was
+    /// in progress.
+    mutating func ignoreUntilReleased(_ key: TalkKey) -> PushToTalkStateMachine.Event? {
+        let event = reset()
+        phase = .cancelled(key)
+        return event
+    }
+
     /// Turns double press for hands free on or off. Turning it off ends a tap's window and
     /// returns `.cancelled` when the tap was recording. A hands free dictation that runs
     /// already goes on until it is finished.
@@ -217,7 +238,18 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             // Only the key this phase is about, or any talk key while no key is down,
             // counts as a talk key event. Everything else is another modifier.
             let key: TalkKey?
-            if let active = phase.key {
+            if case .tapped(let tapped, let recording) = phase, tapped.keyCode != keyCode,
+               let other = keys.first(where: { $0.keyCode == keyCode }) {
+                // Another talk key ends the tap's window and starts a press of its own.
+                // Its hold keeps the tap's recording. When it starts no recording at its
+                // press, the tap's recording is discarded.
+                phase = .up
+                var decision = handleChange(of: other, isDown: other.isDown(in: flags, wasDown: false), flags: flags, at: now)
+                if recording, decision.event == nil {
+                    decision.event = .cancelled
+                }
+                return decision
+            } else if let active = phase.key {
                 key = active.keyCode == keyCode ? active : nil
             } else {
                 key = keys.first { $0.keyCode == keyCode }
@@ -238,6 +270,8 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         guard generation == self.generation else { return nil }
         switch phase {
         case .arming(let key):
+            // Held long enough to be a hold, even when it was a second press.
+            isSecondPress = false
             phase = .holding(key)
             return .pressed(isRepeat: false)
         case .tapped(_, let recording):
@@ -307,6 +341,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         let alone = flags.isDisjoint(with: key.otherModifiers)
         switch (phase, isDown) {
         case (.up, true):
+            isSecondPress = false
             guard alone else {
                 phase = .passingThrough(key)
                 return .passThrough
@@ -319,8 +354,17 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             phase = .holding(key)
             return Decision(event: .pressed(isRepeat: false), swallow: swallow)
         case (.arming, false):
-            // Released before the delay: nothing recorded. A tap when hands free is on.
-            phase = handsFreeEnabled && !key.twinIsDown(atReleaseWith: flags) ? .tapped(key, recording: false) : .up
+            // Released before the delay: nothing recorded. A tap when hands free is on, and
+            // the end of a double press when it was the second press.
+            guard handsFreeEnabled, !key.twinIsDown(atReleaseWith: flags) else {
+                phase = .up
+                return Decision(event: nil, swallow: swallow)
+            }
+            if isSecondPress {
+                phase = .handsFree(key)
+                return Decision(event: .doublePressed, swallow: swallow)
+            }
+            phase = .tapped(key, recording: false)
             return Decision(event: nil, swallow: swallow)
         case (.holding, false):
             if key.twinIsDown(atReleaseWith: flags) {
@@ -328,6 +372,10 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
                 return Decision(event: .cancelled, swallow: swallow)
             }
             if handsFreeEnabled, let pressedAt, pressedAt.duration(to: now) < Self.tapLimit {
+                if isSecondPress {
+                    phase = .handsFree(key)
+                    return Decision(event: .doublePressed, swallow: swallow)
+                }
                 phase = .tapped(key, recording: true)
                 return Decision(event: .tapped, swallow: swallow)
             }
@@ -338,9 +386,17 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
                 phase = .passingThrough(key)
                 return Decision(event: recording ? .cancelled : nil, swallow: false)
             }
+            // The second press. Only its release tells a double press from a hold, and a
+            // key or click before then makes it a shortcut.
             pressedAt = now
-            phase = .handsFreeKeyDown(key, finishes: false)
-            return Decision(event: .doublePressed, swallow: swallow)
+            isSecondPress = true
+            if key.waitsBeforeRecording {
+                // A left hand key's tap never recorded, see `tapLimit`.
+                phase = .arming(key)
+                return Decision(event: recording ? .cancelled : nil, swallow: swallow)
+            }
+            phase = .holding(key)
+            return Decision(event: .pressed(isRepeat: false), swallow: swallow)
         case (.handsFree, true):
             pressedAt = now
             phase = .handsFreeKeyDown(key, finishes: alone)

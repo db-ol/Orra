@@ -199,6 +199,12 @@ final class HotkeyTap {
             if let chooser, isAppActive() {
                 if let press = KeyChoice.press(type: type, keyCode: keyCode, flags: flags) {
                     chooser(press)
+                    // The press chose its key and ended the choice. The key is still down,
+                    // and its release must not reach the system on its own (for fn) or start
+                    // anything.
+                    if self.chooser == nil, case .talkKey(let key) = press {
+                        afterDetectorChange(detector.ignoreUntilReleased(key))
+                    }
                 }
                 return (type == .flagsChanged && keyCode == TalkKey.fn.keyCode)
                     || (type == .keyDown && keyCode == TalkKeyDetector.escapeKeyCode)

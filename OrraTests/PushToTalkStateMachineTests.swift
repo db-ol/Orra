@@ -42,11 +42,11 @@ struct PushToTalkStateMachineTests {
         Row(from: .listening, event: .pressed(isRepeat: true), to: .listening, transition: nil),
         Row(from: .listening, event: .released, to: .processing, transition: .startedProcessing),
         Row(from: .listening, event: .tapped, to: .waitingForSecondPress, transition: .awaitingSecondPress),
-        Row(from: .listening, event: .doublePressed, to: .listening, transition: nil),
+        Row(from: .listening, event: .doublePressed, to: .handsFree, transition: .switchedToHandsFree),
         Row(from: .listening, event: .cancelled, to: .idle, transition: .cancelledListening),
         Row(from: .listening, event: .processingFinished, to: .listening, transition: nil),
 
-        Row(from: .waitingForSecondPress, event: .pressed(isRepeat: false), to: .waitingForSecondPress, transition: nil),
+        Row(from: .waitingForSecondPress, event: .pressed(isRepeat: false), to: .listening, transition: .resumedListening),
         Row(from: .waitingForSecondPress, event: .pressed(isRepeat: true), to: .waitingForSecondPress, transition: nil),
         Row(from: .waitingForSecondPress, event: .released, to: .waitingForSecondPress, transition: nil),
         Row(from: .waitingForSecondPress, event: .tapped, to: .waitingForSecondPress, transition: nil),
@@ -193,6 +193,19 @@ struct PushToTalkStateMachineTests {
         #expect(machine.handle(.released) == .startedProcessing)
         #expect(machine.handle(.processingFinished) == .finished)
         #expect(machine.state == .idle)
+    }
+
+    @Test func theSecondPressKeepsTheRecordingAndItsReleaseDecides() {
+        // A quick second press: hands free at its release.
+        var quick = makeMachine(in: .waitingForSecondPress)
+        #expect(quick.handle(.pressed(isRepeat: false)) == .resumedListening)
+        #expect(quick.isRecording)
+        #expect(quick.handle(.doublePressed) == .switchedToHandsFree)
+        #expect(quick.state == .handsFree)
+        // A long second press: a hold, processed at its release.
+        var hold = makeMachine(in: .waitingForSecondPress)
+        #expect(hold.handle(.pressed(isRepeat: false)) == .resumedListening)
+        #expect(hold.handle(.released) == .startedProcessing)
     }
 
     @Test func aTapWithoutASecondPressIsDiscarded() {

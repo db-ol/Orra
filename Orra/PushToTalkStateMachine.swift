@@ -5,6 +5,8 @@
 ///     idle --press--> listening --release--> processing --finished--> idle
 ///                     listening --cancel---> idle
 ///                     listening --tap------> waitingForSecondPress
+///     waitingForSecondPress --press---------> listening
+///     listening --double press--> handsFree
 ///     waitingForSecondPress --double press--> handsFree
 ///     waitingForSecondPress --cancel--------> idle
 ///     idle --double press--> handsFree --release--> processing
@@ -34,10 +36,13 @@
 ///   or when it may have missed the release. A cancel in idle or in processing is
 ///   ignored, so a recording that is already being processed is never thrown away.
 /// - A tap while listening keeps the recording going while the hotkey layer waits
-///   for a second press. A double press then turns that recording into a hands free
-///   dictation, so the first words are not lost to a restart of the microphone. When
-///   no second press comes, the hotkey layer sends a cancel and the tap's recording,
-///   which was too short to transcribe, is discarded.
+///   for a second press. The second press goes back to listening, still on the same
+///   recording, because only its release tells a double press from a tap followed by a
+///   hold. A double press, sent at that release, then turns the recording into a hands
+///   free dictation, so the first words are not lost to a restart of the microphone. A
+///   release after a longer second press processes it like any hold. When no second
+///   press comes, the hotkey layer sends a cancel and the tap's recording, which was too
+///   short to transcribe, is discarded.
 /// - A double press in idle starts a hands free dictation with a new recording. That
 ///   happens for a left hand key, whose tap never started a recording.
 /// - During a hands free dictation, a release ends it and processes the recording,
@@ -80,10 +85,13 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         case startedListening
         /// listening to waitingForSecondPress. Keep capturing.
         case awaitingSecondPress
+        /// waitingForSecondPress to listening. Keep capturing, the second press may be a
+        /// hold.
+        case resumedListening
         /// idle to handsFree. Start capturing audio.
         case startedHandsFree
-        /// waitingForSecondPress to handsFree. Keep capturing, the dictation goes on
-        /// after the key comes up.
+        /// listening or waitingForSecondPress to handsFree. Keep capturing, the dictation
+        /// goes on after the key comes up.
         case switchedToHandsFree
         /// listening or handsFree to processing. Stop capturing and process the recording.
         case startedProcessing
@@ -124,7 +132,10 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         case (.listening, .tapped):
             state = .waitingForSecondPress
             return .awaitingSecondPress
-        case (.waitingForSecondPress, .doublePressed):
+        case (.waitingForSecondPress, .pressed):
+            state = .listening
+            return .resumedListening
+        case (.listening, .doublePressed), (.waitingForSecondPress, .doublePressed):
             state = .handsFree
             return .switchedToHandsFree
         case (.listening, .cancelled), (.waitingForSecondPress, .cancelled), (.handsFree, .cancelled):
@@ -134,8 +145,8 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
             state = .idle
             return .finished
         case (.idle, .released), (.idle, .tapped), (.idle, .cancelled), (.idle, .processingFinished),
-             (.listening, .pressed), (.listening, .doublePressed), (.listening, .processingFinished),
-             (.waitingForSecondPress, .pressed), (.waitingForSecondPress, .released),
+             (.listening, .pressed), (.listening, .processingFinished),
+             (.waitingForSecondPress, .released),
              (.waitingForSecondPress, .tapped), (.waitingForSecondPress, .processingFinished),
              (.handsFree, .pressed), (.handsFree, .tapped), (.handsFree, .doublePressed),
              (.handsFree, .processingFinished),

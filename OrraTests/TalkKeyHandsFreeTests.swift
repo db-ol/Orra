@@ -70,11 +70,13 @@ struct TalkKeyHandsFreeTests {
         #expect(detector.phase == .tapped(.rightControl, recording: true))
         #expect(detector.timer == .doublePressWindow)
         clock.advance(.milliseconds(150))
-        #expect(down(.rightControl, &detector) == Decision(event: .doublePressed, swallow: false))
-        #expect(detector.phase == .handsFreeKeyDown(.rightControl, finishes: false))
-        // The release of the second press does not end the dictation.
+        // The second press goes on with the tap's recording. Only its release tells.
+        #expect(down(.rightControl, &detector) == Decision(event: .pressed(isRepeat: false), swallow: false))
+        #expect(detector.phase == .holding(.rightControl))
+        #expect(detector.timer == nil)
+        // Its quick release starts the hands free dictation.
         clock.advance(.milliseconds(90))
-        #expect(up(.rightControl, &detector) == .passThrough)
+        #expect(up(.rightControl, &detector) == Decision(event: .doublePressed, swallow: false))
         #expect(detector.phase == .handsFree(.rightControl))
         #expect(detector.timer == nil)
         // A later press on its own ends it at its release.
@@ -125,7 +127,101 @@ struct TalkKeyHandsFreeTests {
         let old = detector.generation
         _ = down(.rightControl, &detector)
         #expect(detector.timerFired(generation: old) == nil)
-        #expect(detector.phase == .handsFreeKeyDown(.rightControl, finishes: false))
+        #expect(detector.phase == .holding(.rightControl))
+    }
+
+    @Test mutating func aTapThenAHoldIsAHold() {
+        var detector = TalkKeyDetector(keys: [.rightControl])
+        var machine = PushToTalkStateMachine()
+        func feed(_ event: Event?) -> PushToTalkStateMachine.Transition? {
+            event.flatMap { machine.handle($0) }
+        }
+        #expect(feed(down(.rightControl, &detector).event) == .startedListening)
+        clock.advance(.milliseconds(60))
+        #expect(feed(up(.rightControl, &detector).event) == .awaitingSecondPress)
+        clock.advance(.milliseconds(200))
+        #expect(feed(down(.rightControl, &detector).event) == .resumedListening)
+        // Held to dictate a sentence. Its release pastes, nothing goes on recording.
+        clock.advance(.seconds(3))
+        #expect(feed(up(.rightControl, &detector).event) == .startedProcessing)
+        #expect(detector.phase == .up)
+        #expect(machine.state == .processing)
+    }
+
+    @Test mutating func aLeftKeyTapThenAHoldIsAHold() {
+        var detector = TalkKeyDetector(keys: [.leftCommand])
+        #expect(tap(.leftCommand, &detector) == [])
+        #expect(down(.leftCommand, &detector) == .passThrough)
+        #expect(detector.phase == .arming(.leftCommand))
+        clock.advance(TalkKeyDetector.leftKeyDelay)
+        #expect(fire(&detector) == .pressed(isRepeat: false))
+        clock.advance(.seconds(2))
+        #expect(up(.leftCommand, &detector) == Decision(event: .released, swallow: false))
+        #expect(detector.phase == .up)
+    }
+
+    @Test mutating func aShortcutOnTheSecondPressOfALeftKeyIsSilent() {
+        var detector = TalkKeyDetector(keys: [.leftCommand])
+        _ = tap(.leftCommand, &detector)
+        // Command, then Command+V within the window: no recording and no cue.
+        #expect(down(.leftCommand, &detector) == .passThrough)
+        #expect(keyDown(9, &detector, flags: Self.leftCommandFlags) == .passThrough)
+        #expect(detector.phase == .passingThrough(.leftCommand))
+        #expect(detector.timer == nil)
+        #expect(up(.leftCommand, &detector) == .passThrough)
+        #expect(detector.phase == .up)
+    }
+
+    @Test mutating func aShortcutOnTheSecondPressOfARightKeyCancels() {
+        var detector = TalkKeyDetector(keys: [.rightControl])
+        _ = tap(.rightControl, &detector)
+        #expect(down(.rightControl, &detector).event == .pressed(isRepeat: false))
+        // Right Control+C: the tap's recording is discarded, nothing goes hands free.
+        #expect(keyDown(Self.c, &detector, flags: Self.rightControlFlags) == Decision(event: .cancelled, swallow: false))
+        #expect(up(.rightControl, &detector) == .passThrough)
+        #expect(detector.phase == .up)
+    }
+
+    @Test mutating func aClickOnTheSecondPressIsAShortcut() {
+        var command = TalkKeyDetector(keys: [.leftCommand])
+        _ = tap(.leftCommand, &command)
+        _ = down(.leftCommand, &command)
+        #expect(command.cancelForClick() == nil)
+        #expect(up(.leftCommand, &command) == .passThrough)
+        #expect(command.phase == .up)
+
+        var control = TalkKeyDetector(keys: [.rightControl])
+        _ = tap(.rightControl, &control)
+        _ = down(.rightControl, &control)
+        #expect(control.cancelForClick() == .cancelled)
+        #expect(up(.rightControl, &control).event == nil)
+        #expect(control.phase == .up)
+    }
+
+    @Test mutating func anotherTalkKeyInTheWindowStartsItsOwnHold() {
+        var detector = TalkKeyDetector(keys: [.fn, .rightControl])
+        var machine = PushToTalkStateMachine()
+        func feed(_ event: Event?) -> PushToTalkStateMachine.Transition? {
+            event.flatMap { machine.handle($0) }
+        }
+        for event in tap(.fn, &detector) {
+            _ = feed(event)
+        }
+        #expect(machine.state == .waitingForSecondPress)
+        #expect(feed(down(.rightControl, &detector).event) == .resumedListening)
+        #expect(detector.phase == .holding(.rightControl))
+        clock.advance(.seconds(2))
+        #expect(feed(up(.rightControl, &detector).event) == .startedProcessing)
+    }
+
+    @Test mutating func anotherLeftTalkKeyInTheWindowDiscardsTheTap() {
+        var detector = TalkKeyDetector(keys: [.fn, .leftOption])
+        _ = tap(.fn, &detector)
+        // The left key records nothing yet, so the tap's recording ends.
+        #expect(down(.leftOption, &detector) == Decision(event: .cancelled, swallow: false))
+        #expect(detector.phase == .arming(.leftOption))
+        clock.advance(TalkKeyDetector.leftKeyDelay)
+        #expect(fire(&detector) == .pressed(isRepeat: false))
     }
 
     @Test mutating func anotherKeyBetweenTheTwoPressesEndsTheWindow() {
@@ -166,8 +262,8 @@ struct TalkKeyHandsFreeTests {
         #expect(down(.fn, &detector).swallow)
         clock.advance(.milliseconds(50))
         #expect(up(.fn, &detector) == Decision(event: .tapped, swallow: true))
-        #expect(down(.fn, &detector) == Decision(event: .doublePressed, swallow: true))
-        #expect(up(.fn, &detector) == Decision(event: nil, swallow: true))
+        #expect(down(.fn, &detector) == Decision(event: .pressed(isRepeat: false), swallow: true))
+        #expect(up(.fn, &detector) == Decision(event: .doublePressed, swallow: true))
         #expect(down(.fn, &detector) == Decision(event: nil, swallow: true))
         #expect(up(.fn, &detector) == Decision(event: .released, swallow: true))
     }

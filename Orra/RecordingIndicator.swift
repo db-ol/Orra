@@ -176,8 +176,6 @@ struct RecordingIndicatorView: View {
             .accessibilityLabel("Listening")
         case .handsFree(let hint):
             HStack(spacing: 10) {
-                Image(systemName: "mic.fill")
-                    .foregroundStyle(.green)
                 LevelMeterBars(level: feedback.level)
                 // Already in the user's language, so shown as it is.
                 Text(verbatim: hint)

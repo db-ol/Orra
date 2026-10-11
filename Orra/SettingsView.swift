@@ -509,6 +509,9 @@ struct MicrophoneToggles: View {
 /// Orra waits for the key. In Settings and in the welcome window.
 struct PressTalkKeyButton: View {
     let pushToTalk: PushToTalkController
+    /// Whether this button started the choice in progress. The welcome window and Settings
+    /// each show one, and closing one must not end a choice started in the other.
+    @State private var startedHere = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -522,6 +525,7 @@ struct PressTalkKeyButton: View {
                 } else {
                     Button("Press a Key…") {
                         pushToTalk.startChoosingTalkKey()
+                        startedHere = true
                     }
                 }
             }
@@ -534,7 +538,14 @@ struct PressTalkKeyButton: View {
             }
         }
         .onDisappear {
-            pushToTalk.stopChoosingTalkKey()
+            if startedHere {
+                pushToTalk.stopChoosingTalkKey()
+            }
+        }
+        .onChange(of: pushToTalk.isChoosingTalkKey) { _, choosing in
+            if !choosing {
+                startedHere = false
+            }
         }
     }
 }

@@ -204,14 +204,29 @@ private struct MicrophoneStepDetail: View {
 /// button to choose one by pressing it.
 private struct TalkKeyStepDetail: View {
     let pushToTalk: PushToTalkController
-    /// Read once when the window opens. Reading the registry needs no permission.
-    @State private var keyboard = KeyboardKind.current()
+    /// Read once when the step appears, not in an initial value, which SwiftUI would
+    /// evaluate again each time the window redraws, such as for download progress.
+    /// Reading the registry needs no permission. Nil until then.
+    @State private var keyboard: KeyboardKind?
 
     var body: some View {
-        let recommended = keyboard.recommendedKey
         VStack(alignment: .leading, spacing: 8) {
             Text(verbatim: TalkKey.holdHint(for: pushToTalk.talkKeys))
                 .foregroundStyle(.secondary)
+            if let keyboard {
+                recommendation(for: keyboard)
+            }
+        }
+        .task {
+            if keyboard == nil {
+                keyboard = KeyboardKind.current()
+            }
+        }
+    }
+
+    @ViewBuilder private func recommendation(for keyboard: KeyboardKind) -> some View {
+        let recommended = keyboard.recommendedKey
+        Group {
             Group {
                 switch keyboard {
                 case .builtIn:
@@ -223,7 +238,9 @@ private struct TalkKeyStepDetail: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                if pushToTalk.talkKeys != [recommended], !pushToTalk.isChoosingTalkKey {
+                // Also shown while the recommended key is only the default, so keeping it
+                // completes the step.
+                if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKeys != [recommended] || !pushToTalk.hasChosenTalkKeys {
                     Button("Use \(recommended.nameInSentence)") {
                         pushToTalk.chooseTalkKey(recommended)
                     }

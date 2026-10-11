@@ -322,10 +322,9 @@ final class PushToTalkController {
     }
 
     /// Makes `key` the only talk key and saves the choice, as when the user presses the key
-    /// they want.
+    /// they want. Saved even when it is the key in use already, such as the default, so
+    /// the welcome window counts the step as done on the next launch too.
     func chooseTalkKey(_ key: TalkKey) {
-        hasChosenTalkKeys = true
-        guard talkKeys != [key] else { return }
         applyTalkKeys([key])
     }
 
@@ -461,6 +460,12 @@ final class PushToTalkController {
         case .awaitingSecondPress:
             // The recording goes on until the second press or the end of the window.
             break
+        case .resumedListening:
+            // The second press after a tap. The recording goes on. If the press turns out
+            // to be a hold, its cue comes like any hold's. A double press replaces it with
+            // the hands free cue at the release.
+            listeningCueTask?.cancel()
+            scheduleListeningCue(after: listeningCueDelay, hold: holdNumber)
         case .switchedToHandsFree:
             listeningCueTask?.cancel()
             scheduleListeningCue(after: .zero, hold: holdNumber)

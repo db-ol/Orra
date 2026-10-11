@@ -140,10 +140,16 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
   step names both recommendations.
 - Hands free: a press released within `tapLimit` (0.3 seconds) is a tap. Its recording
   goes on for `doublePressWindow` (0.4 seconds). A second press of the same key on its
-  own within the window turns that recording into a hands free dictation, so the first
-  words are not lost to a restart of the microphone. For a left modifier the tap never
-  recorded, so the second press starts the recording. A second press after the window is
-  an ordinary hold. A key, modifier or click inside the window ends it.
+  own within the window is a hold under the usual rules: a left modifier waits for
+  `leftKeyDelay`, and a key or click while it is down makes it a shortcut that records
+  nothing and plays no cue, so a tap of Command followed by Command V never starts a
+  dictation. Only when the second press is released within `tapLimit` too does the
+  recording become a hands free dictation, so the first words are not lost to a restart
+  of the microphone. A longer second press is an ordinary hold that pastes at its
+  release, so a brushed key followed by a hold never leaves Orra recording. For a left
+  modifier the tap never recorded, so the double press starts the recording at the second
+  release. A second press after the window is an ordinary hold. A key, modifier or click
+  inside the window ends it, and a press of another talk key starts that key's own hold.
 - During a hands free dictation the indicator shows "Press <key> to finish". The next
   press of that key on its own ends the dictation at its release and pastes. A release is
   used rather than the press, so a shortcut with the key, such as Command Tab, does not
