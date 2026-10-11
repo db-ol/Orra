@@ -74,7 +74,11 @@ final class FakeSpeech {
     var loadError: (any Error)?
     var loadDelay: Duration = .zero
     var reply = "你好"
+    /// The reply without a vocabulary, when it differs from `reply`.
+    var replyWithoutContext: String?
     var transcribeError: (any Error)?
+    /// An error only for a transcription without a vocabulary.
+    var transcribeErrorWithoutContext: (any Error)?
     var delay: Duration = .zero
     private(set) var loads = 0
     private(set) var receivedSampleCounts: [Int] = []
@@ -97,6 +101,8 @@ final class FakeSpeech {
                     try await Task.sleep(for: self.delay)
                 }
                 if let error = self.transcribeError { throw error }
+                if context == nil, let error = self.transcribeErrorWithoutContext { throw error }
+                if context == nil, let plain = self.replyWithoutContext { return plain }
                 return self.reply
             }
         )
@@ -1078,6 +1084,75 @@ struct PushToTalkControllerTests {
         try await dictate(controller)
         #expect(inserter.inserted == ["下午3点我们去看 Lexus RX 350。", "下午三点我们去看 Lexus RX 三五零。", "我们一起去，三五成群。"])
         #expect(saved == [false, true])
+    }
+
+    private func controller(vocabulary: [String]) async -> PushToTalkController {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            vocabulary: vocabulary
+        )
+        await controller.loadModel()
+        return controller
+    }
+
+    @Test func vocabularyTermsHeardOnlyWithTheVocabularyAreNotPasted() async throws {
+        speech.reply = "极速借呗。鼎盛物流。I R S transcripts。"
+        speech.replyWithoutContext = ""
+        let controller = await controller(vocabulary: ["鼎盛物流", "极速借呗", "IRS transcripts", "Orra"])
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] && mic.calls.contains("start") }
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(speech.receivedContexts == ["鼎盛物流\n极速借呗\nIRS transcripts\nOrra", nil])
+        #expect(inserter.inserted.isEmpty)
+        #expect(controller.lastTranscript == nil)
+        #expect(cues.list.last == .finished(message: "No speech was recognized"))
+        #expect(controller.problem == nil)
+    }
+
+    @Test func aSpokenVocabularyTermIsKeptAsWrittenWithTheVocabulary() async throws {
+        speech.reply = "Orra。"
+        speech.replyWithoutContext = "Aura."
+        let controller = await controller(vocabulary: ["通义千问", "Orra"])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["通义千问\nOrra", nil])
+        #expect(inserter.inserted == ["Orra。"])
+    }
+
+    @Test func onlyPunctuationWithoutTheVocabularyIsNoSpeech() async throws {
+        speech.reply = "Orra。"
+        speech.replyWithoutContext = "。"
+        let controller = await controller(vocabulary: ["Orra"])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Orra", nil])
+        #expect(inserter.inserted.isEmpty)
+        #expect(controller.problem == nil)
+    }
+
+    @Test func aFailedPassWithoutTheVocabularyKeepsTheText() async throws {
+        speech.reply = "Orra。"
+        speech.transcribeErrorWithoutContext = TestError()
+        let controller = await controller(vocabulary: ["Orra"])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Orra", nil])
+        #expect(inserter.inserted == ["Orra。"])
+        #expect(controller.problem == nil)
+    }
+
+    @Test func speechWithMoreThanTermsIsTranscribedOnce() async throws {
+        speech.reply = "我们用 Orra 写字"
+        speech.replyWithoutContext = ""
+        let controller = await controller(vocabulary: ["Orra"])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Orra"])
+        #expect(inserter.inserted == ["我们用 Orra 写字"])
     }
 
     @Test func thePasteIsReported() async throws {
