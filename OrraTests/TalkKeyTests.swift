@@ -28,7 +28,8 @@ struct TalkKeyTests {
         #expect(TalkKey.leftOption.twinFlag?.rawValue == UInt64(NX_DEVICERALTKEYMASK))
         #expect(TalkKey.leftCommand.twinFlag?.rawValue == UInt64(NX_DEVICERCMDKEYMASK))
         #expect(TalkKeyDetector.escapeKeyCode == Int64(kVK_Escape))
-        #expect(KeyChoice.shiftKeyCodes == [Int64(kVK_Shift), Int64(kVK_RightShift)])
+        #expect(KeyRecorder.shiftKeyCodes == [Int64(kVK_Shift), Int64(kVK_RightShift)])
+        #expect(KeyRecorder.capsLockKeyCode == Int64(kVK_CapsLock))
     }
 
     @Test func savedRawValuesNeverChange() {
@@ -103,6 +104,17 @@ struct TalkKeyTests {
         #expect(TalkKey.allCases.filter(\.modifiesClicks) == [.rightControl, .rightOption, .rightCommand, .leftControl, .leftOption, .leftCommand])
     }
 
+    @Test func namesShowTheSymbolAndOtherKeyboardsLabels() {
+        #expect(TalkKey.rightOption.title == "⌥ Right Option")
+        #expect(TalkKey.rightOption.fullName == "⌥ Right Option (Alt)")
+        #expect(TalkKey.leftCommand.fullName == "⌘ Left Command (Windows key)")
+        #expect(TalkKey.rightControl.fullName == "⌃ Right Control")
+        #expect(TalkKey.fn.title == "fn")
+        #expect(TalkKey.fn.fullName == "fn (Globe 🌐)")
+        #expect(TalkKey.leftOption.otherLabelInParentheses == "(Alt)")
+        #expect(TalkKey.rightControl.otherLabelInParentheses == nil)
+    }
+
     @Test func holdHintNamesTheKey() {
         #expect(TalkKey.rightControl.holdHint() == "Hold right Control to talk")
         #expect(TalkKey.leftCommand.holdHint() == "Hold left Command to talk")
@@ -124,30 +136,99 @@ struct TalkKeyTests {
     }
 }
 
-/// Pressing a key to choose the talk key.
-struct KeyChoiceTests {
+/// Pressing a key to record the talk key.
+struct KeyRecorderTests {
+    private static func down(_ key: TalkKey) -> CGEventFlags {
+        key.downFlag.union(key.sharedFlag ?? [])
+    }
+
     @Test(arguments: TalkKey.allCases)
-    func everyTalkKeyIsRecognizedWhenItGoesDown(_ key: TalkKey) {
-        let flags = key.downFlag.union(key.sharedFlag ?? [])
-        #expect(KeyChoice.press(type: .flagsChanged, keyCode: key.keyCode, flags: flags) == .talkKey(key))
-        // Its release means nothing.
-        #expect(KeyChoice.press(type: .flagsChanged, keyCode: key.keyCode, flags: []) == nil)
+    func everyTalkKeyIsChosenAtItsReleaseOnItsOwn(_ key: TalkKey) {
+        var recorder = KeyRecorder()
+        #expect(recorder.handle(type: .flagsChanged, keyCode: key.keyCode, flags: Self.down(key)) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: key.keyCode, flags: []) == .chosen(key))
+        // A release without its press means nothing.
+        #expect(recorder.handle(type: .flagsChanged, keyCode: key.keyCode, flags: []) == nil)
     }
 
     @Test func aKeyboardWithoutLeftAndRightBitsStillTellsTheKeyByItsCode() {
-        #expect(KeyChoice.press(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: .maskCommand) == .talkKey(.leftCommand))
-        #expect(KeyChoice.press(type: .flagsChanged, keyCode: TalkKey.rightCommand.keyCode, flags: .maskCommand) == .talkKey(.rightCommand))
+        var recorder = KeyRecorder()
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: .maskCommand) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: []) == .chosen(.leftCommand))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightCommand.keyCode, flags: .maskCommand) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightCommand.keyCode, flags: .maskCommand) == .chosen(.rightCommand))
     }
 
-    @Test func shiftEscapeAndOtherKeysAreNotTalkKeys() {
-        #expect(KeyChoice.press(type: .flagsChanged, keyCode: 0x38, flags: .maskShift) == .shift)
-        #expect(KeyChoice.press(type: .flagsChanged, keyCode: 0x3C, flags: .maskShift) == .shift)
-        #expect(KeyChoice.press(type: .flagsChanged, keyCode: 0x38, flags: []) == nil)
-        #expect(KeyChoice.press(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: []) == .escape)
-        #expect(KeyChoice.press(type: .keyDown, keyCode: 0x00, flags: []) == .otherKey)
-        // Caps Lock is not offered and means nothing.
-        #expect(KeyChoice.press(type: .flagsChanged, keyCode: 0x39, flags: .maskAlphaShift) == nil)
-        #expect(KeyChoice.press(type: .keyUp, keyCode: 0x00, flags: []) == nil)
+    @Test func shortcutsAreCombinations() {
+        var recorder = KeyRecorder()
+        // Command+C.
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: Self.down(.leftCommand))
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x08, flags: Self.down(.leftCommand)) == .rejected(.combination))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: []) == nil)
+        // Right Option pressed while Command is held.
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: Self.down(.rightOption).union(.maskCommand)) == .rejected(.combination))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: .maskCommand) == nil)
+        // Right Control, then left Control.
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.down(.rightControl))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftControl.keyCode, flags: Self.down(.rightControl).union(TalkKey.leftControl.downFlag)) == .rejected(.combination))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.down(.leftControl)) == nil)
+        // fn, then Shift.
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: [.maskSecondaryFn, .maskShift]) == .rejected(.combination))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskShift) == nil)
+        // A letter with Control held, where Control went down before the recording.
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x00, flags: .maskControl) == .rejected(.combination))
+    }
+
+    @Test func shiftCapsLockAndOtherKeysAreTurnedDown() {
+        var recorder = KeyRecorder()
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: .maskShift) == .rejected(.shift))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: []) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x3C, flags: .maskShift) == .rejected(.shift))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x39, flags: .maskAlphaShift) == .rejected(.capsLock))
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x00, flags: []) == .rejected(.key(keyCode: 0x00)))
+        // A capital letter is the letter's key, not a combination.
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x00, flags: .maskShift) == .rejected(.key(keyCode: 0x00)))
+        // Arrow keys carry the Fn flag on their own.
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x7B, flags: .maskSecondaryFn) == .rejected(.key(keyCode: 0x7B)))
+        #expect(recorder.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: []) == .cancelled)
+        #expect(recorder.handle(type: .keyDown, keyCode: TalkKeyDetector.globeKeyCode, flags: []) == nil)
+        #expect(recorder.handle(type: .keyUp, keyCode: 0x00, flags: []) == nil)
+    }
+
+    @Test func aTurnedDownKeyStopsAPendingChoice() {
+        var recorder = KeyRecorder()
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x7E, flags: .maskSecondaryFn) == .rejected(.combination))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: []) == nil)
+        #expect(recorder.candidate == nil)
+    }
+
+    @Test @MainActor func rejectionsSayWhy() {
+        #expect(KeyRecorder.Rejection.shift.message == "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
+        #expect(KeyRecorder.Rejection.capsLock.message == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
+        #expect(KeyRecorder.Rejection.combination.message == "A key combination can't be the talk key. Press one key on its own.")
+        #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_Space)).message == "The Space key can't be the talk key. Holding it would type or do something in the app in front.")
+        #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_F5)).message == "The F5 key can't be the talk key. Holding it would type or do something in the app in front.")
+    }
+}
+
+@MainActor
+struct KeyNameTests {
+    @Test func keysWithoutACharacterHaveNames() {
+        #expect(KeyName.name(forKeyCode: Int64(kVK_Return)) == "Return")
+        #expect(KeyName.name(forKeyCode: Int64(kVK_Tab)) == "Tab")
+        #expect(KeyName.name(forKeyCode: Int64(kVK_LeftArrow)) == "Left Arrow")
+        #expect(KeyName.name(forKeyCode: Int64(kVK_ForwardDelete)) == "Forward Delete")
+        #expect(KeyName.name(forKeyCode: Int64(kVK_F1)) == "F1")
+        #expect(KeyName.name(forKeyCode: Int64(kVK_F20)) == "F20")
+    }
+
+    @Test func aLetterKeyIsNamedByTheCharacterItTypes() throws {
+        // The letter depends on the keyboard layout, A on ABC and Q on AZERTY.
+        let name = try #require(KeyName.name(forKeyCode: Int64(kVK_ANSI_A)))
+        #expect(name.count == 1)
+        #expect(name == name.uppercased())
     }
 }
 

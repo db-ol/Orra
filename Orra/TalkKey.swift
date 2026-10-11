@@ -41,7 +41,8 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    /// The name on a switch in the menu or in Settings.
+    /// The key's Mac name, such as "Right Option", as in Keyboard settings. Left and right
+    /// are part of it. fn keeps its keycap label in every language.
     var name: String {
         switch self {
         case .rightControl: String(localized: "Right Control")
@@ -50,8 +51,48 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
         case .leftControl: String(localized: "Left Control")
         case .leftOption: String(localized: "Left Option")
         case .leftCommand: String(localized: "Left Command")
-        case .fn: String(localized: "fn (Globe)")
+        case .fn: "fn"
         }
+    }
+
+    /// The symbol Mac menus show for the key, such as ⌥ for Option. Nil for fn, whose
+    /// keycap shows the globe and which menus show as "fn" or the globe.
+    var symbol: String? {
+        switch self {
+        case .rightControl, .leftControl: "⌃"
+        case .rightOption, .leftOption: "⌥"
+        case .rightCommand, .leftCommand: "⌘"
+        case .fn: nil
+        }
+    }
+
+    /// The symbol and the name, such as "⌥ Right Option".
+    var title: String {
+        symbol.map { "\($0) \(name)" } ?? name
+    }
+
+    /// What the key is called on other keycaps, shown as a small hint next to its name.
+    /// A keyboard with a Windows layout prints Alt on the key the Mac uses as Option, and
+    /// a Windows logo on the key it uses as Command. The fn key of recent Macs shows a
+    /// globe. Control is Ctrl everywhere, so it needs none.
+    var otherLabel: String? {
+        switch self {
+        case .rightControl, .leftControl: nil
+        case .rightOption, .leftOption: String(localized: "Alt", comment: "The label of the Option key on a keyboard with a Windows layout")
+        case .rightCommand, .leftCommand: String(localized: "Windows key", comment: "The key a keyboard with a Windows layout has in place of Command")
+        case .fn: String(localized: "Globe 🌐", comment: "The fn key of recent Macs, which shows a globe")
+        }
+    }
+
+    /// The other label in parentheses, such as "(Alt)", or nil.
+    var otherLabelInParentheses: String? {
+        otherLabel.map { String(localized: "(\($0))", comment: "A talk key's label on other keyboards, such as (Alt)") }
+    }
+
+    /// The title with the other label, such as "⌥ Right Option (Alt)", where the key is
+    /// shown in one line of text, as in the menu.
+    var fullName: String {
+        otherLabel.map { String(localized: "\(title) (\($0))", comment: "A talk key with its label on other keyboards, such as ⌥ Right Option (Alt)") } ?? title
     }
 
     /// The name inside a sentence, such as "Hold right Control to talk".
@@ -203,36 +244,108 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// One key press while the user chooses a talk key by pressing it, see
-/// `KeyChoice.press(type:keyCode:flags:)`.
-nonisolated enum KeyChoice: Equatable, Sendable {
-    /// A key that can be a talk key went down.
-    case talkKey(TalkKey)
-    /// Shift went down. It cannot be a talk key.
-    case shift
-    /// Escape went down, which ends the choice without changing the keys.
-    case escape
-    /// Another key went down, such as a letter.
-    case otherKey
+/// Records the talk key the user presses, like the shortcut recorders of Mac apps. A key
+/// that can be a talk key counts when it goes down on its own and comes up again with
+/// nothing else pressed in between, so a shortcut such as Command+C is never taken for
+/// Command. Anything else is turned down with the reason, and the recorder keeps
+/// listening. Escape cancels.
+///
+/// Pure logic. `HotkeyTap`, or a local event monitor while Orra has no tap, feeds it the
+/// key down and flags changed events.
+nonisolated struct KeyRecorder: Equatable, Sendable {
+    nonisolated enum Outcome: Equatable, Sendable {
+        /// The key went down and up on its own. It becomes the talk key.
+        case chosen(TalkKey)
+        /// The press cannot be the talk key. The recorder keeps listening.
+        case rejected(Rejection)
+        /// Escape: the recorder stops without a change.
+        case cancelled
+    }
+
+    /// Why a press cannot be the talk key.
+    nonisolated enum Rejection: Equatable, Sendable {
+        /// Shift on its own switches Chinese input methods between Chinese and English, and
+        /// Orra cannot hide that press from the input method.
+        case shift
+        /// Caps Lock is a lock, not a key that is held, and switches input methods too.
+        case capsLock
+        /// Two keys together, such as Command+C or right Control with Shift held.
+        case combination
+        /// A key that types or acts on its own, such as a letter, Return or an arrow key.
+        case key(keyCode: Int64)
+    }
 
     static let shiftKeyCodes: Set<Int64> = [0x38, 0x3C]
+    static let capsLockKeyCode: Int64 = 0x39
 
-    /// What one key down or flags changed event means while the user chooses a talk key, or
-    /// nil for an event that means nothing then, such as a key coming up.
-    static func press(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> KeyChoice? {
+    /// A key that can be a talk key, down on its own with nothing pressed since.
+    private(set) var candidate: TalkKey?
+
+    /// What one key down or flags changed event means, or nil for one that decides nothing
+    /// yet, such as a talk key going down.
+    mutating func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Outcome? {
         switch type {
         case .flagsChanged:
             if let key = TalkKey.allCases.first(where: { $0.keyCode == keyCode }) {
-                return key.isDown(in: flags, wasDown: false) ? .talkKey(key) : nil
+                if key.isDown(in: flags, wasDown: candidate == key) {
+                    // A second modifier, or one pressed while another is held.
+                    guard candidate == nil, flags.isDisjoint(with: key.otherModifiers) else {
+                        candidate = nil
+                        return .rejected(.combination)
+                    }
+                    candidate = key
+                    return nil
+                }
+                guard candidate == key else { return nil }
+                candidate = nil
+                return .chosen(key)
             }
-            if shiftKeyCodes.contains(keyCode) {
-                return flags.contains(.maskShift) ? .shift : nil
+            if Self.shiftKeyCodes.contains(keyCode) {
+                guard flags.contains(.maskShift) else { return nil }
+                let combined = candidate != nil
+                candidate = nil
+                return .rejected(combined ? .combination : .shift)
+            }
+            if keyCode == Self.capsLockKeyCode {
+                candidate = nil
+                return .rejected(.capsLock)
             }
             return nil
         case .keyDown:
-            return keyCode == TalkKeyDetector.escapeKeyCode ? .escape : .otherKey
+            if keyCode == TalkKeyDetector.escapeKeyCode {
+                candidate = nil
+                return .cancelled
+            }
+            // Reported to arrive with a press of the Globe key, see TalkKeyDetector.
+            if keyCode == TalkKeyDetector.globeKeyCode {
+                return nil
+            }
+            let combined = candidate != nil || !flags.isDisjoint(with: [.maskControl, .maskAlternate, .maskCommand])
+            candidate = nil
+            return .rejected(combined ? .combination : .key(keyCode: keyCode))
         default:
             return nil
+        }
+    }
+}
+
+extension KeyRecorder.Rejection {
+    /// What the recorder says about the press, such as "Shift can't be the talk key" with
+    /// the reason.
+    @MainActor var message: String {
+        switch self {
+        case .shift:
+            String(localized: "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
+        case .capsLock:
+            String(localized: "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
+        case .combination:
+            String(localized: "A key combination can't be the talk key. Press one key on its own.")
+        case .key(let keyCode):
+            if let name = KeyName.name(forKeyCode: keyCode) {
+                String(localized: "The \(name) key can't be the talk key. Holding it would type or do something in the app in front.")
+            } else {
+                String(localized: "This key can't be the talk key. Holding it would type or do something in the app in front.")
+            }
         }
     }
 }

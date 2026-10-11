@@ -25,8 +25,8 @@ import CoreGraphics
 /// one timer the detector asks for at a time, for a left hand key's delay or a tap's
 /// double press window, as a task on the main actor that never blocks.
 ///
-/// While the user chooses a talk key by pressing it, see `chooseKey`, the tap reports
-/// presses instead of detecting holds, but only while Orra is the active app.
+/// While the user records a talk key by pressing it, see `chooseKey`, the tap reports
+/// key events instead of detecting holds, but only while Orra is the active app.
 final class HotkeyTap {
     /// Creates the event tap and the click monitor for a HotkeyTap and switches them on.
     /// Returns what removes both again, or nil when the system refuses the tap, which
@@ -51,8 +51,10 @@ final class HotkeyTap {
     /// The running timer and the detector generation it was started for.
     private var timerTask: Task<Void, Never>?
     private var timerGeneration: Int?
-    /// Receives the presses while the user chooses a talk key. Nil otherwise.
-    private var chooser: ((KeyChoice) -> Void)?
+    /// Receives one key down or flags changed event while the user records a talk key.
+    typealias Chooser = (_ type: CGEventType, _ keyCode: Int64, _ flags: CGEventFlags) -> Void
+    /// Receives the events while the user records a talk key. Nil otherwise.
+    private var chooser: Chooser?
 
     /// - Parameters:
     ///   - install: Creates the tap, see `Install`.
@@ -105,11 +107,13 @@ final class HotkeyTap {
         detector.phase.key
     }
 
-    /// While `chooser` is set and Orra is the active app, every press goes to it instead of
-    /// starting a hold, fn's events and Escape are swallowed, so neither the "Press fn key
-    /// to" action nor the window's Escape shortcut fires, and other events pass through.
-    /// Setting it ends a hold in progress. Nil ends the choice.
-    func chooseKey(_ chooser: ((KeyChoice) -> Void)?) {
+    /// While `chooser` is set and Orra is the active app, every key down and flags changed
+    /// event goes to it instead of starting a hold. fn's events are swallowed, so the
+    /// "Press fn key to" action does not fire, and so are key downs, so a key pressed to
+    /// record types nothing and Escape does not close the window. The events of the other
+    /// modifiers pass through, so apps keep an accurate picture of which are down.
+    /// Setting it ends a hold in progress. Nil ends the recording.
+    func chooseKey(_ chooser: Chooser?) {
         self.chooser = chooser
         if chooser != nil {
             afterDetectorChange(detector.reset())
@@ -197,17 +201,9 @@ final class HotkeyTap {
             return false
         default:
             if let chooser, isAppActive() {
-                if let press = KeyChoice.press(type: type, keyCode: keyCode, flags: flags) {
-                    chooser(press)
-                    // The press chose its key and ended the choice. The key is still down,
-                    // and its release must not reach the system on its own (for fn) or start
-                    // anything.
-                    if self.chooser == nil, case .talkKey(let key) = press {
-                        afterDetectorChange(detector.ignoreUntilReleased(key))
-                    }
-                }
-                return (type == .flagsChanged && keyCode == TalkKey.fn.keyCode)
-                    || (type == .keyDown && keyCode == TalkKeyDetector.escapeKeyCode)
+                // A key is chosen at its release, so the detector never sees half a press.
+                chooser(type, keyCode, flags)
+                return type == .keyDown || (type == .flagsChanged && keyCode == TalkKey.fn.keyCode)
             }
             let decision = detector.handle(type: type, keyCode: keyCode, flags: flags, at: now)
             afterDetectorChange(decision.event)

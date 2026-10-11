@@ -80,7 +80,7 @@ struct StatusMenu: View {
         Menu("Talk Key") {
             // A menu shows text as a line that cannot be clicked. The key is chosen by
             // pressing it, which a menu cannot do, so Settings does that.
-            Text("Talk Key: \(pushToTalk.talkKey.name)")
+            Text("Talk Key: \(pushToTalk.talkKey.fullName)")
             Button("Change Talk Key…") {
                 NSApplication.shared.activate()
                 openWindow(id: SettingsWindow.id)

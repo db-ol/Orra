@@ -1338,19 +1338,32 @@ struct PushToTalkControllerTests {
         #expect(controller.hasChosenTalkKey == false)
         controller.startChoosingTalkKey()
         #expect(controller.isChoosingTalkKey)
-        controller.keyChoice(.shift)
-        #expect(controller.keyChoiceNote == "Shift switches input methods, so it cannot be a talk key. Press another key.")
-        controller.keyChoice(.otherKey)
-        #expect(controller.keyChoiceNote == "Press fn, Control, Option or Command on its own.")
+        controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: .maskShift)
+        #expect(controller.keyChoiceNote == "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
+        controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: [])
+        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
+        #expect(controller.keyChoiceNote == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
+        controller.keyChoice(type: .flagsChanged, keyCode: 0x39, flags: .maskAlphaShift)
+        #expect(controller.keyChoiceNote == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
+        // Command+C is a shortcut, not Command.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
+        controller.keyChoice(type: .keyDown, keyCode: 0x08, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
+        #expect(controller.keyChoiceNote == "A key combination can't be the talk key. Press one key on its own.")
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey)
-        controller.keyChoice(.talkKey(.leftOption))
+        #expect(controller.talkKey == .rightOption)
+        // Left Option pressed and released on its own.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftOption.keyCode, flags: [.maskAlternate, TalkKey.leftOption.downFlag])
+        #expect(controller.isChoosingTalkKey)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftOption.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey == false)
         #expect(controller.keyChoiceNote == nil)
         #expect(controller.talkKey == .leftOption)
         #expect(saved == [.leftOption])
         #expect(controller.hasChosenTalkKey)
         // A press after the choice changes nothing.
-        controller.keyChoice(.talkKey(.fn))
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [])
         #expect(controller.talkKey == .leftOption)
     }
 
@@ -1362,9 +1375,30 @@ struct PushToTalkControllerTests {
             talkKey: .fn
         )
         controller.startChoosingTalkKey()
-        controller.keyChoice(.escape)
+        controller.keyChoice(type: .keyDown, keyCode: 0x00, flags: [])
+        #expect(controller.keyChoiceNote != nil)
+        controller.keyChoice(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [])
         #expect(controller.isChoosingTalkKey == false)
+        #expect(controller.keyChoiceNote == nil)
         #expect(controller.talkKey == .fn)
+    }
+
+    @Test func stoppingTheRecordingClearsTheNoteAndAHalfPress() {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .fn
+        )
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [.maskControl, TalkKey.rightControl.downFlag])
+        controller.stopChoosingTalkKey()
+        // A new recording starts afresh, so the earlier press's release chooses nothing.
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [])
+        #expect(controller.isChoosingTalkKey)
+        #expect(controller.talkKey == .fn)
+        controller.stopChoosingTalkKey()
     }
 
     @Test func keepingTheDefaultKeySavesIt() {

@@ -200,8 +200,8 @@ private struct MicrophoneStepDetail: View {
     }
 }
 
-/// The talk key: which one Orra listens for, which one suits this Mac's keyboard, and the
-/// button to choose one by pressing it.
+/// The talk key: the recorder that shows the key and changes it, and which key suits this
+/// Mac's keyboard.
 private struct TalkKeyStepDetail: View {
     let pushToTalk: PushToTalkController
     /// Read once when the step appears, not in an initial value, which SwiftUI would
@@ -211,8 +211,7 @@ private struct TalkKeyStepDetail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(verbatim: pushToTalk.talkKey.holdHint())
-                .foregroundStyle(.secondary)
+            TalkKeyRecorder(pushToTalk: pushToTalk)
             if let keyboard {
                 recommendation(for: keyboard)
             }
@@ -237,15 +236,12 @@ private struct TalkKeyStepDetail: View {
             }
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                // Also shown while the recommended key is only the default, so keeping it
-                // completes the step.
-                if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKey != recommended || !pushToTalk.hasChosenTalkKey {
-                    Button("Use \(recommended.nameInSentence)") {
-                        pushToTalk.chooseTalkKey(recommended)
-                    }
+            // Also shown while the recommended key is only the default, so keeping it
+            // completes the step.
+            if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKey != recommended || !pushToTalk.hasChosenTalkKey {
+                Button("Use \(recommended.nameInSentence)") {
+                    pushToTalk.chooseTalkKey(recommended)
                 }
-                PressTalkKeyButton(pushToTalk: pushToTalk)
             }
         }
     }

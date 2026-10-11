@@ -165,36 +165,39 @@ struct HotkeyTapTests {
         #expect(events == [.pressed(isRepeat: false), .tapped, .cancelled])
     }
 
-    @Test func choosingAKeyReportsPressesOnlyWhileOrraIsActive() {
+    @Test func choosingAKeyReportsEventsOnlyWhileOrraIsActive() {
         final class Active {
             var isActive = true
         }
         let app = Active()
         var events: [PushToTalkStateMachine.Event] = []
-        var presses: [KeyChoice] = []
+        var seen: [Int64] = []
         let tap = HotkeyTap(keys: [.fn], install: { _ in nil }, wait: Self.neverFires, isAppActive: { app.isActive }) { events.append($0) }
-        tap.chooseKey { presses.append($0) }
+        tap.chooseKey { _, keyCode, _ in seen.append(keyCode) }
         // fn is swallowed, so its system action does not fire, and starts no dictation.
         #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn))
         #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: []))
+        // The other modifiers pass through, key downs are swallowed.
         #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.rightControlDown) == false)
-        #expect(tap.handle(type: .keyDown, keyCode: 0, flags: []) == false)
+        #expect(tap.handle(type: .keyDown, keyCode: 0, flags: []))
         #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: []))
-        #expect(presses == [.talkKey(.fn), .talkKey(.rightControl), .otherKey, .escape])
+        #expect(seen == [TalkKey.fn.keyCode, TalkKey.fn.keyCode, TalkKey.rightControl.keyCode, 0, TalkKeyDetector.escapeKeyCode])
         #expect(events.isEmpty)
         // In another app, the talk key works as usual.
         app.isActive = false
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
         #expect(events == [.pressed(isRepeat: false)])
-        #expect(presses.count == 4)
+        #expect(seen.count == 5)
     }
 
-    @Test func theChosenKeysReleaseIsSwallowedAndStartsNothing() {
+    @Test func aKeyChosenAtItsReleaseStartsNothing() {
         var events: [PushToTalkStateMachine.Event] = []
         let tap = HotkeyTap(keys: [.rightControl], install: { _ in nil }, wait: Self.neverFires, isAppActive: { true }) { events.append($0) }
-        // The owner ends the choice and makes fn the talk key, as the controller does.
-        tap.chooseKey { press in
-            if case .talkKey(let key) = press {
+        // The owner records with a KeyRecorder and makes fn the talk key at its release,
+        // as the controller does.
+        var recorder = KeyRecorder()
+        tap.chooseKey { type, keyCode, flags in
+            if case .chosen(let key) = recorder.handle(type: type, keyCode: keyCode, flags: flags) {
                 tap.chooseKey(nil)
                 tap.setKeys([key])
             }
@@ -213,7 +216,7 @@ struct HotkeyTapTests {
         var events: [PushToTalkStateMachine.Event] = []
         let tap = HotkeyTap(keys: [.rightControl], install: { _ in nil }, wait: Self.neverFires, isAppActive: { true }) { events.append($0) }
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.rightControlDown)
-        tap.chooseKey { _ in }
+        tap.chooseKey { _, _, _ in }
         #expect(events == [.pressed(isRepeat: false), .cancelled])
         tap.chooseKey(nil)
         #expect(tap.activeKey == nil)

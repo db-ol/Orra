@@ -211,16 +211,6 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         return reset()
     }
 
-    /// The user chose `key` as the talk key by pressing it, and it is still down. Its
-    /// release starts or ends nothing and, for fn, is swallowed like its press, so the
-    /// "Press fn key to" action does not fire. Returns `.cancelled` when a recording was
-    /// in progress.
-    mutating func ignoreUntilReleased(_ key: TalkKey) -> PushToTalkStateMachine.Event? {
-        let event = reset()
-        phase = .cancelled(key)
-        return event
-    }
-
     /// Turns double press for hands free on or off. Turning it off ends a tap's window and
     /// returns `.cancelled` when the tap was recording. A hands free dictation that runs
     /// already goes on until it is finished.

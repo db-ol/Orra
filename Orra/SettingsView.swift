@@ -196,10 +196,7 @@ private struct GeneralSettings: View {
                 Text("Language")
             }
             Section {
-                LabeledContent("Talk key") {
-                    Text(verbatim: pushToTalk.talkKey.name)
-                }
-                PressTalkKeyButton(pushToTalk: pushToTalk)
+                TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsRecommendation: true)
                 Toggle(isOn: Binding(
                     get: { pushToTalk.handsFreeOn },
                     set: { pushToTalk.setHandsFreeOn($0) }
@@ -213,7 +210,7 @@ private struct GeneralSettings: View {
             } header: {
                 Text("Talk Key")
             } footer: {
-                Text("Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.")
+                Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.")
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -510,33 +507,56 @@ struct MicrophoneToggles: View {
     }
 }
 
-/// The button that lets the user choose the talk key by pressing it, with what to do while
-/// Orra waits for the key. In Settings and in the welcome window.
-struct PressTalkKeyButton: View {
+/// The talk key recorder, like the shortcut recorders of Mac apps: a field that shows the
+/// key, such as "⌥ Right Option (Alt)". Clicking it, or Change…, starts recording, and the
+/// next key the user presses and releases on its own becomes the talk key. A press that
+/// cannot be one shows why under the field. In Settings and in the welcome window.
+struct TalkKeyRecorder: View {
     let pushToTalk: PushToTalkController
-    /// Whether this button started the choice in progress. The welcome window and Settings
-    /// each show one, and closing one must not end a choice started in the other.
+    /// Whether "Talk key" is shown in front of the field, as a row in Settings.
+    var showsLabel = false
+    /// Whether the line with the recommended keys is shown under the field.
+    var showsRecommendation = false
+    /// Whether this recorder started the recording in progress. The welcome window and
+    /// Settings each show one, and closing one must not end a recording started in the
+    /// other.
     @State private var startedHere = false
+
+    private var isRecording: Bool {
+        pushToTalk.isChoosingTalkKey
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                if pushToTalk.isChoosingTalkKey {
-                    Button("Cancel") {
-                        pushToTalk.stopChoosingTalkKey()
+            if showsLabel {
+                LabeledContent {
+                    fieldAndButton
+                } label: {
+                    Label("Talk key", systemImage: "keyboard")
+                }
+            } else {
+                fieldAndButton
+            }
+            if isRecording {
+                if let note = pushToTalk.keyChoiceNote {
+                    // Already in the user's language, so shown as it is.
+                    Label {
+                        Text(verbatim: note)
+                    } icon: {
+                        Image(systemName: "exclamationmark.circle")
                     }
-                    Text("Press the key you want to use…")
-                        .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Button("Press a Key…") {
-                        pushToTalk.startChoosingTalkKey()
-                        startedHere = true
-                    }
+                    Text("Use fn, Control, Option or Command on its own. Escape cancels.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if let note = pushToTalk.keyChoiceNote {
-                // Already in the user's language, so shown as it is.
-                Text(verbatim: note)
+            if showsRecommendation {
+                Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -547,11 +567,63 @@ struct PressTalkKeyButton: View {
                 pushToTalk.stopChoosingTalkKey()
             }
         }
-        .onChange(of: pushToTalk.isChoosingTalkKey) { _, choosing in
-            if !choosing {
+        .onChange(of: pushToTalk.isChoosingTalkKey) { _, recording in
+            if !recording {
                 startedHere = false
             }
         }
+    }
+
+    private var fieldAndButton: some View {
+        HStack(spacing: 8) {
+            Button(action: start) {
+                field
+            }
+            .buttonStyle(.plain)
+            // While recording, a click on the field ends the recording, as any click in
+            // Orra does, rather than starting it again.
+            .allowsHitTesting(!isRecording)
+            .accessibilityLabel(Text("Talk key"))
+            .accessibilityValue(Text(verbatim: isRecording ? String(localized: "Press the key you want to hold") : pushToTalk.talkKey.fullName))
+            if isRecording {
+                Button("Cancel") {
+                    pushToTalk.stopChoosingTalkKey()
+                }
+            } else {
+                Button("Change…", action: start)
+            }
+        }
+    }
+
+    private var field: some View {
+        HStack(spacing: 4) {
+            if isRecording {
+                Text("Press the key you want to hold")
+                    .foregroundStyle(Color.accentColor)
+            } else {
+                Text(verbatim: pushToTalk.talkKey.title)
+                if let other = pushToTalk.talkKey.otherLabelInParentheses {
+                    Text(verbatim: other)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .lineLimit(1)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(minWidth: 220, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(isRecording ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isRecording ? 2 : 1)
+        )
+        .contentShape(Rectangle())
+    }
+
+    private func start() {
+        pushToTalk.startChoosingTalkKey()
+        startedHere = true
     }
 }
 

@@ -52,9 +52,9 @@ final class PushToTalkController {
     /// Whether a quick double press of the talk key starts a hands free dictation. Saved
     /// through `saveHandsFree` whenever it changes.
     private(set) var handsFreeOn: Bool
-    /// True while the user chooses a talk key by pressing it.
+    /// True while the user records a talk key by pressing it.
     private(set) var isChoosingTalkKey = false
-    /// What the last press while choosing a talk key could not be, such as Shift.
+    /// Why the last press while recording a talk key cannot be one, such as Shift.
     private(set) var keyChoiceNote: String?
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
@@ -138,7 +138,12 @@ final class PushToTalkController {
     @ObservationIgnored private let saveHandsFree: (Bool) -> Void
     /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
     /// installed, which needs no permission.
-    @ObservationIgnored private var keyChoiceMonitor: Any?
+    /// The local event monitors while the user records a talk key.
+    @ObservationIgnored private var keyChoiceMonitors: [Any] = []
+    /// Ends the recording of a talk key when Orra stops being the active app.
+    @ObservationIgnored private var resignObserver: (any NSObjectProtocol)?
+    /// Follows the presses while the user records a talk key.
+    @ObservationIgnored private var keyRecorder = KeyRecorder()
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
     @ObservationIgnored private let saveVocabulary: ([String]) -> Void
     @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
@@ -326,54 +331,74 @@ final class PushToTalkController {
         tap?.setHandsFree(on)
     }
 
-    /// Starts listening for the key the user wants as the talk key. The next press of a
-    /// modifier that can be a talk key becomes the talk key. Shift and other keys
-    /// leave a note and keep listening, Escape stops. Only presses in Orra count: the tap
+    /// Starts recording the key the user wants as the talk key, see KeyRecorder. A key
+    /// that can be a talk key, pressed and released on its own, becomes the talk key.
+    /// Anything else leaves a note and the recording goes on. Escape, a click anywhere in
+    /// Orra, or switching to another app stops it. Only presses in Orra count: the tap
     /// checks that Orra is the active app, and without the tap a local monitor sees only
     /// Orra's own events. Neither needs a new permission.
     func startChoosingTalkKey() {
         guard !isChoosingTalkKey else { return }
         isChoosingTalkKey = true
         keyChoiceNote = nil
-        tap?.chooseKey { [weak self] press in
-            self?.keyChoice(press)
+        keyRecorder = KeyRecorder()
+        tap?.chooseKey { [weak self] type, keyCode, flags in
+            self?.keyChoice(type: type, keyCode: keyCode, flags: flags)
         }
-        keyChoiceMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
-            // The tap has seen the event first when it is installed.
-            guard let self, isChoosingTalkKey, tap?.isInstalled != true else { return event }
-            let flags = event.cgEvent?.flags ?? CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
-            let type: CGEventType = event.type == .keyDown ? .keyDown : .flagsChanged
-            guard let press = KeyChoice.press(type: type, keyCode: Int64(event.keyCode), flags: flags) else { return event }
-            keyChoice(press)
-            return press == .escape ? nil : event
+        keyChoiceMonitors = [
+            NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+                // The tap has seen the event first when it is installed.
+                guard let self, isChoosingTalkKey, tap?.isInstalled != true else { return event }
+                let flags = event.cgEvent?.flags ?? CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
+                let type: CGEventType = event.type == .keyDown ? .keyDown : .flagsChanged
+                keyChoice(type: type, keyCode: Int64(event.keyCode), flags: flags)
+                // As the tap does: a key pressed to record types nothing, and Escape does
+                // not close the window.
+                return type == .keyDown ? nil : event
+            },
+            // A click anywhere in Orra ends the recording, as in the shortcut recorders of
+            // Mac apps. The click itself goes on to what was clicked.
+            NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+                self?.stopChoosingTalkKey()
+                return event
+            },
+        ].compactMap { $0 }
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.stopChoosingTalkKey()
+            }
         }
     }
 
-    /// Stops listening for a talk key without changing the keys.
+    /// Stops recording a talk key without changing it.
     func stopChoosingTalkKey() {
         guard isChoosingTalkKey else { return }
         isChoosingTalkKey = false
+        keyChoiceNote = nil
         tap?.chooseKey(nil)
-        if let keyChoiceMonitor {
-            NSEvent.removeMonitor(keyChoiceMonitor)
+        keyChoiceMonitors.forEach(NSEvent.removeMonitor)
+        keyChoiceMonitors = []
+        if let resignObserver {
+            NotificationCenter.default.removeObserver(resignObserver)
         }
-        keyChoiceMonitor = nil
+        resignObserver = nil
     }
 
-    /// One press while the user chooses a talk key. Internal so tests can drive it.
-    func keyChoice(_ press: KeyChoice) {
-        guard isChoosingTalkKey else { return }
-        switch press {
-        case .talkKey(let key):
-            keyChoiceNote = nil
+    /// One key down or flags changed event while the user records a talk key. Internal so
+    /// tests can drive it.
+    func keyChoice(type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
+        guard isChoosingTalkKey, let outcome = keyRecorder.handle(type: type, keyCode: keyCode, flags: flags) else { return }
+        switch outcome {
+        case .chosen(let key):
             stopChoosingTalkKey()
             chooseTalkKey(key)
-        case .shift:
-            keyChoiceNote = String(localized: "Shift switches input methods, so it cannot be a talk key. Press another key.")
-        case .otherKey:
-            keyChoiceNote = String(localized: "Press fn, Control, Option or Command on its own.")
-        case .escape:
-            keyChoiceNote = nil
+        case .rejected(let rejection):
+            keyChoiceNote = rejection.message
+        case .cancelled:
             stopChoosingTalkKey()
         }
     }
