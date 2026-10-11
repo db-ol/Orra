@@ -319,7 +319,10 @@ private struct CleanupSetting: View {
                     }
                 }
             }
-        case .checking, .verifying:
+        case .checking:
+            // A look at the files on disk, over in a moment.
+            EmptyView()
+        case .verifying:
             ForEach(state.menuLines(total: total), id: \.self) { line in
                 Text(verbatim: line)
                     .foregroundStyle(.secondary)

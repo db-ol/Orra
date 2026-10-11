@@ -67,7 +67,12 @@ actor RewriteEngine {
         let started = ContinuousClock.now
         let loaded = try await LLMModelFactory.shared.load(from: folder, using: QwenTokenizerLoader())
         context = loaded
-        _ = try generate("好的。", maximumTokens: 4)
+        do {
+            _ = try generate("好的。", maximumTokens: 4)
+        } catch {
+            unload()
+            throw error
+        }
         Logger.rewrite.notice("Cleanup model loaded and warmed up in \(started.duration(to: .now), privacy: .public)")
     }
 
@@ -214,7 +219,7 @@ nonisolated enum CleanupStep {
                 }
             case .failure(let error):
                 outcome = .failed
-                Logger.rewrite.error("Cleanup failed: \(String(describing: error), privacy: .public)")
+                Logger.rewrite.error("Cleanup failed with \(String(reflecting: type(of: error)), privacy: .public)")
             }
         }
         Logger.rewrite.notice("Cleanup \(outcome.logName, privacy: .public) after \(started.duration(to: .now), privacy: .public)")

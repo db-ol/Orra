@@ -140,7 +140,8 @@ final class TextCleanup {
                 try await engine.load(from: folder)
                 loaded = true
             } catch {
-                Logger.rewrite.error("The cleanup model failed to load: \(String(describing: error), privacy: .public)")
+                // The type only, since a description may hold a path.
+                Logger.rewrite.error("The cleanup model failed to load with \(String(reflecting: type(of: error)), privacy: .public)")
                 loaded = false
             }
             guard let self else { return }
