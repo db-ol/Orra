@@ -253,6 +253,16 @@
         }
       }
     },
+    "Closes in %lld seconds" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒后关闭"
+          }
+        }
+      }
+    },
     "Copy Last Dictation" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1053,6 +1063,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "启动和查找 Orra"
+          }
+        }
+      }
+    },
+    "Stays while the pointer is over it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鼠标停在上面时不会关闭"
           }
         }
       }
