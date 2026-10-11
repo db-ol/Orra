@@ -79,6 +79,11 @@ nonisolated enum OneCharacterFix {
     /// guessed word stays within `bounds` of the edited text, the unchanged text around the
     /// fix, so it never takes in another edit.
     static func suggestion(paste: [Character], edited: [Character], at oldIndex: Int, _ newIndex: Int, within bounds: Range<Int>) -> WordSuggestion? {
+        located(paste: paste, edited: edited, at: oldIndex, newIndex, within: bounds)?.suggestion
+    }
+
+    /// The suggestion, with the span of the guessed word in the pasted text.
+    static func located(paste: [Character], edited: [Character], at oldIndex: Int, _ newIndex: Int, within bounds: Range<Int>) -> (suggestion: WordSuggestion, span: Range<Int>)? {
         let heard = paste[oldIndex]
         let corrected = edited[newIndex]
         guard isHan(heard), isHan(corrected), !isGrammar(heard, corrected),
@@ -86,10 +91,12 @@ nonisolated enum OneCharacterFix {
                 || SoundAlike.soundsAlike(String(heard), String(corrected)) else { return nil }
         let range = guess(in: edited, at: newIndex, within: bounds)
         let shift = oldIndex - newIndex
-        return WordSuggestion(
+        let span = (range.lowerBound + shift)..<(range.upperBound + shift)
+        let suggestion = WordSuggestion(
             change: Correction(heard: String(heard), corrected: String(corrected)),
-            pair: Correction(heard: String(paste[(range.lowerBound + shift)..<(range.upperBound + shift)]), corrected: String(edited[range]))
+            pair: Correction(heard: String(paste[span]), corrected: String(edited[range]))
         )
+        return (suggestion, span)
     }
 
     /// The span of the word around the character at `index`: the system tokenizer's word
@@ -113,6 +120,8 @@ nonisolated enum OneCharacterFix {
     /// the same way to the single characters around it that are not function words, and to
     /// the rest of a word the tokenizer found across its edge. Stays within `bounds` and
     /// grows to no more than `maximumGuessLength`, so 迪力热吧 to 迪丽热巴 gives 迪丽热巴.
+    /// A single character joins only next to another single one, the pieces of a name the
+    /// tokenizer does not know. A word it knows ends at its own edge, so 洛杉矶玩 gives 洛杉矶.
     static func widen(_ range: Range<Int>, in text: [Character], within bounds: Range<Int>) -> Range<Int> {
         grow(range, in: text, tokens(in: text), within: bounds, takingItsTokens: true)
     }
@@ -122,7 +131,8 @@ nonisolated enum OneCharacterFix {
         var upper = range.upperBound
         func joins(_ position: Int) -> Bool {
             guard bounds.contains(position), isHan(text[position]), !functionWords.contains(text[position]) else { return false }
-            if split.isSingle(position) { return true }
+            let edge = position < lower ? lower : upper - 1
+            if split.isSingle(position) { return split.isSingle(edge) }
             guard takingItsTokens, let token = split.ranges[position] else { return false }
             return token.overlaps(lower..<upper)
         }

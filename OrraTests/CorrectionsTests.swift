@@ -58,6 +58,43 @@ struct CorrectionFinderTests {
         #expect(findings("北京天安门广场人英", "背京甜安们广厂人英") == [.word(Correction(heard: "北京天安门广场", corrected: "背京甜安们广厂"))])
     }
 
+    @Test func grammarSwapsOneCharacterApartAreNotLearnedAsAWord() {
+        // Each swap is grammar, and together they sound almost the same.
+        #expect(findings("他说得对吗", "他说的对嘛").isEmpty)
+        #expect(findings("你在干嘛呢", "你在干吗哪").isEmpty)
+        // A grammar swap next to a name stays out of it.
+        #expect(findings("陈阳得书", "晨阳的书").map(\.correction) == [Correction(heard: "陈阳", corrected: "晨阳")])
+    }
+
+    @Test func aWordTheTokenizerKnowsDoesNotTakeInTheVerbAfterIt() {
+        #expect(findings("我们去洛山鸡玩", "我们去洛杉矶玩") == [.word(Correction(heard: "洛山鸡", corrected: "洛杉矶"))])
+        #expect(findings("我们去洛山鸡玩了一天", "我们去洛杉矶玩了一天") == [.word(Correction(heard: "洛山鸡", corrected: "洛杉矶"))])
+        // An unknown name, which the tokenizer splits into single characters, is still
+        // taken whole.
+        #expect(findings("我约了迪力热吧见面", "我约了迪丽热巴见面") == [.word(Correction(heard: "迪力热吧", corrected: "迪丽热巴"))])
+    }
+
+    @Test func wideningNeverMakesASpanTooLongToLearn() {
+        // Eight heard characters and five corrected ones. Taking in 迪 would make nine.
+        #expect(findings("迪鑫淼焱垚犇阿一乌", "迪心秒燕摇奔") == [.word(Correction(heard: "鑫淼焱垚犇阿一乌", corrected: "心秒燕摇奔"))])
+    }
+
+    @Test func aNameOfTwoWordsWhereOneOnlyChangedCaseIsLearnedWhole() {
+        #expect(findings("I use cloud code daily", "I use Claude Code daily") == [.word(Correction(heard: "cloud code", corrected: "Claude Code"))])
+        #expect(findings("用 vs code 写", "用 VS Code 写") == [.word(Correction(heard: "vs code", corrected: "VS Code"))])
+        // A case change alone is still the start of a sentence, not a name.
+        #expect(findings("VS code is", "VS Code is").isEmpty)
+        // Two real fixes apart are still two words.
+        #expect(findings("ask cloud about pithon", "ask Claude about Python").count == 2)
+    }
+
+    @Test func eachFindingHasTheSpanOfThePastedTextItCovers() {
+        let located = CorrectionFinder.locatedFindings(pasted: "我在用通一千万写", edited: "我在用通义千问写")
+        #expect(located.map(\.span) == [3..<7])
+        let offered = CorrectionFinder.locatedFindings(pasted: "我在用通一千万写", edited: "我在用通义千万写")
+        #expect(offered.map(\.span) == [3..<5])
+    }
+
     @Test func aLatinWordKeepsItsTwelveCharacters() {
         #expect(find("I use kubernetis", "I use kubernetis", "I use Kubernetesx") == Correction(heard: "kubernetis", corrected: "Kubernetesx"))
         #expect(find("I use kubernetisab", "I use kubernetisab", "I use Kubernetesabc") == nil)

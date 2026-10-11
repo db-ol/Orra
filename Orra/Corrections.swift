@@ -61,7 +61,19 @@ nonisolated enum CorrectionFinder {
     /// same sentence learns the name only. An edit is skipped when it is a deletion or an
     /// addition, a rewrite, a change of case or word ending, digits, grammar, too long, or
     /// a change that does not sound alike.
-    static func findings(pasted: String, edited editedText: String) -> [Finding] {
+    static func findings(pasted: String, edited: String) -> [Finding] {
+        locatedFindings(pasted: pasted, edited: edited).map(\.finding)
+    }
+
+    /// A finding and the span of the pasted text it covers, in characters. The watcher
+    /// compares spans to tell that a later finding replaces an earlier one.
+    struct Located: Equatable, Sendable {
+        var span: Range<Int>
+        var finding: Finding
+    }
+
+    /// The findings, as `findings(pasted:edited:)` gives them, with their spans.
+    static func locatedFindings(pasted: String, edited editedText: String) -> [Located] {
         let paste = Array(pasted)
         var edited = Array(editedText)
         guard !paste.isEmpty else { return [] }
@@ -70,8 +82,8 @@ nonisolated enum CorrectionFinder {
             edited.removeLast()
         }
         guard edited != paste else { return [] }
-        let hunks = hunks(paste, edited)
-        var found: [Finding] = []
+        let hunks = joiningCaseChanges(hunks(paste, edited), paste, edited)
+        var found: [Located] = []
         for (index, hunk) in hunks.enumerated() {
             // The unchanged text around the edit, up to the edits next to it, in the edited
             // text. A guessed word stays inside it.
@@ -115,10 +127,11 @@ nonisolated enum CorrectionFinder {
                 }
             }
         }
-        // Edits one plain character apart are one edit, as 力热吧 and 丽热巴 are.
+        // Edits one plain character apart are one edit, as 力热吧 and 丽热巴 are. A grammar
+        // swap such as 得 to 的 stays on its own, so it never becomes part of a word.
         var merged: [Hunk] = []
         for hunk in hunks {
-            if let last = merged.last {
+            if let last = merged.last, !isGrammarSwap(last, paste, edited), !isGrammarSwap(hunk, paste, edited) {
                 let gap = paste[last.old.upperBound..<hunk.old.lowerBound]
                 if gap.count < 2, !gap.contains(where: isSeparator) {
                     merged[merged.count - 1] = Hunk(old: last.old.lowerBound..<hunk.old.upperBound,
@@ -217,29 +230,73 @@ nonisolated enum CorrectionFinder {
             || (edited.indices.contains(first) && isNamePart(edited[first]))
     }
 
+    /// A change of one Chinese character into another of its grammar group, such as 得 to 的.
+    private static func isGrammarSwap(_ hunk: Hunk, _ paste: [Character], _ edited: [Character]) -> Bool {
+        hunk.old.count == 1 && hunk.new.count == 1
+            && OneCharacterFix.isGrammar(paste[hunk.old.lowerBound], edited[hunk.new.lowerBound])
+    }
+
+    /// Two Latin words fixed apart, with only spaces between them, where one only changed the
+    /// case of its first letter, are one edit, so cloud code to Claude Code learns the name
+    /// whole. Alone, the case change would be skipped.
+    private static func joiningCaseChanges(_ hunks: [Hunk], _ paste: [Character], _ edited: [Character]) -> [Hunk] {
+        func isLatinWord(_ hunk: Hunk) -> Bool {
+            !hunk.old.isEmpty && !hunk.new.isEmpty
+                && paste[hunk.old].allSatisfy(isNamePart) && edited[hunk.new].allSatisfy(isNamePart)
+        }
+        func changesCaseOnly(_ hunk: Hunk) -> Bool {
+            differsOnlyInFirstLetterCase(String(paste[hunk.old]), String(edited[hunk.new]))
+        }
+        var result: [Hunk] = []
+        for hunk in hunks {
+            if let last = result.last, isLatinWord(last), isLatinWord(hunk), changesCaseOnly(last) || changesCaseOnly(hunk) {
+                let gap = paste[last.old.upperBound..<hunk.old.lowerBound]
+                if !gap.isEmpty, gap.allSatisfy({ $0 == " " }),
+                   edited[last.new.upperBound..<hunk.new.lowerBound].elementsEqual(gap) {
+                    result[result.count - 1] = Hunk(old: last.old.lowerBound..<hunk.old.upperBound,
+                                                    new: last.new.lowerBound..<hunk.new.upperBound)
+                    continue
+                }
+            }
+            result.append(hunk)
+        }
+        return result
+    }
+
     /// What one edit calls for. One changed Chinese character is too little to tell a name
     /// from grammar, such as 的 and 得, and the system cannot split an unknown name into
     /// words, so OneCharacterFix offers such a word to the user instead. An edit of Chinese
     /// characters only takes in the single characters around it, as the offered word does,
     /// so 通一千万 to 通义千问 learns the whole name although 通 did not change.
-    private static func judge(_ hunk: Hunk, _ paste: [Character], _ edited: [Character], within bounds: Range<Int>) -> Finding? {
+    private static func judge(_ hunk: Hunk, _ paste: [Character], _ edited: [Character], within bounds: Range<Int>) -> Located? {
         if hunk.old.count == 1, hunk.new.count == 1, isHan(paste[hunk.old.lowerBound]), isHan(edited[hunk.new.lowerBound]) {
-            return OneCharacterFix.suggestion(paste: paste, edited: edited, at: hunk.old.lowerBound, hunk.new.lowerBound, within: bounds)
-                .map(Finding.suggestion)
+            return OneCharacterFix.located(paste: paste, edited: edited, at: hunk.old.lowerBound, hunk.new.lowerBound, within: bounds)
+                .map { Located(span: $0.span, finding: .suggestion($0.suggestion)) }
         }
         let heard = String(paste[hunk.old]).trimmingCharacters(in: .whitespaces)
         let corrected = String(edited[hunk.new]).trimmingCharacters(in: .whitespaces)
         guard isWordLike(heard), isWordLike(corrected), fits(heard), fits(corrected),
               hanCount(heard) != 1, hanCount(corrected) != 1,
+              !isGrammarOnly(heard, corrected),
               !differsOnlyInFirstLetterCase(heard, corrected),
               !differsOnlyInEnding(heard, corrected),
               SoundAlike.soundsAlike(heard, corrected) else { return nil }
-        guard paste[hunk.old].allSatisfy(isHan), edited[hunk.new].allSatisfy(isHan) else {
-            return .word(Correction(heard: heard, corrected: corrected))
-        }
+        let bare = Located(span: hunk.old, finding: .word(Correction(heard: heard, corrected: corrected)))
+        guard paste[hunk.old].allSatisfy(isHan), edited[hunk.new].allSatisfy(isHan) else { return bare }
         let word = OneCharacterFix.widen(hunk.new, in: edited, within: bounds)
         let old = (hunk.old.lowerBound - (hunk.new.lowerBound - word.lowerBound))..<(hunk.old.upperBound + (word.upperBound - hunk.new.upperBound))
-        return .word(Correction(heard: String(paste[old]), corrected: String(edited[word])))
+        let wide = Correction(heard: String(paste[old]), corrected: String(edited[word]))
+        // Widening must not make a span too long to learn.
+        guard fits(wide.heard), fits(wide.corrected) else { return bare }
+        return Located(span: old, finding: .word(wide))
+    }
+
+    /// 得对吗 and 的对嘛: the same characters but for grammar swaps, such as particles.
+    private static func isGrammarOnly(_ heard: String, _ corrected: String) -> Bool {
+        let a = Array(heard)
+        let b = Array(corrected)
+        guard a.count == b.count, a != b else { return false }
+        return zip(a, b).allSatisfy { $0 == $1 || OneCharacterFix.isGrammar($0, $1) }
     }
 
     /// At most `maximumLength` characters, of which at most `maximumHanCount` Chinese.
