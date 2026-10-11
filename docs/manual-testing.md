@@ -21,7 +21,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 2164 test cases passed on 2026-10-10, 162
+- The test command ends in TEST SUCCEEDED with 2165 test cases passed on 2026-10-10, 162
   of them filler rule cases and 1394 number rule cases, including the real model tests
   below. Three heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
