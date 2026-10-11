@@ -1047,12 +1047,32 @@
         }
       }
     },
+    "Recently used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近使用"
+          }
+        }
+      }
+    },
     "Remove" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除"
+          }
+        }
+      }
+    },
+    "Remove %lld Words" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 %lld 个词"
           }
         }
       }
@@ -1187,6 +1207,16 @@
         }
       }
     },
+    "Select words, then choose Remove or press Delete. Right-click a word to remove it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选中词语后，点“移除”或按 Delete 键。也可以右键点一个词来移除。"
+          }
+        }
+      }
+    },
     "Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1253,6 +1283,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看报告"
+          }
+        }
+      }
+    },
+    "Sort by" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排序方式"
           }
         }
       }

@@ -106,9 +106,17 @@ struct VocabularyTable: View {
     var body: some View {
         let shown = VocabularyList.filter(sorted, by: search)
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Search", text: $search, prompt: Text("Search"))
-                .labelsHidden()
-                .textFieldStyle(.roundedBorder)
+            HStack(spacing: 8) {
+                TextField("Search", text: $search, prompt: Text("Search"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                // The column titles sort too, but few people know they can be clicked.
+                Picker("Sort by", selection: sortChoice) {
+                    Text("Recently used").tag(SortChoice.recent)
+                    Text("Word").tag(SortChoice.word)
+                }
+                .fixedSize()
+            }
             Table(shown, selection: $selection, sortOrder: $sortOrder) {
                 TableColumn("Word", value: \.word, comparator: .localizedStandard) { row in
                     Text(verbatim: row.word)
@@ -137,20 +145,28 @@ struct VocabularyTable: View {
             }
             .frame(height: 280)
             .onDeleteCommand(perform: removeSelected)
+            .contextMenu(forSelectionType: VocabularyRow.ID.self) { ids in
+                Button(ids.count > 1 ? "Remove \(ids.count) Words" : "Remove", role: .destructive) {
+                    selection = ids
+                    removeSelected()
+                }
+            }
             .overlay {
                 if sorted.isEmpty {
                     Text("No words yet")
                         .foregroundStyle(.secondary)
                 }
             }
-            Button(action: removeSelected) {
-                Image(systemName: "minus")
-                    .frame(width: 16, height: 16)
+            HStack {
+                Text("Select words, then choose Remove or press Delete. Right-click a word to remove it.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(role: .destructive, action: removeSelected) {
+                    Label(selection.count > 1 ? "Remove \(selection.count) Words" : "Remove", systemImage: "trash")
+                }
+                .disabled(selection.isEmpty)
             }
-            .buttonStyle(.borderless)
-            .disabled(selection.isEmpty)
-            .help("Remove the selected words")
-            .accessibilityLabel("Remove")
         }
         .onAppear(perform: rebuild)
         .onChange(of: learning.store) { rebuild() }
@@ -161,6 +177,24 @@ struct VocabularyTable: View {
             let ids = Set(pushToTalk.vocabulary.map(\.id))
             selection.formIntersection(ids)
         }
+    }
+
+    /// The two orders the Sort by menu offers, matching the sortable columns.
+    enum SortChoice: Hashable {
+        case recent
+        case word
+    }
+
+    private var sortChoice: Binding<SortChoice> {
+        Binding(
+            get: { sortOrder.first?.keyPath == (\VocabularyRow.word as PartialKeyPath<VocabularyRow>) ? .word : .recent },
+            set: { choice in
+                switch choice {
+                case .recent: sortOrder = [KeyPathComparator(\VocabularyRow.lastActive, order: .reverse)]
+                case .word: sortOrder = [KeyPathComparator(\VocabularyRow.word, comparator: .localizedStandard)]
+                }
+            }
+        )
     }
 
     private func rebuild() {
