@@ -64,12 +64,18 @@ nonisolated struct SetupChecklist: Equatable, Sendable {
 /// The welcome window. AppDelegate shows it at launch until Orra has its model and both
 /// permissions, and the menu's Setup Guide shows it again. AppKit, because an accessory
 /// app cannot open a SwiftUI window at launch.
+///
+/// The window switches to a language picked in it at once. The menu, Settings and the
+/// indicator show the language macOS loaded at launch, so Orra restarts when the window
+/// closes with setup complete after a language was picked in it, see `restartsOnClose`.
 final class WelcomeWindow {
     private let pushToTalk: PushToTalkController
     private let models: ModelInstaller
     private var window: NSWindow?
     private var refresh: Task<Void, Never>?
     private var closeObserver: (any NSObjectProtocol)?
+    /// The language last picked in this window, nil until the user picks one here.
+    private var pickedHere: AppLanguage?
 
     init(pushToTalk: PushToTalkController, models: ModelInstaller) {
         self.pushToTalk = pushToTalk
@@ -89,14 +95,19 @@ final class WelcomeWindow {
     }
 
     private func makeWindow() -> NSWindow {
-        let view = WelcomeView(pushToTalk: pushToTalk, models: models) { [weak self] in
+        let language = AppLanguage.load()
+        let view = WelcomeView(pushToTalk: pushToTalk, models: models, language: language) { [weak self] in
             self?.window?.close()
+        } localizationChanged: { [weak self] localization in
+            self?.window?.title = Self.title(in: localization)
+        } languagePicked: { [weak self] language in
+            self?.pickedHere = language
         }
         let controller = NSHostingController(rootView: view)
         // The window grows when a step shows more, such as the download's progress.
         controller.sizingOptions = [.preferredContentSize]
         let window = NSWindow(contentViewController: controller)
-        window.title = String(localized: "Welcome to Orra")
+        window.title = Self.title(in: language.localization())
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.center()
@@ -104,9 +115,50 @@ final class WelcomeWindow {
             MainActor.assumeIsolated {
                 self?.refresh?.cancel()
                 self?.refresh = nil
+                self?.restartForLanguage()
             }
         }
         return window
+    }
+
+    static func title(in localization: String) -> String {
+        String(localized: LocalizedStringResource("Welcome to Orra", locale: Locale(identifier: localization)))
+    }
+
+    /// Restarts Orra after the window closes when a language picked in it differs from the
+    /// one Orra started with, so the menu and Settings show it too.
+    private func restartForLanguage() {
+        let saved = AppLanguage.load()
+        // Settings and Report a Problem are titled windows that may hold a choice or text
+        // the user has not finished with. The indicator and the notices are untitled panels.
+        let otherWindowOpen = NSApplication.shared.windows.contains {
+            $0 !== window && $0.isVisible && $0.styleMask.contains(.titled)
+        }
+        let restarts = Self.restartsOnClose(
+            setupComplete: SetupChecklist(pushToTalk, models).isComplete,
+            dictating: pushToTalk.state != .idle,
+            pickedHere: pickedHere == saved,
+            otherWindowOpen: otherWindowOpen,
+            picked: saved.localization(),
+            launched: AppLanguage.launchLocalization
+        )
+        guard restarts else { return }
+        // After the close has finished.
+        DispatchQueue.main.async {
+            AppLanguage.restart()
+        }
+    }
+
+    /// Whether closing the window restarts Orra. Only with setup complete, when a restart
+    /// interrupts nothing: the model is installed, so no download runs, and the talk key
+    /// and the language are saved the moment they are chosen. The window does not come
+    /// back at the next launch then. With steps left, as after Not Now, Orra goes on, a
+    /// download included, and shows the picked language at its next launch. Never during a
+    /// dictation, and only for a language picked in this window, so a choice made in
+    /// Settings waits for its own Restart Orra button. Never while another window is open,
+    /// such as Settings or an unsent problem report, since quitting would close it.
+    nonisolated static func restartsOnClose(setupComplete: Bool, dictating: Bool, pickedHere: Bool, otherWindowOpen: Bool, picked: String, launched: String) -> Bool {
+        setupComplete && !dictating && pickedHere && !otherWindowOpen && picked != launched
     }
 
     /// While the window is open, microphone access is read every second, so a change in

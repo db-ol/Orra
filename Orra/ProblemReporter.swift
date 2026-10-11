@@ -263,7 +263,7 @@ final class ProblemReporter {
             case .notLoaded: return "installed, not loaded"
             case .loading: return "installed, loading"
             case .ready: return "installed, loaded"
-            case .unavailable(let reason): return "installed, failed to load: \(reason)"
+            case .unavailable(let problem): return "installed, failed to load: \(problem)"
             }
         }
     }

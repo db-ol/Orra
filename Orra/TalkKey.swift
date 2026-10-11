@@ -43,14 +43,17 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
 
     /// The key's Mac name, such as "Right Option", as in Keyboard settings. Left and right
     /// are part of it. fn keeps its keycap label in every language.
-    var name: String {
+    ///
+    /// The text of a talk key is looked up in the language of `locale`, which is the
+    /// language Orra started with unless the welcome window passes the one picked there.
+    func name(in locale: Locale = .interface) -> String {
         switch self {
-        case .rightControl: String(localized: "Right Control")
-        case .rightOption: String(localized: "Right Option")
-        case .rightCommand: String(localized: "Right Command")
-        case .leftControl: String(localized: "Left Control")
-        case .leftOption: String(localized: "Left Option")
-        case .leftCommand: String(localized: "Left Command")
+        case .rightControl: String(localized: LocalizedStringResource("Right Control", locale: locale))
+        case .rightOption: String(localized: LocalizedStringResource("Right Option", locale: locale))
+        case .rightCommand: String(localized: LocalizedStringResource("Right Command", locale: locale))
+        case .leftControl: String(localized: LocalizedStringResource("Left Control", locale: locale))
+        case .leftOption: String(localized: LocalizedStringResource("Left Option", locale: locale))
+        case .leftCommand: String(localized: LocalizedStringResource("Left Command", locale: locale))
         case .fn: "fn"
         }
     }
@@ -67,50 +70,45 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// The symbol and the name, such as "⌥ Right Option".
-    var title: String {
-        symbol.map { "\($0) \(name)" } ?? name
+    func title(in locale: Locale = .interface) -> String {
+        symbol.map { "\($0) \(name(in: locale))" } ?? name(in: locale)
     }
 
     /// What the key is called on other keycaps, shown as a small hint next to its name.
     /// A keyboard with a Windows layout prints Alt on the key the Mac uses as Option, and
     /// a Windows logo on the key it uses as Command. The fn key of recent Macs shows a
     /// globe. Control is Ctrl everywhere, so it needs none.
-    var otherLabel: String? {
+    func otherLabel(in locale: Locale = .interface) -> String? {
         switch self {
         case .rightControl, .leftControl: nil
-        case .rightOption, .leftOption: String(localized: "Alt", comment: "The label of the Option key on a keyboard with a Windows layout")
-        case .rightCommand, .leftCommand: String(localized: "Windows key", comment: "The key a keyboard with a Windows layout has in place of Command")
-        case .fn: String(localized: "Globe 🌐", comment: "The fn key of recent Macs, which shows a globe")
+        case .rightOption, .leftOption: String(localized: LocalizedStringResource("Alt", locale: locale, comment: "The label of the Option key on a keyboard with a Windows layout"))
+        case .rightCommand, .leftCommand: String(localized: LocalizedStringResource("Windows key", locale: locale, comment: "The key a keyboard with a Windows layout has in place of Command"))
+        case .fn: String(localized: LocalizedStringResource("Globe 🌐", locale: locale, comment: "The fn key of recent Macs, which shows a globe"))
         }
     }
 
     /// The other label in parentheses, such as "(Alt)", or nil.
-    var otherLabelInParentheses: String? {
-        otherLabel.map { String(localized: "(\($0))", comment: "A talk key's label on other keyboards, such as (Alt)") }
+    func otherLabelInParentheses(in locale: Locale = .interface) -> String? {
+        otherLabel(in: locale).map { String(localized: LocalizedStringResource("(\($0))", locale: locale, comment: "A talk key's label on other keyboards, such as (Alt)")) }
     }
 
     /// The title with the other label, such as "⌥ Right Option (Alt)", where the key is
     /// shown in one line of text, as in the menu.
-    var fullName: String {
-        otherLabel.map { String(localized: "\(title) (\($0))", comment: "A talk key with its label on other keyboards, such as ⌥ Right Option (Alt)") } ?? title
+    func fullName(in locale: Locale = .interface) -> String {
+        let title = title(in: locale)
+        return otherLabel(in: locale).map { String(localized: LocalizedStringResource("\(title) (\($0))", locale: locale, comment: "A talk key with its label on other keyboards, such as ⌥ Right Option (Alt)")) } ?? title
     }
 
     /// The name inside a sentence, such as "Hold right Control to talk".
-    var nameInSentence: String {
-        sentenceName(in: .main)
-    }
-
-    /// The name inside a sentence, from the strings in `bundle`. Tests pass the Chinese
-    /// strings.
-    func sentenceName(in bundle: Bundle) -> String {
+    func sentenceName(in locale: Locale = .interface) -> String {
         switch self {
-        case .rightControl: String(localized: "right Control", bundle: bundle, comment: "A talk key inside a sentence")
-        case .rightOption: String(localized: "right Option", bundle: bundle, comment: "A talk key inside a sentence")
-        case .rightCommand: String(localized: "right Command", bundle: bundle, comment: "A talk key inside a sentence")
-        case .leftControl: String(localized: "left Control", bundle: bundle, comment: "A talk key inside a sentence")
-        case .leftOption: String(localized: "left Option", bundle: bundle, comment: "A talk key inside a sentence")
-        case .leftCommand: String(localized: "left Command", bundle: bundle, comment: "A talk key inside a sentence")
-        case .fn: String(localized: "fn", bundle: bundle, comment: "A talk key inside a sentence")
+        case .rightControl: String(localized: LocalizedStringResource("right Control", locale: locale, comment: "A talk key inside a sentence"))
+        case .rightOption: String(localized: LocalizedStringResource("right Option", locale: locale, comment: "A talk key inside a sentence"))
+        case .rightCommand: String(localized: LocalizedStringResource("right Command", locale: locale, comment: "A talk key inside a sentence"))
+        case .leftControl: String(localized: LocalizedStringResource("left Control", locale: locale, comment: "A talk key inside a sentence"))
+        case .leftOption: String(localized: LocalizedStringResource("left Option", locale: locale, comment: "A talk key inside a sentence"))
+        case .leftCommand: String(localized: LocalizedStringResource("left Command", locale: locale, comment: "A talk key inside a sentence"))
+        case .fn: String(localized: LocalizedStringResource("fn", locale: locale, comment: "A talk key inside a sentence"))
         }
     }
 
@@ -233,14 +231,14 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// The hint in the menu, such as "Hold right Control to talk".
-    func holdHint(bundle: Bundle = .main) -> String {
-        String(localized: "Hold \(sentenceName(in: bundle)) to talk", bundle: bundle)
+    func holdHint(in locale: Locale = .interface) -> String {
+        String(localized: LocalizedStringResource("Hold \(sentenceName(in: locale)) to talk", locale: locale))
     }
 
     /// What the indicator says during a hands free dictation, such as "Press right Control
     /// to finish".
-    func finishHint(bundle: Bundle = .main) -> String {
-        String(localized: "Press \(sentenceName(in: bundle)) to finish", bundle: bundle)
+    func finishHint(in locale: Locale = .interface) -> String {
+        String(localized: LocalizedStringResource("Press \(sentenceName(in: locale)) to finish", locale: locale))
     }
 }
 
@@ -353,23 +351,23 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
 extension KeyRecorder.Rejection {
     /// What the recorder says about the press, such as "Shift can't be the talk key" with
     /// the reason.
-    @MainActor var message: String {
+    @MainActor func message(in locale: Locale = .interface) -> String {
         switch self {
         case .shift:
-            String(localized: "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
+            String(localized: LocalizedStringResource("Shift can't be the talk key. On its own, it switches input methods between Chinese and English.", locale: locale))
         case .capsLock:
-            String(localized: "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
+            String(localized: LocalizedStringResource("Caps Lock can't be the talk key. It turns capitals or the input method on and off.", locale: locale))
         case .combination(let modifiers, let keyCode):
-            if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode) {
-                String(localized: "\(keys) is a key combination and can't be the talk key.")
+            if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode, locale: locale) {
+                String(localized: LocalizedStringResource("\(keys) is a key combination and can't be the talk key.", locale: locale))
             } else {
-                String(localized: "A key combination can't be the talk key.")
+                String(localized: LocalizedStringResource("A key combination can't be the talk key.", locale: locale))
             }
         case .key(let keyCode):
-            if let name = KeyName.name(forKeyCode: keyCode) {
-                String(localized: "The \(name) key can't be the talk key. Holding it would type or do something in the app in front.")
+            if let name = KeyName.name(forKeyCode: keyCode, locale: locale) {
+                String(localized: LocalizedStringResource("The \(name) key can't be the talk key. Holding it would type or do something in the app in front.", locale: locale))
             } else {
-                String(localized: "This key can't be the talk key. Holding it would type or do something in the app in front.")
+                String(localized: LocalizedStringResource("This key can't be the talk key. Holding it would type or do something in the app in front.", locale: locale))
             }
         }
     }
@@ -378,10 +376,10 @@ extension KeyRecorder.Rejection {
 extension KeyRecorder.Rejection {
     /// The keys of a combination as the note shows them, such as "⌘ C" or "⌥ ⌘", or nil
     /// when fewer than two keys are known, for example right and left Option together.
-    @MainActor static func keys(modifiers: String, keyCode: Int64?) -> String? {
+    @MainActor static func keys(modifiers: String, keyCode: Int64?, locale: Locale = .interface) -> String? {
         var parts = modifiers.isEmpty ? [] : modifiers.split(separator: " ").map(String.init)
         if let keyCode {
-            guard let name = KeyName.name(forKeyCode: keyCode) else { return nil }
+            guard let name = KeyName.name(forKeyCode: keyCode, locale: locale) else { return nil }
             parts.append(name)
         }
         return parts.count >= 2 ? parts.joined(separator: " ") : nil
