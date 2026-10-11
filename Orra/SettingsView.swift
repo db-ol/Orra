@@ -194,11 +194,20 @@ private struct GeneralSettings: View {
                 )) {
                     Label("Remove filler words such as um and uh", systemImage: "text.badge.minus")
                 }
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.writesNumbersAsDigits },
+                    set: { pushToTalk.setWritesNumbersAsDigits($0) }
+                )) {
+                    Label("Write numbers as digits", systemImage: "number")
+                }
             } header: {
                 Text("While you dictate")
             } footer: {
-                Text("Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.")
+                    Text("Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words.")
+                }
+                .foregroundStyle(.secondary)
             }
             Section {
                 Toggle(isOn: Binding(

@@ -20,8 +20,8 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 585 test cases passed, 145 of them filler
-  rule cases, including the real model tests below. Three heavier real model tests are
+- The test command ends in TEST SUCCEEDED with 1219 test cases passed, 145 of them filler
+  rule cases and 633 number rule cases, including the real model tests below. Three heavier real model tests are
   skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -143,6 +143,12 @@ Build and test commands, run in the repository root:
     sentence start, replies such as 嗯，好的 and uh-huh, acronyms such as UM, and words
     such as 金额 and 呃逆. PushToTalkControllerTests checks that the paste has the fillers
     removed while the setting is on and not while it is off, and that a change is saved.
+  - NumberRulesTests runs the number rules on every case of
+    Tools/rewrite-eval/numbers.jsonl and checks that applying them twice changes nothing
+    more. It checks that every cleanup in cases.jsonl without a number stays as it is,
+    that English is untouched, ranges of times, versions after a Latin name, and a long
+    dictation. PushToTalkControllerTests checks that the paste has digits after the fillers
+    are gone while the setting is on, not while it is off, and that a change is saved.
   - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
@@ -629,6 +635,15 @@ Filler removal, added on 2026-10-10, not verified yet:
 - [ ] Turn the setting off in Settings, General: the same dictations keep their fillers.
   The choice stays after reopening Orra.
 
+Numbers as digits, added on 2026-10-10, not verified yet:
+
+- [ ] With "Write numbers as digits" on, the default, dictate "我下个月想去试驾 Lexus RX
+  三五零" and "明天下午三点开会，预算三百五十块". The paste reads RX 350, 下午3点 and
+  350块, with the space before 350 as the model wrote it.
+- [ ] Dictate "我们一起去，三五成群" and "我买了三本书". Both paste as said.
+- [ ] Turn the setting off in Settings, General: the numbers stay in Chinese characters.
+  The choice stays after reopening Orra.
+
 Updates from inside the app, added on 2026-10-10, not verified yet:
 
 - [ ] A release DMG installs by dragging Orra to Applications and opens without a warning.
@@ -659,4 +674,4 @@ Interface language, added on 2026-10-10, not verified yet:
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
 - Key combinations and mouse buttons as talk keys, and hands free mode.
 - Rewriting with a model: spoken self corrections, fillers that need context such as 那个
-  and like, and translation. Only the filler rules exist.
+  and like, and translation. Only the filler and number rules exist.

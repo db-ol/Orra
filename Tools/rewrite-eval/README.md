@@ -36,6 +36,78 @@ not transcribed from anyone's speech. The expected outputs are the ground truth,
 by hand too. A cleanup removes fillers and applies clear self corrections. It does not
 reword, does not answer a question and does not carry out a request.
 
+## Numbers
+
+`numbers.jsonl` has 672 cases for writing spoken Chinese numbers as digits, one JSON
+object per line:
+
+- `id`: n001 and up.
+- `kind`: `convert` when some number in the input should become digits (131 cases), `keep`
+  when the input must stay exactly as it is (541 cases).
+- `input`: a dictation as Qwen3-ASR writes it, with the numbers spelled out.
+- `expected`: the text after the number rules.
+- `note`: what the case tests.
+
+A wrong conversion is far worse than a missed one, so the rules convert only patterns where a
+reader clearly expects digits:
+
+- Readings digit by digit of three digits or more (13800138000, 302, 999), and a year of four
+  before 年 (2026年). Two digits stay (三八妇女节, 九零后), except right after a Latin letter
+  (CA1831). Counting (一二三四五, 二四六八), sets of days (一四七, 二五八) and dates of events
+  (五一二, 八一三) stay unless a word such as 验证码, 电话 or 尾号 comes right before them.
+- Full dates: a month with its day and 号 or 日 (10月1日), and a month after a year in digits
+  (2026年10月). A day without a month (十五号), a month alone (九月份, 二月春风), ranges of
+  days (十月一号至七号) and lunar dates (农历八月十五号, 七月七日是七夕, 二月二日龙抬头)
+  stay. A year with 千 and its month convert together (2026年10月).
+- Clock times after a time of day such as 下午 or 晚上 (下午3点, 晚上10点半, 下午3点半到4点),
+  or with minutes and 分 (3点20分). 三点半, 三点以后, 十点到十点半 and 三点十分 (which can
+  mean very) need a time of day. 一点 after a time of day stays when it means a little
+  (晚上一点都不冷).
+- Percentages (50%, 3.5%), except rough ones and ranges (百分之五十多, 百分之三到五).
+- Money: a number with 十, 百, 千, 万 or 亿 before 元, 块 or a currency word (350块, 300美元,
+  3.5万元, 3.5亿元, 126万亿元). 块 is money only before 钱, a number, a particle such as 的, 和 or
+  就, punctuation or the end, since it also counts pieces (一千块拼图). An amount that needs more places is written whole (13888元),
+  and stays in words above 1亿.
+- Measurements with a real unit: 公里, 米, 公斤, 斤, 吨, 毫升, 英寸, 寸, 毫安, 岁, 小时, 分钟,
+  秒, 天, 周, 个月, 年 and Latin units such as GB, G and K (42公里, 28岁, 15天, 16GB, 5G).
+  度 counts only for a temperature after 零下 or with 摄氏 (零下12度). Decimals before such a
+  unit convert (3.5公里). 升 is not a unit, it is mostly the verb rise (三十升至五十).
+  一百, 一千 and 八百 before 年 or 岁 are figures of speech and stay (能笑一千年), and so does
+  a measurement with another number after it (十天十夜, 十年二十年).
+- Model numbers glued to a Latin name (M5, iPhone15, RX350), and after a space when a space,
+  punctuation, a Latin unit or the end follows (RX 350, iPhone 15 Pro). Versions after a name
+  that looks like a model (macOS 15.1), or before 以上, 以下 or 版 (Python 3.12以上). After a
+  person's name (Tom八成, Tom三点十五), before a unit or a counter (PPT三个小时, iPad三台,
+  维生素D三粒) the number stays, and so does any other number glued to a Latin word
+  (iPhone十二点五十分).
+
+Everything else stays in words: single digits (三本书, 五公里), numbers before a plain counter
+(二十个人, 十位同学, 三十五页, 十八层, 十八届), 万 and 亿 without money (两万人, 十二万,
+三千万), scores (九十五分), ranges (三百到五百元, 三十至四十岁), rough numbers (七八个, 十几个),
+ordinals, idioms, poems, names, holidays and book titles. 61 cases that converted under the
+earlier, wider rules became keep cases with the note "kept in words since the narrowing", and
+n083 keeps 十张 in words while A四 still converts.
+
+The cases merge two sets written by hand. One duplicate and 47 cases that repeated another
+with other words around the same number were dropped, and 19 were added for conventions
+neither set covered, such as 三点一刻, 十二万三千, 三百分之一 and a range of times. The two
+sets agreed on every convention. Review added 103 cases, n299 to n401, for idioms, poems
+and titles, words that start with a unit character, lunar dates, counting, ranges and units
+the first rules missed. A second review added 118 cases, n402 to n519, for prices for one
+(三千一个月), the tens place, intensifiers and hyperbole (一百二十个放心, 八百遍, 一百个胆子),
+sayings, titles and plenum names, numbers after a person's name, 一点 as a little before
+半年 or 整理, rough percentages, amounts in two parts (三十块零五毛) and both ends of a
+range. A third review added 91 cases, n520 to n610, for 一点 as a little before a price or a
+duration (便宜一点五十块), words that end in a digit before 十 (唯一十八岁, 高三十个班, 张三十八岁),
+sayings and song titles, scores, phone numbers in groups and ranges whose ends differ. A
+fourth review added 62 cases, n611 to n672, for 升 as rise, counting and sets of days, 块 as
+a counter, lunar festivals, idioms with two numbers, hyperbole, counters after a Latin name,
+times after a person's name, ranges of times and years, and years with 千. n394 (Python 3.10)
+became a keep case with it.
+
+OrraTests/NumberRulesTests.swift runs every case, so Orra/NumberRules.swift gets all of
+them while the tests pass.
+
 ## Scoring
 
 Python 3.8 or later, standard library only. Run from this folder:

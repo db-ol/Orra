@@ -15,7 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vocabulary: VocabularyPreference.load(),
         saveVocabulary: { VocabularyPreference.save($0) },
         removesFillerWords: FillerPreference.load(),
-        saveRemovesFillerWords: { FillerPreference.save($0) }
+        saveRemovesFillerWords: { FillerPreference.save($0) },
+        writesNumbersAsDigits: NumberPreference.load(),
+        saveWritesNumbersAsDigits: { NumberPreference.save($0) }
     )
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
