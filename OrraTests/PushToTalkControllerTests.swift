@@ -1026,6 +1026,60 @@ struct PushToTalkControllerTests {
         #expect(saved == [["Orra", "通义千问"], []])
     }
 
+    @Test func fillersAreRemovedOnlyWhileTheSettingIsOn() async throws {
+        var saved: [Bool] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            saveRemovesFillerWords: { saved.append($0) }
+        )
+        #expect(controller.removesFillerWords)
+        await controller.loadModel()
+        speech.reply = "呃，我们明天 um 再说吧。"
+        try await dictate(controller)
+        controller.setRemovesFillerWords(false)
+        try await dictate(controller)
+        controller.setRemovesFillerWords(false)
+        controller.setRemovesFillerWords(true)
+        speech.reply = "嗯嗯"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["我们明天再说吧。", "呃，我们明天 um 再说吧。", "嗯嗯"])
+        #expect(controller.lastTranscript == "嗯嗯")
+        #expect(saved == [false, true])
+    }
+
+    @Test func numbersAreWrittenAsDigitsOnlyWhileTheSettingIsOn() async throws {
+        var saved: [Bool] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            saveWritesNumbersAsDigits: { saved.append($0) }
+        )
+        #expect(controller.writesNumbersAsDigits)
+        await controller.loadModel()
+        // The fillers go first, so 呃 between the numbers does not stop them.
+        speech.reply = "呃，下午三点我们去看 Lexus RX 三五零。"
+        try await dictate(controller)
+        controller.setWritesNumbersAsDigits(false)
+        try await dictate(controller)
+        controller.setWritesNumbersAsDigits(false)
+        controller.setWritesNumbersAsDigits(true)
+        speech.reply = "我们一起去，三五成群。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["下午3点我们去看 Lexus RX 350。", "下午三点我们去看 Lexus RX 三五零。", "我们一起去，三五成群。"])
+        #expect(saved == [false, true])
+    }
+
     @Test func thePasteIsReported() async throws {
         let controller = await makeController()
         var reported: [(String, pid_t)] = []
