@@ -457,6 +457,16 @@
         }
       }
     },
+    "Language" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言"
+          }
+        }
+      }
+    },
     "Learn from my corrections" : {
       "localizations" : {
         "zh-Hans" : {
@@ -627,6 +637,16 @@
         }
       }
     },
+    "Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说出来的日期、时间、价格和百分比会写成阿拉伯数字。“三本书”这样的小数目、“十几个”这样的约数和成语保持原样。"
+          }
+        }
+      }
+    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -663,6 +683,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra"
+          }
+        }
+      }
+    },
+    "Orra Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 设置"
           }
         }
       }
@@ -777,6 +807,16 @@
         }
       }
     },
+    "Orra shows the new language after it restarts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 重新启动后才会显示新的语言。"
+          }
+        }
+      }
+    },
     "People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac." : {
       "localizations" : {
         "zh-Hans" : {
@@ -837,6 +877,36 @@
         }
       }
     },
+    "Remove filler words such as um and uh" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去掉“呃”“嗯”这类语气词"
+          }
+        }
+      }
+    },
+    "Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去掉只用来停顿的“呃”“额”“嗯”“啊”“哦”，英文里的同类词也会去掉。有意义的词，比如“好啊”“吧”“那个”，以及“嗯，好的”这样的回答，会照原样保留。"
+          }
+        }
+      }
+    },
+    "Restart Orra" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新启动 Orra"
+          }
+        }
+      }
+    },
     "Resume Download (%@ left)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -873,6 +943,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "右侧 Option 键"
+          }
+        }
+      }
+    },
+    "Same as the Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随 Mac 系统"
           }
         }
       }
@@ -963,6 +1043,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型"
+          }
+        }
+      }
+    },
+    "Starting and finding Orra" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动和查找 Orra"
           }
         }
       }
@@ -1233,6 +1323,16 @@
         }
       }
     },
+    "Version, speech model, updates and privacy." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本、语音模型、更新和隐私。"
+          }
+        }
+      }
+    },
     "Vocabulary" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1273,6 +1373,16 @@
         }
       }
     },
+    "Which microphone Orra records from." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 用哪个麦克风录音。"
+          }
+        }
+      }
+    },
     "While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1289,6 +1399,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "听写时"
+          }
+        }
+      }
+    },
+    "Words and names that Orra should write your way, and learning from your corrections." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让 Orra 按你的写法输出的词和名字，以及从你的修改中学习。"
+          }
+        }
+      }
+    },
+    "Write numbers as digits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把数字写成阿拉伯数字"
+          }
+        }
+      }
+    },
+    "Your language, the talk key, what you see and hear while dictating, and how Orra starts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "界面语言、说话键、听写时的提示，以及 Orra 如何启动。"
           }
         }
       }
