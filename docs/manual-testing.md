@@ -642,6 +642,16 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
   The menu offers Install Orra with its version, and the update window shows once you
   switch to Orra. There is no checkbox to install updates automatically.
 
+Interface language, added on 2026-10-10, not verified yet:
+
+- [ ] Settings, General, Language offers Same as the Mac, English and 简体中文. Choosing one
+  shows Restart Orra, and after the restart the menu, Settings, the welcome window and the
+  indicator use that language. Same as the Mac follows System Settings again.
+- [ ] Settings looks like System Settings: colored icons in the sidebar, a header with icon,
+  title and summary on every page, and icons on the rows of General. Language is the first
+  section of General. The window can be made larger, keeps its size, and cannot be made
+  smaller than its content.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is

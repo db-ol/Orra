@@ -79,6 +79,8 @@ and the options, commit it, and stop.
 
 ## Continuous integration
 .github/workflows/ci.yml runs two jobs on every pull request and every push to main.
+.github/workflows/pages.yml deploys the website in site/ to GitHub Pages when a push to main
+changes site/. Keep the site in line with README.md, as docs/website.md describes.
 
 - Rules check, on Linux: `python3 Tools/ci/check_rules.py`. It fails when one of the values it
   lists at the top differs: the team, bundle IDs, deployment target, App Sandbox, hardened
