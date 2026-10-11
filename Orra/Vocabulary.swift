@@ -89,10 +89,15 @@ nonisolated enum VocabularyEcho {
         return reachable[heard.count]
     }
 
-    /// Lowercase letters and digits only, traditional characters as simplified, so
-    /// "I R S transcripts。" matches the term "IRS transcripts".
+    /// Lowercase letters and digits only, without accents, full width Latin as ASCII and
+    /// traditional characters as simplified, so "I R S transcripts。" matches the term "IRS
+    /// transcripts". Traditional characters are converted even in mostly English text, since
+    /// this only compares text with terms.
     static func normalized(_ text: String) -> String {
-        String(String.UnicodeScalarView(ChineseText.simplified(text).lowercased().unicodeScalars.filter {
+        let folded = ChineseText.simplifiedCharacters(text)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .lowercased()
+        return String(String.UnicodeScalarView(folded.unicodeScalars.filter {
             CharacterSet.alphanumerics.contains($0)
         }))
     }

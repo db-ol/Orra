@@ -77,6 +77,8 @@ final class FakeSpeech {
     /// The reply without a vocabulary, when it differs from `reply`.
     var replyWithoutContext: String?
     var transcribeError: (any Error)?
+    /// An error only for a transcription without a vocabulary.
+    var transcribeErrorWithoutContext: (any Error)?
     var delay: Duration = .zero
     private(set) var loads = 0
     private(set) var receivedSampleCounts: [Int] = []
@@ -99,6 +101,7 @@ final class FakeSpeech {
                     try await Task.sleep(for: self.delay)
                 }
                 if let error = self.transcribeError { throw error }
+                if context == nil, let error = self.transcribeErrorWithoutContext { throw error }
                 if context == nil, let plain = self.replyWithoutContext { return plain }
                 return self.reply
             }
@@ -1067,6 +1070,26 @@ struct PushToTalkControllerTests {
         try await dictate(controller)
         #expect(speech.receivedContexts == ["通义千问\nOrra", nil])
         #expect(inserter.inserted == ["Orra。"])
+    }
+
+    @Test func onlyPunctuationWithoutTheVocabularyIsNoSpeech() async throws {
+        speech.reply = "Orra。"
+        speech.replyWithoutContext = "。"
+        let controller = await controller(vocabulary: ["Orra"])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Orra", nil])
+        #expect(inserter.inserted.isEmpty)
+        #expect(controller.problem == nil)
+    }
+
+    @Test func aFailedPassWithoutTheVocabularyKeepsTheText() async throws {
+        speech.reply = "Orra。"
+        speech.transcribeErrorWithoutContext = TestError()
+        let controller = await controller(vocabulary: ["Orra"])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Orra", nil])
+        #expect(inserter.inserted == ["Orra。"])
+        #expect(controller.problem == nil)
     }
 
     @Test func speechWithMoreThanTermsIsTranscribedOnce() async throws {

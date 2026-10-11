@@ -16,16 +16,28 @@ extension Transcription {
     /// the vocabulary, see VocabularyEcho. When the text is only vocabulary terms, the same
     /// samples are transcribed again without the vocabulary. If that pass hears nothing,
     /// nobody spoke and the text is empty. Otherwise the user said the terms, and the text
-    /// with the vocabulary stands, since it writes them the user's way. Logs a timing and
-    /// whether speech was heard, never the text.
+    /// with the vocabulary stands, since it writes them the user's way. Speech means a
+    /// letter or a digit, so a pass that gives only punctuation heard nothing. When that
+    /// pass fails, the text with the vocabulary stands too, as it did before the check. A
+    /// known limit: a single term spoken so softly that only the pass with the vocabulary
+    /// hears it is dropped like an echo.
+    /// Logs a timing and whether speech was heard, never the text.
     func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double) async throws -> String {
         let text = try await transcribe(samples, Vocabulary.context(terms))
         guard !terms.isEmpty, await Self.isOnlyTerms(text, of: terms) else { return text }
+        let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
         let started = ContinuousClock.now
-        let plain = try await transcribe(samples, nil)
-        let heardSpeech = !TranscriptGuard.clean(plain, audioSeconds: audioSeconds).isEmpty
-        Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
-            .notice("Transcript held only vocabulary terms, the pass without them took \(started.duration(to: .now), privacy: .public), speech heard: \(heardSpeech, privacy: .public)")
+        let plain: String
+        do {
+            plain = try await transcribe(samples, nil)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.error("Transcript held only vocabulary terms, the pass without them failed after \(started.duration(to: .now), privacy: .public)")
+            return text
+        }
+        let heardSpeech = !VocabularyEcho.normalized(TranscriptGuard.clean(plain, audioSeconds: audioSeconds)).isEmpty
+        logger.notice("Transcript held only vocabulary terms, the pass without them took \(started.duration(to: .now), privacy: .public), speech heard: \(heardSpeech, privacy: .public)")
         return heardSpeech ? text : ""
     }
 

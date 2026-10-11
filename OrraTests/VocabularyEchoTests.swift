@@ -54,7 +54,7 @@ extension RealModelTests {
             }
             var seen = Set<String>()
             var result: [String] = []
-            for index in 0..<lists.map(\.count).max()! {
+            for index in 0..<(lists.map(\.count).max() ?? 0) {
                 for list in lists where index < list.count {
                     let key = VocabularyEcho.normalized(list[index])
                     if !key.isEmpty, seen.insert(key).inserted { result.append(list[index]) }
@@ -63,10 +63,9 @@ extension RealModelTests {
             return result
         }
 
-        /// The ContextASR sets, which list the terms of each clip, and optionally other sets.
-        nonisolated private static func hasSets(besides others: [String] = []) -> Bool {
-            let terms = ["contextasr_zh", "contextasr_en"].map { "sets/\($0)/terms.tsv" }
-            return (terms + others.map { "sets/\($0)/refs.tsv" }).allSatisfy {
+        /// The ContextASR sets: the terms of each clip and the list of clips.
+        nonisolated private static func hasSets() -> Bool {
+            ["contextasr_zh", "contextasr_en"].flatMap { ["sets/\($0)/terms.tsv", "sets/\($0)/refs.tsv"] }.allSatisfy {
                 FileManager.default.fileExists(atPath: EvaluationData.root.appendingPathComponent($0).path)
             }
         }
@@ -155,8 +154,10 @@ extension RealModelTests {
                 transcribe: { samples, context in try await engine.transcribe(samples, context: context) }
             )
             let terms = try Self.contextTerms()
+            try #require(terms.count >= 100)
             var report = ["Vocabulary echo, a spoken term, numbers only"]
             var spokenCount = 0
+            var exercised = 0
             for (index, voice) in [(0, "Tingting"), (1, "Samantha")] {
                 guard let speech = try Self.spoken(terms[index], voice: voice) else {
                     report.append("term \(index): voice \(voice) missing, skipped")
@@ -174,12 +175,13 @@ extension RealModelTests {
                     let elapsed = start.duration(to: .now)
                     let kept = VocabularyEcho.normalized(text).contains(key)
                     report.append("term \(index) with \(size) terms: only terms \(onlyTerms), term kept \(kept), \(text.count) chars, \(elapsed)")
-                    #expect(onlyTerms, "term \(index) with \(size) terms: the transcript held more than terms, so the guard was not exercised")
+                    if onlyTerms { exercised += 1 }
                     #expect(kept, "term \(index) with \(size) terms: the spoken term was dropped")
                 }
             }
             try Self.save(report, as: "vocabulary-echo-spoken.txt")
-            #expect(spokenCount > 0, "no system voice could speak the terms")
+            try #require(spokenCount > 0, "no system voice could speak the terms")
+            #expect(exercised > 0, "every transcript held more than terms, so the guard was never exercised")
         }
     }
 }

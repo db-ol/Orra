@@ -88,6 +88,17 @@ struct VocabularyTests {
         #expect(!VocabularyEcho.isOnlyTerms("你好", of: terms))
     }
 
+    @Test func traditionalCharactersMatchInMostlyEnglishText() {
+        let terms = ["极速借呗", "IRS transcripts", "Pine Bluff", "Equifax reports", "Rafael Rosen"]
+        #expect(VocabularyEcho.isOnlyTerms("Pine Bluff IRS transcripts Equifax reports Rafael Rosen 極速借唄", of: terms))
+    }
+
+    @Test func fullWidthLatinAndAccentsMatch() {
+        #expect(VocabularyEcho.isOnlyTerms("ＯＲＲＡ", of: ["Orra"]))
+        #expect(VocabularyEcho.isOnlyTerms("café", of: ["Cafe"]))
+        #expect(VocabularyEcho.isOnlyTerms("Cafe", of: ["café"]))
+    }
+
     @Test func emptyTextOrNoTermsIsNeverAnEcho() {
         #expect(!VocabularyEcho.isOnlyTerms("", of: ["Orra"]))
         #expect(!VocabularyEcho.isOnlyTerms("。，  ", of: ["Orra"]))
