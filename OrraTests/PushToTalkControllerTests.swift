@@ -1403,7 +1403,7 @@ struct PushToTalkControllerTests {
         // keyboard layout, unlike a letter.
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
         controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
-        #expect(controller.keyChoiceNote == "⌘ Return is a key combination and can't be the talk key. Press one key on its own.")
+        #expect(controller.keyChoiceNote == "⌘ Return is a key combination and can't be the talk key.")
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey)
         #expect(controller.talkKey == .rightOption)

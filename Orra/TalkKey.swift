@@ -361,9 +361,9 @@ extension KeyRecorder.Rejection {
             String(localized: "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
         case .combination(let modifiers, let keyCode):
             if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode) {
-                String(localized: "\(keys) is a key combination and can't be the talk key. Press one key on its own.")
+                String(localized: "\(keys) is a key combination and can't be the talk key.")
             } else {
-                String(localized: "A key combination can't be the talk key. Press one key on its own.")
+                String(localized: "A key combination can't be the talk key.")
             }
         case .key(let keyCode):
             if let name = KeyName.name(forKeyCode: keyCode) {

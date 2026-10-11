@@ -207,11 +207,11 @@ struct KeyRecorderTests {
     @Test @MainActor func rejectionsSayWhy() {
         #expect(KeyRecorder.Rejection.shift.message == "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
         #expect(KeyRecorder.Rejection.capsLock.message == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
-        #expect(KeyRecorder.Rejection.combination(modifiers: "⌘", keyCode: Int64(kVK_Return)).message == "⌘ Return is a key combination and can't be the talk key. Press one key on its own.")
-        #expect(KeyRecorder.Rejection.combination(modifiers: "⌥ ⌘", keyCode: nil).message == "⌥ ⌘ is a key combination and can't be the talk key. Press one key on its own.")
-        #expect(KeyRecorder.Rejection.combination(modifiers: "fn", keyCode: Int64(kVK_UpArrow)).message == "fn Up Arrow is a key combination and can't be the talk key. Press one key on its own.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "⌘", keyCode: Int64(kVK_Return)).message == "⌘ Return is a key combination and can't be the talk key.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "⌥ ⌘", keyCode: nil).message == "⌥ ⌘ is a key combination and can't be the talk key.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "fn", keyCode: Int64(kVK_UpArrow)).message == "fn Up Arrow is a key combination and can't be the talk key.")
         // Right and left Control together show one symbol, so the note names no keys.
-        #expect(KeyRecorder.Rejection.combination(modifiers: "⌃", keyCode: nil).message == "A key combination can't be the talk key. Press one key on its own.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "⌃", keyCode: nil).message == "A key combination can't be the talk key.")
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_Space)).message == "The Space key can't be the talk key. Holding it would type or do something in the app in front.")
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_F5)).message == "The F5 key can't be the talk key. Holding it would type or do something in the app in front.")
     }

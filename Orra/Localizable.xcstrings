@@ -42,12 +42,12 @@
         }
       }
     },
-    "%@ is a key combination and can't be the talk key. Press one key on its own." : {
+    "%@ is a key combination and can't be the talk key." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ 是组合键，不能作为说话键。请单独按一个键。"
+            "value" : "%@ 是组合键，不能作为说话键。"
           }
         }
       }
@@ -151,12 +151,12 @@
         }
       }
     },
-    "A key combination can't be the talk key. Press one key on its own." : {
+    "A key combination can't be the talk key." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "组合键不能作为说话键。请单独按一个键。"
+            "value" : "组合键不能作为说话键。"
           }
         }
       }
@@ -2034,6 +2034,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型仍在载入"
+          }
+        }
+      }
+    },
+    "The talk key can be fn, or Control, Option or Command on the left or right." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键可以用 fn 键，或者左侧、右侧的 Control、Option、Command 键。"
           }
         }
       }

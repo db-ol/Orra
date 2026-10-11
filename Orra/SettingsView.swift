@@ -524,12 +524,18 @@ struct TalkKeyRecorder: View {
                     }
                     .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("Use fn, Control, Option or Command on its own. Escape cancels.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
+                // Also under a refused press, so the user sees which keys work.
+                Text("Use fn, Control, Option or Command on its own. Escape cancels.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                // Which keys can be the talk key, before the user starts recording.
+                Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if showsRecommendation {
                 Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard.")
@@ -552,7 +558,8 @@ struct TalkKeyRecorder: View {
             // VoiceOver reads a refused press, which only shows as text under the field.
             // Only the recorder that started the recording speaks, so it is said once.
             if startedHere, let note {
-                AccessibilityNotification.Announcement(note).post()
+                let keys = String(localized: "Use fn, Control, Option or Command on its own. Escape cancels.")
+                AccessibilityNotification.Announcement("\(note) \(keys)").post()
             }
         }
     }
