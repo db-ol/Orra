@@ -387,8 +387,7 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
   lid open, and right Control on a Mac without a built in keyboard or with the lid closed.
   Use fn or Use right Control changes the key, and the step gets its check mark, also when
   the recommended key is the default already. The check mark stays after a relaunch.
-  Closing Settings while the welcome window records a key leaves that recording alone. Try
-  it before granting Accessibility too.
+  Try it before granting Accessibility too.
 - [ ] Double press the talk key in Notes and let go: the indicator shows the white bars and
   "Press right Control to finish", or the key used, in white text in the same dark
   capsule, with no microphone or color, and keeps recording. Type and click in Notes: it
@@ -407,6 +406,9 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
 - [ ] With Keyboard > Dictation > Shortcut set to "Press Control Key Twice", double press
   right Control. Note whether macOS Dictation starts as well.
 - [ ] Hands free stops at 60 seconds, pastes, and says why.
+- [ ] With "Double press for hands free" off, a double press does nothing.
+- [ ] In Chinese, the indicator says "按右侧 Control 键结束", and the welcome step and the
+  Settings explanation read naturally.
 
 One talk key in a recorder field, added later on 2026-10-10, not verified yet:
 
@@ -420,9 +422,12 @@ One talk key in a recorder field, added later on 2026-10-10, not verified yet:
   shows "⌥ Right Option (Alt)".
 - [ ] While recording, Shift, Caps Lock, A, Return, Space, an arrow key, F5 and Command C
   each show a reason under the field, such as "The Return key can't be the talk key…",
-  type nothing into the window and keep the recording on. Escape cancels without a change
-  and leaves the window open. A click elsewhere in the window, or a switch to another app,
-  cancels too. The current talk key starts no dictation while recording.
+  type nothing into the window and keep the recording on. Shift and Caps Lock still do
+  what they always do, because Orra passes modifier presses on: with Pinyin on, Shift
+  switches it between Chinese and English, and Caps Lock turns capitals on or switches to
+  ABC. Escape cancels without a change and leaves the window open. A click elsewhere in
+  the window, or a switch to another app, cancels too, so closing Settings or the welcome
+  window ends a recording first. The current talk key starts no dictation while recording.
 - [ ] Holding Command and pressing right Option is turned down as a combination.
 - [ ] On a Windows layout keyboard, the key printed Alt records as Option and the Windows
   key as Command. Note which side each one records as.
@@ -432,10 +437,14 @@ One talk key in a recorder field, added later on 2026-10-10, not verified yet:
   clicked, and Change Talk Key… opens Settings on General, also when Settings was open on
   another page.
 - [ ] The welcome step "Choose your talk key" records the key the same way.
-- [ ] VoiceOver reads the field as "Talk key" with the key as its value.
-- [ ] With "Double press for hands free" off, a double press does nothing.
-- [ ] In Chinese, the indicator says "按右侧 Control 键结束", and the welcome step and the
-  Settings explanation read naturally.
+- [ ] VoiceOver reads the Settings row as "Talk key" once, with the key as its value.
+  Starting the recording says "Press the key you want to hold" and the keys to use, and
+  each refused press, such as Return or Command C, is read out.
+- [ ] A refused press leaves its note until a key that can be the talk key goes down.
+  Press Return, then hold right Option: the note goes away while the key is held.
+- [ ] Command C shows "⌘ C is a key combination…", and right Option with Command held
+  shows "⌥ ⌘ is a key combination…".
+- [ ] The note text is easy to read in light and dark mode, with an orange icon.
 
 Tap switched off by the system, changed on 2026-10-06, not verified yet. The log lines
 below show with the log stream command under Testing notes:

@@ -269,8 +269,10 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
         case shift
         /// Caps Lock is a lock, not a key that is held, and switches input methods too.
         case capsLock
-        /// Two keys together, such as Command+C or right Control with Shift held.
-        case combination
+        /// Two keys together, such as Command+C or right Control with Shift held. The
+        /// symbols of the modifiers held, such as "⌘", and the key code of the other key
+        /// when it is not a modifier, so the note can show "⌘ C".
+        case combination(modifiers: String, keyCode: Int64?)
         /// A key that types or acts on its own, such as a letter, Return or an arrow key.
         case key(keyCode: Int64)
     }
@@ -290,8 +292,9 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
                 if key.isDown(in: flags, wasDown: candidate == key) {
                     // A second modifier, or one pressed while another is held.
                     guard candidate == nil, flags.isDisjoint(with: key.otherModifiers) else {
+                        let rejection = combination(flags: flags, fnPressed: key == .fn, keyCode: nil)
                         candidate = nil
-                        return .rejected(.combination)
+                        return .rejected(rejection)
                     }
                     candidate = key
                     return nil
@@ -302,9 +305,9 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
             }
             if Self.shiftKeyCodes.contains(keyCode) {
                 guard flags.contains(.maskShift) else { return nil }
-                let combined = candidate != nil
+                let rejection: Rejection = candidate != nil ? combination(flags: flags, fnPressed: false, keyCode: nil) : .shift
                 candidate = nil
-                return .rejected(combined ? .combination : .shift)
+                return .rejected(rejection)
             }
             if keyCode == Self.capsLockKeyCode {
                 candidate = nil
@@ -321,11 +324,29 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
                 return nil
             }
             let combined = candidate != nil || !flags.isDisjoint(with: [.maskControl, .maskAlternate, .maskCommand])
+            let rejection: Rejection = combined ? combination(flags: flags, fnPressed: false, keyCode: keyCode) : .key(keyCode: keyCode)
             candidate = nil
-            return .rejected(combined ? .combination : .key(keyCode: keyCode))
+            return .rejected(rejection)
         default:
             return nil
         }
+    }
+
+    /// The combination the user pressed, with the modifiers in the order Mac menus show
+    /// them. fn counts only when it was pressed for the recording, because arrow and
+    /// function keys carry the Fn flag on their own. Call it before clearing `candidate`.
+    private func combination(flags: CGEventFlags, fnPressed: Bool, keyCode: Int64?) -> Rejection {
+        var symbols: [String] = []
+        if fnPressed || candidate == .fn {
+            symbols.append("fn")
+        }
+        let modifiers: [(CGEventFlags, String)] = [
+            (.maskControl, "⌃"), (.maskAlternate, "⌥"), (.maskShift, "⇧"), (.maskCommand, "⌘"),
+        ]
+        for (flag, symbol) in modifiers where flags.contains(flag) {
+            symbols.append(symbol)
+        }
+        return .combination(modifiers: symbols.joined(separator: " "), keyCode: keyCode)
     }
 }
 
@@ -338,8 +359,12 @@ extension KeyRecorder.Rejection {
             String(localized: "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
         case .capsLock:
             String(localized: "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
-        case .combination:
-            String(localized: "A key combination can't be the talk key. Press one key on its own.")
+        case .combination(let modifiers, let keyCode):
+            if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode) {
+                String(localized: "\(keys) is a key combination and can't be the talk key. Press one key on its own.")
+            } else {
+                String(localized: "A key combination can't be the talk key. Press one key on its own.")
+            }
         case .key(let keyCode):
             if let name = KeyName.name(forKeyCode: keyCode) {
                 String(localized: "The \(name) key can't be the talk key. Holding it would type or do something in the app in front.")
@@ -347,6 +372,19 @@ extension KeyRecorder.Rejection {
                 String(localized: "This key can't be the talk key. Holding it would type or do something in the app in front.")
             }
         }
+    }
+}
+
+extension KeyRecorder.Rejection {
+    /// The keys of a combination as the note shows them, such as "⌘ C" or "⌥ ⌘", or nil
+    /// when fewer than two keys are known, for example right and left Option together.
+    @MainActor static func keys(modifiers: String, keyCode: Int64?) -> String? {
+        var parts = modifiers.isEmpty ? [] : modifiers.split(separator: " ").map(String.init)
+        if let keyCode {
+            guard let name = KeyName.name(forKeyCode: keyCode) else { return nil }
+            parts.append(name)
+        }
+        return parts.count >= 2 ? parts.joined(separator: " ") : nil
     }
 }
 

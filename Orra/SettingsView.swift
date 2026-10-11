@@ -532,7 +532,9 @@ struct TalkKeyRecorder: View {
                 LabeledContent {
                     fieldAndButton
                 } label: {
+                    // The field carries the same label for VoiceOver, so it is read once.
                     Label("Talk key", systemImage: "keyboard")
+                        .accessibilityHidden(true)
                 }
             } else {
                 fieldAndButton
@@ -540,13 +542,15 @@ struct TalkKeyRecorder: View {
             if isRecording {
                 if let note = pushToTalk.keyChoiceNote {
                     // Already in the user's language, so shown as it is.
+                    // Orange on the icon only: orange text that small is too faint on a
+                    // light background.
                     Label {
                         Text(verbatim: note)
                     } icon: {
                         Image(systemName: "exclamationmark.circle")
+                            .foregroundStyle(.orange)
                     }
                     .font(.subheadline)
-                    .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("Use fn, Control, Option or Command on its own. Escape cancels.")
@@ -570,6 +574,13 @@ struct TalkKeyRecorder: View {
         .onChange(of: pushToTalk.isChoosingTalkKey) { _, recording in
             if !recording {
                 startedHere = false
+            }
+        }
+        .onChange(of: pushToTalk.keyChoiceNote) { _, note in
+            // VoiceOver reads a refused press, which only shows as text under the field.
+            // Only the recorder that started the recording speaks, so it is said once.
+            if startedHere, let note {
+                AccessibilityNotification.Announcement(note).post()
             }
         }
     }
@@ -624,6 +635,10 @@ struct TalkKeyRecorder: View {
     private func start() {
         pushToTalk.startChoosingTalkKey()
         startedHere = true
+        // Only the field's value changes, which VoiceOver does not read on its own.
+        AccessibilityNotification.Announcement(
+            String(localized: "Press the key you want to hold. Use fn, Control, Option or Command on its own. Escape cancels.")
+        ).post()
     }
 }
 

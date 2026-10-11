@@ -391,7 +391,15 @@ final class PushToTalkController {
     /// One key down or flags changed event while the user records a talk key. Internal so
     /// tests can drive it.
     func keyChoice(type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
-        guard isChoosingTalkKey, let outcome = keyRecorder.handle(type: type, keyCode: keyCode, flags: flags) else { return }
+        guard isChoosingTalkKey else { return }
+        guard let outcome = keyRecorder.handle(type: type, keyCode: keyCode, flags: flags) else {
+            // A key that can be the talk key is down, so the note about an earlier press
+            // no longer applies.
+            if keyRecorder.candidate != nil {
+                keyChoiceNote = nil
+            }
+            return
+        }
         switch outcome {
         case .chosen(let key):
             stopChoosingTalkKey()

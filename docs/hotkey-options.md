@@ -128,12 +128,12 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
   click keep working. Speech in that first moment is not recorded. The right modifiers
   and fn start at the press as before.
 - The welcome window has a step "Choose your talk key", and Settings, General has a
-  "Press a Key…" button. The next modifier press becomes the only talk key. Since the
-  second change of 2026-10-10 a recorder field takes the place of the button, see below. Shift and
+  "Press a Key…" button. The next modifier press becomes the only talk key. Shift and
   other keys leave a note, Escape stops. The tap reports those presses instead of
   detecting holds, but only while Orra is the active app, and it swallows fn so its system
   action does not fire. Without Accessibility access an NSEvent local monitor sees Orra's
-  own key events, which needs no permission. No new permission is asked for.
+  own key events, which needs no permission. No new permission is asked for. Since the
+  second change of 2026-10-10 a recorder field takes the place of the button, see below.
 - The welcome step recommends fn when the Mac has a built in keyboard with the lid open,
   and right Control otherwise. It reads the IOKit registry for an IOHIDDevice marked
   Built-In with the keyboard usage (page 1, usage 6), as `ioreg` showed on a MacBook on
@@ -199,14 +199,20 @@ names keyboards print on the keys. Implemented in `Orra/TalkKey.swift`,
   else is turned down with a reason under the field: Shift (it switches input methods),
   Caps Lock (it is a lock and switches input methods too), a combination (two keys, or a
   modifier pressed while another is held), or a key that types or acts, named by
-  `KeyName`, such as "The Return key" or "The A key". The letter comes from the current
-  ASCII capable keyboard layout through UCKeyTranslate, which reads the layout and needs
-  no permission. Recording goes on until a key is chosen, Escape, a click anywhere in
-  Orra or a switch to another app. The key names are shown on screen only, never logged.
+  `KeyName`, such as "The Return key" or "The A key". A combination names its keys with
+  the modifier symbols, such as "⌘ C is a key combination", and fn only when it was
+  pressed, because arrow keys carry the Fn flag on their own. The letter comes from the
+  current ASCII capable keyboard layout through UCKeyTranslate, which reads the layout
+  and needs no permission. The note stays until a key that can be the talk key goes down,
+  and VoiceOver reads it out, as it reads the prompt when recording starts. Recording
+  goes on until a key is chosen, Escape, a click anywhere in Orra or a switch to another
+  app. The key names are shown on screen only, never logged.
 - While recording, the tap swallows fn's events and every key down, but only while Orra
   is the active app, so a key pressed to record types nothing and Escape does not close
-  the window. Other modifiers pass through. Without Accessibility access a local NSEvent
-  monitor does the same for Orra's own events.
+  the window. Other modifiers pass through, so apps keep an accurate picture of which
+  are down. That is why a Shift press still switches Pinyin between Chinese and English,
+  and Caps Lock still toggles, while recording. Without Accessibility access a local
+  NSEvent monitor does the same for Orra's own events.
 - The welcome step shows the same recorder field, with the Use fn or Use right Control
   button under the recommendation.
 - Talk Key in the menu is a line with the key, such as "Talk Key: ⌥ Right Option (Alt)",

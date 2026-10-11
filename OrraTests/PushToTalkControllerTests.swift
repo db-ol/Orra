@@ -1345,10 +1345,11 @@ struct PushToTalkControllerTests {
         #expect(controller.keyChoiceNote == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
         controller.keyChoice(type: .flagsChanged, keyCode: 0x39, flags: .maskAlphaShift)
         #expect(controller.keyChoiceNote == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
-        // Command+C is a shortcut, not Command.
+        // Command+Return is a shortcut, not Command. Return has the same name on every
+        // keyboard layout, unlike a letter.
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
-        controller.keyChoice(type: .keyDown, keyCode: 0x08, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
-        #expect(controller.keyChoiceNote == "A key combination can't be the talk key. Press one key on its own.")
+        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
+        #expect(controller.keyChoiceNote == "⌘ Return is a key combination and can't be the talk key. Press one key on its own.")
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey)
         #expect(controller.talkKey == .rightOption)
@@ -1365,6 +1366,26 @@ struct PushToTalkControllerTests {
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [])
         #expect(controller.talkKey == .leftOption)
+    }
+
+    @Test func aTalkKeyGoingDownClearsTheNoteAboutAnEarlierPress() {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .rightControl
+        )
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
+        #expect(controller.keyChoiceNote == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
+        // A key up or other event that decides nothing keeps the note.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [])
+        #expect(controller.keyChoiceNote != nil)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [.maskAlternate, TalkKey.rightOption.downFlag])
+        #expect(controller.keyChoiceNote == nil)
+        #expect(controller.isChoosingTalkKey)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [])
+        #expect(controller.talkKey == .rightOption)
     }
 
     @Test func escapeStopsChoosingWithoutAChange() {

@@ -53,6 +53,16 @@
         }
       }
     },
+    "%@ is a key combination and can't be the talk key. Press one key on its own." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是组合键，不能作为说话键。请单独按一个键。"
+          }
+        }
+      }
+    },
     "%@ is chosen under Microphone. Choose another microphone or System Default there." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1278,6 +1288,16 @@
         }
       }
     },
+    "Press the key you want to hold. Use fn, Control, Option or Command on its own. Escape cancels." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下你想按住说话的键。请单独按 fn、Control、Option 或 Command 键。按 Esc 键取消。"
+          }
+        }
+      }
+    },
     "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1630,17 +1650,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "启动和查找 Orra"
-          }
-        }
-      }
-    },
-    "Stays while the pointer is over it" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "鼠标停在上面时不会关闭"
           }
         }
       }

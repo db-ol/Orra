@@ -163,21 +163,21 @@ struct KeyRecorderTests {
         var recorder = KeyRecorder()
         // Command+C.
         _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: Self.down(.leftCommand))
-        #expect(recorder.handle(type: .keyDown, keyCode: 0x08, flags: Self.down(.leftCommand)) == .rejected(.combination))
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x08, flags: Self.down(.leftCommand)) == .rejected(.combination(modifiers: "⌘", keyCode: 0x08)))
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: []) == nil)
         // Right Option pressed while Command is held.
-        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: Self.down(.rightOption).union(.maskCommand)) == .rejected(.combination))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: Self.down(.rightOption).union(.maskCommand)) == .rejected(.combination(modifiers: "⌥ ⌘", keyCode: nil)))
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: .maskCommand) == nil)
         // Right Control, then left Control.
         _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.down(.rightControl))
-        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftControl.keyCode, flags: Self.down(.rightControl).union(TalkKey.leftControl.downFlag)) == .rejected(.combination))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftControl.keyCode, flags: Self.down(.rightControl).union(TalkKey.leftControl.downFlag)) == .rejected(.combination(modifiers: "⌃", keyCode: nil)))
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.down(.leftControl)) == nil)
         // fn, then Shift.
         _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
-        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: [.maskSecondaryFn, .maskShift]) == .rejected(.combination))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: [.maskSecondaryFn, .maskShift]) == .rejected(.combination(modifiers: "fn ⇧", keyCode: nil)))
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskShift) == nil)
         // A letter with Control held, where Control went down before the recording.
-        #expect(recorder.handle(type: .keyDown, keyCode: 0x00, flags: .maskControl) == .rejected(.combination))
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x00, flags: .maskControl) == .rejected(.combination(modifiers: "⌃", keyCode: 0x00)))
     }
 
     @Test func shiftCapsLockAndOtherKeysAreTurnedDown() {
@@ -199,7 +199,7 @@ struct KeyRecorderTests {
     @Test func aTurnedDownKeyStopsAPendingChoice() {
         var recorder = KeyRecorder()
         _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
-        #expect(recorder.handle(type: .keyDown, keyCode: 0x7E, flags: .maskSecondaryFn) == .rejected(.combination))
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x7E, flags: .maskSecondaryFn) == .rejected(.combination(modifiers: "fn", keyCode: 0x7E)))
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: []) == nil)
         #expect(recorder.candidate == nil)
     }
@@ -207,7 +207,11 @@ struct KeyRecorderTests {
     @Test @MainActor func rejectionsSayWhy() {
         #expect(KeyRecorder.Rejection.shift.message == "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
         #expect(KeyRecorder.Rejection.capsLock.message == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
-        #expect(KeyRecorder.Rejection.combination.message == "A key combination can't be the talk key. Press one key on its own.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "⌘", keyCode: Int64(kVK_Return)).message == "⌘ Return is a key combination and can't be the talk key. Press one key on its own.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "⌥ ⌘", keyCode: nil).message == "⌥ ⌘ is a key combination and can't be the talk key. Press one key on its own.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "fn", keyCode: Int64(kVK_UpArrow)).message == "fn Up Arrow is a key combination and can't be the talk key. Press one key on its own.")
+        // Right and left Control together show one symbol, so the note names no keys.
+        #expect(KeyRecorder.Rejection.combination(modifiers: "⌃", keyCode: nil).message == "A key combination can't be the talk key. Press one key on its own.")
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_Space)).message == "The Space key can't be the talk key. Holding it would type or do something in the app in front.")
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_F5)).message == "The F5 key can't be the talk key. Holding it would type or do something in the app in front.")
     }
