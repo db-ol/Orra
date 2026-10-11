@@ -30,7 +30,7 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
 
 ## Getting started
 
-1. Open Orra. A welcome window walks you through four steps. The first three make Orra ready, and the last one is up to you:
+1. Open Orra. A welcome window walks you through four steps. At the top, pick Orra's language, English or 简体中文, or keep the Mac's. The window switches to it right away, and you can change it later in Settings, General. The first three steps make Orra ready, and the last one is up to you:
    - **Download the speech model**, 2.47 GB, once.
    - **Allow the microphone.**
    - **Allow Accessibility**, which Orra needs to notice the talk key and to paste the text.
@@ -47,7 +47,7 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
 - **Fillers and numbers.** Before it pastes, Orra removes fillers that only fill a pause, such as 呃, 额, um and uh, and keeps words that carry meaning, such as 好啊, 吧 and 那个. It also writes numbers spoken in Chinese as digits where a reader expects them: 二零二六年十月十号 becomes 2026年10月10号, 百分之五十 becomes 50% and Lexus RX 三五零 becomes Lexus RX 350. Small counts such as 三本书, rough numbers and idioms stay in words. Settings, General turns each of them off.
 - **Microphone.** Orra records from the system's default input unless you choose another under Microphone. With the lid of a MacBook closed, its own microphone is off, so choose another one, such as a webcam's.
 - **Sounds, indicator, bar and Dock icon.** Settings, General turns each of them off.
-- **Language.** Orra's menus and windows are in English and Simplified Chinese, following your Mac. To choose another, use Language in Settings, General, and restart Orra.
+- **Language.** Orra's menus and windows are in English and Simplified Chinese, following your Mac. To choose another, use Language in the welcome window, or in Settings, General, and restart Orra. After a choice in the welcome window, Orra restarts on its own when you click Done.
 - **Updates.** Choose Check for Updates in the menu, or let Orra check by itself under Settings, About.
 - **Reporting a problem.** Choose Report a Problem… in Orra's menu and describe what happened. Continue on GitHub opens a new issue with your text, Orra's version, macOS and your Mac model filled in. GitHub needs a free account, and issues there are public. Orra also writes a diagnostic report for you to drag into the issue.
 

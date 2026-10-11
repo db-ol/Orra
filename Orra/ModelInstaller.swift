@@ -166,28 +166,28 @@ final class ModelInstaller {
 /// The text for each state, in the menu and the welcome window, kept here so tests can
 /// read it.
 nonisolated extension ModelInstaller.State {
-    /// The lines above the button. Empty once the model is installed, where the speech
-    /// model's own lines take over.
-    func menuLines(total: Int64) -> [String] {
+    /// The lines above the button, in the language of `locale`. Empty once the model is
+    /// installed, where the speech model's own lines take over.
+    func menuLines(total: Int64, locale: Locale = .interface) -> [String] {
         switch self {
         case .checking:
-            [String(localized: "Preparing the speech model…")]
+            [String(localized: LocalizedStringResource("Preparing the speech model…", locale: locale))]
         case .missing:
-            [String(localized: "Orra needs its speech model to transcribe."), String(localized: "The model comes from Hugging Face or a mirror. Your speech stays on this Mac.")]
+            [String(localized: LocalizedStringResource("Orra needs its speech model to transcribe.", locale: locale)), String(localized: LocalizedStringResource("The model comes from Hugging Face or a mirror. Your speech stays on this Mac.", locale: locale))]
         case .downloading(let bytes, let source):
-            [String(localized: "Downloading the speech model: \(Self.percent(bytes, of: total))% of \(Self.size(total))")] + (source.map { [String(localized: "From \($0.rawValue)")] } ?? [])
+            [String(localized: LocalizedStringResource("Downloading the speech model: \(Self.percent(bytes, of: total))% of \(Self.size(total))", locale: locale))] + (source.map { [String(localized: LocalizedStringResource("From \($0.rawValue)", locale: locale))] } ?? [])
         case .verifying:
-            [String(localized: "Checking the downloaded files…")]
+            [String(localized: LocalizedStringResource("Checking the downloaded files…", locale: locale))]
         case .failed(.offline):
-            [String(localized: "This Mac is offline. Connect to the internet, then try again.")]
+            [String(localized: LocalizedStringResource("This Mac is offline. Connect to the internet, then try again.", locale: locale))]
         case .failed(.unreachable):
-            [String(localized: "Orra could not download the model from Hugging Face or its mirrors.")]
+            [String(localized: LocalizedStringResource("Orra could not download the model from Hugging Face or its mirrors.", locale: locale))]
         case .failed(.notEnoughSpace(let needed, let available)):
-            [String(localized: "The download needs \(Self.size(needed)) of free space and \(Self.size(available)) is free.")]
+            [String(localized: LocalizedStringResource("The download needs \(Self.size(needed)) of free space and \(Self.size(available)) is free.", locale: locale))]
         case .failed(.damaged):
-            [String(localized: "The downloaded files did not match the expected checksums.")]
+            [String(localized: LocalizedStringResource("The downloaded files did not match the expected checksums.", locale: locale))]
         case .failed(.couldNotSave):
-            [String(localized: "Orra could not save the model files.")]
+            [String(localized: LocalizedStringResource("Orra could not save the model files.", locale: locale))]
         case .installed:
             []
         }
@@ -195,16 +195,16 @@ nonisolated extension ModelInstaller.State {
 
     /// The menu's button, or nil when there is none. Before any download it says how much
     /// will be downloaded.
-    func buttonTitle(total: Int64) -> String? {
+    func buttonTitle(total: Int64, locale: Locale = .interface) -> String? {
         switch self {
         case .missing(let bytes) where bytes > 0:
-            String(localized: "Resume Download (\(Self.size(total - bytes)) left)")
+            String(localized: LocalizedStringResource("Resume Download (\(Self.size(total - bytes)) left)", locale: locale))
         case .missing:
-            String(localized: "Download Speech Model (\(Self.size(total)))")
+            String(localized: LocalizedStringResource("Download Speech Model (\(Self.size(total)))", locale: locale))
         case .downloading:
-            String(localized: "Cancel Download")
+            String(localized: LocalizedStringResource("Cancel Download", locale: locale))
         case .failed:
-            String(localized: "Try Again")
+            String(localized: LocalizedStringResource("Try Again", locale: locale))
         case .checking, .verifying, .installed:
             nil
         }

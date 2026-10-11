@@ -7,32 +7,33 @@ enum KeyName {
     /// The name of the key with this virtual key code: its name for a key that types no
     /// character, and otherwise the character it types on the current keyboard layout, as
     /// a capital. Nil when neither is known.
-    static func name(forKeyCode keyCode: Int64) -> String? {
-        if let name = namedKey(keyCode) {
+    static func name(forKeyCode keyCode: Int64, locale: Locale = .interface) -> String? {
+        if let name = namedKey(keyCode, locale: locale) {
             return name
         }
         return character(forKeyCode: keyCode)
     }
 
     /// Keys whose keycap shows a word or an arrow, by their codes in HIToolbox Events.h.
-    static func namedKey(_ keyCode: Int64) -> String? {
+    /// The names are looked up in the language of `locale`.
+    static func namedKey(_ keyCode: Int64, locale: Locale = .interface) -> String? {
         switch Int(keyCode) {
-        case kVK_Return: String(localized: "Return", comment: "A key name")
-        case kVK_ANSI_KeypadEnter: String(localized: "Enter", comment: "A key name")
-        case kVK_Tab: String(localized: "Tab", comment: "A key name")
-        case kVK_Space: String(localized: "Space", comment: "A key name")
-        case kVK_Delete: String(localized: "Delete", comment: "A key name")
-        case kVK_ForwardDelete: String(localized: "Forward Delete", comment: "A key name")
-        case kVK_Home: String(localized: "Home", comment: "A key name")
-        case kVK_End: String(localized: "End", comment: "A key name")
-        case kVK_PageUp: String(localized: "Page Up", comment: "A key name")
-        case kVK_PageDown: String(localized: "Page Down", comment: "A key name")
-        case kVK_LeftArrow: String(localized: "Left Arrow", comment: "A key name")
-        case kVK_RightArrow: String(localized: "Right Arrow", comment: "A key name")
-        case kVK_UpArrow: String(localized: "Up Arrow", comment: "A key name")
-        case kVK_DownArrow: String(localized: "Down Arrow", comment: "A key name")
-        case kVK_Help: String(localized: "Help", comment: "A key name")
-        case kVK_ANSI_KeypadClear: String(localized: "Clear", comment: "A key name")
+        case kVK_Return: String(localized: LocalizedStringResource("Return", locale: locale, comment: "A key name"))
+        case kVK_ANSI_KeypadEnter: String(localized: LocalizedStringResource("Enter", locale: locale, comment: "A key name"))
+        case kVK_Tab: String(localized: LocalizedStringResource("Tab", locale: locale, comment: "A key name"))
+        case kVK_Space: String(localized: LocalizedStringResource("Space", locale: locale, comment: "A key name"))
+        case kVK_Delete: String(localized: LocalizedStringResource("Delete", locale: locale, comment: "A key name"))
+        case kVK_ForwardDelete: String(localized: LocalizedStringResource("Forward Delete", locale: locale, comment: "A key name"))
+        case kVK_Home: String(localized: LocalizedStringResource("Home", locale: locale, comment: "A key name"))
+        case kVK_End: String(localized: LocalizedStringResource("End", locale: locale, comment: "A key name"))
+        case kVK_PageUp: String(localized: LocalizedStringResource("Page Up", locale: locale, comment: "A key name"))
+        case kVK_PageDown: String(localized: LocalizedStringResource("Page Down", locale: locale, comment: "A key name"))
+        case kVK_LeftArrow: String(localized: LocalizedStringResource("Left Arrow", locale: locale, comment: "A key name"))
+        case kVK_RightArrow: String(localized: LocalizedStringResource("Right Arrow", locale: locale, comment: "A key name"))
+        case kVK_UpArrow: String(localized: LocalizedStringResource("Up Arrow", locale: locale, comment: "A key name"))
+        case kVK_DownArrow: String(localized: LocalizedStringResource("Down Arrow", locale: locale, comment: "A key name"))
+        case kVK_Help: String(localized: LocalizedStringResource("Help", locale: locale, comment: "A key name"))
+        case kVK_ANSI_KeypadClear: String(localized: LocalizedStringResource("Clear", locale: locale, comment: "A key name"))
         default: functionKeys[Int(keyCode)].map { "F\($0)" }
         }
     }

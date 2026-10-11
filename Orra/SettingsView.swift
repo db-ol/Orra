@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// The pages of the settings window, in the sidebar's order.
@@ -159,8 +160,6 @@ private struct GeneralSettings: View {
     @Bindable var feedback: RecordingFeedback
     let openAtLogin: OpenAtLogin
     @Bindable var dockIcon: DockIcon
-    /// The language this copy of Orra started with, to tell when a restart is due.
-    @State private var startedWith = AppLanguage.load()
     @State private var language = AppLanguage.load()
 
     var body: some View {
@@ -181,7 +180,18 @@ private struct GeneralSettings: View {
                 .onChange(of: language) { _, language in
                     language.save()
                 }
-                if language != startedWith {
+                // The welcome window can change the language while Settings is open. The
+                // vocabulary is saved on another thread, so changes are read on the main one.
+                .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: DispatchQueue.main)) { _ in
+                    let saved = AppLanguage.load()
+                    if saved != language {
+                        language = saved
+                    }
+                }
+                // Compared with what macOS loaded at launch, so a language picked in the
+                // welcome window counts, and picking English on a Mac in English needs no
+                // restart.
+                if language.localization() != AppLanguage.launchLocalization {
                     HStack {
                         Text("Orra shows the new language after it restarts.")
                             .foregroundStyle(.secondary)
@@ -489,6 +499,9 @@ struct TalkKeyRecorder: View {
     var showsLabel = false
     /// Whether the line with the recommended keys is shown under the field.
     var showsRecommendation = false
+    /// The language of the text built here, which the welcome window sets to the one
+    /// picked there.
+    @Environment(\.interfaceLocale) private var interfaceLocale
     /// Whether this recorder started the recording in progress. The welcome window and
     /// Settings each show one, and closing one must not end a recording started in the
     /// other.
@@ -512,8 +525,8 @@ struct TalkKeyRecorder: View {
                 fieldAndButton
             }
             if isRecording {
-                if let note = pushToTalk.keyChoiceNote {
-                    // Already in the user's language, so shown as it is.
+                if let note = pushToTalk.keyChoiceRejection?.message(in: interfaceLocale) {
+                    // Already in the language of the window, so shown as it is.
                     // Orange on the icon only: orange text that small is too faint on a
                     // light background.
                     Label {
@@ -554,11 +567,11 @@ struct TalkKeyRecorder: View {
                 startedHere = false
             }
         }
-        .onChange(of: pushToTalk.keyChoiceNote) { _, note in
+        .onChange(of: pushToTalk.keyChoiceRejection) { _, rejection in
             // VoiceOver reads a refused press, which only shows as text under the field.
             // Only the recorder that started the recording speaks, so it is said once.
-            if startedHere, let note {
-                let keys = String(localized: "Use fn, Control, Option or Command on its own. Escape cancels.")
+            if startedHere, let note = rejection?.message(in: interfaceLocale) {
+                let keys = String(localized: LocalizedStringResource("Use fn, Control, Option or Command on its own. Escape cancels.", locale: interfaceLocale))
                 AccessibilityNotification.Announcement("\(note) \(keys)").post()
             }
         }
@@ -574,7 +587,7 @@ struct TalkKeyRecorder: View {
             // Orra does, rather than starting it again.
             .allowsHitTesting(!isRecording)
             .accessibilityLabel(Text("Talk key"))
-            .accessibilityValue(Text(verbatim: isRecording ? String(localized: "Press the key you want to hold") : pushToTalk.talkKey.fullName))
+            .accessibilityValue(isRecording ? Text("Press the key you want to hold") : Text(verbatim: pushToTalk.talkKey.fullName(in: interfaceLocale)))
             if isRecording {
                 Button("Cancel") {
                     pushToTalk.stopChoosingTalkKey()
@@ -591,8 +604,8 @@ struct TalkKeyRecorder: View {
                 Text("Press the key you want to hold")
                     .foregroundStyle(Color.accentColor)
             } else {
-                Text(verbatim: pushToTalk.talkKey.title)
-                if let other = pushToTalk.talkKey.otherLabelInParentheses {
+                Text(verbatim: pushToTalk.talkKey.title(in: interfaceLocale))
+                if let other = pushToTalk.talkKey.otherLabelInParentheses(in: interfaceLocale) {
                     Text(verbatim: other)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -616,7 +629,7 @@ struct TalkKeyRecorder: View {
         startedHere = true
         // Only the field's value changes, which VoiceOver does not read on its own.
         AccessibilityNotification.Announcement(
-            String(localized: "Press the key you want to hold. Use fn, Control, Option or Command on its own. Escape cancels.")
+            String(localized: LocalizedStringResource("Press the key you want to hold. Use fn, Control, Option or Command on its own. Escape cancels.", locale: interfaceLocale))
         ).post()
     }
 }

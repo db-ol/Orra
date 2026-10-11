@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// The language of Orra's interface: the Mac's own choice, or English or Simplified Chinese
 /// for Orra alone. Kept as AppleLanguages in Orra's own defaults, the same setting System
@@ -31,6 +32,25 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
         return .system
     }
 
+    /// The localization this choice shows, "en" or "zh-Hans". For the Mac's choice it is the
+    /// one macOS picks from the Mac's languages at launch, so Chinese only when it comes
+    /// before English. Another language first, such as French, shows English.
+    func localization(macLanguages: [String] = Self.macLanguages(), available: [String] = Bundle.main.localizations) -> String {
+        let preferences = self == .system ? macLanguages : [rawValue]
+        let chosen = Bundle.preferredLocalizations(from: available, forPreferences: preferences).first
+        return chosen.flatMap { available.contains($0) ? $0 : nil } ?? Self.english.rawValue
+    }
+
+    /// The Mac's languages as System Settings lists them, without Orra's own choice, which
+    /// macOS puts first in Locale.preferredLanguages.
+    static func macLanguages(from defaults: UserDefaults = .standard) -> [String] {
+        defaults.persistentDomain(forName: UserDefaults.globalDomain)?[defaultsKey] as? [String] ?? Locale.preferredLanguages
+    }
+
+    /// The localization macOS loaded when this copy of Orra started. The menu, Settings and
+    /// the indicator show it until Orra restarts.
+    static let launchLocalization = Bundle.main.preferredLocalizations.first ?? english.rawValue
+
     func save(to defaults: UserDefaults = .standard) {
         if self == .system {
             defaults.removeObject(forKey: Self.defaultsKey)
@@ -52,4 +72,18 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
         }
         NSApplication.shared.terminate(nil)
     }
+}
+
+extension Locale {
+    /// The locale Orra's strings are looked up in until it restarts, see
+    /// `AppLanguage.launchLocalization`. Its region is left out, as the strings do not
+    /// depend on it.
+    nonisolated static let interface = Locale(identifier: AppLanguage.launchLocalization)
+}
+
+extension EnvironmentValues {
+    /// The locale for the text a view builds in code, such as a talk key's name. The
+    /// welcome window sets it to the language picked there, together with `locale`, which
+    /// SwiftUI looks up text literals in. Elsewhere it stays the language Orra started with.
+    @Entry var interfaceLocale: Locale = .interface
 }

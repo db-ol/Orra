@@ -37,8 +37,22 @@ final class PushToTalkController {
         case notLoaded
         case loading
         case ready
-        /// The reason, as shown in the menu.
-        case unavailable(String)
+        /// Why the model is not there to use. The menu and the welcome window show it.
+        case unavailable(ModelProblem)
+    }
+
+    /// Why the speech model could not be loaded.
+    nonisolated enum ModelProblem: Equatable, Sendable {
+        case missing
+        case failedToLoad
+
+        /// The reason as the menu shows it, in the language of `locale`.
+        func message(in locale: Locale = .interface) -> String {
+            switch self {
+            case .missing: String(localized: LocalizedStringResource("The speech model is not on this Mac", locale: locale))
+            case .failedToLoad: String(localized: LocalizedStringResource("The speech model could not be loaded", locale: locale))
+            }
+        }
     }
 
     /// The current push to talk state.
@@ -55,7 +69,11 @@ final class PushToTalkController {
     /// True while the user records a talk key by pressing it.
     private(set) var isChoosingTalkKey = false
     /// Why the last press while recording a talk key cannot be one, such as Shift.
-    private(set) var keyChoiceNote: String?
+    private(set) var keyChoiceRejection: KeyRecorder.Rejection?
+    /// What the recorder says about that press, in the language Orra started with.
+    var keyChoiceNote: String? {
+        keyChoiceRejection?.message()
+    }
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
     private(set) var microphone: MicrophoneChoice?
@@ -281,9 +299,9 @@ final class PushToTalkController {
             modelState = .ready
             logger.info("Speech model loaded in \(started.duration(to: .now), privacy: .public)")
         } catch TranscriptionError.modelMissing {
-            modelState = .unavailable(String(localized: "The speech model is not on this Mac"))
+            modelState = .unavailable(.missing)
         } catch {
-            modelState = .unavailable(String(localized: "The speech model could not be loaded"))
+            modelState = .unavailable(.failedToLoad)
             logger.error("Speech model failed to load: \(String(describing: error), privacy: .public)")
         }
     }
@@ -373,7 +391,7 @@ final class PushToTalkController {
     func startChoosingTalkKey() {
         guard !isChoosingTalkKey else { return }
         isChoosingTalkKey = true
-        keyChoiceNote = nil
+        keyChoiceRejection = nil
         keyRecorder = KeyRecorder()
         tap?.chooseKey { [weak self] type, keyCode, flags in
             self?.keyChoice(type: type, keyCode: keyCode, flags: flags)
@@ -411,7 +429,7 @@ final class PushToTalkController {
     func stopChoosingTalkKey() {
         guard isChoosingTalkKey else { return }
         isChoosingTalkKey = false
-        keyChoiceNote = nil
+        keyChoiceRejection = nil
         tap?.chooseKey(nil)
         keyChoiceMonitors.forEach(NSEvent.removeMonitor)
         keyChoiceMonitors = []
@@ -429,7 +447,7 @@ final class PushToTalkController {
             // A key that can be the talk key is down, so the note about an earlier press
             // no longer applies.
             if keyRecorder.candidate != nil {
-                keyChoiceNote = nil
+                keyChoiceRejection = nil
             }
             return
         }
@@ -438,7 +456,7 @@ final class PushToTalkController {
             stopChoosingTalkKey()
             chooseTalkKey(key)
         case .rejected(let rejection):
-            keyChoiceNote = rejection.message
+            keyChoiceRejection = rejection
         case .cancelled:
             stopChoosingTalkKey()
         }
@@ -587,8 +605,8 @@ final class PushToTalkController {
             String(localized: "The speech model is not ready. The Orra menu shows what is missing.")
         case .loading:
             String(localized: "The speech model is still loading")
-        case .unavailable(let reason):
-            reason
+        case .unavailable(let problem):
+            problem.message()
         }
     }
 

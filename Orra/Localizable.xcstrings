@@ -2303,6 +2303,16 @@
         }
       }
     },
+    "You can change this later in Settings, General." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之后也可以在“设置”的“通用”中更改。"
+          }
+        }
+      }
+    },
     "Your language, the talk key, what you see and hear while dictating, and how Orra starts." : {
       "localizations" : {
         "zh-Hans" : {

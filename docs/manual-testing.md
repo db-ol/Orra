@@ -194,6 +194,12 @@ Build and test commands, run in the repository root:
     is chosen only when it comes before English in the preferred languages and never for
     Traditional Chinese alone, the Chinese talk key hint, the Chinese form of a key name
     with its other label, and the Chinese hint that finishes a hands free dictation.
+  - WelcomeLanguageTests covers the language picked in the welcome window: the
+    localization of each choice, Same as the Mac for English, Chinese, Traditional
+    Chinese and French first, Chinese text built in code while Orra runs in English, that
+    SwiftUI draws a text literal in the language of the environment's locale, and that
+    closing the window restarts Orra only with setup complete, no dictation running and a
+    language other than the one it started with.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -896,12 +902,34 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
 Interface language, added on 2026-10-10, not verified yet:
 
 - [ ] Settings, General, Language offers Same as the Mac, English and 简体中文. Choosing one
-  shows Restart Orra, and after the restart the menu, Settings, the welcome window and the
-  indicator use that language. Same as the Mac follows System Settings again.
+  other than the language Orra shows now brings up Restart Orra, and after the restart
+  the menu, Settings, the welcome window and the indicator use that language. Same as the
+  Mac follows System Settings again. Choosing English on a Mac in English shows no Restart
+  Orra.
 - [ ] Settings looks like System Settings: colored icons in the sidebar, a header with icon,
   title and summary on every page, and icons on the rows of General. Language is the first
   section of General. The window can be made larger, keeps its size, and cannot be made
   smaller than its content.
+
+Language in the welcome window, added on 2026-10-10, not verified yet. Prepare a first
+launch as for the welcome window above, with the Mac in English:
+
+- [ ] Under the header, the welcome window shows Language with Same as the Mac, English and
+  简体中文, and under it "You can change this later in Settings, General."
+- [ ] Choosing 简体中文 turns the whole window Chinese at once, without a restart: the
+  title, the header, the language note, every step with its buttons and status lines (the
+  download's progress too), the talk key field, a refused key's note while recording, the
+  recommendation with its Use button, and Not Now. The menu stays in English.
+- [ ] Choosing English or Same as the Mac turns the window back to English.
+- [ ] With Settings open at the same time, its Language picker follows the welcome window,
+  and shows Restart Orra once the language differs from the one Orra shows.
+- [ ] With a step left, choose 简体中文 and click Not Now, with a download running: Orra
+  does not restart and the download goes on. The next launch shows the menu, Settings and
+  the welcome window in Chinese.
+- [ ] With setup complete, a talk key chosen and 简体中文 picked, click Done: Orra quits and
+  opens again within a few seconds, in Chinese, with no welcome window, the same talk key,
+  and the speech model loading.
+- [ ] Done without a change of language does not restart Orra.
 
 Report a Problem, added on 2026-10-10, not verified yet:
 

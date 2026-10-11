@@ -451,7 +451,7 @@ struct MenuBarIconTests {
         #expect(symbol(isHotkeyActive: false) == "mic.slash")
         #expect(symbol(modelState: .loading) == "hourglass")
         #expect(symbol(modelState: .notLoaded) == "hourglass")
-        #expect(symbol(modelState: .unavailable("x")) == "exclamationmark.triangle")
+        #expect(symbol(modelState: .unavailable(.failedToLoad)) == "exclamationmark.triangle")
         #expect(symbol(microphoneAccess: .denied) == "exclamationmark.triangle")
         #expect(symbol(microphoneAccess: .notConfigured) == "exclamationmark.triangle")
         #expect(symbol(hasProblem: true) == "exclamationmark.triangle")
