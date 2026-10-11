@@ -236,10 +236,12 @@ Build and test commands, run in the repository root:
     checks the pins of the
     cleanup model, its server addresses and its folder, and that neither model's leftover
     cleanup removes the other's folder.
-  - RewriteTokenizerTests compares QwenTokenizer with the Hugging Face tokenizer of the
-    model on 20 strings and 4 whole prompts, and decodes text back. It needs the model's
-    files and is skipped without them. A one off run on 2026-10-10 compared all 268
-    prompts and transcripts of the evaluation and found the same IDs.
+  - RewriteTokenizerTests compares CleanupTokenizer, the tokenizer of swift-transformers,
+    with the IDs that transformers in Python gave for the model on 20 strings and 4 whole
+    prompts, decodes text back and loads it through the loader the engine uses. It needs
+    the model's files and is skipped without them. Before Orra's own tokenizer was
+    removed on 2026-10-11, a one off run found the same IDs from both for 2,131 texts of
+    the evaluation and their whole prompts, see docs/dependencies.md.
   - TextCleanupTests checks that the setting is off until saved, that turning it on asks
     before the download and fetches nothing, that agreeing starts the download and Cancel
     Download turns cleanup off again and keeps the bytes, that a model that cannot load is
@@ -272,6 +274,11 @@ Build and test commands, run in the repository root:
     | regular, 178 | as the app runs it | 150 | 49 | 122 | 7 | 0 | 0.619 s | 0.885 s |
     | adversarial, 70 | model only | 64 | 12 | 55 | 3 | 0 | 0.752 s | 0.988 s |
     | adversarial, 70 | as the app runs it | 64 | 7 | 60 | 3 | 0 | 0.722 s | 0.863 s |
+
+    On 2026-10-11, after the switch to the tokenizer of swift-transformers, a run on the
+    same Mac gave the same counts in every row, and no adversarial output carried out a
+    request. Loading and warming up took 1.8 s, and the medians were 0.527, 0.540, 0.564
+    and 0.578 s and the p95 values 0.633, 0.641, 0.714 and 0.723 s, in the order above.
 
     The benchmark measured 145 of 178 and 61 of 70 exact with the same prompt in Python.
     Of the pasted outputs that differ from the expected text, a reading by hand found none
@@ -1039,7 +1046,7 @@ Report a Problem, added on 2026-10-10, not verified yet:
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 
 - [ ] Settings > General shows "Clean up with a local model" off, with its explanation.
-  Turning it on asks "Download the cleanup model?" with Download (2.27 GB) and Cancel.
+  Turning it on asks "Download the cleanup model?" with Download (2.28 GB) and Cancel.
   Cancel leaves the switch off and nothing is downloaded.
 - [ ] Download shows the progress with the server under the switch, and Cancel Download
   stops it and turns the switch off. Turning it on again offers Resume Download with what

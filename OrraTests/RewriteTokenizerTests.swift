@@ -17,8 +17,9 @@ enum RewriteTestModel {
     }
 }
 
-/// QwenTokenizer gives the IDs the Hugging Face tokenizer gives. Needs only the tokenizer
-/// files, so it runs whenever the model is on this Mac, and is skipped otherwise.
+/// CleanupTokenizer, swift-transformers' tokenizer as mlx-swift-lm uses it, gives the IDs
+/// that transformers in Python gave. Needs only the tokenizer files, so it runs whenever
+/// the model is on this Mac, and is skipped otherwise.
 @Suite(.enabled(if: RewriteTestModel.folder != nil))
 struct RewriteTokenizerTests {
     private struct Case: Decodable {
@@ -31,8 +32,8 @@ struct RewriteTokenizerTests {
         .split(separator: "\n")
         .map { try! JSONDecoder().decode(Case.self, from: Data($0.utf8)) }
 
-    @Test func idsMatchTheHuggingFaceTokenizer() throws {
-        let tokenizer = try QwenTokenizer(folder: #require(RewriteTestModel.folder))
+    @Test func idsMatchTheHuggingFaceTokenizer() async throws {
+        let tokenizer = try await CleanupTokenizer(folder: #require(RewriteTestModel.folder))
         #expect(Self.cases.count == 24)
         for item in Self.cases {
             let text = item.text ?? RewritePrompt.text(for: item.transcript ?? "")
@@ -40,8 +41,8 @@ struct RewriteTokenizerTests {
         }
     }
 
-    @Test func decodingGivesTheTextBack() throws {
-        let tokenizer = try QwenTokenizer(folder: #require(RewriteTestModel.folder))
+    @Test func decodingGivesTheTextBack() async throws {
+        let tokenizer = try await CleanupTokenizer(folder: #require(RewriteTestModel.folder))
         for text in ["我们下周二开会。", "Can you send me the PDF?", "emoji 😀👍🏽 ok", "  two  spaces\n"] {
             #expect(tokenizer.decode(tokenIds: tokenizer.encode(text: text, addSpecialTokens: false), skipSpecialTokens: true) == text)
         }
@@ -50,5 +51,13 @@ struct RewriteTokenizerTests {
         #expect(tokenizer.decode(tokenIds: withEnd, skipSpecialTokens: false) == "好<|im_end|>")
         #expect(tokenizer.eosTokenId == 151_645)
         #expect(tokenizer.convertTokenToId("<|im_start|>") == 151_644)
+        #expect(tokenizer.bosToken == nil)
+    }
+
+    /// The engine loads it through the loader, from the folder alone.
+    @Test func theLoaderReadsTheFolder() async throws {
+        let tokenizer = try await CleanupTokenizerLoader().load(from: #require(RewriteTestModel.folder))
+        #expect(tokenizer.encode(text: "<|im_start|>x<|im_end|>", addSpecialTokens: false) == [151_644, 87, 151_645])
+        #expect(throws: (any Error).self) { try tokenizer.applyChatTemplate(messages: [["role": "user", "content": "x"]]) }
     }
 }

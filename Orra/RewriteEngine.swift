@@ -15,7 +15,7 @@ nonisolated extension ModelManifest {
     /// Hugging Face main as of 2026-10-10, where only tokenizer_config.json changed after the
     /// upload. ModelScope's mirror in the mlx-community organization lists the same sizes and
     /// SHA-256 values at its commit, and hf-mirror.com serves the Hugging Face commit.
-    /// tokenizer.json is for the tokenizer of swift-transformers. chat_template.jinja and the index are
+    /// tokenizer.json is what CleanupTokenizer reads. chat_template.jinja and the index are
     /// left out, since Orra builds the prompt itself and the weights are in one file.
     static let qwen3Cleanup = ModelManifest(
         id: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
@@ -65,7 +65,7 @@ actor RewriteEngine {
     func load(from folder: URL) async throws {
         guard context == nil else { return }
         let started = ContinuousClock.now
-        let loaded = try await LLMModelFactory.shared.load(from: folder, using: QwenTokenizerLoader())
+        let loaded = try await LLMModelFactory.shared.load(from: folder, using: CleanupTokenizerLoader())
         context = loaded
         do {
             _ = try generate("好的。", maximumTokens: 4)

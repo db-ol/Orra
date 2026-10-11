@@ -1,7 +1,7 @@
 /// Token IDs from the Hugging Face tokenizer of mlx-community/Qwen3-4B-Instruct-2507-4bit
 /// (transformers 5.19.0), read on 2026-10-10. Lines with "text" hold a string and its IDs,
 /// lines with "transcript" the IDs of the whole cleanup prompt for that transcript, which
-/// is what the model reads. RewriteTokenizerTests expects the same IDs.
+/// is what the model reads. RewriteTokenizerTests expects the same IDs from CleanupTokenizer.
 enum RewriteTokenizerCases {
     static let jsonl = #"""
 {"text": "", "ids": []}
