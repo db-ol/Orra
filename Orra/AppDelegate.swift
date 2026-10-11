@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openAtLogin: openAtLogin,
         dockIcon: dockIcon,
         learning: learning,
+        cleanup: cleanup,
         updater: updater
     ))
     lazy var learnedNotice = LearnedNoticePanel(
