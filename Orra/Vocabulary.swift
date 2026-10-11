@@ -1,38 +1,90 @@
 import AppKit
 import Observation
+import os
 
-/// The user's own words and names, which the speech model gets with every dictation so it
-/// writes them the way the user does. Measured on 2026-10-08 with ContextEvaluationTests:
-/// on synthetic speech, terms in the vocabulary were recognized 98.9% of the time in
-/// Chinese and 95.7% in English, against 84.5% and 83.1% without, and terms that were not
-/// spoken were almost never inserted into speech. Without speech it is different: in
-/// silence, hum or faint noise the model can answer with terms of the list, see
-/// VocabularyEcho, so such a transcript is checked once more without the vocabulary.
+/// One word or name of the vocabulary, with when it was added and when a pasted transcript
+/// last held it. Holds the word and the two dates, never any other text.
+nonisolated struct VocabularyWord: Codable, Equatable, Hashable, Sendable, Identifiable {
+    var text: String
+    var added: Date
+    /// When a pasted transcript last held the word, ignoring case. Nil until then.
+    var lastUsed: Date?
+
+    init(_ text: String, added: Date, lastUsed: Date? = nil) {
+        self.text = text
+        self.added = added
+        self.lastUsed = lastUsed
+    }
+
+    /// The word ignoring case, which is unique in the list.
+    var id: String { text.lowercased() }
+
+    /// When the word was added or last used, whichever is later.
+    var lastActive: Date { max(added, lastUsed ?? added) }
+}
+
+/// The user's own words and names. The speech model gets the most relevant of them with
+/// every dictation, so it writes them the way the user does. Measured on 2026-10-08 with
+/// ContextEvaluationTests: on synthetic speech, terms in the vocabulary were recognized
+/// 98.9% of the time in Chinese and 95.7% in English, against 84.5% and 83.1% without, and
+/// terms that were not spoken were almost never inserted into speech. Without speech it is
+/// different: in silence, hum or faint noise the model can answer with terms of the list,
+/// see VocabularyEcho, so such a transcript is checked once more without the vocabulary.
+///
+/// A longer list helps less per term and slows every dictation. Measured on 2026-10-10 with
+/// Qwen3-ASR 1.7B, spoken terms were recognized 95% of the time with 100 terms in the
+/// context, 92 to 93% with 200, 90% with 400 and 87% with 800, and each 1000 tokens of
+/// context, about 210 terms, added 0.25 to 0.3 s to every short dictation. So the list
+/// itself has no practical limit, and the model gets the `modelLimit` words added or used
+/// most recently, see `forModel(_:)`.
 nonisolated enum Vocabulary {
-    /// At most this many terms reach the model. Every term lengthens the prompt of every
-    /// dictation.
-    static let limit = 100
+    /// At most this many words reach the model with a dictation.
+    static let modelLimit = 200
+    /// A sanity cap against runaway data, such as a script adding words in a loop. Far
+    /// more than a person keeps, so it is not a limit anyone should meet.
+    static let maximumCount = 5_000
     /// Longer lines are cut, since a term is a word or a name, not a sentence.
     static let maximumLength = 40
 
     /// The terms in text with one term per line: trimmed, without empty lines, each term
-    /// once ignoring case, and no more than `limit`.
+    /// once ignoring case, and no more than `maximumCount`.
     static func terms(from text: String) -> [String] {
+        terms(from: text.split(whereSeparator: \.isNewline).map(String.init))
+    }
+
+    /// The terms trimmed and cut like typed lines, each once ignoring case, without empty
+    /// ones, and no more than `maximumCount`.
+    static func terms(from lines: [String]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []
-        for line in text.split(whereSeparator: \.isNewline) {
-            let term = String(line.trimmingCharacters(in: .whitespaces).prefix(maximumLength))
-            guard !term.isEmpty, seen.insert(term.lowercased()).inserted else { continue }
+        for line in lines {
+            guard let term = cleaned(line), seen.insert(term.lowercased()).inserted else { continue }
             result.append(term)
-            if result.count == limit { break }
+            if result.count == maximumCount { break }
         }
         return result
     }
 
-    /// The list with one more term, trimmed and cut like a typed line. Unchanged when the
-    /// term is empty, already there ignoring case, or the list is full.
-    static func adding(_ term: String, to terms: [String]) -> [String] {
-        Self.terms(from: (terms + [term]).joined(separator: "\n"))
+    /// A line as a term: trimmed and cut at `maximumLength`. Nil when nothing is left.
+    static func cleaned(_ line: String) -> String? {
+        let term = String(line.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maximumLength))
+            .trimmingCharacters(in: .whitespaces)
+        return term.isEmpty || term.contains(where: \.isNewline) ? nil : term
+    }
+
+    /// The list with one more word, trimmed and cut like a typed line, added at `date`.
+    /// Unchanged when the word is empty, already there ignoring case, or the list holds
+    /// `maximumCount` words.
+    static func adding(_ term: String, to words: [VocabularyWord], at date: Date) -> [VocabularyWord] {
+        guard let term = cleaned(term), words.count < maximumCount,
+              !contains(term, in: words) else { return words }
+        return words + [VocabularyWord(term, added: date)]
+    }
+
+    /// Whether the list holds the term, ignoring case.
+    static func contains(_ term: String, in words: [VocabularyWord]) -> Bool {
+        let id = term.lowercased()
+        return words.contains { $0.id == id }
     }
 
     /// The copied text when it can be a vocabulary word: one line, at most
@@ -45,9 +97,54 @@ nonisolated enum Vocabulary {
         return term
     }
 
-    /// The list without the term.
-    static func removing(_ term: String, from terms: [String]) -> [String] {
-        terms.filter { $0 != term }
+    /// The list without the terms, ignoring case.
+    static func removing(_ terms: some Sequence<String>, from words: [VocabularyWord]) -> [VocabularyWord] {
+        let ids = Set(terms.map { $0.lowercased() })
+        return words.filter { !ids.contains($0.id) }
+    }
+
+    /// The words the model gets: the `limit` added or used most recently, a word added
+    /// later first when two are equally recent, in the order of the list. Manual and
+    /// learned words count the same.
+    static func forModel(_ words: [VocabularyWord], limit: Int = modelLimit) -> [String] {
+        guard words.count > limit else { return words.map(\.text) }
+        let chosen = Set(words.indices.sorted { a, b in
+            let (first, second) = (words[a].lastActive, words[b].lastActive)
+            return first != second ? first > second : a > b
+        }.prefix(limit))
+        return words.indices.filter(chosen.contains).map { words[$0].text }
+    }
+
+    /// The list with `date` as the last use of each word the transcript holds, ignoring
+    /// case. A word that starts or ends with a Latin letter or digit counts only where
+    /// the transcript has no Latin letter or digit right next to it, so "Orra" is not used
+    /// in "Orrange". Keeps nothing of the transcript.
+    static func markingUsed(in transcript: String, _ words: [VocabularyWord], at date: Date) -> [VocabularyWord] {
+        words.map { word in
+            guard holds(transcript, word.text) else { return word }
+            var used = word
+            used.lastUsed = date
+            return used
+        }
+    }
+
+    private static func holds(_ text: String, _ term: String) -> Bool {
+        func isLatin(_ character: Character?) -> Bool {
+            guard let character else { return false }
+            return character.isASCII && (character.isLetter || character.isNumber)
+        }
+        let checksStart = isLatin(term.first)
+        let checksEnd = isLatin(term.last)
+        var searchStart = text.startIndex
+        while let range = text.range(of: term, options: .caseInsensitive, range: searchStart..<text.endIndex) {
+            let before = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+            let after = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+            if !(checksStart && isLatin(before)) && !(checksEnd && isLatin(after)) {
+                return true
+            }
+            searchStart = text.index(after: range.lowerBound)
+        }
+        return false
     }
 
     /// What the model gets: one term per line, as the evaluation measured, and nothing
@@ -103,23 +200,52 @@ nonisolated enum VocabularyEcho {
     }
 }
 
-/// Keeps the vocabulary in UserDefaults, on this Mac only.
+/// Keeps the vocabulary in UserDefaults, on this Mac only: the words with their dates as
+/// JSON under `defaultsKey`. Orra 0.1.0 kept the words alone as a string array under
+/// `legacyKey`. Those are taken over once, dated the moment they are, and the old value is
+/// left as it was, so going back to 0.1.0 still finds the words it knew.
 nonisolated enum VocabularyPreference {
-    static let defaultsKey = "vocabulary"
+    static let defaultsKey = "vocabularyWords"
+    static let legacyKey = "vocabulary"
 
-    static func load(from defaults: UserDefaults = .standard) -> [String] {
-        Vocabulary.terms(from: (defaults.stringArray(forKey: defaultsKey) ?? []).joined(separator: "\n"))
+    static func load(from defaults: UserDefaults = .standard, now: Date = Date()) -> [VocabularyWord] {
+        if let data = defaults.data(forKey: defaultsKey) {
+            if let words = try? JSONDecoder().decode([VocabularyWord].self, from: data) {
+                return cleaned(words)
+            }
+            // Counts nothing and names no word.
+            Logger(subsystem: "io.github.db-ol.Orra", category: "vocabulary").error("The saved vocabulary could not be read, using the older list")
+        }
+        return Vocabulary.terms(from: defaults.stringArray(forKey: legacyKey) ?? []).map {
+            VocabularyWord($0, added: now)
+        }
     }
 
-    static func save(_ terms: [String], to defaults: UserDefaults = .standard) {
-        defaults.set(terms, forKey: defaultsKey)
+    static func save(_ words: [VocabularyWord], to defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(words) else { return }
+        defaults.set(data, forKey: defaultsKey)
+    }
+
+    /// The saved words trimmed and cut, each once ignoring case, at most `maximumCount`.
+    private static func cleaned(_ words: [VocabularyWord]) -> [VocabularyWord] {
+        var seen = Set<String>()
+        var result: [VocabularyWord] = []
+        for word in words {
+            guard let text = Vocabulary.cleaned(word.text), seen.insert(text.lowercased()).inserted else { continue }
+            var kept = word
+            kept.text = text
+            result.append(kept)
+            if result.count == Vocabulary.maximumCount { break }
+        }
+        return result
     }
 }
 
-/// What happened when learning added a word to the vocabulary.
+/// What happened when a word was added to the vocabulary.
 enum VocabularyAddition: Equatable {
     case added
     case alreadyThere
+    /// The list holds `Vocabulary.maximumCount` words, the sanity cap.
     case full
 }
 
@@ -146,7 +272,7 @@ final class ClipboardWord {
 
     func refresh() {
         let terms = vocabulary()
-        guard !isDictating(), terms.count < Vocabulary.limit else {
+        guard !isDictating(), terms.count < Vocabulary.maximumCount else {
             word = nil
             return
         }

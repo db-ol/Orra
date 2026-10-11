@@ -1011,6 +1011,7 @@ struct PushToTalkControllerTests {
 
     @Test func theVocabularyReachesTheModelAndIsSaved() async throws {
         var saved: [[String]] = []
+        let added = Date(timeIntervalSince1970: 1_000)
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -1019,12 +1020,12 @@ struct PushToTalkControllerTests {
             minimumHold: .zero,
             releaseTail: .zero,
             listeningCueDelay: .zero,
-            vocabulary: ["Orra"],
-            saveVocabulary: { saved.append($0) }
+            vocabulary: vocabularyWords("Orra", added: added),
+            saveVocabulary: { saved.append($0.map(\.text)) }
         )
         await controller.loadModel()
         try await dictate(controller)
-        controller.setVocabulary(["Orra", "通义千问"])
+        #expect(controller.addToVocabulary("通义千问") == .added)
         try await dictate(controller)
         controller.setVocabulary([])
         try await dictate(controller)
@@ -1086,7 +1087,60 @@ struct PushToTalkControllerTests {
         #expect(saved == [false, true])
     }
 
+    @Test func aPasteDatesTheVocabularyWordsItHolds() async throws {
+        let added = Date(timeIntervalSince1970: 1_000)
+        let pasteTime = Date(timeIntervalSince1970: 5_000)
+        var saved: [[VocabularyWord]] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            vocabulary: vocabularyWords("Orra", "通义千问", "Qwen", added: added),
+            saveVocabulary: { saved.append($0) },
+            now: { pasteTime }
+        )
+        await controller.loadModel()
+        speech.reply = "我在用 orra 和通义千问。"
+        try await dictate(controller)
+        #expect(controller.vocabulary.map(\.lastUsed) == [pasteTime, pasteTime, nil])
+        #expect(saved.last == controller.vocabulary)
+        // A text that was not pasted dates nothing.
+        let before = controller.vocabulary
+        inserter.result = .skippedPasswordField
+        speech.reply = "Qwen"
+        try await dictate(controller)
+        #expect(controller.vocabulary == before)
+    }
+
+    @Test func theModelGetsTheMostRecentWordsOfALongVocabulary() async throws {
+        let words = (0..<300).map { VocabularyWord("term\($0)", added: Date(timeIntervalSince1970: Double($0))) }
+        let controller = await controller(vocabulary: words)
+        try await dictate(controller)
+        let context = try #require(speech.receivedContexts.first ?? nil)
+        #expect(context.split(separator: "\n").map(String.init) == (100..<300).map { "term\($0)" })
+    }
+
+    @Test func learningIsNeverRefusedBelowTheSanityCap() {
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        controller.setVocabulary((0..<1_000).map { VocabularyWord("term\($0)", added: .distantPast) })
+        #expect(controller.addToVocabulary("Orra") == .added)
+        #expect(controller.addToVocabulary("orra") == .alreadyThere)
+        #expect(controller.vocabulary.count == 1_001)
+        controller.setVocabulary((0..<(Vocabulary.maximumCount - 1)).map { VocabularyWord("term\($0)", added: .distantPast) })
+        #expect(controller.addToVocabulary("Orra") == .added)
+        #expect(controller.addToVocabulary("Qwen") == .full)
+        #expect(controller.vocabulary.count == Vocabulary.maximumCount)
+    }
+
     private func controller(vocabulary: [String]) async -> PushToTalkController {
+        await controller(vocabulary: vocabularyWords(vocabulary))
+    }
+
+    private func controller(vocabulary: [VocabularyWord]) async -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,

@@ -316,7 +316,7 @@ private struct VocabularySettings: View {
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
-        let terms = pushToTalk.vocabulary
+        let terms = pushToTalk.vocabulary.map(\.text)
         let shown = filter.isEmpty ? terms : terms.filter { $0.localizedCaseInsensitiveContains(filter) }
         Form {
             PageHeader(page: .vocabulary)
@@ -332,7 +332,7 @@ private struct VocabularySettings: View {
                         Label("Add", systemImage: "plus")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(terms.count >= Vocabulary.limit)
+                    .disabled(terms.count >= Vocabulary.maximumCount)
                 }
             } footer: {
                 Text("People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac.")
@@ -353,7 +353,7 @@ private struct VocabularySettings: View {
                         Text(verbatim: term)
                         Spacer()
                         Button {
-                            pushToTalk.setVocabulary(Vocabulary.removing(term, from: terms))
+                            pushToTalk.removeFromVocabulary([term])
                             learning.removedFromVocabulary(term)
                         } label: {
                             Image(systemName: "minus.circle")
@@ -363,7 +363,7 @@ private struct VocabularySettings: View {
                     }
                 }
             } header: {
-                Text("\(terms.count) of \(Vocabulary.limit) words")
+                Text("\(terms.count) of \(Vocabulary.maximumCount) words")
             }
             Section {
                 Toggle(isOn: $learning.isOn) {
@@ -389,10 +389,7 @@ private struct VocabularySettings: View {
 
     private func add() {
         defer { fieldFocused = true }
-        let updated = Vocabulary.adding(newTerm, to: pushToTalk.vocabulary)
-        if updated != pushToTalk.vocabulary {
-            pushToTalk.setVocabulary(updated)
-        }
+        pushToTalk.addToVocabulary(newTerm)
         newTerm = ""
     }
 }
