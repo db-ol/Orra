@@ -46,6 +46,16 @@ final class InserterFixture {
     func release() {
         pasteboard.releaseGlobally()
     }
+
+    /// Waits until the pasteboard holds `string`, for up to 5 seconds. The restore runs on
+    /// the main actor, which other tests running at the same time can keep busy, so a fixed
+    /// wait fails on a loaded machine.
+    func waitForString(_ string: String) async throws {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while pasteboard.string(forType: .string) != string, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
 }
 
 @MainActor
@@ -66,7 +76,7 @@ struct TextInserterTests {
         fixture.put("old")
         let inserter = fixture.makeInserter()
         await inserter.insert("new")
-        try await Task.sleep(for: .milliseconds(250))
+        try await fixture.waitForString("old")
         #expect(fixture.pasteboard.string(forType: .string) == "old")
         #expect(fixture.pasteboard.types?.contains(TextInserter.concealedType) == false)
     }
@@ -93,7 +103,7 @@ struct TextInserterTests {
         #expect(await inserter.insert("new") == .pasted)
         #expect(fixture.postedKeyCodes == [9])
         #expect(fixture.fieldChecks == 1)
-        try await Task.sleep(for: .milliseconds(250))
+        try await fixture.waitForString("old")
         #expect(fixture.pasteboard.string(forType: .string) == "old")
     }
 
@@ -170,7 +180,7 @@ struct TextInserterTests {
         fixture.secureInputHolder = fixture.frontmost
         fixture.field = .password
         #expect(await inserter.insert("second") == .skippedPasswordField)
-        try await Task.sleep(for: .milliseconds(300))
+        try await fixture.waitForString("old")
         #expect(fixture.pasteboard.string(forType: .string) == "old")
     }
 
@@ -204,7 +214,7 @@ struct TextInserterTests {
         await inserter.insert("one")
         await inserter.insert("two")
         #expect(fixture.pasteboard.string(forType: .string) == "two")
-        try await Task.sleep(for: .milliseconds(250))
+        try await fixture.waitForString("old")
         #expect(fixture.pasteboard.string(forType: .string) == "old")
         #expect(fixture.postedKeyCodes == [9, 9])
     }
@@ -222,7 +232,7 @@ struct TextInserterTests {
         fixture.pasteboard.writeObjects([first, second])
         let inserter = fixture.makeInserter()
         await inserter.insert("new")
-        try await Task.sleep(for: .milliseconds(250))
+        try await fixture.waitForString("rich text stand in")
         let items = fixture.pasteboard.pasteboardItems ?? []
         #expect(items.count == 2)
         #expect(items.first?.string(forType: .string) == "rich text stand in")
