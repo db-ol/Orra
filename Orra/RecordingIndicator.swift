@@ -144,7 +144,8 @@ final class NonactivatingPanel: NSPanel {
 }
 
 /// The indicator, drawn at the bottom of a clear panel: a level meter while Orra listens,
-/// a spinner while it transcribes, or a message.
+/// with how to finish during a hands free dictation, a spinner while it transcribes, or a
+/// message.
 struct RecordingIndicatorView: View {
     static let panelSize = CGSize(width: 520, height: 150)
     static let idleBarSize = CGSize(width: 40, height: 6)
@@ -173,6 +174,17 @@ struct RecordingIndicatorView: View {
             .indicatorStyle()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Listening")
+        case .handsFree(let hint):
+            HStack(spacing: 10) {
+                Image(systemName: "mic.fill")
+                    .foregroundStyle(.green)
+                LevelMeterBars(level: feedback.level)
+                // Already in the user's language, so shown as it is.
+                Text(verbatim: hint)
+            }
+            .indicatorStyle()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: hint))
         case .transcribing:
             HStack(spacing: 8) {
                 ProgressView()

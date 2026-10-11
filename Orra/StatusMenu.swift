@@ -79,6 +79,11 @@ struct StatusMenu: View {
 
         Menu("Talk Key") {
             TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
+            Divider()
+            Toggle("Double Press for Hands Free", isOn: Binding(
+                get: { pushToTalk.handsFreeOn },
+                set: { pushToTalk.setHandsFreeOn($0) }
+            ))
         }
         Menu("Microphone") {
             MicrophoneToggles(inputs: inputs, chosen: pushToTalk.microphone, choose: pushToTalk.setMicrophone)

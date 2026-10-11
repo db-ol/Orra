@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         insert: TextInserter.live().insert,
         talkKeys: TalkKeyPreference.load(),
         saveTalkKeys: { TalkKeyPreference.save($0) },
+        handsFree: HandsFreePreference.load(),
+        saveHandsFree: { HandsFreePreference.save($0) },
         microphone: MicrophonePreference.load(),
         saveMicrophone: { MicrophonePreference.save($0) },
         vocabulary: VocabularyPreference.load(),

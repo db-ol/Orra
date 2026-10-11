@@ -73,7 +73,7 @@ struct MenuBarIcon: View {
         if let symbol = models.state.symbolName { return symbol }
         guard pushToTalk.isHotkeyActive else { return "mic.slash" }
         switch pushToTalk.state {
-        case .listening:
+        case .listening, .waitingForSecondPress, .handsFree:
             return "mic.fill"
         case .processing:
             return "waveform"

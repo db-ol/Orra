@@ -67,6 +67,23 @@
         }
       }
     },
+    "%@, %@" : {
+      "comment" : "Talk key names in a list",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@、%2$@"
+          }
+        }
+      }
+    },
     "%lld of %lld words" : {
       "localizations" : {
         "en" : {
@@ -343,6 +360,26 @@
         }
       }
     },
+    "Double Press for Hands Free" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两下进入免手持模式"
+          }
+        }
+      }
+    },
+    "Double press for hands free" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两下进入免手持模式"
+          }
+        }
+      }
+    },
     "Download Speech Model (%@)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -385,6 +422,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载…"
+          }
+        }
+      }
+    },
+    "For a longer text, press the talk key twice quickly and talk hands free. Press it once more to paste." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要说长一点的内容，可以快速连按两下说话键，松开后继续说。说完再按一下，文字就会粘贴进去。"
           }
         }
       }
@@ -497,12 +544,12 @@
         }
       }
     },
-    "Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards." : {
+    "Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "单独按住一个键，说话，然后松开。fn（地球仪）键在 MacBook 键盘的左下角，外接键盘大多适合用右侧 Control 键。"
+            "value" : "单独按住一个键，说话，然后松开。fn（地球仪）键在 MacBook 键盘的左下角，外接键盘大多适合用右侧 Control 键。左侧 Control、Option 或 Command 键要单独按住片刻才开始录音，所以它们的快捷键照常可用。"
           }
         }
       }
@@ -563,6 +610,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "学习"
+          }
+        }
+      }
+    },
+    "Left Command" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Command 键"
+          }
+        }
+      }
+    },
+    "Left Control" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Control 键"
+          }
+        }
+      }
+    },
+    "Left Option" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Option 键"
           }
         }
       }
@@ -907,6 +984,16 @@
         }
       }
     },
+    "Orra records up to 1 minute at a time, so the recording stopped there." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 每次最多录 1 分钟，所以录音到这里就停止了。"
+          }
+        }
+      }
+    },
     "Orra shows the new language after it restarts." : {
       "localizations" : {
         "zh-Hans" : {
@@ -953,6 +1040,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在准备语音模型…"
+          }
+        }
+      }
+    },
+    "Press %@ to finish" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按%@结束"
+          }
+        }
+      }
+    },
+    "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速连按两下说话键，松开后 Orra 会继续录音。再按一下说话键就会粘贴，按 Esc 键则取消。按住说话的用法不变。"
           }
         }
       }
@@ -1690,6 +1797,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "fn（地球仪）键"
+          }
+        }
+      }
+    },
+    "left Command" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Command 键"
+          }
+        }
+      }
+    },
+    "left Control" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Control 键"
+          }
+        }
+      }
+    },
+    "left Option" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Option 键"
           }
         }
       }

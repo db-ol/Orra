@@ -778,6 +778,7 @@ struct PushToTalkControllerTests {
         #expect(mic.calls == ["start", "stop"])
         #expect(controller.state == .idle)
         #expect(inserter.inserted == ["你好"])
+        #expect(controller.notice == "Orra records up to 1 minute at a time, so the recording stopped there.")
         // The real release that follows later changes nothing.
         controller.handle(.released)
         #expect(mic.calls == ["start", "stop"])
@@ -1192,5 +1193,141 @@ struct PushToTalkControllerTests {
         // variable the guard relies on is set while tests run. It does not run
         // the guard itself.
         #expect(AppDelegate.isHostedByXcode)
+    }
+
+    // MARK: Hands free
+
+    @Test func aDoublePressRecordsHandsFreeUntilTheNextPress() async throws {
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { cues.list == [.listening] }
+        controller.handle(.tapped)
+        #expect(controller.state == .waitingForSecondPress)
+        controller.handle(.doublePressed)
+        #expect(controller.state == .handsFree)
+        try await waitUntil { cues.list.count == 2 }
+        // The same recording goes on: the microphone started once.
+        #expect(cues.list == [.listening, .handsFree(finishHint: "Press right Control to finish")])
+        #expect(mic.calls == ["start"])
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(mic.calls == ["start", "stop"])
+        #expect(inserter.inserted == ["你好"])
+        #expect(cues.list.last == .finished(message: nil))
+    }
+
+    @Test func aDoublePressFromIdleStartsTheMicrophoneAndShowsTheHintAtOnce() async throws {
+        let controller = await makeController(listeningCueDelay: .seconds(10))
+        let cues = CueRecorder(controller)
+        controller.handle(.doublePressed)
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.handsFree(finishHint: "Press right Control to finish")])
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(inserter.inserted == ["你好"])
+    }
+
+    @Test func aTapWithoutASecondPressIsDiscarded() async throws {
+        let controller = await makeController()
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.contains("start") }
+        controller.handle(.tapped)
+        // The window ends without a second press.
+        controller.handle(.cancelled)
+        try await waitUntil { mic.calls.contains("cancel") }
+        #expect(controller.state == .idle)
+        #expect(mic.calls == ["start", "cancel"])
+        #expect(inserter.inserted.isEmpty)
+    }
+
+    @Test func cancellingHandsFreePastesNothing() async throws {
+        let controller = await makeController()
+        controller.handle(.doublePressed)
+        try await waitUntil { mic.calls.contains("start") }
+        // Escape, or a change of keys.
+        controller.handle(.cancelled)
+        try await waitUntil { mic.calls.contains("cancel") }
+        #expect(controller.state == .idle)
+        #expect(inserter.inserted.isEmpty)
+        #expect(speech.receivedSampleCounts.isEmpty)
+    }
+
+    @Test func handsFreeStopsAtTheTimeLimitAndSaysWhy() async throws {
+        let controller = await makeController(limit: .milliseconds(50))
+        let cues = CueRecorder(controller)
+        controller.handle(.doublePressed)
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        #expect(inserter.inserted == ["你好"])
+        #expect(cues.list.last == .finished(message: "Orra records up to 1 minute at a time, so the recording stopped there."))
+    }
+
+    @Test func aDoublePressWithoutTheModelSaysWhy() async throws {
+        let controller = await makeController(loadModel: false)
+        let cues = CueRecorder(controller)
+        controller.handle(.doublePressed)
+        #expect(controller.state == .idle)
+        #expect(mic.calls.isEmpty)
+        #expect(cues.list.count == 1)
+    }
+
+    @Test func handsFreeThroughTheTapEndsWithEscape() async throws {
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        let key = TalkKey.rightControl
+        let down = HotkeyTapTests.rightControlDown
+        var now = ContinuousClock.now
+        #expect(tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now) == false)
+        now = now.advanced(by: .milliseconds(80))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        #expect(controller.state == .waitingForSecondPress)
+        now = now.advanced(by: .milliseconds(100))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now)
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        #expect(controller.state == .handsFree)
+        #expect(tap.activeKey == .rightControl)
+        // Escape is swallowed and cancels.
+        #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now))
+        #expect(controller.state == .idle)
+        #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now) == false)
+        try await waitUntil { mic.calls.contains("cancel") }
+        #expect(inserter.inserted.isEmpty)
+    }
+
+    @Test func aDoublePressDuringProcessingLeavesEscapeAlone() async throws {
+        speech.delay = .milliseconds(300)
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.contains("start") }
+        controller.handle(.released)
+        #expect(controller.state == .processing)
+        let key = TalkKey.fn
+        controller.setTalkKey(key, on: true)
+        var now = ContinuousClock.now
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: .maskSecondaryFn, at: now)
+        now = now.advanced(by: .milliseconds(50))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: .maskSecondaryFn, at: now)
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        // The state model ignored the double press, so the tap holds no dictation.
+        #expect(controller.state == .processing)
+        #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now) == false)
+        try await waitUntil { controller.state == .idle }
+    }
+
+    @Test func handsFreeIsSaved() {
+        var saved: [Bool] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            handsFree: true,
+            saveHandsFree: { saved.append($0) }
+        )
+        controller.setHandsFreeOn(false)
+        controller.setHandsFreeOn(false)
+        #expect(controller.handsFreeOn == false)
+        #expect(saved == [false])
     }
 }

@@ -6,11 +6,16 @@ import os
 /// What the recording indicator and the sounds follow. A dictation sends listening,
 /// transcribing, recordingStopped and finished, in that order. Listening waits until the
 /// hold has lasted a moment and the microphone has started, so a shortcut with the talk
-/// key, such as right Control+C, sends nothing. A hold that ends early skips to finished, which comes only when there is
-/// a message to show or an indicator to clear.
+/// key, such as right Control+C, sends nothing. A hands free dictation sends handsFree in
+/// place of listening, or after it when a hold turned into one. A hold that ends early
+/// skips to finished, which comes only when there is a message to show or an indicator to
+/// clear.
 nonisolated enum DictationCue: Equatable, Sendable {
     /// The hold has lasted long enough to be a dictation, and the microphone is recording.
     case listening
+    /// A hands free dictation records. The hint says how to finish it, such as "Press
+    /// right Control to finish".
+    case handsFree(finishHint: String)
     /// The talk key was released after a hold long enough to transcribe.
     case transcribing
     /// The microphone stopped after a hold long enough to transcribe. A recording without
@@ -24,7 +29,8 @@ nonisolated enum DictationCue: Equatable, Sendable {
 /// publishes the state for the menu bar.
 ///
 /// A hold records. The release stops the recording, the speech model turns it into text
-/// off the main actor, and the text is pasted into the frontmost app.
+/// off the main actor, and the text is pasted into the frontmost app. A quick double press
+/// records hands free until the next press of the key, see PushToTalkStateMachine.
 @Observable
 final class PushToTalkController {
     nonisolated enum ModelState: Equatable, Sendable {
@@ -40,6 +46,9 @@ final class PushToTalkController {
     /// The keys that start a dictation when held on their own. Saved through
     /// `saveTalkKeys` whenever they change.
     private(set) var talkKeys: Set<TalkKey>
+    /// Whether a quick double press of the talk key starts a hands free dictation. Saved
+    /// through `saveHandsFree` whenever it changes.
+    private(set) var handsFreeOn: Bool
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
     private(set) var microphone: MicrophoneChoice?
@@ -119,6 +128,7 @@ final class PushToTalkController {
     @ObservationIgnored private var machine = PushToTalkStateMachine()
     @ObservationIgnored private var tap: HotkeyTap?
     @ObservationIgnored private let saveTalkKeys: (Set<TalkKey>) -> Void
+    @ObservationIgnored private let saveHandsFree: (Bool) -> Void
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
     @ObservationIgnored private let saveVocabulary: ([String]) -> Void
     @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
@@ -149,6 +159,8 @@ final class PushToTalkController {
     ///     start sound plays. A shortcut with the talk key is over sooner.
     ///   - talkKeys: The keys that start a dictation, as saved by the user.
     ///   - saveTalkKeys: Saves the keys after the user changes them.
+    ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
+    ///   - saveHandsFree: Saves the choice after the user changes it.
     ///   - microphone: The microphone the user chose, or nil for the system default.
     ///   - saveMicrophone: Saves the choice after the user changes it.
     ///   - vocabulary: The user's words and names, as saved.
@@ -172,6 +184,8 @@ final class PushToTalkController {
         listeningCueDelay: Duration = .milliseconds(150),
         talkKeys: Set<TalkKey> = TalkKey.defaultKeys,
         saveTalkKeys: @escaping (Set<TalkKey>) -> Void = { _ in },
+        handsFree: Bool = true,
+        saveHandsFree: @escaping (Bool) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
         saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in },
         vocabulary: [String] = [],
@@ -195,6 +209,8 @@ final class PushToTalkController {
         self.listeningCueDelay = listeningCueDelay
         self.talkKeys = talkKeys.isEmpty ? TalkKey.defaultKeys : talkKeys
         self.saveTalkKeys = saveTalkKeys
+        self.handsFreeOn = handsFree
+        self.saveHandsFree = saveHandsFree
         self.microphone = microphone
         self.saveMicrophone = saveMicrophone
         self.vocabulary = vocabulary
@@ -212,7 +228,7 @@ final class PushToTalkController {
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
-        tap = HotkeyTap(keys: talkKeys, install: installTap) { [weak self] event in
+        tap = HotkeyTap(keys: talkKeys, handsFree: handsFreeOn, install: installTap) { [weak self] event in
             self?.handle(event)
         } onSwitchedOff: { [weak self] reason in
             self?.tapWasSwitchedOff(reason)
@@ -289,9 +305,27 @@ final class PushToTalkController {
             keys.remove(key)
         }
         guard !keys.isEmpty, keys != talkKeys else { return }
+        applyTalkKeys(keys)
+    }
+
+    private func applyTalkKeys(_ keys: Set<TalkKey>) {
         talkKeys = keys
         saveTalkKeys(keys)
         tap?.setKeys(keys)
+    }
+
+    /// Turns double press for hands free on or off and saves the choice.
+    func setHandsFreeOn(_ on: Bool) {
+        guard on != handsFreeOn else { return }
+        handsFreeOn = on
+        saveHandsFree(on)
+        tap?.setHandsFree(on)
+    }
+
+    /// The key that finishes the hands free dictation in progress, for the indicator: the
+    /// key that started it, or the first talk key.
+    private var handsFreeKey: TalkKey? {
+        tap?.activeKey ?? TalkKey.allCases.first(where: talkKeys.contains)
     }
 
     /// Shows the system prompt that leads to Privacy & Security > Accessibility.
@@ -323,11 +357,18 @@ final class PushToTalkController {
 
     /// Applies one push to talk event. Internal so tests can drive it.
     func handle(_ event: PushToTalkStateMachine.Event) {
+        // The tap keeps Escape and the next press for a hands free dictation only while one
+        // runs. It may have ended here some other way, or never started.
+        defer {
+            if machine.state != .handsFree {
+                tap?.endHandsFree()
+            }
+        }
         guard let transition = machine.handle(event) else { return }
         state = machine.state
         logger.debug("Push to talk transition: \(String(describing: transition), privacy: .public)")
         switch transition {
-        case .startedListening:
+        case .startedListening, .startedHandsFree:
             problem = nil
             notice = nil
             microphoneNotice = nil
@@ -342,7 +383,13 @@ final class PushToTalkController {
                 handle(.cancelled)
                 return
             }
-            startRecording()
+            startRecording(cueDelay: transition == .startedHandsFree ? .zero : listeningCueDelay)
+        case .awaitingSecondPress:
+            // The recording goes on until the second press or the end of the window.
+            break
+        case .switchedToHandsFree:
+            listeningCueTask?.cancel()
+            scheduleListeningCue(after: .zero, hold: holdNumber)
         case .startedProcessing:
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
@@ -437,7 +484,7 @@ final class PushToTalkController {
     /// Starts the microphone for a hold, or ends the hold when that is not possible.
     /// The first hold asks for microphone access and is cancelled, because the prompt
     /// takes the focus while the talk key is still down.
-    private func startRecording() {
+    private func startRecording(cueDelay: Duration) {
         microphoneAccess = capture.access()
         switch microphoneAccess {
         case .authorized:
@@ -462,21 +509,13 @@ final class PushToTalkController {
             }
             recordingLimitTask = Task { [weak self, maximumRecordingDuration] in
                 try? await Task.sleep(for: maximumRecordingDuration)
-                guard !Task.isCancelled, let self, state == .listening else { return }
+                guard !Task.isCancelled, let self, state == .listening || state == .handsFree else { return }
                 logger.info("Recording reached its maximum length")
+                // The audio buffer holds no more, so the dictation ends here and says why.
+                notice = String(localized: "Orra records up to 1 minute at a time, so the recording stopped there.")
                 handle(.released)
             }
-            let started = captureStart
-            listeningCueTask = Task { [weak self, listeningCueDelay] in
-                try? await Task.sleep(for: listeningCueDelay)
-                // The cue also waits for the microphone, which can take 0.3 s for a USB
-                // microphone, so whoever starts talking at the sound is recorded from the
-                // first syllable. A microphone that fails to start sends no cue.
-                guard await started?.value == true else { return }
-                guard !Task.isCancelled, let self, holdNumber == hold, state == .listening else { return }
-                indicatorShown = true
-                onCue(.listening)
-            }
+            scheduleListeningCue(after: cueDelay, hold: hold)
         case .notDetermined:
             // The system prompt that follows says enough.
             handle(.cancelled)
@@ -487,6 +526,32 @@ final class PushToTalkController {
         case .notConfigured:
             holdMessage = String(localized: "This build has no microphone usage description")
             handle(.cancelled)
+        }
+    }
+
+    /// Sends the listening cue, or the hands free cue, once `delay` has passed and the
+    /// microphone has started, if the hold is still the current one and still records.
+    private func scheduleListeningCue(after delay: Duration, hold: Int) {
+        let started = captureStart
+        listeningCueTask = Task { [weak self] in
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            }
+            // The cue also waits for the microphone, which can take 0.3 s for a USB
+            // microphone, so whoever starts talking at the sound is recorded from the
+            // first syllable. A microphone that fails to start sends no cue.
+            guard await started?.value == true else { return }
+            guard !Task.isCancelled, let self, holdNumber == hold else { return }
+            switch state {
+            case .listening:
+                indicatorShown = true
+                onCue(.listening)
+            case .handsFree:
+                indicatorShown = true
+                onCue(.handsFree(finishHint: handsFreeKey?.finishHint() ?? ""))
+            case .idle, .waitingForSecondPress, .processing:
+                break
+            }
         }
     }
 
@@ -504,7 +569,7 @@ final class PushToTalkController {
         } else {
             problem = String(localized: "The microphone could not start")
         }
-        if state == .listening {
+        if machine.isRecording {
             handle(.cancelled)
         }
     }

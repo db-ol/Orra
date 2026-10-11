@@ -111,4 +111,58 @@ struct HotkeyTapTests {
         tap.stop()
         #expect(system.removals == 1)
     }
+
+    // MARK: Timers, hands free and choosing a key
+
+    /// A wait that never ends, so only the test fires timers.
+    static let neverFires: HotkeyTap.Wait = { _ in
+        try? await Task.sleep(for: .seconds(3600))
+    }
+
+    @Test func aLeftKeyStartsAHoldWhenItsTimerFires() {
+        var events: [PushToTalkStateMachine.Event] = []
+        let tap = HotkeyTap(keys: [.leftCommand], install: { _ in nil }, wait: Self.neverFires) { events.append($0) }
+        let flags = CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x08)
+        #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: flags) == false)
+        #expect(events.isEmpty)
+        tap.fireTimer()
+        #expect(events == [.pressed(isRepeat: false)])
+        // A timer that already fired does nothing more.
+        tap.fireTimer()
+        #expect(events == [.pressed(isRepeat: false)])
+    }
+
+    @Test func aLeftKeyShortcutCancelsItsTimer() {
+        var events: [PushToTalkStateMachine.Event] = []
+        let tap = HotkeyTap(keys: [.leftCommand], install: { _ in nil }, wait: Self.neverFires) { events.append($0) }
+        let flags = CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x08)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: flags)
+        #expect(tap.handle(type: .keyDown, keyCode: 8, flags: flags) == false)
+        tap.fireTimer()
+        #expect(events.isEmpty)
+    }
+
+    @Test func aTapsWindowEndsWhenItsTimerFires() {
+        var events: [PushToTalkStateMachine.Event] = []
+        let tap = HotkeyTap(keys: [.rightControl], install: { _ in nil }, wait: Self.neverFires) { events.append($0) }
+        let start = ContinuousClock.now
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.rightControlDown, at: start)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [], at: start.advanced(by: .milliseconds(50)))
+        #expect(events == [.pressed(isRepeat: false), .tapped])
+        tap.fireTimer()
+        #expect(events == [.pressed(isRepeat: false), .tapped, .cancelled])
+    }
+
+    @Test func theRealWaitFiresTheWindow() async throws {
+        var events: [PushToTalkStateMachine.Event] = []
+        let tap = HotkeyTap(keys: [.rightControl], install: { _ in nil }) { events.append($0) }
+        let start = ContinuousClock.now
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.rightControlDown, at: start)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [], at: start)
+        for _ in 0..<400 where events.count < 3 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(events == [.pressed(isRepeat: false), .tapped, .cancelled])
+    }
 }
+

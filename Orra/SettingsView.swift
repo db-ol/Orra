@@ -194,10 +194,20 @@ private struct GeneralSettings: View {
             }
             Section {
                 TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.handsFreeOn },
+                    set: { pushToTalk.setHandsFreeOn($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Double press for hands free",
+                        detail: "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before.",
+                        systemImage: "hand.raised"
+                    )
+                }
             } header: {
                 Text("Talk Key")
             } footer: {
-                Text("Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards.")
+                Text("Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.")
                     .foregroundStyle(.secondary)
             }
             Section {

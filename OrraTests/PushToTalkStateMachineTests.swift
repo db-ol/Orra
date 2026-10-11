@@ -21,6 +21,8 @@ struct PushToTalkStateMachineTests {
         .pressed(isRepeat: false),
         .pressed(isRepeat: true),
         .released,
+        .tapped,
+        .doublePressed,
         .cancelled,
         .processingFinished,
     ]
@@ -31,18 +33,40 @@ struct PushToTalkStateMachineTests {
         Row(from: .idle, event: .pressed(isRepeat: false), to: .listening, transition: .startedListening),
         Row(from: .idle, event: .pressed(isRepeat: true), to: .idle, transition: nil),
         Row(from: .idle, event: .released, to: .idle, transition: nil),
+        Row(from: .idle, event: .tapped, to: .idle, transition: nil),
+        Row(from: .idle, event: .doublePressed, to: .handsFree, transition: .startedHandsFree),
         Row(from: .idle, event: .cancelled, to: .idle, transition: nil),
         Row(from: .idle, event: .processingFinished, to: .idle, transition: nil),
 
         Row(from: .listening, event: .pressed(isRepeat: false), to: .listening, transition: nil),
         Row(from: .listening, event: .pressed(isRepeat: true), to: .listening, transition: nil),
         Row(from: .listening, event: .released, to: .processing, transition: .startedProcessing),
+        Row(from: .listening, event: .tapped, to: .waitingForSecondPress, transition: .awaitingSecondPress),
+        Row(from: .listening, event: .doublePressed, to: .listening, transition: nil),
         Row(from: .listening, event: .cancelled, to: .idle, transition: .cancelledListening),
         Row(from: .listening, event: .processingFinished, to: .listening, transition: nil),
+
+        Row(from: .waitingForSecondPress, event: .pressed(isRepeat: false), to: .waitingForSecondPress, transition: nil),
+        Row(from: .waitingForSecondPress, event: .pressed(isRepeat: true), to: .waitingForSecondPress, transition: nil),
+        Row(from: .waitingForSecondPress, event: .released, to: .waitingForSecondPress, transition: nil),
+        Row(from: .waitingForSecondPress, event: .tapped, to: .waitingForSecondPress, transition: nil),
+        Row(from: .waitingForSecondPress, event: .doublePressed, to: .handsFree, transition: .switchedToHandsFree),
+        Row(from: .waitingForSecondPress, event: .cancelled, to: .idle, transition: .cancelledListening),
+        Row(from: .waitingForSecondPress, event: .processingFinished, to: .waitingForSecondPress, transition: nil),
+
+        Row(from: .handsFree, event: .pressed(isRepeat: false), to: .handsFree, transition: nil),
+        Row(from: .handsFree, event: .pressed(isRepeat: true), to: .handsFree, transition: nil),
+        Row(from: .handsFree, event: .released, to: .processing, transition: .startedProcessing),
+        Row(from: .handsFree, event: .tapped, to: .handsFree, transition: nil),
+        Row(from: .handsFree, event: .doublePressed, to: .handsFree, transition: nil),
+        Row(from: .handsFree, event: .cancelled, to: .idle, transition: .cancelledListening),
+        Row(from: .handsFree, event: .processingFinished, to: .handsFree, transition: nil),
 
         Row(from: .processing, event: .pressed(isRepeat: false), to: .processing, transition: nil),
         Row(from: .processing, event: .pressed(isRepeat: true), to: .processing, transition: nil),
         Row(from: .processing, event: .released, to: .processing, transition: nil),
+        Row(from: .processing, event: .tapped, to: .processing, transition: nil),
+        Row(from: .processing, event: .doublePressed, to: .processing, transition: nil),
         Row(from: .processing, event: .cancelled, to: .processing, transition: nil),
         Row(from: .processing, event: .processingFinished, to: .idle, transition: .finished),
     ]
@@ -55,6 +79,11 @@ struct PushToTalkStateMachineTests {
             break
         case .listening:
             _ = machine.handle(.pressed(isRepeat: false))
+        case .waitingForSecondPress:
+            _ = machine.handle(.pressed(isRepeat: false))
+            _ = machine.handle(.tapped)
+        case .handsFree:
+            _ = machine.handle(.doublePressed)
         case .processing:
             _ = machine.handle(.pressed(isRepeat: false))
             _ = machine.handle(.released)
@@ -149,5 +178,56 @@ struct PushToTalkStateMachineTests {
             }
         }
         #expect(covered.count == Machine.State.allCases.count * Self.allEvents.count)
+    }
+
+    // MARK: Hands free
+
+    @Test func aTapThenADoublePressKeepsTheRecordingAndGoesHandsFree() {
+        var machine = Machine()
+        #expect(machine.handle(.pressed(isRepeat: false)) == .startedListening)
+        #expect(machine.handle(.tapped) == .awaitingSecondPress)
+        #expect(machine.isRecording)
+        #expect(machine.handle(.doublePressed) == .switchedToHandsFree)
+        #expect(machine.state == .handsFree)
+        // The release of the second press is not sent. The next press on its own ends it.
+        #expect(machine.handle(.released) == .startedProcessing)
+        #expect(machine.handle(.processingFinished) == .finished)
+        #expect(machine.state == .idle)
+    }
+
+    @Test func aTapWithoutASecondPressIsDiscarded() {
+        var machine = makeMachine(in: .waitingForSecondPress)
+        #expect(machine.handle(.cancelled) == .cancelledListening)
+        #expect(machine.state == .idle)
+        // A slow second press is an ordinary hold.
+        #expect(machine.handle(.pressed(isRepeat: false)) == .startedListening)
+        #expect(machine.handle(.released) == .startedProcessing)
+    }
+
+    @Test func aDoublePressFromIdleStartsHandsFree() {
+        var machine = Machine()
+        #expect(machine.handle(.doublePressed) == .startedHandsFree)
+        #expect(machine.isRecording)
+        #expect(machine.handle(.cancelled) == .cancelledListening)
+        #expect(machine.state == .idle)
+    }
+
+    @Test func pressesDuringHandsFreeDoNotRestartIt() {
+        var machine = makeMachine(in: .handsFree)
+        for event in [Machine.Event.pressed(isRepeat: false), .tapped, .doublePressed, .processingFinished] {
+            #expect(machine.handle(event) == nil)
+            #expect(machine.state == .handsFree)
+        }
+    }
+
+    @Test func aDoublePressDuringProcessingIsIgnored() {
+        var machine = makeMachine(in: .processing)
+        #expect(machine.handle(.doublePressed) == nil)
+        #expect(machine.state == .processing)
+    }
+
+    @Test func onlyTheListeningStatesRecord() {
+        let recording = Machine.State.allCases.filter { makeMachine(in: $0).isRecording }
+        #expect(recording == [.listening, .waitingForSecondPress, .handsFree])
     }
 }
