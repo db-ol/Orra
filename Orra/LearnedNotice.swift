@@ -5,8 +5,10 @@ import SwiftUI
 /// The word Orra just learned on its own, shown for a while with Undo and a countdown to when
 /// it goes, or a word it offers to add after a fix of one Chinese character, in a field the
 /// user may edit. Stays while the pointer is over it, or while the user edits the word. An
-/// offered word that is closed or runs out is declined. A new offer waits while the user
-/// edits the word, so their typing is not lost.
+/// offered word that is closed or runs out is declined. A notice that comes while a word is
+/// offered, or an offer that comes while any notice is shown, waits and shows once the one
+/// shown closes, so an offer is never lost unseen. A learned word replaces a learned word
+/// shown or waiting, so only the latest Undo is kept.
 @Observable
 final class LearnedNotice {
     static let duration: Duration = .seconds(10)
@@ -27,8 +29,13 @@ final class LearnedNotice {
         let seconds: TimeInterval
     }
 
+    /// The most notices that wait. A further one pushes out the oldest.
+    static let maximumWaiting = 5
+
     private(set) var content: Content?
     private(set) var countdown: Countdown?
+    /// The notices waiting for the one shown to close, oldest first.
+    private(set) var waiting: [Content] = []
     /// The offered word as the user edits it.
     var draft = ""
 
@@ -61,25 +68,54 @@ final class LearnedNotice {
         self.now = now
     }
 
-    /// Shows the word, in place of one shown before, and hides it after `duration`.
+    /// Shows the word, in place of a learned word shown before, and hides it after
+    /// `duration`. Waits while a word is offered.
     func show(_ learned: CorrectionLearning.Learned) {
-        present(.learned(learned), for: Self.duration)
+        let content = Content.learned(learned)
+        if suggestion != nil {
+            waiting.removeAll { if case .learned = $0 { true } else { false } }
+            enqueue(content)
+        } else {
+            present(content)
+        }
     }
 
-    /// Offers the word, in place of a notice shown before, with the guess in the field.
-    /// Does nothing while the user edits an offered word: the same fix offers it again.
+    /// Offers the word, with the guess in the field. Waits while another notice is shown.
     func suggest(_ suggestion: WordSuggestion) {
-        guard !(editing && self.suggestion != nil) else { return }
-        draft = suggestion.guess
-        present(.suggestion(suggestion), for: Self.suggestionDuration)
+        let content = Content.suggestion(suggestion)
+        guard content != self.content, !waiting.contains(content) else { return }
+        if self.content != nil {
+            enqueue(content)
+        } else {
+            present(content)
+        }
     }
 
-    private func present(_ content: Content, for duration: Duration) {
+    private func enqueue(_ content: Content) {
+        waiting.append(content)
+        if waiting.count > Self.maximumWaiting {
+            waiting.removeFirst()
+        }
+    }
+
+    private func present(_ content: Content) {
+        if case .suggestion(let suggestion) = content {
+            draft = suggestion.guess
+        }
         self.content = content
         pointerInside = false
         editing = false
         onChange?(content)
-        hide(after: duration)
+        switch content {
+        case .learned: hide(after: Self.duration)
+        case .suggestion: hide(after: Self.suggestionDuration)
+        }
+    }
+
+    /// Shows the next waiting notice, when none is shown.
+    private func showNext() {
+        guard content == nil, !waiting.isEmpty else { return }
+        present(waiting.removeFirst())
     }
 
     /// Keeps the notice while the pointer is over it.
@@ -133,17 +169,19 @@ final class LearnedNotice {
     /// Closes the notice. An offered word that was not added is declined.
     func close() {
         let declined = suggestion
-        finish()
+        clear()
         if let declined {
             onDecline?(declined)
         }
+        showNext()
     }
 
     /// Undoes the word shown. The notice closes first, so a notice that undoing shows stays.
     func undo() {
         guard let learned else { return }
-        finish()
+        clear()
         onUndo?(learned)
+        showNext()
     }
 
     /// Adds the offered word as the user left it in the field. The notice closes first, so
@@ -151,12 +189,19 @@ final class LearnedNotice {
     func add() {
         let word = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let suggestion, !word.isEmpty else { return }
-        finish()
+        clear()
         onAdd?(suggestion, word)
+        showNext()
     }
 
-    /// Closes the notice after the user answered it, with Undo or Add.
+    /// Closes the notice after the user answered it, with Undo or Add, and shows the next
+    /// one waiting.
     func finish() {
+        clear()
+        showNext()
+    }
+
+    private func clear() {
         hide?.cancel()
         hide = nil
         countdown = nil

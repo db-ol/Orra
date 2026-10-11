@@ -147,9 +147,47 @@ struct LearnedNoticeTests {
         #expect(notice.suggestion == suggestion)
         #expect(notice.draft == "通义")
         notice.setEditing(false)
-        notice.suggest(other)
+        notice.add()
         #expect(notice.suggestion == other)
         #expect(notice.draft == "北京")
+    }
+
+    @Test func noticesThatComeTogetherShowInTurn() {
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
+        let other = WordSuggestion(
+            change: Correction(heard: "峰", corrected: "枫"),
+            pair: Correction(heard: "林峰", corrected: "林枫")
+        )
+        let later = CorrectionLearning.Learned(
+            correction: Correction(heard: "克劳德", corrected: "Claude"),
+            pairs: [Correction(heard: "克劳德", corrected: "Claude")],
+            outcome: .added
+        )
+        var declined: [WordSuggestion] = []
+        notice.onDecline = { declined.append($0) }
+        // Two offers and two learned words in one report, offers first.
+        notice.suggest(suggestion)
+        notice.suggest(other)
+        notice.suggest(other)
+        notice.show(learned)
+        notice.show(later)
+        #expect(notice.suggestion == suggestion)
+        #expect(notice.waiting == [.suggestion(other), .learned(later)])
+        notice.close()
+        #expect(declined == [suggestion])
+        #expect(notice.suggestion == other)
+        #expect(notice.draft == "林枫")
+        notice.close()
+        #expect(notice.learned == later)
+        // An offer waits behind a learned word, and a learned word replaces it.
+        notice.suggest(suggestion)
+        #expect(notice.learned == later)
+        notice.show(learned)
+        #expect(notice.learned == learned)
+        #expect(notice.waiting == [.suggestion(suggestion)])
+        notice.close()
+        #expect(notice.suggestion == suggestion)
+        #expect(declined == [suggestion, other])
     }
 
     @Test func thePanelsKeyStatusHoldsTheCountdown() {
