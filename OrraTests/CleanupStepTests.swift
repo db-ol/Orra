@@ -89,6 +89,16 @@ struct CleanupStepTests {
         #expect(CleanupStep.isWorthCleaning("3 点 5"))
     }
 
+    /// A long dictation gets more time, and one too long to wait for is not cleaned up.
+    @Test func theTimeGrowsWithTheTextUpToTheLongestCleaned() {
+        let longest = String(repeating: "会", count: CleanupStep.maximumLength)
+        #expect(CleanupStep.timeout(for: "我们下周二开会。") < .seconds(3))
+        // 400 Chinese characters took 3.9 s on an M5 Pro.
+        #expect(CleanupStep.timeout(for: longest) >= .seconds(7))
+        #expect(CleanupStep.isWorthCleaning(longest))
+        #expect(!CleanupStep.isWorthCleaning(longest + "了"))
+    }
+
     @Test func outcomesAreLoggedWithoutText() {
         #expect(CleanupStep.Outcome.heldBack(.newNumber(["13812345678"])).logName == "held back by the new number check")
         #expect(CleanupStep.Outcome.timedOut.logName == "timed out")

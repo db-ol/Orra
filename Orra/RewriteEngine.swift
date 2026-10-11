@@ -168,24 +168,34 @@ nonisolated enum CleanupStep {
         }
     }
 
-    /// The longest Orra waits for a cleanup before it pastes the text without it. A
-    /// cleanup of a long dictation takes about a second on an M-series Mac.
-    static let timeout: Duration = .seconds(3)
+    /// The longest Orra waits for a cleanup of this text before it pastes the text without
+    /// it. The model writes the whole text again, so the time grows with its length. On an
+    /// M5 Pro, CleanupModelEvaluationTests measured 0.7 s for 46 Chinese characters, 3.9 s
+    /// for 400 and 4.5 s for 905 English ones, about 60 written tokens a second. This
+    /// allows about twice that, so a slower Mac still gets most cleanups.
+    static func timeout(for text: String) -> Duration {
+        .seconds(2) + .milliseconds(15) * text.count
+    }
 
-    /// Whether a text is long enough for a cleanup: at least three letters or digits. A
-    /// word or two has nothing to clean up.
+    /// The longest text Orra cleans up, in characters. A longer one would keep the user
+    /// waiting several seconds for the paste, so it is pasted without cleanup.
+    static let maximumLength = 400
+
+    /// Whether a text is worth a cleanup: at least three letters or digits, since a word or
+    /// two has nothing to clean up, and no longer than `maximumLength`.
     static func isWorthCleaning(_ text: String) -> Bool {
-        text.unicodeScalars.lazy.filter { $0.properties.isAlphabetic || $0.properties.numericType != nil }.prefix(3).count == 3
+        text.count <= maximumLength
+            && text.unicodeScalars.lazy.filter { $0.properties.isAlphabetic || $0.properties.numericType != nil }.prefix(3).count == 3
     }
 
     /// The text to paste and what happened. Logs the outcome and the time, never text.
     @concurrent
-    static func run(_ text: String, timeout: Duration = timeout, complete: @escaping @Sendable (String) async throws -> String) async -> (text: String, outcome: Outcome) {
+    static func run(_ text: String, timeout: Duration? = nil, complete: @escaping @Sendable (String) async throws -> String) async -> (text: String, outcome: Outcome) {
         let started = ContinuousClock.now
         let work = Task { try await complete(text) }
         let timer = Task {
             do {
-                try await Task.sleep(for: timeout)
+                try await Task.sleep(for: timeout ?? Self.timeout(for: text))
             } catch {
                 return false
             }

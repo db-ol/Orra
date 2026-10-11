@@ -41,6 +41,60 @@ struct CleanupModelEvaluationTests {
         NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text))
     }
 
+    /// Long dictations, written for this test, measured without a time limit: how long the
+    /// model takes at the top of the length range, and whether the step finishes within the
+    /// time it allows for that length.
+    @Test func longDictations() async throws {
+        let folder = try #require(RewriteTestModel.folder)
+        let engine = RewriteEngine()
+        try await engine.load(from: folder)
+        // Different sentences, since the model drops a sentence said twice.
+        let chinese = [
+            "呃，我们下周的项目评审会，那个，原来定在周三下午，哦不对，是周四下午，地点在三楼的大会议室。",
+            "大家记得提前准备好各自负责部分的进度说明，还有遇到的问题和需要别人帮忙的地方。",
+            "设计组这次要讲新版首页的改动，就是说，为什么把搜索框挪到了上面，以及用户测试的结果。",
+            "后端那边呢，主要讲数据库迁移的计划，嗯，还有上个月那次故障的复盘，以后怎么避免。",
+            "测试组要给出这一版的问题清单，按严重程度排好，哪些必须在发布前修，哪些可以放到下一版。",
+            "市场部的同事也会来听，他们想知道新功能大概什么时候能上线，好安排宣传的时间。",
+            "会议时间大概两个小时，中间休息十分钟，会议室里有投影，但是转接头要自己带。",
+            "如果有人那天来不了，提前跟我说一声，然后把材料发到群里，我帮你讲一下。",
+            "会后我会整理一份会议纪要，发给所有人，里面写清楚每个人接下来要做的事和截止时间。",
+            "还有，那个，下个月的团建地点还没定，大家有什么想法可以在群里说，周五之前定下来。",
+        ]
+        let english = [
+            "So, um, for the release next week we need to finish the migration and update the docs.",
+            "The design team will walk through the new home page, mostly why the search box moved to the top.",
+            "Backend will cover the database plan and, uh, the review of last month's outage.",
+            "QA should bring the list of open bugs sorted by severity, so we can decide what blocks the release.",
+            "Marketing wants a rough launch date, I mean a launch week, so they can plan the announcement.",
+            "The meeting runs about two hours with a short break, and the room has a projector but no adapters.",
+            "If you can't make it, let me know ahead of time and send your slides to the channel.",
+            "I'll write up the notes afterwards with every owner and every deadline we agree on.",
+            "Also, the offsite location is still open, so please post your ideas before Friday.",
+            "Like, if anyone has a budget question, ask finance directly instead of waiting for the meeting.",
+        ]
+        var report = ""
+        for (name, sentences) in [("Chinese", chinese), ("English", english)] {
+            for count in [1, 3, 6, 10] {
+                let text = sentences.prefix(count).joined(separator: name == "English" ? " " : "")
+                let started = ContinuousClock.now
+                let completion = try await engine.cleanUp(text)
+                let elapsed = started.duration(to: .now)
+                let step = await CleanupStep.run(text, complete: { try await engine.cleanUp($0).answer })
+                report += "\(name) \(text.count) characters: \(elapsed), \(completion.promptTokens) prompt tokens, \(completion.generatedTokens) written, step \(step.outcome.logName), allowed \(CleanupStep.timeout(for: text)), cleaned \(CleanupStep.isWorthCleaning(text))\n"
+                if CleanupStep.isWorthCleaning(text) {
+                    #expect(step.outcome != .timedOut, "\(name) \(text.count) characters")
+                }
+            }
+        }
+        await engine.unload()
+        print(report)
+        Attachment.record(report, named: "cleanup-long-dictations.txt")
+        if let path = ProcessInfo.processInfo.environment["ORRA_CLEANUP_REPORT"] {
+            try report.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
+
     @Test func cleanupCases() async throws {
         let folder = try #require(RewriteTestModel.folder)
         let engine = RewriteEngine()
@@ -102,7 +156,7 @@ struct CleanupModelEvaluationTests {
         if let path = ProcessInfo.processInfo.environment["ORRA_CLEANUP_REPORT"] {
             try report.write(toFile: path, atomically: true, encoding: .utf8)
         }
-        // The setting promises about half a second. The benchmark measured 0.49 and 0.56 s.
+        // The setting promises under a second. The benchmark measured 0.49 and 0.56 s.
         for median in medians {
             #expect(median < 1.0)
         }
