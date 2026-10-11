@@ -24,21 +24,31 @@ final class TextCleanup {
     private(set) var engineState: EngineState = .unloaded
     let models: ModelInstaller
 
-    @ObservationIgnored private let engine: RewriteEngine
+    @ObservationIgnored private let engine: CleanupEngine
     @ObservationIgnored private let save: (Bool) -> Void
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    /// The latest load or unload. Each waits for the one before it, so they never overlap
+    /// and never swap order.
+    @ObservationIgnored private var engineWork: Task<Void, Never>?
+    /// Counts the loads asked for, so a load the user turned off and on again since leaves
+    /// the state alone.
+    @ObservationIgnored private var loadGeneration = 0
 
     /// - Parameters:
     ///   - isOn: As saved.
     ///   - save: Saves the setting after the user changes it.
     ///   - models: The installer for the cleanup model. Tests pass one with temporary
     ///     folders and a stand in network.
-    ///   - engine: Loads and runs the model.
-    init(isOn: Bool, save: @escaping (Bool) -> Void, models: ModelInstaller, engine: RewriteEngine = RewriteEngine()) {
+    ///   - engine: Loads and runs the model. Tests pass a stand in.
+    init(isOn: Bool, save: @escaping (Bool) -> Void, models: ModelInstaller, engine: CleanupEngine = .live()) {
         self.isOn = isOn
         self.save = save
         self.models = models
         self.engine = engine
+        // Set before anything can install the model, so every install loads it.
+        models.onInstalled = { [weak self] folder in
+            self?.load(from: folder)
+        }
     }
 
     /// The app's cleanup. Creating it touches neither the disk nor the network.
@@ -58,9 +68,6 @@ final class TextCleanup {
     /// At launch: looks for the model with local files only, and loads it when cleanup is
     /// on. Never goes online.
     func start() async {
-        models.onInstalled = { [weak self] folder in
-            self?.load(from: folder)
-        }
         await models.prepare()
     }
 
@@ -68,20 +75,27 @@ final class TextCleanup {
     var model: CleanupModel {
         CleanupModel(
             isReady: { [weak self] in self?.isOn == true && self?.engineState == .ready },
-            complete: { [engine] text in try await engine.cleanUp(text).answer }
+            complete: engine.complete
         )
     }
 
     /// The switch in Settings was turned on. With the model in place cleanup starts at
-    /// once, otherwise Settings asks before anything is downloaded.
+    /// once, otherwise Settings asks before anything is downloaded. While Orra still looks
+    /// for the model on disk, Settings keeps the switch off, see `canTurnOn`.
     func turnOn() {
-        guard !isOn else { return }
+        guard !isOn, canTurnOn else { return }
         if case .installed(let folder) = models.state {
             setOn(true)
             load(from: folder)
         } else {
             isConfirmingDownload = true
         }
+    }
+
+    /// False while Orra looks for the model on disk, at launch or after Try Again, since
+    /// only then does it know whether a download is needed.
+    var canTurnOn: Bool {
+        models.state != .checking
     }
 
     /// The user agreed to download the model.
@@ -112,17 +126,17 @@ final class TextCleanup {
         if case .downloading = models.state {
             models.cancel()
         }
-        loadTask?.cancel()
+        loadGeneration += 1
         loadTask = nil
         engineState = .unloaded
-        Task { [engine] in await engine.unload() }
+        enqueue { [engine] in await engine.unload() }
     }
 
     /// Try Again after the model failed to load: checks the files, hashes included, and
     /// loads them again, or leads back to Download when one is damaged.
-    func retryLoading() {
+    func retryLoading() async {
         engineState = .unloaded
-        Task { await models.prepare(checkingHashes: true) }
+        await models.prepare(checkingHashes: true)
     }
 
     private func setOn(_ on: Bool) {
@@ -134,32 +148,59 @@ final class TextCleanup {
     private func load(from folder: URL) {
         guard isOn, engineState == .unloaded || engineState == .failed else { return }
         engineState = .loading
-        loadTask = Task { [weak self, engine] in
+        loadGeneration += 1
+        let generation = loadGeneration
+        loadTask = enqueue { [weak self, engine] in
+            // Turned off, or off and on again, before its turn: the unload queued by
+            // turning off runs next, and a newer load after it.
+            guard let self, generation == loadGeneration else { return }
             let loaded: Bool
             do {
-                try await engine.load(from: folder)
+                try await engine.load(folder)
                 loaded = true
             } catch {
                 // The type only, since a description may hold a path.
                 Logger.rewrite.error("The cleanup model failed to load with \(String(reflecting: type(of: error)), privacy: .public)")
                 loaded = false
             }
-            guard let self else { return }
-            guard !Task.isCancelled, isOn else {
-                // Turned off while loading. When it was turned on again since, the newer
-                // load keeps the model.
-                if !isOn {
-                    await engine.unload()
-                }
-                return
-            }
+            // Turned off while loading. The unload queued then runs next.
+            guard generation == loadGeneration else { return }
             engineState = loaded ? .ready : .failed
             loadTask = nil
         }
     }
 
-    /// Waits for a load that is under way. Internal for tests.
+    /// Runs engine work after the work queued before it.
+    @discardableResult
+    private func enqueue(_ work: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let previous = engineWork
+        let task = Task {
+            await previous?.value
+            await work()
+        }
+        engineWork = task
+        return task
+    }
+
+    /// Waits for the loads and unloads under way. Internal for tests.
     func waitForLoad() async {
-        await loadTask?.value
+        await engineWork?.value
+    }
+}
+
+/// What TextCleanup needs from the cleanup model. Closures, so tests pass a stand in.
+struct CleanupEngine {
+    /// Loads the model from an installed folder, see RewriteEngine.load.
+    var load: @Sendable (URL) async throws -> Void
+    var unload: @Sendable () async -> Void
+    /// The model's answer for a transcript, see RewriteEngine.cleanUp.
+    var complete: @Sendable (String) async throws -> String
+
+    static func live(_ engine: RewriteEngine = RewriteEngine()) -> CleanupEngine {
+        CleanupEngine(
+            load: { try await engine.load(from: $0) },
+            unload: { await engine.unload() },
+            complete: { try await engine.cleanUp($0).answer }
+        )
     }
 }

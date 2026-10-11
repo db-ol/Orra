@@ -286,6 +286,8 @@ private struct CleanupSetting: View {
                 systemImage: "wand.and.sparkles"
             )
         }
+        // Off while Orra looks for the model on disk, a moment at launch.
+        .disabled(!cleanup.isOn && !cleanup.canTurnOn)
         .alert("Download the cleanup model?", isPresented: $cleanup.isConfirmingDownload) {
             Button(CleanupLabels.downloadButton(models.state, total: total)) {
                 cleanup.confirmDownload()
@@ -315,7 +317,7 @@ private struct CleanupSetting: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Try Again") {
-                        cleanup.retryLoading()
+                        Task { await cleanup.retryLoading() }
                     }
                 }
             }
