@@ -17,16 +17,24 @@
   same day. speech-swift already resolved it and pins it with exact 3.31.4, so the version
   cannot move ahead of speech-swift. It adds no network use of its own: Orra downloads the
   text model itself, as it does the speech model.
+- huggingface/swift-transformers (Apache-2.0), exact version 1.3.4, product Tokenizers
+  only, linked to the Orra target only. Approved by the maintainer on 2026-10-11 for the
+  cleanup model's tokenizer, in place of Orra's own port, and added in Xcode by the
+  maintainer the same day. speech-swift already resolved it at 1.3.4 for its Hub product,
+  so it adds no package to Package.resolved. Orra loads the tokenizer from the installed
+  folder with `AutoTokenizer.from(modelFolder:)`, which reads local files and never
+  downloads.
 
 ## What the build resolves
 
 Xcode resolves 41 packages, listed in
 Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved. SwiftPM resolves
 every package that speech-swift declares, but the build compiles only the 12 that the
-Qwen3ASR, MLXLLM and MLXLMCommon products need. The other 28 are fetched and never built
+Qwen3ASR, MLXLLM, MLXLMCommon and Tokenizers products need. The other 28 are fetched and never built
 or linked. Versions come from Package.resolved and licenses from the GitHub API, both read
 on 2026-10-05. The compiled list comes from the build log of 2026-10-10, which added
-mlx-swift-lm and the MLXOptimizers target of mlx-swift and nothing else.
+mlx-swift-lm and the MLXOptimizers target of mlx-swift and nothing else. Linking
+Tokenizers on 2026-10-11 added its target of swift-transformers and no other package.
 
 ### Compiled for Orra
 
@@ -36,10 +44,10 @@ mlx-swift-lm and the MLXOptimizers target of mlx-swift and nothing else.
 | ml-explore/mlx-swift | 0.31.6 | MIT | MLX, MLXNN, MLXFast, MLXFFT, MLXOptimizers and the Cmlx core with its 9 Metal shaders |
 | ml-explore/mlx-swift-lm | 3.31.4 | MIT | MLXLLM and MLXLMCommon, which load and run the cleanup model |
 | apple/swift-numerics | 1.1.1 | Apache-2.0 | Numerics, used by MLX |
-| huggingface/swift-transformers | 1.3.4 | Apache-2.0 | Hub, used by AudioCommon |
+| huggingface/swift-transformers | 1.3.4 | Apache-2.0 | Tokenizers, the cleanup model's tokenizer, and Hub, used by AudioCommon and Tokenizers |
 | huggingface/swift-huggingface | 0.13.0 | Apache-2.0 | HuggingFace, used by Hub |
 | mattt/eventsource | 1.5.1 | MIT | EventSource, used by HuggingFace |
-| huggingface/swift-jinja | 2.5.1 | Apache-2.0 | Jinja, used by Hub |
+| huggingface/swift-jinja | 2.5.1 | Apache-2.0 | Jinja, used by Hub and Tokenizers |
 | apple/swift-collections | 1.7.1 | Apache-2.0 | OrderedCollections, used by Hub and Jinja |
 | apple/swift-crypto | 4.5.2 | Apache-2.0 | Crypto, used by Hub and HuggingFace |
 | ibireme/yyjson | 0.12.0 | MIT | yyjson, used by Hub |
@@ -123,11 +131,22 @@ download.
 Orra downloads the cleanup model with the same code as the speech model, see
 docs/model-download.md. mlx-swift-lm loads it from that folder with
 `LLMModelFactory.load(from:using:)`, which reads local files only. It leaves the tokenizer
-to the app, and its own adapter for swift-transformers needs the Tokenizers product, which
-Orra does not link. So Orra/QwenTokenizer.swift reads Qwen3's byte level BPE itself, from
-vocab.json and merges.txt. RewriteTokenizerTests checks it against the Hugging Face
-tokenizer, and a one off run on 2026-10-10 found the same IDs for all 268 prompts of the
-evaluation. Linking Tokenizers instead would need the maintainer's approval.
+to the app. Orra/CleanupTokenizer.swift hands it the tokenizer of swift-transformers, read
+from tokenizer.json and tokenizer_config.json in the same folder. It is the bridge that
+the #adaptHuggingFaceTokenizer macro of mlx-swift-lm writes, written out by hand, so the
+MLXHuggingFace product and its macro stay out of the build. Orra writes the chat prompt
+itself (RewritePrompt) and only encodes it.
+
+It replaced Orra's own port of Qwen3's tokenizer (QwenTokenizer, removed on 2026-10-11).
+Before the port was removed, a one off run compared the two on the model's files: every
+input and expected text of the 178 regular and 70 adversarial evaluation cases, as
+written and after the filler and number rules, the 1,344 texts of numbers.jsonl, the
+cases of RewriteTokenizerCases and the few shot examples, 2,131 texts in all. The IDs of
+each text alone and of the whole cleanup prompt built around it were the same, both
+decoded to the same text with and without special tokens, and each of the 151,669 token
+IDs decoded alone to the same text. RewriteTokenizerTests checks CleanupTokenizer against
+IDs that transformers in Python gave. In a Debug build the port loaded in 0.41 s and
+swift-transformers loads in 0.70 s, once when the model loads.
 
 ## Keeping speech-swift or carrying only Qwen3ASR
 

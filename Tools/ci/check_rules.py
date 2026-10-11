@@ -131,6 +131,10 @@ EXPECTED_PACKAGE_REFERENCES = {
         "kind": "exactVersion",
         "version": "3.31.4",
     },
+    "https://github.com/huggingface/swift-transformers": {
+        "kind": "exactVersion",
+        "version": "1.3.4",
+    },
 }
 
 # The package products each target links, as (product, package location).
@@ -140,6 +144,7 @@ EXPECTED_PRODUCTS = {
         ("Sparkle", "https://github.com/sparkle-project/Sparkle"),
         ("MLXLLM", "https://github.com/ml-explore/mlx-swift-lm"),
         ("MLXLMCommon", "https://github.com/ml-explore/mlx-swift-lm"),
+        ("Tokenizers", "https://github.com/huggingface/swift-transformers"),
     },
     "OrraTests": set(),
 }
