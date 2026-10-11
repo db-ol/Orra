@@ -341,3 +341,12 @@ struct VocabularyTests {
         #expect(!VocabularyEcho.isOnlyTerms("Orra", of: ["。", "  "]))
     }
 }
+
+/// The vocabulary table grows with its rows, so Remove sits right under the last word.
+struct VocabularyTableHeightTests {
+    @Test func theTableFitsItsRowsUpToTheMaximum() {
+        #expect(VocabularyTable.height(rows: 0) == VocabularyTable.height(rows: 3))
+        #expect(VocabularyTable.height(rows: 5) > VocabularyTable.height(rows: 4))
+        #expect(VocabularyTable.height(rows: 5000) == VocabularyTable.maximumHeight)
+    }
+}
