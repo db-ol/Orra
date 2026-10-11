@@ -3,8 +3,9 @@
 State of the repository after the overnight session of 2026-10-02, with manual
 results added on 2026-10-03, 2026-10-05 and 2026-10-06, the fn hotkey added on
 2026-10-04, local dictation added in the night of 2026-10-04, the choice of talk key and
-of microphone added on 2026-10-05, and on 2026-10-07 the model download, the recording
-indicator and sounds, the welcome window, the Chinese interface and the app icon. Three
+of microphone added on 2026-10-05, on 2026-10-07 the model download, the recording
+indicator and sounds, the welcome window, the Chinese interface and the app icon, and on
+2026-10-10 the left hand talk keys, choosing the key by pressing it and hands free. Three
 sections: what a build or test run verified, what only a person at the Mac can verify, and
 what does not exist yet.
 
@@ -20,11 +21,26 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 1219 test cases passed, 145 of them filler
-  rule cases and 633 number rule cases, including the real model tests below. Three heavier real model tests are
-  skipped unless asked for.
-  - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
-    15 rows) and each edge case decision, including cancel.
+- The test command ends in TEST SUCCEEDED with 2164 test cases passed on 2026-10-10, 162
+  of them filler rule cases and 1394 number rule cases, including the real model tests
+  below. Three heavier real model tests are skipped unless asked for.
+  - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
+    35 rows) and each edge case decision, including cancel, a tap that waits for a second
+    press, a double press from idle and after a tap, and presses during hands free and
+    during processing.
+  - TalkKeyHandsFreeTests drives the detector with a clock the test moves: a quick double
+    press that starts hands free, a tap whose window closes, a slow second press that is
+    an ordinary hold, a long hold that is never a tap, a stale timer, another key, another
+    modifier or a click between the presses, turning hands free off during a window, fn
+    staying hidden throughout, typing and clicks during hands free, Escape with the key up
+    and down and Escape outside hands free, a shortcut with a left key and the key with
+    another modifier that do not finish, a Control click and an fn click, a change of keys,
+    the owner ending hands free, and reset. For the left keys it covers the delay, a
+    shortcut, a click and another modifier before the delay that stay silent, a double
+    press that starts hands free without recording the tap, a lone tap, and telling a left
+    key from its right twin. Thousands of random presses with hands free on check that only
+    fn's events and Escape during hands free are swallowed and that the detector and the
+    state model agree on hands free.
   - TalkKeyDetectorTests covers, for fn as before, a hold of fn alone, Caps Lock, fn with
     another modifier, modifier rollover, a key or modifier during a hold (Fn+Delete), key
     code 179, arrows carrying the fn flag, release without press, repeated presses, that
@@ -34,18 +50,31 @@ Build and test commands, run in the repository root:
     right bits in both orders of the two Control keys. It also covers right Option and
     right Command, fn passing through when it is not a talk key, two talk keys at once,
     changing the keys during a hold, runs into the state model, and thousands of random
-    presses that check that only fn's own events are ever swallowed and that nothing stays
-    held once every key is up.
+    presses, including the left keys and their delay, that check that only fn's own events
+    are ever swallowed and that nothing stays held once every key is up. These run with
+    double press for hands free off, so a press released at once is a hold.
   - HotkeyTapTests feeds the tap's handler without installing a tap: removing the held key
     ends the recording, a click ends a right Control hold, only fn is swallowed, and a tap
     the system switched off, after a timeout or on user input, ends the hold, removes
-    itself, tells its owner and does not switch itself back on.
-  - TalkKeyTests checks the key codes and left and right bits against the system headers,
-    the default of right Control, reading a release on keyboards without those bits, which
-    keys change what a click does, the menu hint, and that only fn swallows its events.
+    itself, tells its owner and does not switch itself back on. It also checks that a left
+    key's timer starts the hold and a shortcut cancels it, that a tap's window ends when its
+    timer fires, also with the real wait, and that while the user chooses a key the tap
+    reports presses and swallows fn and Escape only while Orra is active, and ends a hold.
+  - TalkKeyTests checks the key codes and left and right bits of all seven keys and the
+    Escape and Shift key codes against the system headers, that the saved raw values never
+    change, that only the left keys wait, the default of right Control, reading a release
+    on keyboards without those bits, which keys change what a click does, the menu hint for
+    one to seven keys, the hands free hint, the recommended key, and that only fn swallows
+    its events. KeyChoiceTests covers pressing each key to choose it, keyboards without
+    left and right bits, Shift, Escape, Caps Lock and other keys. HandsFreePreferenceTests
+    checks that hands free is on until turned off.
     TalkKeyPreferenceTests saves and loads the choice in UserDefaults suites of its own,
     never Orra's. PushToTalkControllerTests checks that changes are saved and that the
-    last key stays on.
+    last key stays on, choosing a key by pressing it with Shift, other keys and Escape, a
+    double press that keeps the recording and pastes at the next press, a double press from
+    idle with the hint at once, a tap without a second press, cancelling hands free, the
+    limit during hands free with its message, a double press without the model, Escape
+    through the tap, and a double press during processing that leaves Escape alone.
   - MicrophoneCheckTests covers telling a microphone that delivers zeros from a quiet one,
     that none of the 600 evaluation clips counts as silent, the menu line for a closed
     lid, another input or an unknown one, and reading the default input and the lid state.
@@ -137,7 +166,8 @@ Build and test commands, run in the repository root:
     English string, that the Chinese uses full width punctuation and a space next to a
     Latin word or a number, that the built app carries the Chinese strings, that Chinese
     is chosen only when it comes before English in the preferred languages and never for
-    Traditional Chinese alone, and the Chinese talk key hint for one to four keys.
+    Traditional Chinese alone, the Chinese talk key hint for one to seven keys, and the
+    Chinese hint that finishes a hands free dictation.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -323,6 +353,39 @@ Talk key choice, added on 2026-10-05, not verified yet:
 - [ ] The choice of keys is still there after quitting and reopening Orra.
 - [ ] Right Option and right Command work the same way when turned on.
 
+Left hand keys, choosing the key and hands free, added on 2026-10-10, not verified yet:
+
+- [ ] Talk Key in the menu and Settings list seven keys and the "Double Press for Hands
+  Free" switch. A choice saved by an earlier version is still checked after the update.
+- [ ] With left Command as the talk key, Command C, Command V and Command Tab work as
+  before, play no sound and show no indicator. Holding left Command alone plays the sound
+  after about 0.3 seconds, and the dictation works. Try left Control with a Control click
+  in Finder and left Option with an accented character too.
+- [ ] Settings, General, Press a Key…: pressing fn makes fn the only talk key, without the
+  emoji picker or an input source switch. Shift shows the note about input methods,
+  Escape stops without a change, and the Settings window stays open. The current talk
+  key starts no dictation while Orra waits for the key.
+- [ ] Welcome window: the step "Choose your talk key" recommends fn on a MacBook with the
+  lid open, and right Control on a Mac without a built in keyboard or with the lid closed.
+  Use fn or Use right Control changes the key, and the step gets its check mark. Try it
+  before granting Accessibility too.
+- [ ] Double press the talk key in Notes and let go: the indicator shows "Press right
+  Control to finish", or the key used, and keeps recording. Type and click in Notes: it
+  goes on. Press the key once: the text is pasted, including the words said right after
+  the double press.
+- [ ] During hands free, Escape cancels without pasting and does not reach Notes. After
+  that, Escape works in Notes again.
+- [ ] A double press with a slow second press is an ordinary hold. Note whether 0.3 and 0.4
+  seconds feel right.
+- [ ] Hands free with left Command: Command Tab to another app does not finish the
+  dictation. A press of left Command alone then pastes into the app in front.
+- [ ] With Keyboard > Dictation > Shortcut set to "Press Control Key Twice", double press
+  right Control. Note whether macOS Dictation starts as well.
+- [ ] Hands free stops at 60 seconds, pastes, and says why.
+- [ ] With "Double press for hands free" off, a double press does nothing.
+- [ ] In Chinese, the indicator says "按右侧 Control 键结束", and the welcome step and the
+  Settings explanation read naturally.
+
 Tap switched off by the system, changed on 2026-10-06, not verified yet. The log lines
 below show with the log stream command under Testing notes:
 
@@ -430,7 +493,7 @@ are in place since 2026-10-05:
   someone talks. Secure input hides the other keys from Orra, so this can be taken as a
   dictation, and its text is then pasted at the prompt.
 - [ ] A quick tap of the talk key does nothing. Holding it for more than 60 seconds stops
-  the recording and pastes.
+  the recording, pastes, and the indicator says that Orra records up to 1 minute.
 - [ ] Pressing the talk key while the previous dictation is still being processed does
   nothing.
 - [ ] Command V still pastes with the Pinyin, ABC, Dvorak and Dvorak QWERTY Command
@@ -539,7 +602,7 @@ Simplified, then quit and reopen it. Afterwards set it back:
 
 - [ ] The menu, its submenus, Settings, the welcome window and the recording indicator are
   in Chinese, with full width punctuation, and no line is cut off or left in English.
-- [ ] With all four talk keys on, the menu says "按住右侧 Control 键、右侧 Option 键、右侧
+- [ ] With right Control, right Option, right Command and fn on, the menu says "按住右侧 Control 键、右侧 Option 键、右侧
   Command 键或地球仪（fn）键说话".
 - [ ] The download lines read naturally, for example "正在下载语音模型：37%，共 2.47 GB".
 - [ ] In a user account whose system language is Chinese and where Orra never had
@@ -756,6 +819,6 @@ Report a Problem, added on 2026-10-10, not verified yet:
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
-- Key combinations and mouse buttons as talk keys, and hands free mode.
+- Key combinations and mouse buttons as talk keys.
 - Rewriting with a model: spoken self corrections, fillers that need context such as 那个
   and like, and translation. Only the filler and number rules exist.
