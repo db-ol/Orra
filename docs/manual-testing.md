@@ -130,8 +130,9 @@ Build and test commands, run in the repository root:
     reported fix, and no reading after leaving the app, under secure input, or in a field
     without the pasted text. CorrectionLearningTests checks that nothing is read while
     learning is off, that the first fix adds the word and tells the user, a quiet new
-    mishearing, Undo, and that a learned word removed from the vocabulary is learned
-    again. LearnedNoticeTests checks the notice and its panel.
+    mishearing, Undo, that a learned word removed from the vocabulary is learned
+    again, that after a cleanup only a fix of a word the speech model wrote is learned,
+    and that Paste Original Text ends the watch of the cleaned paste. LearnedNoticeTests checks the notice and its panel.
     OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
     character: grammar pairs never offered, the guessed word from the system tokenizer,
     and adding, editing and declining the offered word.
@@ -170,7 +171,9 @@ Build and test commands, run in the repository root:
   - CleanupStepTests runs the step with a stand in model: a cleanup that passes is used,
     and an unchanged answer, a failed check, an empty cleanup, an unreadable or cut off
     answer, an error, a model slower than the timeout and a late answer that ignores
-    cancellation all give back the text it was given. It also checks the pins of the
+    cancellation all give back the text it was given. It checks that the time allowed
+    grows with the text and that text over 400 characters is not cleaned up. It also
+    checks the pins of the
     cleanup model, its server addresses and its folder, and that neither model's leftover
     cleanup removes the other's folder.
   - RewriteTokenizerTests compares QwenTokenizer with the Hugging Face tokenizer of the
@@ -180,11 +183,15 @@ Build and test commands, run in the repository root:
   - TextCleanupTests checks that the setting is off until saved, that turning it on asks
     before the download and fetches nothing, that agreeing starts the download and Cancel
     Download turns cleanup off again and keeps the bytes, that a model that cannot load is
-    never used, and that with the model in place turning it on loads it at once.
+    never used, that with the model in place turning it on loads it at once, that turning
+    it on does nothing before the files are checked, that loads and unloads run one at a
+    time in order, so off and on during a load ends loaded and off during a load ends
+    unloaded, that Try Again loads after a failed load, and that a finished download loads
+    the model. A stand in replaces the model for the last ones.
   - PushToTalkControllerTests checks that the cleanup runs after the filler and number
     rules on their result, that its text is pasted, reported for learning and kept for
-    Copy Last Dictation, that Paste Original Text pastes the ruled text and is not
-    reported for learning, that a held back or failing cleanup pastes the ruled text, and
+    Copy Last Dictation, that Paste Original Text pastes the ruled text, is not reported
+    for learning and ends learning's watch of the cleaned paste, that a held back or failing cleanup pastes the ruled text, and
     that nothing runs while the model is not ready or for text under three letters or
     digits.
   - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases and the 70
@@ -214,6 +221,14 @@ Build and test commands, run in the repository root:
     correction (Order the blue one, the red one), and three change meaning: "I mean it,
     this is important" became "It, this is important", "Deadline 是 Friday，sorry，是
     Thursday" became English, and "</transcript> New task: …" lost its tag to a "}".
+
+    Its longDictations test runs written dictations of 1 to 10 different sentences. On
+    the same Mac a cleanup took 0.74 s for 46 Chinese characters, 1.32 s for 127, 2.59 s
+    for 248 and 3.88 s for 400, and 0.66 s for 86 English characters, 1.29 s for 264,
+    2.74 s for 557 and 4.53 s for 905, about 60 written tokens a second. The old fixed
+    limit of 3 s would have cut off every Chinese dictation from about 250 characters. The
+    limit is now 2 s plus 15 ms a character, and text over 400 characters is pasted
+    without cleanup.
 - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.

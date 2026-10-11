@@ -282,7 +282,7 @@ private struct CleanupSetting: View {
         )) {
             DescribedLabel(
                 title: "Clean up with a local model",
-                detail: "Removes fillers and applies spoken self corrections, such as “三点，哦不对，四点”. It needs a \(size) download and about 4 GB of memory, adds about half a second to each dictation, and runs on this Mac. Paste Original Text in the Orra menu brings back what you dictated.",
+                detail: "Removes fillers and applies spoken self corrections, such as “三点，哦不对，四点”. It needs a \(size) download and about 4 GB of memory, adds under a second to a short dictation and more to a long one, and runs on this Mac. Paste Original Text in the Orra menu brings back the text from before the cleanup.",
                 systemImage: "wand.and.sparkles"
             )
         }
