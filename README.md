@@ -7,7 +7,8 @@ Orra is an open source voice input app for the Mac. Hold a key, speak, let go, a
 Orra is an early preview. Expect rough edges, and expect the design to change.
 
 <p align="center">
-  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/Download-Orra%20for%20macOS-0A84FF?style=for-the-badge&logo=apple&logoColor=white" alt="Download Orra for macOS" height="40"></a><br>
+  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/-Download%20Orra%20for%20macOS-0A84FF?style=for-the-badge&logo=apple&logoColor=white" alt="Download Orra for macOS" height="40"></a>
+  <a href="https://db-ol.github.io/Orra/"><img src="https://img.shields.io/badge/-Website-555555?style=for-the-badge&logo=safari&logoColor=white" alt="Orra website" height="40"></a><br>
   For Macs with Apple Silicon and macOS 15.6 or later
 </p>
 
