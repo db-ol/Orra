@@ -81,9 +81,13 @@ final class PushToTalkController {
     private(set) var originalText: String?
     /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
     @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
-    /// Told after each paste, with the text and the app it went into, so Orra can learn
-    /// from a correction. AppDelegate sets it.
-    @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t) -> Void = { _, _ in }
+    /// Told after each paste, with the text, the app it went into and the text before the
+    /// cleanup model changed it, if it did, so Orra can learn from a correction.
+    /// AppDelegate sets it.
+    @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t, _ beforeCleanup: String?) -> Void = { _, _, _ in }
+    /// Told when Paste Original Text pastes over a cleaned paste, with the cleaned text, so
+    /// learning stops following it.
+    @ObservationIgnored var onPasteOriginal: (_ cleaned: String) -> Void = { _ in }
 
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
@@ -603,7 +607,7 @@ final class PushToTalkController {
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(released.duration(to: .now), privacy: .public) for \(recording.duration, privacy: .public) s of audio")
                 if let app = target ?? frontmostApp() {
-                    onPasted(text, app)
+                    onPasted(text, app, originalText)
                 }
             case .skippedPasswordField:
                 notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
@@ -621,6 +625,9 @@ final class PushToTalkController {
     /// paste, and Copy Last Dictation still copies the cleaned text.
     func pasteOriginal() async {
         guard state == .idle, let originalText else { return }
+        if let lastTranscript {
+            onPasteOriginal(lastTranscript)
+        }
         switch await insert(originalText) {
         case .pasted, .nothingToInsert:
             break

@@ -489,6 +489,53 @@ struct CorrectionLearningTests {
         #expect(vocabulary.words == ["Claude"])
     }
 
+    /// Waits until the field's reads have stopped for a while.
+    private func waitForReads(_ field: ScriptedField) async {
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+    }
+
+    /// After a cleanup, a fix of a word the speech model wrote is learned, and a fix of a
+    /// word only the cleanup model wrote is not.
+    @Test func afterACleanupOnlyFixesOfDictatedWordsAreLearned() async {
+        let cleaned = "我在用克劳德写代码"
+        let field = ScriptedField([cleaned, cleaned, "我在用Claude写代码"])
+        let learning = makeLearning(isOn: true, field: field)
+        learning.pasted(cleaned, in: 42, beforeCleanup: "我在用那个克劳德写代码")
+        await waitForReads(field)
+        #expect(accepted(learning) == [pair])
+
+        // Here the cleanup model wrote 克劳德, so fixing it teaches nothing about the speech.
+        let other = ScriptedField([cleaned, cleaned, "我在用Claude写代码"])
+        let vocabulary = VocabularyBox()
+        let second = makeLearning(isOn: true, field: other, vocabulary: vocabulary)
+        second.pasted(cleaned, in: 42, beforeCleanup: "我在用 cloud 写代码")
+        await waitForReads(other)
+        #expect(second.store.entries.isEmpty)
+        #expect(vocabulary.words.isEmpty)
+    }
+
+    /// Paste Original Text over a cleaned paste ends that paste's watch, so the text it
+    /// puts back is not learned as a correction.
+    @Test func pastingTheOriginalEndsTheWatchOfTheCleanedPaste() async {
+        let cleaned = "我在用克劳德写代码"
+        let field = ScriptedField([cleaned, cleaned, cleaned, "我在用Claude写代码"])
+        let learning = makeLearning(isOn: true, field: field)
+        learning.pasted(cleaned, in: 42, beforeCleanup: "我在用那个克劳德写代码")
+        for _ in 0..<1_000 where field.reads < 1 {
+            await Task.yield()
+        }
+        learning.pastedOriginal(replacing: cleaned)
+        await waitForReads(field)
+        #expect(field.reads < 3)
+        #expect(learning.store.entries.isEmpty)
+    }
+
     @Test func undoKeepsAWordTheUserHadAddedBefore() {
         let vocabulary = VocabularyBox()
         vocabulary.words = ["Claude"]

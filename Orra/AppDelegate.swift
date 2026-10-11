@@ -130,7 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 feedback.handle(cue)
             }
         }
-        pushToTalk.onPasted = { [learning] text, app in learning.pasted(text, in: app) }
+        pushToTalk.onPasted = { [learning] text, app, beforeCleanup in learning.pasted(text, in: app, beforeCleanup: beforeCleanup) }
+        pushToTalk.onPasteOriginal = { [learning] cleaned in learning.pastedOriginal(replacing: cleaned) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         learning.onSuggest = { [learnedNotice] suggestion in learnedNotice.suggest(suggestion) }
         pushToTalk.start()

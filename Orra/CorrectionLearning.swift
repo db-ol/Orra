@@ -113,7 +113,7 @@ final class CorrectionWatcher {
     }
 
     private let environment: Environment
-    private var watches: [(id: Int, task: Task<Void, Never>, control: Control)] = []
+    private var watches: [(id: Int, pasted: String, task: Task<Void, Never>, control: Control)] = []
     private var nextID = 0
     private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "learning")
 
@@ -205,7 +205,7 @@ final class CorrectionWatcher {
             guard !Task.isCancelled else { return }
             report()
         }
-        watches.append((id, task, control))
+        watches.append((id, pasted, task, control))
     }
 
     /// Off the main actor, because the keyboard tap runs there.
@@ -219,6 +219,14 @@ final class CorrectionWatcher {
             watch.task.cancel()
         }
         watches = []
+    }
+
+    /// Ends the watches of this pasted text without reporting more.
+    func stop(pasted: String) {
+        for watch in watches where watch.pasted == pasted {
+            watch.task.cancel()
+        }
+        watches.removeAll { $0.pasted == pasted }
     }
 }
 
@@ -327,10 +335,15 @@ final class CorrectionLearning {
             .appendingPathComponent("io.github.db-ol.Orra/corrections.json")
     }
 
-    /// Called after each paste. Does nothing while learning is off.
-    func pasted(_ text: String, in pid: pid_t) {
+    /// Called after each paste. Does nothing while learning is off. When the cleanup model
+    /// changed the dictation, `beforeCleanup` is the text before it, and only a fix of a word
+    /// in that text is learned. A fix of what the model wrote is no misheard word.
+    func pasted(_ text: String, in pid: pid_t, beforeCleanup: String? = nil) {
         guard isOn else { return }
         watcher.watch(pasted: text, in: pid) { [weak self] finding, earlier in
+            if let beforeCleanup, !beforeCleanup.contains(finding.correction.heard) {
+                return
+            }
             switch finding {
             case .word(let correction):
                 self?.record(correction, replacing: earlier?.correction)
@@ -338,6 +351,12 @@ final class CorrectionLearning {
                 self?.suggest(suggestion, replacing: earlier?.correction)
             }
         }
+    }
+
+    /// Paste Original Text replaced a cleaned paste: its watch ends, so putting back the
+    /// text before the cleanup is not taken for a correction.
+    func pastedOriginal(replacing cleaned: String) {
+        watcher.stop(pasted: cleaned)
     }
 
     /// Offers the guessed word, unless it is in the vocabulary, this pair was declined, or

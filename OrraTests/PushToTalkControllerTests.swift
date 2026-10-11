@@ -1159,7 +1159,10 @@ struct PushToTalkControllerTests {
     @Test func thePasteIsReported() async throws {
         let controller = await makeController()
         var reported: [(String, pid_t)] = []
-        controller.onPasted = { reported.append(($0, $1)) }
+        controller.onPasted = { text, app, beforeCleanup in
+            reported.append((text, app))
+            #expect(beforeCleanup == nil)
+        }
         try await dictate(controller)
         #expect(inserter.inserted == ["你好"])
         #expect(reported.map(\.0) == ["你好"])
@@ -1194,18 +1197,27 @@ struct PushToTalkControllerTests {
             return #"{"cleaned": "我们下午3点开会。"}"#
         }))
         var reported: [String] = []
-        controller.onPasted = { text, _ in reported.append(text) }
+        var beforeCleanup: [String?] = []
+        var stopped: [String] = []
+        controller.onPasted = { text, _, before in
+            reported.append(text)
+            beforeCleanup.append(before)
+        }
+        controller.onPasteOriginal = { stopped.append($0) }
         speech.reply = "呃，我们下午两点，哦不对，下午三点开会。"
         try await dictate(controller)
         #expect(received.withLock { $0 } == ["我们下午2点，哦不对，下午3点开会。"])
         #expect(inserter.inserted == ["我们下午3点开会。"])
         #expect(reported == ["我们下午3点开会。"])
+        #expect(beforeCleanup == ["我们下午2点，哦不对，下午3点开会。"])
+        #expect(stopped.isEmpty)
         #expect(controller.lastTranscript == "我们下午3点开会。")
         #expect(controller.originalText == "我们下午2点，哦不对，下午3点开会。")
         await controller.pasteOriginal()
         #expect(inserter.inserted == ["我们下午3点开会。", "我们下午2点，哦不对，下午3点开会。"])
-        // Orra does not learn from the menu's paste.
+        // Orra does not learn from the menu's paste, and stops following the cleaned one.
         #expect(reported == ["我们下午3点开会。"])
+        #expect(stopped == ["我们下午3点开会。"])
     }
 
     @Test func aHeldBackCleanupPastesTheRuledText() async throws {
