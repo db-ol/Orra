@@ -156,6 +156,61 @@ struct VocabularyTests {
         #expect(VocabularyPreference.load(from: defaults).map(\.text) == ["Orra"])
     }
 
+    @MainActor
+    @Test func tableRowsShowWhereAWordCameFromAndHowItWasMisheard() {
+        var store = CorrectionStore()
+        let date = Date(timeIntervalSince1970: 1_000)
+        for heard in ["Aura", "Ora", "Aura"] {
+            store.record(Correction(heard: heard, corrected: "Orra"), at: date)
+        }
+        _ = store.acceptSeen(of: "Orra")
+        // Seen only, not learned.
+        store.record(Correction(heard: "Quen", corrected: "Qwen"), at: date)
+        let used = Date(timeIntervalSince1970: 9_000)
+        let words = [VocabularyWord("orra", added: date), VocabularyWord("Qwen", added: date, lastUsed: used)]
+        let rows = VocabularyList.rows(words, store: store)
+        #expect(rows.map(\.isLearned) == [true, false])
+        #expect(rows.map(\.heardAs) == ["Aura, Ora", ""])
+        #expect(rows.map(\.lastUsed) == [nil, used])
+        #expect(rows[1].lastActive == used)
+    }
+
+    @MainActor
+    @Test func removingFromTheTableForgetsLearnedWords() {
+        let controller = PushToTalkController(capture: FakeMicrophone().capture, transcription: FakeSpeech().transcription, insert: { _ in .pasted })
+        let learning = CorrectionLearning(
+            isOn: true,
+            store: CorrectionStore(),
+            watcher: CorrectionWatcher(),
+            saveSetting: { _ in },
+            saveStore: { _ in },
+            addToVocabulary: { controller.addToVocabulary($0) },
+            removeFromVocabulary: { controller.removeFromVocabulary([$0]) },
+            isInVocabulary: { controller.vocabularyContains($0) }
+        )
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        controller.addToVocabulary("Qwen")
+        controller.addToVocabulary("通义千问")
+        learning.record(Correction(heard: "Aura", corrected: "Orra"))
+        #expect(controller.vocabulary.map(\.text) == ["Qwen", "通义千问", "Orra"])
+        #expect(learning.store.acceptedWords == ["Orra"])
+        VocabularyList.remove(["orra", "qwen"], pushToTalk: controller, learning: learning)
+        #expect(controller.vocabulary.map(\.text) == ["通义千问"])
+        #expect(learning.store.acceptedWords.isEmpty)
+        // The next fix learns it again, with the notice.
+        learning.record(Correction(heard: "Aura", corrected: "Orra"))
+        #expect(learned.map(\.outcome) == [.added, .added])
+        #expect(controller.vocabulary.map(\.text) == ["通义千问", "Orra"])
+    }
+
+    @MainActor
+    @Test func theHeaderSaysHowManyWordsTheModelGets() {
+        #expect(VocabularyList.summary(count: 1) == "1 word")
+        #expect(VocabularyList.summary(count: 200) == "200 words")
+        #expect(VocabularyList.summary(count: 236) == "236 words. Orra gives the 200 most recently added or used to the speech model.")
+    }
+
     @Test func onlyTermsInAnyOrderAndRepeatedCountAsAnEcho() {
         let terms = ["极速借呗", "IRS transcripts", "Pine Bluff", "瑞麒 G 六"]
         #expect(VocabularyEcho.isOnlyTerms("极速借呗。", of: terms))
