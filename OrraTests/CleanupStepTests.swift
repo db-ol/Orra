@@ -110,9 +110,9 @@ struct CleanupModelPinTests {
     @Test func pinnedValues() {
         let manifest = ModelManifest.qwen3Cleanup
         #expect(manifest.id == "mlx-community/Qwen3-4B-Instruct-2507-4bit")
-        #expect(manifest.files.map(\.name) == ["config.json", "generation_config.json", "tokenizer_config.json", "merges.txt", "vocab.json", "model.safetensors"])
-        #expect(manifest.totalBytes == 2_267_477_719)
-        #expect(ModelInstaller.State.size(manifest.totalBytes) == "2.27 GB")
+        #expect(manifest.files.map(\.name) == ["config.json", "generation_config.json", "tokenizer_config.json", "merges.txt", "vocab.json", "tokenizer.json", "model.safetensors"])
+        #expect(manifest.totalBytes == 2_278_900_373)
+        #expect(ModelInstaller.State.size(manifest.totalBytes) == "2.28 GB")
         for file in manifest.files {
             #expect(file.sha256.count == 64 && file.sha256.allSatisfy { "0123456789abcdef".contains($0) }, "\(file.name)")
         }
@@ -123,7 +123,7 @@ struct CleanupModelPinTests {
     }
 
     @Test func sourceURLs() {
-        let weights = ModelManifest.qwen3Cleanup.files[5]
+        let weights = ModelManifest.qwen3Cleanup.files[6]
         #expect(ModelSource.huggingFace.url(for: weights, in: .qwen3Cleanup).absoluteString
             == "https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b/model.safetensors")
         #expect(ModelSource.modelScope.url(for: weights, in: .qwen3Cleanup).absoluteString

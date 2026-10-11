@@ -14,10 +14,9 @@ nonisolated extension ModelManifest {
     /// Qwen3 4B Instruct 2507 in the 4 bit MLX build, for cleaning up dictations. Apache-2.0.
     /// Hugging Face main as of 2026-10-10, where only tokenizer_config.json changed after the
     /// upload. ModelScope's mirror in the mlx-community organization lists the same sizes and
-    /// SHA-256 values at its commit, and hf-mirror.com serves the Hugging Face commit. Only
-    /// the files mlx-swift-lm and QwenTokenizer read are fetched: tokenizer.json,
-    /// chat_template.jinja and the index are left out, since Orra builds the prompt and
-    /// tokenizes it itself and the weights are in one file.
+    /// SHA-256 values at its commit, and hf-mirror.com serves the Hugging Face commit.
+    /// tokenizer.json is for the tokenizer of swift-transformers. chat_template.jinja and the index are
+    /// left out, since Orra builds the prompt itself and the weights are in one file.
     static let qwen3Cleanup = ModelManifest(
         id: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
         huggingFaceRevision: "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b",
@@ -28,6 +27,7 @@ nonisolated extension ModelManifest {
             ModelFile(name: "tokenizer_config.json", size: 5_440, sha256: "4397cc477eb6d79715ccd2000accd6b3531928f30029665832fa1b255f24d2b9"),
             ModelFile(name: "merges.txt", size: 1_671_853, sha256: "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"),
             ModelFile(name: "vocab.json", size: 2_776_833, sha256: "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"),
+            ModelFile(name: "tokenizer.json", size: 11_422_654, sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"),
             ModelFile(name: "model.safetensors", size: 2_263_022_417, sha256: "2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f", resumable: true),
         ]
     )
