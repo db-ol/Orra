@@ -4,10 +4,10 @@ import Observation
 /// Shows the recording indicator and plays the start and stop sounds, following the
 /// controller's cues. Settings can turn either off.
 ///
-/// The indicator shows a level meter while Orra listens, a spinner while it transcribes,
-/// and for a few seconds the reason when a hold ends without a paste. In between, while
-/// Orra can dictate, a small bar at the bottom of the screen shows that it is ready, unless
-/// Settings turns it off.
+/// The indicator shows white bars that move with the voice while Orra listens, a slow wave
+/// of the same bars while it transcribes, and for a few seconds the reason when a hold
+/// ends without a paste. In between, while Orra can dictate, a small bar at the bottom of
+/// the screen shows that it is ready, unless Settings turns it off.
 @Observable
 final class RecordingFeedback {
     /// What the indicator shows.
