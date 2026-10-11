@@ -173,7 +173,7 @@ struct TalkKeyDetectorTests {
 
     @Test func fnPassesThroughWhenItIsNotATalkKey() {
         // With the default keys, fn keeps its system action, such as the emoji picker.
-        var detector = TalkKeyDetector(keys: TalkKey.defaultKeys, handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
         #expect(fnDown(&detector) == .passThrough)
         #expect(detector.phase == .up)
         #expect(fnUp(&detector) == .passThrough)
@@ -182,7 +182,7 @@ struct TalkKeyDetectorTests {
     // MARK: Right Control, the default
 
     @Test func rightControlAloneIsAHoldAndItsEventsPassThrough() {
-        var detector = TalkKeyDetector(keys: TalkKey.defaultKeys, handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
         #expect(rightControlDown(&detector) == Decision(event: .pressed(isRepeat: false), swallow: false))
         #expect(detector.phase == .holding(.rightControl))
         #expect(rightControlUp(&detector) == Decision(event: .released, swallow: false))
@@ -271,7 +271,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func rightControlClickIsAShortcutNotADictation() {
-        var detector = TalkKeyDetector(keys: TalkKey.defaultKeys, handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
         var machine = PushToTalkStateMachine()
         var transitions: [PushToTalkStateMachine.Transition] = []
         func feed(_ event: PushToTalkStateMachine.Event?) {
@@ -393,7 +393,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func rightControlHoldStartsListeningAndReleaseStartsProcessing() {
-        let run = transitions(keys: TalkKey.defaultKeys, for: [
+        let run = transitions(keys: [TalkKey.defaultKey], for: [
             (.flagsChanged, Self.rightControl, [.maskControl, Self.rightControlBit]),
             (.flagsChanged, Self.rightControl, []),
         ])
@@ -498,7 +498,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func rightControlCIsAShortcutNotADictation() {
-        let run = transitions(keys: TalkKey.defaultKeys, for: [
+        let run = transitions(keys: [TalkKey.defaultKey], for: [
             (.flagsChanged, Self.rightControl, [.maskControl, Self.rightControlBit]),
             (.keyDown, Self.c, [.maskControl, Self.rightControlBit]),
             (.flagsChanged, Self.rightControl, []),

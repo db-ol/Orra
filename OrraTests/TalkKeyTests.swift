@@ -49,7 +49,19 @@ struct TalkKeyTests {
     }
 
     @Test func rightControlIsTheDefault() {
-        #expect(TalkKey.defaultKeys == [.rightControl])
+        #expect(TalkKey.defaultKey == .rightControl)
+    }
+
+    @Test func severalKeysKeepOneByAFixedOrder() {
+        #expect(TalkKey.keepOrder.count == TalkKey.allCases.count)
+        #expect(Set(TalkKey.keepOrder) == Set(TalkKey.allCases))
+        #expect(TalkKey.kept(from: Set(TalkKey.allCases)) == .fn)
+        #expect(TalkKey.kept(from: [.rightControl, .fn]) == .fn)
+        #expect(TalkKey.kept(from: [.leftCommand, .rightControl, .rightOption]) == .rightControl)
+        #expect(TalkKey.kept(from: [.leftOption, .rightCommand]) == .rightCommand)
+        #expect(TalkKey.kept(from: [.leftCommand, .leftControl]) == .leftControl)
+        #expect(TalkKey.kept(from: [.leftCommand]) == .leftCommand)
+        #expect(TalkKey.kept(from: []) == nil)
     }
 
     @Test func otherModifiersForFnAreUnchanged() {
@@ -91,14 +103,10 @@ struct TalkKeyTests {
         #expect(TalkKey.allCases.filter(\.modifiesClicks) == [.rightControl, .rightOption, .rightCommand, .leftControl, .leftOption, .leftCommand])
     }
 
-    @Test func holdHintNamesTheKeysInMenuOrder() {
-        #expect(TalkKey.holdHint(for: [.rightControl]) == "Hold right Control to talk")
-        #expect(TalkKey.holdHint(for: [.fn, .rightControl]) == "Hold right Control or fn to talk")
-        #expect(TalkKey.holdHint(for: [.fn, .rightOption, .rightControl]) == "Hold right Control, right Option or fn to talk")
-        #expect(TalkKey.holdHint(for: [.fn, .rightOption, .rightCommand, .rightControl]) == "Hold right Control, right Option, right Command or fn to talk")
-        #expect(TalkKey.holdHint(for: [.fn, .leftCommand, .rightOption, .rightCommand, .rightControl]) == "Hold right Control, right Option, right Command, left Command or fn to talk")
-        #expect(TalkKey.holdHint(for: Set(TalkKey.allCases)) == "Hold right Control, right Option, right Command, left Control, left Option, left Command or fn to talk")
-        #expect(TalkKey.holdHint(for: []) == "No talk key is set")
+    @Test func holdHintNamesTheKey() {
+        #expect(TalkKey.rightControl.holdHint() == "Hold right Control to talk")
+        #expect(TalkKey.leftCommand.holdHint() == "Hold left Command to talk")
+        #expect(TalkKey.fn.holdHint() == "Hold fn to talk")
     }
 
     @Test func onlyFnSwallowsItsEvents() {
@@ -157,26 +165,41 @@ struct TalkKeyPreferenceTests {
 
     @Test func nothingSavedMeansTheDefault() {
         withDefaults("nothingSaved") { defaults in
-            #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKeys)
+            #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKey)
         }
     }
 
-    @Test func savedKeysComeBack() {
+    @Test func theSavedKeyComesBack() {
         withDefaults("saved") { defaults in
-            TalkKeyPreference.save([.fn, .rightOption], to: defaults)
-            #expect(TalkKeyPreference.load(from: defaults) == [.fn, .rightOption])
-            #expect(defaults.stringArray(forKey: TalkKeyPreference.defaultsKey) == ["rightOption", "fn"])
+            TalkKeyPreference.save(.rightOption, to: defaults)
+            #expect(TalkKeyPreference.load(from: defaults) == .rightOption)
+            // Saved as a list of one, the way Orra 0.1.0 reads it.
+            #expect(defaults.stringArray(forKey: TalkKeyPreference.defaultsKey) == ["rightOption"])
+        }
+    }
+
+    @Test func severalSavedKeysKeepOne() {
+        withDefaults("several") { defaults in
+            // As Orra 0.1.0 saved them, with several keys on.
+            defaults.set(["rightControl", "rightOption", "rightCommand", "fn"], forKey: TalkKeyPreference.defaultsKey)
+            #expect(TalkKeyPreference.load(from: defaults) == .fn)
+            defaults.set(["rightControl", "rightCommand"], forKey: TalkKeyPreference.defaultsKey)
+            #expect(TalkKeyPreference.load(from: defaults) == .rightControl)
+            defaults.set(["rightOption", "leftControl", "leftCommand"], forKey: TalkKeyPreference.defaultsKey)
+            #expect(TalkKeyPreference.load(from: defaults) == .rightOption)
+            defaults.set(["leftOption", "leftCommand"], forKey: TalkKeyPreference.defaultsKey)
+            #expect(TalkKeyPreference.load(from: defaults) == .leftOption)
         }
     }
 
     @Test func unknownKeysAreIgnored() {
         withDefaults("unknown") { defaults in
-            defaults.set(["leftShift", "fn"], forKey: TalkKeyPreference.defaultsKey)
-            #expect(TalkKeyPreference.load(from: defaults) == [.fn])
+            defaults.set(["leftShift", "leftOption"], forKey: TalkKeyPreference.defaultsKey)
+            #expect(TalkKeyPreference.load(from: defaults) == .leftOption)
             defaults.set(["leftShift"], forKey: TalkKeyPreference.defaultsKey)
-            #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKeys)
+            #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKey)
             defaults.set([String](), forKey: TalkKeyPreference.defaultsKey)
-            #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKeys)
+            #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKey)
         }
     }
 }
@@ -191,7 +214,7 @@ struct HandsFreePreferenceTests {
         HandsFreePreference.save(false, to: defaults)
         #expect(HandsFreePreference.load(from: defaults) == false)
         #expect(TalkKeyPreference.isSaved(in: defaults) == false)
-        TalkKeyPreference.save([.fn], to: defaults)
+        TalkKeyPreference.save(.fn, to: defaults)
         #expect(TalkKeyPreference.isSaved(in: defaults))
     }
 }

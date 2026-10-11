@@ -43,12 +43,12 @@ final class PushToTalkController {
 
     /// The current push to talk state.
     private(set) var state: PushToTalkStateMachine.State = .idle
-    /// The keys that start a dictation when held on their own. Saved through
-    /// `saveTalkKeys` whenever they change.
-    private(set) var talkKeys: Set<TalkKey>
-    /// Whether the user has chosen talk keys, here or in an earlier launch. The welcome
+    /// The key that starts a dictation when held on its own. Saved through `saveTalkKey`
+    /// whenever it changes.
+    private(set) var talkKey: TalkKey
+    /// Whether the user has chosen the talk key, here or in an earlier launch. The welcome
     /// window marks its talk key step as done then.
-    private(set) var hasChosenTalkKeys: Bool
+    private(set) var hasChosenTalkKey: Bool
     /// Whether a quick double press of the talk key starts a hands free dictation. Saved
     /// through `saveHandsFree` whenever it changes.
     private(set) var handsFreeOn: Bool
@@ -134,7 +134,7 @@ final class PushToTalkController {
     @ObservationIgnored private var userActivity: (any NSObjectProtocol)?
     @ObservationIgnored private var machine = PushToTalkStateMachine()
     @ObservationIgnored private var tap: HotkeyTap?
-    @ObservationIgnored private let saveTalkKeys: (Set<TalkKey>) -> Void
+    @ObservationIgnored private let saveTalkKey: (TalkKey) -> Void
     @ObservationIgnored private let saveHandsFree: (Bool) -> Void
     /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
     /// installed, which needs no permission.
@@ -167,9 +167,9 @@ final class PushToTalkController {
     ///     `watchAccess()`.
     ///   - listeningCueDelay: How long a hold lasts before the indicator shows and the
     ///     start sound plays. A shortcut with the talk key is over sooner.
-    ///   - talkKeys: The keys that start a dictation, as saved by the user.
-    ///   - saveTalkKeys: Saves the keys after the user changes them.
-    ///   - talkKeysChosen: Whether the user has saved talk keys before.
+    ///   - talkKey: The key that starts a dictation, as saved by the user.
+    ///   - saveTalkKey: Saves the key after the user changes it.
+    ///   - talkKeyChosen: Whether the user has saved a talk key before.
     ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
     ///   - saveHandsFree: Saves the choice after the user changes it.
     ///   - microphone: The microphone the user chose, or nil for the system default.
@@ -193,9 +193,9 @@ final class PushToTalkController {
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
         listeningCueDelay: Duration = .milliseconds(150),
-        talkKeys: Set<TalkKey> = TalkKey.defaultKeys,
-        saveTalkKeys: @escaping (Set<TalkKey>) -> Void = { _ in },
-        talkKeysChosen: Bool = false,
+        talkKey: TalkKey = TalkKey.defaultKey,
+        saveTalkKey: @escaping (TalkKey) -> Void = { _ in },
+        talkKeyChosen: Bool = false,
         handsFree: Bool = true,
         saveHandsFree: @escaping (Bool) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
@@ -219,9 +219,9 @@ final class PushToTalkController {
         self.releaseTail = releaseTail
         self.accessCheckDelay = accessCheckDelay
         self.listeningCueDelay = listeningCueDelay
-        self.talkKeys = talkKeys.isEmpty ? TalkKey.defaultKeys : talkKeys
-        self.saveTalkKeys = saveTalkKeys
-        self.hasChosenTalkKeys = talkKeysChosen
+        self.talkKey = talkKey
+        self.saveTalkKey = saveTalkKey
+        self.hasChosenTalkKey = talkKeyChosen
         self.handsFreeOn = handsFree
         self.saveHandsFree = saveHandsFree
         self.microphone = microphone
@@ -241,7 +241,7 @@ final class PushToTalkController {
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
-        tap = HotkeyTap(keys: talkKeys, handsFree: handsFreeOn, install: installTap) { [weak self] event in
+        tap = HotkeyTap(keys: [talkKey], handsFree: handsFreeOn, install: installTap) { [weak self] event in
             self?.handle(event)
         } onSwitchedOff: { [weak self] reason in
             self?.tapWasSwitchedOff(reason)
@@ -308,31 +308,14 @@ final class PushToTalkController {
         saveMicrophone(choice)
     }
 
-    /// Turns a talk key on or off and saves the choice. The last key stays on, so
-    /// dictation cannot be switched off by accident.
-    func setTalkKey(_ key: TalkKey, on: Bool) {
-        var keys = talkKeys
-        if on {
-            keys.insert(key)
-        } else {
-            keys.remove(key)
-        }
-        guard !keys.isEmpty, keys != talkKeys else { return }
-        applyTalkKeys(keys)
-    }
-
-    /// Makes `key` the only talk key and saves the choice, as when the user presses the key
-    /// they want. Saved even when it is the key in use already, such as the default, so
-    /// the welcome window counts the step as done on the next launch too.
+    /// Makes `key` the talk key and saves the choice. Saved even when it is the key in use
+    /// already, such as the default, so the welcome window counts the step as done on the
+    /// next launch too.
     func chooseTalkKey(_ key: TalkKey) {
-        applyTalkKeys([key])
-    }
-
-    private func applyTalkKeys(_ keys: Set<TalkKey>) {
-        hasChosenTalkKeys = true
-        talkKeys = keys
-        saveTalkKeys(keys)
-        tap?.setKeys(keys)
+        hasChosenTalkKey = true
+        talkKey = key
+        saveTalkKey(key)
+        tap?.setKeys([key])
     }
 
     /// Turns double press for hands free on or off and saves the choice.
@@ -344,7 +327,7 @@ final class PushToTalkController {
     }
 
     /// Starts listening for the key the user wants as the talk key. The next press of a
-    /// modifier that can be a talk key becomes the only talk key. Shift and other keys
+    /// modifier that can be a talk key becomes the talk key. Shift and other keys
     /// leave a note and keep listening, Escape stops. Only presses in Orra count: the tap
     /// checks that Orra is the active app, and without the tap a local monitor sees only
     /// Orra's own events. Neither needs a new permission.
@@ -396,9 +379,9 @@ final class PushToTalkController {
     }
 
     /// The key that finishes the hands free dictation in progress, for the indicator: the
-    /// key that started it, or the first talk key.
-    private var handsFreeKey: TalkKey? {
-        tap?.activeKey ?? TalkKey.allCases.first(where: talkKeys.contains)
+    /// key that started it, or the talk key.
+    private var handsFreeKey: TalkKey {
+        tap?.activeKey ?? talkKey
     }
 
     /// Shows the system prompt that leads to Privacy & Security > Accessibility.
@@ -627,7 +610,7 @@ final class PushToTalkController {
                 onCue(.listening)
             case .handsFree:
                 indicatorShown = true
-                onCue(.handsFree(finishHint: handsFreeKey?.finishHint() ?? ""))
+                onCue(.handsFree(finishHint: handsFreeKey.finishHint()))
             case .idle, .waitingForSecondPress, .processing:
                 break
             }

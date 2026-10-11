@@ -34,7 +34,7 @@ struct WelcomeView: View {
                 AccessibilityStepDetail(pushToTalk: pushToTalk)
             }
             // Not part of the checklist: right Control works when the user skips it.
-            SetupStepRow(number: 4, status: pushToTalk.hasChosenTalkKeys ? .done : .todo, title: "Choose your talk key") {
+            SetupStepRow(number: 4, status: pushToTalk.hasChosenTalkKey ? .done : .todo, title: "Choose your talk key") {
                 TalkKeyStepDetail(pushToTalk: pushToTalk)
             }
             if checklist.isComplete {
@@ -211,7 +211,7 @@ private struct TalkKeyStepDetail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(verbatim: TalkKey.holdHint(for: pushToTalk.talkKeys))
+            Text(verbatim: pushToTalk.talkKey.holdHint())
                 .foregroundStyle(.secondary)
             if let keyboard {
                 recommendation(for: keyboard)
@@ -240,7 +240,7 @@ private struct TalkKeyStepDetail: View {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 // Also shown while the recommended key is only the default, so keeping it
                 // completes the step.
-                if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKeys != [recommended] || !pushToTalk.hasChosenTalkKeys {
+                if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKey != recommended || !pushToTalk.hasChosenTalkKey {
                     Button("Use \(recommended.nameInSentence)") {
                         pushToTalk.chooseTalkKey(recommended)
                     }
@@ -257,7 +257,7 @@ private struct AccessibilityStepDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if pushToTalk.isHotkeyActive {
-                Text(verbatim: TalkKey.holdHint(for: pushToTalk.talkKeys))
+                Text(verbatim: pushToTalk.talkKey.holdHint())
                     .foregroundStyle(.secondary)
             } else {
                 Text("Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here.")

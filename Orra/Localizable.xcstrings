@@ -67,23 +67,6 @@
         }
       }
     },
-    "%@, %@" : {
-      "comment" : "Talk key names in a list",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, %2$@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@、%2$@"
-          }
-        }
-      }
-    },
     "%lld of %lld words" : {
       "localizations" : {
         "en" : {
@@ -236,6 +219,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "取消下载"
+          }
+        }
+      }
+    },
+    "Change Talk Key…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改说话键…"
           }
         }
       }
@@ -506,60 +499,12 @@
         }
       }
     },
-    "Hold %@ or %@ to talk" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Hold %1$@ or %2$@ to talk"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住%1$@或%2$@说话"
-          }
-        }
-      }
-    },
     "Hold %@ to talk" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住%@说话"
-          }
-        }
-      }
-    },
-    "Hold %@, %@ or %@ to talk" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Hold %1$@, %2$@ or %3$@ to talk"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住%1$@、%2$@或%3$@说话"
-          }
-        }
-      }
-    },
-    "Hold %@, %@, %@ or %@ to talk" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Hold %1$@, %2$@, %3$@ or %4$@ to talk"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住%1$@、%2$@、%3$@或%4$@说话"
           }
         }
       }
@@ -760,16 +705,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有识别到语音"
-          }
-        }
-      }
-    },
-    "No talk key is set" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未设置说话键"
           }
         }
       }
@@ -1445,6 +1380,26 @@
       }
     },
     "Talk Key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键"
+          }
+        }
+      }
+    },
+    "Talk Key: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键：%@"
+          }
+        }
+      }
+    },
+    "Talk key" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {

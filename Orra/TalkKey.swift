@@ -2,8 +2,8 @@ import CoreGraphics
 import Foundation
 import IOKit
 
-/// A key that starts a dictation while it is held on its own. The user picks one or more
-/// in the menu, in Settings or in the welcome window, and right Control is the default.
+/// The key that starts a dictation while it is held on its own. The user picks one by
+/// pressing it, in Settings or in the welcome window, and right Control is the default.
 ///
 /// The left and right Control, Option and Command keys and fn are offered. Shift is not,
 /// because Shift on its own switches Chinese input methods between Chinese and English,
@@ -25,7 +25,19 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
     /// row of most external keyboards, and the Fn key of many of those, such as the
     /// Logitech MX Keys, never reaches the Mac. The welcome window recommends fn on a
     /// Mac's built in keyboard and lets the user press the key they want.
-    static let defaultKeys: Set<TalkKey> = [.rightControl]
+    static let defaultKey: TalkKey = .rightControl
+
+    /// Which key stays the talk key when a saved choice holds several, as Orra 0.1.0 and
+    /// earlier builds of this branch allowed. fn comes first, because right Control is the
+    /// default and so a user who turned fn on chose it on purpose. Right Control follows,
+    /// then the other right hand keys, then the left hand ones, which wait before they
+    /// record.
+    static let keepOrder: [TalkKey] = [.fn, .rightControl, .rightOption, .rightCommand, .leftControl, .leftOption, .leftCommand]
+
+    /// The key to keep from several, by `keepOrder`. Nil when `keys` is empty.
+    static func kept(from keys: Set<TalkKey>) -> TalkKey? {
+        keepOrder.first(where: keys.contains)
+    }
 
     var id: String { rawValue }
 
@@ -179,29 +191,9 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
         return flags.isDisjoint(with: downFlag.union(twinFlag)) && flags.contains(sharedFlag)
     }
 
-    /// The hint in the menu, such as "Hold right Control or fn to talk". One sentence per
-    /// number of keys up to four, so each language can join the names its own way. Five
-    /// or more keys use the sentence for two, with all but the last name joined by the
-    /// list separator of the language.
-    static func holdHint(for keys: Set<TalkKey>, bundle: Bundle = .main) -> String {
-        let names = allCases.filter(keys.contains).map { $0.sentenceName(in: bundle) }
-        switch names.count {
-        case 0:
-            return String(localized: "No talk key is set", bundle: bundle)
-        case 1:
-            return String(localized: "Hold \(names[0]) to talk", bundle: bundle)
-        case 2:
-            return String(localized: "Hold \(names[0]) or \(names[1]) to talk", bundle: bundle)
-        case 3:
-            return String(localized: "Hold \(names[0]), \(names[1]) or \(names[2]) to talk", bundle: bundle)
-        case 4:
-            return String(localized: "Hold \(names[0]), \(names[1]), \(names[2]) or \(names[3]) to talk", bundle: bundle)
-        default:
-            let first = names.dropLast().dropFirst().reduce(names[0]) { list, name in
-                String(localized: "\(list), \(name)", bundle: bundle, comment: "Talk key names in a list")
-            }
-            return String(localized: "Hold \(first) or \(names[names.count - 1]) to talk", bundle: bundle)
-        }
+    /// The hint in the menu, such as "Hold right Control to talk".
+    func holdHint(bundle: Bundle = .main) -> String {
+        String(localized: "Hold \(sentenceName(in: bundle)) to talk", bundle: bundle)
     }
 
     /// What the indicator says during a hands free dictation, such as "Press right Control
@@ -301,21 +293,25 @@ nonisolated enum HandsFreePreference {
     }
 }
 
-/// Keeps the user's talk keys in UserDefaults.
+/// Keeps the user's talk key in UserDefaults.
+///
+/// Orra 0.1.0 saved a list of keys under `defaultsKey`, and several could be on. The key is
+/// still saved there, as a list of one, so a saved choice of 0.1.0 loads and a downgrade
+/// keeps the key. A list of several keeps one, see `TalkKey.kept(from:)`.
 nonisolated enum TalkKeyPreference {
     static let defaultsKey = "talkKeys"
 
-    /// The saved keys, or the default when nothing usable is saved.
-    static func load(from defaults: UserDefaults = .standard) -> Set<TalkKey> {
+    /// The saved key, or the default when nothing usable is saved.
+    static func load(from defaults: UserDefaults = .standard) -> TalkKey {
         let saved = Set((defaults.stringArray(forKey: defaultsKey) ?? []).compactMap(TalkKey.init(rawValue:)))
-        return saved.isEmpty ? TalkKey.defaultKeys : saved
+        return TalkKey.kept(from: saved) ?? TalkKey.defaultKey
     }
 
-    static func save(_ keys: Set<TalkKey>, to defaults: UserDefaults = .standard) {
-        defaults.set(TalkKey.allCases.filter(keys.contains).map(\.rawValue), forKey: defaultsKey)
+    static func save(_ key: TalkKey, to defaults: UserDefaults = .standard) {
+        defaults.set([key.rawValue], forKey: defaultsKey)
     }
 
-    /// Whether the user has chosen keys before, so the welcome window can mark its step as
+    /// Whether the user has chosen a key before, so the welcome window can mark its step as
     /// done.
     static func isSaved(in defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: defaultsKey) != nil

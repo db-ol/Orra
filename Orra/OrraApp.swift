@@ -39,6 +39,14 @@ import SwiftUI
 /// The settings window's identity, for openWindow.
 enum SettingsWindow {
     static let id = "settings"
+    /// Posted to turn an open settings window to its General page. A window that opens
+    /// starts there anyway.
+    static let showGeneralNotification = Notification.Name("io.github.db-ol.Orra.showGeneralSettings")
+
+    /// Turns the settings window to its General page, where the talk key is chosen.
+    static func showGeneral() {
+        NotificationCenter.default.post(name: showGeneralNotification, object: nil)
+    }
 }
 
 /// Settings… with Command comma in the app menu, which also lets AppKit code open the

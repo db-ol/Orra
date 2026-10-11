@@ -146,6 +146,9 @@ struct SettingsView: View {
             }
         }
         .toolbar(removing: .sidebarToggle)
+        .onReceive(NotificationCenter.default.publisher(for: SettingsWindow.showGeneralNotification)) { _ in
+            page = .general
+        }
         .frame(minWidth: 700, idealWidth: 780, maxWidth: .infinity, minHeight: 500, idealHeight: 620, maxHeight: .infinity)
     }
 }
@@ -193,7 +196,9 @@ private struct GeneralSettings: View {
                 Text("Language")
             }
             Section {
-                TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
+                LabeledContent("Talk key") {
+                    Text(verbatim: pushToTalk.talkKey.name)
+                }
                 PressTalkKeyButton(pushToTalk: pushToTalk)
                 Toggle(isOn: Binding(
                     get: { pushToTalk.handsFreeOn },
@@ -546,23 +551,6 @@ struct PressTalkKeyButton: View {
             if !choosing {
                 startedHere = false
             }
-        }
-    }
-}
-
-/// One switch per talk key, in the menu and in Settings. The last key that is on cannot be
-/// turned off.
-struct TalkKeyToggles: View {
-    let keys: Set<TalkKey>
-    let setKey: (TalkKey, Bool) -> Void
-
-    var body: some View {
-        ForEach(TalkKey.allCases) { key in
-            Toggle(key.name, isOn: Binding(
-                get: { keys.contains(key) },
-                set: { setKey(key, $0) }
-            ))
-            .disabled(keys == [key])
         }
     }
 }

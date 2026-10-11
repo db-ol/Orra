@@ -204,51 +204,25 @@ struct PushToTalkControllerTests {
         #expect(controller.modelState == .notLoaded)
     }
 
-    @Test func talkKeysDefaultToRightControl() async {
+    @Test func theTalkKeyDefaultsToRightControl() async {
         let controller = await makeController(loadModel: false)
-        #expect(controller.talkKeys == [.rightControl])
+        #expect(controller.talkKey == .rightControl)
     }
 
-    @Test func talkKeysChangeAndAreSaved() {
-        var saved: [Set<TalkKey>] = []
+    @Test func theTalkKeyChangesAndIsSaved() {
+        var saved: [TalkKey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
-            talkKeys: [.rightControl],
-            saveTalkKeys: { saved.append($0) }
+            talkKey: .rightControl,
+            saveTalkKey: { saved.append($0) }
         )
-        controller.setTalkKey(.fn, on: true)
-        #expect(controller.talkKeys == [.rightControl, .fn])
-        controller.setTalkKey(.rightControl, on: false)
-        #expect(controller.talkKeys == [.fn])
-        #expect(saved == [[.rightControl, .fn], [.fn]])
-    }
-
-    @Test func theLastTalkKeyStaysOn() {
-        var saves = 0
-        let controller = PushToTalkController(
-            capture: mic.capture,
-            transcription: speech.transcription,
-            insert: inserter.insert,
-            talkKeys: [.fn],
-            saveTalkKeys: { _ in saves += 1 }
-        )
-        controller.setTalkKey(.fn, on: false)
-        #expect(controller.talkKeys == [.fn])
-        // Turning on a key that is already on changes nothing either.
-        controller.setTalkKey(.fn, on: true)
-        #expect(saves == 0)
-    }
-
-    @Test func anEmptySavedChoiceFallsBackToTheDefault() {
-        let controller = PushToTalkController(
-            capture: mic.capture,
-            transcription: speech.transcription,
-            insert: inserter.insert,
-            talkKeys: []
-        )
-        #expect(controller.talkKeys == TalkKey.defaultKeys)
+        controller.chooseTalkKey(.fn)
+        #expect(controller.talkKey == .fn)
+        controller.chooseTalkKey(.leftOption)
+        #expect(controller.talkKey == .leftOption)
+        #expect(saved == [.fn, .leftOption])
     }
 
     @Test func theChosenMicrophoneIsSavedAndUsedForTheNextRecording() async throws {
@@ -1322,7 +1296,7 @@ struct PushToTalkControllerTests {
         controller.handle(.released)
         #expect(controller.state == .processing)
         let key = TalkKey.fn
-        controller.setTalkKey(key, on: true)
+        controller.chooseTalkKey(key)
         var now = ContinuousClock.now
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: .maskSecondaryFn, at: now)
         now = now.advanced(by: .milliseconds(50))
@@ -1352,16 +1326,16 @@ struct PushToTalkControllerTests {
 
     // MARK: Choosing the talk key by pressing it
 
-    @Test func pressingAKeyMakesItTheOnlyTalkKey() {
-        var saved: [Set<TalkKey>] = []
+    @Test func pressingAKeyMakesItTheTalkKey() {
+        var saved: [TalkKey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
-            talkKeys: [.rightControl, .rightOption],
-            saveTalkKeys: { saved.append($0) }
+            talkKey: .rightOption,
+            saveTalkKey: { saved.append($0) }
         )
-        #expect(controller.hasChosenTalkKeys == false)
+        #expect(controller.hasChosenTalkKey == false)
         controller.startChoosingTalkKey()
         #expect(controller.isChoosingTalkKey)
         controller.keyChoice(.shift)
@@ -1372,12 +1346,12 @@ struct PushToTalkControllerTests {
         controller.keyChoice(.talkKey(.leftOption))
         #expect(controller.isChoosingTalkKey == false)
         #expect(controller.keyChoiceNote == nil)
-        #expect(controller.talkKeys == [.leftOption])
-        #expect(saved == [[.leftOption]])
-        #expect(controller.hasChosenTalkKeys)
+        #expect(controller.talkKey == .leftOption)
+        #expect(saved == [.leftOption])
+        #expect(controller.hasChosenTalkKey)
         // A press after the choice changes nothing.
         controller.keyChoice(.talkKey(.fn))
-        #expect(controller.talkKeys == [.leftOption])
+        #expect(controller.talkKey == .leftOption)
     }
 
     @Test func escapeStopsChoosingWithoutAChange() {
@@ -1385,26 +1359,26 @@ struct PushToTalkControllerTests {
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
-            talkKeys: [.fn]
+            talkKey: .fn
         )
         controller.startChoosingTalkKey()
         controller.keyChoice(.escape)
         #expect(controller.isChoosingTalkKey == false)
-        #expect(controller.talkKeys == [.fn])
+        #expect(controller.talkKey == .fn)
     }
 
     @Test func keepingTheDefaultKeySavesIt() {
-        var saved: [Set<TalkKey>] = []
+        var saved: [TalkKey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
             insert: inserter.insert,
-            talkKeys: [.rightControl],
-            saveTalkKeys: { saved.append($0) }
+            talkKey: .rightControl,
+            saveTalkKey: { saved.append($0) }
         )
-        #expect(controller.hasChosenTalkKeys == false)
+        #expect(controller.hasChosenTalkKey == false)
         controller.chooseTalkKey(.rightControl)
-        #expect(controller.hasChosenTalkKeys)
-        #expect(saved == [[.rightControl]])
+        #expect(controller.hasChosenTalkKey)
+        #expect(saved == [.rightControl])
     }
 }

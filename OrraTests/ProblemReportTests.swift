@@ -18,7 +18,7 @@ struct ProblemReportTests {
         microphoneAccess: "granted",
         accessibilityTrusted: true,
         talkKeyActive: true,
-        talkKeys: ["rightControl", "fn"],
+        talkKey: "fn",
         microphone: "System default (MacBook Pro Microphone)",
         settings: [.init(name: "Sounds", on: true), .init(name: "Show in Dock", on: false)],
         vocabularyCount: 12,
@@ -77,7 +77,7 @@ struct ProblemReportTests {
         #expect(report.contains("Preferred languages: zh-Hans-CN, en-US"))
         #expect(report.contains("Folder size: 2.5 GB"))
         #expect(report.contains("Accessibility: granted"))
-        #expect(report.contains("Talk keys: rightControl, fn"))
+        #expect(report.contains("Talk key: fn"))
         #expect(report.contains("Sounds: on"))
         #expect(report.contains("Show in Dock: off"))
         #expect(report.contains("Vocabulary: 12 words"))
