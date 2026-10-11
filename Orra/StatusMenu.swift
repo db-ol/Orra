@@ -10,7 +10,7 @@ struct StatusMenu: View {
     let updater: AppUpdater
     let showWelcome: () -> Void
     let reportProblem: () -> Void
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         // Above the talk key, so the download can start before Accessibility is granted.
@@ -117,12 +117,11 @@ struct StatusMenu: View {
             reportProblem()
         }
         Button("Settings…") {
-            // An accessory app is not the active app when its menu is used.
-            // Activate first, otherwise the settings window can open behind
-            // the frontmost app. The Settings scene owns a single window, so
-            // repeated calls bring the same window forward.
+            // An accessory app is not the active app when its menu is used. Activate
+            // first, otherwise the window can open behind the frontmost app. The window
+            // is a single one, so repeated calls bring the same window forward.
             NSApplication.shared.activate()
-            openSettings()
+            openWindow(id: SettingsWindow.id)
         }
 
         Divider()

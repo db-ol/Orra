@@ -41,6 +41,10 @@ Orra's menu and windows are in English and Simplified Chinese, in the order of y
 
 While Orra listens, a small indicator at the bottom of the screen shows bars that move with your voice, and a short sound marks the start and the end of the recording. When a dictation pastes nothing, the indicator says why. Both can be turned off in Settings.
 
+Before it pastes, Orra removes filler words that never carry meaning: 呃, 额, um, uh and erm, 嗯 unless it is an answer or comes before a reply such as 嗯，好的, and 啊 or 哦 that opens a clause before a comma, unless a correction such as 不是 follows. A filler in quotation marks stays. Words that can mean something, such as 好啊, 吧, 呢, 那个 and like, stay as you said them. Self corrections such as "三点，哦不是四点" are not applied. Settings, General turns filler removal off.
+
+Orra also writes numbers that the speech model spelled out in Chinese as digits, only where a reader clearly expects digits: 二零二六年十月十号 becomes 2026年10月10号, 下午三点半 becomes 下午3点半, 百分之五十 becomes 50%, 三百五十块 becomes 350块, 四十二公里 becomes 42公里 and Lexus RX 三五零 becomes Lexus RX 350. Small counts such as 三本书, numbers before a counter such as 二十个人, rough numbers such as 十几个, ordinals such as 第三, and idioms such as 一心一意 and 三五成群 stay in words. Settings, General turns this off too.
+
 In Settings, the Vocabulary page takes the words and names you use, up to 100. Orra gives them to the speech model with every dictation, so it writes them your way. On synthetic test speech this raised the share of such terms written correctly from about 84% to 99% in Chinese and from 83% to 96% in English, and words from the list were almost never inserted when they were not said. The list stays on your Mac.
 
 Orra records from the system's default input unless you choose another under Microphone in its menu or in Settings. The choice stays until you change it, and while that microphone is unplugged the default records. With the lid closed, a MacBook turns its own microphone off, so choose another one, such as a webcam's. The menu warns about it. docs/microphone-choice.md explains how the choice works.

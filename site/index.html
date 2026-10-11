@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orra: voice input for your Mac</title>
+  <meta name="description" content="Orra is an open source voice input app for macOS. Hold a key, speak, release, and the words land in the app you were typing in. Speech becomes text on your Mac, never on a server.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="canonical" href="https://db-ol.github.io/Orra/">
+  <link rel="alternate" hreflang="en" href="https://db-ol.github.io/Orra/">
+  <link rel="alternate" hreflang="zh-Hans" href="https://db-ol.github.io/Orra/zh/">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="wrap topbar">
+    <a class="brand" href="./"><img src="favicon.png" alt="" width="28" height="28">Orra</a>
+    <nav>
+      <a class="optional" href="#how">How it works</a>
+      <a class="optional" href="#privacy">Privacy</a>
+      <a href="https://github.com/db-ol/Orra">GitHub</a>
+      <a href="zh/" hreflang="zh-Hans" lang="zh-Hans">中文</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="wrap">
+        <img class="app-icon" src="icon.png" alt="Orra app icon" width="128" height="128">
+        <h1>Orra</h1>
+        <p class="tagline">Dictate anywhere on your Mac. Speech becomes text on your Mac, never on a server.</p>
+        <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Download for Mac</a>
+        <p class="requirements">Free and open source. Needs a Mac with Apple silicon, macOS 15.6 or later and about 3 GB of free space. Signed with a Developer ID and notarized by Apple.</p>
+        <p class="preview-note">Orra is an early preview. Expect rough edges and changes to the design.</p>
+      </div>
+    </div>
+
+    <section id="how">
+      <div class="wrap">
+        <h2>How it works</h2>
+        <ol class="steps">
+          <li>
+            <h3>Hold a key</h3>
+            <p>Hold the talk key, right Control unless you pick right Option, right Command or fn.</p>
+          </li>
+          <li>
+            <h3>Speak</h3>
+            <p>Orra records while you hold it. A small indicator at the bottom of the screen moves with your voice.</p>
+          </li>
+          <li>
+            <h3>Release</h3>
+            <p>Orra turns your speech into text on your Mac and pastes it where your cursor is, in any app you can type in.</p>
+          </li>
+        </ol>
+        <p class="requirements">The first time, a welcome window walks you through downloading the speech model (2.47 GB, once) and allowing the microphone and Accessibility.</p>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2>Features</h2>
+        <div class="features">
+          <div>
+            <h3>Chinese, English and both at once</h3>
+            <p>Speak Chinese, English, or mix them in one sentence.</p>
+          </div>
+          <div>
+            <h3>On device speech recognition</h3>
+            <p>Qwen3-ASR 1.7B runs on your Mac. What you say does not leave it.</p>
+          </div>
+          <div>
+            <h3>Your vocabulary</h3>
+            <p>Add up to 100 names and terms, and Orra writes them your way.</p>
+          </div>
+          <div>
+            <h3>Learns from your corrections</h3>
+            <p>Turn it on, fix a misheard word after a dictation in apps such as Notes, Mail and Safari, and Orra adds the right spelling to your vocabulary. A notice lets you undo it.</p>
+          </div>
+          <div>
+            <h3>Updates in the app</h3>
+            <p>Check for Updates in the menu, or let Orra check for you. Nothing installs until you choose it.</p>
+          </div>
+          <div>
+            <h3>English and Chinese interface</h3>
+            <p>Menus and windows follow your Mac's language, in English or Simplified Chinese.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy">
+      <div class="wrap prose">
+        <h2>Privacy</h2>
+        <p>Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own.</p>
+        <p>Orra goes online for two things only:</p>
+        <ul>
+          <li><strong>Downloading the speech model</strong>, after you choose Download Speech Model. It comes from Hugging Face, or from ModelScope or hf-mirror.com when Hugging Face cannot be reached. Orra checks the size and SHA-256 hash of every file before using it.</li>
+          <li><strong>Checking for updates</strong>, only after you allow it. Launching Orra never touches the network before that.</li>
+        </ul>
+        <p>Learning from your corrections is off until you turn it on. Even then Orra keeps only word pairs, never your text. The <a href="https://github.com/db-ol/Orra#privacy">README</a> has the full details.</p>
+        <p>This website uses no cookies, no analytics and no trackers.</p>
+      </div>
+    </section>
+
+    <section id="open-source">
+      <div class="wrap prose">
+        <h2>Open source</h2>
+        <p>Orra is written in Swift and SwiftUI and released under the MIT License. Read the code, build it yourself, or help make it better.</p>
+        <ul class="links">
+          <li><a href="https://github.com/db-ol/Orra">Source on GitHub</a></li>
+          <li><a href="https://github.com/db-ol/Orra/releases">All releases</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="feedback">
+      <div class="wrap prose">
+        <h2>Feedback</h2>
+        <p>Found a bug or missing something? Tell us on GitHub.</p>
+        <ul class="links">
+          <li><a href="https://github.com/db-ol/Orra/issues">Report an issue</a></li>
+          <li><a href="https://github.com/db-ol/Orra/discussions">Join the discussion</a></li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Orra is open source under the <a href="https://github.com/db-ol/Orra/blob/main/LICENSE">MIT License</a>.</p>
+      <p><a href="zh/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></p>
+    </div>
+  </footer>
+</body>
+</html>
