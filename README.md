@@ -15,7 +15,7 @@ Orra is an early preview. Expect rough edges, and expect the design to change.
 
 - Dictate in Chinese, English, or both mixed in one sentence, into any app that takes text.
 - Speech becomes text on your Mac with the Qwen3-ASR 1.7B model. Nothing you say leaves the Mac.
-- A personal vocabulary of up to 100 names and terms, so Orra writes them your way. Optionally, Orra learns the words you fix after a dictation.
+- A personal vocabulary of names and terms, as many as you like, so Orra writes them your way. Optionally, Orra learns the words you fix after a dictation.
 - Filler words such as 呃, um and uh are removed, and numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits.
 - A small bar at the bottom of the screen shows that Orra is ready, and while you speak it shows your voice level.
 - Updates install from inside the app.
@@ -40,7 +40,7 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
 ## Using Orra
 
 - **Talk key.** Choose right Control, right Option, right Command or fn (Globe) under Talk Key in the menu or in Settings, General.
-- **Vocabulary.** In Settings, Vocabulary, add the words and names you use. Orra gives them to the speech model with every dictation. On test speech this raised the share of such terms written correctly from about 84% to 99% in Chinese and from 83% to 96% in English, and listed words were almost never inserted when nobody said them.
+- **Vocabulary.** In Settings, Vocabulary, add the words and names you use. Orra gives them to the speech model with every dictation. On test speech this raised the share of such terms written correctly from about 84% to 99% in Chinese and from 83% to 96% in English, and listed words were almost never inserted when nobody said them. The list has no practical limit. Each dictation gives the model the 200 words you added or used most recently, since a longer context helps less per word and slows every dictation. Settings shows the words in a table with where each came from, how Orra misheard it, and when you last used it.
 - **Learning from your corrections.** Turn on "Learn from my corrections" under Vocabulary. When you fix a misheard word right after a dictation, Orra adds the right spelling to your vocabulary and shows a notice with Undo. When you fix one Chinese character of a name, such as 陈阳 to 晨阳, Orra asks instead and offers its guess of the whole word for you to edit and add. A word you remove from the vocabulary is learned again the next time you fix it, while a word you undid is not. It works in apps that let macOS read their text, such as Notes, Mail and Safari. In other apps, copy the word and choose the add item in Orra's menu.
 - **Fillers and numbers.** Before it pastes, Orra removes fillers that only fill a pause, such as 呃, 额, um and uh, and keeps words that carry meaning, such as 好啊, 吧 and 那个. It also writes numbers spoken in Chinese as digits where a reader expects them: 二零二六年十月十号 becomes 2026年10月10号, 百分之五十 becomes 50% and Lexus RX 三五零 becomes Lexus RX 350. Small counts such as 三本书, rough numbers and idioms stay in words. Settings, General turns each of them off.
 - **Microphone.** Orra records from the system's default input unless you choose another under Microphone. With the lid of a MacBook closed, its own microphone is off, so choose another one, such as a webcam's.

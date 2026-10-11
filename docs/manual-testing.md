@@ -114,9 +114,16 @@ Build and test commands, run in the repository root:
     still loading needs nothing from the user, which decides whether launch opens the
     window and the menu shows Setup Guide….
   - VocabularyTests checks how the vocabulary text becomes terms (trimmed, once each
-    ignoring case, cut at 40 characters, at most 100), the context string the model gets,
-    and saving the list. PushToTalkControllerTests checks that every dictation passes the
-    current vocabulary to the model, nil when it is empty, and that a change is saved.
+    ignoring case, cut at 40 characters, capped only at 5,000 against runaway data), the
+    context string the model gets, and the choice of the 200 words added or used most
+    recently, with ties going to the word added later. It checks that a paste dates the
+    words it holds ignoring case, but not a word inside a longer Latin word, that the
+    words and their dates are saved, that the string list of 0.1.0 is taken over without
+    losing a word, and the rows, header and removal of the table in Settings, where removing a
+    learned word lets learning add it again. PushToTalkControllerTests checks that every
+    dictation passes the vocabulary to the model, nil when it is empty, only the 200 most
+    recent of a longer list, that a paste dates the words it holds while a text that was not
+    pasted dates none, that a change is saved, and that learning is refused only at the cap.
   - CorrectionFinderTests, SoundAlikeTests and CorrectionStoreTests cover finding a fixed
     word in the pasted text (Chinese, a name across scripts, a whole Latin word), leaving
     out changes of meaning, deletions, additions, rewrites and edits outside the paste,
@@ -606,6 +613,27 @@ Personal vocabulary, added on 2026-10-08, not verified yet:
 - [ ] The count above the list follows it, and the list is still there after
   quitting and reopening Orra.
 
+Vocabulary without the 100 word limit, added on 2026-10-10, not verified yet:
+
+- [ ] Settings, Vocabulary shows the learning switch with its explanation first, then the
+  field to add a word, then a table about 280 points high that scrolls, with the columns
+  Word, Source, Heard as and Last used, in English and in Chinese. It fits the window
+  without clipping and looks at home in the grouped page, in light and dark mode.
+- [ ] Clicking the Word and Last used headers sorts the table both ways. The search
+  field filters by word and by misheard spelling.
+- [ ] A word added in the field shows "Added by you" and a dash under Last used. A word
+  learned from a correction shows "Learned" and the misheard spelling under Heard as.
+- [ ] Dictate a sentence with a listed word, in another case too: its Last used becomes
+  "now" and stays after quitting and reopening Orra.
+- [ ] Select several rows with Command or Shift and remove them with the minus button,
+  then another with the Delete key: they leave the list. Fix a removed learned word
+  again: it is learned again with the notice.
+- [ ] After updating from 0.1.0, every word of the old list is still there.
+- [ ] With more than 200 words (paste a list into the field one by one, or let a test
+  build fill it), the header says how many words there are and that Orra gives the 200
+  most recently added or used to the speech model, and dictation feels as quick as with
+  200.
+
 Learning from corrections, added on 2026-10-08, not verified yet. Turn on Learn from my
 corrections under Vocabulary in Settings first:
 
@@ -625,9 +653,9 @@ corrections under Vocabulary in Settings first:
   moment the notice appears, and pauses only while you edit. Click into the field, then
   click back into Notes without pressing Add: typing goes to Notes and the ring counts 4
   again. Close it, or let it run out, and the same fix does not offer it again for a week.
-- [ ] Fill the vocabulary to 100 words, then add an offered
-  word: the notice says the vocabulary is full and stays until it runs out. Make room and
-  fix the same character again: the word is offered again.
+- [ ] With more than 200 words in the vocabulary, an offered word and a learned word
+  are still added. Only at the cap of 5,000 words, which needs a test build, does the
+  notice say the vocabulary is full.
 - [ ] Dictate four lines with the same misheard name, switch to another app for a moment,
   come back and fix them within 3 minutes: one notice comes. Undo takes the name out of
   the vocabulary, and fixing it again, misheard any way, does not add it again.
