@@ -90,7 +90,8 @@ default, after the Fn key of a Logitech MX Keys did not reach Orra at all. Imple
 
 - The user turns on one or more of right Control, right Option, right Command and fn,
   under Talk Key in the menu or in the Settings window. The last key that is on stays on.
-  The choice is saved in UserDefaults.
+  The choice is saved in UserDefaults. Since the second change of 2026-10-10 there is one
+  talk key, see the end of this file.
 - A right hand modifier is told from its left twin by the device dependent bit in the
   event flags (IOLLEvent.h), or by the shared flag on a keyboard that sets no such bits.
   Pressed while another modifier is held, left twin included, it starts no hold.
@@ -127,7 +128,8 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
   click keep working. Speech in that first moment is not recorded. The right modifiers
   and fn start at the press as before.
 - The welcome window has a step "Choose your talk key", and Settings, General has a
-  "Press a Key…" button. The next modifier press becomes the only talk key. Shift and
+  "Press a Key…" button. The next modifier press becomes the only talk key. Since the
+  second change of 2026-10-10 a recorder field takes the place of the button, see below. Shift and
   other keys leave a note, Escape stops. The tap reports those presses instead of
   detecting holds, but only while Orra is the active app, and it swallows fn so its system
   action does not fire. Without Accessibility access an NSEvent local monitor sees Orra's
@@ -170,6 +172,50 @@ Not verified on hardware yet: whether the 0.3 and 0.4 second values feel right, 
 the macOS Dictation shortcut "Press Control Key Twice" or a Siri double press of Command
 fire as well when a double press of that key is used, and whether the registry check finds
 the keyboard of an Intel MacBook.
+
+Later on 2026-10-10 the maintainer found the talk key switches confusing, several keys on
+at once included, and asked for one key that the user sets by pressing it, with the
+names keyboards print on the keys. Implemented in `Orra/TalkKey.swift`,
+`Orra/KeyName.swift`, `Orra/PushToTalkController.swift`, `Orra/HotkeyTap.swift`,
+`Orra/SettingsView.swift`, `Orra/WelcomeView.swift` and `Orra/StatusMenu.swift`:
+
+- There is one talk key. `TalkKeyPreference` still saves it under `talkKeys`, as a list
+  of one, so Orra 0.1.0 reads it after a downgrade. A saved list of several keys, from
+  0.1.0 or an earlier build of this branch, keeps one by `TalkKey.keepOrder`: fn, right
+  Control, right Option, right Command, left Control, left Option, left Command. fn comes
+  first because right Control is the default, so a user who turned fn on chose it on
+  purpose. The detector and the tap still take a set of keys, which now holds one.
+- Settings, General shows a recorder field like the shortcut recorders of Mac apps. It
+  shows the key with its symbol and Mac name, such as "⌥ Right Option", and a small hint
+  with the label of other keyboards: Alt for Option and Windows key for Command, which a
+  keyboard with a Windows layout prints on the keys macOS uses as Option and Command, and
+  Globe 🌐 for fn. Control needs none. Clicking the field or Change… starts recording,
+  and the line under it says "Use fn, Control, Option or Command on its own. Escape
+  cancels." A line under the field recommends fn on a Mac's built in keyboard and right
+  Control on an external one.
+- `KeyRecorder` decides. A key that can be a talk key counts when it goes down on its own
+  and comes up again with nothing pressed in between, so Command C is never taken for
+  Command, and the tap needs no special case for the release of the chosen key. Anything
+  else is turned down with a reason under the field: Shift (it switches input methods),
+  Caps Lock (it is a lock and switches input methods too), a combination (two keys, or a
+  modifier pressed while another is held), or a key that types or acts, named by
+  `KeyName`, such as "The Return key" or "The A key". The letter comes from the current
+  ASCII capable keyboard layout through UCKeyTranslate, which reads the layout and needs
+  no permission. Recording goes on until a key is chosen, Escape, a click anywhere in
+  Orra or a switch to another app. The key names are shown on screen only, never logged.
+- While recording, the tap swallows fn's events and every key down, but only while Orra
+  is the active app, so a key pressed to record types nothing and Escape does not close
+  the window. Other modifiers pass through. Without Accessibility access a local NSEvent
+  monitor does the same for Orra's own events.
+- The welcome step shows the same recorder field, with the Use fn or Use right Control
+  button under the recommendation.
+- Talk Key in the menu is a line with the key, such as "Talk Key: ⌥ Right Option (Alt)",
+  and Change Talk Key…, which opens Settings on General. A menu cannot record a key
+  press. The hands free switch stays there.
+
+Not verified on hardware yet: how the recorder feels, whether a Windows layout keyboard
+reports its Alt and Windows keys as Option and Command as expected, and the key names on
+layouts other than ABC.
 
 Not done yet: key combinations and mouse buttons as talk keys, and moving the tap off the
 main thread.
