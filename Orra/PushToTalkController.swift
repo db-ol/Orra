@@ -46,9 +46,16 @@ final class PushToTalkController {
     /// The keys that start a dictation when held on their own. Saved through
     /// `saveTalkKeys` whenever they change.
     private(set) var talkKeys: Set<TalkKey>
+    /// Whether the user has chosen talk keys, here or in an earlier launch. The welcome
+    /// window marks its talk key step as done then.
+    private(set) var hasChosenTalkKeys: Bool
     /// Whether a quick double press of the talk key starts a hands free dictation. Saved
     /// through `saveHandsFree` whenever it changes.
     private(set) var handsFreeOn: Bool
+    /// True while the user chooses a talk key by pressing it.
+    private(set) var isChoosingTalkKey = false
+    /// What the last press while choosing a talk key could not be, such as Shift.
+    private(set) var keyChoiceNote: String?
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
     private(set) var microphone: MicrophoneChoice?
@@ -129,6 +136,9 @@ final class PushToTalkController {
     @ObservationIgnored private var tap: HotkeyTap?
     @ObservationIgnored private let saveTalkKeys: (Set<TalkKey>) -> Void
     @ObservationIgnored private let saveHandsFree: (Bool) -> Void
+    /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
+    /// installed, which needs no permission.
+    @ObservationIgnored private var keyChoiceMonitor: Any?
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
     @ObservationIgnored private let saveVocabulary: ([String]) -> Void
     @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
@@ -159,6 +169,7 @@ final class PushToTalkController {
     ///     start sound plays. A shortcut with the talk key is over sooner.
     ///   - talkKeys: The keys that start a dictation, as saved by the user.
     ///   - saveTalkKeys: Saves the keys after the user changes them.
+    ///   - talkKeysChosen: Whether the user has saved talk keys before.
     ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
     ///   - saveHandsFree: Saves the choice after the user changes it.
     ///   - microphone: The microphone the user chose, or nil for the system default.
@@ -184,6 +195,7 @@ final class PushToTalkController {
         listeningCueDelay: Duration = .milliseconds(150),
         talkKeys: Set<TalkKey> = TalkKey.defaultKeys,
         saveTalkKeys: @escaping (Set<TalkKey>) -> Void = { _ in },
+        talkKeysChosen: Bool = false,
         handsFree: Bool = true,
         saveHandsFree: @escaping (Bool) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
@@ -209,6 +221,7 @@ final class PushToTalkController {
         self.listeningCueDelay = listeningCueDelay
         self.talkKeys = talkKeys.isEmpty ? TalkKey.defaultKeys : talkKeys
         self.saveTalkKeys = saveTalkKeys
+        self.hasChosenTalkKeys = talkKeysChosen
         self.handsFreeOn = handsFree
         self.saveHandsFree = saveHandsFree
         self.microphone = microphone
@@ -308,7 +321,16 @@ final class PushToTalkController {
         applyTalkKeys(keys)
     }
 
+    /// Makes `key` the only talk key and saves the choice, as when the user presses the key
+    /// they want.
+    func chooseTalkKey(_ key: TalkKey) {
+        hasChosenTalkKeys = true
+        guard talkKeys != [key] else { return }
+        applyTalkKeys([key])
+    }
+
     private func applyTalkKeys(_ keys: Set<TalkKey>) {
+        hasChosenTalkKeys = true
         talkKeys = keys
         saveTalkKeys(keys)
         tap?.setKeys(keys)
@@ -320,6 +342,58 @@ final class PushToTalkController {
         handsFreeOn = on
         saveHandsFree(on)
         tap?.setHandsFree(on)
+    }
+
+    /// Starts listening for the key the user wants as the talk key. The next press of a
+    /// modifier that can be a talk key becomes the only talk key. Shift and other keys
+    /// leave a note and keep listening, Escape stops. Only presses in Orra count: the tap
+    /// checks that Orra is the active app, and without the tap a local monitor sees only
+    /// Orra's own events. Neither needs a new permission.
+    func startChoosingTalkKey() {
+        guard !isChoosingTalkKey else { return }
+        isChoosingTalkKey = true
+        keyChoiceNote = nil
+        tap?.chooseKey { [weak self] press in
+            self?.keyChoice(press)
+        }
+        keyChoiceMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+            // The tap has seen the event first when it is installed.
+            guard let self, isChoosingTalkKey, tap?.isInstalled != true else { return event }
+            let flags = event.cgEvent?.flags ?? CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
+            let type: CGEventType = event.type == .keyDown ? .keyDown : .flagsChanged
+            guard let press = KeyChoice.press(type: type, keyCode: Int64(event.keyCode), flags: flags) else { return event }
+            keyChoice(press)
+            return press == .escape ? nil : event
+        }
+    }
+
+    /// Stops listening for a talk key without changing the keys.
+    func stopChoosingTalkKey() {
+        guard isChoosingTalkKey else { return }
+        isChoosingTalkKey = false
+        tap?.chooseKey(nil)
+        if let keyChoiceMonitor {
+            NSEvent.removeMonitor(keyChoiceMonitor)
+        }
+        keyChoiceMonitor = nil
+    }
+
+    /// One press while the user chooses a talk key. Internal so tests can drive it.
+    func keyChoice(_ press: KeyChoice) {
+        guard isChoosingTalkKey else { return }
+        switch press {
+        case .talkKey(let key):
+            keyChoiceNote = nil
+            stopChoosingTalkKey()
+            chooseTalkKey(key)
+        case .shift:
+            keyChoiceNote = String(localized: "Shift switches input methods, so it cannot be a talk key. Press another key.")
+        case .otherKey:
+            keyChoiceNote = String(localized: "Press fn, Control, Option or Command on its own.")
+        case .escape:
+            keyChoiceNote = nil
+            stopChoosingTalkKey()
+        }
     }
 
     /// The key that finishes the hands free dictation in progress, for the indicator: the

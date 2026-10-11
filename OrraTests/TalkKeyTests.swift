@@ -28,6 +28,7 @@ struct TalkKeyTests {
         #expect(TalkKey.leftOption.twinFlag?.rawValue == UInt64(NX_DEVICERALTKEYMASK))
         #expect(TalkKey.leftCommand.twinFlag?.rawValue == UInt64(NX_DEVICERCMDKEYMASK))
         #expect(TalkKeyDetector.escapeKeyCode == Int64(kVK_Escape))
+        #expect(KeyChoice.shiftKeyCodes == [Int64(kVK_Shift), Int64(kVK_RightShift)])
     }
 
     @Test func savedRawValuesNeverChange() {
@@ -108,6 +109,38 @@ struct TalkKeyTests {
         #expect(TalkKey.rightControl.finishHint() == "Press right Control to finish")
         #expect(TalkKey.fn.finishHint() == "Press fn to finish")
     }
+
+    @Test func fnIsRecommendedOnlyForABuiltInKeyboard() {
+        #expect(KeyboardKind.builtIn.recommendedKey == .fn)
+        #expect(KeyboardKind.external.recommendedKey == .rightControl)
+    }
+}
+
+/// Pressing a key to choose the talk key.
+struct KeyChoiceTests {
+    @Test(arguments: TalkKey.allCases)
+    func everyTalkKeyIsRecognizedWhenItGoesDown(_ key: TalkKey) {
+        let flags = key.downFlag.union(key.sharedFlag ?? [])
+        #expect(KeyChoice.press(type: .flagsChanged, keyCode: key.keyCode, flags: flags) == .talkKey(key))
+        // Its release means nothing.
+        #expect(KeyChoice.press(type: .flagsChanged, keyCode: key.keyCode, flags: []) == nil)
+    }
+
+    @Test func aKeyboardWithoutLeftAndRightBitsStillTellsTheKeyByItsCode() {
+        #expect(KeyChoice.press(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: .maskCommand) == .talkKey(.leftCommand))
+        #expect(KeyChoice.press(type: .flagsChanged, keyCode: TalkKey.rightCommand.keyCode, flags: .maskCommand) == .talkKey(.rightCommand))
+    }
+
+    @Test func shiftEscapeAndOtherKeysAreNotTalkKeys() {
+        #expect(KeyChoice.press(type: .flagsChanged, keyCode: 0x38, flags: .maskShift) == .shift)
+        #expect(KeyChoice.press(type: .flagsChanged, keyCode: 0x3C, flags: .maskShift) == .shift)
+        #expect(KeyChoice.press(type: .flagsChanged, keyCode: 0x38, flags: []) == nil)
+        #expect(KeyChoice.press(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: []) == .escape)
+        #expect(KeyChoice.press(type: .keyDown, keyCode: 0x00, flags: []) == .otherKey)
+        // Caps Lock is not offered and means nothing.
+        #expect(KeyChoice.press(type: .flagsChanged, keyCode: 0x39, flags: .maskAlphaShift) == nil)
+        #expect(KeyChoice.press(type: .keyUp, keyCode: 0x00, flags: []) == nil)
+    }
 }
 
 /// Uses UserDefaults suites of its own, never Orra's real settings. Each test has a fixed
@@ -157,5 +190,8 @@ struct HandsFreePreferenceTests {
         #expect(HandsFreePreference.load(from: defaults))
         HandsFreePreference.save(false, to: defaults)
         #expect(HandsFreePreference.load(from: defaults) == false)
+        #expect(TalkKeyPreference.isSaved(in: defaults) == false)
+        TalkKeyPreference.save([.fn], to: defaults)
+        #expect(TalkKeyPreference.isSaved(in: defaults))
     }
 }

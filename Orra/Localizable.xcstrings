@@ -220,6 +220,16 @@
         }
       }
     },
+    "Cancel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
     "Cancel Download" : {
       "localizations" : {
         "zh-Hans" : {
@@ -286,6 +296,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请在“麦克风”中选择“系统默认”，然后在“声音”设置中选择 %@。"
+          }
+        }
+      }
+    },
+    "Choose your talk key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择说话键"
           }
         }
       }
@@ -804,6 +824,26 @@
         }
       }
     },
+    "On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn. On a Mac's built in keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在外接键盘上，右侧 Control 键最合适，因为有些外接键盘（比如 Logitech MX Keys）的 fn 键信号根本传不到 Mac。在 Mac 自带的键盘上，左下角的 fn（地球仪）键在右手用鼠标时也很顺手。"
+          }
+        }
+      }
+    },
+    "On this Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, choose right Control, because some, such as the Logitech MX Keys, never send fn." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 自带的键盘上，左下角的 fn（地球仪）键在右手用鼠标时很顺手。用外接键盘时请选右侧 Control 键，因为有些外接键盘（比如 Logitech MX Keys）的 fn 键信号根本传不到 Mac。"
+          }
+        }
+      }
+    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1054,6 +1094,36 @@
         }
       }
     },
+    "Press a Key…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下一个键…"
+          }
+        }
+      }
+    },
+    "Press fn, Control, Option or Command on its own." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请单独按 fn、Control、Option 或 Command 键。"
+          }
+        }
+      }
+    },
+    "Press the key you want to use…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请按下你想用的键…"
+          }
+        }
+      }
+    },
     "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1230,6 +1300,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置向导…"
+          }
+        }
+      }
+    },
+    "Shift switches input methods, so it cannot be a talk key. Press another key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shift 键用来切换输入法，不能作为说话键。请按其他键。"
           }
         }
       }
@@ -1616,6 +1696,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "撤销"
+          }
+        }
+      }
+    },
+    "Use %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用%@"
           }
         }
       }

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The welcome window's content: the three steps that make Orra ready, in any order, then
-/// how to dictate. The download comes first because it takes longest, and it goes on
-/// while the user grants the permissions.
+/// The welcome window's content: the three steps that make Orra ready, in any order, the
+/// choice of the talk key, then how to dictate. The download comes first because it takes
+/// longest, and it goes on while the user grants the permissions.
 struct WelcomeView: View {
     let pushToTalk: PushToTalkController
     let models: ModelInstaller
@@ -32,6 +32,10 @@ struct WelcomeView: View {
             }
             SetupStepRow(number: 3, status: checklist.accessibility, title: "Allow Accessibility") {
                 AccessibilityStepDetail(pushToTalk: pushToTalk)
+            }
+            // Not part of the checklist: right Control works when the user skips it.
+            SetupStepRow(number: 4, status: pushToTalk.hasChosenTalkKeys ? .done : .todo, title: "Choose your talk key") {
+                TalkKeyStepDetail(pushToTalk: pushToTalk)
             }
             if checklist.isComplete {
                 VStack(alignment: .leading, spacing: 4) {
@@ -191,6 +195,40 @@ private struct MicrophoneStepDetail: View {
             case .notConfigured:
                 Text("This build has no microphone usage description")
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// The talk key: which one Orra listens for, which one suits this Mac's keyboard, and the
+/// button to choose one by pressing it.
+private struct TalkKeyStepDetail: View {
+    let pushToTalk: PushToTalkController
+    /// Read once when the window opens. Reading the registry needs no permission.
+    @State private var keyboard = KeyboardKind.current()
+
+    var body: some View {
+        let recommended = keyboard.recommendedKey
+        VStack(alignment: .leading, spacing: 8) {
+            Text(verbatim: TalkKey.holdHint(for: pushToTalk.talkKeys))
+                .foregroundStyle(.secondary)
+            Group {
+                switch keyboard {
+                case .builtIn:
+                    Text("On this Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, choose right Control, because some, such as the Logitech MX Keys, never send fn.")
+                case .external:
+                    Text("On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn. On a Mac's built in keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse.")
+                }
+            }
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                if pushToTalk.talkKeys != [recommended], !pushToTalk.isChoosingTalkKey {
+                    Button("Use \(recommended.nameInSentence)") {
+                        pushToTalk.chooseTalkKey(recommended)
+                    }
+                }
+                PressTalkKeyButton(pushToTalk: pushToTalk)
             }
         }
     }

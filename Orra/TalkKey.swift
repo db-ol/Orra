@@ -1,8 +1,9 @@
 import CoreGraphics
 import Foundation
+import IOKit
 
 /// A key that starts a dictation while it is held on its own. The user picks one or more
-/// in the menu or in Settings, and right Control is the default.
+/// in the menu, in Settings or in the welcome window, and right Control is the default.
 ///
 /// The left and right Control, Option and Command keys and fn are offered. Shift is not,
 /// because Shift on its own switches Chinese input methods between Chinese and English,
@@ -22,7 +23,8 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
 
     /// What a fresh install listens for. Right Control sits at the right end of the bottom
     /// row of most external keyboards, and the Fn key of many of those, such as the
-    /// Logitech MX Keys, never reaches the Mac.
+    /// Logitech MX Keys, never reaches the Mac. The welcome window recommends fn on a
+    /// Mac's built in keyboard and lets the user press the key they want.
     static let defaultKeys: Set<TalkKey> = [.rightControl]
 
     var id: String { rawValue }
@@ -209,6 +211,82 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// One key press while the user chooses a talk key by pressing it, see
+/// `KeyChoice.press(type:keyCode:flags:)`.
+nonisolated enum KeyChoice: Equatable, Sendable {
+    /// A key that can be a talk key went down.
+    case talkKey(TalkKey)
+    /// Shift went down. It cannot be a talk key.
+    case shift
+    /// Escape went down, which ends the choice without changing the keys.
+    case escape
+    /// Another key went down, such as a letter.
+    case otherKey
+
+    static let shiftKeyCodes: Set<Int64> = [0x38, 0x3C]
+
+    /// What one key down or flags changed event means while the user chooses a talk key, or
+    /// nil for an event that means nothing then, such as a key coming up.
+    static func press(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> KeyChoice? {
+        switch type {
+        case .flagsChanged:
+            if let key = TalkKey.allCases.first(where: { $0.keyCode == keyCode }) {
+                return key.isDown(in: flags, wasDown: false) ? .talkKey(key) : nil
+            }
+            if shiftKeyCodes.contains(keyCode) {
+                return flags.contains(.maskShift) ? .shift : nil
+            }
+            return nil
+        case .keyDown:
+            return keyCode == TalkKeyDetector.escapeKeyCode ? .escape : .otherKey
+        default:
+            return nil
+        }
+    }
+}
+
+/// Which talk key the welcome window recommends: fn when the Mac has a built in keyboard
+/// in use, and right Control otherwise, because some external keyboards, such as the
+/// Logitech MX Keys, never send fn.
+nonisolated enum KeyboardKind: Equatable, Sendable {
+    case builtIn
+    case external
+
+    var recommendedKey: TalkKey {
+        self == .builtIn ? .fn : .rightControl
+    }
+
+    /// Whether this Mac has a built in keyboard that can be typed on now: a HID device in
+    /// the IOKit registry marked Built-In with a keyboard usage, as `ioreg` showed on a
+    /// MacBook on 2026-10-10, and the lid open. Reading the registry needs no permission,
+    /// unlike opening the device. Not a documented interface, so the welcome window names
+    /// both recommendations.
+    static func current() -> KeyboardKind {
+        hasBuiltInKeyboard() && !Lid.isClosed() ? .builtIn : .external
+    }
+
+    private static func hasBuiltInKeyboard() -> Bool {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOHIDDevice"), &iterator) == KERN_SUCCESS else {
+            return false
+        }
+        defer { IOObjectRelease(iterator) }
+        var found = false
+        while case let service = IOIteratorNext(iterator), service != 0 {
+            defer { IOObjectRelease(service) }
+            guard !found else { continue }
+            let builtIn = IORegistryEntryCreateCFProperty(service, "Built-In" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? Bool ?? false
+            guard builtIn else { continue }
+            let pairs = IORegistryEntryCreateCFProperty(service, "DeviceUsagePairs" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? [[String: Any]] ?? []
+            // Generic Desktop page 1, Keyboard usage 6.
+            found = pairs.contains { ($0["DeviceUsagePage"] as? Int) == 1 && ($0["DeviceUsage"] as? Int) == 6 }
+        }
+        return found
+    }
+}
+
 /// Keeps whether a double press of the talk key starts a hands free dictation. On until the
 /// user turns it off.
 nonisolated enum HandsFreePreference {
@@ -235,5 +313,11 @@ nonisolated enum TalkKeyPreference {
 
     static func save(_ keys: Set<TalkKey>, to defaults: UserDefaults = .standard) {
         defaults.set(TalkKey.allCases.filter(keys.contains).map(\.rawValue), forKey: defaultsKey)
+    }
+
+    /// Whether the user has chosen keys before, so the welcome window can mark its step as
+    /// done.
+    static func isSaved(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: defaultsKey) != nil
     }
 }

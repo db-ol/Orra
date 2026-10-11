@@ -164,5 +164,39 @@ struct HotkeyTapTests {
         }
         #expect(events == [.pressed(isRepeat: false), .tapped, .cancelled])
     }
+
+    @Test func choosingAKeyReportsPressesOnlyWhileOrraIsActive() {
+        final class Active {
+            var isActive = true
+        }
+        let app = Active()
+        var events: [PushToTalkStateMachine.Event] = []
+        var presses: [KeyChoice] = []
+        let tap = HotkeyTap(keys: [.fn], install: { _ in nil }, wait: Self.neverFires, isAppActive: { app.isActive }) { events.append($0) }
+        tap.chooseKey { presses.append($0) }
+        // fn is swallowed, so its system action does not fire, and starts no dictation.
+        #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn))
+        #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: []))
+        #expect(tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.rightControlDown) == false)
+        #expect(tap.handle(type: .keyDown, keyCode: 0, flags: []) == false)
+        #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: []))
+        #expect(presses == [.talkKey(.fn), .talkKey(.rightControl), .otherKey, .escape])
+        #expect(events.isEmpty)
+        // In another app, the talk key works as usual.
+        app.isActive = false
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        #expect(events == [.pressed(isRepeat: false)])
+        #expect(presses.count == 4)
+    }
+
+    @Test func choosingAKeyEndsAHold() {
+        var events: [PushToTalkStateMachine.Event] = []
+        let tap = HotkeyTap(keys: [.rightControl], install: { _ in nil }, wait: Self.neverFires, isAppActive: { true }) { events.append($0) }
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.rightControlDown)
+        tap.chooseKey { _ in }
+        #expect(events == [.pressed(isRepeat: false), .cancelled])
+        tap.chooseKey(nil)
+        #expect(tap.activeKey == nil)
+    }
 }
 

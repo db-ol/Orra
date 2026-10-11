@@ -194,6 +194,7 @@ private struct GeneralSettings: View {
             }
             Section {
                 TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
+                PressTalkKeyButton(pushToTalk: pushToTalk)
                 Toggle(isOn: Binding(
                     get: { pushToTalk.handsFreeOn },
                     set: { pushToTalk.setHandsFreeOn($0) }
@@ -500,6 +501,40 @@ struct MicrophoneToggles: View {
         if let chosen, !inputs.inputs.contains(where: { $0.uid == chosen.uid }) {
             Toggle(MicrophoneLabels.missing(chosen), isOn: .constant(true))
                 .disabled(true)
+        }
+    }
+}
+
+/// The button that lets the user choose the talk key by pressing it, with what to do while
+/// Orra waits for the key. In Settings and in the welcome window.
+struct PressTalkKeyButton: View {
+    let pushToTalk: PushToTalkController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                if pushToTalk.isChoosingTalkKey {
+                    Button("Cancel") {
+                        pushToTalk.stopChoosingTalkKey()
+                    }
+                    Text("Press the key you want to use…")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button("Press a Key…") {
+                        pushToTalk.startChoosingTalkKey()
+                    }
+                }
+            }
+            if let note = pushToTalk.keyChoiceNote {
+                // Already in the user's language, so shown as it is.
+                Text(verbatim: note)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onDisappear {
+            pushToTalk.stopChoosingTalkKey()
         }
     }
 }

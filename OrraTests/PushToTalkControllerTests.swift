@@ -1330,4 +1330,47 @@ struct PushToTalkControllerTests {
         #expect(controller.handsFreeOn == false)
         #expect(saved == [false])
     }
+
+    // MARK: Choosing the talk key by pressing it
+
+    @Test func pressingAKeyMakesItTheOnlyTalkKey() {
+        var saved: [Set<TalkKey>] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKeys: [.rightControl, .rightOption],
+            saveTalkKeys: { saved.append($0) }
+        )
+        #expect(controller.hasChosenTalkKeys == false)
+        controller.startChoosingTalkKey()
+        #expect(controller.isChoosingTalkKey)
+        controller.keyChoice(.shift)
+        #expect(controller.keyChoiceNote == "Shift switches input methods, so it cannot be a talk key. Press another key.")
+        controller.keyChoice(.otherKey)
+        #expect(controller.keyChoiceNote == "Press fn, Control, Option or Command on its own.")
+        #expect(controller.isChoosingTalkKey)
+        controller.keyChoice(.talkKey(.leftOption))
+        #expect(controller.isChoosingTalkKey == false)
+        #expect(controller.keyChoiceNote == nil)
+        #expect(controller.talkKeys == [.leftOption])
+        #expect(saved == [[.leftOption]])
+        #expect(controller.hasChosenTalkKeys)
+        // A press after the choice changes nothing.
+        controller.keyChoice(.talkKey(.fn))
+        #expect(controller.talkKeys == [.leftOption])
+    }
+
+    @Test func escapeStopsChoosingWithoutAChange() {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKeys: [.fn]
+        )
+        controller.startChoosingTalkKey()
+        controller.keyChoice(.escape)
+        #expect(controller.isChoosingTalkKey == false)
+        #expect(controller.talkKeys == [.fn])
+    }
 }

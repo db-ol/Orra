@@ -24,6 +24,9 @@ import CoreGraphics
 /// The detector has no clock. The tap passes the time each event arrived, and runs the
 /// one timer the detector asks for at a time, for a left hand key's delay or a tap's
 /// double press window, as a task on the main actor that never blocks.
+///
+/// While the user chooses a talk key by pressing it, see `chooseKey`, the tap reports
+/// presses instead of detecting holds, but only while Orra is the active app.
 final class HotkeyTap {
     /// Creates the event tap and the click monitor for a HotkeyTap and switches them on.
     /// Returns what removes both again, or nil when the system refuses the tap, which
@@ -41,12 +44,15 @@ final class HotkeyTap {
     private let onEvent: (PushToTalkStateMachine.Event) -> Void
     private let onSwitchedOff: (CGEventType) -> Void
     private let wait: Wait
+    private let isAppActive: @MainActor () -> Bool
     private var detector: TalkKeyDetector
     /// Removes the installed tap. Nil while no tap is installed.
     private var removeInstalled: Remove?
     /// The running timer and the detector generation it was started for.
     private var timerTask: Task<Void, Never>?
     private var timerGeneration: Int?
+    /// Receives the presses while the user chooses a talk key. Nil otherwise.
+    private var chooser: ((KeyChoice) -> Void)?
 
     /// - Parameters:
     ///   - install: Creates the tap, see `Install`.
@@ -55,17 +61,21 @@ final class HotkeyTap {
     ///     itself, with the reason the system gave.
     ///   - handsFree: Whether a double press starts a hands free dictation.
     ///   - wait: Waits for a timer, see `Wait`.
+    ///   - isAppActive: Whether Orra is the active app, so a key the user presses to
+    ///     choose a talk key is meant for Orra.
     init(
         keys: Set<TalkKey>,
         handsFree: Bool = true,
         install: @escaping Install,
         wait: @escaping Wait = { try? await Task.sleep(for: $0) },
+        isAppActive: @escaping @MainActor () -> Bool = { NSApplication.shared.isActive },
         onEvent: @escaping (PushToTalkStateMachine.Event) -> Void,
         onSwitchedOff: @escaping (CGEventType) -> Void = { _ in }
     ) {
         detector = TalkKeyDetector(keys: keys, handsFreeEnabled: handsFree)
         self.install = install
         self.wait = wait
+        self.isAppActive = isAppActive
         self.onEvent = onEvent
         self.onSwitchedOff = onSwitchedOff
     }
@@ -93,6 +103,17 @@ final class HotkeyTap {
     /// The talk key the current press or dictation is about, if any.
     var activeKey: TalkKey? {
         detector.phase.key
+    }
+
+    /// While `chooser` is set and Orra is the active app, every press goes to it instead of
+    /// starting a hold, fn's events and Escape are swallowed, so neither the "Press fn key
+    /// to" action nor the window's Escape shortcut fires, and other events pass through.
+    /// Setting it ends a hold in progress. Nil ends the choice.
+    func chooseKey(_ chooser: ((KeyChoice) -> Void)?) {
+        self.chooser = chooser
+        if chooser != nil {
+            afterDetectorChange(detector.reset())
+        }
     }
 
     /// Sends the event, if any, and starts or stops the timer the detector asks for.
@@ -175,6 +196,13 @@ final class HotkeyTap {
             onSwitchedOff(type)
             return false
         default:
+            if let chooser, isAppActive() {
+                if let press = KeyChoice.press(type: type, keyCode: keyCode, flags: flags) {
+                    chooser(press)
+                }
+                return (type == .flagsChanged && keyCode == TalkKey.fn.keyCode)
+                    || (type == .keyDown && keyCode == TalkKeyDetector.escapeKeyCode)
+            }
             let decision = detector.handle(type: type, keyCode: keyCode, flags: flags, at: now)
             afterDetectorChange(decision.event)
             return decision.swallow
