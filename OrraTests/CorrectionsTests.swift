@@ -237,6 +237,13 @@ struct CorrectionStoreTests {
         #expect(!store.has(.accepted, for: "Orra"))
     }
 
+    @Test func undoingAPairNoLongerKeptKeepsItAsUndone() {
+        var store = CorrectionStore()
+        store.dismiss([pair], at: Date(timeIntervalSince1970: 1_000_000))
+        #expect(store.state(of: pair) == .dismissed)
+        #expect(store.has(.dismissed, for: "Claude"))
+    }
+
     @Test func aCountOlderThanAWeekStartsOver() {
         var store = CorrectionStore()
         let start = Date(timeIntervalSince1970: 1_000_000)

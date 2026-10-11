@@ -537,10 +537,14 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
         Set(entries.filter { $0.state == .accepted }.map(\.correction.corrected))
     }
 
-    /// Marks the pairs as undone, so their word is not learned again.
-    mutating func dismiss(_ corrections: [Correction]) {
+    /// Marks the pairs as undone, so their word is not learned again. A pair no longer kept,
+    /// as after the user took the word out of the vocabulary, is kept again as undone.
+    mutating func dismiss(_ corrections: [Correction], at date: Date = Date()) {
         for index in entries.indices where corrections.contains(entries[index].correction) {
             entries[index].state = .dismissed
+        }
+        for correction in corrections where !entries.contains(where: { $0.correction == correction }) {
+            entries.append(Entry(correction: correction, count: 1, lastSeen: date, state: .dismissed))
         }
     }
 

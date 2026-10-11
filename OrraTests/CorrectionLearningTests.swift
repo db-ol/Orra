@@ -412,6 +412,21 @@ struct CorrectionLearningTests {
         #expect(learned.count == 2)
     }
 
+    @Test func undoOnANoticeStillShownAfterTheWordWasRemovedIsForGood() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.record(pair)
+        // Removed in Settings while the notice with Undo is still on screen.
+        vocabulary.words = []
+        learning.removedFromVocabulary("Claude")
+        learning.undo(learned[0])
+        learning.record(pair)
+        #expect(vocabulary.words.isEmpty)
+        #expect(learned.count == 1)
+        #expect(learning.store.state(of: pair) == .dismissed)
+    }
 
     @Test func removingAWordThatWasNeverLearnedChangesNothing() {
         let vocabulary = VocabularyBox()

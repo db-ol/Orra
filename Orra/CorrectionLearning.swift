@@ -416,7 +416,7 @@ final class CorrectionLearning {
     /// Takes back a word learned on its own: never learns it again, and takes it out of the
     /// vocabulary when learning put it there.
     func undo(_ learned: Learned) {
-        store.dismiss(learned.pairs)
+        store.dismiss(learned.pairs, at: now())
         saveStore(store)
         if learned.outcome == .added {
             removeFromVocabulary(learned.correction.corrected)
