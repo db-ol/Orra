@@ -192,10 +192,12 @@ Build and test commands, run in the repository root:
   vocabulary and the learned pairs, keeps the newest 2000 log lines, picks at most three
   Orra crash reports from the last 7 days, and the issue link fills the form fields the
   bug report form defines, with what happened among them. The link stays under 6,000
-  characters: a long text is cut between whole characters with a marker, which the
-  tests check for English, Chinese and emoji, since percent encoding makes a Chinese
-  character 9 characters long and an emoji up to several dozen. Without a title, the
-  first line of the text is the title, at most 120 characters and 1,000 encoded.
+  characters, and the sign in link GitHub makes from it under 7,000: a long text is cut
+  between whole characters with a marker in English and Chinese, which the tests check
+  for English, Chinese and emoji, since percent encoding makes a Chinese character 9
+  characters long and an emoji up to several dozen, and the sign in link adds 2 for
+  every %. Without a title, the first line of the text is the title, at most 120
+  characters and 1,000 encoded, also after a Windows line break.
 - On 2026-10-10, curl without a GitHub session asked for
   https://github.com/db-ol/Orra/issues/new with template, title, what-happened, version,
   macos and mac filled in, with Chinese text, a newline, a plus and an ampersand. GitHub
@@ -203,9 +205,17 @@ Build and test commands, run in the repository root:
   link, encoded once more, with every parameter in it. The sign in page put the same
   link in its return_to field, and its Create an account link went to /signup with the
   same return_to. The sign up page itself answered curl with a bot check, so whether
-  GitHub returns to the form after creating an account was not verified. Links up to
-  6,979 characters got the 302, and links of 7,079 characters and more got a 500, so
-  Orra keeps its links under 6,000. A one off run on 2026-10-10 wrote a report on this Mac from
+  GitHub returns to the form after creating an account was not verified. With English
+  text, links up to 6,979 characters got the 302, and links of 7,079 characters and
+  more got a 500. With Chinese text or emoji the sign in link is the limit, since every
+  % in the issue link becomes %25 there, about 1.67 times as long. A 4,620 character
+  link with Chinese text got a sign in link of 7,693 characters with the issue link
+  intact. From a 4,680 character link with emoji and a 4,800 character link with
+  Chinese text, GitHub sent a 302 to plain https://github.com/login with no return_to,
+  so the form would come back empty after signing in. The sign in link was always
+  https://github.com/login?return_to= followed by the issue link encoded the way Orra
+  encodes. So Orra keeps its links under 6,000 characters and the sign in link under
+  7,000. A one off run on 2026-10-10 wrote a report on this Mac from
   the local log store, with a crash report, and without the home folder or the account
   name in it.
 - The secure input check reads kCGSSessionSecureInputPID. A throwaway program turned secure

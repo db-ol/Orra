@@ -134,6 +134,9 @@ struct ProblemReportTests {
     @Test func titleComesFromTheFirstLineWhenEmpty() {
         let issue = Self.issue("  按住 fn 键没有反应 🙁\n第二行")
         #expect(Self.value("title", in: issue.url) == "按住 fn 键没有反应 🙁")
+        // Text pasted with Windows line breaks, where \r\n is one Character.
+        let crlf = Self.issue("First line\r\nSecond line")
+        #expect(Self.value("title", in: crlf.url) == "First line")
         #expect(Self.value("what-happened", in: issue.url) == "按住 fn 键没有反应 🙁\n第二行")
         let long = Self.issue(title: String(repeating: "word ", count: 100), "Text")
         let title = Self.value("title", in: long.url) ?? ""
@@ -151,26 +154,46 @@ struct ProblemReportTests {
         #expect(issue.url.absoluteString == "https://github.com/db-ol/Orra/issues/new?template=bug_report.yml&version=0.1.1%20%287%29&macos=macOS%2026.0%20%2825A354%29&mac=Mac15%2C6%20Apple%20M3%20Pro")
     }
 
+    /// Whether `url` fits both the link limit and the sign in link limit.
+    private static func fits(_ url: String) -> Bool {
+        url.count <= ProblemReport.maximumIssueURLLength
+            && ProblemReport.signInPage.count + ProblemReport.encode(url).count <= ProblemReport.maximumSignInLinkLength
+    }
+
     @Test(arguments: [
         String(repeating: "The talk key did nothing. ", count: 400),
         String(repeating: "按住说话键以后没有任何反应，", count: 400),
         String(repeating: "👨‍👩‍👧🎙️", count: 400),
         String(repeating: "a中😀", count: 900),
+        // Short enough for the link, too long for the sign in link.
+        String(repeating: "中", count: 600),
+        String(repeating: "👋", count: 420),
     ])
     func longTextIsCutToFitTheLink(_ text: String) throws {
         let issue = Self.issue(text)
         #expect(issue.wasCut)
         #expect(issue.url.absoluteString.count <= ProblemReport.maximumIssueURLLength)
+        #expect(ProblemReport.signInLink(for: issue.url).count <= ProblemReport.maximumSignInLinkLength)
         let field = try #require(Self.value("what-happened", in: issue.url))
         #expect(field.hasSuffix(ProblemReport.cutMarker))
         let start = String(field.dropLast(ProblemReport.cutMarker.count))
-        #expect(start.count > 100)
+        #expect(start.count > 50)
         #expect(text.hasPrefix(start))
         // Whole characters only: the start ends where a character of the text ends.
         #expect(Array(text).starts(with: Array(start)))
         // One more character would not fit.
         let next = Array(text)[start.count]
-        #expect(ProblemReport.encode(start + String(next)).count + ProblemReport.encode(ProblemReport.cutMarker).count > ProblemReport.maximumIssueURLLength - (issue.url.absoluteString.count - ProblemReport.encode(field).count) || next.isWhitespace)
+        let longer = issue.url.absoluteString.replacing(
+            "what-happened=" + ProblemReport.encode(field),
+            with: "what-happened=" + ProblemReport.encode(start + String(next) + ProblemReport.cutMarker)
+        )
+        #expect(!Self.fits(longer) || next.isWhitespace)
+    }
+
+    @Test func signInLinkIsTheOneGitHubSendsTo() throws {
+        // On 2026-10-10 GitHub answered this link with a 302 to exactly this sign in link.
+        let issue = try #require(URL(string: "https://github.com/db-ol/Orra/issues/new?template=bug_report.yml&title=T&what-happened=%E4%B8%AD"))
+        #expect(ProblemReport.signInLink(for: issue) == "https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fdb-ol%2FOrra%2Fissues%2Fnew%3Ftemplate%3Dbug_report.yml%26title%3DT%26what-happened%3D%25E4%25B8%25AD")
     }
 
     @Test func percentEncodingMakesChineseAndEmojiLonger() {
@@ -181,9 +204,13 @@ struct ProblemReportTests {
         // 1,000 Chinese characters are short as text but too long for the link.
         let issue = Self.issue(String(repeating: "中", count: 1000))
         #expect(issue.wasCut)
-        let short = Self.issue(String(repeating: "中", count: 500))
+        // 600 fit the link, but not the sign in link, where every % becomes %25.
+        let signIn = Self.issue(title: "T", String(repeating: "中", count: 600))
+        #expect(signIn.url.absoluteString.count < ProblemReport.maximumIssueURLLength)
+        #expect(signIn.wasCut)
+        let short = Self.issue(title: "T", String(repeating: "中", count: 400))
         #expect(!short.wasCut)
-        #expect(short.url.absoluteString.count <= ProblemReport.maximumIssueURLLength)
+        #expect(ProblemReport.signInLink(for: short.url).count <= ProblemReport.maximumSignInLinkLength)
     }
 
     @Test func textThatFitsExactlyIsNotCut() {
@@ -195,8 +222,21 @@ struct ProblemReportTests {
         #expect(Self.issue(title: "T", String(repeating: "x", count: room + 1)).wasCut)
     }
 
+    @Test func textThatFitsTheSignInLinkExactlyIsNotCut() {
+        let empty = ProblemReport.signInLink(for: Self.issue(title: "T", "x").url).count - 1
+        // In the sign in link, 中 is 9 characters once encoded and 6 more for its three %.
+        let room = (ProblemReport.maximumSignInLinkLength - empty) / 15
+        let fits = Self.issue(title: "T", String(repeating: "中", count: room))
+        #expect(!fits.wasCut)
+        #expect(ProblemReport.signInLink(for: fits.url).count > ProblemReport.maximumSignInLinkLength - 15)
+        #expect(Self.issue(title: "T", String(repeating: "中", count: room + 1)).wasCut)
+    }
+
     @Test func cutKeepsNothingWhenEvenTheMarkerDoesNotFit() {
-        #expect(ProblemReport.cut("Hello", toFit: 10) == "")
+        // The marker alone is longer than 300 characters once encoded.
+        let issue = ProblemReport.issue(title: "T", whatHappened: String(repeating: "x", count: 200), version: "1", macOS: "26", mac: "Mac", maximumLength: 300)
+        #expect(issue.wasCut)
+        #expect(Self.value("what-happened", in: issue.url) == "")
     }
 
     @Test func issueFormHasTheFieldsTheURLFills() throws {

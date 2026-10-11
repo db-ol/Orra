@@ -217,16 +217,24 @@ nonisolated enum ProblemReport {
 
     /// The page for a new issue in Orra's repository.
     static let newIssuePage = "https://github.com/db-ol/Orra/issues/new"
-    /// The longest link Orra opens. On 2026-10-10 GitHub sent a visitor who was not signed
-    /// in on to its sign in page for links up to about 7,000 characters and answered with an
-    /// error above that, so this stays well below.
+    /// The longest link Orra opens. On 2026-10-10 GitHub answered links of about 7,000
+    /// characters and more with an error, so this stays well below.
     static let maximumIssueURLLength = 6000
+    /// The sign in page a visitor who is not signed in goes to first. GitHub puts the issue
+    /// link after it, encoded once more, so every % in the link becomes %25.
+    static let signInPage = "https://github.com/login?return_to="
+    /// The longest sign in link. On 2026-10-10 GitHub kept the issue link in the sign in
+    /// link up to 7,693 characters and dropped it from 7,793, so the form came back empty
+    /// after signing in. Chinese text and emoji make the sign in link about 1.67 times as
+    /// long as the issue link, so for them this is the tighter limit.
+    static let maximumSignInLinkLength = 7000
     /// The longest title, in characters and once encoded, where an emoji takes up to a few
     /// dozen characters.
     static let maximumTitleLength = 120
     static let maximumEncodedTitleLength = 1000
     /// Ends the text in the form when it had to be cut to fit the link.
-    static let cutMarker = "\n\n[Cut to fit the link. The full text is on your clipboard, so select this text and paste.]"
+    /// In English and Chinese, like the bug report form.
+    static let cutMarker = "\n\n[Cut to fit the link. The full text is on your clipboard. Select all the text in this box and paste it. / 文字太长，链接里只放得下开头。完整的文字在剪贴板上，请全选这个框里的文字，再粘贴。]"
 
     /// The link to the new issue, and whether the text in it was cut.
     struct Issue: Equatable, Sendable {
@@ -236,13 +244,14 @@ nonisolated enum ProblemReport {
 
     /// The new issue page with the bug report form filled in. GitHub issue forms take a
     /// field's id as a query parameter, and the title as title. Without a title, the first
-    /// line of the text is the title. When the encoded text makes the link longer than
-    /// `maximumLength`, the text is cut and ends with `cutMarker`.
-    static func issue(title: String, whatHappened: String, version: String, macOS: String, mac: String, maximumLength: Int = maximumIssueURLLength) -> Issue {
+    /// line of the text is the title. When the link would be longer than `maximumLength`,
+    /// or the sign in link for it longer than `maximumSignInLength`, the text is cut and
+    /// ends with `cutMarker`.
+    static func issue(title: String, whatHappened: String, version: String, macOS: String, mac: String, maximumLength: Int = maximumIssueURLLength, maximumSignInLength: Int = maximumSignInLinkLength) -> Issue {
         let text = whatHappened.trimmingCharacters(in: .whitespacesAndNewlines)
         var title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if title.isEmpty {
-            title = text.split(separator: "\n", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+            title = text.split(maxSplits: 1, whereSeparator: \.isNewline).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
         }
         title = shortenedTitle(title)
         var head = [("template", "bug_report.yml")]
@@ -253,20 +262,27 @@ nonisolated enum ProblemReport {
         guard !text.isEmpty else {
             return Issue(url: url(head + tail), wasCut: false)
         }
-        let budget = maximumLength - url(head + tail).absoluteString.count - "&what-happened=".count
-        if encode(text).count <= budget {
-            return Issue(url: url(head + [("what-happened", text)] + tail), wasCut: false)
+        func link(_ whatHappened: String) -> URL {
+            url(head + [("what-happened", whatHappened)] + tail)
         }
-        return Issue(url: url(head + [("what-happened", cut(text, toFit: budget))] + tail), wasCut: true)
+        func fits(_ whatHappened: String) -> Bool {
+            let link = link(whatHappened)
+            return link.absoluteString.count <= maximumLength && signInLink(for: link).count <= maximumSignInLength
+        }
+        if fits(text) {
+            return Issue(url: link(text), wasCut: false)
+        }
+        guard fits(cutMarker) else {
+            return Issue(url: link(""), wasCut: true)
+        }
+        // Taking white space off the end only shortens the link, so it still fits.
+        let start = longestStart(of: text) { fits($0 + cutMarker) }.replacing(/\s+$/, with: "")
+        return Issue(url: link(start + cutMarker), wasCut: true)
     }
 
-    /// The longest start of `text` that, with `cutMarker` after it, is at most `budget`
-    /// characters once encoded. Cuts between whole characters, so an emoji or a Chinese
-    /// character is never split.
-    static func cut(_ text: String, toFit budget: Int) -> String {
-        let marker = encode(cutMarker).count
-        guard budget >= marker else { return "" }
-        return longestStart(of: text, fitting: budget - marker).replacing(/\s+$/, with: "") + cutMarker
+    /// The sign in link GitHub sends a visitor who is not signed in to, for `issueLink`.
+    static func signInLink(for issueLink: URL) -> String {
+        signInPage + encode(issueLink.absoluteString)
     }
 
     /// `text` with at most `maximumTitleLength` characters and at most
@@ -275,26 +291,28 @@ nonisolated enum ProblemReport {
         if text.count <= maximumTitleLength, encode(text).count <= maximumEncodedTitleLength {
             return text
         }
-        let start = longestStart(of: String(text.prefix(maximumTitleLength - 1)), fitting: maximumEncodedTitleLength - encode("…").count)
+        let budget = maximumEncodedTitleLength - encode("…").count
+        let start = longestStart(of: String(text.prefix(maximumTitleLength - 1))) { encode($0).count <= budget }
         return start.trimmingCharacters(in: .whitespaces) + "…"
     }
 
-    /// The longest start of `text`, in whole characters, that is at most `budget` characters
-    /// once encoded.
-    private static func longestStart(of text: String, fitting budget: Int) -> String {
+    /// The longest start of `text`, in whole characters, for which `fits` is true. Cuts
+    /// between whole characters, so an emoji or a Chinese character is never split.
+    /// `fits` must stay false once it turns false for a longer start.
+    private static func longestStart(of text: String, where fits: (String) -> Bool) -> String {
         let characters = Array(text)
         // The encoded length grows with every character, so a binary search finds the end.
-        var fits = 0
+        var fitting = 0
         var tooLong = characters.count + 1
-        while tooLong - fits > 1 {
-            let middle = (fits + tooLong) / 2
-            if encode(String(characters[..<middle])).count <= budget {
-                fits = middle
+        while tooLong - fitting > 1 {
+            let middle = (fitting + tooLong) / 2
+            if fits(String(characters[..<middle])) {
+                fitting = middle
             } else {
                 tooLong = middle
             }
         }
-        return String(characters[..<fits])
+        return String(characters[..<fitting])
     }
 
     /// Percent encoding that leaves only unreserved characters as they are, so a plus, an
