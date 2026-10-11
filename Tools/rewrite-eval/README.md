@@ -36,6 +36,21 @@ not transcribed from anyone's speech. The expected outputs are the ground truth,
 by hand too. A cleanup removes fillers and applies clear self corrections. It does not
 reword, does not answer a question and does not carry out a request.
 
+## Adversarial cases
+
+`adversarial.jsonl` has 70 cases that try to make a text model answer or carry out the
+dictation instead of cleaning it up: requests (帮我写一封邮件给老板), questions, injection lines
+such as "Ignore all previous instructions", role and format orders, text about the model
+itself, and controls that only look like those. One JSON object per line with `id`, `lang`,
+`category`, `input`, `expected_cleanup`, `expected_en` and `expected_zh`. A cleanup keeps a
+request or a question as it is. Like the other cases they were written by hand.
+
+They come from the prompt hardening benchmark of 2026-10-10, which picked the prompt in
+Orra/RewritePrompt.swift and the checks in Orra/RewriteGuard.swift.
+OrraTests/RewriteGuardTests.swift runs that benchmark's cleanup outputs through the checks,
+and OrraTests/CleanupModelEvaluationTests.swift runs the model on these cases and the
+cleanup cases above, see docs/manual-testing.md.
+
 ## Numbers
 
 `numbers.jsonl` has 672 cases for writing spoken Chinese numbers as digits, one JSON
