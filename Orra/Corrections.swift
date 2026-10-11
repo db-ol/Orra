@@ -477,7 +477,7 @@ nonisolated enum SoundAlike {
 }
 
 /// The corrections Orra saw, and whether each was learned, undone, or offered and declined. A pair stays seen
-/// while its word could not be added, such as when the vocabulary is full. Kept as a small
+/// while its word could not be added, as when the vocabulary is at its cap of 5,000 words. Kept as a small
 /// JSON file on this Mac. Holds the word pairs only, never the text around them.
 nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
     nonisolated enum State: String, Codable, Sendable {
