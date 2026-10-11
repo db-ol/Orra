@@ -1026,6 +1026,33 @@ struct PushToTalkControllerTests {
         #expect(saved == [["Orra", "通义千问"], []])
     }
 
+    @Test func fillersAreRemovedOnlyWhileTheSettingIsOn() async throws {
+        var saved: [Bool] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            saveRemovesFillerWords: { saved.append($0) }
+        )
+        #expect(controller.removesFillerWords)
+        await controller.loadModel()
+        speech.reply = "呃，我们明天 um 再说吧。"
+        try await dictate(controller)
+        controller.setRemovesFillerWords(false)
+        try await dictate(controller)
+        controller.setRemovesFillerWords(false)
+        controller.setRemovesFillerWords(true)
+        speech.reply = "嗯嗯"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["我们明天再说吧。", "呃，我们明天 um 再说吧。", "嗯嗯"])
+        #expect(controller.lastTranscript == "嗯嗯")
+        #expect(saved == [false, true])
+    }
+
     @Test func thePasteIsReported() async throws {
         let controller = await makeController()
         var reported: [(String, pid_t)] = []

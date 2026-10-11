@@ -20,8 +20,9 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 423 test cases, including the real model
-  tests below. Two heavier real model tests are skipped unless asked for.
+- The test command ends in TEST SUCCEEDED with 585 test cases passed, 145 of them filler
+  rule cases, including the real model tests below. Three heavier real model tests are
+  skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
   - TalkKeyDetectorTests covers, for fn as before, a hold of fn alone, Caps Lock, fn with
@@ -135,6 +136,13 @@ Build and test commands, run in the repository root:
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
     keeps 噁, and leaves Japanese alone.
+  - FillerRulesTests runs the filler rules on every case of Tools/rewrite-eval/cases.jsonl
+    that rules alone should get right (fillers, particles that must stay, and controls),
+    checks that the cases that need a model lose only fillers, never a word or a number,
+    and covers spacing between Chinese and English, punctuation left behind, capitals at a
+    sentence start, replies such as 嗯，好的 and uh-huh, acronyms such as UM, and words
+    such as 金额 and 呃逆. PushToTalkControllerTests checks that the paste has the fillers
+    removed while the setting is on and not while it is off, and that a change is saved.
   - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
@@ -612,6 +620,15 @@ Dock icon, added on 2026-10-10, not verified yet:
 - [ ] Dictating into another app works the same with the icon shown, and the recording
   indicator never makes Orra the active app.
 
+Filler removal, added on 2026-10-10, not verified yet:
+
+- [ ] With "Remove filler words such as um and 呃" on, the default, dictate
+  "呃，我明天下午要去趟医院" and "Um, I think we should push the launch". The pasted text
+  has no 呃 and no Um, and the English sentence starts with a capital.
+- [ ] Dictate "好啊，那就这么定了" and a bare "嗯嗯". Both paste as said.
+- [ ] Turn the setting off in Settings, General: the same dictations keep their fillers.
+  The choice stays after reopening Orra.
+
 Updates from inside the app, added on 2026-10-10, not verified yet:
 
 - [ ] A release DMG installs by dragging Orra to Applications and opens without a warning.
@@ -641,5 +658,5 @@ Interface language, added on 2026-10-10, not verified yet:
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
 - Key combinations and mouse buttons as talk keys, and hands free mode.
-- Rewriting, and settings other than the talk keys, the microphone, the recording
-  indicator and the sounds.
+- Rewriting with a model: spoken self corrections, fillers that need context such as 那个
+  and like, and translation. Only the filler rules exist.

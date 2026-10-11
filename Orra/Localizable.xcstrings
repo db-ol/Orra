@@ -193,22 +193,22 @@
         }
       }
     },
-    "Check for updates automatically" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动检查更新"
-          }
-        }
-      }
-    },
     "Check for Updates…" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "检查更新…"
+          }
+        }
+      }
+    },
+    "Check for updates automatically" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
           }
         }
       }
@@ -315,27 +315,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载…"
-          }
-        }
-      }
-    },
-    "fn" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "地球仪（fn）键"
-          }
-        }
-      }
-    },
-    "fn (Globe)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "fn（地球仪）键"
           }
         }
       }
@@ -628,6 +607,16 @@
         }
       }
     },
+    "Not Now" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以后"
+          }
+        }
+      }
+    },
     "Not done yet" : {
       "localizations" : {
         "zh-Hans" : {
@@ -644,26 +633,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未下载"
-          }
-        }
-      }
-    },
-    "Not Now" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以后"
-          }
-        }
-      }
-    },
-    "Open at Login" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录时打开"
           }
         }
       }
@@ -688,12 +657,32 @@
         }
       }
     },
+    "Open at Login" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录时打开"
+          }
+        }
+      }
+    },
     "Orra" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra"
+          }
+        }
+      }
+    },
+    "Orra Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 设置"
           }
         }
       }
@@ -808,16 +797,6 @@
         }
       }
     },
-    "Orra Settings" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 设置"
-          }
-        }
-      }
-    },
     "Orra shows the new language after it restarts." : {
       "localizations" : {
         "zh-Hans" : {
@@ -888,6 +867,26 @@
         }
       }
     },
+    "Remove filler words such as um and uh" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去掉“呃”“嗯”这类语气词"
+          }
+        }
+      }
+    },
+    "Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去掉只用来停顿的“呃”“额”“嗯”“啊”“哦”，英文里的同类词也会去掉。有意义的词，比如“好啊”“吧”“那个”，以及“嗯，好的”这样的回答，会照原样保留。"
+          }
+        }
+      }
+    },
     "Restart Orra" : {
       "localizations" : {
         "zh-Hans" : {
@@ -908,17 +907,6 @@
         }
       }
     },
-    "right Command" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Command 键"
-          }
-        }
-      }
-    },
     "Right Command" : {
       "localizations" : {
         "zh-Hans" : {
@@ -929,34 +917,12 @@
         }
       }
     },
-    "right Control" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Control 键"
-          }
-        }
-      }
-    },
     "Right Control" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "右侧 Control 键"
-          }
-        }
-      }
-    },
-    "right Option" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Option 键"
           }
         }
       }
@@ -1011,22 +977,22 @@
         }
       }
     },
-    "Show a small bar at the bottom of the screen while Orra is ready" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 待命时，在屏幕底部显示一条小横条"
-          }
-        }
-      }
-    },
     "Show Orra in the Dock" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "在程序坞中显示 Orra"
+          }
+        }
+      }
+    },
+    "Show a small bar at the bottom of the screen while Orra is ready" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 待命时，在屏幕底部显示一条小横条"
           }
         }
       }
@@ -1091,22 +1057,22 @@
         }
       }
     },
-    "System Default (%@, lid closed)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系统默认（%@，已合盖）"
-          }
-        }
-      }
-    },
     "System Default (%@)" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "系统默认（%@）"
+          }
+        }
+      }
+    },
+    "System Default (%@, lid closed)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统默认（%@，已合盖）"
           }
         }
       }
@@ -1267,22 +1233,22 @@
         }
       }
     },
-    "This build has no microphone usage description" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此版本缺少麦克风用途说明"
-          }
-        }
-      }
-    },
     "This Mac is offline. Connect to the internet, then try again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "这台 Mac 没有联网。请连接互联网，然后重试。"
+          }
+        }
+      }
+    },
+    "This build has no microphone usage description" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本缺少麦克风用途说明"
           }
         }
       }
@@ -1443,6 +1409,60 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "界面语言、说话键、听写时的提示，以及 Orra 如何启动。"
+          }
+        }
+      }
+    },
+    "fn" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地球仪（fn）键"
+          }
+        }
+      }
+    },
+    "fn (Globe)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "fn（地球仪）键"
+          }
+        }
+      }
+    },
+    "right Command" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Command 键"
+          }
+        }
+      }
+    },
+    "right Control" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Control 键"
+          }
+        }
+      }
+    },
+    "right Option" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Option 键"
           }
         }
       }

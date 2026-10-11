@@ -188,8 +188,17 @@ private struct GeneralSettings: View {
                 Toggle(isOn: $feedback.showsIdleBar) {
                     Label("Show a small bar at the bottom of the screen while Orra is ready", systemImage: "minus.rectangle")
                 }
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.removesFillerWords },
+                    set: { pushToTalk.setRemovesFillerWords($0) }
+                )) {
+                    Label("Remove filler words such as um and uh", systemImage: "text.badge.minus")
+                }
             } header: {
                 Text("While you dictate")
+            } footer: {
+                Text("Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.")
+                    .foregroundStyle(.secondary)
             }
             Section {
                 Toggle(isOn: Binding(

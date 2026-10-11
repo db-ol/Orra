@@ -46,6 +46,9 @@ final class PushToTalkController {
     /// The user's words and names, which the speech model gets with every dictation. Saved
     /// through `saveVocabulary` whenever they change. Never logged.
     private(set) var vocabulary: [String]
+    /// Whether fillers such as 呃 and um are removed before the paste, see FillerRules.
+    /// Saved through `saveRemovesFillerWords` whenever it changes.
+    private(set) var removesFillerWords: Bool
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
     /// Microphone permission as last seen. Refreshed at start, on every hold, and after
@@ -114,6 +117,7 @@ final class PushToTalkController {
     @ObservationIgnored private let saveTalkKeys: (Set<TalkKey>) -> Void
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
     @ObservationIgnored private let saveVocabulary: ([String]) -> Void
+    @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
     @ObservationIgnored private var accessCheckTask: Task<Void, Never>?
     @ObservationIgnored private var accessObserver: (any NSObjectProtocol)?
     @ObservationIgnored private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
@@ -142,6 +146,10 @@ final class PushToTalkController {
     ///   - saveTalkKeys: Saves the keys after the user changes them.
     ///   - microphone: The microphone the user chose, or nil for the system default.
     ///   - saveMicrophone: Saves the choice after the user changes it.
+    ///   - vocabulary: The user's words and names, as saved.
+    ///   - saveVocabulary: Saves the words after the user changes them.
+    ///   - removesFillerWords: Whether fillers are removed, as saved.
+    ///   - saveRemovesFillerWords: Saves the choice after the user changes it.
     init(
         capture: AudioCapture,
         transcription: Transcription,
@@ -160,7 +168,9 @@ final class PushToTalkController {
         microphone: MicrophoneChoice? = nil,
         saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in },
         vocabulary: [String] = [],
-        saveVocabulary: @escaping ([String]) -> Void = { _ in }
+        saveVocabulary: @escaping ([String]) -> Void = { _ in },
+        removesFillerWords: Bool = true,
+        saveRemovesFillerWords: @escaping (Bool) -> Void = { _ in }
     ) {
         self.capture = capture
         self.transcription = transcription
@@ -180,6 +190,8 @@ final class PushToTalkController {
         self.saveMicrophone = saveMicrophone
         self.vocabulary = vocabulary
         self.saveVocabulary = saveVocabulary
+        self.removesFillerWords = removesFillerWords
+        self.saveRemovesFillerWords = saveRemovesFillerWords
     }
 
     /// Starts watching for the hotkey. Without Accessibility access it waits: the welcome
@@ -233,6 +245,13 @@ final class PushToTalkController {
         guard terms != vocabulary else { return }
         vocabulary = terms
         saveVocabulary(terms)
+    }
+
+    /// Turns filler removal on or off for the next dictations and saves the choice.
+    func setRemovesFillerWords(_ on: Bool) {
+        guard on != removesFillerWords else { return }
+        removesFillerWords = on
+        saveRemovesFillerWords(on)
     }
 
     func setMicrophone(_ choice: MicrophoneChoice?) {
@@ -525,7 +544,10 @@ final class PushToTalkController {
                 return
             }
             let raw = try await transcription.transcribe(samples, Vocabulary.context(vocabulary))
-            let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            if removesFillerWords {
+                text = FillerRules.removingFillers(from: text)
+            }
             guard !text.isEmpty else {
                 holdMessage = String(localized: "No speech was recognized")
                 logger.notice("No speech recognized in \(recording.duration, privacy: .public) s of audio")
