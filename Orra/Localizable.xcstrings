@@ -1223,6 +1223,16 @@
         }
       }
     },
+    "The report could not be saved. Try again, or turn off Attach the diagnostic report to go on without it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存报告。请再试一次，或关闭“附上诊断报告”，不附报告继续。"
+          }
+        }
+      }
+    },
     "The speech model could not be loaded" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1453,12 +1463,12 @@
         }
       }
     },
-    "Your text was too long for the link, so GitHub shows only its start. The full text is on your clipboard. Paste it into the form." : {
+    "Your text was too long for the link, so GitHub shows only its start. The full text is on your clipboard. On GitHub, select all the text in the What happened box and paste." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的内容太长，链接放不下，所以 GitHub 只显示开头部分。完整内容已放到剪贴板上，请把它粘贴到表单中。"
+            "value" : "你的内容太长，链接放不下，所以 GitHub 只显示开头部分。完整内容已放到剪贴板上。请在 GitHub 上全选“发生了什么”框里的文字，再粘贴。"
           }
         }
       }

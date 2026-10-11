@@ -361,6 +361,18 @@ struct ReportView: View {
             DisclosureGroup("Show the report", isExpanded: $showsReport) {
                 report
             }
+            if attachesReport, case .failed = reporter.state {
+                // Outside the report, which is hidden at first, since it keeps Continue on GitHub off.
+                HStack {
+                    Text("The report could not be saved. Try again, or turn off Attach the diagnostic report to go on without it.")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Try Again") {
+                        reporter.create()
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(.orange)
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Reports go to GitHub and are public, so leave out private details. You need a free GitHub account. If you are not signed in, GitHub asks you to sign in or to create an account. After you sign in, GitHub shows the form with your text filled in. After creating an account, choose Continue on GitHub again if the form is empty.")
@@ -373,7 +385,7 @@ struct ReportView: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             if textWasCut {
-                Text("Your text was too long for the link, so GitHub shows only its start. The full text is on your clipboard. Paste it into the form.")
+                Text("Your text was too long for the link, so GitHub shows only its start. The full text is on your clipboard. On GitHub, select all the text in the What happened box and paste.")
                     .font(.callout)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -425,12 +437,7 @@ struct ReportView: View {
             .background(Color(nsColor: .textBackgroundColor))
             .border(Color(nsColor: .separatorColor))
         case .failed:
-            HStack {
-                Text("The report could not be saved.")
-                Button("Try Again") {
-                    reporter.create()
-                }
-            }
+            Text("The report could not be saved.")
         }
     }
 }
