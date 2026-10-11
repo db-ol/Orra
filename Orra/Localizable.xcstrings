@@ -183,6 +183,16 @@
         }
       }
     },
+    "Attach the diagnostic report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附上诊断报告"
+          }
+        }
+      }
+    },
     "Cancel Download" : {
       "localizations" : {
         "zh-Hans" : {
@@ -253,12 +263,52 @@
         }
       }
     },
+    "Closes in %lld seconds" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒后关闭"
+          }
+        }
+      }
+    },
+    "Continue on GitHub" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 GitHub 上继续"
+          }
+        }
+      }
+    },
     "Copy Last Dictation" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "拷贝上次听写"
+          }
+        }
+      }
+    },
+    "Copy Report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝报告"
+          }
+        }
+      }
+    },
+    "Creating the report…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成报告…"
           }
         }
       }
@@ -457,6 +507,26 @@
         }
       }
     },
+    "It holds Orra’s version, settings, permissions and log from the last hour, facts about your Mac and recent crash reports. It holds no dictated text and no audio. Your name and your Mac’s name are taken out." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其中有 Orra 的版本、设置、权限和最近一小时的日志，你的 Mac 的信息，以及最近的崩溃报告。其中没有听写的文字，也没有录音。你的名字和 Mac 的名称会被去掉。"
+          }
+        }
+      }
+    },
+    "Language" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言"
+          }
+        }
+      }
+    },
     "Learn from my corrections" : {
       "localizations" : {
         "zh-Hans" : {
@@ -627,6 +697,16 @@
         }
       }
     },
+    "Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说出来的日期、时间、价格和百分比会写成阿拉伯数字。“三本书”这样的小数目、“十几个”这样的约数和成语保持原样。"
+          }
+        }
+      }
+    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -667,12 +747,32 @@
         }
       }
     },
+    "Orra Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 设置"
+          }
+        }
+      }
+    },
     "Orra can use the microphone." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 可以使用麦克风。"
+          }
+        }
+      }
+    },
+    "Orra changes your clipboard only when you choose Copy Report, or when your text is too long for the link." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有在你选择“拷贝报告”，或者你的内容太长、链接放不下时，Orra 才会改动剪贴板。"
           }
         }
       }
@@ -767,12 +867,32 @@
         }
       }
     },
+    "Orra opens the folder with the report file. Drag the file into the page on GitHub." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 会打开报告文件所在的文件夹，请把文件拖进 GitHub 页面。"
+          }
+        }
+      }
+    },
     "Orra records only while you hold the talk key." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 只在你按住说话键时录音。"
+          }
+        }
+      }
+    },
+    "Orra shows the new language after it restarts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 重新启动后才会显示新的语言。"
           }
         }
       }
@@ -837,6 +957,66 @@
         }
       }
     },
+    "Remove filler words such as um and uh" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去掉“呃”“嗯”这类语气词"
+          }
+        }
+      }
+    },
+    "Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去掉只用来停顿的“呃”“额”“嗯”“啊”“哦”，英文里的同类词也会去掉。有意义的词，比如“好啊”“吧”“那个”，以及“嗯，好的”这样的回答，会照原样保留。"
+          }
+        }
+      }
+    },
+    "Report a Problem" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告问题"
+          }
+        }
+      }
+    },
+    "Report a Problem…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告问题…"
+          }
+        }
+      }
+    },
+    "Reports go to GitHub and are public, so leave out private details. You need a free GitHub account. If you are not signed in, GitHub asks you to sign in or to create an account. After you sign in, GitHub shows the form with your text filled in. After creating an account, choose Continue on GitHub again if the form is empty." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告会发到 GitHub 上并公开显示，请不要写入隐私信息。你需要一个免费的 GitHub 账户。如果你没有登录，GitHub 会请你登录或注册账户。登录后，GitHub 会显示已填好你的内容的表单。注册账户后，如果表单是空的，请再选择一次“在 GitHub 上继续”。"
+          }
+        }
+      }
+    },
+    "Restart Orra" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新启动 Orra"
+          }
+        }
+      }
+    },
     "Resume Download (%@ left)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -873,6 +1053,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "右侧 Option 键"
+          }
+        }
+      }
+    },
+    "Same as the Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随 Mac 系统"
           }
         }
       }
@@ -917,6 +1107,16 @@
         }
       }
     },
+    "Show Report File" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示报告文件"
+          }
+        }
+      }
+    },
     "Show a small bar at the bottom of the screen while Orra is ready" : {
       "localizations" : {
         "zh-Hans" : {
@@ -933,6 +1133,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示录音提示"
+          }
+        }
+      }
+    },
+    "Show the report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看报告"
           }
         }
       }
@@ -963,6 +1173,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型"
+          }
+        }
+      }
+    },
+    "Starting and finding Orra" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动和查找 Orra"
+          }
+        }
+      }
+    },
+    "Stays while the pointer is over it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鼠标停在上面时不会关闭"
           }
         }
       }
@@ -1093,6 +1323,26 @@
         }
       }
     },
+    "The report could not be saved." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存报告。"
+          }
+        }
+      }
+    },
+    "The report could not be saved. Try again, or turn off Attach the diagnostic report to go on without it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存报告。请再试一次，或关闭“附上诊断报告”，不附报告继续。"
+          }
+        }
+      }
+    },
     "The speech model could not be loaded" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1173,6 +1423,16 @@
         }
       }
     },
+    "Title (optional)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标题（可选）"
+          }
+        }
+      }
+    },
     "Transcribing…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1233,6 +1493,16 @@
         }
       }
     },
+    "Version, speech model, updates and privacy." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本、语音模型、更新和隐私。"
+          }
+        }
+      }
+    },
     "Vocabulary" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1263,12 +1533,42 @@
         }
       }
     },
+    "What happened?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发生了什么？"
+          }
+        }
+      }
+    },
+    "What you did, what you expected, and what happened instead." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你做了什么，预期的结果是什么，实际发生了什么。"
+          }
+        }
+      }
+    },
     "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开后，每次粘贴后的 3 分钟内，只要你还在那个输入框里，Orra 就会读取它的文字，从不读取密码框。你改正一个听错的词，Orra 就会把正确的写法加入个人词库，并弹出提示，你可以撤销。Orra 只保存词对，只存在这台 Mac 上。它只在 macOS 能读取文字的 App 里生效，比如备忘录、邮件和 Safari，部分编辑器和终端不行。在这些 App 里，请拷贝正确的词，再从 Orra 菜单里添加。"
+          }
+        }
+      }
+    },
+    "Which microphone Orra records from." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 用哪个麦克风录音。"
           }
         }
       }
@@ -1289,6 +1589,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "听写时"
+          }
+        }
+      }
+    },
+    "Words and names that Orra should write your way, and learning from your corrections." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让 Orra 按你的写法输出的词和名字，以及从你的修改中学习。"
+          }
+        }
+      }
+    },
+    "Write numbers as digits" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把数字写成阿拉伯数字"
+          }
+        }
+      }
+    },
+    "Your language, the talk key, what you see and hear while dictating, and how Orra starts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "界面语言、说话键、听写时的提示，以及 Orra 如何启动。"
+          }
+        }
+      }
+    },
+    "Your text was too long for the link, so GitHub shows only its start. The full text is on your clipboard. On GitHub, select all the text in the What happened box and paste." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的内容太长，链接放不下，所以 GitHub 只显示开头部分。完整内容已放到剪贴板上。请在 GitHub 上全选“发生了什么”框里的文字，再粘贴。"
           }
         }
       }

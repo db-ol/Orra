@@ -7,14 +7,51 @@ import SwiftUI
         MenuBarExtra {
             StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, clipboard: appDelegate.clipboard, updater: appDelegate.updater) {
                 appDelegate.welcome.show()
+            } reportProblem: {
+                appDelegate.report.show()
             }
         } label: {
             MenuBarIcon(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models)
         }
 
-        Settings {
+        // A plain window rather than SwiftUI's Settings scene, whose window cannot be
+        // resized. It opens only when asked for, never at launch.
+        Window("Orra Settings", id: SettingsWindow.id) {
             SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
         }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 780, height: 620)
+        .defaultLaunchBehavior(.suppressed)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                SettingsMenuItem()
+            }
+            // Replaces the Help menu's item, which has no help book to open.
+            CommandGroup(replacing: .help) {
+                Button("Report a Problem…") {
+                    appDelegate.report.show()
+                }
+            }
+        }
+    }
+}
+
+/// The settings window's identity, for openWindow.
+enum SettingsWindow {
+    static let id = "settings"
+}
+
+/// Settings… with Command comma in the app menu, which also lets AppKit code open the
+/// window through that item, see DockIcon.openSettings.
+struct SettingsMenuItem: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Settings…") {
+            NSApplication.shared.activate()
+            openWindow(id: SettingsWindow.id)
+        }
+        .keyboardShortcut(",", modifiers: .command)
     }
 }
 

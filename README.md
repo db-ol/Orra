@@ -16,6 +16,7 @@ Orra is an early preview. Expect rough edges, and expect the design to change.
 - Dictate in Chinese, English, or both mixed in one sentence, into any app that takes text.
 - Speech becomes text on your Mac with the Qwen3-ASR 1.7B model. Nothing you say leaves the Mac.
 - A personal vocabulary of up to 100 names and terms, so Orra writes them your way. Optionally, Orra learns the words you fix after a dictation.
+- Filler words such as 呃, um and uh are removed, and numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits.
 - A small bar at the bottom of the screen shows that Orra is ready, and while you speak it shows your voice level.
 - Updates install from inside the app.
 
@@ -41,10 +42,12 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
 - **Talk key.** Choose right Control, right Option, right Command or fn (Globe) under Talk Key in the menu or in Settings, General.
 - **Vocabulary.** In Settings, Vocabulary, add the words and names you use. Orra gives them to the speech model with every dictation. On test speech this raised the share of such terms written correctly from about 84% to 99% in Chinese and from 83% to 96% in English, and listed words were almost never inserted when nobody said them.
 - **Learning from your corrections.** Turn on "Learn from my corrections" under Vocabulary. When you fix a misheard word right after a dictation, Orra adds the right spelling to your vocabulary and shows a notice with Undo. It works in apps that let macOS read their text, such as Notes, Mail and Safari. In other apps, copy the word and choose the add item in Orra's menu.
+- **Fillers and numbers.** Before it pastes, Orra removes fillers that only fill a pause, such as 呃, 额, um and uh, and keeps words that carry meaning, such as 好啊, 吧 and 那个. It also writes numbers spoken in Chinese as digits where a reader expects them: 二零二六年十月十号 becomes 2026年10月10号, 百分之五十 becomes 50% and Lexus RX 三五零 becomes Lexus RX 350. Small counts such as 三本书, rough numbers and idioms stay in words. Settings, General turns each of them off.
 - **Microphone.** Orra records from the system's default input unless you choose another under Microphone. With the lid of a MacBook closed, its own microphone is off, so choose another one, such as a webcam's.
 - **Sounds, indicator, bar and Dock icon.** Settings, General turns each of them off.
 - **Language.** Orra's menus and windows are in English and Simplified Chinese, following your Mac. To give Orra its own language, use System Settings, General, Language & Region, Applications.
 - **Updates.** Choose Check for Updates in the menu, or let Orra check by itself under Settings, About.
+- **Reporting a problem.** Choose Report a Problem… in Orra's menu and describe what happened. Continue on GitHub opens a new issue with your text, Orra's version, macOS and your Mac model filled in. GitHub needs a free account, and issues there are public. Orra also writes a diagnostic report for you to drag into the issue.
 
 ## Privacy
 
@@ -59,11 +62,13 @@ Orra turns your speech into text on your Mac and never sends your recordings or 
 
 Launching Orra never connects to the network until you allowed update checks. Like any download, these services see your IP address, and an update check also shows Orra's version and, as every web request does, your preferred languages. Orra sends no account, token or cookie, and nothing else about your Mac.
 
+**Report a Problem** writes a text file on your Mac with Orra's version, settings and permissions, the Mac's model, chip, memory, macOS version and languages, the microphone's name, Orra's own log from the last hour and its crash reports from the last 7 days. It holds no dictated text, audio, clipboard, vocabulary or learned words. Your home folder, account name, full name and computer name are taken out. Orra sends nothing itself. It opens the GitHub page in your browser, and the file reaches GitHub only if you attach it.
+
 To remove the model, quit Orra and delete the Models folder above. If ~/Library/Caches/qwen3-speech holds a copy from another app, delete that too, or Orra installs the model again from it. docs/model-download.md has the details.
 
 ## Feedback and help
 
-- **Found a problem?** [Report it on GitHub Issues](https://github.com/db-ol/Orra/issues/new/choose). Say which version of Orra and macOS you use, and what you expected to happen. Please leave out anything private you dictated.
+- **Found a problem?** Choose Report a Problem… in Orra's menu, or [open an issue on GitHub](https://github.com/db-ol/Orra/issues/new/choose). Please leave out anything private you dictated.
 - **Have a question or an idea?** Ask in [Discussions](https://github.com/db-ol/Orra/discussions).
 
 ## For developers

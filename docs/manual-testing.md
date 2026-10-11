@@ -20,8 +20,9 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 422 test cases, including the real model
-  tests below. Two heavier real model tests are skipped unless asked for.
+- The test command ends in TEST SUCCEEDED with 1219 test cases passed, 145 of them filler
+  rule cases and 633 number rule cases, including the real model tests below. Three heavier real model tests are
+  skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
   - TalkKeyDetectorTests covers, for fn as before, a hold of fn alone, Caps Lock, fn with
@@ -135,6 +136,19 @@ Build and test commands, run in the repository root:
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
     keeps 噁, and leaves Japanese alone.
+  - FillerRulesTests runs the filler rules on every case of Tools/rewrite-eval/cases.jsonl
+    that rules alone should get right (fillers, particles that must stay, and controls),
+    checks that the cases that need a model lose only fillers, never a word or a number,
+    and covers spacing between Chinese and English, punctuation left behind, capitals at a
+    sentence start, replies such as 嗯，好的 and uh-huh, acronyms such as UM, and words
+    such as 金额 and 呃逆. PushToTalkControllerTests checks that the paste has the fillers
+    removed while the setting is on and not while it is off, and that a change is saved.
+  - NumberRulesTests runs the number rules on every case of
+    Tools/rewrite-eval/numbers.jsonl and checks that applying them twice changes nothing
+    more. It checks that every cleanup in cases.jsonl without a number stays as it is,
+    that English is untouched, ranges of times, versions after a Latin name, and a long
+    dictation. PushToTalkControllerTests checks that the paste has digits after the fillers
+    are gone while the setting is on, not while it is off, and that a change is saved.
   - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
@@ -186,6 +200,38 @@ Build and test commands, run in the repository root:
     model suites sit under RealModelTests, which runs them one at a time. They load the
     model from Orra's installed folder, or, before a build with the model download has
     run once, from the copy in ~/Library/Caches/qwen3-speech, which they only read.
+- ProblemReportTests covers the diagnostic report of Report a Problem…: the home folder,
+  account name, full name and computer name are taken out, names under three characters
+  and other users' folders stay, the report lists the facts and only counts of the
+  vocabulary and the learned pairs, keeps the newest 2000 log lines, picks at most three
+  Orra crash reports from the last 7 days, and the issue link fills the form fields the
+  bug report form defines, with what happened among them. The link stays under 6,000
+  characters, and the sign in link GitHub makes from it under 7,000: a long text is cut
+  between whole characters with a marker in English and Chinese, which the tests check
+  for English, Chinese and emoji, since percent encoding makes a Chinese character 9
+  characters long and an emoji up to several dozen, and the sign in link adds 2 for
+  every %. Without a title, the first line of the text is the title, at most 120
+  characters and 1,000 encoded, also after a Windows line break.
+- On 2026-10-10, curl without a GitHub session asked for
+  https://github.com/db-ol/Orra/issues/new with template, title, what-happened, version,
+  macos and mac filled in, with Chinese text, a newline, a plus and an ampersand. GitHub
+  answered 302 to https://github.com/login?return_to= followed by the whole new issue
+  link, encoded once more, with every parameter in it. The sign in page put the same
+  link in its return_to field, and its Create an account link went to /signup with the
+  same return_to. The sign up page itself answered curl with a bot check, so whether
+  GitHub returns to the form after creating an account was not verified. With English
+  text, links up to 6,979 characters got the 302, and links of 7,079 characters and
+  more got a 500. With Chinese text or emoji the sign in link is the limit, since every
+  % in the issue link becomes %25 there, about 1.67 times as long. A 4,620 character
+  link with Chinese text got a sign in link of 7,693 characters with the issue link
+  intact. From a 4,680 character link with emoji and a 4,800 character link with
+  Chinese text, GitHub sent a 302 to plain https://github.com/login with no return_to,
+  so the form would come back empty after signing in. The sign in link was always
+  https://github.com/login?return_to= followed by the issue link encoded the way Orra
+  encodes. So Orra keeps its links under 6,000 characters and the sign in link under
+  7,000. A one off run on 2026-10-10 wrote a report on this Mac from
+  the local log store, with a crash report, and without the home folder or the account
+  name in it.
 - The secure input check reads kCGSSessionSecureInputPID. A throwaway program turned secure
   input on and off on 2026-10-04 and saw the key appear and disappear.
 - The built app launches from the terminal, finishes launching, and reports the
@@ -503,7 +549,7 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
 - [ ] With a USB microphone chosen in Orra, start speaking right at the sound: the first
   syllable is in the text. The sound comes only once the microphone records.
 - [ ] Hold the talk key in Notes: a moment after the press a short sound plays and a dark
-  indicator appears at the bottom of the screen with the pointer, with bars that move
+  indicator appears at the bottom of the screen with the pointer, a green microphone with bars that move
   with your voice. Notes keeps the focus: its text cursor still blinks, and the menu bar
   still shows Notes.
 - [ ] A shortcut with the talk key, such as right Control+C in Terminal, plays no sound and
@@ -559,7 +605,8 @@ corrections under Vocabulary in Settings first:
 
 - [ ] Dictate a sentence with a name Orra gets wrong into Notes and fix the name by hand: a
   second or two after you stop typing, a notice above the recording indicator says the
-  name was added to the vocabulary. It stays 15 seconds, and while the pointer is over it. The app you are in keeps the focus. The next dictation is more likely to
+  name was added to the vocabulary. A ring counts down the 10 seconds it stays. With the
+  pointer over it the ring shows a pause sign, and after the pointer leaves it counts 4. The app you are in keeps the focus. The next dictation is more likely to
   write it right, and Orra never changes the text itself.
 - [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
   Chinese character such as 的 to 得, deleting words, or rewriting the sentence adds
@@ -612,6 +659,24 @@ Dock icon, added on 2026-10-10, not verified yet:
 - [ ] Dictating into another app works the same with the icon shown, and the recording
   indicator never makes Orra the active app.
 
+Filler removal, added on 2026-10-10, not verified yet:
+
+- [ ] With "Remove filler words such as um and 呃" on, the default, dictate
+  "呃，我明天下午要去趟医院" and "Um, I think we should push the launch". The pasted text
+  has no 呃 and no Um, and the English sentence starts with a capital.
+- [ ] Dictate "好啊，那就这么定了" and a bare "嗯嗯". Both paste as said.
+- [ ] Turn the setting off in Settings, General: the same dictations keep their fillers.
+  The choice stays after reopening Orra.
+
+Numbers as digits, added on 2026-10-10, not verified yet:
+
+- [ ] With "Write numbers as digits" on, the default, dictate "我下个月想去试驾 Lexus RX
+  三五零" and "明天下午三点开会，预算三百五十块". The paste reads RX 350, 下午3点 and
+  350块, with the space before 350 as the model wrote it.
+- [ ] Dictate "我们一起去，三五成群" and "我买了三本书". Both paste as said.
+- [ ] Turn the setting off in Settings, General: the numbers stay in Chinese characters.
+  The choice stays after reopening Orra.
+
 Updates from inside the app, added on 2026-10-10, not verified yet:
 
 - [ ] A release DMG installs by dragging Orra to Applications and opens without a warning.
@@ -625,11 +690,49 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
   The menu offers Install Orra with its version, and the update window shows once you
   switch to Orra. There is no checkbox to install updates automatically.
 
+Interface language, added on 2026-10-10, not verified yet:
+
+- [ ] Settings, General, Language offers Same as the Mac, English and 简体中文. Choosing one
+  shows Restart Orra, and after the restart the menu, Settings, the welcome window and the
+  indicator use that language. Same as the Mac follows System Settings again.
+- [ ] Settings looks like System Settings: colored icons in the sidebar, a header with icon,
+  title and summary on every page, and icons on the rows of General. Language is the first
+  section of General. The window can be made larger, keeps its size, and cannot be made
+  smaller than its content.
+
+Report a Problem, added on 2026-10-10, not verified yet:
+
+- [ ] Report a Problem… in the menu bar menu, and in the Help menu while Orra is in the
+  Dock, opens the Report a Problem window. It shows the report after a few seconds.
+- [ ] The report lists Orra's version, macOS, the Mac model and chip, the settings, the
+  permissions and Orra's log from the last hour. It contains no dictated text, no
+  vocabulary words or learned pairs, no clipboard, and neither your home folder path nor
+  your account name. No permission prompt appears.
+- [ ] The window has a title field, a What happened? text with a hint while empty, the
+  Attach the diagnostic report checkbox, on at first, and Show the report, which shows
+  the report text. Continue on GitHub stays off while the text is empty, and while the
+  report is being created with the checkbox on. Command-Return chooses it, and Return
+  starts a new line.
+- [ ] Continue on GitHub opens the bug report form in the browser with the title, What
+  happened, Orra version, macOS version and Mac model filled in. Without a title, the
+  first line of the text is the title. Chinese text and emoji arrive as written.
+- [ ] Signed out of GitHub, Continue on GitHub leads to the sign in page, and signing in
+  leads back to the form with the text filled in. Creating a new account from there:
+  note whether GitHub returns to the form afterwards.
+- [ ] With the checkbox on, Finder selects Orra-Report-<date>.txt, and dragging it into
+  the form attaches it. With the checkbox off, Finder does not open.
+- [ ] The clipboard keeps what it held when you choose Continue on GitHub with a short
+  text. Copy Report puts the report on the clipboard.
+- [ ] A very long text, such as several pages, opens the form with the start of the text
+  and the cut marker at its end, the window says the full text is on the clipboard,
+  and pasting gives the whole text. Nothing is sent without you submitting the form.
+- [ ] With the interface in Chinese, the menu item and the window read in Chinese.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
 - Key combinations and mouse buttons as talk keys, and hands free mode.
-- Rewriting, and settings other than the talk keys, the microphone, the recording
-  indicator and the sounds.
+- Rewriting with a model: spoken self corrections, fillers that need context such as 那个
+  and like, and translation. Only the filler and number rules exist.

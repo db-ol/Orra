@@ -46,6 +46,13 @@ final class PushToTalkController {
     /// The user's words and names, which the speech model gets with every dictation. Saved
     /// through `saveVocabulary` whenever they change. Never logged.
     private(set) var vocabulary: [String]
+    /// Whether fillers such as 呃 and um are removed before the paste, see FillerRules.
+    /// Saved through `saveRemovesFillerWords` whenever it changes.
+    private(set) var removesFillerWords: Bool
+    /// Whether numbers spoken in Chinese, such as 百分之五十, are written as digits before
+    /// the paste, see NumberRules. Saved through `saveWritesNumbersAsDigits` whenever it
+    /// changes.
+    private(set) var writesNumbersAsDigits: Bool
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
     /// Microphone permission as last seen. Refreshed at start, on every hold, and after
@@ -114,6 +121,8 @@ final class PushToTalkController {
     @ObservationIgnored private let saveTalkKeys: (Set<TalkKey>) -> Void
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
     @ObservationIgnored private let saveVocabulary: ([String]) -> Void
+    @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
+    @ObservationIgnored private let saveWritesNumbersAsDigits: (Bool) -> Void
     @ObservationIgnored private var accessCheckTask: Task<Void, Never>?
     @ObservationIgnored private var accessObserver: (any NSObjectProtocol)?
     @ObservationIgnored private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
@@ -142,6 +151,12 @@ final class PushToTalkController {
     ///   - saveTalkKeys: Saves the keys after the user changes them.
     ///   - microphone: The microphone the user chose, or nil for the system default.
     ///   - saveMicrophone: Saves the choice after the user changes it.
+    ///   - vocabulary: The user's words and names, as saved.
+    ///   - saveVocabulary: Saves the words after the user changes them.
+    ///   - removesFillerWords: Whether fillers are removed, as saved.
+    ///   - saveRemovesFillerWords: Saves the choice after the user changes it.
+    ///   - writesNumbersAsDigits: Whether spoken numbers become digits, as saved.
+    ///   - saveWritesNumbersAsDigits: Saves the choice after the user changes it.
     init(
         capture: AudioCapture,
         transcription: Transcription,
@@ -160,7 +175,11 @@ final class PushToTalkController {
         microphone: MicrophoneChoice? = nil,
         saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in },
         vocabulary: [String] = [],
-        saveVocabulary: @escaping ([String]) -> Void = { _ in }
+        saveVocabulary: @escaping ([String]) -> Void = { _ in },
+        removesFillerWords: Bool = true,
+        saveRemovesFillerWords: @escaping (Bool) -> Void = { _ in },
+        writesNumbersAsDigits: Bool = true,
+        saveWritesNumbersAsDigits: @escaping (Bool) -> Void = { _ in }
     ) {
         self.capture = capture
         self.transcription = transcription
@@ -180,6 +199,10 @@ final class PushToTalkController {
         self.saveMicrophone = saveMicrophone
         self.vocabulary = vocabulary
         self.saveVocabulary = saveVocabulary
+        self.removesFillerWords = removesFillerWords
+        self.saveRemovesFillerWords = saveRemovesFillerWords
+        self.writesNumbersAsDigits = writesNumbersAsDigits
+        self.saveWritesNumbersAsDigits = saveWritesNumbersAsDigits
     }
 
     /// Starts watching for the hotkey. Without Accessibility access it waits: the welcome
@@ -233,6 +256,21 @@ final class PushToTalkController {
         guard terms != vocabulary else { return }
         vocabulary = terms
         saveVocabulary(terms)
+    }
+
+    /// Turns filler removal on or off for the next dictations and saves the choice.
+    func setRemovesFillerWords(_ on: Bool) {
+        guard on != removesFillerWords else { return }
+        removesFillerWords = on
+        saveRemovesFillerWords(on)
+    }
+
+    /// Turns writing spoken numbers as digits on or off for the next dictations and saves
+    /// the choice.
+    func setWritesNumbersAsDigits(_ on: Bool) {
+        guard on != writesNumbersAsDigits else { return }
+        writesNumbersAsDigits = on
+        saveWritesNumbersAsDigits(on)
     }
 
     func setMicrophone(_ choice: MicrophoneChoice?) {
@@ -524,8 +562,14 @@ final class PushToTalkController {
                 logger.notice("The microphone delivered no sound for \(recording.duration, privacy: .public) s, lid closed: \(situation.lidClosed, privacy: .public)")
                 return
             }
-            let raw = try await transcription.transcribe(samples, Vocabulary.context(vocabulary))
-            let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            let raw = try await transcription.transcribe(samples, vocabulary: vocabulary, audioSeconds: recording.duration)
+            var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            if removesFillerWords {
+                text = FillerRules.removingFillers(from: text)
+            }
+            if writesNumbersAsDigits {
+                text = NumberRules.writingNumbersAsDigits(in: text)
+            }
             guard !text.isEmpty else {
                 holdMessage = String(localized: "No speech was recognized")
                 logger.notice("No speech recognized in \(recording.duration, privacy: .public) s of audio")

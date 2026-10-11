@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The pages of the settings window, in the sidebar's order.
@@ -20,10 +21,89 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .general: "gearshape"
-        case .microphone: "mic"
-        case .vocabulary: "character.book.closed"
-        case .about: "info.circle"
+        case .general: "gearshape.fill"
+        case .microphone: "mic.fill"
+        case .vocabulary: "character.book.closed.fill"
+        case .about: "info.circle.fill"
+        }
+    }
+
+    /// The color behind the icon, as System Settings gives each pane its own.
+    var tint: Color {
+        switch self {
+        case .general: .gray
+        case .microphone: .orange
+        case .vocabulary: .blue
+        case .about: .indigo
+        }
+    }
+
+    /// One line under the page's title.
+    var summary: LocalizedStringKey {
+        switch self {
+        case .general: "Your language, the talk key, what you see and hear while dictating, and how Orra starts."
+        case .microphone: "Which microphone Orra records from."
+        case .vocabulary: "Words and names that Orra should write your way, and learning from your corrections."
+        case .about: "Version, speech model, updates and privacy."
+        }
+    }
+}
+
+/// A symbol in a colored rounded square, as in the sidebar of System Settings.
+struct SettingsIcon: View {
+    let symbol: String
+    let tint: Color
+    var size: CGFloat = 22
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.55, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(tint.gradient))
+            .accessibilityHidden(true)
+    }
+}
+
+/// A setting's name with what it does in smaller text right under it, as System Settings
+/// shows them, so the explanation sits next to its switch.
+private struct DescribedLabel: View {
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
+    let systemImage: String
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: systemImage)
+        }
+    }
+}
+
+/// The top of each page: its icon, title and what it holds.
+private struct PageHeader: View {
+    let page: SettingsPage
+
+    var body: some View {
+        Section {
+            HStack(spacing: 14) {
+                SettingsIcon(symbol: page.symbol, tint: page.tint, size: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(page.title)
+                        .font(.title2.weight(.semibold))
+                    Text(page.summary)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 }
@@ -43,10 +123,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(SettingsPage.allCases, selection: $page) { page in
-                Label(page.title, systemImage: page.symbol)
-                    .tag(page)
+                Label {
+                    Text(page.title)
+                } icon: {
+                    SettingsIcon(symbol: page.symbol, tint: page.tint)
+                }
+                .padding(.vertical, 2)
+                .tag(page)
             }
-            .navigationSplitViewColumnWidth(170)
+            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
             .toolbar(removing: .sidebarToggle)
         } detail: {
             switch page ?? .general {
@@ -61,7 +146,7 @@ struct SettingsView: View {
             }
         }
         .toolbar(removing: .sidebarToggle)
-        .frame(width: 660, height: 460)
+        .frame(minWidth: 700, idealWidth: 780, maxWidth: .infinity, minHeight: 500, idealHeight: 620, maxHeight: .infinity)
     }
 }
 
@@ -71,9 +156,42 @@ private struct GeneralSettings: View {
     @Bindable var feedback: RecordingFeedback
     let openAtLogin: OpenAtLogin
     @Bindable var dockIcon: DockIcon
+    /// The language this copy of Orra started with, to tell when a restart is due.
+    @State private var startedWith = AppLanguage.load()
+    @State private var language = AppLanguage.load()
 
     var body: some View {
         Form {
+            PageHeader(page: .general)
+            Section {
+                Picker(selection: $language) {
+                    ForEach(AppLanguage.allCases) { language in
+                        if let name = language.nativeName {
+                            Text(verbatim: name).tag(language)
+                        } else {
+                            Text("Same as the Mac").tag(language)
+                        }
+                    }
+                } label: {
+                    Label("Language", systemImage: "globe")
+                }
+                .onChange(of: language) { _, language in
+                    language.save()
+                }
+                if language != startedWith {
+                    HStack {
+                        Text("Orra shows the new language after it restarts.")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Restart Orra") {
+                            AppLanguage.restart()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            } header: {
+                Text("Language")
+            }
             Section {
                 TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
             } header: {
@@ -83,17 +201,45 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section {
-                Toggle("Show the recording indicator", isOn: $feedback.showsIndicator)
-                Toggle("Play sounds when recording starts and stops", isOn: $feedback.playsSounds)
-                Toggle("Show a small bar at the bottom of the screen while Orra is ready", isOn: $feedback.showsIdleBar)
+                Toggle(isOn: $feedback.showsIndicator) {
+                    Label("Show the recording indicator", systemImage: "waveform")
+                }
+                Toggle(isOn: $feedback.playsSounds) {
+                    Label("Play sounds when recording starts and stops", systemImage: "speaker.wave.2")
+                }
+                Toggle(isOn: $feedback.showsIdleBar) {
+                    Label("Show a small bar at the bottom of the screen while Orra is ready", systemImage: "minus.rectangle")
+                }
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.removesFillerWords },
+                    set: { pushToTalk.setRemovesFillerWords($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Remove filler words such as um and uh",
+                        detail: "Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.",
+                        systemImage: "text.badge.minus"
+                    )
+                }
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.writesNumbersAsDigits },
+                    set: { pushToTalk.setWritesNumbersAsDigits($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Write numbers as digits",
+                        detail: "Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words.",
+                        systemImage: "number"
+                    )
+                }
             } header: {
                 Text("While you dictate")
             }
             Section {
-                Toggle("Open at Login", isOn: Binding(
+                Toggle(isOn: Binding(
                     get: { openAtLogin.isOn },
                     set: { openAtLogin.setOn($0) }
-                ))
+                )) {
+                    Label("Open at Login", systemImage: "power")
+                }
                 if openAtLogin.needsApproval {
                     Button("Allow Orra in Login Items…") {
                         openAtLogin.openSettings()
@@ -103,10 +249,15 @@ private struct GeneralSettings: View {
                     Text(verbatim: problem)
                         .foregroundStyle(.secondary)
                 }
-                Toggle("Show Orra in the Dock", isOn: $dockIcon.showsInDock)
-            } footer: {
-                Text("Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.")
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $dockIcon.showsInDock) {
+                    DescribedLabel(
+                        title: "Show Orra in the Dock",
+                        detail: "Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.",
+                        systemImage: "dock.rectangle"
+                    )
+                }
+            } header: {
+                Text("Starting and finding Orra")
             }
         }
         .formStyle(.grouped)
@@ -121,6 +272,7 @@ private struct MicrophoneSettings: View {
 
     var body: some View {
         Form {
+            PageHeader(page: .microphone)
             Section {
                 Picker("Microphone", selection: Binding(
                     get: { pushToTalk.microphone?.uid ?? "" },
@@ -167,6 +319,7 @@ private struct VocabularySettings: View {
         let terms = pushToTalk.vocabulary
         let shown = filter.isEmpty ? terms : terms.filter { $0.localizedCaseInsensitiveContains(filter) }
         Form {
+            PageHeader(page: .vocabulary)
             Section {
                 HStack(spacing: 8) {
                     // A visible box with the hint inside it, so it reads as a place to type.
@@ -212,7 +365,13 @@ private struct VocabularySettings: View {
                 Text("\(terms.count) of \(Vocabulary.limit) words")
             }
             Section {
-                Toggle("Learn from my corrections", isOn: $learning.isOn)
+                Toggle(isOn: $learning.isOn) {
+                    DescribedLabel(
+                        title: "Learn from my corrections",
+                        detail: "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.",
+                        systemImage: "character.cursor.ibeam"
+                    )
+                }
                 if !learning.store.entries.isEmpty {
                     Button("Forget Learned Corrections") {
                         learning.removeAll()
@@ -220,9 +379,6 @@ private struct VocabularySettings: View {
                 }
             } header: {
                 Text("Learning")
-            } footer: {
-                Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.")
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -248,6 +404,7 @@ private struct AboutSettings: View {
 
     var body: some View {
         Form {
+            PageHeader(page: .about)
             Section {
                 HStack(spacing: 14) {
                     Image(nsImage: NSApplication.shared.applicationIconImage)
@@ -269,14 +426,17 @@ private struct AboutSettings: View {
                 }
             }
             Section {
-                Toggle("Check for updates automatically", isOn: $updater.checksAutomatically)
+                Toggle(isOn: $updater.checksAutomatically) {
+                    DescribedLabel(
+                        title: "Check for updates automatically",
+                        detail: "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it.",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                }
                 Button("Check for Updates…") {
                     updater.checkForUpdates()
                 }
                 .disabled(!updater.canCheckForUpdates)
-            } footer: {
-                Text("About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it.")
-                    .foregroundStyle(.secondary)
             }
             Section {
                 Text("Speech is turned into text on this Mac. Orra goes online only to download the speech model when you ask it to, and to check for updates when you allow it.")

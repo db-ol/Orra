@@ -43,9 +43,9 @@ nonisolated enum CorrectionFinder {
         var start = prefix
         var oldEnd = paste.count - suffix
         var newEnd = edited.count - suffix
-        guard start < oldEnd, start < newEnd else { return nil }
         // A Latin word is taken whole, with its digits and joining marks, so SGLang-Omni
-        // and Qwen3 stay one word.
+        // and Qwen3 stay one word, and a letter typed into Ora or taken out of it changes
+        // the whole word.
         while start > 0, isNamePart(paste[start - 1]),
               (start < oldEnd && isNamePart(paste[start])) || (start < newEnd && isNamePart(edited[start])) {
             start -= 1
@@ -55,6 +55,7 @@ nonisolated enum CorrectionFinder {
             oldEnd += 1
             newEnd += 1
         }
+        guard start < oldEnd, start < newEnd else { return nil }
         let heard = String(paste[start..<oldEnd]).trimmingCharacters(in: .whitespaces)
         let corrected = String(edited[start..<newEnd]).trimmingCharacters(in: .whitespaces)
         guard isWordLike(heard), isWordLike(corrected),

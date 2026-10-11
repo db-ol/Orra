@@ -13,7 +13,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         microphone: MicrophonePreference.load(),
         saveMicrophone: { MicrophonePreference.save($0) },
         vocabulary: VocabularyPreference.load(),
-        saveVocabulary: { VocabularyPreference.save($0) }
+        saveVocabulary: { VocabularyPreference.save($0) },
+        removesFillerWords: FillerPreference.load(),
+        saveRemovesFillerWords: { FillerPreference.save($0) },
+        writesNumbersAsDigits: NumberPreference.load(),
+        saveWritesNumbersAsDigits: { NumberPreference.save($0) }
     )
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
@@ -44,6 +48,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pushToTalk.setVocabulary(Vocabulary.removing(word, from: pushToTalk.vocabulary))
         }
     )
+    lazy var report = ReportWindow(reporter: .live(
+        pushToTalk: pushToTalk,
+        models: models,
+        inputs: audioInputs,
+        feedback: feedback,
+        openAtLogin: openAtLogin,
+        dockIcon: dockIcon,
+        learning: learning,
+        updater: updater
+    ))
     lazy var learnedNotice = LearnedNoticePanel(notice: LearnedNotice()) { [learning] learned in
         learning.undo(learned)
     }
