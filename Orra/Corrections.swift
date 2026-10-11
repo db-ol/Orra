@@ -185,14 +185,15 @@ nonisolated enum CorrectionFinder {
                 let lower = index > 0 ? hunks[index - 1].old.upperBound : 0
                 let upper = index + 1 < hunks.count ? hunks[index + 1].old.lowerBound : paste.count
                 let hunk = hunks[index]
+                let joins = joinsOrSplitsWords(hunk, paste, edited)
                 var (oldStart, newStart, oldEnd, newEnd) = (hunk.old.lowerBound, hunk.new.lowerBound, hunk.old.upperBound, hunk.new.upperBound)
                 while oldStart > lower, isNamePart(paste[oldStart - 1]),
-                      (oldStart < oldEnd && isNamePart(paste[oldStart])) || (newStart < newEnd && isNamePart(edited[newStart])) {
+                      joins || (oldStart < oldEnd && isNamePart(paste[oldStart])) || (newStart < newEnd && isNamePart(edited[newStart])) {
                     oldStart -= 1
                     newStart -= 1
                 }
                 while oldEnd < upper, isNamePart(paste[oldEnd]),
-                      (oldEnd > oldStart && isNamePart(paste[oldEnd - 1])) || (newEnd > newStart && isNamePart(edited[newEnd - 1])) {
+                      joins || (oldEnd > oldStart && isNamePart(paste[oldEnd - 1])) || (newEnd > newStart && isNamePart(edited[newEnd - 1])) {
                     oldEnd += 1
                     newEnd += 1
                 }
@@ -212,6 +213,17 @@ nonisolated enum CorrectionFinder {
             hunks = result
         }
         return hunks
+    }
+
+    /// Whether the edit only takes out or puts in spaces between two name parts, such as
+    /// read me to readme. Alone, the space says nothing, so the edit takes in the words on
+    /// both sides.
+    private static func joinsOrSplitsWords(_ hunk: Hunk, _ paste: [Character], _ edited: [Character]) -> Bool {
+        hunk.old.isEmpty != hunk.new.isEmpty
+            && hunk.old.lowerBound > 0 && hunk.old.upperBound < paste.count
+            && isLatinLetterOrDigit(paste[hunk.old.lowerBound - 1]) && isLatinLetterOrDigit(paste[hunk.old.upperBound])
+            && paste[hunk.old].allSatisfy(\.isWhitespace) && edited[hunk.new].allSatisfy(\.isWhitespace)
+            && !edited[hunk.new].contains(where: \.isNewline)
     }
 
     /// Whether the edit ends in a name part. An edit that only deletes, such as the space
@@ -309,6 +321,11 @@ nonisolated enum CorrectionFinder {
     }
 
     /// Letters, digits and the marks that join a name, as in SGLang-Omni, Node.js, GPT-4o.
+    /// Between words, not after a sentence's period, so done. Then to done.Then is no name.
+    private static func isLatinLetterOrDigit(_ character: Character) -> Bool {
+        character.isASCII && (character.isLetter || character.isNumber)
+    }
+
     private static func isNamePart(_ character: Character) -> Bool {
         character.isASCII && (character.isLetter || character.isNumber || "-_.+".contains(character))
     }
