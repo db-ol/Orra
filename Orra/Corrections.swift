@@ -427,9 +427,38 @@ nonisolated enum SoundAlike {
         let b = Array(sound(second))
         guard let firstA = a.first, let firstB = b.first else { return false }
         let crossesScripts = first.unicodeScalars.contains { $0.value >= 0x3400 } != second.unicodeScalars.contains { $0.value >= 0x3400 }
+        if !crossesScripts, consonants(first) == consonants(second), looksLikeName(second) {
+            return true
+        }
         if !crossesScripts, firstA != firstB { return false }
         let limit = Double(max(a.count, b.count)) * (crossesScripts ? 0.6 : 0.4)
         return Double(distance(a, b)) <= limit
+    }
+
+    /// A rough English sound key: a first vowel as "a", the other vowels dropped and doubled
+    /// letters taken once, so Aura and Orra, or cloud and Claude, give the same key. Nil for
+    /// a key shorter than two letters, which says too little.
+    static func consonants(_ text: String) -> String? {
+        let vowels = Set("aeiou")
+        var key = ""
+        for letter in text.lowercased() where letter.isASCII && letter.isLetter {
+            let mapped: Character
+            if key.isEmpty {
+                mapped = vowels.contains(letter) ? "a" : letter
+            } else if vowels.contains(letter) {
+                continue
+            } else {
+                mapped = letter
+            }
+            if key.last != mapped { key.append(mapped) }
+        }
+        return key.count >= 2 ? key : nil
+    }
+
+    /// A name rather than a plain word, such as Orra or Qwen3: a capital letter or a digit.
+    /// Fixing form to from changes a word, and that is never learned this way.
+    private static func looksLikeName(_ text: String) -> Bool {
+        text.contains { $0.isUppercase || $0.isNumber }
     }
 
     static func distance(_ a: [Character], _ b: [Character]) -> Int {

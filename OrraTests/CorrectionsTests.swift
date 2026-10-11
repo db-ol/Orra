@@ -118,6 +118,10 @@ struct CorrectionFinderTests {
         #expect(find("I use Kubernettes daily", "I use Kubernettes daily", "I use Kubernetes daily") == Correction(heard: "Kubernettes", corrected: "Kubernetes"))
     }
 
+    @Test func aNameWhoseFirstVowelWasMisheardIsFound() {
+        #expect(find("你觉得 Aura 的语音听写好用吗？", "你觉得 Aura 的语音听写好用吗？", "你觉得 Orra 的语音听写好用吗？") == Correction(heard: "Aura", corrected: "Orra"))
+    }
+
     @Test func aWordTypedBetweenWordsIsNotACorrection() {
         #expect(find("I like apples", "I like apples", "I really like apples") == nil)
         #expect(find("我喜欢苹果", "我喜欢苹果", "我很喜欢苹果") == nil)
@@ -215,6 +219,10 @@ struct SoundAlikeTests {
         #expect(SoundAlike.soundsAlike("cloud", "Claude"))
         #expect(!SoundAlike.soundsAlike("Monday", "Friday"))
         #expect(!SoundAlike.soundsAlike("Monday", "Sunday"))
+        #expect(SoundAlike.soundsAlike("Aura", "Orra"))
+        #expect(SoundAlike.soundsAlike("aura", "Orra"))
+        #expect(!SoundAlike.soundsAlike("form", "from"))
+        #expect(!SoundAlike.soundsAlike("Anna", "Emma"))
         #expect(!SoundAlike.soundsAlike("明天", "今天"))
     }
 }
