@@ -32,6 +32,9 @@ nonisolated enum Finding: Equatable, Hashable, Sendable {
 nonisolated enum CorrectionFinder {
     /// The longest a heard or corrected word may be, in characters.
     static let maximumLength = 12
+    /// The most Chinese characters a heard or corrected word may have. A longer span is a
+    /// phrase, not a name, and is never learned.
+    static let maximumHanCount = 8
     /// Above this many character pairs the two texts are not compared character by
     /// character, and the whole changed span is judged as one edit.
     static let maximumComparison = 250_000
@@ -226,8 +229,7 @@ nonisolated enum CorrectionFinder {
         }
         let heard = String(paste[hunk.old]).trimmingCharacters(in: .whitespaces)
         let corrected = String(edited[hunk.new]).trimmingCharacters(in: .whitespaces)
-        guard isWordLike(heard), isWordLike(corrected),
-              heard.count <= maximumLength, corrected.count <= maximumLength,
+        guard isWordLike(heard), isWordLike(corrected), fits(heard), fits(corrected),
               hanCount(heard) != 1, hanCount(corrected) != 1,
               !differsOnlyInFirstLetterCase(heard, corrected),
               !differsOnlyInEnding(heard, corrected),
@@ -238,6 +240,11 @@ nonisolated enum CorrectionFinder {
         let word = OneCharacterFix.widen(hunk.new, in: edited, within: bounds)
         let old = (hunk.old.lowerBound - (hunk.new.lowerBound - word.lowerBound))..<(hunk.old.upperBound + (word.upperBound - hunk.new.upperBound))
         return .word(Correction(heard: String(paste[old]), corrected: String(edited[word])))
+    }
+
+    /// At most `maximumLength` characters, of which at most `maximumHanCount` Chinese.
+    private static func fits(_ text: String) -> Bool {
+        text.count <= maximumLength && hanCount(text) <= maximumHanCount
     }
 
     private static func isLatin(_ character: Character) -> Bool {

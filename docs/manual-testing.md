@@ -120,8 +120,8 @@ Build and test commands, run in the repository root:
     word in the pasted text (Chinese, a name across scripts, a whole Latin word), leaving
     out changes of meaning, deletions, additions, rewrites and edits outside the paste,
     the pinyin comparison, accepting only pairs that were not undone, and the stored file.
-    They also cover separate fixes in one sentence judged one by one, and a Chinese name
-    widened to its unchanged characters.
+    They also cover separate fixes in one sentence judged one by one, a Chinese name
+    widened to its unchanged characters, and the cap of 8 Chinese characters.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, and no reading after leaving the app, under secure input, or in a field
     without the pasted text. CorrectionLearningTests checks that nothing is read while

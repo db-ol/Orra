@@ -50,6 +50,18 @@ struct CorrectionFinderTests {
         #expect(found.allSatisfy { $0.correction.corrected.count <= CorrectionFinder.maximumLength })
     }
 
+    @Test func aChineseSpanLongerThanEightCharactersIsNeverLearned() {
+        // Nine characters that sound the same, with no two unchanged characters in a row.
+        #expect(findings("北京天安门广场人民英", "背京甜安们广厂人敏英").isEmpty)
+        #expect(SoundAlike.soundsAlike("北京天安门广场人民", "背京甜安们广厂人敏"))
+        // A shorter span is learned.
+        #expect(findings("北京天安门广场人英", "背京甜安们广厂人英") == [.word(Correction(heard: "北京天安门广场", corrected: "背京甜安们广厂"))])
+    }
+
+    @Test func aLatinWordKeepsItsTwelveCharacters() {
+        #expect(find("I use kubernetis", "I use kubernetis", "I use Kubernetesx") == Correction(heard: "kubernetis", corrected: "Kubernetesx"))
+        #expect(find("I use kubernetisab", "I use kubernetisab", "I use Kubernetesabc") == nil)
+    }
 
     @Test func chineseNumeralsAreLettersNotDigits() {
         #expect(find("同意千万。", "同意千万。", "通义千问。") == Correction(heard: "同意千万", corrected: "通义千问"))
