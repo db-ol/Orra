@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// What PushToTalkController needs from the speech model. Closures, so tests can pass
 /// fakes. The live implementation does its work off the main actor.
@@ -8,6 +9,31 @@ struct Transcription {
     /// Turns 16 kHz mono samples into text. The context is the user's vocabulary, one
     /// term per line, or nil.
     var transcribe: (_ samples: [Float], _ context: String?) async throws -> String
+}
+
+extension Transcription {
+    /// Turns samples into text with the vocabulary as context, guarded against an echo of
+    /// the vocabulary, see VocabularyEcho. When the text is only vocabulary terms, the same
+    /// samples are transcribed again without the vocabulary. If that pass hears nothing,
+    /// nobody spoke and the text is empty. Otherwise the user said the terms, and the text
+    /// with the vocabulary stands, since it writes them the user's way. Logs a timing and
+    /// whether speech was heard, never the text.
+    func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double) async throws -> String {
+        let text = try await transcribe(samples, Vocabulary.context(terms))
+        guard !terms.isEmpty, await Self.isOnlyTerms(text, of: terms) else { return text }
+        let started = ContinuousClock.now
+        let plain = try await transcribe(samples, nil)
+        let heardSpeech = !TranscriptGuard.clean(plain, audioSeconds: audioSeconds).isEmpty
+        Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
+            .notice("Transcript held only vocabulary terms, the pass without them took \(started.duration(to: .now), privacy: .public), speech heard: \(heardSpeech, privacy: .public)")
+        return heardSpeech ? text : ""
+    }
+
+    /// Off the main actor, since a long transcript is compared with every term.
+    @concurrent
+    nonisolated private static func isOnlyTerms(_ text: String, of terms: [String]) async -> Bool {
+        VocabularyEcho.isOnlyTerms(text, of: terms)
+    }
 }
 
 /// The one speech model Orra uses for now: Qwen3-ASR 1.7B in the 8 bit MLX build. The

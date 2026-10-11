@@ -524,7 +524,7 @@ final class PushToTalkController {
                 logger.notice("The microphone delivered no sound for \(recording.duration, privacy: .public) s, lid closed: \(situation.lidClosed, privacy: .public)")
                 return
             }
-            let raw = try await transcription.transcribe(samples, Vocabulary.context(vocabulary))
+            let raw = try await transcription.transcribe(samples, vocabulary: vocabulary, audioSeconds: recording.duration)
             let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
             guard !text.isEmpty else {
                 holdMessage = String(localized: "No speech was recognized")

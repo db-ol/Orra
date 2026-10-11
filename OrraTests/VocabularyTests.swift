@@ -63,4 +63,35 @@ struct VocabularyTests {
         VocabularyPreference.save(["Orra", "通义千问"], to: defaults)
         #expect(VocabularyPreference.load(from: defaults) == ["Orra", "通义千问"])
     }
+
+    @Test func onlyTermsInAnyOrderAndRepeatedCountAsAnEcho() {
+        let terms = ["极速借呗", "IRS transcripts", "Pine Bluff", "瑞麒 G 六"]
+        #expect(VocabularyEcho.isOnlyTerms("极速借呗。", of: terms))
+        #expect(VocabularyEcho.isOnlyTerms("极速借呗", of: terms))
+        #expect(VocabularyEcho.isOnlyTerms("I R S transcripts。极速借呗。Pine Bluff。", of: terms))
+        #expect(VocabularyEcho.isOnlyTerms("pine bluff, PINE BLUFF! 極速借唄", of: terms))
+        #expect(VocabularyEcho.isOnlyTerms("瑞麒G六，极速借呗", of: terms))
+    }
+
+    @Test func aLastTermCutShortStillCountsAfterAWholeOne() {
+        let terms = ["极速借呗", "Equifax reports", "Rafael Rosen"]
+        #expect(VocabularyEcho.isOnlyTerms("极速借呗。Equifax repo", of: terms))
+        #expect(VocabularyEcho.isOnlyTerms("极速借呗。 Rafael R", of: terms))
+        #expect(!VocabularyEcho.isOnlyTerms("Equifax", of: terms))
+    }
+
+    @Test func speechAroundTermsIsNotAnEcho() {
+        let terms = ["Orra", "极速借呗", "a"]
+        #expect(!VocabularyEcho.isOnlyTerms("我们用 Orra 写字", of: terms))
+        #expect(!VocabularyEcho.isOnlyTerms("Orra is great", of: terms))
+        #expect(!VocabularyEcho.isOnlyTerms("极速借呗怎么样", of: terms))
+        #expect(!VocabularyEcho.isOnlyTerms("你好", of: terms))
+    }
+
+    @Test func emptyTextOrNoTermsIsNeverAnEcho() {
+        #expect(!VocabularyEcho.isOnlyTerms("", of: ["Orra"]))
+        #expect(!VocabularyEcho.isOnlyTerms("。，  ", of: ["Orra"]))
+        #expect(!VocabularyEcho.isOnlyTerms("Orra", of: []))
+        #expect(!VocabularyEcho.isOnlyTerms("Orra", of: ["。", "  "]))
+    }
 }
