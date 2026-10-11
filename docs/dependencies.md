@@ -22,17 +22,19 @@
 
 Xcode resolves 41 packages, listed in
 Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved. SwiftPM resolves
-every package that speech-swift declares, but the build compiles only the 11 that the
-Qwen3ASR product needs. The other 29 are fetched and never built or linked. Versions come
-from Package.resolved and licenses from the GitHub API, both read on 2026-10-05. The
-compiled list comes from the build log of the same day.
+every package that speech-swift declares, but the build compiles only the 12 that the
+Qwen3ASR, MLXLLM and MLXLMCommon products need. The other 28 are fetched and never built
+or linked. Versions come from Package.resolved and licenses from the GitHub API, both read
+on 2026-10-05. The compiled list comes from the build log of 2026-10-10, which added
+mlx-swift-lm and the MLXOptimizers target of mlx-swift and nothing else.
 
 ### Compiled for Orra
 
 | Package | Version | License | Why it is built |
 |---|---|---|---|
 | soniqo/speech-swift | 1f54e56 | Apache-2.0 | Qwen3ASR and its targets AudioCommon, MLXCommon and SpeechVAD |
-| ml-explore/mlx-swift | 0.31.6 | MIT | MLX, MLXNN, MLXFast, MLXFFT and the Cmlx core with its 9 Metal shaders |
+| ml-explore/mlx-swift | 0.31.6 | MIT | MLX, MLXNN, MLXFast, MLXFFT, MLXOptimizers and the Cmlx core with its 9 Metal shaders |
+| ml-explore/mlx-swift-lm | 3.31.4 | MIT | MLXLLM and MLXLMCommon, which load and run the cleanup model |
 | apple/swift-numerics | 1.1.1 | Apache-2.0 | Numerics, used by MLX |
 | huggingface/swift-transformers | 1.3.4 | Apache-2.0 | Hub, used by AudioCommon |
 | huggingface/swift-huggingface | 0.13.0 | Apache-2.0 | HuggingFace, used by Hub |
@@ -77,7 +79,6 @@ These are resolved only because other speech-swift products need them.
 | hummingbird-project/hummingbird | 2.16.0 | Apache-2.0 |
 | hummingbird-project/hummingbird-websocket | 2.6.0 | Apache-2.0 |
 | hummingbird-project/swift-websocket | 1.5.0 | Apache-2.0 |
-| ml-explore/mlx-swift-lm | 3.31.4 | MIT |
 | mlc-ai/xgrammar | 0.2.7 | Apache-2.0 |
 | modelcontextprotocol/swift-sdk | 0.12.1 | MIT or Apache-2.0, see below |
 | swift-server/async-http-client | 1.36.2 | Apache-2.0 |
@@ -101,9 +102,10 @@ contribution is under one or the other, so GitHub detects no single license.
   belongs to the resolved mlx-swift revision, so after a package update that moves
   mlx-swift, Xcode asks again and command line builds stop at plugin validation until it is
   trusted. On macOS the plugin adds no build commands.
-- mlx-swift-lm has a macro, MLXHuggingFaceMacros, and Xcode may ask to enable it. Orra never
-  builds mlx-swift-lm, so the macro is not needed. On the maintainer's Mac it was enabled
-  on 2026-10-05, which changes nothing in the build.
+- mlx-swift-lm has a macro, MLXHuggingFaceMacros, and Xcode may ask to enable it. Orra
+  builds only MLXLLM and MLXLMCommon, not MLXHuggingFace, so the macro and swift-syntax
+  are not built or needed. On the maintainer's Mac it was enabled on 2026-10-05, which
+  changes nothing in the build.
 - The build log has four warnings from Metal headers inside mlx-swift ("constexpr if is a
   C++17 extension"). They are third party code and do not affect Orra.
 
@@ -116,10 +118,21 @@ speech-swift's own downloader is not used. speech-swift only loads the model, wi
 offlineMode: true, from the folder Orra installed. docs/model-download.md describes the
 download.
 
+## Cleanup model
+
+Orra downloads the cleanup model with the same code as the speech model, see
+docs/model-download.md. mlx-swift-lm loads it from that folder with
+`LLMModelFactory.load(from:using:)`, which reads local files only. It leaves the tokenizer
+to the app, and its own adapter for swift-transformers needs the Tokenizers product, which
+Orra does not link. So Orra/QwenTokenizer.swift reads Qwen3's byte level BPE itself, from
+vocab.json and merges.txt. RewriteTokenizerTests checks it against the Hugging Face
+tokenizer, and a one off run on 2026-10-10 found the same IDs for all 268 prompts of the
+evaluation. Linking Tokenizers instead would need the maintainer's approval.
+
 ## Keeping speech-swift or carrying only Qwen3ASR
 
 Still the maintainer's decision. Carrying only the Apache-2.0 sources of Qwen3ASR,
-AudioCommon, MLXCommon and SpeechVAD in a local package would drop the 29 packages that are
-never built and the macro prompt from mlx-swift-lm. It would keep mlx-swift,
-swift-transformers and their dependencies, and with them the Metal Toolchain requirement
-and the CudaBuild plugin.
+AudioCommon, MLXCommon and SpeechVAD in a local package would drop the 28 packages that are
+never built. Orra would then depend on mlx-swift-lm directly, and its macro prompt would
+stay. It would keep mlx-swift, mlx-swift-lm, swift-transformers and their dependencies,
+and with them the Metal Toolchain requirement and the CudaBuild plugin.

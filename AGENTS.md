@@ -66,7 +66,8 @@ trusted once in Xcode. docs/dependencies.md has the details.
   turns it on: the field it pasted into, for 3 minutes and only while that field has the focus, never a password field or an app
   holding secure input. It stores the word pairs only, never the text, and never logs either.
 - Orra goes online only for the speech model download the user starts from the menu or the
-  welcome window, and for update checks through Sparkle that the user allowed or started.
+  welcome window, the cleanup model download the user agrees to in Settings, and for
+  update checks through Sparkle that the user allowed or started.
   Launching must never touch the network before the user allowed update checks. Any other
   network use needs the maintainer's approval. docs/model-download.md describes the
   download, and docs/releasing.md the update feed.

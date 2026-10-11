@@ -5,6 +5,9 @@ How Orra gets its speech model, Qwen3-ASR 1.7B in the 8 bit MLX build
 is in Orra/ModelFiles.swift (pinned files, folders, launch), Orra/ModelDownload.swift (the
 network) and Orra/ModelInstaller.swift (the menu's state).
 
+The optional cleanup model downloads the same way, with its own pins and folder. Its
+differences are in [The cleanup model](#the-cleanup-model) at the end.
+
 ## When Orra goes online
 
 - Only after the user chooses Download Speech Model, Resume Download or Try Again in the
@@ -187,3 +190,65 @@ argument in a Release build, are ignored.
 5. Run the tests and the model download checks in docs/manual-testing.md.
 
 A new server, or any other network use, needs the maintainer's approval, see AGENTS.md.
+
+## The cleanup model
+
+Qwen3 4B Instruct 2507 in the 4 bit MLX build (mlx-community/Qwen3-4B-Instruct-2507-4bit,
+Apache-2.0), for "Clean up with a local model" in Settings > General. The pins are in
+`ModelManifest.qwen3Cleanup` in Orra/RewriteEngine.swift, and Orra/TextCleanup.swift
+drives the download from Settings. Everything above about servers, retries, ranges,
+hashes, staging and backups applies to it as well.
+
+When Orra goes online for it:
+
+- Only after the user turns cleanup on and agrees to the download in the dialog that
+  names its size, 2.27 GB, or chooses Download, Resume Download or Try Again under the
+  switch while cleanup is on. Cancel Download keeps the bytes on disk and turns cleanup
+  off again.
+- Never at launch, and never while cleanup is off. Launch only looks at the installed
+  folder's file sizes. Loading uses local files only.
+
+Servers, at these commits. On 2026-10-10 each of the three served the five small files
+with the pinned SHA-256 values and answered a Range request on the weights with a 206
+whose 64 KiB matched the same bytes of the pinned file. Hugging Face and ModelScope list
+the pinned SHA-256 of the weights in their APIs. The whole weights were not downloaded
+from each server.
+
+1. huggingface.co:
+   `https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b/<file>`
+2. modelscope.cn, a mirror in its mlx-community organization, whose weights come from
+   cdn-lfs-cn-1.modelscope.cn:
+   `https://modelscope.cn/models/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/ec7ca96008a45bebdd03ad3d09d86f6e61a3e4af/<file>`
+3. hf-mirror.com, which hands the weights on to Hugging Face's own download servers:
+   `https://hf-mirror.com/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b/<file>`
+
+Hugging Face main was at 50d42775 on 2026-10-10. It changed only tokenizer_config.json
+after the upload in 7494131f. ModelScope's ec7ca960 has the same change.
+
+Orra fetches only the files it reads. tokenizer.json (11 MB), chat_template.jinja and
+model.safetensors.index.json are left out: Orra writes the chat prompt itself and
+tokenizes with vocab.json and merges.txt (Orra/QwenTokenizer.swift), and the weights are
+in one file.
+
+| File | Bytes | SHA-256 |
+|---|---|---|
+| config.json | 938 | 574349e5a343236546fda55e4744a76e181f534182d7dc60ff1bad7e7a502849 |
+| generation_config.json | 238 | 835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48 |
+| tokenizer_config.json | 5,440 | 4397cc477eb6d79715ccd2000accd6b3531928f30029665832fa1b255f24d2b9 |
+| merges.txt | 1,671,853 | 8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5 |
+| vocab.json | 2,776,833 | ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910 |
+| model.safetensors | 2,263,022,417 | 2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f |
+
+In all 2,267,477,719 bytes, shown as 2.27 GB. Only model.safetensors resumes with a Range
+request. A fresh download needs 2.77 GB of free space.
+
+- Installed:
+  `~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3-4B-Instruct-2507-4bit-50d42775/`,
+  staged in `.download-Qwen3-4B-Instruct-2507-4bit-50d42775/` next to it. Both are left
+  out of Time Machine backups. There is no older copy to reuse.
+- To remove it, turn cleanup off, quit Orra and delete that folder. The speech model's
+  folder next to it stays.
+- The log lines of the download are in the model-download category, and the loading and
+  each cleanup in the rewrite category, with timings, token counts and outcomes only:
+
+      /usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'

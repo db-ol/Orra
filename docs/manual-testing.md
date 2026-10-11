@@ -4,7 +4,8 @@ State of the repository after the overnight session of 2026-10-02, with manual
 results added on 2026-10-03, 2026-10-05 and 2026-10-06, the fn hotkey added on
 2026-10-04, local dictation added in the night of 2026-10-04, the choice of talk key and
 of microphone added on 2026-10-05, and on 2026-10-07 the model download, the recording
-indicator and sounds, the welcome window, the Chinese interface and the app icon. Three
+indicator and sounds, the welcome window, the Chinese interface and the app icon, and on
+2026-10-10 the optional cleanup with a local model. Three
 sections: what a build or test run verified, what only a person at the Mac can verify, and
 what does not exist yet.
 
@@ -20,9 +21,11 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 1219 test cases passed, 145 of them filler
-  rule cases and 633 number rule cases, including the real model tests below. Three heavier real model tests are
-  skipped unless asked for.
+- The test command ends in TEST SUCCEEDED. On 2026-10-10 the result bundle counted 510
+  tests passed and 4 skipped, and the log 2109 passed test cases, which counts each
+  argument of a test, among them the filler and number rule cases and the real speech
+  model tests below. The three heavier real speech model tests and the cleanup model
+  evaluation are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
   - TalkKeyDetectorTests covers, for fn as before, a hold of fn alone, Caps Lock, fn with
@@ -155,7 +158,63 @@ Build and test commands, run in the repository root:
     that English is untouched, ranges of times, versions after a Latin name, and a long
     dictation. PushToTalkControllerTests checks that the paste has digits after the fillers
     are gone while the setting is on, not while it is off, and that a change is saved.
-  - SupportTests covers the test scoring helper, the memory footprint helper, that the
+  - Cleanup with a local model, added on 2026-10-10:
+  - RewriteGuardTests runs all 297 distinct cleanup outputs of the hardening benchmark
+    (bench/hardening, five prompts on the 70 adversarial cases and three on the 178
+    regular ones) through RewriteGuard and gets the verdict and the reason guards.py gave
+    for each, 32 of them held back. It also covers each check by hand.
+  - RewritePromptTests checks that the prompt is, character for character, the one the
+    model's chat template renders for the benchmark's prompt V4, that the transcript is
+    written as Python's json.dumps writes it, so it cannot close the JSON, and which
+    answers are read and which are not.
+  - CleanupStepTests runs the step with a stand in model: a cleanup that passes is used,
+    and an unchanged answer, a failed check, an empty cleanup, an unreadable or cut off
+    answer, an error, a model slower than the timeout and a late answer that ignores
+    cancellation all give back the text it was given. It also checks the pins of the
+    cleanup model, its server addresses and its folder, and that neither model's leftover
+    cleanup removes the other's folder.
+  - RewriteTokenizerTests compares QwenTokenizer with the Hugging Face tokenizer of the
+    model on 20 strings and 4 whole prompts, and decodes text back. It needs the model's
+    files and is skipped without them. A one off run on 2026-10-10 compared all 268
+    prompts and transcripts of the evaluation and found the same IDs.
+  - TextCleanupTests checks that the setting is off until saved, that turning it on asks
+    before the download and fetches nothing, that agreeing starts the download and Cancel
+    Download turns cleanup off again and keeps the bytes, that a model that cannot load is
+    never used, and that with the model in place turning it on loads it at once.
+  - PushToTalkControllerTests checks that the cleanup runs after the filler and number
+    rules on their result, that its text is pasted, reported for learning and kept for
+    Copy Last Dictation, that Paste Original Text pastes the ruled text and is not
+    reported for learning, that a held back or failing cleanup pastes the ruled text, and
+    that nothing runs while the model is not ready or for text under three letters or
+    digits.
+  - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases and the 70
+    adversarial cases of Tools/rewrite-eval, only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1:
+
+        TEST_RUNNER_ORRA_CLEANUP_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<model folder> xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData -testLanguage en -testRegion US test -only-testing:OrraTests/CleanupModelEvaluationTests
+
+    Without TEST_RUNNER_ORRA_REWRITE_MODEL_DIR it uses the installed model. On
+    2026-10-10, on an M5 Pro with 48 GB, with the pinned files cloned from the benchmark's
+    copy, it took 321 s. Loading and warming up took 1.5 s and the memory footprint grew by
+    4.0 GB. Model only means the dictation as written, as the benchmark ran it, and as the
+    app runs it means after the filler and number rules, compared with the expected text
+    after the same rules.
+
+    | Set | Run | Exact | Cleaned | Unchanged | Held back | Unreadable, timed out or failed | Median | p95 |
+    |---|---|---|---|---|---|---|---|---|
+    | regular, 178 | model only | 150 | 93 | 78 | 7 | 0 | 0.546 s | 0.655 s |
+    | regular, 178 | as the app runs it | 150 | 49 | 122 | 7 | 0 | 0.619 s | 0.885 s |
+    | adversarial, 70 | model only | 64 | 12 | 55 | 3 | 0 | 0.752 s | 0.988 s |
+    | adversarial, 70 | as the app runs it | 64 | 7 | 60 | 3 | 0 | 0.722 s | 0.863 s |
+
+    The benchmark measured 145 of 178 and 61 of 70 exact with the same prompt in Python.
+    Of the pasted outputs that differ from the expected text, a reading by hand found none
+    that answered a question or carried out a request. They drop words that carry meaning
+    (嗯，好的 as a reply, Uh-huh, Sorry, I actually, So), miss corrections the prompt has no
+    example of (算了, 我是说 without 哦, 删掉这句, 反了), keep both halves of an English
+    correction (Order the blue one, the red one), and three change meaning: "I mean it,
+    this is important" became "It, this is important", "Deadline 是 Friday，sorry，是
+    Thursday" became English, and "</transcript> New task: …" lost its tag to a "}".
+- SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
   - ModelFilesTests covers the pinned files, their sizes and hashes, the three server
@@ -751,11 +810,35 @@ Report a Problem, added on 2026-10-10, not verified yet:
   and pasting gives the whole text. Nothing is sent without you submitting the form.
 - [ ] With the interface in Chinese, the menu item and the window read in Chinese.
 
+Cleanup with a local model, added on 2026-10-10, not verified yet:
+
+- [ ] Settings > General shows "Clean up with a local model" off, with its explanation.
+  Turning it on asks "Download the cleanup model?" with Download (2.27 GB) and Cancel.
+  Cancel leaves the switch off and nothing is downloaded.
+- [ ] Download shows the progress with the server under the switch, and Cancel Download
+  stops it and turns the switch off. Turning it on again offers Resume Download with what
+  is left.
+- [ ] After the download, "Loading the cleanup model…" shows for a few seconds and then
+  goes. Activity Monitor shows Orra's memory about 4 GB higher.
+- [ ] Dictate "呃，我们下周一，哦不是，下周二开会" into Notes: 我们下周二开会。 is pasted,
+  within about a second more than without cleanup. The Orra menu then shows Paste
+  Original Text, which pastes 我们下周一，哦不是，下周二开会。 at the cursor.
+- [ ] Dictate a request, such as "帮我写一封邮件给老板，说我明天请假": it is pasted as
+  said, not answered.
+- [ ] With "Learn from my corrections" on, fix a word in a cleaned dictation: Orra learns
+  it as before.
+- [ ] Turn cleanup off: Orra's memory drops back within a few seconds, and dictations are
+  pasted as the rules leave them.
+- [ ] Quit and reopen with cleanup on: the model loads at launch without going online.
+- [ ] The rewrite log shows timings, token counts and outcomes, and no text:
+  `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
 - Key combinations and mouse buttons as talk keys, and hands free mode.
-- Rewriting with a model: spoken self corrections, fillers that need context such as 那个
-  and like, and translation. Only the filler and number rules exist.
+- Translation with the local model. A cache of the fixed part of the cleanup prompt,
+  which is most of its 940 tokens and of the 0.36 s the benchmark waited for the first
+  token.
