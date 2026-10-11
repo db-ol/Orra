@@ -242,11 +242,13 @@ final class CorrectionLearning {
     }
     private(set) var store: CorrectionStore
 
-    /// A word Orra learned on its own, or could not add because the vocabulary is full: the
-    /// misheard spelling and the pairs it accepted, so Undo takes back only those.
+    /// A word Orra learned on its own, or could not add because the vocabulary holds
+    /// `Vocabulary.maximumCount` words, a cap against runaway data that nobody should meet:
+    /// the misheard spelling and the pairs it accepted, so Undo takes back only those.
     struct Learned: Equatable {
         enum Outcome: Equatable {
             case added
+            /// The vocabulary is at `Vocabulary.maximumCount`.
             case vocabularyFull
         }
 

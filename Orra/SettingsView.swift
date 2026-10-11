@@ -306,65 +306,17 @@ private struct MicrophoneSettings: View {
     }
 }
 
-/// The user's words and names: a field to add one, and the list with a delete button
-/// per word.
+/// The user's words and names, laid out as System Settings shows text replacements:
+/// learning from corrections first, then a field to add a word, then the words in a table.
 private struct VocabularySettings: View {
     let pushToTalk: PushToTalkController
     @Bindable var learning: CorrectionLearning
     @State private var newTerm = ""
-    @State private var filter = ""
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
-        let terms = pushToTalk.vocabulary
-        let shown = filter.isEmpty ? terms : terms.filter { $0.localizedCaseInsensitiveContains(filter) }
         Form {
             PageHeader(page: .vocabulary)
-            Section {
-                HStack(spacing: 8) {
-                    // A visible box with the hint inside it, so it reads as a place to type.
-                    TextField("New word", text: $newTerm, prompt: Text("Type a word or name, then press Return"))
-                        .labelsHidden()
-                        .textFieldStyle(.roundedBorder)
-                        .focused($fieldFocused)
-                        .onSubmit(add)
-                    Button(action: add) {
-                        Label("Add", systemImage: "plus")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(terms.count >= Vocabulary.limit)
-                }
-            } footer: {
-                Text("People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                if terms.count > 8 {
-                    TextField("Search", text: $filter, prompt: Text("Search"))
-                        .labelsHidden()
-                        .textFieldStyle(.roundedBorder)
-                }
-                if terms.isEmpty {
-                    Text("No words yet")
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(shown, id: \.self) { term in
-                    HStack {
-                        Text(verbatim: term)
-                        Spacer()
-                        Button {
-                            pushToTalk.setVocabulary(Vocabulary.removing(term, from: terms))
-                            learning.removedFromVocabulary(term)
-                        } label: {
-                            Image(systemName: "minus.circle")
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Remove")
-                    }
-                }
-            } header: {
-                Text("\(terms.count) of \(Vocabulary.limit) words")
-            }
             Section {
                 Toggle(isOn: $learning.isOn) {
                     DescribedLabel(
@@ -381,6 +333,29 @@ private struct VocabularySettings: View {
             } header: {
                 Text("Learning")
             }
+            Section {
+                HStack(spacing: 8) {
+                    // A visible box with the hint inside it, so it reads as a place to type.
+                    TextField("New word", text: $newTerm, prompt: Text("Type a word or name, then press Return"))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .focused($fieldFocused)
+                        .onSubmit(add)
+                    Button(action: add) {
+                        Label("Add", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(pushToTalk.vocabulary.count >= Vocabulary.maximumCount)
+                }
+            } footer: {
+                Text("People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                VocabularyTable(pushToTalk: pushToTalk, learning: learning)
+            } header: {
+                Text(verbatim: VocabularyList.summary(count: pushToTalk.vocabulary.count))
+            }
         }
         .formStyle(.grouped)
         .navigationTitle("Vocabulary")
@@ -389,10 +364,7 @@ private struct VocabularySettings: View {
 
     private func add() {
         defer { fieldFocused = true }
-        let updated = Vocabulary.adding(newTerm, to: pushToTalk.vocabulary)
-        if updated != pushToTalk.vocabulary {
-            pushToTalk.setVocabulary(updated)
-        }
+        pushToTalk.addToVocabulary(newTerm)
         newTerm = ""
     }
 }

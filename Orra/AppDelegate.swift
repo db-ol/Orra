@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         microphone: MicrophonePreference.load(),
         saveMicrophone: { MicrophonePreference.save($0) },
         vocabulary: VocabularyPreference.load(),
-        saveVocabulary: { VocabularyPreference.save($0) },
+        saveVocabulary: { VocabularyPreference.saveInBackground($0) },
         removesFillerWords: FillerPreference.load(),
         saveRemovesFillerWords: { FillerPreference.save($0) },
         writesNumbersAsDigits: NumberPreference.load(),
@@ -33,23 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
     lazy var clipboard = ClipboardWord(
         isDictating: { [pushToTalk] in pushToTalk.state != .idle },
-        vocabulary: { [pushToTalk] in pushToTalk.vocabulary }
+        vocabulary: { [pushToTalk] in pushToTalk.vocabulary.map(\.text) }
     )
     lazy var learning = CorrectionLearning.live(
-        addToVocabulary: { [pushToTalk] word in
-            let terms = pushToTalk.vocabulary
-            if terms.contains(where: { $0.lowercased() == word.lowercased() }) { return .alreadyThere }
-            let updated = Vocabulary.adding(word, to: terms)
-            guard updated != terms else { return .full }
-            pushToTalk.setVocabulary(updated)
-            return .added
-        },
-        removeFromVocabulary: { [pushToTalk] word in
-            pushToTalk.setVocabulary(Vocabulary.removing(word, from: pushToTalk.vocabulary))
-        },
-        isInVocabulary: { [pushToTalk] word in
-            pushToTalk.vocabulary.contains { $0.lowercased() == word.lowercased() }
-        }
+        addToVocabulary: { [pushToTalk] word in pushToTalk.addToVocabulary(word, source: .learned) },
+        removeFromVocabulary: { [pushToTalk] word in pushToTalk.removeFromVocabulary([word]) },
+        isInVocabulary: { [pushToTalk] word in pushToTalk.vocabularyContains(word) }
     )
     lazy var report = ReportWindow(reporter: .live(
         pushToTalk: pushToTalk,
@@ -106,6 +95,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DockIcon.openSettings()
         }
         return false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // The vocabulary saves on a background queue. The last save must be written.
+        VocabularyPreference.flush()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

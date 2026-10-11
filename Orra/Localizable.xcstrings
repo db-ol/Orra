@@ -67,18 +67,38 @@
         }
       }
     },
-    "%lld of %lld words" : {
+    "%lld words" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个词"
+          }
+        }
+      }
+    },
+    "%lld words. Orra gives the %lld most recently added or used to the speech model." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$lld of %2$lld words"
+            "value" : "%1$lld words. Orra gives the %2$lld most recently added or used to the speech model."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已有 %1$lld 个，最多 %2$lld 个"
+            "value" : "共 %1$lld 个词。Orra 会把最近添加或用过的 %2$lld 个提供给语音模型。"
+          }
+        }
+      }
+    },
+    "1 word" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 个词"
           }
         }
       }
@@ -129,6 +149,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "把拷贝的“%@”加入个人词库"
+          }
+        }
+      }
+    },
+    "Added by you" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你添加的"
           }
         }
       }
@@ -429,6 +459,16 @@
         }
       }
     },
+    "Heard as" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听成"
+          }
+        }
+      }
+    },
     "Heard as “%@”" : {
       "localizations" : {
         "zh-Hans" : {
@@ -547,12 +587,32 @@
         }
       }
     },
+    "Last used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次使用"
+          }
+        }
+      }
+    },
     "Learn from my corrections" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "从我的修改中学习"
+          }
+        }
+      }
+    },
+    "Learned" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学到的"
           }
         }
       }
@@ -623,6 +683,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风访问权限已关闭。请在系统设置的“麦克风”中打开 Orra。"
+          }
+        }
+      }
+    },
+    "Never used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从未使用"
           }
         }
       }
@@ -977,6 +1047,16 @@
         }
       }
     },
+    "Recently used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近使用"
+          }
+        }
+      }
+    },
     "Remove" : {
       "localizations" : {
         "zh-Hans" : {
@@ -987,12 +1067,32 @@
         }
       }
     },
+    "Remove %lld Words" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 %lld 个词"
+          }
+        }
+      }
+    },
     "Remove filler words such as um and uh" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "去掉“呃”“嗯”这类语气词"
+          }
+        }
+      }
+    },
+    "Remove the selected words" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除所选的词"
           }
         }
       }
@@ -1107,6 +1207,16 @@
         }
       }
     },
+    "Select words, then choose Remove or press Delete. Right-click a word to remove it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选中词语后，点“移除”或按 Delete 键。也可以右键点一个词来移除。"
+          }
+        }
+      }
+    },
     "Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1173,6 +1283,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看报告"
+          }
+        }
+      }
+    },
+    "Sort by" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排序方式"
+          }
+        }
+      }
+    },
+    "Source" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来源"
           }
         }
       }

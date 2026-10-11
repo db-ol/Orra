@@ -43,9 +43,10 @@ final class PushToTalkController {
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
     private(set) var microphone: MicrophoneChoice?
-    /// The user's words and names, which the speech model gets with every dictation. Saved
-    /// through `saveVocabulary` whenever they change. Never logged.
-    private(set) var vocabulary: [String]
+    /// The user's words and names with their dates. The speech model gets the most recent
+    /// of them with every dictation, see `Vocabulary.forModel(_:)`. Saved through
+    /// `saveVocabulary` whenever they change, also when a paste uses one. Never logged.
+    private(set) var vocabulary: [VocabularyWord]
     /// Whether fillers such as 呃 and um are removed before the paste, see FillerRules.
     /// Saved through `saveRemovesFillerWords` whenever it changes.
     private(set) var removesFillerWords: Bool
@@ -120,7 +121,8 @@ final class PushToTalkController {
     @ObservationIgnored private var tap: HotkeyTap?
     @ObservationIgnored private let saveTalkKeys: (Set<TalkKey>) -> Void
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
-    @ObservationIgnored private let saveVocabulary: ([String]) -> Void
+    @ObservationIgnored private let saveVocabulary: ([VocabularyWord]) -> Void
+    @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
     @ObservationIgnored private let saveWritesNumbersAsDigits: (Bool) -> Void
     @ObservationIgnored private var accessCheckTask: Task<Void, Never>?
@@ -152,11 +154,12 @@ final class PushToTalkController {
     ///   - microphone: The microphone the user chose, or nil for the system default.
     ///   - saveMicrophone: Saves the choice after the user changes it.
     ///   - vocabulary: The user's words and names, as saved.
-    ///   - saveVocabulary: Saves the words after the user changes them.
+    ///   - saveVocabulary: Saves the words after they change.
     ///   - removesFillerWords: Whether fillers are removed, as saved.
     ///   - saveRemovesFillerWords: Saves the choice after the user changes it.
     ///   - writesNumbersAsDigits: Whether spoken numbers become digits, as saved.
     ///   - saveWritesNumbersAsDigits: Saves the choice after the user changes it.
+    ///   - now: The time, for the dates of the vocabulary. Tests pass fakes.
     init(
         capture: AudioCapture,
         transcription: Transcription,
@@ -174,12 +177,13 @@ final class PushToTalkController {
         saveTalkKeys: @escaping (Set<TalkKey>) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
         saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in },
-        vocabulary: [String] = [],
-        saveVocabulary: @escaping ([String]) -> Void = { _ in },
+        vocabulary: [VocabularyWord] = [],
+        saveVocabulary: @escaping ([VocabularyWord]) -> Void = { _ in },
         removesFillerWords: Bool = true,
         saveRemovesFillerWords: @escaping (Bool) -> Void = { _ in },
         writesNumbersAsDigits: Bool = true,
-        saveWritesNumbersAsDigits: @escaping (Bool) -> Void = { _ in }
+        saveWritesNumbersAsDigits: @escaping (Bool) -> Void = { _ in },
+        now: @escaping () -> Date = { Date() }
     ) {
         self.capture = capture
         self.transcription = transcription
@@ -203,6 +207,7 @@ final class PushToTalkController {
         self.saveRemovesFillerWords = saveRemovesFillerWords
         self.writesNumbersAsDigits = writesNumbersAsDigits
         self.saveWritesNumbersAsDigits = saveWritesNumbersAsDigits
+        self.now = now
     }
 
     /// Starts watching for the hotkey. Without Accessibility access it waits: the welcome
@@ -249,13 +254,39 @@ final class PushToTalkController {
         }
     }
 
-    /// Chooses the microphone for the next dictations, or the system default for nil, and
-    /// saves the choice.
     /// Replaces the vocabulary for the next dictations and saves it.
-    func setVocabulary(_ terms: [String]) {
-        guard terms != vocabulary else { return }
-        vocabulary = terms
-        saveVocabulary(terms)
+    func setVocabulary(_ words: [VocabularyWord]) {
+        guard words != vocabulary else { return }
+        vocabulary = words
+        saveVocabulary(words)
+    }
+
+    /// Adds a word, typed, copied or learned, dated now. Refused only at the sanity cap,
+    /// `Vocabulary.maximumCount`. An empty word adds nothing and counts as already there.
+    @discardableResult
+    func addToVocabulary(_ term: String, source: VocabularyWord.Source = .user) -> VocabularyAddition {
+        guard let word = Vocabulary.cleaned(term), !Vocabulary.contains(word, in: vocabulary) else {
+            return .alreadyThere
+        }
+        guard vocabulary.count < Vocabulary.maximumCount else { return .full }
+        setVocabulary(Vocabulary.adding(word, to: vocabulary, at: now(), source: source))
+        return .added
+    }
+
+    /// Takes the words out of the vocabulary, ignoring case.
+    func removeFromVocabulary(_ terms: some Sequence<String>) {
+        setVocabulary(Vocabulary.removing(terms, from: vocabulary))
+    }
+
+    /// Whether the vocabulary holds the word, ignoring case.
+    func vocabularyContains(_ term: String) -> Bool {
+        Vocabulary.contains(term, in: vocabulary)
+    }
+
+    /// Dates the last use of the words a pasted transcript holds. Keeps no text.
+    private func markVocabularyUsed(in text: String) {
+        guard !vocabulary.isEmpty else { return }
+        setVocabulary(Vocabulary.markingUsed(in: text, vocabulary, at: now()))
     }
 
     /// Turns filler removal on or off for the next dictations and saves the choice.
@@ -273,6 +304,8 @@ final class PushToTalkController {
         saveWritesNumbersAsDigits(on)
     }
 
+    /// Chooses the microphone for the next dictations, or the system default for nil, and
+    /// saves the choice.
     func setMicrophone(_ choice: MicrophoneChoice?) {
         guard choice != microphone else { return }
         microphone = choice
@@ -562,7 +595,7 @@ final class PushToTalkController {
                 logger.notice("The microphone delivered no sound for \(recording.duration, privacy: .public) s, lid closed: \(situation.lidClosed, privacy: .public)")
                 return
             }
-            let raw = try await transcription.transcribe(samples, vocabulary: vocabulary, audioSeconds: recording.duration)
+            let raw = try await transcription.transcribe(samples, vocabulary: Vocabulary.forModel(vocabulary), audioSeconds: recording.duration)
             var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
             if removesFillerWords {
                 text = FillerRules.removingFillers(from: text)
@@ -586,6 +619,7 @@ final class PushToTalkController {
                 // Notice rather than info, so the timing stays in the log store for later
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(released.duration(to: .now), privacy: .public) for \(recording.duration, privacy: .public) s of audio")
+                markVocabularyUsed(in: text)
                 if let app = target ?? frontmostApp() {
                     onPasted(text, app)
                 }
