@@ -89,6 +89,26 @@ struct LocalizationTests {
         }
     }
 
+    /// Xcode rewrites the catalog in this order whenever it builds, so a catalog kept in
+    /// another order shows up as a change after every build in Xcode.
+    @Test(arguments: ["Localizable", "InfoPlist"])
+    func catalogKeepsXcodesOrder(_ name: String) throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Orra/\(name).xcstrings")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        // The keys of "strings" are the only lines indented by four spaces that open an
+        // object. Each is decoded as a JSON string to undo its escapes.
+        let keys = try text.split(separator: "\n").compactMap { line -> String? in
+            guard let match = line.wholeMatch(of: /\ {4}("(?:[^"\\]|\\.)*") : \{/) else { return nil }
+            return try JSONDecoder().decode(String.self, from: Data(match.output.1.utf8))
+        }
+        #expect(!keys.isEmpty)
+        let sorted = keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        #expect(keys == sorted, "\(name): sort the keys with localizedStandardCompare, as Xcode does")
+    }
+
     @Test func theAppCarriesTheChineseStrings() throws {
         let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
         let chinese = try #require(Bundle(path: path))
