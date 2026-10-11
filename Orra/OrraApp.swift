@@ -7,6 +7,8 @@ import SwiftUI
         MenuBarExtra {
             StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, clipboard: appDelegate.clipboard, updater: appDelegate.updater) {
                 appDelegate.welcome.show()
+            } reportProblem: {
+                appDelegate.report.show()
             }
         } label: {
             MenuBarIcon(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models)
@@ -23,6 +25,12 @@ import SwiftUI
         .commands {
             CommandGroup(replacing: .appSettings) {
                 SettingsMenuItem()
+            }
+            // Replaces the Help menu's item, which has no help book to open.
+            CommandGroup(replacing: .help) {
+                Button("Report a Problem…") {
+                    appDelegate.report.show()
+                }
             }
         }
     }

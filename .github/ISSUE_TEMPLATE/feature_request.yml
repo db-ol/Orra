@@ -1,0 +1,14 @@
+name: Feature request / 功能建议
+description: An idea that would make Orra better. / 让 Orra 更好用的想法。
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like / 你希望有什么
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it helps you / 它对你有什么帮助

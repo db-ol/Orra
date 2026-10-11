@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas / 提问与讨论
+    url: https://github.com/db-ol/Orra/discussions
+    about: Ask how to use Orra or talk about it. / 询问 Orra 的用法或参与讨论。
