@@ -191,7 +191,21 @@ Build and test commands, run in the repository root:
   and other users' folders stay, the report lists the facts and only counts of the
   vocabulary and the learned pairs, keeps the newest 2000 log lines, picks at most three
   Orra crash reports from the last 7 days, and the issue link fills the form fields the
-  bug report form defines. A one off run on 2026-10-10 wrote a report on this Mac from
+  bug report form defines, with what happened among them. The link stays under 6,000
+  characters: a long text is cut between whole characters with a marker, which the
+  tests check for English, Chinese and emoji, since percent encoding makes a Chinese
+  character 9 characters long and an emoji up to several dozen. Without a title, the
+  first line of the text is the title, at most 120 characters and 1,000 encoded.
+- On 2026-10-10, curl without a GitHub session asked for
+  https://github.com/db-ol/Orra/issues/new with template, title, what-happened, version,
+  macos and mac filled in, with Chinese text, a newline, a plus and an ampersand. GitHub
+  answered 302 to https://github.com/login?return_to= followed by the whole new issue
+  link, encoded once more, with every parameter in it. The sign in page put the same
+  link in its return_to field, and its Create an account link went to /signup with the
+  same return_to. The sign up page itself answered curl with a bot check, so whether
+  GitHub returns to the form after creating an account was not verified. Links up to
+  6,979 characters got the 302, and links of 7,079 characters and more got a 500, so
+  Orra keeps its links under 6,000. A one off run on 2026-10-10 wrote a report on this Mac from
   the local log store, with a crash report, and without the home folder or the account
   name in it.
 - The secure input check reads kCGSSessionSecureInputPID. A throwaway program turned secure
@@ -641,10 +655,24 @@ Report a Problem, added on 2026-10-10, not verified yet:
   permissions and Orra's log from the last hour. It contains no dictated text, no
   vocabulary words or learned pairs, no clipboard, and neither your home folder path nor
   your account name. No permission prompt appears.
-- [ ] Show in Finder selects Orra-Report-<date>.txt. Open GitHub Issue also opens the bug
-  report form in the browser with Orra version, macOS version and Mac model filled in.
-  Dragging the file into the form attaches it. Nothing is sent without you submitting
-  the form.
+- [ ] The window has a title field, a What happened? text with a hint while empty, the
+  Attach the diagnostic report checkbox, on at first, and Show the report, which shows
+  the report text. Continue on GitHub stays off while the text is empty, and while the
+  report is being created with the checkbox on. Command-Return chooses it, and Return
+  starts a new line.
+- [ ] Continue on GitHub opens the bug report form in the browser with the title, What
+  happened, Orra version, macOS version and Mac model filled in. Without a title, the
+  first line of the text is the title. Chinese text and emoji arrive as written.
+- [ ] Signed out of GitHub, Continue on GitHub leads to the sign in page, and signing in
+  leads back to the form with the text filled in. Creating a new account from there:
+  note whether GitHub returns to the form afterwards.
+- [ ] With the checkbox on, Finder selects Orra-Report-<date>.txt, and dragging it into
+  the form attaches it. With the checkbox off, Finder does not open.
+- [ ] The clipboard keeps what it held when you choose Continue on GitHub with a short
+  text. Copy Report puts the report on the clipboard.
+- [ ] A very long text, such as several pages, opens the form with the start of the text
+  and the cut marker at its end, the window says the full text is on the clipboard,
+  and pasting gives the whole text. Nothing is sent without you submitting the form.
 - [ ] With the interface in Chinese, the menu item and the window read in Chinese.
 
 ## Not implemented
