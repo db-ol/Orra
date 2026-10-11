@@ -193,22 +193,22 @@
         }
       }
     },
-    "Check for Updates…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检查更新…"
-          }
-        }
-      }
-    },
     "Check for updates automatically" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "自动检查更新"
+          }
+        }
+      }
+    },
+    "Check for Updates…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新…"
           }
         }
       }
@@ -315,6 +315,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载…"
+          }
+        }
+      }
+    },
+    "fn" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地球仪（fn）键"
+          }
+        }
+      }
+    },
+    "fn (Globe)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "fn（地球仪）键"
           }
         }
       }
@@ -453,6 +474,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装 Orra %@…"
+          }
+        }
+      }
+    },
+    "Language" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言"
           }
         }
       }
@@ -597,16 +628,6 @@
         }
       }
     },
-    "Not Now" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以后"
-          }
-        }
-      }
-    },
     "Not done yet" : {
       "localizations" : {
         "zh-Hans" : {
@@ -627,6 +648,26 @@
         }
       }
     },
+    "Not Now" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以后"
+          }
+        }
+      }
+    },
+    "Open at Login" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录时打开"
+          }
+        }
+      }
+    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -643,16 +684,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开声音设置…"
-          }
-        }
-      }
-    },
-    "Open at Login" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录时打开"
           }
         }
       }
@@ -777,6 +808,26 @@
         }
       }
     },
+    "Orra Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 设置"
+          }
+        }
+      }
+    },
+    "Orra shows the new language after it restarts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 重新启动后才会显示新的语言。"
+          }
+        }
+      }
+    },
     "People, products and terms you use. Orra gives them to the speech model so it writes them your way. They stay on this Mac." : {
       "localizations" : {
         "zh-Hans" : {
@@ -837,12 +888,33 @@
         }
       }
     },
+    "Restart Orra" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新启动 Orra"
+          }
+        }
+      }
+    },
     "Resume Download (%@ left)" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "继续下载（剩余 %@）"
+          }
+        }
+      }
+    },
+    "right Command" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Command 键"
           }
         }
       }
@@ -857,6 +929,17 @@
         }
       }
     },
+    "right Control" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Control 键"
+          }
+        }
+      }
+    },
     "Right Control" : {
       "localizations" : {
         "zh-Hans" : {
@@ -867,12 +950,33 @@
         }
       }
     },
+    "right Option" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Option 键"
+          }
+        }
+      }
+    },
     "Right Option" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "右侧 Option 键"
+          }
+        }
+      }
+    },
+    "Same as the Mac" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随 Mac 系统"
           }
         }
       }
@@ -907,22 +1011,22 @@
         }
       }
     },
-    "Show Orra in the Dock" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在程序坞中显示 Orra"
-          }
-        }
-      }
-    },
     "Show a small bar at the bottom of the screen while Orra is ready" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 待命时，在屏幕底部显示一条小横条"
+          }
+        }
+      }
+    },
+    "Show Orra in the Dock" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在程序坞中显示 Orra"
           }
         }
       }
@@ -967,6 +1071,16 @@
         }
       }
     },
+    "Starting and finding Orra" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动和查找 Orra"
+          }
+        }
+      }
+    },
     "System Default" : {
       "localizations" : {
         "zh-Hans" : {
@@ -977,22 +1091,22 @@
         }
       }
     },
-    "System Default (%@)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系统默认（%@）"
-          }
-        }
-      }
-    },
     "System Default (%@, lid closed)" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "系统默认（%@，已合盖）"
+          }
+        }
+      }
+    },
+    "System Default (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统默认（%@）"
           }
         }
       }
@@ -1153,22 +1267,22 @@
         }
       }
     },
-    "This Mac is offline. Connect to the internet, then try again." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这台 Mac 没有联网。请连接互联网，然后重试。"
-          }
-        }
-      }
-    },
     "This build has no microphone usage description" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "此版本缺少麦克风用途说明"
+          }
+        }
+      }
+    },
+    "This Mac is offline. Connect to the internet, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 没有联网。请连接互联网，然后重试。"
           }
         }
       }
@@ -1233,6 +1347,16 @@
         }
       }
     },
+    "Version, speech model, updates and privacy." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本、语音模型、更新和隐私。"
+          }
+        }
+      }
+    },
     "Vocabulary" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1273,6 +1397,16 @@
         }
       }
     },
+    "Which microphone Orra records from." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 用哪个麦克风录音。"
+          }
+        }
+      }
+    },
     "While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1293,56 +1427,22 @@
         }
       }
     },
-    "fn" : {
-      "comment" : "A talk key inside a sentence",
+    "Words and names that Orra should write your way, and learning from your corrections." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "地球仪（fn）键"
+            "value" : "让 Orra 按你的写法输出的词和名字，以及从你的修改中学习。"
           }
         }
       }
     },
-    "fn (Globe)" : {
+    "Your language, the talk key, what you see and hear while dictating, and how Orra starts." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "fn（地球仪）键"
-          }
-        }
-      }
-    },
-    "right Command" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Command 键"
-          }
-        }
-      }
-    },
-    "right Control" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Control 键"
-          }
-        }
-      }
-    },
-    "right Option" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Option 键"
+            "value" : "界面语言、说话键、听写时的提示，以及 Orra 如何启动。"
           }
         }
       }

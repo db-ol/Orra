@@ -20,7 +20,7 @@ Build and test commands, run in the repository root:
   missing AppIntents dependency, which is a tool message, a full build logs four Metal
   compiler warnings from headers inside mlx-swift ("constexpr if is a C++17 extension"),
   which are third party code.
-- The test command ends in TEST SUCCEEDED with 422 test cases, including the real model
+- The test command ends in TEST SUCCEEDED with 423 test cases, including the real model
   tests below. Two heavier real model tests are skipped unless asked for.
   - PushToTalkStateMachineTests covers the full transition table (3 states by 5 events,
     15 rows) and each edge case decision, including cancel.
@@ -624,6 +624,16 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
 - [ ] An update found by an automatic check does not come in front of the app you are in.
   The menu offers Install Orra with its version, and the update window shows once you
   switch to Orra. There is no checkbox to install updates automatically.
+
+Interface language, added on 2026-10-10, not verified yet:
+
+- [ ] Settings, General, Language offers Same as the Mac, English and 简体中文. Choosing one
+  shows Restart Orra, and after the restart the menu, Settings, the welcome window and the
+  indicator use that language. Same as the Mac follows System Settings again.
+- [ ] Settings looks like System Settings: colored icons in the sidebar, a header with icon,
+  title and summary on every page, and icons on the rows of General. Language is the first
+  section of General. The window can be made larger, keeps its size, and cannot be made
+  smaller than its content.
 
 ## Not implemented
 
