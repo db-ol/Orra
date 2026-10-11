@@ -202,7 +202,7 @@ hashes, staging and backups applies to it as well.
 When Orra goes online for it:
 
 - Only after the user turns cleanup on and agrees to the download in the dialog that
-  names its size, 2.28 GB, or chooses Download, Resume Download or Try Again under the
+  names its size, 2.27 GB, or chooses Download, Resume Download or Try Again under the
   switch while cleanup is on. Cancel Download keeps the bytes on disk and turns cleanup
   off again.
 - Never at launch, and never while cleanup is off. Launch only looks at the installed
@@ -232,21 +232,19 @@ prompt itself, and the weights are in one file. tokenizer.json, 11 MB, is for th
 tokenizer of swift-transformers. Like the small files it is fetched whole, without a Range
 request. Like the weights it is a large stored file, so huggingface.co and hf-mirror.com
 redirect it to Hugging Face's download servers (us.aws.cdn.hf.co on 2026-10-11), and
-modelscope.cn serves it itself. vocab.json and merges.txt hold the same vocabulary and
-merges and are fetched as before.
+modelscope.cn serves it itself. It holds the vocabulary and the merges, so vocab.json and
+merges.txt are left out.
 
 | File | Bytes | SHA-256 |
 |---|---|---|
 | config.json | 938 | 574349e5a343236546fda55e4744a76e181f534182d7dc60ff1bad7e7a502849 |
 | generation_config.json | 238 | 835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48 |
 | tokenizer_config.json | 5,440 | 4397cc477eb6d79715ccd2000accd6b3531928f30029665832fa1b255f24d2b9 |
-| merges.txt | 1,671,853 | 8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5 |
-| vocab.json | 2,776,833 | ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910 |
 | tokenizer.json | 11,422,654 | aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4 |
 | model.safetensors | 2,263,022,417 | 2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f |
 
-In all 2,278,900,373 bytes, shown as 2.28 GB. Only model.safetensors resumes with a Range
-request. A fresh download needs 2.78 GB of free space.
+In all 2,274,451,687 bytes, shown as 2.27 GB. Only model.safetensors resumes with a Range
+request. A fresh download needs 2.77 GB of free space.
 
 - Installed:
   `~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3-4B-Instruct-2507-4bit-50d42775/`,

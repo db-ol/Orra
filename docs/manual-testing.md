@@ -1046,7 +1046,7 @@ Report a Problem, added on 2026-10-10, not verified yet:
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 
 - [ ] Settings > General shows "Clean up with a local model" off, with its explanation.
-  Turning it on asks "Download the cleanup model?" with Download (2.28 GB) and Cancel.
+  Turning it on asks "Download the cleanup model?" with Download (2.27 GB) and Cancel.
   Cancel leaves the switch off and nothing is downloaded.
 - [ ] Download shows the progress with the server under the switch, and Cancel Download
   stops it and turns the switch off. Turning it on again offers Resume Download with what
