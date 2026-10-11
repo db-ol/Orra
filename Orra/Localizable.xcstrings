@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ (%@)" : {
+      "comment" : "A talk key with its label on other keyboards, such as ⌥ Right Option (Alt)",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（%@）"
+          }
+        }
+      }
+    },
     "%@ (lid closed)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -27,6 +38,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 无法启动"
+          }
+        }
+      }
+    },
+    "%@ is a key combination and can't be the talk key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是组合键，不能作为说话键。"
           }
         }
       }
@@ -67,6 +88,22 @@
         }
       }
     },
+    "%lld of %lld words" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld words"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已有 %1$lld 个，最多 %2$lld 个"
+          }
+        }
+      }
+    },
     "%lld words" : {
       "localizations" : {
         "zh-Hans" : {
@@ -93,12 +130,33 @@
         }
       }
     },
+    "(%@)" : {
+      "comment" : "A talk key's label on other keyboards, such as (Alt)",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（%@）"
+          }
+        }
+      }
+    },
     "1 word" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 个词"
+          }
+        }
+      }
+    },
+    "A key combination can't be the talk key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "组合键不能作为说话键。"
           }
         }
       }
@@ -213,6 +271,17 @@
         }
       }
     },
+    "Alt" : {
+      "comment" : "The label of the Option key on a keyboard with a Windows layout",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alt"
+          }
+        }
+      }
+    },
     "Another app came to the front, so the text was not pasted. Use Copy Last Dictation." : {
       "localizations" : {
         "zh-Hans" : {
@@ -233,6 +302,16 @@
         }
       }
     },
+    "Cancel" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消"
+          }
+        }
+      }
+    },
     "Cancel Download" : {
       "localizations" : {
         "zh-Hans" : {
@@ -243,12 +322,42 @@
         }
       }
     },
+    "Caps Lock can't be the talk key. It turns capitals or the input method on and off." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大写锁定键不能作为说话键。它用来开关大写字母或切换输入法。"
+          }
+        }
+      }
+    },
+    "Change Talk Key…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改说话键…"
+          }
+        }
+      }
+    },
     "Changed “%@” to “%@”" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "把“%@”改成了“%@”"
+          }
+        }
+      }
+    },
+    "Change…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改…"
           }
         }
       }
@@ -299,6 +408,27 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请在“麦克风”中选择“系统默认”，然后在“声音”设置中选择 %@。"
+          }
+        }
+      }
+    },
+    "Choose your talk key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择说话键"
+          }
+        }
+      }
+    },
+    "Clear" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear"
           }
         }
       }
@@ -363,12 +493,54 @@
         }
       }
     },
+    "Delete" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "完成"
+          }
+        }
+      }
+    },
+    "Double Press for Hands Free" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两下进入免手持模式"
+          }
+        }
+      }
+    },
+    "Double press for hands free" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两下进入免手持模式"
+          }
+        }
+      }
+    },
+    "Down Arrow" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下箭头"
           }
         }
       }
@@ -419,12 +591,55 @@
         }
       }
     },
+    "End" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End"
+          }
+        }
+      }
+    },
+    "Enter" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter"
+          }
+        }
+      }
+    },
+    "For a longer text, press the talk key twice quickly and talk hands free. Press it once more to paste." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要说长一点的内容，可以快速连按两下说话键，松开后继续说。说完再按一下，文字就会粘贴进去。"
+          }
+        }
+      }
+    },
     "Forget Learned Corrections" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除学到的修改"
+          }
+        }
+      }
+    },
+    "Forward Delete" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向前删除"
           }
         }
       }
@@ -445,6 +660,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通用"
+          }
+        }
+      }
+    },
+    "Globe 🌐" : {
+      "comment" : "The fn key of recent Macs, which shows a globe",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地球仪 🌐"
           }
         }
       }
@@ -475,6 +701,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "原来听成了“%@”"
+          }
+        }
+      }
+    },
+    "Help" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Help"
           }
         }
       }
@@ -557,6 +794,27 @@
         }
       }
     },
+    "Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单独按住说话键，说话，然后松开。左侧 Control、Option 或 Command 键要单独按住片刻才开始录音，所以它们的快捷键照常可用。"
+          }
+        }
+      }
+    },
+    "Home" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Home"
+          }
+        }
+      }
+    },
     "Install Orra %@…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -623,6 +881,47 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "学习"
+          }
+        }
+      }
+    },
+    "Left Arrow" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左箭头"
+          }
+        }
+      }
+    },
+    "Left Command" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Command 键"
+          }
+        }
+      }
+    },
+    "Left Control" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Control 键"
+          }
+        }
+      }
+    },
+    "Left Option" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Option 键"
           }
         }
       }
@@ -793,6 +1092,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "说出来的日期、时间、价格和百分比会写成阿拉伯数字。“三本书”这样的小数目、“十几个”这样的约数和成语保持原样。"
+          }
+        }
+      }
+    },
+    "On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn. On a Mac's built in keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在外接键盘上，右侧 Control 键最合适，因为有些外接键盘（比如 Logitech MX Keys）的 fn 键信号根本传不到 Mac。在 Mac 自带的键盘上，左下角的 fn（地球仪）键在右手用鼠标时也很顺手。"
+          }
+        }
+      }
+    },
+    "On this Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, choose right Control, because some, such as the Logitech MX Keys, never send fn." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 自带的键盘上，左下角的 fn（地球仪）键在右手用鼠标时很顺手。用外接键盘时请选右侧 Control 键，因为有些外接键盘（比如 Logitech MX Keys）的 fn 键信号根本传不到 Mac。"
           }
         }
       }
@@ -977,12 +1296,44 @@
         }
       }
     },
+    "Orra records up to 1 minute at a time, so the recording stopped there." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 每次最多录 1 分钟，所以录音到这里就停止了。"
+          }
+        }
+      }
+    },
     "Orra shows the new language after it restarts." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 重新启动后才会显示新的语言。"
+          }
+        }
+      }
+    },
+    "Page Down" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page Down"
+          }
+        }
+      }
+    },
+    "Page Up" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page Up"
           }
         }
       }
@@ -1027,6 +1378,46 @@
         }
       }
     },
+    "Press %@ to finish" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按%@结束"
+          }
+        }
+      }
+    },
+    "Press the key you want to hold" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下你想按住说话的键"
+          }
+        }
+      }
+    },
+    "Press the key you want to hold. Use fn, Control, Option or Command on its own. Escape cancels." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下你想按住说话的键。请单独按 fn、Control、Option 或 Command 键。按 Esc 键取消。"
+          }
+        }
+      }
+    },
+    "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速连按两下说话键，松开后 Orra 会继续录音。再按一下说话键就会粘贴，按 Esc 键则取消。按住说话的用法不变。"
+          }
+        }
+      }
+    },
     "Quit Orra" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1053,6 +1444,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近使用"
+          }
+        }
+      }
+    },
+    "Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推荐：Mac 自带键盘用 fn 键，外接键盘用右侧 Control 键。"
           }
         }
       }
@@ -1157,6 +1558,28 @@
         }
       }
     },
+    "Return" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Return"
+          }
+        }
+      }
+    },
+    "Right Arrow" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右箭头"
+          }
+        }
+      }
+    },
     "Right Command" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1233,6 +1656,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置向导…"
+          }
+        }
+      }
+    },
+    "Shift can't be the talk key. On its own, it switches input methods between Chinese and English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shift 键不能作为说话键。单独按下它会切换中英文输入法。"
           }
         }
       }
@@ -1317,6 +1750,17 @@
         }
       }
     },
+    "Space" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空格"
+          }
+        }
+      }
+    },
     "Speech is turned into text on this Mac. Orra goes online only to download the speech model when you ask it to, and to check for updates when you allow it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1387,12 +1831,53 @@
         }
       }
     },
+    "Tab" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tab"
+          }
+        }
+      }
+    },
     "Talk Key" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "说话键"
+          }
+        }
+      }
+    },
+    "Talk Key: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键：%@"
+          }
+        }
+      }
+    },
+    "Talk key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键"
+          }
+        }
+      }
+    },
+    "The %@ key can't be the talk key. Holding it would type or do something in the app in front." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”键不能作为说话键。按住它会输入文字或在前台 App 中执行操作。"
           }
         }
       }
@@ -1553,6 +2038,16 @@
         }
       }
     },
+    "The talk key can be fn, or Control, Option or Command on the left or right." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键可以用 fn 键，或者左侧、右侧的 Control、Option、Command 键。"
+          }
+        }
+      }
+    },
     "The talk key needs Accessibility access" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1579,6 +2074,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此版本缺少麦克风用途说明"
+          }
+        }
+      }
+    },
+    "This key can't be the talk key. Holding it would type or do something in the app in front." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个键不能作为说话键。按住它会输入文字或在前台 App 中执行操作。"
           }
         }
       }
@@ -1639,6 +2144,37 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "撤销"
+          }
+        }
+      }
+    },
+    "Up Arrow" : {
+      "comment" : "A key name",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上箭头"
+          }
+        }
+      }
+    },
+    "Use %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用%@"
+          }
+        }
+      }
+    },
+    "Use fn, Control, Option or Command on its own. Escape cancels." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请单独按 fn、Control、Option 或 Command 键。按 Esc 键取消。"
           }
         }
       }
@@ -1753,6 +2289,17 @@
         }
       }
     },
+    "Windows key" : {
+      "comment" : "The key a keyboard with a Windows layout has in place of Command",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 键"
+          }
+        }
+      }
+    },
     "Word" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1820,6 +2367,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "fn（地球仪）键"
+          }
+        }
+      }
+    },
+    "left Command" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Command 键"
+          }
+        }
+      }
+    },
+    "left Control" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Control 键"
+          }
+        }
+      }
+    },
+    "left Option" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Option 键"
           }
         }
       }

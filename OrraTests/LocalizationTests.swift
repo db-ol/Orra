@@ -108,11 +108,11 @@ struct LocalizationTests {
     @Test func talkKeyHintsReadAsChineseSentences() throws {
         let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
         let chinese = try #require(Bundle(path: path))
-        #expect(TalkKey.holdHint(for: [], bundle: chinese) == "未设置说话键")
-        #expect(TalkKey.holdHint(for: [.rightControl], bundle: chinese) == "按住右侧 Control 键说话")
-        #expect(TalkKey.holdHint(for: [.fn], bundle: chinese) == "按住地球仪（fn）键说话")
-        #expect(TalkKey.holdHint(for: [.rightControl, .fn], bundle: chinese) == "按住右侧 Control 键或地球仪（fn）键说话")
-        #expect(TalkKey.holdHint(for: [.rightControl, .rightOption, .fn], bundle: chinese) == "按住右侧 Control 键、右侧 Option 键或地球仪（fn）键说话")
-        #expect(TalkKey.holdHint(for: Set(TalkKey.allCases), bundle: chinese) == "按住右侧 Control 键、右侧 Option 键、右侧 Command 键或地球仪（fn）键说话")
+        #expect(TalkKey.rightControl.holdHint(bundle: chinese) == "按住右侧 Control 键说话")
+        #expect(TalkKey.fn.holdHint(bundle: chinese) == "按住地球仪（fn）键说话")
+        #expect(chinese.localizedString(forKey: "%@ (%@)", value: nil, table: nil) == "%@（%@）")
+        #expect(chinese.localizedString(forKey: "Windows key", value: nil, table: nil) == "Windows 键")
+        #expect(TalkKey.leftCommand.finishHint(bundle: chinese) == "按左侧 Command 键结束")
+        #expect(TalkKey.fn.finishHint(bundle: chinese) == "按地球仪（fn）键结束")
     }
 }

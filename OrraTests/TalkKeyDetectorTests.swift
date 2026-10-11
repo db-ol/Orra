@@ -2,6 +2,8 @@ import CoreGraphics
 import Testing
 @testable import Orra
 
+/// Holds, with double press for hands free off, so a press released at once is a hold
+/// like before. TalkKeyHandsFreeTests covers taps, left hand keys and hands free.
 struct TalkKeyDetectorTests {
     typealias Decision = TalkKeyDetector.Decision
 
@@ -39,7 +41,7 @@ struct TalkKeyDetectorTests {
     /// Drives a fresh detector that listens for fn only into `phase`, using real event
     /// sequences only.
     private func makeFnDetector(in phase: TalkKeyDetector.Phase) -> TalkKeyDetector {
-        var detector = TalkKeyDetector(keys: [.fn])
+        var detector = TalkKeyDetector(keys: [.fn], handsFreeEnabled: false)
         switch phase {
         case .up:
             break
@@ -50,6 +52,8 @@ struct TalkKeyDetectorTests {
             _ = detector.handle(type: .keyDown, keyCode: Self.delete, flags: .maskSecondaryFn)
         case .passingThrough:
             _ = fnDown(&detector, with: .maskCommand)
+        case .arming, .tapped, .handsFree, .handsFreeKeyDown:
+            preconditionFailure("TalkKeyHandsFreeTests covers \(phase)")
         }
         precondition(detector.phase == phase, "helper failed to reach \(phase)")
         return detector
@@ -58,7 +62,7 @@ struct TalkKeyDetectorTests {
     // MARK: fn, as before the keys became a choice
 
     @Test func fnAloneIsAHoldAndItsEventsAreSwallowed() {
-        var detector = TalkKeyDetector(keys: [.fn])
+        var detector = TalkKeyDetector(keys: [.fn], handsFreeEnabled: false)
         #expect(fnDown(&detector) == Decision(event: .pressed(isRepeat: false), swallow: true))
         #expect(detector.phase == .holding(.fn))
         #expect(fnUp(&detector) == Decision(event: .released, swallow: true))
@@ -66,14 +70,14 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func capsLockDoesNotPreventAHold() {
-        var detector = TalkKeyDetector(keys: [.fn])
+        var detector = TalkKeyDetector(keys: [.fn], handsFreeEnabled: false)
         #expect(fnDown(&detector, with: .maskAlphaShift).event == .pressed(isRepeat: false))
         #expect(fnUp(&detector, with: .maskAlphaShift).event == .released)
     }
 
     @Test(arguments: [CGEventFlags.maskShift, .maskControl, .maskAlternate, .maskCommand])
     func fnWithAnotherModifierPassesThrough(_ modifier: CGEventFlags) {
-        var detector = TalkKeyDetector(keys: [.fn])
+        var detector = TalkKeyDetector(keys: [.fn], handsFreeEnabled: false)
         #expect(fnDown(&detector, with: modifier) == .passThrough)
         #expect(detector.phase == .passingThrough(.fn))
         #expect(fnUp(&detector, with: modifier) == .passThrough)
@@ -104,7 +108,7 @@ struct TalkKeyDetectorTests {
         // Rollover: Command is still down when Fn goes down and comes up right
         // after. Fn must go down on its own, so there is no hold and nothing is
         // swallowed.
-        var detector = TalkKeyDetector(keys: [.fn])
+        var detector = TalkKeyDetector(keys: [.fn], handsFreeEnabled: false)
         #expect(detector.handle(type: .flagsChanged, keyCode: Self.command, flags: .maskCommand) == .passThrough)
         #expect(fnDown(&detector, with: .maskCommand) == .passThrough)
         #expect(detector.handle(type: .flagsChanged, keyCode: Self.command, flags: .maskSecondaryFn) == .passThrough)
@@ -121,14 +125,14 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func arrowKeyWithTheFnFlagDoesNotStartAHold() {
-        var detector = TalkKeyDetector(keys: [.fn])
+        var detector = TalkKeyDetector(keys: [.fn], handsFreeEnabled: false)
         let decision = detector.handle(type: .keyDown, keyCode: Self.leftArrow, flags: [.maskSecondaryFn, .maskNumericPad])
         #expect(decision == .passThrough)
         #expect(detector.phase == .up)
     }
 
     @Test func releaseWithoutPressPassesThrough() {
-        var detector = TalkKeyDetector(keys: [.fn])
+        var detector = TalkKeyDetector(keys: [.fn], handsFreeEnabled: false)
         #expect(fnUp(&detector) == .passThrough)
         #expect(detector.phase == .up)
     }
@@ -169,7 +173,7 @@ struct TalkKeyDetectorTests {
 
     @Test func fnPassesThroughWhenItIsNotATalkKey() {
         // With the default keys, fn keeps its system action, such as the emoji picker.
-        var detector = TalkKeyDetector(keys: TalkKey.defaultKeys)
+        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
         #expect(fnDown(&detector) == .passThrough)
         #expect(detector.phase == .up)
         #expect(fnUp(&detector) == .passThrough)
@@ -178,7 +182,7 @@ struct TalkKeyDetectorTests {
     // MARK: Right Control, the default
 
     @Test func rightControlAloneIsAHoldAndItsEventsPassThrough() {
-        var detector = TalkKeyDetector(keys: TalkKey.defaultKeys)
+        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
         #expect(rightControlDown(&detector) == Decision(event: .pressed(isRepeat: false), swallow: false))
         #expect(detector.phase == .holding(.rightControl))
         #expect(rightControlUp(&detector) == Decision(event: .released, swallow: false))
@@ -186,21 +190,21 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func rightControlWorksOnAKeyboardWithoutLeftAndRightBits() {
-        var detector = TalkKeyDetector(keys: [.rightControl])
+        var detector = TalkKeyDetector(keys: [.rightControl], handsFreeEnabled: false)
         #expect(detector.handle(type: .flagsChanged, keyCode: Self.rightControl, flags: .maskControl).event == .pressed(isRepeat: false))
         #expect(detector.handle(type: .flagsChanged, keyCode: Self.rightControl, flags: []).event == .released)
         #expect(detector.phase == .up)
     }
 
     @Test func leftControlNeverStartsAHold() {
-        var detector = TalkKeyDetector(keys: [.rightControl])
+        var detector = TalkKeyDetector(keys: [.rightControl], handsFreeEnabled: false)
         #expect(detector.handle(type: .flagsChanged, keyCode: Self.leftControl, flags: [.maskControl, Self.leftControlBit]) == .passThrough)
         #expect(detector.phase == .up)
         #expect(detector.handle(type: .flagsChanged, keyCode: Self.leftControl, flags: []) == .passThrough)
     }
 
     @Test func rightControlWhileLeftControlIsDownBelongsToAShortcut() {
-        var detector = TalkKeyDetector(keys: [.rightControl])
+        var detector = TalkKeyDetector(keys: [.rightControl], handsFreeEnabled: false)
         _ = detector.handle(type: .flagsChanged, keyCode: Self.leftControl, flags: [.maskControl, Self.leftControlBit])
         #expect(rightControlDown(&detector, with: Self.leftControlBit) == .passThrough)
         #expect(detector.phase == .passingThrough(.rightControl))
@@ -209,7 +213,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func leftControlDuringARightControlHoldCancelsIt() {
-        var detector = TalkKeyDetector(keys: [.rightControl])
+        var detector = TalkKeyDetector(keys: [.rightControl], handsFreeEnabled: false)
         _ = rightControlDown(&detector)
         let leftDown = detector.handle(type: .flagsChanged, keyCode: Self.leftControl, flags: [.maskControl, Self.leftControlBit, Self.rightControlBit])
         #expect(leftDown == Decision(event: .cancelled, swallow: false))
@@ -221,7 +225,7 @@ struct TalkKeyDetectorTests {
 
     @Test(arguments: [CGEventFlags.maskShift, .maskAlternate, .maskCommand, .maskSecondaryFn])
     func rightControlWithAnotherModifierPassesThrough(_ modifier: CGEventFlags) {
-        var detector = TalkKeyDetector(keys: [.rightControl])
+        var detector = TalkKeyDetector(keys: [.rightControl], handsFreeEnabled: false)
         #expect(rightControlDown(&detector, with: modifier) == .passThrough)
         #expect(detector.phase == .passingThrough(.rightControl))
         #expect(rightControlUp(&detector, with: modifier) == .passThrough)
@@ -230,21 +234,21 @@ struct TalkKeyDetectorTests {
 
     @Test(arguments: [TalkKey.rightOption, .rightCommand])
     func theOtherRightHandModifiersWorkTheSameWay(_ key: TalkKey) throws {
-        var detector = TalkKeyDetector(keys: [key])
+        var detector = TalkKeyDetector(keys: [key], handsFreeEnabled: false)
         let sharedFlag = try #require(key.sharedFlag)
-        let leftKeyFlag = try #require(key.leftKeyFlag)
+        let twinFlag = try #require(key.twinFlag)
         let down = detector.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [sharedFlag, key.downFlag])
         #expect(down == Decision(event: .pressed(isRepeat: false), swallow: false))
         #expect(detector.handle(type: .flagsChanged, keyCode: key.keyCode, flags: []) == Decision(event: .released, swallow: false))
         // With the left key of the pair already down, it is a shortcut.
-        #expect(detector.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [sharedFlag, key.downFlag, leftKeyFlag]) == .passThrough)
+        #expect(detector.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [sharedFlag, key.downFlag, twinFlag]) == .passThrough)
         #expect(detector.phase == .passingThrough(key))
     }
 
     // MARK: Clicks
 
     @Test func aClickEndsAHoldOfARightHandKey() {
-        var detector = TalkKeyDetector(keys: [.rightControl])
+        var detector = TalkKeyDetector(keys: [.rightControl], handsFreeEnabled: false)
         _ = rightControlDown(&detector)
         #expect(detector.cancelForClick() == .cancelled)
         #expect(detector.phase == .cancelled(.rightControl))
@@ -267,7 +271,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func rightControlClickIsAShortcutNotADictation() {
-        var detector = TalkKeyDetector(keys: TalkKey.defaultKeys)
+        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
         var machine = PushToTalkStateMachine()
         var transitions: [PushToTalkStateMachine.Transition] = []
         func feed(_ event: PushToTalkStateMachine.Event?) {
@@ -285,7 +289,7 @@ struct TalkKeyDetectorTests {
     // MARK: Keyboards without left and right bits
 
     @Test func withoutBitsRightControlReleasedWhileLeftControlIsDownLeavesNothingStuck() {
-        var detector = TalkKeyDetector(keys: [.rightControl, .fn])
+        var detector = TalkKeyDetector(keys: [.rightControl, .fn], handsFreeEnabled: false)
         #expect(detector.handle(type: .flagsChanged, keyCode: Self.rightControl, flags: .maskControl).event == .pressed(isRepeat: false))
         #expect(detector.handle(type: .flagsChanged, keyCode: Self.leftControl, flags: .maskControl) == Decision(event: .cancelled, swallow: false))
         // Right Control comes up while left Control is still down. Without bits the flags
@@ -316,7 +320,7 @@ struct TalkKeyDetectorTests {
     // MARK: Several keys
 
     @Test func eitherOfTwoTalkKeysStartsAHold() {
-        var detector = TalkKeyDetector(keys: [.fn, .rightControl])
+        var detector = TalkKeyDetector(keys: [.fn, .rightControl], handsFreeEnabled: false)
         #expect(fnDown(&detector).event == .pressed(isRepeat: false))
         #expect(fnUp(&detector).event == .released)
         #expect(rightControlDown(&detector).event == .pressed(isRepeat: false))
@@ -325,7 +329,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func aSecondTalkKeyDuringAHoldCancelsIt() {
-        var detector = TalkKeyDetector(keys: [.fn, .rightControl])
+        var detector = TalkKeyDetector(keys: [.fn, .rightControl], handsFreeEnabled: false)
         _ = fnDown(&detector)
         #expect(rightControlDown(&detector, with: .maskSecondaryFn) == Decision(event: .cancelled, swallow: false))
         #expect(detector.phase == .cancelled(.fn))
@@ -335,7 +339,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func removingTheHeldKeyEndsTheHold() {
-        var detector = TalkKeyDetector(keys: [.fn, .rightControl])
+        var detector = TalkKeyDetector(keys: [.fn, .rightControl], handsFreeEnabled: false)
         _ = rightControlDown(&detector)
         #expect(detector.setKeys([.fn]) == .cancelled)
         #expect(detector.phase == .up)
@@ -345,7 +349,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func addingAKeyKeepsTheHold() {
-        var detector = TalkKeyDetector(keys: [.rightControl])
+        var detector = TalkKeyDetector(keys: [.rightControl], handsFreeEnabled: false)
         _ = rightControlDown(&detector)
         #expect(detector.setKeys([.rightControl, .fn]) == nil)
         #expect(detector.phase == .holding(.rightControl))
@@ -357,7 +361,7 @@ struct TalkKeyDetectorTests {
     /// Feeds raw events through the detector into the state model and returns
     /// the transitions, the way HotkeyTap and PushToTalkController do.
     private func transitions(keys: Set<TalkKey>, for events: [(CGEventType, Int64, CGEventFlags)]) -> (transitions: [PushToTalkStateMachine.Transition], machine: PushToTalkStateMachine) {
-        var detector = TalkKeyDetector(keys: keys)
+        var detector = TalkKeyDetector(keys: keys, handsFreeEnabled: false)
         var machine = PushToTalkStateMachine()
         var result: [PushToTalkStateMachine.Transition] = []
         for (type, keyCode, flags) in events {
@@ -389,7 +393,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func rightControlHoldStartsListeningAndReleaseStartsProcessing() {
-        let run = transitions(keys: TalkKey.defaultKeys, for: [
+        let run = transitions(keys: [TalkKey.defaultKey], for: [
             (.flagsChanged, Self.rightControl, [.maskControl, Self.rightControlBit]),
             (.flagsChanged, Self.rightControl, []),
         ])
@@ -435,7 +439,7 @@ struct TalkKeyDetectorTests {
         let keySets: [Set<TalkKey>] = [[.rightControl], [.fn], [.rightControl, .fn], [.rightOption, .rightCommand], Set(TalkKey.allCases)]
         var random = SplitMix(state: seed)
         var down = Array(repeating: false, count: modifiers.count)
-        var detector = TalkKeyDetector(keys: keySets[Int(seed) % keySets.count])
+        var detector = TalkKeyDetector(keys: keySets[Int(seed) % keySets.count], handsFreeEnabled: false)
         var machine = PushToTalkStateMachine()
         var fnPressWasSwallowed = false
 
@@ -461,6 +465,9 @@ struct TalkKeyDetectorTests {
                 feed(detector.reset())
             } else if roll < 8 {
                 feed(detector.cancelForClick())
+            } else if roll < 10 {
+                // A left hand key's delay passes.
+                feed(detector.timerFired(generation: detector.generation))
             } else if roll < 20 {
                 let decision = detector.handle(type: .keyDown, keyCode: Self.c, flags: currentFlags())
                 #expect(decision.swallow == false)
@@ -491,7 +498,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func rightControlCIsAShortcutNotADictation() {
-        let run = transitions(keys: TalkKey.defaultKeys, for: [
+        let run = transitions(keys: [TalkKey.defaultKey], for: [
             (.flagsChanged, Self.rightControl, [.maskControl, Self.rightControlBit]),
             (.keyDown, Self.c, [.maskControl, Self.rightControlBit]),
             (.flagsChanged, Self.rightControl, []),

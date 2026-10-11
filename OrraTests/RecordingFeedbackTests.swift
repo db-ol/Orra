@@ -292,7 +292,12 @@ struct RecordingFeedbackTests {
         return colors
     }
 
-    @Test(arguments: [DictationCue.listening, .transcribing, .finished(message: "No speech was recognized")])
+    @Test(arguments: [
+        DictationCue.listening,
+        .handsFree(finishHint: "Press right Control to finish"),
+        .transcribing,
+        .finished(message: "No speech was recognized"),
+    ])
     func theIndicatorDrawsWhiteOnDarkWithoutColor(_ cue: DictationCue) throws {
         let feedback = makeFeedback()
         if cue == .transcribing {
@@ -428,6 +433,14 @@ struct MenuBarIconTests {
         // The download and the missing hotkey still come first.
         #expect(symbol(modelSymbol: "arrow.down.circle", dictation: .processing, showsIndicator: false) == "arrow.down.circle")
         #expect(symbol(isHotkeyActive: false, dictation: .listening, showsIndicator: false) == "mic.slash")
+    }
+
+    @Test func handsFreeCountsAsListening() {
+        #expect(symbol(dictation: .waitingForSecondPress) == "mic")
+        #expect(symbol(dictation: .handsFree) == "mic")
+        #expect(symbol(dictation: .waitingForSecondPress, showsIndicator: false) == "mic.fill")
+        #expect(symbol(dictation: .handsFree, showsIndicator: false) == "mic.fill")
+        #expect(symbol(dictation: .handsFree, showsIndicator: false, hasProblem: true) == "mic.fill")
     }
 
     @Test func theModelDownloadComesFirst() {

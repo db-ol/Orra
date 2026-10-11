@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The welcome window's content: the three steps that make Orra ready, in any order, then
-/// how to dictate. The download comes first because it takes longest, and it goes on
-/// while the user grants the permissions.
+/// The welcome window's content: the three steps that make Orra ready, in any order, the
+/// choice of the talk key, then how to dictate. The download comes first because it takes
+/// longest, and it goes on while the user grants the permissions.
 struct WelcomeView: View {
     let pushToTalk: PushToTalkController
     let models: ModelInstaller
@@ -33,12 +33,20 @@ struct WelcomeView: View {
             SetupStepRow(number: 3, status: checklist.accessibility, title: "Allow Accessibility") {
                 AccessibilityStepDetail(pushToTalk: pushToTalk)
             }
+            // Not part of the checklist: right Control works when the user skips it.
+            SetupStepRow(number: 4, status: pushToTalk.hasChosenTalkKey ? .done : .todo, title: "Choose your talk key") {
+                TalkKeyStepDetail(pushToTalk: pushToTalk)
+            }
             if checklist.isComplete {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Orra is ready")
                         .font(.headline)
                     Text("Try it in any app: hold the talk key, say something, and let go. The text appears where you are typing.")
                         .fixedSize(horizontal: false, vertical: true)
+                    if pushToTalk.handsFreeOn {
+                        Text("For a longer text, press the talk key twice quickly and talk hands free. Press it once more to paste.")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -192,13 +200,60 @@ private struct MicrophoneStepDetail: View {
     }
 }
 
+/// The talk key: the recorder that shows the key and changes it, and which key suits this
+/// Mac's keyboard.
+private struct TalkKeyStepDetail: View {
+    let pushToTalk: PushToTalkController
+    /// Read once when the step appears, not in an initial value, which SwiftUI would
+    /// evaluate again each time the window redraws, such as for download progress.
+    /// Reading the registry needs no permission. Nil until then.
+    @State private var keyboard: KeyboardKind?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TalkKeyRecorder(pushToTalk: pushToTalk)
+            if let keyboard {
+                recommendation(for: keyboard)
+            }
+        }
+        .task {
+            if keyboard == nil {
+                keyboard = KeyboardKind.current()
+            }
+        }
+    }
+
+    @ViewBuilder private func recommendation(for keyboard: KeyboardKind) -> some View {
+        let recommended = keyboard.recommendedKey
+        Group {
+            Group {
+                switch keyboard {
+                case .builtIn:
+                    Text("On this Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, choose right Control, because some, such as the Logitech MX Keys, never send fn.")
+                case .external:
+                    Text("On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn. On a Mac's built in keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse.")
+                }
+            }
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            // Also shown while the recommended key is only the default, so keeping it
+            // completes the step.
+            if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKey != recommended || !pushToTalk.hasChosenTalkKey {
+                Button("Use \(recommended.nameInSentence)") {
+                    pushToTalk.chooseTalkKey(recommended)
+                }
+            }
+        }
+    }
+}
+
 private struct AccessibilityStepDetail: View {
     let pushToTalk: PushToTalkController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if pushToTalk.isHotkeyActive {
-                Text(verbatim: TalkKey.holdHint(for: pushToTalk.talkKeys))
+                Text(verbatim: pushToTalk.talkKey.holdHint())
                     .foregroundStyle(.secondary)
             } else {
                 Text("Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here.")

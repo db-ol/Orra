@@ -20,6 +20,13 @@ import CoreGraphics
 /// Mouse clicks do not go through the tap, so they never wait for Orra. While the tap is
 /// installed, a global NSEvent monitor observes mouse button presses instead. It cannot
 /// delay or change them, and for mouse events it needs no permission.
+///
+/// The detector has no clock. The tap passes the time each event arrived, and runs the
+/// one timer the detector asks for at a time, for a left hand key's delay or a tap's
+/// double press window, as a task on the main actor that never blocks.
+///
+/// While the user records a talk key by pressing it, see `chooseKey`, the tap reports
+/// key events instead of detecting holds, but only while Orra is the active app.
 final class HotkeyTap {
     /// Creates the event tap and the click monitor for a HotkeyTap and switches them on.
     /// Returns what removes both again, or nil when the system refuses the tap, which
@@ -30,35 +37,123 @@ final class HotkeyTap {
     /// does not need switching off again.
     typealias Remove = @MainActor (_ systemSwitchedOff: Bool) -> Void
 
+    /// Waits for a timer. Tests pass one that never returns and fire timers themselves.
+    typealias Wait = @MainActor (Duration) async -> Void
+
     private let install: Install
     private let onEvent: (PushToTalkStateMachine.Event) -> Void
     private let onSwitchedOff: (CGEventType) -> Void
+    private let wait: Wait
+    private let isAppActive: @MainActor () -> Bool
     private var detector: TalkKeyDetector
     /// Removes the installed tap. Nil while no tap is installed.
     private var removeInstalled: Remove?
+    /// The running timer and the detector generation it was started for.
+    private var timerTask: Task<Void, Never>?
+    private var timerGeneration: Int?
+    /// Receives one key down or flags changed event while the user records a talk key.
+    typealias Chooser = (_ type: CGEventType, _ keyCode: Int64, _ flags: CGEventFlags) -> Void
+    /// Receives the events while the user records a talk key. Nil otherwise.
+    private var chooser: Chooser?
 
     /// - Parameters:
     ///   - install: Creates the tap, see `Install`.
     ///   - onEvent: Receives the push to talk events.
     ///   - onSwitchedOff: Called after the system switched the tap off and the tap removed
     ///     itself, with the reason the system gave.
+    ///   - handsFree: Whether a double press starts a hands free dictation.
+    ///   - wait: Waits for a timer, see `Wait`.
+    ///   - isAppActive: Whether Orra is the active app, so a key the user presses to
+    ///     choose a talk key is meant for Orra.
     init(
         keys: Set<TalkKey>,
+        handsFree: Bool = true,
         install: @escaping Install,
+        wait: @escaping Wait = { try? await Task.sleep(for: $0) },
+        isAppActive: @escaping @MainActor () -> Bool = { NSApplication.shared.isActive },
         onEvent: @escaping (PushToTalkStateMachine.Event) -> Void,
         onSwitchedOff: @escaping (CGEventType) -> Void = { _ in }
     ) {
-        detector = TalkKeyDetector(keys: keys)
+        detector = TalkKeyDetector(keys: keys, handsFreeEnabled: handsFree)
         self.install = install
+        self.wait = wait
+        self.isAppActive = isAppActive
         self.onEvent = onEvent
         self.onSwitchedOff = onSwitchedOff
     }
 
-    /// Switches to other talk keys at once. Ends a hold of a key that is no longer one.
+    /// Switches to other talk keys at once. Ends a hold or a hands free dictation of a key
+    /// that is no longer one.
     func setKeys(_ keys: Set<TalkKey>) {
-        if let event = detector.setKeys(keys) {
+        let event = detector.setKeys(keys)
+        afterDetectorChange(event)
+    }
+
+    /// Turns double press for hands free on or off.
+    func setHandsFree(_ on: Bool) {
+        let event = detector.setHandsFreeEnabled(on)
+        afterDetectorChange(event)
+    }
+
+    /// The owner tells that no hands free dictation runs, see
+    /// `TalkKeyDetector.endHandsFree()`.
+    func endHandsFree() {
+        detector.endHandsFree()
+        updateTimer()
+    }
+
+    /// The talk key the current press or dictation is about, if any.
+    var activeKey: TalkKey? {
+        detector.phase.key
+    }
+
+    /// While `chooser` is set and Orra is the active app, every key down and flags changed
+    /// event goes to it instead of starting a hold. fn's events are swallowed, so the
+    /// "Press fn key to" action does not fire, and so are key downs, so a key pressed to
+    /// record types nothing and Escape does not close the window. The events of the other
+    /// modifiers pass through, so apps keep an accurate picture of which are down.
+    /// Setting it ends a hold in progress. Nil ends the recording.
+    func chooseKey(_ chooser: Chooser?) {
+        self.chooser = chooser
+        if chooser != nil {
+            afterDetectorChange(detector.reset())
+        }
+    }
+
+    /// Sends the event, if any, and starts or stops the timer the detector asks for.
+    private func afterDetectorChange(_ event: PushToTalkStateMachine.Event?) {
+        if let event {
             onEvent(event)
         }
+        updateTimer()
+    }
+
+    private func updateTimer() {
+        guard let timer = detector.timer else {
+            timerTask?.cancel()
+            timerTask = nil
+            timerGeneration = nil
+            return
+        }
+        let generation = detector.generation
+        guard timerGeneration != generation else { return }
+        timerTask?.cancel()
+        timerGeneration = generation
+        timerTask = Task { [weak self, wait] in
+            await wait(timer.duration)
+            guard !Task.isCancelled else { return }
+            self?.fireTimer(generation: generation)
+        }
+    }
+
+    /// The timer started for `generation` fired. Internal so tests can fire it.
+    func fireTimer(generation: Int? = nil) {
+        guard let generation = generation ?? timerGeneration else { return }
+        if timerGeneration == generation {
+            timerTask = nil
+            timerGeneration = nil
+        }
+        afterDetectorChange(detector.timerFired(generation: generation))
     }
 
     var isInstalled: Bool { removeInstalled != nil }
@@ -77,9 +172,7 @@ final class HotkeyTap {
     /// A mouse button went down. Ends a hold of a key that modifies clicks, such as right
     /// Control, whose click opens a context menu. Internal so tests can call it.
     func clickDuringHold() {
-        if let event = detector.cancelForClick() {
-            onEvent(event)
-        }
+        afterDetectorChange(detector.cancelForClick())
     }
 
     /// Disables and removes the tap. Ends a hold in progress.
@@ -89,14 +182,12 @@ final class HotkeyTap {
         guard let removeInstalled else { return }
         self.removeInstalled = nil
         removeInstalled(systemSwitchedOff)
-        if let event = detector.reset() {
-            onEvent(event)
-        }
+        afterDetectorChange(detector.reset())
     }
 
     /// Handles one event from the tap. Returns true to swallow it. Internal so tests can
     /// feed it events without a tap.
-    func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Bool {
+    func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags, at now: ContinuousClock.Instant = .now) -> Bool {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             // The system switched the tap off and events were missed, possibly the
@@ -109,10 +200,13 @@ final class HotkeyTap {
             onSwitchedOff(type)
             return false
         default:
-            let decision = detector.handle(type: type, keyCode: keyCode, flags: flags)
-            if let event = decision.event {
-                onEvent(event)
+            if let chooser, isAppActive() {
+                // A key is chosen at its release, so the detector never sees half a press.
+                chooser(type, keyCode, flags)
+                return type == .keyDown || (type == .flagsChanged && keyCode == TalkKey.fn.keyCode)
             }
+            let decision = detector.handle(type: type, keyCode: keyCode, flags: flags, at: now)
+            afterDetectorChange(decision.event)
             return decision.swallow
         }
     }
@@ -172,8 +266,9 @@ nonisolated private func hotkeyTapCallback(
     let tap = Unmanaged<HotkeyTap>.fromOpaque(userInfo).takeUnretainedValue()
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     let flags = event.flags
+    let now = ContinuousClock.now
     let swallow = MainActor.assumeIsolated {
-        tap.handle(type: type, keyCode: keyCode, flags: flags)
+        tap.handle(type: type, keyCode: keyCode, flags: flags, at: now)
     }
     return swallow ? nil : Unmanaged.passUnretained(event)
 }

@@ -6,11 +6,16 @@ import os
 /// What the recording indicator and the sounds follow. A dictation sends listening,
 /// transcribing, recordingStopped and finished, in that order. Listening waits until the
 /// hold has lasted a moment and the microphone has started, so a shortcut with the talk
-/// key, such as right Control+C, sends nothing. A hold that ends early skips to finished, which comes only when there is
-/// a message to show or an indicator to clear.
+/// key, such as right Control+C, sends nothing. A hands free dictation sends handsFree in
+/// place of listening, or after it when a hold turned into one. A hold that ends early
+/// skips to finished, which comes only when there is a message to show or an indicator to
+/// clear.
 nonisolated enum DictationCue: Equatable, Sendable {
     /// The hold has lasted long enough to be a dictation, and the microphone is recording.
     case listening
+    /// A hands free dictation records. The hint says how to finish it, such as "Press
+    /// right Control to finish".
+    case handsFree(finishHint: String)
     /// The talk key was released after a hold long enough to transcribe.
     case transcribing
     /// The microphone stopped after a hold long enough to transcribe. A recording without
@@ -24,7 +29,8 @@ nonisolated enum DictationCue: Equatable, Sendable {
 /// publishes the state for the menu bar.
 ///
 /// A hold records. The release stops the recording, the speech model turns it into text
-/// off the main actor, and the text is pasted into the frontmost app.
+/// off the main actor, and the text is pasted into the frontmost app. A quick double press
+/// records hands free until the next press of the key, see PushToTalkStateMachine.
 @Observable
 final class PushToTalkController {
     nonisolated enum ModelState: Equatable, Sendable {
@@ -37,9 +43,19 @@ final class PushToTalkController {
 
     /// The current push to talk state.
     private(set) var state: PushToTalkStateMachine.State = .idle
-    /// The keys that start a dictation when held on their own. Saved through
-    /// `saveTalkKeys` whenever they change.
-    private(set) var talkKeys: Set<TalkKey>
+    /// The key that starts a dictation when held on its own. Saved through `saveTalkKey`
+    /// whenever it changes.
+    private(set) var talkKey: TalkKey
+    /// Whether the user has chosen the talk key, here or in an earlier launch. The welcome
+    /// window marks its talk key step as done then.
+    private(set) var hasChosenTalkKey: Bool
+    /// Whether a quick double press of the talk key starts a hands free dictation. Saved
+    /// through `saveHandsFree` whenever it changes.
+    private(set) var handsFreeOn: Bool
+    /// True while the user records a talk key by pressing it.
+    private(set) var isChoosingTalkKey = false
+    /// Why the last press while recording a talk key cannot be one, such as Shift.
+    private(set) var keyChoiceNote: String?
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
     private(set) var microphone: MicrophoneChoice?
@@ -119,7 +135,16 @@ final class PushToTalkController {
     @ObservationIgnored private var userActivity: (any NSObjectProtocol)?
     @ObservationIgnored private var machine = PushToTalkStateMachine()
     @ObservationIgnored private var tap: HotkeyTap?
-    @ObservationIgnored private let saveTalkKeys: (Set<TalkKey>) -> Void
+    @ObservationIgnored private let saveTalkKey: (TalkKey) -> Void
+    @ObservationIgnored private let saveHandsFree: (Bool) -> Void
+    /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
+    /// installed, which needs no permission.
+    /// The local event monitors while the user records a talk key.
+    @ObservationIgnored private var keyChoiceMonitors: [Any] = []
+    /// Ends the recording of a talk key when Orra stops being the active app.
+    @ObservationIgnored private var resignObserver: (any NSObjectProtocol)?
+    /// Follows the presses while the user records a talk key.
+    @ObservationIgnored private var keyRecorder = KeyRecorder()
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
     @ObservationIgnored private let saveVocabulary: ([VocabularyWord]) -> Void
     @ObservationIgnored private let now: () -> Date
@@ -149,8 +174,11 @@ final class PushToTalkController {
     ///     `watchAccess()`.
     ///   - listeningCueDelay: How long a hold lasts before the indicator shows and the
     ///     start sound plays. A shortcut with the talk key is over sooner.
-    ///   - talkKeys: The keys that start a dictation, as saved by the user.
-    ///   - saveTalkKeys: Saves the keys after the user changes them.
+    ///   - talkKey: The key that starts a dictation, as saved by the user.
+    ///   - saveTalkKey: Saves the key after the user changes it.
+    ///   - talkKeyChosen: Whether the user has saved a talk key before.
+    ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
+    ///   - saveHandsFree: Saves the choice after the user changes it.
     ///   - microphone: The microphone the user chose, or nil for the system default.
     ///   - saveMicrophone: Saves the choice after the user changes it.
     ///   - vocabulary: The user's words and names, as saved.
@@ -173,8 +201,11 @@ final class PushToTalkController {
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
         listeningCueDelay: Duration = .milliseconds(150),
-        talkKeys: Set<TalkKey> = TalkKey.defaultKeys,
-        saveTalkKeys: @escaping (Set<TalkKey>) -> Void = { _ in },
+        talkKey: TalkKey = TalkKey.defaultKey,
+        saveTalkKey: @escaping (TalkKey) -> Void = { _ in },
+        talkKeyChosen: Bool = false,
+        handsFree: Bool = true,
+        saveHandsFree: @escaping (Bool) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
         saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in },
         vocabulary: [VocabularyWord] = [],
@@ -197,8 +228,11 @@ final class PushToTalkController {
         self.releaseTail = releaseTail
         self.accessCheckDelay = accessCheckDelay
         self.listeningCueDelay = listeningCueDelay
-        self.talkKeys = talkKeys.isEmpty ? TalkKey.defaultKeys : talkKeys
-        self.saveTalkKeys = saveTalkKeys
+        self.talkKey = talkKey
+        self.saveTalkKey = saveTalkKey
+        self.hasChosenTalkKey = talkKeyChosen
+        self.handsFreeOn = handsFree
+        self.saveHandsFree = saveHandsFree
         self.microphone = microphone
         self.saveMicrophone = saveMicrophone
         self.vocabulary = vocabulary
@@ -217,7 +251,7 @@ final class PushToTalkController {
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
-        tap = HotkeyTap(keys: talkKeys, install: installTap) { [weak self] event in
+        tap = HotkeyTap(keys: [talkKey], handsFree: handsFreeOn, install: installTap) { [weak self] event in
             self?.handle(event)
         } onSwitchedOff: { [weak self] reason in
             self?.tapWasSwitchedOff(reason)
@@ -312,19 +346,108 @@ final class PushToTalkController {
         saveMicrophone(choice)
     }
 
-    /// Turns a talk key on or off and saves the choice. The last key stays on, so
-    /// dictation cannot be switched off by accident.
-    func setTalkKey(_ key: TalkKey, on: Bool) {
-        var keys = talkKeys
-        if on {
-            keys.insert(key)
-        } else {
-            keys.remove(key)
+    /// Makes `key` the talk key and saves the choice. Saved even when it is the key in use
+    /// already, such as the default, so the welcome window counts the step as done on the
+    /// next launch too.
+    func chooseTalkKey(_ key: TalkKey) {
+        hasChosenTalkKey = true
+        talkKey = key
+        saveTalkKey(key)
+        tap?.setKeys([key])
+    }
+
+    /// Turns double press for hands free on or off and saves the choice.
+    func setHandsFreeOn(_ on: Bool) {
+        guard on != handsFreeOn else { return }
+        handsFreeOn = on
+        saveHandsFree(on)
+        tap?.setHandsFree(on)
+    }
+
+    /// Starts recording the key the user wants as the talk key, see KeyRecorder. A key
+    /// that can be a talk key, pressed and released on its own, becomes the talk key.
+    /// Anything else leaves a note and the recording goes on. Escape, a click anywhere in
+    /// Orra, or switching to another app stops it. Only presses in Orra count: the tap
+    /// checks that Orra is the active app, and without the tap a local monitor sees only
+    /// Orra's own events. Neither needs a new permission.
+    func startChoosingTalkKey() {
+        guard !isChoosingTalkKey else { return }
+        isChoosingTalkKey = true
+        keyChoiceNote = nil
+        keyRecorder = KeyRecorder()
+        tap?.chooseKey { [weak self] type, keyCode, flags in
+            self?.keyChoice(type: type, keyCode: keyCode, flags: flags)
         }
-        guard !keys.isEmpty, keys != talkKeys else { return }
-        talkKeys = keys
-        saveTalkKeys(keys)
-        tap?.setKeys(keys)
+        keyChoiceMonitors = [
+            NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+                // The tap has seen the event first when it is installed.
+                guard let self, isChoosingTalkKey, tap?.isInstalled != true else { return event }
+                let flags = event.cgEvent?.flags ?? CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
+                let type: CGEventType = event.type == .keyDown ? .keyDown : .flagsChanged
+                keyChoice(type: type, keyCode: Int64(event.keyCode), flags: flags)
+                // As the tap does: a key pressed to record types nothing, and Escape does
+                // not close the window.
+                return type == .keyDown ? nil : event
+            },
+            // A click anywhere in Orra ends the recording, as in the shortcut recorders of
+            // Mac apps. The click itself goes on to what was clicked.
+            NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+                self?.stopChoosingTalkKey()
+                return event
+            },
+        ].compactMap { $0 }
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.stopChoosingTalkKey()
+            }
+        }
+    }
+
+    /// Stops recording a talk key without changing it.
+    func stopChoosingTalkKey() {
+        guard isChoosingTalkKey else { return }
+        isChoosingTalkKey = false
+        keyChoiceNote = nil
+        tap?.chooseKey(nil)
+        keyChoiceMonitors.forEach(NSEvent.removeMonitor)
+        keyChoiceMonitors = []
+        if let resignObserver {
+            NotificationCenter.default.removeObserver(resignObserver)
+        }
+        resignObserver = nil
+    }
+
+    /// One key down or flags changed event while the user records a talk key. Internal so
+    /// tests can drive it.
+    func keyChoice(type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
+        guard isChoosingTalkKey else { return }
+        guard let outcome = keyRecorder.handle(type: type, keyCode: keyCode, flags: flags) else {
+            // A key that can be the talk key is down, so the note about an earlier press
+            // no longer applies.
+            if keyRecorder.candidate != nil {
+                keyChoiceNote = nil
+            }
+            return
+        }
+        switch outcome {
+        case .chosen(let key):
+            stopChoosingTalkKey()
+            chooseTalkKey(key)
+        case .rejected(let rejection):
+            keyChoiceNote = rejection.message
+        case .cancelled:
+            stopChoosingTalkKey()
+        }
+    }
+
+    /// The key that finishes the hands free dictation in progress, for the indicator: the
+    /// key that started it, or the talk key.
+    private var handsFreeKey: TalkKey {
+        tap?.activeKey ?? talkKey
     }
 
     /// Shows the system prompt that leads to Privacy & Security > Accessibility.
@@ -356,11 +479,18 @@ final class PushToTalkController {
 
     /// Applies one push to talk event. Internal so tests can drive it.
     func handle(_ event: PushToTalkStateMachine.Event) {
+        // The tap keeps Escape and the next press for a hands free dictation only while one
+        // runs. It may have ended here some other way, or never started.
+        defer {
+            if machine.state != .handsFree {
+                tap?.endHandsFree()
+            }
+        }
         guard let transition = machine.handle(event) else { return }
         state = machine.state
         logger.debug("Push to talk transition: \(String(describing: transition), privacy: .public)")
         switch transition {
-        case .startedListening:
+        case .startedListening, .startedHandsFree:
             problem = nil
             notice = nil
             microphoneNotice = nil
@@ -375,7 +505,19 @@ final class PushToTalkController {
                 handle(.cancelled)
                 return
             }
-            startRecording()
+            startRecording(cueDelay: transition == .startedHandsFree ? .zero : listeningCueDelay)
+        case .awaitingSecondPress:
+            // The recording goes on until the second press or the end of the window.
+            break
+        case .resumedListening:
+            // The second press after a tap. The recording goes on. If the press turns out
+            // to be a hold, its cue comes like any hold's. A double press replaces it with
+            // the hands free cue at the release.
+            listeningCueTask?.cancel()
+            scheduleListeningCue(after: listeningCueDelay, hold: holdNumber)
+        case .switchedToHandsFree:
+            listeningCueTask?.cancel()
+            scheduleListeningCue(after: .zero, hold: holdNumber)
         case .startedProcessing:
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
@@ -470,7 +612,7 @@ final class PushToTalkController {
     /// Starts the microphone for a hold, or ends the hold when that is not possible.
     /// The first hold asks for microphone access and is cancelled, because the prompt
     /// takes the focus while the talk key is still down.
-    private func startRecording() {
+    private func startRecording(cueDelay: Duration) {
         microphoneAccess = capture.access()
         switch microphoneAccess {
         case .authorized:
@@ -495,21 +637,13 @@ final class PushToTalkController {
             }
             recordingLimitTask = Task { [weak self, maximumRecordingDuration] in
                 try? await Task.sleep(for: maximumRecordingDuration)
-                guard !Task.isCancelled, let self, state == .listening else { return }
+                guard !Task.isCancelled, let self, state == .listening || state == .handsFree else { return }
                 logger.info("Recording reached its maximum length")
+                // The audio buffer holds no more, so the dictation ends here and says why.
+                notice = String(localized: "Orra records up to 1 minute at a time, so the recording stopped there.")
                 handle(.released)
             }
-            let started = captureStart
-            listeningCueTask = Task { [weak self, listeningCueDelay] in
-                try? await Task.sleep(for: listeningCueDelay)
-                // The cue also waits for the microphone, which can take 0.3 s for a USB
-                // microphone, so whoever starts talking at the sound is recorded from the
-                // first syllable. A microphone that fails to start sends no cue.
-                guard await started?.value == true else { return }
-                guard !Task.isCancelled, let self, holdNumber == hold, state == .listening else { return }
-                indicatorShown = true
-                onCue(.listening)
-            }
+            scheduleListeningCue(after: cueDelay, hold: hold)
         case .notDetermined:
             // The system prompt that follows says enough.
             handle(.cancelled)
@@ -520,6 +654,32 @@ final class PushToTalkController {
         case .notConfigured:
             holdMessage = String(localized: "This build has no microphone usage description")
             handle(.cancelled)
+        }
+    }
+
+    /// Sends the listening cue, or the hands free cue, once `delay` has passed and the
+    /// microphone has started, if the hold is still the current one and still records.
+    private func scheduleListeningCue(after delay: Duration, hold: Int) {
+        let started = captureStart
+        listeningCueTask = Task { [weak self] in
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            }
+            // The cue also waits for the microphone, which can take 0.3 s for a USB
+            // microphone, so whoever starts talking at the sound is recorded from the
+            // first syllable. A microphone that fails to start sends no cue.
+            guard await started?.value == true else { return }
+            guard !Task.isCancelled, let self, holdNumber == hold else { return }
+            switch state {
+            case .listening:
+                indicatorShown = true
+                onCue(.listening)
+            case .handsFree:
+                indicatorShown = true
+                onCue(.handsFree(finishHint: handsFreeKey.finishHint()))
+            case .idle, .waitingForSecondPress, .processing:
+                break
+            }
         }
     }
 
@@ -537,7 +697,7 @@ final class PushToTalkController {
         } else {
             problem = String(localized: "The microphone could not start")
         }
-        if state == .listening {
+        if machine.isRecording {
             handle(.cancelled)
         }
     }

@@ -146,6 +146,9 @@ struct SettingsView: View {
             }
         }
         .toolbar(removing: .sidebarToggle)
+        .onReceive(NotificationCenter.default.publisher(for: SettingsWindow.showGeneralNotification)) { _ in
+            page = .general
+        }
         .frame(minWidth: 700, idealWidth: 780, maxWidth: .infinity, minHeight: 500, idealHeight: 620, maxHeight: .infinity)
     }
 }
@@ -193,11 +196,21 @@ private struct GeneralSettings: View {
                 Text("Language")
             }
             Section {
-                TalkKeyToggles(keys: pushToTalk.talkKeys, setKey: pushToTalk.setTalkKey)
+                TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsRecommendation: true)
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.handsFreeOn },
+                    set: { pushToTalk.setHandsFreeOn($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Double press for hands free",
+                        detail: "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before.",
+                        systemImage: "hand.raised"
+                    )
+                }
             } header: {
                 Text("Talk Key")
             } footer: {
-                Text("Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards.")
+                Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.")
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -466,20 +479,145 @@ struct MicrophoneToggles: View {
     }
 }
 
-/// One switch per talk key, in the menu and in Settings. The last key that is on cannot be
-/// turned off.
-struct TalkKeyToggles: View {
-    let keys: Set<TalkKey>
-    let setKey: (TalkKey, Bool) -> Void
+/// The talk key recorder, like the shortcut recorders of Mac apps: a field that shows the
+/// key, such as "⌥ Right Option (Alt)". Clicking it, or Change…, starts recording, and the
+/// next key the user presses and releases on its own becomes the talk key. A press that
+/// cannot be one shows why under the field. In Settings and in the welcome window.
+struct TalkKeyRecorder: View {
+    let pushToTalk: PushToTalkController
+    /// Whether "Talk key" is shown in front of the field, as a row in Settings.
+    var showsLabel = false
+    /// Whether the line with the recommended keys is shown under the field.
+    var showsRecommendation = false
+    /// Whether this recorder started the recording in progress. The welcome window and
+    /// Settings each show one, and closing one must not end a recording started in the
+    /// other.
+    @State private var startedHere = false
+
+    private var isRecording: Bool {
+        pushToTalk.isChoosingTalkKey
+    }
 
     var body: some View {
-        ForEach(TalkKey.allCases) { key in
-            Toggle(key.name, isOn: Binding(
-                get: { keys.contains(key) },
-                set: { setKey(key, $0) }
-            ))
-            .disabled(keys == [key])
+        VStack(alignment: .leading, spacing: 6) {
+            if showsLabel {
+                LabeledContent {
+                    fieldAndButton
+                } label: {
+                    // The field carries the same label for VoiceOver, so it is read once.
+                    Label("Talk key", systemImage: "keyboard")
+                        .accessibilityHidden(true)
+                }
+            } else {
+                fieldAndButton
+            }
+            if isRecording {
+                if let note = pushToTalk.keyChoiceNote {
+                    // Already in the user's language, so shown as it is.
+                    // Orange on the icon only: orange text that small is too faint on a
+                    // light background.
+                    Label {
+                        Text(verbatim: note)
+                    } icon: {
+                        Image(systemName: "exclamationmark.circle")
+                            .foregroundStyle(.orange)
+                    }
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                // Also under a refused press, so the user sees which keys work.
+                Text("Use fn, Control, Option or Command on its own. Escape cancels.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                // Which keys can be the talk key, before the user starts recording.
+                Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if showsRecommendation {
+                Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+        .onDisappear {
+            if startedHere {
+                pushToTalk.stopChoosingTalkKey()
+            }
+        }
+        .onChange(of: pushToTalk.isChoosingTalkKey) { _, recording in
+            if !recording {
+                startedHere = false
+            }
+        }
+        .onChange(of: pushToTalk.keyChoiceNote) { _, note in
+            // VoiceOver reads a refused press, which only shows as text under the field.
+            // Only the recorder that started the recording speaks, so it is said once.
+            if startedHere, let note {
+                let keys = String(localized: "Use fn, Control, Option or Command on its own. Escape cancels.")
+                AccessibilityNotification.Announcement("\(note) \(keys)").post()
+            }
+        }
+    }
+
+    private var fieldAndButton: some View {
+        HStack(spacing: 8) {
+            Button(action: start) {
+                field
+            }
+            .buttonStyle(.plain)
+            // While recording, a click on the field ends the recording, as any click in
+            // Orra does, rather than starting it again.
+            .allowsHitTesting(!isRecording)
+            .accessibilityLabel(Text("Talk key"))
+            .accessibilityValue(Text(verbatim: isRecording ? String(localized: "Press the key you want to hold") : pushToTalk.talkKey.fullName))
+            if isRecording {
+                Button("Cancel") {
+                    pushToTalk.stopChoosingTalkKey()
+                }
+            } else {
+                Button("Change…", action: start)
+            }
+        }
+    }
+
+    private var field: some View {
+        HStack(spacing: 4) {
+            if isRecording {
+                Text("Press the key you want to hold")
+                    .foregroundStyle(Color.accentColor)
+            } else {
+                Text(verbatim: pushToTalk.talkKey.title)
+                if let other = pushToTalk.talkKey.otherLabelInParentheses {
+                    Text(verbatim: other)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .lineLimit(1)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(minWidth: 220, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(isRecording ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isRecording ? 2 : 1)
+        )
+        .contentShape(Rectangle())
+    }
+
+    private func start() {
+        pushToTalk.startChoosingTalkKey()
+        startedHere = true
+        // Only the field's value changes, which VoiceOver does not read on its own.
+        AccessibilityNotification.Announcement(
+            String(localized: "Press the key you want to hold. Use fn, Control, Option or Command on its own. Escape cancels.")
+        ).post()
     }
 }
 

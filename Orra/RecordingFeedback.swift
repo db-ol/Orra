@@ -4,19 +4,30 @@ import Observation
 /// Shows the recording indicator and plays the start and stop sounds, following the
 /// controller's cues. Settings can turn either off.
 ///
-/// The indicator shows white bars that move with the voice while Orra listens, a slow wave
-/// of the same bars while it transcribes, and for a few seconds the reason when a hold
-/// ends without a paste. In between, while Orra can dictate, a small bar at the bottom of
-/// the screen shows that it is ready, unless Settings turns it off.
+/// The indicator shows white bars that move with the voice while Orra listens, with how to
+/// finish during a hands free dictation, a slow wave of the same bars while it transcribes,
+/// and for a few seconds the reason when a hold ends without a paste. In between, while
+/// Orra can dictate, a small bar at the bottom of the screen shows that it is ready, unless
+/// Settings turns it off.
 @Observable
 final class RecordingFeedback {
     /// What the indicator shows.
     nonisolated enum Display: Equatable, Sendable {
         case listening
+        /// The bars during a hands free dictation, with how to finish it.
+        case handsFree(finishHint: String)
         case transcribing
         case message(String)
         /// The small bar while Orra waits. Only ever presented, never in `display`.
         case idle
+
+        /// Whether the level meter shows.
+        var showsMeter: Bool {
+            switch self {
+            case .listening, .handsFree: true
+            case .transcribing, .message, .idle: false
+            }
+        }
     }
 
     nonisolated enum Sound: Equatable, Sendable {
@@ -136,6 +147,12 @@ final class RecordingFeedback {
                 play(.start)
             }
             show(.listening)
+        case .handsFree(let hint):
+            // A hold that turned hands free has played the start sound already.
+            if playsSounds, display?.showsMeter != true {
+                play(.start)
+            }
+            show(.handsFree(finishHint: hint))
         case .transcribing:
             show(.transcribing)
         case .recordingStopped:
@@ -167,7 +184,7 @@ final class RecordingFeedback {
         hideTask?.cancel()
         hideTask = nil
         display = newDisplay
-        if newDisplay != .listening {
+        if newDisplay?.showsMeter != true {
             level = 0
         }
         present(presented)
@@ -176,7 +193,7 @@ final class RecordingFeedback {
 
     /// Reads the level only while the meter is on screen.
     private func updateLevelTask() {
-        guard showsIndicator, display == .listening else {
+        guard showsIndicator, display?.showsMeter == true else {
             levelTask?.cancel()
             levelTask = nil
             return
