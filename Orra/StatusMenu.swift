@@ -71,7 +71,7 @@ struct StatusMenu: View {
             Divider()
             // Works in every app, also where Orra cannot read the text to learn from it.
             Button("Add “\(copied)” from the Clipboard to Vocabulary") {
-                pushToTalk.setVocabulary(Vocabulary.adding(copied, to: pushToTalk.vocabulary))
+                pushToTalk.addToVocabulary(copied)
                 clipboard.clear()
             }
         }

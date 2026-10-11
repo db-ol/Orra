@@ -1,17 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "(%@)" : {
-      "comment" : "A talk key's label on other keyboards, such as (Alt)",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "（%@）"
-          }
-        }
-      }
-    },
     "%@ (%@)" : {
       "comment" : "A talk key with its label on other keyboards, such as ⌥ Right Option (Alt)",
       "localizations" : {
@@ -115,6 +104,53 @@
         }
       }
     },
+    "%lld words" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 个词"
+          }
+        }
+      }
+    },
+    "%lld words. Orra gives the %lld most recently added or used to the speech model." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld words. Orra gives the %2$lld most recently added or used to the speech model."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共 %1$lld 个词。Orra 会把最近添加或用过的 %2$lld 个提供给语音模型。"
+          }
+        }
+      }
+    },
+    "(%@)" : {
+      "comment" : "A talk key's label on other keyboards, such as (Alt)",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "（%@）"
+          }
+        }
+      }
+    },
+    "1 word" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 个词"
+          }
+        }
+      }
+    },
     "A key combination can't be the talk key. Press one key on its own." : {
       "localizations" : {
         "zh-Hans" : {
@@ -155,6 +191,16 @@
         }
       }
     },
+    "Add a word to your vocabulary?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要把这个词加入个人词库吗？"
+          }
+        }
+      }
+    },
     "Add “%@” from the Clipboard to Vocabulary" : {
       "localizations" : {
         "zh-Hans" : {
@@ -165,12 +211,12 @@
         }
       }
     },
-    "Add a word to your vocabulary?" : {
+    "Added by you" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要把这个词加入个人词库吗？"
+            "value" : "你添加的"
           }
         }
       }
@@ -296,16 +342,6 @@
         }
       }
     },
-    "Change…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更改…"
-          }
-        }
-      }
-    },
     "Changed “%@” to “%@”" : {
       "localizations" : {
         "zh-Hans" : {
@@ -316,12 +352,12 @@
         }
       }
     },
-    "Check for updates automatically" : {
+    "Change…" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动检查更新"
+            "value" : "更改…"
           }
         }
       }
@@ -332,6 +368,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "检查更新…"
+          }
+        }
+      }
+    },
+    "Check for updates automatically" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
           }
         }
       }
@@ -468,7 +514,7 @@
         }
       }
     },
-    "Double press for hands free" : {
+    "Double Press for Hands Free" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -478,7 +524,7 @@
         }
       }
     },
-    "Double Press for Hands Free" : {
+    "Double press for hands free" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
@@ -567,17 +613,6 @@
         }
       }
     },
-    "fn" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "地球仪（fn）键"
-          }
-        }
-      }
-    },
     "For a longer text, press the talk key twice quickly and talk hands free. Press it once more to paste." : {
       "localizations" : {
         "zh-Hans" : {
@@ -650,6 +685,16 @@
         }
       }
     },
+    "Heard as" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听成"
+          }
+        }
+      }
+    },
     "Heard as “%@”" : {
       "localizations" : {
         "zh-Hans" : {
@@ -671,12 +716,70 @@
         }
       }
     },
+    "Hold %@ or %@ to talk" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Hold %1$@ or %2$@ to talk"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住%1$@或%2$@说话"
+          }
+        }
+      }
+    },
     "Hold %@ to talk" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住%@说话"
+          }
+        }
+      }
+    },
+    "Hold %@, %@ or %@ to talk" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Hold %1$@, %2$@ or %3$@ to talk"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住%1$@、%2$@或%3$@说话"
+          }
+        }
+      }
+    },
+    "Hold %@, %@, %@ or %@ to talk" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Hold %1$@, %2$@, %3$@ or %4$@ to talk"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住%1$@、%2$@、%3$@或%4$@说话"
+          }
+        }
+      }
+    },
+    "Hold a key on its own, speak, and let go. fn (Globe) is at the bottom left of a MacBook keyboard. Right Control suits most external keyboards." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单独按住一个键，说话，然后松开。fn（地球仪）键在 MacBook 键盘的左下角，外接键盘大多适合用右侧 Control 键。"
           }
         }
       }
@@ -742,12 +845,32 @@
         }
       }
     },
+    "Last used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次使用"
+          }
+        }
+      }
+    },
     "Learn from my corrections" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "从我的修改中学习"
+          }
+        }
+      }
+    },
+    "Learned" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学到的"
           }
         }
       }
@@ -773,17 +896,6 @@
         }
       }
     },
-    "left Command" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "左侧 Command 键"
-          }
-        }
-      }
-    },
     "Left Command" : {
       "localizations" : {
         "zh-Hans" : {
@@ -794,34 +906,12 @@
         }
       }
     },
-    "left Control" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "左侧 Control 键"
-          }
-        }
-      }
-    },
     "Left Control" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "左侧 Control 键"
-          }
-        }
-      }
-    },
-    "left Option" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "左侧 Option 键"
           }
         }
       }
@@ -896,6 +986,16 @@
         }
       }
     },
+    "Never used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从未使用"
+          }
+        }
+      }
+    },
     "New word" : {
       "localizations" : {
         "zh-Hans" : {
@@ -936,12 +1036,32 @@
         }
       }
     },
+    "No talk key is set" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未设置说话键"
+          }
+        }
+      }
+    },
     "No words yet" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "还没有词"
+          }
+        }
+      }
+    },
+    "Not Now" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以后"
           }
         }
       }
@@ -962,16 +1082,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未下载"
-          }
-        }
-      }
-    },
-    "Not Now" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以后"
           }
         }
       }
@@ -1006,16 +1116,6 @@
         }
       }
     },
-    "Open at Login" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "登录时打开"
-          }
-        }
-      }
-    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1036,12 +1136,32 @@
         }
       }
     },
+    "Open at Login" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录时打开"
+          }
+        }
+      }
+    },
     "Orra" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra"
+          }
+        }
+      }
+    },
+    "Orra Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 设置"
           }
         }
       }
@@ -1186,16 +1306,6 @@
         }
       }
     },
-    "Orra Settings" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 设置"
-          }
-        }
-      }
-    },
     "Orra shows the new language after it restarts." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1328,6 +1438,16 @@
         }
       }
     },
+    "Recently used" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近使用"
+          }
+        }
+      }
+    },
     "Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1348,12 +1468,32 @@
         }
       }
     },
+    "Remove %lld Words" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除 %lld 个词"
+          }
+        }
+      }
+    },
     "Remove filler words such as um and uh" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "去掉“呃”“嗯”这类语气词"
+          }
+        }
+      }
+    },
+    "Remove the selected words" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除所选的词"
           }
         }
       }
@@ -1440,17 +1580,6 @@
         }
       }
     },
-    "right Command" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Command 键"
-          }
-        }
-      }
-    },
     "Right Command" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1461,34 +1590,12 @@
         }
       }
     },
-    "right Control" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Control 键"
-          }
-        }
-      }
-    },
     "Right Control" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "右侧 Control 键"
-          }
-        }
-      }
-    },
-    "right Option" : {
-      "comment" : "A talk key inside a sentence",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "右侧 Option 键"
           }
         }
       }
@@ -1523,6 +1630,16 @@
         }
       }
     },
+    "Select words, then choose Remove or press Delete. Right-click a word to remove it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选中词语后，点“移除”或按 Delete 键。也可以右键点一个词来移除。"
+          }
+        }
+      }
+    },
     "Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1553,16 +1670,6 @@
         }
       }
     },
-    "Show a small bar at the bottom of the screen while Orra is ready" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 待命时，在屏幕底部显示一条小横条"
-          }
-        }
-      }
-    },
     "Show Orra in the Dock" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1583,6 +1690,16 @@
         }
       }
     },
+    "Show a small bar at the bottom of the screen while Orra is ready" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 待命时，在屏幕底部显示一条小横条"
+          }
+        }
+      }
+    },
     "Show the recording indicator" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1599,6 +1716,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看报告"
+          }
+        }
+      }
+    },
+    "Sort by" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排序方式"
+          }
+        }
+      }
+    },
+    "Source" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来源"
           }
         }
       }
@@ -1654,22 +1791,22 @@
         }
       }
     },
+    "Stays while the pointer is over it" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鼠标停在上面时不会关闭"
+          }
+        }
+      }
+    },
     "System Default" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "系统默认"
-          }
-        }
-      }
-    },
-    "System Default (%@, lid closed)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系统默认（%@，已合盖）"
           }
         }
       }
@@ -1684,6 +1821,16 @@
         }
       }
     },
+    "System Default (%@, lid closed)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统默认（%@，已合盖）"
+          }
+        }
+      }
+    },
     "Tab" : {
       "comment" : "A key name",
       "localizations" : {
@@ -1691,16 +1838,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tab"
-          }
-        }
-      }
-    },
-    "Talk key" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "说话键"
           }
         }
       }
@@ -1721,6 +1858,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "说话键：%@"
+          }
+        }
+      }
+    },
+    "Talk key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键"
           }
         }
       }
@@ -1901,6 +2048,16 @@
         }
       }
     },
+    "This Mac is offline. Connect to the internet, then try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 没有联网。请连接互联网，然后重试。"
+          }
+        }
+      }
+    },
     "This build has no microphone usage description" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1917,16 +2074,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这个键不能作为说话键。按住它会输入文字或在前台 App 中执行操作。"
-          }
-        }
-      }
-    },
-    "This Mac is offline. Connect to the internet, then try again." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这台 Mac 没有联网。请连接互联网，然后重试。"
           }
         }
       }
@@ -2189,6 +2336,93 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的内容太长，链接放不下，所以 GitHub 只显示开头部分。完整内容已放到剪贴板上。请在 GitHub 上全选“发生了什么”框里的文字，再粘贴。"
+          }
+        }
+      }
+    },
+    "fn" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "地球仪（fn）键"
+          }
+        }
+      }
+    },
+    "fn (Globe)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "fn（地球仪）键"
+          }
+        }
+      }
+    },
+    "left Command" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Command 键"
+          }
+        }
+      }
+    },
+    "left Control" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Control 键"
+          }
+        }
+      }
+    },
+    "left Option" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧 Option 键"
+          }
+        }
+      }
+    },
+    "right Command" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Command 键"
+          }
+        }
+      }
+    },
+    "right Control" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Control 键"
+          }
+        }
+      }
+    },
+    "right Option" : {
+      "comment" : "A talk key inside a sentence",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧 Option 键"
           }
         }
       }
