@@ -115,6 +115,7 @@ struct SettingsView: View {
     @Bindable var feedback: RecordingFeedback
     let openAtLogin: OpenAtLogin
     let models: ModelInstaller
+    let cleanup: TextCleanup
     let learning: CorrectionLearning
     let dockIcon: DockIcon
     let updater: AppUpdater
@@ -136,7 +137,7 @@ struct SettingsView: View {
         } detail: {
             switch page ?? .general {
             case .general:
-                GeneralSettings(pushToTalk: pushToTalk, feedback: feedback, openAtLogin: openAtLogin, dockIcon: dockIcon)
+                GeneralSettings(pushToTalk: pushToTalk, feedback: feedback, cleanup: cleanup, openAtLogin: openAtLogin, dockIcon: dockIcon)
             case .microphone:
                 MicrophoneSettings(pushToTalk: pushToTalk, inputs: inputs)
             case .vocabulary:
@@ -154,6 +155,7 @@ struct SettingsView: View {
 private struct GeneralSettings: View {
     let pushToTalk: PushToTalkController
     @Bindable var feedback: RecordingFeedback
+    @Bindable var cleanup: TextCleanup
     let openAtLogin: OpenAtLogin
     @Bindable var dockIcon: DockIcon
     /// The language this copy of Orra started with, to tell when a restart is due.
@@ -230,6 +232,7 @@ private struct GeneralSettings: View {
                         systemImage: "number"
                     )
                 }
+                CleanupSetting(cleanup: cleanup)
             } header: {
                 Text("While you dictate")
             }
@@ -262,6 +265,122 @@ private struct GeneralSettings: View {
         }
         .formStyle(.grouped)
         .navigationTitle("General")
+    }
+}
+
+/// The switch for cleanup with the local model, and its download and loading under it.
+private struct CleanupSetting: View {
+    @Bindable var cleanup: TextCleanup
+
+    var body: some View {
+        let models = cleanup.models
+        let total = models.manifest.totalBytes
+        let size = ModelInstaller.State.size(total)
+        Toggle(isOn: Binding(
+            get: { cleanup.isOn },
+            set: { $0 ? cleanup.turnOn() : cleanup.turnOff() }
+        )) {
+            DescribedLabel(
+                title: "Clean up with a local model",
+                detail: "Removes fillers and applies spoken self corrections, such as “三点，哦不对，四点”. It needs a \(size) download and about 4 GB of memory, adds about half a second to each dictation, and runs on this Mac. Paste Original Text in the Orra menu brings back what you dictated.",
+                systemImage: "wand.and.sparkles"
+            )
+        }
+        .alert("Download the cleanup model?", isPresented: $cleanup.isConfirmingDownload) {
+            Button(CleanupLabels.downloadButton(models.state, total: total)) {
+                cleanup.confirmDownload()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
+        }
+        if cleanup.isOn {
+            status(models.state, total: total)
+        }
+    }
+
+    @ViewBuilder
+    private func status(_ state: ModelInstaller.State, total: Int64) -> some View {
+        switch state {
+        case .installed:
+            switch cleanup.engineState {
+            case .unloaded, .loading:
+                Text("Loading the cleanup model…")
+                    .foregroundStyle(.secondary)
+            case .ready:
+                EmptyView()
+            case .failed:
+                HStack {
+                    Text("The cleanup model could not be loaded")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Try Again") {
+                        cleanup.retryLoading()
+                    }
+                }
+            }
+        case .checking, .verifying:
+            ForEach(state.menuLines(total: total), id: \.self) { line in
+                Text(verbatim: line)
+                    .foregroundStyle(.secondary)
+            }
+        case .downloading(let bytes, let source):
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView(value: Double(bytes), total: Double(max(total, 1))) {
+                    Text(CleanupLabels.progress(bytes: bytes, total: total))
+                } currentValueLabel: {
+                    if let source {
+                        Text(String(localized: "From \(source.rawValue)"))
+                    }
+                }
+                Button("Cancel Download") {
+                    cleanup.cancelDownload()
+                }
+            }
+        case .missing, .failed:
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(CleanupLabels.lines(state, total: total), id: \.self) { line in
+                        Text(verbatim: line)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer()
+                Button(CleanupLabels.downloadButton(state, total: total)) {
+                    cleanup.download()
+                }
+            }
+        }
+    }
+}
+
+/// The text about the cleanup model's download, kept apart so tests can read it.
+nonisolated enum CleanupLabels {
+    static func progress(bytes: Int64, total: Int64) -> String {
+        String(localized: "Downloading the cleanup model: \(ModelInstaller.State.percent(bytes, of: total))% of \(ModelInstaller.State.size(total))")
+    }
+
+    /// Download with the size, or how much is left when part of it is on disk already.
+    static func downloadButton(_ state: ModelInstaller.State, total: Int64) -> String {
+        switch state {
+        case .missing(let bytes) where bytes > 0:
+            String(localized: "Resume Download (\(ModelInstaller.State.size(total - bytes)) left)")
+        case .failed:
+            String(localized: "Try Again")
+        default:
+            String(localized: "Download (\(ModelInstaller.State.size(total)))")
+        }
+    }
+
+    /// What stands in the way while cleanup is on and the model is not in place.
+    static func lines(_ state: ModelInstaller.State, total: Int64) -> [String] {
+        switch state {
+        case .missing:
+            [String(localized: "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup.")]
+        default:
+            state.menuLines(total: total)
+        }
     }
 }
 
@@ -440,7 +559,7 @@ private struct AboutSettings: View {
                 .disabled(!updater.canCheckForUpdates)
             }
             Section {
-                Text("Speech is turned into text on this Mac. Orra goes online only to download the speech model when you ask it to, and to check for updates when you allow it.")
+                Text("Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the speech model or the cleanup model when you ask it to, and to check for updates when you allow it.")
                     .foregroundStyle(.secondary)
                 Link("Source code and privacy details", destination: URL(string: "https://github.com/db-ol/Orra")!)
             }
@@ -522,6 +641,7 @@ struct TalkKeyToggles: View {
         feedback: RecordingFeedback(preferences: .init(), inputLevel: { 0 }, present: { _ in }, play: { _ in }, save: { _ in }),
         openAtLogin: .live(),
         models: .live(),
+        cleanup: .live(),
         learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in .added }, removeFromVocabulary: { _ in }),
         dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
         updater: AppUpdater()

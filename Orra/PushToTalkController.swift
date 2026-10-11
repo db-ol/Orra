@@ -75,6 +75,10 @@ final class PushToTalkController {
     /// The text of the latest dictation, kept in memory only, so the menu can copy it when
     /// the paste missed. Never logged.
     private(set) var lastTranscript: String?
+    /// The latest dictation as the rule steps left it, when the cleanup model changed it
+    /// before the paste, so Paste Original Text in the menu can bring it back. In memory
+    /// only, never logged.
+    private(set) var originalText: String?
     /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
     @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
     /// Told after each paste, with the text and the app it went into, so Orra can learn
@@ -83,6 +87,7 @@ final class PushToTalkController {
 
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
+    @ObservationIgnored private let cleanup: CleanupModel
     @ObservationIgnored private let insert: @MainActor (String) async -> InsertionResult
     @ObservationIgnored private let frontmostApp: @MainActor () -> pid_t?
     @ObservationIgnored private let lidIsClosed: @MainActor () -> Bool
@@ -130,6 +135,8 @@ final class PushToTalkController {
     /// - Parameters:
     ///   - capture: The microphone. The app passes `.live()`, tests pass fakes.
     ///   - transcription: The speech model. Tests pass fakes.
+    ///   - cleanup: The cleanup model, which runs after the rule steps when it is ready.
+    ///     Tests pass fakes.
     ///   - insert: Puts text into the frontmost app. Tests pass fakes.
     ///   - frontmostApp: The process ID of the frontmost app. Tests pass fakes.
     ///   - lidIsClosed: Whether the MacBook's lid is closed, read when a recording holds
@@ -160,6 +167,7 @@ final class PushToTalkController {
     init(
         capture: AudioCapture,
         transcription: Transcription,
+        cleanup: CleanupModel = .off,
         insert: @escaping @MainActor (String) async -> InsertionResult,
         frontmostApp: @escaping @MainActor () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
         lidIsClosed: @escaping @MainActor () -> Bool = { Lid.isClosed() },
@@ -183,6 +191,7 @@ final class PushToTalkController {
     ) {
         self.capture = capture
         self.transcription = transcription
+        self.cleanup = cleanup
         self.insert = insert
         self.frontmostApp = frontmostApp
         self.lidIsClosed = lidIsClosed
@@ -575,6 +584,13 @@ final class PushToTalkController {
                 logger.notice("No speech recognized in \(recording.duration, privacy: .public) s of audio")
                 return
             }
+            // The rule steps come first, so the model sees their result, and any problem
+            // with the model leaves exactly that text.
+            let ruled = text
+            if cleanup.isReady(), CleanupStep.isWorthCleaning(text) {
+                text = await CleanupStep.run(text, complete: cleanup.complete).text
+            }
+            originalText = text == ruled ? nil : ruled
             lastTranscript = text
             // Paste only into the app that was in front when the key was released.
             if let target, let current = frontmostApp(), current != target {
@@ -597,6 +613,19 @@ final class PushToTalkController {
         } catch {
             problem = String(localized: "The recording could not be transcribed")
             logger.error("Transcription failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Paste Original Text in the menu: pastes the latest dictation as it was before the
+    /// cleanup model changed it, into the frontmost app. Orra does not learn from this
+    /// paste, and Copy Last Dictation still copies the cleaned text.
+    func pasteOriginal() async {
+        guard state == .idle, let originalText else { return }
+        switch await insert(originalText) {
+        case .pasted, .nothingToInsert:
+            break
+        case .skippedPasswordField:
+            notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
         }
     }
 

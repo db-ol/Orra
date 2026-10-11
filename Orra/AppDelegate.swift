@@ -4,9 +4,12 @@ import AppKit
 /// DockIcon. The policy is set here at launch rather than through LSUIElement, so it can
 /// follow the setting.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let pushToTalk = PushToTalkController(
+    /// Cleanup with the local text model, off until the user turns it on.
+    let cleanup = TextCleanup.live()
+    lazy var pushToTalk = PushToTalkController(
         capture: .live(),
         transcription: .qwen3(),
+        cleanup: cleanup.model,
         insert: TextInserter.live().insert,
         talkKeys: TalkKeyPreference.load(),
         saveTalkKeys: { TalkKeyPreference.save($0) },
@@ -137,11 +140,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
-        Task { [models, pushToTalk, welcome] in
+        Task { [models, pushToTalk, welcome, cleanup] in
             await models.prepare()
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()
             }
+            // Loads the cleanup model when cleanup is on and the model is in place.
+            await cleanup.start()
         }
     }
 }
