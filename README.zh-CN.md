@@ -1,13 +1,14 @@
 # Orra
 
-[English](README.md) | 简体中文
+[English](README.md) | 简体中文 | [官网](https://db-ol.github.io/Orra/zh/)
 
 Orra 是一款开源的 Mac 语音输入 App。按住一个键说话，松开后，文字就会出现在你正在输入的 App 里。语音在你自己的 Mac 上转成文字，从不经过服务器。
 
 Orra 目前是早期预览版。难免有不完善的地方，设计也还会调整。
 
 <p align="center">
-  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Orra%20for%20macOS-0A84FF?style=for-the-badge&logo=apple&logoColor=white" alt="下载 Orra for macOS" height="40"></a><br>
+  <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Orra%20for%20macOS-0A84FF?style=for-the-badge&logo=apple&logoColor=white" alt="下载 Orra for macOS" height="40"></a>
+  <a href="https://db-ol.github.io/Orra/zh/"><img src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-db--ol.github.io%2FOrra%2Fzh-555555?style=for-the-badge&logo=safari&logoColor=white" alt="Orra 官网" height="40"></a><br>
   适用于搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac
 </p>
 
