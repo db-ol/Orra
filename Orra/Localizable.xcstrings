@@ -183,6 +183,16 @@
         }
       }
     },
+    "Attach the diagnostic report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附上诊断报告"
+          }
+        }
+      }
+    },
     "Cancel Download" : {
       "localizations" : {
         "zh-Hans" : {
@@ -253,12 +263,32 @@
         }
       }
     },
+    "Continue on GitHub" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 GitHub 上继续"
+          }
+        }
+      }
+    },
     "Copy Last Dictation" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "拷贝上次听写"
+          }
+        }
+      }
+    },
+    "Copy Report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝报告"
           }
         }
       }
@@ -467,6 +497,16 @@
         }
       }
     },
+    "It holds Orra’s version, settings, permissions and log from the last hour, facts about your Mac and recent crash reports. It holds no dictated text and no audio. Your name and your Mac’s name are taken out." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其中有 Orra 的版本、设置、权限和最近一小时的日志，你的 Mac 的信息，以及最近的崩溃报告。其中没有听写的文字，也没有录音。你的名字和 Mac 的名称会被去掉。"
+          }
+        }
+      }
+    },
     "Learn from my corrections" : {
       "localizations" : {
         "zh-Hans" : {
@@ -637,26 +677,6 @@
         }
       }
     },
-    "Open GitHub Issue" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开 GitHub 问题页"
-          }
-        }
-      }
-    },
-    "Open GitHub Issue opens the issue form in your browser with the versions filled in. Describe the problem there and drag the report file from Finder into the form. GitHub needs an account." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“打开 GitHub 问题页”会在浏览器中打开问题表单，并填好版本信息。请在那里描述问题，再把报告文件从访达拖进表单。需要 GitHub 账号。"
-          }
-        }
-      }
-    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -703,6 +723,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 可以使用麦克风。"
+          }
+        }
+      }
+    },
+    "Orra changes your clipboard only when you choose Copy Report, or when your text is too long for the link." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有在你选择“拷贝报告”，或者你的内容太长、链接放不下时，Orra 才会改动剪贴板。"
           }
         }
       }
@@ -807,12 +837,12 @@
         }
       }
     },
-    "Orra creates a diagnostic report that helps find the cause. It holds Orra’s version, settings and permissions, your Mac’s model, memory, macOS version and preferred languages, the microphone’s name, Orra’s own log from the last hour and its crash reports from the last 7 days. It never holds what you dictated, recordings, the clipboard or your vocabulary. Your name and your Mac’s name are taken out. Nothing is sent." : {
+    "Orra shows the report file in Finder. Drag it into the page on GitHub." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 会生成一份帮助查找原因的诊断报告。其中有 Orra 的版本、设置和权限，你的 Mac 机型、内存、macOS 版本和首选语言，麦克风的名称，Orra 自己最近一小时的日志，以及最近 7 天的崩溃报告。报告中绝不包含你听写的内容、录音、剪贴板或你的词汇表。你的名字和 Mac 的名称会被去掉。不会发送任何内容。"
+            "value" : "Orra 会在访达中显示报告文件。请把它拖进 GitHub 页面。"
           }
         }
       }
@@ -893,6 +923,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "报告问题…"
+          }
+        }
+      }
+    },
+    "Reports go to GitHub and are public, so leave out private details. You need a free GitHub account. If you are not signed in, GitHub asks you to sign in or to create an account. After you sign in, GitHub shows the form with your text filled in. After creating an account, choose Continue on GitHub again if the form is empty." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告会发到 GitHub 上并公开显示，请不要写入隐私信息。你需要一个免费的 GitHub 账户。如果你没有登录，GitHub 会请你登录或注册账户。登录后，GitHub 会显示已填好你的内容的表单。注册账户后，如果表单是空的，请再选择一次“在 GitHub 上继续”。"
           }
         }
       }
@@ -1003,6 +1043,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示录音提示"
+          }
+        }
+      }
+    },
+    "Show the report" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看报告"
           }
         }
       }
@@ -1253,6 +1303,16 @@
         }
       }
     },
+    "Title (optional)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标题（可选）"
+          }
+        }
+      }
+    },
     "Transcribing…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1343,6 +1403,26 @@
         }
       }
     },
+    "What happened?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发生了什么？"
+          }
+        }
+      }
+    },
+    "What you did, what you expected, and what happened instead." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你做了什么，预期的结果是什么，实际发生了什么。"
+          }
+        }
+      }
+    },
     "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1369,6 +1449,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "听写时"
+          }
+        }
+      }
+    },
+    "Your text was too long for the link, so GitHub shows only its start. The full text is on your clipboard. Paste it into the form." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的内容太长，链接放不下，所以 GitHub 只显示开头部分。完整内容已放到剪贴板上，请把它粘贴到表单中。"
           }
         }
       }

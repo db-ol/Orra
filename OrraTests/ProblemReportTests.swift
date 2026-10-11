@@ -115,11 +115,88 @@ struct ProblemReportTests {
         #expect(ProblemReport.fileName(for: date, timeZone: TimeZone(identifier: "UTC")!) == "Orra-Report-2026-10-03-040000.txt")
     }
 
+    private static func value(_ name: String, in url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == name }?.value
+    }
+
+    private static func issue(title: String = "", _ text: String) -> ProblemReport.Issue {
+        ProblemReport.issue(title: title, whatHappened: text, version: "0.1.1 (7)", macOS: "macOS 26.0 (25A354)", mac: "Mac15,6 Apple M3 Pro")
+    }
+
     @Test func issueURLFillsTheFormFields() {
-        let url = ProblemReport.issueURL(version: "0.1.1 (7)", macOS: "macOS 26.0 (25A354)", mac: "Mac15,6 Apple M3+Pro&x")
-        #expect(url.absoluteString == "https://github.com/db-ol/Orra/issues/new?template=bug_report.yml&version=0.1.1%20%287%29&macos=macOS%2026.0%20%2825A354%29&mac=Mac15%2C6%20Apple%20M3%2BPro%26x")
-        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
-        #expect(items?.first { $0.name == "mac" }?.value == "Mac15,6 Apple M3+Pro&x")
+        let issue = ProblemReport.issue(title: "Hotkey & paste", whatHappened: "Held fn+Space.\nNothing pasted.", version: "0.1.1 (7)", macOS: "macOS 26.0 (25A354)", mac: "Mac15,6 Apple M3+Pro&x")
+        #expect(!issue.wasCut)
+        #expect(issue.url.absoluteString == "https://github.com/db-ol/Orra/issues/new?template=bug_report.yml&title=Hotkey%20%26%20paste&what-happened=Held%20fn%2BSpace.%0ANothing%20pasted.&version=0.1.1%20%287%29&macos=macOS%2026.0%20%2825A354%29&mac=Mac15%2C6%20Apple%20M3%2BPro%26x")
+        #expect(Self.value("mac", in: issue.url) == "Mac15,6 Apple M3+Pro&x")
+        #expect(Self.value("what-happened", in: issue.url) == "Held fn+Space.\nNothing pasted.")
+    }
+
+    @Test func titleComesFromTheFirstLineWhenEmpty() {
+        let issue = Self.issue("  按住 fn 键没有反应 🙁\n第二行")
+        #expect(Self.value("title", in: issue.url) == "按住 fn 键没有反应 🙁")
+        #expect(Self.value("what-happened", in: issue.url) == "按住 fn 键没有反应 🙁\n第二行")
+        let long = Self.issue(title: String(repeating: "word ", count: 100), "Text")
+        let title = Self.value("title", in: long.url) ?? ""
+        #expect(title.count == ProblemReport.maximumTitleLength)
+        #expect(title.hasSuffix("word…"))
+        let emoji = Self.issue(title: String(repeating: "👨‍👩‍👧", count: 100), "Text")
+        let emojiTitle = Self.value("title", in: emoji.url) ?? ""
+        #expect(ProblemReport.encode(emojiTitle).count <= ProblemReport.maximumEncodedTitleLength)
+        #expect(emojiTitle.hasSuffix("👨‍👩‍👧…"))
+        #expect(emojiTitle.count > 10)
+    }
+
+    @Test func emptyTextLeavesTheFieldsOut() {
+        let issue = Self.issue("  \n ")
+        #expect(issue.url.absoluteString == "https://github.com/db-ol/Orra/issues/new?template=bug_report.yml&version=0.1.1%20%287%29&macos=macOS%2026.0%20%2825A354%29&mac=Mac15%2C6%20Apple%20M3%20Pro")
+    }
+
+    @Test(arguments: [
+        String(repeating: "The talk key did nothing. ", count: 400),
+        String(repeating: "按住说话键以后没有任何反应，", count: 400),
+        String(repeating: "👨‍👩‍👧🎙️", count: 400),
+        String(repeating: "a中😀", count: 900),
+    ])
+    func longTextIsCutToFitTheLink(_ text: String) throws {
+        let issue = Self.issue(text)
+        #expect(issue.wasCut)
+        #expect(issue.url.absoluteString.count <= ProblemReport.maximumIssueURLLength)
+        let field = try #require(Self.value("what-happened", in: issue.url))
+        #expect(field.hasSuffix(ProblemReport.cutMarker))
+        let start = String(field.dropLast(ProblemReport.cutMarker.count))
+        #expect(start.count > 100)
+        #expect(text.hasPrefix(start))
+        // Whole characters only: the start ends where a character of the text ends.
+        #expect(Array(text).starts(with: Array(start)))
+        // One more character would not fit.
+        let next = Array(text)[start.count]
+        #expect(ProblemReport.encode(start + String(next)).count + ProblemReport.encode(ProblemReport.cutMarker).count > ProblemReport.maximumIssueURLLength - (issue.url.absoluteString.count - ProblemReport.encode(field).count) || next.isWhitespace)
+    }
+
+    @Test func percentEncodingMakesChineseAndEmojiLonger() {
+        #expect(ProblemReport.encode("a").count == 1)
+        #expect(ProblemReport.encode("中").count == 9)
+        #expect(ProblemReport.encode("😀").count == 12)
+        #expect(ProblemReport.encode("👨‍👩‍👧").count == 54)
+        // 1,000 Chinese characters are short as text but too long for the link.
+        let issue = Self.issue(String(repeating: "中", count: 1000))
+        #expect(issue.wasCut)
+        let short = Self.issue(String(repeating: "中", count: 500))
+        #expect(!short.wasCut)
+        #expect(short.url.absoluteString.count <= ProblemReport.maximumIssueURLLength)
+    }
+
+    @Test func textThatFitsExactlyIsNotCut() {
+        let empty = Self.issue(title: "T", "x").url.absoluteString.count - 1
+        let room = ProblemReport.maximumIssueURLLength - empty
+        let fits = Self.issue(title: "T", String(repeating: "x", count: room))
+        #expect(!fits.wasCut)
+        #expect(fits.url.absoluteString.count == ProblemReport.maximumIssueURLLength)
+        #expect(Self.issue(title: "T", String(repeating: "x", count: room + 1)).wasCut)
+    }
+
+    @Test func cutKeepsNothingWhenEvenTheMarkerDoesNotFit() {
+        #expect(ProblemReport.cut("Hello", toFit: 10) == "")
     }
 
     @Test func issueFormHasTheFieldsTheURLFills() throws {
@@ -128,7 +205,7 @@ struct ProblemReportTests {
             .deletingLastPathComponent()
             .appendingPathComponent(".github/ISSUE_TEMPLATE/bug_report.yml")
         let form = try String(contentsOf: url, encoding: .utf8)
-        for id in ["version", "macos", "mac"] {
+        for id in ["what-happened", "version", "macos", "mac"] {
             #expect(form.contains("    id: \(id)\n"), "\(id)")
         }
     }

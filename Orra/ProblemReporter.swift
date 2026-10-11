@@ -5,8 +5,9 @@ import OSLog
 import SwiftUI
 import SystemConfiguration
 
-/// Writes the diagnostic report for Report a Problem… and opens the GitHub issue form.
-/// Nothing is sent: the user attaches the file to the issue, see ProblemReport.
+/// Writes the diagnostic report for Report a Problem… and opens the GitHub issue form with
+/// the user's text in it. Nothing is sent: the browser shows the form, the user attaches the
+/// file and submits it there, see ProblemReport.
 ///
 /// The facts are read on the main actor, which takes a moment. The log, the crash reports,
 /// the model folder's size and the file are read and written off the main actor.
@@ -55,17 +56,37 @@ final class ProblemReporter {
         NSWorkspace.shared.activateFileViewerSelecting([file])
     }
 
-    /// Opens the issue form in the browser with the version fields filled in, and shows the
-    /// file in Finder next to it.
-    func openIssue() {
+    /// Puts the report on the clipboard. Only when the user asks for it.
+    func copyReport() {
+        guard case .ready(_, let text) = state else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    /// Opens the issue form in the browser with the title, the text and the version fields
+    /// filled in. When the report is attached, shows its file in Finder next to it. When
+    /// the text is too long for the link, the link holds the start of it and the whole text
+    /// goes on the clipboard. Never logs the text, which may be dictated.
+    ///
+    /// - Returns: Whether the text was cut and put on the clipboard.
+    func openIssue(title: String, whatHappened: String, attachReport: Bool) -> Bool {
         let facts = facts()
-        let url = ProblemReport.issueURL(
+        let issue = ProblemReport.issue(
+            title: title,
+            whatHappened: whatHappened,
             version: "\(facts.version) (\(facts.build))",
             macOS: facts.macOS,
             mac: "\(facts.model) \(facts.chip)"
         )
-        showInFinder()
-        NSWorkspace.shared.open(url)
+        if issue.wasCut {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(whatHappened.trimmingCharacters(in: .whitespacesAndNewlines), forType: .string)
+        }
+        if attachReport {
+            showInFinder()
+        }
+        NSWorkspace.shared.open(issue.url)
+        return issue.wasCut
     }
 
     // MARK: Off the main actor
@@ -299,51 +320,117 @@ final class ReportWindow {
 
 struct ReportView: View {
     let reporter: ProblemReporter
+    @State private var title = ""
+    @State private var whatHappened = ""
+    @State private var attachesReport = true
+    @State private var showsReport = false
+    @State private var textWasCut = false
+
+    private var reportReady: Bool {
+        if case .ready = reporter.state { return true }
+        return false
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Orra creates a diagnostic report that helps find the cause. It holds Orra’s version, settings and permissions, your Mac’s model, memory, macOS version and preferred languages, the microphone’s name, Orra’s own log from the last hour and its crash reports from the last 7 days. It never holds what you dictated, recordings, the clipboard or your vocabulary. Your name and your Mac’s name are taken out. Nothing is sent.")
+        VStack(alignment: .leading, spacing: 12) {
+            Text("What happened?")
+                .font(.headline)
+            TextField("Title (optional)", text: $title)
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $whatHappened)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+                if whatHappened.isEmpty {
+                    Text("What you did, what you expected, and what happened instead.")
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: 150)
+            .background(Color(nsColor: .textBackgroundColor))
+            .border(Color(nsColor: .separatorColor))
+
+            Toggle("Attach the diagnostic report", isOn: $attachesReport)
+            Text("It holds Orra’s version, settings, permissions and log from the last hour, facts about your Mac and recent crash reports. It holds no dictated text and no audio. Your name and your Mac’s name are taken out.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            switch reporter.state {
-            case .creating:
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Creating the report…")
+            DisclosureGroup("Show the report", isExpanded: $showsReport) {
+                report
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Reports go to GitHub and are public, so leave out private details. You need a free GitHub account. If you are not signed in, GitHub asks you to sign in or to create an account. After you sign in, GitHub shows the form with your text filled in. After creating an account, choose Continue on GitHub again if the form is empty.")
+                if attachesReport {
+                    Text("Orra shows the report file in Finder. Drag it into the page on GitHub.")
                 }
-                .frame(maxWidth: .infinity, minHeight: 280)
-            case .ready(_, let text):
-                ScrollView {
-                    Text(verbatim: text)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                }
-                .frame(height: 280)
-                .background(Color(nsColor: .textBackgroundColor))
-                .border(Color(nsColor: .separatorColor))
-                Text("Open GitHub Issue opens the issue form in your browser with the versions filled in. Describe the problem there and drag the report file from Finder into the form. GitHub needs an account.")
+                Text("Orra changes your clipboard only when you choose Copy Report, or when your text is too long for the link.")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            if textWasCut {
+                Text("Your text was too long for the link, so GitHub shows only its start. The full text is on your clipboard. Paste it into the form.")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Button("Show in Finder") {
-                        reporter.showInFinder()
-                    }
-                    Spacer()
-                    Button("Open GitHub Issue") {
-                        reporter.openIssue()
-                    }
-                    .keyboardShortcut(.defaultAction)
+            }
+
+            HStack {
+                Button("Copy Report") {
+                    reporter.copyReport()
                 }
-            case .failed:
+                .disabled(!reportReady)
+                Button("Show in Finder") {
+                    reporter.showInFinder()
+                }
+                .disabled(!reportReady)
+                Spacer()
+                Button("Continue on GitHub") {
+                    textWasCut = reporter.openIssue(title: title, whatHappened: whatHappened, attachReport: attachesReport)
+                }
+                // Command-Return, since Return starts a new line in the text.
+                .keyboardShortcut(.return, modifiers: .command)
+                .buttonStyle(.borderedProminent)
+                .disabled(whatHappened.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (attachesReport && !reportReady))
+            }
+        }
+        .padding(20)
+        .frame(width: 580)
+        .onChange(of: whatHappened) {
+            textWasCut = false
+        }
+    }
+
+    @ViewBuilder private var report: some View {
+        switch reporter.state {
+        case .creating:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Creating the report…")
+            }
+            .frame(maxWidth: .infinity, minHeight: 200)
+        case .ready(_, let text):
+            ScrollView {
+                Text(verbatim: text)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+            }
+            .frame(height: 200)
+            .background(Color(nsColor: .textBackgroundColor))
+            .border(Color(nsColor: .separatorColor))
+        case .failed:
+            HStack {
                 Text("The report could not be saved.")
                 Button("Try Again") {
                     reporter.create()
                 }
             }
         }
-        .padding(20)
-        .frame(width: 580)
     }
 }

@@ -8,20 +8,21 @@ body:
         Thanks for reporting a problem. Please write in English or Chinese.
         感谢你报告问题。用英文或中文填写都可以。
 
-        In Orra's menu, choose **Report a Problem…**. Orra writes a diagnostic report to a text file and opens this page with the version fields filled in. Drag the file into the box below to attach it. The report contains no dictated text and no audio.
-        在 Orra 的菜单中选择 **报告问题…**。Orra 会把诊断报告写进一个文本文件，并打开这个页面，填好版本信息。把文件拖进下面的输入框即可附上。报告中没有任何听写的文字，也没有录音。
+        In Orra's menu, choose **Report a Problem…**. You describe the problem in Orra, and Orra opens this page with your text and the version fields filled in. It also writes a diagnostic report to a text file. Drag the file into the box below to attach it. The report contains no dictated text and no audio. Issues are public, so leave out private details.
+        在 Orra 的菜单中选择 **报告问题…**。在 Orra 中描述问题后，Orra 会打开这个页面，填好你写的内容和版本信息。它还会把诊断报告写进一个文本文件。把文件拖进下面的输入框即可附上。报告中没有任何听写的文字，也没有录音。问题是公开的，请不要写入隐私信息。
   - type: textarea
     id: what-happened
     attributes:
       label: What happened / 发生了什么
+      description: |
+        What you did, what you expected, and what happened instead.
+        你做了什么，预期的结果是什么，实际发生了什么。
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: What you expected / 你预期的结果
-    validations:
-      required: true
+      label: What you expected, if not written above / 你预期的结果（如果上面没有写）
   - type: textarea
     id: steps
     attributes:

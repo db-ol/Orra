@@ -215,21 +215,98 @@ nonisolated enum ProblemReport {
 
     // MARK: Issue
 
-    /// The new issue page with the bug report form, the version fields filled in. GitHub
-    /// issue forms take a field's id as a query parameter.
-    static func issueURL(version: String, macOS: String, mac: String) -> URL {
-        let items = [
-            ("template", "bug_report.yml"),
-            ("version", version),
-            ("macos", macOS),
-            ("mac", mac),
-        ]
-        // Only unreserved characters stay as they are, so a plus or an ampersand in a value
-        // cannot change the query.
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
-        let query = items.map { name, value in
-            "\(name)=\(value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")"
-        }.joined(separator: "&")
-        return URL(string: "https://github.com/db-ol/Orra/issues/new?\(query)")!
+    /// The page for a new issue in Orra's repository.
+    static let newIssuePage = "https://github.com/db-ol/Orra/issues/new"
+    /// The longest link Orra opens. On 2026-10-10 GitHub sent a visitor who was not signed
+    /// in on to its sign in page for links up to about 7,000 characters and answered with an
+    /// error above that, so this stays well below.
+    static let maximumIssueURLLength = 6000
+    /// The longest title, in characters and once encoded, where an emoji takes up to a few
+    /// dozen characters.
+    static let maximumTitleLength = 120
+    static let maximumEncodedTitleLength = 1000
+    /// Ends the text in the form when it had to be cut to fit the link.
+    static let cutMarker = "\n\n[Cut to fit the link. The full text is on your clipboard, so select this text and paste.]"
+
+    /// The link to the new issue, and whether the text in it was cut.
+    struct Issue: Equatable, Sendable {
+        var url: URL
+        var wasCut: Bool
+    }
+
+    /// The new issue page with the bug report form filled in. GitHub issue forms take a
+    /// field's id as a query parameter, and the title as title. Without a title, the first
+    /// line of the text is the title. When the encoded text makes the link longer than
+    /// `maximumLength`, the text is cut and ends with `cutMarker`.
+    static func issue(title: String, whatHappened: String, version: String, macOS: String, mac: String, maximumLength: Int = maximumIssueURLLength) -> Issue {
+        let text = whatHappened.trimmingCharacters(in: .whitespacesAndNewlines)
+        var title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.isEmpty {
+            title = text.split(separator: "\n", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        }
+        title = shortenedTitle(title)
+        var head = [("template", "bug_report.yml")]
+        if !title.isEmpty {
+            head.append(("title", title))
+        }
+        let tail = [("version", version), ("macos", macOS), ("mac", mac)]
+        guard !text.isEmpty else {
+            return Issue(url: url(head + tail), wasCut: false)
+        }
+        let budget = maximumLength - url(head + tail).absoluteString.count - "&what-happened=".count
+        if encode(text).count <= budget {
+            return Issue(url: url(head + [("what-happened", text)] + tail), wasCut: false)
+        }
+        return Issue(url: url(head + [("what-happened", cut(text, toFit: budget))] + tail), wasCut: true)
+    }
+
+    /// The longest start of `text` that, with `cutMarker` after it, is at most `budget`
+    /// characters once encoded. Cuts between whole characters, so an emoji or a Chinese
+    /// character is never split.
+    static func cut(_ text: String, toFit budget: Int) -> String {
+        let marker = encode(cutMarker).count
+        guard budget >= marker else { return "" }
+        return longestStart(of: text, fitting: budget - marker).replacing(/\s+$/, with: "") + cutMarker
+    }
+
+    /// `text` with at most `maximumTitleLength` characters and at most
+    /// `maximumEncodedTitleLength` once encoded, ending in an ellipsis when it was shortened.
+    static func shortenedTitle(_ text: String) -> String {
+        if text.count <= maximumTitleLength, encode(text).count <= maximumEncodedTitleLength {
+            return text
+        }
+        let start = longestStart(of: String(text.prefix(maximumTitleLength - 1)), fitting: maximumEncodedTitleLength - encode("…").count)
+        return start.trimmingCharacters(in: .whitespaces) + "…"
+    }
+
+    /// The longest start of `text`, in whole characters, that is at most `budget` characters
+    /// once encoded.
+    private static func longestStart(of text: String, fitting budget: Int) -> String {
+        let characters = Array(text)
+        // The encoded length grows with every character, so a binary search finds the end.
+        var fits = 0
+        var tooLong = characters.count + 1
+        while tooLong - fits > 1 {
+            let middle = (fits + tooLong) / 2
+            if encode(String(characters[..<middle])).count <= budget {
+                fits = middle
+            } else {
+                tooLong = middle
+            }
+        }
+        return String(characters[..<fits])
+    }
+
+    /// Percent encoding that leaves only unreserved characters as they are, so a plus, an
+    /// ampersand or a newline in a value cannot change the query.
+    static func encode(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? ""
+    }
+
+    private static let unreserved = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+
+    private static func url(_ items: [(String, String)]) -> URL {
+        let query = items.map { "\($0.0)=\(encode($0.1))" }.joined(separator: "&")
+        return URL(string: "\(newIssuePage)?\(query)")!
     }
 }
