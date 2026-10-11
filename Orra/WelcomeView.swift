@@ -15,16 +15,20 @@ struct WelcomeView: View {
     let close: () -> Void
     /// Tells the window the localization shown, so its title follows.
     let localizationChanged: (String) -> Void
+    /// Tells the window the language the user picked in it, not one that came from
+    /// Settings, so only a choice made here can restart Orra when the window closes.
+    let languagePicked: (AppLanguage) -> Void
     @State private var language: AppLanguage
     /// The localization the window shows, such as "zh-Hans". Kept, so a redraw for the
     /// download's progress does not read the Mac's languages again.
     @State private var localization: String
 
-    init(pushToTalk: PushToTalkController, models: ModelInstaller, language: AppLanguage, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void) {
+    init(pushToTalk: PushToTalkController, models: ModelInstaller, language: AppLanguage, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void) {
         self.pushToTalk = pushToTalk
         self.models = models
         self.close = close
         self.localizationChanged = localizationChanged
+        self.languagePicked = languagePicked
         _language = State(initialValue: language)
         _localization = State(initialValue: language.localization())
     }
@@ -67,7 +71,12 @@ struct WelcomeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            LanguageRow(language: $language)
+            LanguageRow(language: Binding {
+                language
+            } set: { picked in
+                language = picked
+                languagePicked(picked)
+            })
             SetupStepRow(number: 1, status: checklist.model, title: "Download the speech model") {
                 ModelStepDetail(models: models, pushToTalk: pushToTalk)
             }

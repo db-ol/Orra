@@ -198,8 +198,9 @@ Build and test commands, run in the repository root:
     localization of each choice, Same as the Mac for English, Chinese, Traditional
     Chinese and French first, Chinese text built in code while Orra runs in English, that
     SwiftUI draws a text literal in the language of the environment's locale, and that
-    closing the window restarts Orra only with setup complete, no dictation running and a
-    language other than the one it started with.
+    closing the window restarts Orra only with setup complete, no dictation running, a
+    language picked in the window other than the one it started with, and no other Orra
+    window open.
   - TranscriptGuardTests and ChineseTextTests cover loop cutting that leaves phone numbers
     and codes intact, the length cap, and the conversion of traditional characters that
     leaves valid simplified text such as 乾隆, 著书 and 俱乐部 alone, converts 後 and 於,
@@ -930,6 +931,11 @@ launch as for the welcome window above, with the Mac in English:
   opens again within a few seconds, in Chinese, with no welcome window, the same talk key,
   and the speech model loading.
 - [ ] Done without a change of language does not restart Orra.
+- [ ] With setup complete, choose 简体中文 in Settings, leave Restart Orra unclicked, close
+  Settings and click Done in the welcome window: Orra does not restart.
+- [ ] With setup complete and 简体中文 picked in the welcome window, open Report a Problem,
+  type a few words and click Done in the welcome window: Orra does not restart and the
+  report keeps its text. The same with Settings open.
 
 Report a Problem, added on 2026-10-10, not verified yet:
 
