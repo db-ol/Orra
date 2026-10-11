@@ -71,10 +71,13 @@ nonisolated enum FieldReader {
 /// switching away and coming back to fix a line works. Each paste has its own watch, up to
 /// five at a time, so dictating several lines and then fixing them works. A watch pushed
 /// out by a sixth paste reports what it found. PasteTracker follows where each paste is while other lines
-/// change. It looks for a correction after every change and reports it once the field has
-/// not changed for a reading, so the user hears back a second or two after the fix. When the user
-/// keeps typing over the same misheard words, as when finishing a half typed word, the new
-/// correction is reported as replacing the earlier one. Logs states only, never text.
+/// change. It looks for corrections after every change and reports them once the field has
+/// not changed for a reading, so the user hears back a second or two after the fix. Separate
+/// fixes in one paste are followed apart, by their misheard spelling. When the user keeps
+/// typing over the same misheard words, as when finishing a half typed word, the new
+/// correction is reported as replacing the earlier one. Offered words are reported before
+/// learned ones, so the notice that stays last is the one with Undo. Logs states only,
+/// never text.
 @MainActor
 final class CorrectionWatcher {
     struct Environment {
@@ -118,7 +121,7 @@ final class CorrectionWatcher {
     }
 
     /// Starts following a paste. The oldest watch ends and reports when five are running.
-    /// `onCorrection` gets the finding and the earlier one it replaces, if any.
+    /// `onCorrection` gets each finding and the earlier one it replaces, if any.
     func watch(pasted: String, in pid: pid_t, onCorrection: @escaping (Finding, Finding?) -> Void) {
         if watches.count >= Self.maximumWatches {
             watches.removeFirst().control.finish = true
@@ -149,10 +152,19 @@ final class CorrectionWatcher {
                 return
             }
             var latest = before
-            var found: Finding?
-            // The latest finding reported for each misheard span, so going back and forth
-            // over a word leaves one pair.
+            // The latest finding for each misheard spelling, in the order first found.
+            var found: [(heard: String, finding: Finding)] = []
+            // The latest finding reported for each misheard spelling, so going back and
+            // forth over a word leaves one pair.
             var reported: [String: Finding] = [:]
+            @MainActor func report() {
+                let waiting = found.filter { reported[$0.heard] != $0.finding }
+                // Offered words first, so a learned word's notice, with Undo, shows last.
+                for item in waiting.filter({ !$0.finding.isWord }) + waiting.filter(\.finding.isWord) {
+                    let earlier = reported.updateValue(item.finding, forKey: item.heard)
+                    onCorrection(item.finding, earlier)
+                }
+            }
             var quiet = 0
             var readings = 0
             var paused = 0
@@ -170,29 +182,33 @@ final class CorrectionWatcher {
                     latest = text
                     quiet = 0
                     tracker.update(to: text)
-                    if let finding = await Self.find(pasted: pasted, edited: tracker.pasteNow) {
-                        found = finding
+                    for finding in await Self.find(pasted: pasted, edited: tracker.pasteNow) {
+                        let heard = finding.correction.heard
+                        if let index = found.firstIndex(where: { $0.heard == heard }) {
+                            found[index].finding = finding
+                        } else {
+                            found.append((heard, finding))
+                        }
                     }
                 } else {
                     quiet += 1
                 }
                 guard !Task.isCancelled else { return }
-                if let found, reported[found.correction.heard] != found, quiet >= Self.quietReadings {
-                    let earlier = reported.updateValue(found, forKey: found.correction.heard)
-                    onCorrection(found, earlier)
+                if quiet >= Self.quietReadings {
+                    report()
                 }
             }
-            logger.notice("Learning: watch ended after \(readings, privacy: .public) readings and \(paused, privacy: .public) seconds away, correction found: \(found != nil, privacy: .public)")
-            guard !Task.isCancelled, let found, reported[found.correction.heard] != found else { return }
-            onCorrection(found, reported[found.correction.heard])
+            logger.notice("Learning: watch ended after \(readings, privacy: .public) readings and \(paused, privacy: .public) seconds away, corrections found: \(found.count, privacy: .public)")
+            guard !Task.isCancelled else { return }
+            report()
         }
         watches.append((id, task, control))
     }
 
     /// Off the main actor, because the keyboard tap runs there.
     @concurrent
-    private static func find(pasted: String, edited: String) async -> Finding? {
-        CorrectionFinder.finding(pasted: pasted, edited: edited)
+    private static func find(pasted: String, edited: String) async -> [Finding] {
+        CorrectionFinder.findings(pasted: pasted, edited: edited)
     }
 
     func stop() {

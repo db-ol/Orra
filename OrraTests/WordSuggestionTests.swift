@@ -3,8 +3,11 @@ import Testing
 @testable import Orra
 
 struct OneCharacterFixTests {
+    /// The word offered for the edit, when it is the only finding.
     private func suggest(_ pasted: String, _ edited: String) -> WordSuggestion? {
-        OneCharacterFix.suggestion(pasted: pasted, edited: edited)
+        let findings = CorrectionFinder.findings(pasted: pasted, edited: edited)
+        guard findings.count == 1, case .suggestion(let suggestion) = findings[0] else { return nil }
+        return suggestion
     }
 
     private func guess(_ text: String, at index: Int) -> String {
@@ -22,25 +25,35 @@ struct OneCharacterFixTests {
     }
 
     @Test func theFinderStillLearnsNothingOnItsOwnButOffersTheWord() {
-        let finding = CorrectionFinder.finding(pasted: "我用通一千问写代码", edited: "我用通义千问写代码")
-        #expect(finding?.correction == Correction(heard: "通一千问", corrected: "通义千问"))
-        if case .word = finding { Issue.record("one character must not be learned on its own") }
-        #expect(CorrectionFinder.finding(pasted: "同意千万。", edited: "通义千问。") == .word(Correction(heard: "同意千万", corrected: "通义千问")))
+        let findings = CorrectionFinder.findings(pasted: "我用通一千问写代码", edited: "我用通义千问写代码")
+        #expect(findings.map(\.correction) == [Correction(heard: "通一千问", corrected: "通义千问")])
+        #expect(!findings.contains { $0.isWord }, "one character must not be learned on its own")
+        #expect(CorrectionFinder.findings(pasted: "同意千万。", edited: "通义千问。") == [.word(Correction(heard: "同意千万", corrected: "通义千问"))])
     }
 
     @Test func grammarAndCommonTyposAreNeverOffered() {
         #expect(suggest("我觉得他的很好", "我觉得他得很好") == nil)
         #expect(suggest("我在说一遍", "我再说一遍") == nil)
         #expect(suggest("她在这里", "他在这里") == nil)
-        #expect(CorrectionFinder.finding(pasted: "慢慢的走", edited: "慢慢地走") == nil)
+        #expect(CorrectionFinder.findings(pasted: "慢慢的走", edited: "慢慢地走").isEmpty)
+        // Sentence final particles.
+        #expect(CorrectionFinder.findings(pasted: "这样可以嘛", edited: "这样可以吗").isEmpty)
+        #expect(CorrectionFinder.findings(pasted: "你在哪", edited: "你在呢").isEmpty)
+        #expect(CorrectionFinder.findings(pasted: "好了", edited: "好啦").isEmpty)
+        #expect(CorrectionFinder.findings(pasted: "走吧", edited: "走啊").isEmpty)
+        #expect(CorrectionFinder.findings(pasted: "是么", edited: "是吗").isEmpty)
     }
 
     @Test func everyGrammarPairSoundsAlikeSoTheListIsNeeded() {
+        // The particles are listed whatever they sound like.
+        let particles: Set<Character> = ["吗", "嘛", "么", "呢", "吧", "啊", "了", "啦"]
         for group in OneCharacterFix.grammarGroups {
             for first in group {
                 for second in group where first != second {
                     #expect(OneCharacterFix.isGrammar(first, second))
-                    #expect(SoundAlike.soundsAlike(String(first), String(second)), "\(first) \(second)")
+                    if group.isDisjoint(with: particles) {
+                        #expect(SoundAlike.soundsAlike(String(first), String(second)), "\(first) \(second)")
+                    }
                 }
             }
         }
@@ -55,7 +68,8 @@ struct OneCharacterFixTests {
         #expect(suggest("我用同一千问写代码", "我用通义千问写代码") == nil)
         // Not Han.
         #expect(suggest("I use Ora", "I use Orb") == nil)
-        #expect(suggest("用通一千问", "用通义千问写") == nil)
+        // A character typed after the fix is an addition of its own: the fix is still offered.
+        #expect(suggest("用通一千问", "用通义千问写")?.guess == "通义千问")
         #expect(suggest("用通一千问", "用通一千问") == nil)
     }
 

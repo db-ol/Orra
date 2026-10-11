@@ -120,6 +120,7 @@ Build and test commands, run in the repository root:
     word in the pasted text (Chinese, a name across scripts, a whole Latin word), leaving
     out changes of meaning, deletions, additions, rewrites and edits outside the paste,
     the pinyin comparison, accepting only pairs that were not undone, and the stored file.
+    They also cover separate fixes in one sentence judged one by one.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, and no reading after leaving the app, under secure input, or in a field
     without the pasted text. CorrectionLearningTests checks that nothing is read while
@@ -582,6 +583,8 @@ corrections under Vocabulary in Settings first:
 - [ ] Dictate four lines with the same misheard name, switch to another app for a moment,
   come back and fix them within 3 minutes: one notice comes. Undo takes the name out of
   the vocabulary, and fixing it again, misheard any way, does not add it again.
+- [ ] When a dictation comes out as 陈阳写的那些文档一样嘛, fix it to 晨阳写的那些文档一样吗:
+  only the name 晨阳 is offered, never the whole sentence.
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the
   right word there: the Orra menu offers to add it to the vocabulary.

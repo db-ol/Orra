@@ -34,8 +34,9 @@ nonisolated enum OneCharacterFix {
 
     /// Characters that sound alike and are swapped as grammar or as common typos, never as
     /// part of a misheard name. A fix between two characters of the same group is never
-    /// offered. Each pair has the same pinyin without tones (地 is also read de), so the
-    /// sound rule alone would let them through.
+    /// offered. Most pairs have the same pinyin without tones (地 is also read de), so the
+    /// sound rule alone would let them through. The particles are listed whatever they
+    /// sound like.
     static let grammarGroups: [Set<Character>] = [
         ["的", "地", "得"],
         ["在", "再"],
@@ -52,6 +53,11 @@ nonisolated enum OneCharacterFix {
         ["份", "分"],
         ["进", "近"],
         ["和", "合"],
+        // Sentence final particles, swapped as tone rather than misheard.
+        ["吗", "嘛", "么"],
+        ["呢", "哪"],
+        ["吧", "啊"],
+        ["了", "啦"],
     ]
 
     /// Single character words that end a guess: pronouns, particles, common verbs and
@@ -68,27 +74,21 @@ nonisolated enum OneCharacterFix {
         grammarGroups.contains { $0.contains(first) && $0.contains(second) }
     }
 
-    /// The suggestion for a paste that the user changed into `edited`, when exactly one Han
-    /// character was replaced by another that sounds alike and the two are not grammar.
-    static func suggestion(pasted: String, edited editedText: String) -> WordSuggestion? {
-        let paste = Array(pasted)
-        var edited = Array(editedText)
-        // Punctuation or spaces typed right after the paste, such as a closing period.
-        while edited.count > paste.count, let last = edited.last, isSeparator(last) {
-            edited.removeLast()
-        }
-        guard paste.count == edited.count, paste != edited else { return nil }
-        let changed = paste.indices.filter { paste[$0] != edited[$0] }
-        guard changed.count == 1, let index = changed.first else { return nil }
-        let heard = paste[index]
-        let corrected = edited[index]
+    /// The suggestion for a fix of the one Han character at `oldIndex` in the pasted text,
+    /// `newIndex` in the edited text, when the two sound alike and are not grammar. The
+    /// guessed word stays within `bounds` of the edited text, the unchanged text around the
+    /// fix, so it never takes in another edit.
+    static func suggestion(paste: [Character], edited: [Character], at oldIndex: Int, _ newIndex: Int, within bounds: Range<Int>) -> WordSuggestion? {
+        let heard = paste[oldIndex]
+        let corrected = edited[newIndex]
         guard isHan(heard), isHan(corrected), !isGrammar(heard, corrected),
               SoundAlike.sound(String(heard)) == SoundAlike.sound(String(corrected))
                 || SoundAlike.soundsAlike(String(heard), String(corrected)) else { return nil }
-        let range = guess(in: edited, at: index)
+        let range = guess(in: edited, at: newIndex, within: bounds)
+        let shift = oldIndex - newIndex
         return WordSuggestion(
             change: Correction(heard: String(heard), corrected: String(corrected)),
-            pair: Correction(heard: String(paste[range]), corrected: String(edited[range]))
+            pair: Correction(heard: String(paste[(range.lowerBound + shift)..<(range.upperBound + shift)]), corrected: String(edited[range]))
         )
     }
 
@@ -99,13 +99,15 @@ nonisolated enum OneCharacterFix {
     /// words, and at `maximumGuessLength`. So a name with a function word in it, or next to
     /// a word the tokenizer knows, is guessed in part: 文心一言 gives 言, and 欧阳娜娜 gives
     /// 娜娜. The user may edit the guess before adding it.
-    static func guess(in text: [Character], at index: Int) -> Range<Int> {
+    static func guess(in text: [Character], at index: Int, within bounds: Range<Int>? = nil) -> Range<Int> {
+        let bounds = bounds ?? text.indices
         let split = tokens(in: text)
         if let token = split.word(at: index) {
-            return token.count <= maximumGuessLength ? token : index..<(index + 1)
+            let fits = token.count <= maximumGuessLength && bounds.lowerBound <= token.lowerBound && token.upperBound <= bounds.upperBound
+            return fits ? token : index..<(index + 1)
         }
         func joins(_ position: Int) -> Bool {
-            text.indices.contains(position) && isHan(text[position]) && split.isSingle(position)
+            bounds.contains(position) && isHan(text[position]) && split.isSingle(position)
                 && !functionWords.contains(text[position])
         }
         var lower = index

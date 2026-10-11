@@ -3,14 +3,46 @@ import Testing
 @testable import Orra
 
 struct CorrectionFinderTests {
-    private func find(_ pasted: String, _ before: String, _ after: String) -> Correction? {
-        CorrectionFinder.correction(pasted: pasted, before: before, after: after)
+    /// The one word learned from the edit, nil when there is none. An edit that gives
+    /// more than one finding fails the test.
+    private func find(_ pasted: String, _ before: String, _ after: String,
+                      sourceLocation: SourceLocation = #_sourceLocation) -> Correction? {
+        let findings = CorrectionFinder.findings(pasted: pasted, before: before, after: after)
+        #expect(findings.count <= 1, "\(findings)", sourceLocation: sourceLocation)
+        guard findings.count == 1, case .word(let correction) = findings[0] else { return nil }
+        return correction
+    }
+
+    private func findings(_ pasted: String, _ edited: String) -> [Finding] {
+        CorrectionFinder.findings(pasted: pasted, edited: edited)
     }
 
     @Test func aMisheardChineseNameIsFound() {
         let pasted = "我约了迪力热吧见面"
         #expect(find(pasted, "备注：" + pasted, "备注：我约了迪丽热巴见面") == Correction(heard: "力热吧", corrected: "丽热巴"))
     }
+
+    @Test func separateFixesInOneSentenceAreJudgedApart() {
+        // Real case: the whole sentence was learned. 陈 to 晨 offers the name, and 嘛 to 吗
+        // is grammar.
+        let found = findings("陈阳写的那些文档一样嘛", "晨阳写的那些文档一样吗")
+        #expect(found.count == 1)
+        guard case .suggestion(let suggestion) = found.first else {
+            Issue.record("expected the name to be offered: \(found)")
+            return
+        }
+        #expect(suggestion.change == Correction(heard: "陈", corrected: "晨"))
+        #expect(suggestion.pair == Correction(heard: "陈阳", corrected: "晨阳"))
+    }
+
+    @Test func aLatinNameAndAChineseFixApartAreJudgedApart() {
+        // Real case: "PR 今天merge" was learned as one word.
+        let found = findings("P.R. 今天没雨", "PR 今天merge")
+        #expect(!found.contains { $0.correction.corrected.contains(" ") })
+        #expect(found.contains(.word(Correction(heard: "P.R.", corrected: "PR"))))
+        #expect(found.allSatisfy { $0.correction.corrected.count <= CorrectionFinder.maximumLength })
+    }
+
 
     @Test func chineseNumeralsAreLettersNotDigits() {
         #expect(find("同意千万。", "同意千万。", "通义千问。") == Correction(heard: "同意千万", corrected: "通义千问"))

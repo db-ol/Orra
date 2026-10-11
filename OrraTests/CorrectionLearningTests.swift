@@ -213,6 +213,43 @@ struct CorrectionWatcherTests {
         #expect(reports.map(\.1) == [nil, first])
     }
 
+    @Test func twoFixesInOnePasteAreReportedApartWithTheLearnedWordLast() async {
+        let pasted = "克劳德觉得陈阳很好"
+        let field = ScriptedField([pasted, pasted, "Claude觉得陈阳很好", "Claude觉得陈阳很好", "Claude觉得晨阳很好"])
+        let watcher = CorrectionWatcher(environment: field.environment)
+        var reports: [(Finding, Finding?)] = []
+        watcher.watch(pasted: pasted, in: 42) { reports.append(($0, $1)) }
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        // The word first, once the field was quiet, then the offered name on its own.
+        #expect(reports.map(\.0.correction) == [
+            Correction(heard: "克劳德", corrected: "Claude"),
+            Correction(heard: "陈阳", corrected: "晨阳"),
+        ])
+        #expect(reports.allSatisfy { $0.1 == nil })
+    }
+
+    @Test func twoFixesFoundTogetherReportTheOfferBeforeTheWord() async {
+        let pasted = "克劳德觉得陈阳很好"
+        let field = ScriptedField([pasted, pasted, "Claude觉得晨阳很好"])
+        let watcher = CorrectionWatcher(environment: field.environment)
+        var reports: [Finding] = []
+        watcher.watch(pasted: pasted, in: 42) { reports.append($0); _ = $1 }
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        #expect(reports.map(\.isWord) == [false, true])
+    }
+
     @Test func aFieldWithoutThePastedTextIsLeftAlone() async {
         let field = ScriptedField(["别的内容", "别的内容改了"])
         #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
@@ -315,6 +352,30 @@ struct CorrectionLearningTests {
         vocabulary.words = []
         learning.record(Correction(heard: "可劳德", corrected: "Claude"))
         #expect(vocabulary.words.isEmpty)
+    }
+
+    @Test func separateFixesInOnePasteAreEachKept() async {
+        // 克劳德 to Claude is learned, and 嘛 to 吗 is grammar.
+        let pasted = "我在用克劳德写代码嘛"
+        let field = ScriptedField([pasted, pasted, "我在用Claude写代码吗"])
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: field, vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        var offered: [WordSuggestion] = []
+        learning.onLearned = { learned.append($0) }
+        learning.onSuggest = { offered.append($0) }
+        learning.pasted(pasted, in: 42)
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        learning.isOn = false
+        #expect(learned.map(\.correction) == [pair])
+        #expect(offered.isEmpty)
+        #expect(vocabulary.words == ["Claude"])
     }
 
     @Test func undoKeepsAWordTheUserHadAddedBefore() {
