@@ -250,6 +250,50 @@ struct CorrectionWatcherTests {
         #expect(reports.map(\.isWord) == [false, true])
     }
 
+    /// Every report of a watch over the field, with the finding it replaces.
+    private func reports(_ field: ScriptedField, pasted: String) async -> [(Finding, Finding?)] {
+        let watcher = CorrectionWatcher(environment: field.environment)
+        var reports: [(Finding, Finding?)] = []
+        watcher.watch(pasted: pasted, in: 42) { reports.append(($0, $1)) }
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        return reports
+    }
+
+    @Test func aWordTypedPastWithoutAPauseIsNeverReported() async {
+        let pasted = "用 quen 3 跑"
+        let field = ScriptedField([pasted, "用 Qwen 3 跑", "用 Qwen3 跑"])
+        let found = await reports(field, pasted: pasted)
+        #expect(found.map(\.0) == [.word(Correction(heard: "quen 3", corrected: "Qwen3"))])
+        #expect(found.allSatisfy { $0.1 == nil })
+    }
+
+    @Test func aFixOverTheSameTextReplacesTheOneReported() async {
+        let pasted = "用 quen 3 跑"
+        let field = ScriptedField([pasted, "用 Qwen 3 跑", "用 Qwen 3 跑", "用 Qwen3 跑"])
+        let found = await reports(field, pasted: pasted)
+        let half = Finding.word(Correction(heard: "quen", corrected: "Qwen"))
+        #expect(found.map(\.0) == [half, .word(Correction(heard: "quen 3", corrected: "Qwen3"))])
+        #expect(found.map(\.1) == [nil, half])
+    }
+
+    @Test func aWordFoundAfterAnOfferOverTheSameTextReplacesTheOffer() async {
+        let pasted = "通一千万"
+        let field = ScriptedField([pasted, "通义千万", "通义千万", "通义千问"])
+        let found = await reports(field, pasted: pasted)
+        #expect(found.map(\.0.correction) == [
+            Correction(heard: "通一", corrected: "通义"),
+            Correction(heard: "通一千万", corrected: "通义千问"),
+        ])
+        #expect(found.map(\.0.isWord) == [false, true])
+        #expect(found[1].1?.correction == Correction(heard: "通一", corrected: "通义"))
+    }
+
     @Test func aFieldWithoutThePastedTextIsLeftAlone() async {
         let field = ScriptedField(["别的内容", "别的内容改了"])
         #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
@@ -367,6 +411,7 @@ struct CorrectionLearningTests {
         #expect(vocabulary.words.isEmpty)
         #expect(learned.count == 2)
     }
+
 
     @Test func removingAWordThatWasNeverLearnedChangesNothing() {
         let vocabulary = VocabularyBox()
