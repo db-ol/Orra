@@ -57,7 +57,7 @@ final class TextCleanup {
             isOn: CleanupPreference.load(),
             save: { CleanupPreference.save($0) },
             models: ModelInstaller(
-                manifest: .qwen3Cleanup,
+                manifest: .qwen35Cleanup,
                 folders: .liveCleanup,
                 sources: ModelSource.servers(launchArguments: ProcessInfo.processInfo.arguments),
                 environment: .live

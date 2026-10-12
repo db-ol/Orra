@@ -108,28 +108,28 @@ struct CleanupStepTests {
 /// The pinned cleanup model and its folder.
 struct CleanupModelPinTests {
     @Test func pinnedValues() {
-        let manifest = ModelManifest.qwen3Cleanup
-        #expect(manifest.id == "mlx-community/Qwen3-4B-Instruct-2507-4bit")
-        #expect(manifest.files.map(\.name) == ["config.json", "generation_config.json", "tokenizer_config.json", "tokenizer.json", "model.safetensors"])
-        #expect(manifest.totalBytes == 2_274_451_687)
-        #expect(ModelInstaller.State.size(manifest.totalBytes) == "2.27 GB")
+        let manifest = ModelManifest.qwen35Cleanup
+        #expect(manifest.id == "mlx-community/Qwen3.5-4B-4bit")
+        #expect(manifest.files.map(\.name) == ["config.json", "tokenizer_config.json", "tokenizer.json", "model.safetensors"])
+        #expect(manifest.totalBytes == 3_054_294_543)
+        #expect(ModelInstaller.State.size(manifest.totalBytes) == "3.05 GB")
         for file in manifest.files {
             #expect(file.sha256.count == 64 && file.sha256.allSatisfy { "0123456789abcdef".contains($0) }, "\(file.name)")
         }
         #expect(manifest.files.filter(\.resumable).map(\.name) == ["model.safetensors"])
-        #expect(manifest.folderName == "Qwen3-4B-Instruct-2507-4bit-50d42775")
-        #expect(manifest.huggingFaceRevision == "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b")
-        #expect(manifest.modelScopeRevision == "ec7ca96008a45bebdd03ad3d09d86f6e61a3e4af")
+        #expect(manifest.folderName == "Qwen3.5-4B-4bit-0e7ffd5c")
+        #expect(manifest.huggingFaceRevision == "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c")
+        #expect(manifest.modelScopeRevision == "ab9c7a42fd31095a40634b3362317779dee9e7fa")
     }
 
     @Test func sourceURLs() {
-        let weights = ModelManifest.qwen3Cleanup.files.first { $0.name == "model.safetensors" }!
-        #expect(ModelSource.huggingFace.url(for: weights, in: .qwen3Cleanup).absoluteString
-            == "https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b/model.safetensors")
-        #expect(ModelSource.modelScope.url(for: weights, in: .qwen3Cleanup).absoluteString
-            == "https://modelscope.cn/models/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/ec7ca96008a45bebdd03ad3d09d86f6e61a3e4af/model.safetensors")
-        #expect(ModelSource.hfMirror.url(for: weights, in: .qwen3Cleanup).absoluteString
-            == "https://hf-mirror.com/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b/model.safetensors")
+        let weights = ModelManifest.qwen35Cleanup.files.first { $0.name == "model.safetensors" }!
+        #expect(ModelSource.huggingFace.url(for: weights, in: .qwen35Cleanup).absoluteString
+            == "https://huggingface.co/mlx-community/Qwen3.5-4B-4bit/resolve/0e7ffd5c629ef7719d4cbc04069232580bfa9d9c/model.safetensors")
+        #expect(ModelSource.modelScope.url(for: weights, in: .qwen35Cleanup).absoluteString
+            == "https://modelscope.cn/models/mlx-community/Qwen3.5-4B-4bit/resolve/ab9c7a42fd31095a40634b3362317779dee9e7fa/model.safetensors")
+        #expect(ModelSource.hfMirror.url(for: weights, in: .qwen35Cleanup).absoluteString
+            == "https://hf-mirror.com/mlx-community/Qwen3.5-4B-4bit/resolve/0e7ffd5c629ef7719d4cbc04069232580bfa9d9c/model.safetensors")
     }
 
     /// Its own folder next to the speech model's, and neither removes the other.
@@ -137,21 +137,26 @@ struct CleanupModelPinTests {
         let folders = ModelFolders.liveCleanup
         #expect(folders.models == ModelFolders.live.models)
         #expect(folders.oldCopies.isEmpty)
-        #expect(folders.installed(.qwen3Cleanup).path.hasSuffix("/io.github.db-ol.Orra/Models/Qwen3-4B-Instruct-2507-4bit-50d42775"))
-        #expect(!ModelManifest.qwen3Cleanup.folderName.hasPrefix(ModelManifest.qwen3.name + "-"))
-        #expect(!ModelManifest.qwen3.folderName.hasPrefix(ModelManifest.qwen3Cleanup.name + "-"))
+        #expect(folders.installed(.qwen35Cleanup).path.hasSuffix("/io.github.db-ol.Orra/Models/Qwen3.5-4B-4bit-0e7ffd5c"))
+        #expect(!ModelManifest.qwen35Cleanup.folderName.hasPrefix(ModelManifest.qwen3.name + "-"))
+        #expect(!ModelManifest.qwen3.folderName.hasPrefix(ModelManifest.qwen35Cleanup.name + "-"))
     }
 
     @Test func leftoversOfTheOtherModelStay() throws {
         let temporary = TemporaryModelFolders()
         defer { temporary.remove() }
         let speech = temporary.folders.models.appendingPathComponent(ModelManifest.qwen3.folderName)
-        let cleanupOld = temporary.folders.models.appendingPathComponent("Qwen3-4B-Instruct-2507-4bit-00000000")
-        for folder in [speech, cleanupOld] {
+        let cleanupOld = temporary.folders.models.appendingPathComponent("Qwen3.5-4B-4bit-00000000")
+        let replaced = temporary.folders.models.appendingPathComponent("Qwen3-4B-Instruct-2507-4bit-50d42775")
+        let replacedStaging = temporary.folders.models.appendingPathComponent(".download-Qwen3-4B-Instruct-2507-4bit-50d42775")
+        for folder in [speech, cleanupOld, replaced, replacedStaging] {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        ModelDisk.removeLeftovers(.qwen3Cleanup, temporary.folders)
+        ModelDisk.removeLeftovers(.qwen35Cleanup, temporary.folders)
         #expect(FileManager.default.fileExists(atPath: speech.path))
         #expect(!FileManager.default.fileExists(atPath: cleanupOld.path))
+        // The cleanup model it replaced goes too.
+        #expect(!FileManager.default.fileExists(atPath: replaced.path))
+        #expect(!FileManager.default.fileExists(atPath: replacedStaging.path))
     }
 }

@@ -35,6 +35,8 @@ nonisolated struct ModelManifest: Sendable, Equatable {
     /// In download order. Small files come first, so a fresh download asks each server for
     /// a small file before the weights.
     let files: [ModelFile]
+    /// Repository names of models this one replaced. Their folders go with the leftovers.
+    var formerNames: [String] = []
 
     var totalBytes: Int64 {
         files.reduce(0) { $0 + $1.size }
@@ -289,12 +291,14 @@ nonisolated enum ModelDisk {
         try FileManager.default.removeItem(at: installed)
     }
 
-    /// Once the model is installed, removes the staging folder and the folders of other
-    /// revisions of the same model. Nothing outside the Models folder, and no other model.
+    /// Once the model is installed, removes the staging folder, the folders of other
+    /// revisions of the same model and those of the models it replaced. Nothing outside the
+    /// Models folder, and no other model.
     static func removeLeftovers(_ manifest: ModelManifest, _ folders: ModelFolders) {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: folders.models.path)) ?? []
+        let models = [manifest.name] + manifest.formerNames
         for name in names where name != manifest.folderName
-            && (name.hasPrefix(manifest.name + "-") || name.hasPrefix(".download-" + manifest.name + "-")) {
+            && models.contains(where: { name.hasPrefix($0 + "-") || name.hasPrefix(".download-" + $0 + "-") }) {
             do {
                 try FileManager.default.removeItem(at: folders.models.appendingPathComponent(name, isDirectory: true))
                 Logger.modelDownload.notice("Removed the leftover folder \(name, privacy: .public)")

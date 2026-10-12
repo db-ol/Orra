@@ -11,24 +11,27 @@ extension Logger {
 }
 
 nonisolated extension ModelManifest {
-    /// Qwen3 4B Instruct 2507 in the 4 bit MLX build, for cleaning up dictations. Apache-2.0.
-    /// Hugging Face main as of 2026-10-10, where only tokenizer_config.json changed after the
-    /// upload. ModelScope's mirror in the mlx-community organization lists the same sizes and
-    /// SHA-256 values at its commit, and hf-mirror.com serves the Hugging Face commit.
-    /// tokenizer.json is what CleanupTokenizer reads, and it holds the vocabulary and the
-    /// merges, so vocab.json and merges.txt are left out. chat_template.jinja and the index
-    /// are left out too, since Orra builds the prompt itself and the weights are in one file.
-    static let qwen3Cleanup = ModelManifest(
-        id: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
-        huggingFaceRevision: "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b",
-        modelScopeRevision: "ec7ca96008a45bebdd03ad3d09d86f6e61a3e4af",
+    /// Qwen3.5 4B in the 4 bit MLX build, for cleaning up dictations. Apache-2.0. Hugging
+    /// Face main as of 2026-10-11, last changed on 2026-03-02. ModelScope's mirror in the
+    /// mlx-community organization lists the same sizes and SHA-256 values at its commit, and
+    /// hf-mirror.com serves the Hugging Face commit. The weights hold the language model only,
+    /// with no vision tower. tokenizer.json is what CleanupTokenizer reads, and it holds the
+    /// vocabulary and the merges, so vocab.json is left out. chat_template.jinja, the index
+    /// and the image and video processor files are left out too, since Orra builds the prompt
+    /// itself, the weights are in one file and Orra sends only text.
+    static let qwen35Cleanup = ModelManifest(
+        id: "mlx-community/Qwen3.5-4B-4bit",
+        huggingFaceRevision: "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
+        modelScopeRevision: "ab9c7a42fd31095a40634b3362317779dee9e7fa",
         files: [
-            ModelFile(name: "config.json", size: 938, sha256: "574349e5a343236546fda55e4744a76e181f534182d7dc60ff1bad7e7a502849"),
-            ModelFile(name: "generation_config.json", size: 238, sha256: "835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48"),
-            ModelFile(name: "tokenizer_config.json", size: 5_440, sha256: "4397cc477eb6d79715ccd2000accd6b3531928f30029665832fa1b255f24d2b9"),
-            ModelFile(name: "tokenizer.json", size: 11_422_654, sha256: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"),
-            ModelFile(name: "model.safetensors", size: 2_263_022_417, sha256: "2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f", resumable: true),
-        ]
+            ModelFile(name: "config.json", size: 3_366, sha256: "f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa"),
+            ModelFile(name: "tokenizer_config.json", size: 1_139, sha256: "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"),
+            ModelFile(name: "tokenizer.json", size: 19_989_343, sha256: "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"),
+            ModelFile(name: "model.safetensors", size: 3_034_300_695, sha256: "5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db", resumable: true),
+        ],
+        // The cleanup model before 2026-10-11, which builds of the local-rewrite branch
+        // downloaded. No release carried it.
+        formerNames: ["Qwen3-4B-Instruct-2507-4bit"]
     )
 }
 
@@ -169,9 +172,9 @@ nonisolated enum CleanupStep {
 
     /// The longest Orra waits for a cleanup of this text before it pastes the text without
     /// it. The model writes the whole text again, so the time grows with its length. On an
-    /// M5 Pro, CleanupModelEvaluationTests measured 0.7 s for 46 Chinese characters, 3.9 s
-    /// for 400 and 4.5 s for 905 English ones, about 60 written tokens a second. This
-    /// allows about twice that, so a slower Mac still gets most cleanups.
+    /// M5 Pro, CleanupModelEvaluationTests measured 1.1 s for 46 Chinese characters, 3.3 to
+    /// 5.6 s for 400 and 2.5 s for 905 English ones in a Release build. This allows 2.7 s,
+    /// 8 s and 15.6 s for them, so a slower Mac still gets most cleanups.
     static func timeout(for text: String) -> Duration {
         .seconds(2) + .milliseconds(15) * text.count
     }

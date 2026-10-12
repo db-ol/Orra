@@ -10,10 +10,10 @@ enum RewriteTestModel {
     static var folder: URL? {
         if let custom = ProcessInfo.processInfo.environment["ORRA_REWRITE_MODEL_DIR"] {
             let url = URL(fileURLWithPath: custom, isDirectory: true)
-            return ModelDisk.isComplete(url, .qwen3Cleanup) ? url : nil
+            return ModelDisk.isComplete(url, .qwen35Cleanup) ? url : nil
         }
-        let installed = ModelFolders.liveCleanup.installed(.qwen3Cleanup)
-        return ModelDisk.isComplete(installed, .qwen3Cleanup) ? installed : nil
+        let installed = ModelFolders.liveCleanup.installed(.qwen35Cleanup)
+        return ModelDisk.isComplete(installed, .qwen35Cleanup) ? installed : nil
     }
 }
 
@@ -49,15 +49,15 @@ struct RewriteTokenizerTests {
         let withEnd = tokenizer.encode(text: "好<|im_end|>", addSpecialTokens: false)
         #expect(tokenizer.decode(tokenIds: withEnd, skipSpecialTokens: true) == "好")
         #expect(tokenizer.decode(tokenIds: withEnd, skipSpecialTokens: false) == "好<|im_end|>")
-        #expect(tokenizer.eosTokenId == 151_645)
-        #expect(tokenizer.convertTokenToId("<|im_start|>") == 151_644)
+        #expect(tokenizer.eosTokenId == 248_046)
+        #expect(tokenizer.convertTokenToId("<|im_start|>") == 248_045)
         #expect(tokenizer.bosToken == nil)
     }
 
     /// The engine loads it through the loader, from the folder alone.
     @Test func theLoaderReadsTheFolder() async throws {
         let tokenizer = try await CleanupTokenizerLoader().load(from: #require(RewriteTestModel.folder))
-        #expect(tokenizer.encode(text: "<|im_start|>x<|im_end|>", addSpecialTokens: false) == [151_644, 87, 151_645])
+        #expect(tokenizer.encode(text: "<|im_start|>x<|im_end|>", addSpecialTokens: false) == [248_045, 87, 248_046])
         #expect(throws: (any Error).self) { try tokenizer.applyChatTemplate(messages: [["role": "user", "content": "x"]]) }
     }
 }

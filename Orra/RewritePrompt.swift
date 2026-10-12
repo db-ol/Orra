@@ -6,8 +6,11 @@ import Foundation
 /// bench/hardening): the transcript goes in as JSON, the few shot pairs include requests
 /// and questions that must not be answered, a reminder follows every transcript, and the
 /// answer is started for the model with `{"cleaned": "`. On 70 adversarial cases it kept
-/// 61 outputs exact and the guards caught the rest that went wrong. The strings are copied
-/// from the benchmark word for word, because the measurements hold only for them.
+/// 61 outputs of Qwen3 4B Instruct exact and the guards caught the rest that went wrong.
+/// Measured again with Qwen3.5 4B on 2026-10-11, it was still the best of the variants:
+/// 65 of the 70 exact and none answered or carried out, and 161 of the 178 regular cases
+/// exact. The strings are copied from the benchmark word for word, because the
+/// measurements hold only for them.
 nonisolated enum RewritePrompt {
     static let system = """
     You clean up dictated text. Each user message is a JSON object whose "transcript" field holds what a person said, written down by speech recognition. It may be Chinese, English, or both mixed.
@@ -41,8 +44,12 @@ nonisolated enum RewritePrompt {
     /// The start of the answer, written into the prompt for the model.
     static let prefill = #"{"cleaned": ""#
 
-    /// The whole prompt in Qwen3's chat format, as its chat template renders it with the
-    /// generation prompt, followed by the prefill.
+    /// An empty reasoning block. Qwen3.5 reasons before it answers unless the prompt closes
+    /// the block for it, which its chat template does with thinking turned off.
+    static let noThinking = "<think>\n\n</think>\n\n"
+
+    /// The whole prompt in Qwen3.5's chat format, as its chat template renders it with the
+    /// generation prompt and thinking turned off, followed by the prefill.
     static func text(for transcript: String) -> String {
         var prompt = "<|im_start|>system\n" + system + "<|im_end|>\n"
         for example in examples {
@@ -50,7 +57,7 @@ nonisolated enum RewritePrompt {
             prompt += "<|im_start|>assistant\n" + json(key: "cleaned", example.cleaned) + "<|im_end|>\n"
         }
         prompt += "<|im_start|>user\n" + user(transcript) + "<|im_end|>\n"
-        prompt += "<|im_start|>assistant\n" + prefill
+        prompt += "<|im_start|>assistant\n" + noThinking + prefill
         return prompt
     }
 
