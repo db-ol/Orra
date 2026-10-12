@@ -16,8 +16,8 @@ struct RewriteGuardTests {
 
     /// The Swift port gives every measured output the verdict and the reason guards.py gave.
     @Test func everyMeasuredOutputGetsThePythonVerdict() {
-        #expect(Self.cases.count == 297)
-        #expect(Self.cases.filter { !$0.ok }.count == 32)
+        #expect(Self.cases.count == 357)
+        #expect(Self.cases.filter { !$0.ok }.count == 43)
         for item in Self.cases {
             let failure = RewriteGuard.check(source: item.source, output: item.output)
             #expect((failure == nil) == item.ok, "\(item.source) -> \(item.output)")
