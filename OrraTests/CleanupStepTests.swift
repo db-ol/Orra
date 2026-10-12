@@ -58,15 +58,16 @@ struct CleanupStepTests {
         #expect(result.outcome == .failed)
     }
 
-    @Test func aSlowModelIsCutOffAtTheTimeout() async {
-        let started = ContinuousClock.now
+    /// The model would answer after an hour, so the test ends only if the timeout cuts it
+    /// off. No bound on the time taken, since a busy Mac can be seconds late.
+    @Test(.timeLimit(.minutes(1)))
+    func aSlowModelIsCutOffAtTheTimeout() async {
         let result = await CleanupStep.run("我们下周二开会。", timeout: .milliseconds(200), complete: { _ in
-            try await Task.sleep(for: .seconds(10))
+            try await Task.sleep(for: .seconds(3600))
             return #"{"cleaned": "我们下周二开会。"}"#
         })
         #expect(result.text == "我们下周二开会。")
         #expect(result.outcome == .timedOut)
-        #expect(started.duration(to: .now) < .seconds(5))
     }
 
     /// A model that ignores cancellation and answers late is still not used.
