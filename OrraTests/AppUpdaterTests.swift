@@ -26,4 +26,14 @@ struct AppUpdaterTests {
         // Does nothing, and reaches no network, until start().
         updater.checkForUpdates()
     }
+
+    /// The tests run a Debug build, like Xcode's Run. Its placeholder version 1.0 would
+    /// make every release look like an update, so Sparkle never starts.
+    @Test func aDebugBuildNeverStartsSparkle() {
+        #expect(!AppUpdater.updatesEnabled)
+        let updater = AppUpdater()
+        updater.start()
+        #expect(!updater.canCheckForUpdates)
+        #expect(!updater.checksAutomatically)
+    }
 }
