@@ -137,15 +137,21 @@ the #adaptHuggingFaceTokenizer macro of mlx-swift-lm writes, written out by hand
 MLXHuggingFace product and its macro stay out of the build. Orra writes the chat prompt
 itself (RewritePrompt) and only encodes it.
 
+The model is Qwen3.5 4B since 2026-10-11, in place of Qwen3 4B Instruct 2507. MLXLLM in
+mlx-swift-lm 3.31.4 knows its model type, qwen3_5, and loads the language model alone,
+dropping any vision weights. swift-transformers reads its tokenizer_config.json, whose
+tokenizer class is TokenizersBackend, as a BPE tokenizer. No dependency changed for it.
+
 It replaced Orra's own port of Qwen3's tokenizer (QwenTokenizer, removed on 2026-10-11).
-Before the port was removed, a one off run compared the two on the model's files: every
+Before the port was removed, a one off run compared the two on the files of Qwen3 4B
+Instruct 2507: every
 input and expected text of the 178 regular and 70 adversarial evaluation cases, as
 written and after the filler and number rules, the 1,344 texts of numbers.jsonl, the
 cases of RewriteTokenizerCases and the few shot examples, 2,131 texts in all. The IDs of
 each text alone and of the whole cleanup prompt built around it were the same, both
 decoded to the same text with and without special tokens, and each of the 151,669 token
 IDs decoded alone to the same text. RewriteTokenizerTests checks CleanupTokenizer against
-IDs that transformers in Python gave. In a Debug build the port loaded in 0.41 s and
+IDs that transformers in Python gave, now for Qwen3.5 4B. In a Debug build the port loaded in 0.41 s and
 swift-transformers loads in 0.70 s, once when the model loads.
 
 ## Keeping speech-swift or carrying only Qwen3ASR

@@ -5,9 +5,10 @@ import Testing
 /// Runs the real cleanup model on the cleanup cases of Tools/rewrite-eval: the 178 regular
 /// cases and the 70 adversarial ones, which ask, order or try to steer the model. Only when
 /// asked for, with TEST_RUNNER_ORRA_CLEANUP_EVAL=1, and only when the model is on this Mac,
-/// see RewriteTestModel. It loads 2.3 GB, so run it on its own:
+/// see RewriteTestModel. It loads 3 GB, so run it on its own, in a Release build, since a
+/// Debug build runs MLX without optimization and misses the time limit below:
 ///
-///     TEST_RUNNER_ORRA_CLEANUP_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<folder> xcodebuild ... test -only-testing:OrraTests/CleanupModelEvaluationTests
+///     TEST_RUNNER_ORRA_CLEANUP_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<folder> xcodebuild ... -configuration Release ... ENABLE_TESTABILITY=YES test -only-testing:OrraTests/CleanupModelEvaluationTests
 ///
 /// Each case runs twice: on the dictation itself, as the benchmark did, and as the app runs
 /// it, after the filler and number rules. The report lists exact matches, what the step did
@@ -156,7 +157,7 @@ struct CleanupModelEvaluationTests {
         if let path = ProcessInfo.processInfo.environment["ORRA_CLEANUP_REPORT"] {
             try report.write(toFile: path, atomically: true, encoding: .utf8)
         }
-        // The setting promises under a second. The benchmark measured 0.49 and 0.56 s.
+        // The setting promises under a second. A Release build measured 0.60 and 0.69 s.
         for median in medians {
             #expect(median < 1.0)
         }

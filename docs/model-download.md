@@ -193,63 +193,66 @@ A new server, or any other network use, needs the maintainer's approval, see AGE
 
 ## The cleanup model
 
-Qwen3 4B Instruct 2507 in the 4 bit MLX build (mlx-community/Qwen3-4B-Instruct-2507-4bit,
-Apache-2.0), for "Clean up with a local model" in Settings > General. The pins are in
-`ModelManifest.qwen3Cleanup` in Orra/RewriteEngine.swift, and Orra/TextCleanup.swift
+Qwen3.5 4B in the 4 bit MLX build (mlx-community/Qwen3.5-4B-4bit, Apache-2.0), for
+"Clean up with a local model" in Settings > General. The pins are in
+`ModelManifest.qwen35Cleanup` in Orra/RewriteEngine.swift, and Orra/TextCleanup.swift
 drives the download from Settings. Everything above about servers, retries, ranges,
-hashes, staging and backups applies to it as well.
+hashes, staging and backups applies to it as well. It replaced Qwen3 4B Instruct 2507
+(mlx-community/Qwen3-4B-Instruct-2507-4bit) on 2026-10-11, before any release carried
+cleanup.
 
 When Orra goes online for it:
 
 - Only after the user turns cleanup on and agrees to the download in the dialog that
-  names its size, 2.27 GB, or chooses Download, Resume Download or Try Again under the
+  names its size, 3.05 GB, or chooses Download, Resume Download or Try Again under the
   switch while cleanup is on. Cancel Download keeps the bytes on disk and turns cleanup
   off again.
 - Never at launch, and never while cleanup is off. Launch only looks at the installed
   folder's file sizes. Loading uses local files only.
 
-Servers, at these commits. On 2026-10-10 each of the three served the five small files
-with the pinned SHA-256 values and answered a Range request on the weights with a 206
-whose 64 KiB matched the same bytes of the pinned file. On 2026-10-11 each served
-tokenizer.json with its pinned SHA-256, and the APIs of Hugging Face and ModelScope list
-the same size and SHA-256 for it. Hugging Face and ModelScope list the pinned SHA-256 of
-the weights in their APIs. The whole weights were not downloaded from each server.
+Servers, at these commits. On 2026-10-11 each of the three served the three small files
+and tokenizer.json with the pinned SHA-256 values and answered a Range request on the
+weights with a 206 whose 64 KiB matched the same bytes of the pinned file. The APIs of
+Hugging Face and ModelScope list the pinned sizes and SHA-256 values of all four files.
+The whole weights were not downloaded from each server.
 
 1. huggingface.co:
-   `https://huggingface.co/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b/<file>`
+   `https://huggingface.co/mlx-community/Qwen3.5-4B-4bit/resolve/0e7ffd5c629ef7719d4cbc04069232580bfa9d9c/<file>`
 2. modelscope.cn, a mirror in its mlx-community organization, whose weights come from
    cdn-lfs-cn-1.modelscope.cn:
-   `https://modelscope.cn/models/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/ec7ca96008a45bebdd03ad3d09d86f6e61a3e4af/<file>`
+   `https://modelscope.cn/models/mlx-community/Qwen3.5-4B-4bit/resolve/ab9c7a42fd31095a40634b3362317779dee9e7fa/<file>`
 3. hf-mirror.com, which hands the weights and tokenizer.json on to Hugging Face's own
    download servers:
-   `https://hf-mirror.com/mlx-community/Qwen3-4B-Instruct-2507-4bit/resolve/50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b/<file>`
+   `https://hf-mirror.com/mlx-community/Qwen3.5-4B-4bit/resolve/0e7ffd5c629ef7719d4cbc04069232580bfa9d9c/<file>`
 
-Hugging Face main was at 50d42775 on 2026-10-10. It changed only tokenizer_config.json
-after the upload in 7494131f. ModelScope's ec7ca960 has the same change.
+Hugging Face main was at 0e7ffd5c on 2026-10-11, last changed on 2026-03-02.
+ModelScope's master was at ab9c7a42, where only README.md differs.
 
-chat_template.jinja and model.safetensors.index.json are left out: Orra writes the chat
-prompt itself, and the weights are in one file. tokenizer.json, 11 MB, is for the
-tokenizer of swift-transformers. Like the small files it is fetched whole, without a Range
-request. Like the weights it is a large stored file, so huggingface.co and hf-mirror.com
-redirect it to Hugging Face's download servers (us.aws.cdn.hf.co on 2026-10-11), and
-modelscope.cn serves it itself. It holds the vocabulary and the merges, so vocab.json and
-merges.txt are left out.
+The model can also read images and video, but these weights hold the language model
+only, and Orra sends text only. chat_template.jinja, model.safetensors.index.json,
+vocab.json and the image and video processor files are left out: Orra writes the chat
+prompt itself, the weights are in one file, and tokenizer.json holds the vocabulary and
+the merges. tokenizer.json, 20 MB, is for the tokenizer of swift-transformers. Like the
+small files it is fetched whole, without a Range request. Like the weights it is a large
+stored file, so huggingface.co and hf-mirror.com redirect it to Hugging Face's download
+servers (us.aws.cdn.hf.co on 2026-10-11), and modelscope.cn serves it itself.
 
 | File | Bytes | SHA-256 |
 |---|---|---|
-| config.json | 938 | 574349e5a343236546fda55e4744a76e181f534182d7dc60ff1bad7e7a502849 |
-| generation_config.json | 238 | 835fffe355c9438e7a25be099b3fccaa98350b83451f9fd2d99512e74f1ade48 |
-| tokenizer_config.json | 5,440 | 4397cc477eb6d79715ccd2000accd6b3531928f30029665832fa1b255f24d2b9 |
-| tokenizer.json | 11,422,654 | aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4 |
-| model.safetensors | 2,263,022,417 | 2a73c6c248601ab904e035548abd8e6abb65ea27dcb5f342fb0a8910eb44173f |
+| config.json | 3,366 | f3efc81b2ea8d96a45301037d3ccccbcccdef44a961845c87f286aaddbc6eaaa |
+| tokenizer_config.json | 1,139 | e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182 |
+| tokenizer.json | 19,989,343 | 87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4 |
+| model.safetensors | 3,034,300,695 | 5fb9acd0246866381cf8c5c354c6db1019f6498eec4ccb4f5edcc71ffeacb2db |
 
-In all 2,274,451,687 bytes, shown as 2.27 GB. Only model.safetensors resumes with a Range
-request. A fresh download needs 2.77 GB of free space.
+In all 3,054,294,543 bytes, shown as 3.05 GB. Only model.safetensors resumes with a Range
+request. A fresh download needs 3.55 GB of free space.
 
 - Installed:
-  `~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3-4B-Instruct-2507-4bit-50d42775/`,
-  staged in `.download-Qwen3-4B-Instruct-2507-4bit-50d42775/` next to it. Both are left
-  out of Time Machine backups. There is no older copy to reuse.
+  `~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3.5-4B-4bit-0e7ffd5c/`,
+  staged in `.download-Qwen3.5-4B-4bit-0e7ffd5c/` next to it. Both are left out of Time
+  Machine backups. There is no older copy to reuse. Once it is installed, Orra removes
+  the folder of the Qwen3 4B Instruct cleanup model, Qwen3-4B-Instruct-2507-4bit-50d42775,
+  and its staging folder, which builds of the local-rewrite branch downloaded.
 - To remove it, turn cleanup off, quit Orra and delete that folder. The speech model's
   folder next to it stays.
 - The log lines of the download are in the model-download category, and the loading and

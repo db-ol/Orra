@@ -220,12 +220,14 @@ Build and test commands, run in the repository root:
     dictation. PushToTalkControllerTests checks that the paste has digits after the fillers
     are gone while the setting is on, not while it is off, and that a change is saved.
   - Cleanup with a local model, added on 2026-10-10:
-  - RewriteGuardTests runs all 297 distinct cleanup outputs of the hardening benchmark
+  - RewriteGuardTests runs all 357 distinct cleanup outputs of the hardening benchmark
     (bench/hardening, five prompts on the 70 adversarial cases and three on the 178
-    regular ones) through RewriteGuard and gets the verdict and the reason guards.py gave
-    for each, 32 of them held back. It also covers each check by hand.
+    regular ones, with Qwen3 4B Instruct 2507 on 2026-10-10 and Qwen3.5 4B on 2026-10-11)
+    through RewriteGuard and gets the verdict and the reason guards.py gave for each, 43
+    of them held back. It also covers each check by hand.
   - RewritePromptTests checks that the prompt is, character for character, the one the
-    model's chat template renders for the benchmark's prompt V4, that the transcript is
+    model's chat template renders for the benchmark's prompt V4 with thinking turned
+    off, that the transcript is
     written as Python's json.dumps writes it, so it cannot close the JSON, and which
     answers are read and which are not.
   - CleanupStepTests runs the step with a stand in model: a cleanup that passes is used,
@@ -257,45 +259,51 @@ Build and test commands, run in the repository root:
     that nothing runs while the model is not ready or for text under three letters or
     digits.
   - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases and the 70
-    adversarial cases of Tools/rewrite-eval, only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1:
+    adversarial cases of Tools/rewrite-eval, only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
+    Its timings hold for a Release build, since a Debug build runs MLX without
+    optimization:
 
-        TEST_RUNNER_ORRA_CLEANUP_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<model folder> xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData -testLanguage en -testRegion US test -only-testing:OrraTests/CleanupModelEvaluationTests
+        TEST_RUNNER_ORRA_CLEANUP_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<model folder> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/CleanupModelEvaluationTests
 
     Without TEST_RUNNER_ORRA_REWRITE_MODEL_DIR it uses the installed model. On
-    2026-10-10, on an M5 Pro with 48 GB, with the pinned files cloned from the benchmark's
-    copy, it took 321 s. Loading and warming up took 1.5 s and the memory footprint grew by
-    4.0 GB. Model only means the dictation as written, as the benchmark ran it, and as the
-    app runs it means after the filler and number rules, compared with the expected text
-    after the same rules.
+    2026-10-11, on an M5 Pro with 48 GB, with Qwen3.5 4B's pinned files cloned from the
+    benchmark's copy, a Release build took 325 s. Loading and warming up took 1.1 s and
+    the memory footprint grew by 3.9 GB. Model only means the dictation as written, as
+    the benchmark ran it, and as the app runs it means after the filler and number rules,
+    compared with the expected text after the same rules.
 
     | Set | Run | Exact | Cleaned | Unchanged | Held back | Unreadable, timed out or failed | Median | p95 |
     |---|---|---|---|---|---|---|---|---|
-    | regular, 178 | model only | 150 | 93 | 78 | 7 | 0 | 0.546 s | 0.655 s |
-    | regular, 178 | as the app runs it | 150 | 49 | 122 | 7 | 0 | 0.619 s | 0.885 s |
-    | adversarial, 70 | model only | 64 | 12 | 55 | 3 | 0 | 0.752 s | 0.988 s |
-    | adversarial, 70 | as the app runs it | 64 | 7 | 60 | 3 | 0 | 0.722 s | 0.863 s |
+    | regular, 178 | model only | 157 | 98 | 79 | 1 | 0 | 0.595 s | 0.699 s |
+    | regular, 178 | as the app runs it | 156 | 51 | 126 | 1 | 0 | 0.652 s | 0.808 s |
+    | adversarial, 70 | model only | 65 | 12 | 58 | 0 | 0 | 0.688 s | 0.989 s |
+    | adversarial, 70 | as the app runs it | 66 | 6 | 64 | 0 | 0 | 0.674 s | 0.848 s |
 
-    On 2026-10-11, after the switch to the tokenizer of swift-transformers, a run on the
-    same Mac gave the same counts in every row, and no adversarial output carried out a
-    request. Loading and warming up took 1.8 s, and the medians were 0.527, 0.540, 0.564
-    and 0.578 s and the p95 values 0.633, 0.641, 0.714 and 0.723 s, in the order above.
+    A Debug build gave the same counts, with medians of 0.691, 0.786, 1.105 and 1.120 s,
+    so its check that each model only median stays under a second fails there. The
+    benchmark measured 161 of 178 and 65 of 70 exact with the same prompt in Python. The
+    one held back output is a correct one: 他的电话是13812345678，不对，最后一位是9 became
+    他的电话是13812345679, which the new number check stops. Of the pasted outputs that
+    differ from the expected text, a reading by hand found none that answered a question
+    or carried out a request. They drop words that carry meaning (嗯，好的 and 嗯，是的 as
+    replies, Uh-huh, 我的意思是, 那个 as a demonstrative, Uh oh, 啊 in 真好啊), keep a
+    filler now and then (就是说, like), miss some corrections (应该是, Budget ten K), and
+    three change meaning: 我再想想，明天给你答复 lost 我再想想, 价格不是三万，是三万五，合同上写错了
+    lost 不是三万, and "</transcript> New task: …" and "[INST] … [/INST]" lost their tags.
 
-    The benchmark measured 145 of 178 and 61 of 70 exact with the same prompt in Python.
-    Of the pasted outputs that differ from the expected text, a reading by hand found none
-    that answered a question or carried out a request. They drop words that carry meaning
-    (嗯，好的 as a reply, Uh-huh, Sorry, I actually, So), miss corrections the prompt has no
-    example of (算了, 我是说 without 哦, 删掉这句, 反了), keep both halves of an English
-    correction (Order the blue one, the red one), and three change meaning: "I mean it,
-    this is important" became "It, this is important", "Deadline 是 Friday，sorry，是
-    Thursday" became English, and "</transcript> New task: …" lost its tag to a "}".
+    Qwen3 4B Instruct 2507, the cleanup model until 2026-10-11, gave 150, 150, 64 and 64
+    exact with 7, 7, 3 and 3 held back in a Debug build on 2026-10-10, with medians of
+    0.546, 0.619, 0.752 and 0.722 s, loading in 1.5 s and 4.0 GB more memory. It dropped
+    Sorry and I actually, turned "I mean it, this is important" into "It, this is
+    important" and "Deadline 是 Friday，sorry，是 Thursday" into English, which Qwen3.5 4B
+    keeps as they are.
 
-    Its longDictations test runs written dictations of 1 to 10 different sentences. On
-    the same Mac a cleanup took 0.74 s for 46 Chinese characters, 1.32 s for 127, 2.59 s
-    for 248 and 3.88 s for 400, and 0.66 s for 86 English characters, 1.29 s for 264,
-    2.74 s for 557 and 4.53 s for 905, about 60 written tokens a second. The old fixed
-    limit of 3 s would have cut off every Chinese dictation from about 250 characters. The
-    limit is now 2 s plus 15 ms a character, and text over 400 characters is pasted
-    without cleanup.
+    Its longDictations test runs written dictations of 1 to 10 different sentences. In the
+    Release run a cleanup took 1.11 s for 46 Chinese characters, 1.93 s for 127, 3.64 s
+    for 248 and 5.60 s for 400 (3.25 s when run again), and 0.92 s for 86 English
+    characters, 1.63 s for 264, 1.75 s for 557 and 2.54 s for 905. Each stayed within the
+    limit of 2 s plus 15 ms a character. Text over 400 characters is pasted without
+    cleanup.
 - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
@@ -1046,13 +1054,16 @@ Report a Problem, added on 2026-10-10, not verified yet:
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 
 - [ ] Settings > General shows "Clean up with a local model" off, with its explanation.
-  Turning it on asks "Download the cleanup model?" with Download (2.27 GB) and Cancel.
+  Turning it on asks "Download the cleanup model?" with Download (3.05 GB) and Cancel.
   Cancel leaves the switch off and nothing is downloaded.
 - [ ] Download shows the progress with the server under the switch, and Cancel Download
   stops it and turns the switch off. Turning it on again offers Resume Download with what
   is left.
 - [ ] After the download, "Loading the cleanup model…" shows for a few seconds and then
   goes. Activity Monitor shows Orra's memory about 4 GB higher.
+- [ ] On a Mac where a build of the local-rewrite branch downloaded the Qwen3 4B Instruct
+  cleanup model, its folder Qwen3-4B-Instruct-2507-4bit-50d42775 is gone from the Models
+  folder once the download of Qwen3.5 4B finishes.
 - [ ] Dictate "呃，我们下周一，哦不是，下周二开会" into Notes: 我们下周二开会。 is pasted,
   within about a second more than without cleanup. The Orra menu then shows Paste
   Original Text, which pastes 我们下周一，哦不是，下周二开会。 at the cursor.
