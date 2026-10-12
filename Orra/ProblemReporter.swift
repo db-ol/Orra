@@ -203,6 +203,7 @@ final class ProblemReporter {
         openAtLogin: OpenAtLogin,
         dockIcon: DockIcon,
         learning: CorrectionLearning,
+        cleanup: TextCleanup,
         updater: AppUpdater
     ) -> ProblemReporter {
         ProblemReporter(facts: {
@@ -243,8 +244,10 @@ final class ProblemReporter {
                     .init(name: "Open at login", on: openAtLogin.isOn),
                     .init(name: "Show in Dock", on: dockIcon.showsInDock),
                     .init(name: "Learn from corrections", on: learning.isOn),
+                    .init(name: "Clean up with a local model", on: cleanup.isOn),
                     .init(name: "Check for updates automatically", on: updater.checksAutomatically),
                 ],
+                cleanupModelState: describe(cleanup.models.state, cleanup.engineState),
                 vocabularyCount: pushToTalk.vocabulary.count,
                 learnedPairCount: learning.store.entries.count
             )
@@ -265,6 +268,18 @@ final class ProblemReporter {
             case .ready: return "installed, loaded"
             case .unavailable(let problem): return "installed, failed to load: \(problem)"
             }
+        }
+    }
+
+    private static func describe(_ installer: ModelInstaller.State, _ engine: TextCleanup.EngineState) -> String {
+        guard case .installed = installer else {
+            return describe(installer, .notLoaded)
+        }
+        switch engine {
+        case .unloaded: return "installed, not loaded"
+        case .loading: return "installed, loading"
+        case .ready: return "installed, loaded"
+        case .failed: return "installed, failed to load"
         }
     }
 

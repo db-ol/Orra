@@ -234,13 +234,13 @@ struct ModelDownloadTests {
     }
 
     @Test func droppedConnectionPausesAndResumes() async throws {
-        // A short pause between pieces lets the pieces before the drop reach the file, so
-        // there are bytes on disk when the connection breaks.
-        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(dropAfter: 1_500_000, chunkDelay: .milliseconds(1))])
-        defer { servers.close() }
         let temporary = TemporaryModelFolders()
         defer { temporary.remove() }
         let weights = temporary.staging.appendingPathComponent("model.safetensors")
+        // The connection breaks only once bytes reached the file, which on a busy Mac can
+        // take seconds.
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(dropAfter: 1_500_000, dropWhen: { (ModelDisk.size(weights) ?? 0) > 0 })])
+        defer { servers.close() }
         // Read during the pause, after the drop and before the retry touches the file.
         let atPause = Mutex<Int64?>(nil)
         let outcome = await download(servers, temporary) {

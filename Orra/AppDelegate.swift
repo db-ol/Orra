@@ -4,9 +4,12 @@ import AppKit
 /// DockIcon. The policy is set here at launch rather than through LSUIElement, so it can
 /// follow the setting.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let pushToTalk = PushToTalkController(
+    /// Cleanup with the local text model, off until the user turns it on.
+    let cleanup = TextCleanup.live()
+    lazy var pushToTalk = PushToTalkController(
         capture: .live(),
         transcription: .qwen3(),
+        cleanup: cleanup.model,
         insert: TextInserter.live().insert,
         talkKey: TalkKeyPreference.load(),
         saveTalkKey: { TalkKeyPreference.save($0) },
@@ -51,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openAtLogin: openAtLogin,
         dockIcon: dockIcon,
         learning: learning,
+        cleanup: cleanup,
         updater: updater
     ))
     lazy var learnedNotice = LearnedNoticePanel(
@@ -124,7 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 feedback.handle(cue)
             }
         }
-        pushToTalk.onPasted = { [learning] text, app in learning.pasted(text, in: app) }
+        pushToTalk.onPasted = { [learning] text, app, beforeCleanup in learning.pasted(text, in: app, beforeCleanup: beforeCleanup) }
+        pushToTalk.onPasteOriginal = { [learning] cleaned in learning.pastedOriginal(replacing: cleaned) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         learning.onSuggest = { [learnedNotice] suggestion in learnedNotice.suggest(suggestion) }
         pushToTalk.start()
@@ -134,11 +139,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
-        Task { [models, pushToTalk, welcome] in
+        Task { [models, pushToTalk, welcome, cleanup] in
             await models.prepare()
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()
             }
+            // Loads the cleanup model when cleanup is on and the model is in place.
+            await cleanup.start()
         }
     }
 }

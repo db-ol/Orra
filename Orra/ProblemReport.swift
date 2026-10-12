@@ -28,6 +28,8 @@ nonisolated enum ProblemReport {
         var talkKey: String
         var microphone: String
         var settings: [Setting]
+        /// The cleanup model's download and loading, as the speech model's state reads.
+        var cleanupModelState: String
         var vocabularyCount: Int
         var learnedPairCount: Int
     }
@@ -144,6 +146,7 @@ nonisolated enum ProblemReport {
         for setting in facts.settings {
             lines.append("\(setting.name): \(setting.on ? "on" : "off")")
         }
+        lines.append("Cleanup model: \(facts.cleanupModelState)")
         lines.append("Vocabulary: \(facts.vocabularyCount) words")
         lines.append("Learned word pairs: \(facts.learnedPairCount)")
         lines.append("")
