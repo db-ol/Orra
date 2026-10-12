@@ -99,22 +99,6 @@
         }
       }
     },
-    "%lld of %lld words" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld words"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已有 %1$lld 个，最多 %2$lld 个"
-          }
-        }
-      }
-    },
     "%lld words" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1842,16 +1826,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音在这台 Mac 上转成文字，可选的整理也在这台 Mac 上完成。Orra 只在两种情况下联网：你要求下载语音模型或整理模型时，以及你允许后检查更新时。"
-          }
-        }
-      }
-    },
-    "Speech is turned into text on this Mac. Orra goes online only to download the speech model when you ask it to, and to check for updates when you allow it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "语音在这台 Mac 上转成文字。Orra 只在两种情况下联网：你要求下载语音模型时，以及你允许后检查更新时。"
           }
         }
       }
