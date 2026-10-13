@@ -70,14 +70,13 @@ struct CleanupStepTests {
         #expect(result.outcome == .timedOut)
     }
 
-    /// A model that ignores cancellation and answers late is still not used. It answers
-    /// only once the timeout has cancelled it, so the test does not depend on how long a
-    /// busy Mac takes to run the timer.
+    /// A model that ignores cancellation and answers late is still not used. It answers only
+    /// once the timeout cancelled it, so a busy Mac cannot let it finish first.
     @Test(.timeLimit(.minutes(1)))
     func aLateAnswerIsNotUsed() async {
         let result = await CleanupStep.run("呃，我们下周二开会。", timeout: .milliseconds(50), complete: { _ in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(5))
+                usleep(1_000)
             }
             return #"{"cleaned": "我们下周二开会。"}"#
         })

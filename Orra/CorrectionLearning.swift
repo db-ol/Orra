@@ -123,7 +123,18 @@ final class CorrectionWatcher {
 
     /// Starts following a paste. The oldest watch ends and reports when five are running.
     /// `onCorrection` gets each finding and the earlier one it replaces, if any.
-    func watch(pasted: String, in pid: pid_t, onCorrection: @escaping (Finding, Finding?) -> Void) {
+    ///
+    /// `replacements` are the words Orra replaced in the pasted text. A fix that touches
+    /// one is reported in terms of what the speech model wrote, see
+    /// `CorrectionFinder.translate(_:pasted:replacements:)`, and `onRevert` gets the pairs
+    /// of a replacement the user put back.
+    func watch(
+        pasted: String,
+        in pid: pid_t,
+        replacements: [Replacement] = [],
+        onCorrection: @escaping (Finding, Finding?) -> Void,
+        onRevert: @escaping ([Correction]) -> Void = { _ in }
+    ) {
         if watches.count >= Self.maximumWatches {
             watches.removeFirst().control.finish = true
         }
@@ -161,16 +172,31 @@ final class CorrectionWatcher {
             // over the same text replaces the earlier one, so going back and forth over a
             // word leaves one pair.
             var reported: [CorrectionFinder.Located] = []
+            let characters = Array(pasted)
+            @MainActor func translated(_ item: CorrectionFinder.Located) -> CorrectionFinder.Translation {
+                replacements.isEmpty ? .finding(item.finding) : CorrectionFinder.translate(item, pasted: characters, replacements: replacements)
+            }
             @MainActor func report() {
                 let waiting = found.filter { item in
                     !reported.contains { $0.finding == item.finding && $0.span.overlaps(item.span) }
                 }
                 // Offered words first. The notice shows them in turn.
                 for item in waiting.filter({ !$0.finding.isWord }) + waiting.filter(\.finding.isWord) {
-                    let earlier = reported.last { $0.span.overlaps(item.span) }?.finding
+                    let earlier = reported.last { $0.span.overlaps(item.span) }
                     reported.removeAll { $0.span.overlaps(item.span) }
                     reported.append(item)
-                    onCorrection(item.finding, earlier)
+                    switch translated(item) {
+                    case .finding(let finding):
+                        var replaced: Finding?
+                        if let earlier, case .finding(let before) = translated(earlier) {
+                            replaced = before
+                        }
+                        onCorrection(finding, replaced)
+                    case .reverted(let pairs):
+                        onRevert(pairs)
+                    case .dropped:
+                        break
+                    }
                 }
             }
             var quiet = 0
@@ -237,8 +263,8 @@ final class CorrectionWatcher {
 /// the next fix learns it again with the notice. A word the user undid is never learned
 /// again. After a fix of one Chinese character it
 /// adds nothing on its own, and tells `onSuggest`, which offers the guessed word for the
-/// user to add. The text itself is never changed: the vocabulary only helps the model hear
-/// the word.
+/// user to add. The kept pairs also replace what the speech model wrote in later
+/// dictations, see WordReplacement, while learning is on.
 @Observable
 final class CorrectionLearning {
     var isOn: Bool {
@@ -340,11 +366,19 @@ final class CorrectionLearning {
     /// Called after each paste. Does nothing while learning is off. When the cleanup model
     /// changed the dictation, `beforeCleanup` is the text before it, and only a fix of a word
     /// in that text is learned. A fix of what the model wrote is no misheard word.
-    func pasted(_ text: String, in pid: pid_t, beforeCleanup: String? = nil) {
+    ///
+    /// `replacements` are the words Orra put in, placed in the text before the cleanup. A fix
+    /// of one is learned with the spelling the speech model wrote, so 克劳德 replaced by Claude
+    /// and fixed to Cloud keeps 克劳德 to Cloud, and putting back 克劳德 forgets the pair that
+    /// replaced it. After a cleanup the replaced words cannot be placed in the paste, so a
+    /// fix that touches one is not learned.
+    func pasted(_ text: String, in pid: pid_t, beforeCleanup: String? = nil, replacements: [Replacement] = []) {
         guard isOn else { return }
-        watcher.watch(pasted: text, in: pid) { [weak self] finding, earlier in
-            if let beforeCleanup, !beforeCleanup.contains(finding.correction.heard) {
-                return
+        watcher.watch(pasted: text, in: pid, replacements: beforeCleanup == nil ? replacements : []) { [weak self] finding, earlier in
+            if let beforeCleanup {
+                let heard = finding.correction.heard
+                guard beforeCleanup.contains(heard),
+                      !replacements.contains(where: { heard.contains($0.corrected) || $0.corrected.contains(heard) }) else { return }
             }
             switch finding {
             case .word(let correction):
@@ -352,7 +386,26 @@ final class CorrectionLearning {
             case .suggestion(let suggestion):
                 self?.suggest(suggestion, replacing: earlier?.correction)
             }
+        } onRevert: { [weak self] pairs in
+            self?.reverted(pairs)
         }
+    }
+
+    /// The kept pairs whose words replace what the speech model wrote, see WordReplacement:
+    /// none while learning is off, so turning it off also stops the replacements.
+    var replacementPairs: [Correction] {
+        isOn ? store.acceptedPairs : []
+    }
+
+    /// The user put back what the speech model wrote in place of a replaced word: the pairs
+    /// that replaced it are forgotten, so they replace nothing until the user fixes the word
+    /// again. The word stays in the vocabulary.
+    func reverted(_ pairs: [Correction]) {
+        guard !pairs.isEmpty else { return }
+        for pair in pairs {
+            store.forget(pair)
+        }
+        saveStore(store)
     }
 
     /// Paste Original Text replaced a cleaned paste: its watch ends, so putting back the

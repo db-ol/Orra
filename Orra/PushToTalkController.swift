@@ -140,11 +140,15 @@ final class PushToTalkController {
     private(set) var originalText: String?
     /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
     @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
-    /// Told after each paste, with the text, the app it went into and the text before the
-    /// cleanup model changed it, if it did, so Orra can learn from a correction. Never told
-    /// about a translated paste, since a fix of a translation is no misheard word.
-    /// AppDelegate sets it.
-    @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t, _ beforeCleanup: String?) -> Void = { _, _, _ in }
+    /// Told after each paste, with the text, the app it went into, the text before the
+    /// cleanup model changed it, if it did, and the words Orra replaced, placed in the text
+    /// before the cleanup, so Orra can learn from a correction. Never told about a
+    /// translated paste, since a fix of a translation is no misheard word. AppDelegate sets
+    /// it.
+    @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t, _ beforeCleanup: String?, _ replacements: [Replacement]) -> Void = { _, _, _, _ in }
+    /// The kept word pairs whose words replace what the speech model wrote, see
+    /// WordReplacement. Read once per dictation. AppDelegate sets it.
+    @ObservationIgnored var replacementPairs: () -> [Correction] = { [] }
     /// Told when Paste Original Text pastes over a cleaned paste, with the cleaned text, so
     /// learning stops following it.
     @ObservationIgnored var onPasteOriginal: (_ cleaned: String) -> Void = { _ in }
@@ -905,6 +909,14 @@ final class PushToTalkController {
             if writesNumbersAsDigits {
                 text = NumberRules.writingNumbersAsDigits(in: text)
             }
+            // The user's words go in after the rule steps, which learning saw the heard
+            // spellings after, so no rule rewrites a user's word, and before the cleanup
+            // model, so it sees them.
+            var replacements: [Replacement] = []
+            let pairs = replacementPairs()
+            if !pairs.isEmpty, !text.isEmpty {
+                (text, replacements) = await Self.replacingWords(in: text, pairs: pairs, vocabulary: vocabulary.map(\.text))
+            }
             guard !text.isEmpty else {
                 holdMessage = String(localized: "No speech was recognized")
                 logger.notice("No speech recognized in \(recording.duration, privacy: .public) s of audio")
@@ -942,7 +954,7 @@ final class PushToTalkController {
                 // Orra never learns from a translated paste: a fix of the translation is no
                 // misheard word.
                 if !isTranslation, let app = target ?? frontmostApp() {
-                    onPasted(text, app, originalText)
+                    onPasted(text, app, originalText, replacements)
                 }
             case .skippedPasswordField:
                 notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
@@ -996,6 +1008,13 @@ final class PushToTalkController {
             notice = String(localized: "This dictation was pasted without translation.")
         }
         return result
+    }
+
+    /// Off the main actor, since the first use reads the word lists, see OrdinaryWords.
+    @concurrent
+    nonisolated private static func replacingWords(in text: String, pairs: [Correction], vocabulary: [String]) async -> (String, [Replacement]) {
+        let result = WordReplacement.apply(to: text, pairs: pairs, vocabulary: vocabulary, ordinary: .system)
+        return (result.text, result.replacements)
     }
 
     /// Resampling and the silence check run off the main actor, because a long recording
