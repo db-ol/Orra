@@ -227,6 +227,49 @@ layouts other than ABC.
 Not done yet: key combinations and mouse buttons as talk keys, and moving the tap off the
 main thread.
 
+On 2026-10-13 the maintainer asked for a second key for translation, with a default the
+user can change. Implemented in `Orra/TalkKey.swift`, `Orra/TalkKeyDetector.swift`,
+`Orra/HotkeyTap.swift`, `Orra/PushToTalkController.swift` and `Orra/SettingsView.swift`:
+
+- The translation key is right Option by default, or right Command when the talk key is
+  right Option. `TranslationKeyPreference` saves it under `translationKey` once the user
+  picks it, or once picking the talk key moved it. Until then it follows the talk key by
+  that rule. A saved key equal to the talk key, which Orra never writes, loads as the
+  default.
+- The two keys are never the same. Picking for one key the key the other one has swaps
+  them, saves both, and a note under the recorder says "The two keys swapped. The talk
+  key is now right Option and the translation key right Control." (两个键已互换。现在说话键是右侧
+  Option 键，翻译键是右侧 Control 键。) VoiceOver reads the note. It goes when the user records a
+  key again. The welcome window's recorder records the talk key, so it swaps the same way.
+- The tap watches the translation key only while translation is on. The detector and the
+  tap still take a set of keys, which then holds two.
+- The translation key waits `TalkKeyDetector.leftKeyDelay` (0.3 seconds) before it
+  records, whichever key it is, by the mechanism of the left hand keys: the detector takes
+  a set of delayed keys, and a press of one is `arming` until the timer fires. Any other
+  key, modifier or click during the wait makes the press a shortcut that records nothing,
+  plays no cue and passes every event through, so Option E and the other characters right
+  Option types, and shortcuts such as Option Command Escape, keep working. A hold longer
+  than the wait that then meets another key is cancelled like any hold, and the key passes
+  through. The talk key keeps its own rule: a right hand key or fn starts at once.
+- Hands free works the same for both keys, under the one switch "Double press for hands
+  free". A double press of the translation key records hands free, the indicator says
+  "Press right Option to finish", and the next press of that key alone pastes the
+  translation. As for a left hand key, its tap never recorded, so the double press starts
+  the recording at the second release. A press of the other key during a hands free
+  dictation is ignored, as any other modifier.
+- A tap of the talk key followed within the double press window by the translation key
+  drops the tap's recording, and the translation key records after its own wait.
+- Settings, Translation has a recorder field for the translation key like the talk key's.
+  The notes about a press that cannot be the key name the translation key while it is
+  recorded. Recording one key stops a recording of the other.
+- The menu's Talk Key submenu shows the translation key with Change Translation Key…,
+  and the menu says "Hold right Option to translate" under the hold hint, while
+  translation is on.
+
+Not verified on hardware yet: whether 0.3 seconds feels right on a right hand key, how
+right Option behaves with input methods that use it, and whether a double press of right
+Command or right Option fires a Siri or Dictation shortcut set to that key.
+
 ## What Orra needs
 
 - Press and release, not just press. `PushToTalkStateMachine` is driven by both.
