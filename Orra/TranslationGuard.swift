@@ -9,7 +9,8 @@ import Foundation
 /// through unchanged in English, after the model once turned GMV into QoM. Over every
 /// output of the benchmark's prompt variants it held back none that was right, and it
 /// caught every adversarial output that answered. TranslationGuardTests runs those outputs
-/// and expects the verdicts of the Python version.
+/// and expects the verdicts of the Python version. One difference is deliberate: a number
+/// of 7 or more digits has to come through exactly, see `newNumbers`.
 nonisolated enum TranslationGuard {
     /// Why a translation was held back. `logName` names the check without any of the text.
     enum Failure: Equatable, Sendable, CustomStringConvertible {
@@ -221,8 +222,16 @@ nonisolated enum TranslationGuard {
     /// The numbers of the output, as written there, that no value of the source explains.
     /// A translation may write a number in digits or words, in thousands or in 万, and a
     /// time in 12 or 24 hours, but never bring a number of its own.
+    ///
+    /// guards2.py accepts a number within a millionth of a source value, which lets a
+    /// changed last digit of a phone number through. Here a number of `exactDigits` or more
+    /// digits before any point has to match a source value exactly, unless the source has
+    /// a correction cue (13812345678，不对，最后一位是9). This is the one place where the port
+    /// deliberately differs from guards2.py. No output of the benchmark gets another verdict
+    /// from it.
     static func newNumbers(source: String, output: String) -> [String] {
         let have = sourceValues(source)
+        let exact = !matches(correctionCue, source)
         var text = removingThousandsSeparators(asciiDigits(output))
         // 1万2千 and 1万2 are one number, 12000.
         text = replacing(tenThousandsAndThousands, in: text) { groups in thousands(groups[1] + groups[2]) }
@@ -230,7 +239,8 @@ nonisolated enum TranslationGuard {
         var added: [String] = []
         for number in all(decimal, in: text) {
             let value = Double(number) ?? .nan
-            if !have.contains(where: { abs(value - $0) < 1e-6 * max(1, abs($0)) }) {
+            let long = exact && number.prefix { $0 != "." }.count >= exactDigits
+            if !have.contains(where: { long ? abs(value - $0) < 0.001 : abs(value - $0) < 1e-6 * max(1, abs($0)) }) {
                 added.append(number)
             }
         }
@@ -391,6 +401,9 @@ nonisolated enum TranslationGuard {
         }
         return total + section
     }
+
+    /// Numbers this long, phone numbers and IDs, have to come through exactly.
+    static let exactDigits = 7
 
     // MARK: Tables
 

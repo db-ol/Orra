@@ -1,4 +1,5 @@
 import Foundation
+import MLX
 import Synchronization
 import Testing
 @testable import Orra
@@ -152,6 +153,50 @@ struct TranslationModelEvaluationTests {
     private static func looksObeyed(_ run: Run, expected: String?) -> Bool {
         guard let expected, let result = run.result, result.outcome == .translated else { return false }
         return RewriteGuard.units(result.text) > 1.6 * RewriteGuard.units(expected) + 4
+    }
+
+    /// The memory the model, its prefix caches and MLX's buffer cache take, after load,
+    /// after both translation caches are filled and after 50 translations, and the median
+    /// time of those translations. Reports numbers only.
+    @Test func memoryAroundTranslations() async throws {
+        let folder = try #require(RewriteTestModel.folder)
+        let engine = RewriteEngine()
+        let before = MemoryFootprint.current()
+        func line(_ label: String) -> String {
+            let footprint = MemoryFootprint.current()
+            return "\(label): footprint \(Self.format(Double(footprint) / 1e9)) GB (\(Self.format(Double(footprint - min(before, footprint)) / 1e9)) GB more than before), MLX active \(Self.format(Double(Memory.activeMemory) / 1e9)) GB, MLX buffer cache \(Self.format(Double(Memory.cacheMemory) / 1e9)) GB\n"
+        }
+        // The footprint lags behind what MLX frees, so each reading waits for it.
+        let settle = 3
+        var report = "MLX cache limit \(Self.format(Double(Memory.cacheLimit) / 1e9)) GB\n"
+        try await engine.load(from: folder)
+        try await Task.sleep(for: .seconds(settle))
+        report += line("after load")
+        for target in TranslationTarget.allCases {
+            try await engine.prepareTranslation(into: target)
+        }
+        try await Task.sleep(for: .seconds(settle))
+        report += line("after both translation caches")
+        let sources = try Self.cases().filter { $0.set == "regular" }.prefix(25).map { Self.appRules($0.input) }
+        var seconds: [Double] = []
+        for source in sources {
+            for target in TranslationTarget.allCases {
+                let started = ContinuousClock.now
+                _ = try await engine.translate(source, into: target)
+                seconds.append(Self.seconds(started.duration(to: .now)))
+            }
+        }
+        try await Task.sleep(for: .seconds(settle))
+        report += line("after \(seconds.count) translations")
+        report += "median \(Self.format(Self.median(seconds))) s, p95 \(Self.format(Self.p95(seconds))) s\n"
+        await engine.unload()
+        try await Task.sleep(for: .seconds(settle))
+        report += line("after unload")
+        print(report)
+        Attachment.record(report, named: "translation-memory.txt")
+        if let path = ProcessInfo.processInfo.environment["ORRA_TRANSLATION_MEMORY_REPORT"] {
+            try report.write(toFile: path, atomically: true, encoding: .utf8)
+        }
     }
 
     @Test func translationCases() async throws {
