@@ -136,12 +136,28 @@ nonisolated enum TranslationStep {
 /// pass fakes.
 struct TranslationModel {
     /// Whether translation is on and the model is loaded, so a translation can start at
-    /// once.
+    /// once. False while the model is unloaded after a while without a dictation.
     var isReady: () -> Bool
+    /// Whether the model can translate now, after waiting a bounded time for a load the
+    /// press of the key started, see TextCleanup.waitUntilLoadedForTranslation.
+    var waitUntilLoaded: () async -> Bool
     /// Which way to translate, as the user set it.
     var direction: () -> TranslationDirection
     /// The model's answer for a transcript and a target, see RewriteEngine.translate.
     var complete: @Sendable (String, TranslationTarget) async throws -> String
+
+    /// Without `waitUntilLoaded`, nothing is waited for and `isReady` decides.
+    init(
+        isReady: @escaping () -> Bool,
+        waitUntilLoaded: (() async -> Bool)? = nil,
+        direction: @escaping () -> TranslationDirection,
+        complete: @escaping @Sendable (String, TranslationTarget) async throws -> String
+    ) {
+        self.isReady = isReady
+        self.waitUntilLoaded = waitUntilLoaded ?? { isReady() }
+        self.direction = direction
+        self.complete = complete
+    }
 
     /// No translation, for tests and previews.
     static let off = TranslationModel(isReady: { false }, direction: { .automatic }, complete: { _, _ in throw RewriteError.notLoaded })

@@ -45,7 +45,8 @@ nonisolated extension ModelFolders {
 
 /// Owns the cleanup model, which also translates. An actor, so loading and generating run
 /// off the main actor and one cleanup or translation runs at a time. Loaded while cleanup
-/// or translation is on, unloaded when both are off, see TextCleanup.
+/// or translation is on and the user dictates, unloaded when both are off or nobody
+/// dictated for a while, see TextCleanup.
 ///
 /// Written against mlx-swift-lm 3.31.4.
 actor RewriteEngine {
@@ -113,14 +114,16 @@ actor RewriteEngine {
         Logger.rewrite.notice("Cleanup model loaded and warmed up in \(started.duration(to: .now), privacy: .public)")
     }
 
-    /// Drops the model, its prefix cache and the GPU buffers MLX keeps for reuse.
+    /// Drops the model, its prefix cache and the GPU buffers MLX keeps for reuse, and asks
+    /// malloc to return the pages it holds free, so the memory goes back to the system.
     func unload() {
         guard context != nil else { return }
         prefix = nil
         translationPrefixes = [:]
         context = nil
         Memory.clearCache()
-        Logger.rewrite.notice("Cleanup model unloaded")
+        let returned = malloc_zone_pressure_relief(nil, 0)
+        Logger.rewrite.notice("Cleanup model unloaded, malloc returned \(returned, privacy: .public) bytes")
     }
 
     /// Runs the cleanup prompt on a transcript. Greedy, so the same text always gets the
@@ -248,13 +251,18 @@ nonisolated enum RewriteError: Error, Equatable {
 
 /// What PushToTalkController needs from the cleanup model. Closures, so tests pass fakes.
 struct CleanupModel {
-    /// Whether cleanup is on and the model is loaded, so a cleanup can start at once.
-    var isReady: () -> Bool
+    /// Whether the model can clean up a transcript now, after waiting a bounded time for a
+    /// load under way, see TextCleanup.waitUntilLoaded.
+    var waitUntilLoaded: () async -> Bool
+    /// The talk key went down, see TextCleanup.dictationStarted.
+    var dictationStarted: () -> Void = {}
+    /// The dictation is over, see TextCleanup.dictationEnded.
+    var dictationEnded: () -> Void = {}
     /// The model's answer for a transcript, see RewriteEngine.cleanUp.
     var complete: @Sendable (String) async throws -> String
 
     /// No cleanup, for tests and previews.
-    static let off = CleanupModel(isReady: { false }, complete: { _ in throw RewriteError.notLoaded })
+    static let off = CleanupModel(waitUntilLoaded: { false }, complete: { _ in throw RewriteError.notLoaded })
 }
 
 /// The cleanup step after the rule steps: runs the model, reads its answer and checks it.

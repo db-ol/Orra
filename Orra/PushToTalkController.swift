@@ -648,6 +648,9 @@ final class PushToTalkController {
                 handle(.cancelled)
                 return
             }
+            // Loads the model when it was unloaded while idle, so it loads while the user
+            // speaks, for cleanup and for translation.
+            cleanup.dictationStarted()
             startRecording(cueDelay: transition == .startedHandsFree ? .zero : listeningCueDelay)
         case .awaitingSecondPress:
             // The recording goes on until the second press or the end of the window.
@@ -692,9 +695,11 @@ final class PushToTalkController {
                 }
             }
             endCue(holdMessage ?? problem)
+            cleanup.dictationEnded()
         case .finished:
             endUserActivity()
             endCue(holdMessage ?? problem ?? notice)
+            cleanup.dictationEnded()
         }
     }
 
@@ -923,13 +928,14 @@ final class PushToTalkController {
                 return
             }
             // The rule steps come first, so the model sees their result, and any problem
-            // with the model leaves exactly that text.
+            // with the model leaves exactly that text. A model that the press of the key
+            // started to load is waited for, a bounded time.
             let ruled = text
             let translated = await translate(text, translating)
             if let translated {
                 // In place of the cleanup step, since the translation prompt cleans up too.
                 text = translated.text
-            } else if cleanup.isReady(), CleanupStep.isWorthCleaning(text) {
+            } else if CleanupStep.isWorthCleaning(text), await cleanup.waitUntilLoaded() {
                 text = await CleanupStep.run(text, complete: cleanup.complete).text
             }
             let isTranslation = translated?.isTranslation == true
@@ -984,14 +990,15 @@ final class PushToTalkController {
     }
 
     /// The translation of a dictation of the translation key, or nil when the translation
-    /// step did not run: not a dictation of the translation key, the model not ready, the
-    /// text too long, or nothing in it to translate, such as digits only. The step's result
+    /// step did not run: not a dictation of the translation key, the model not ready, also
+    /// after a bounded wait for a load the press of the key started, the text too long, or
+    /// nothing in it to translate, such as digits only. The step's result
     /// holds the text without translation whenever the translation cannot be used. Every
     /// case that pastes the text untranslated, other than one with nothing to translate or
     /// already in the target language, leaves a notice that says so.
     private func translate(_ text: String, _ direction: TranslationDirection?) async -> TranslationStep.Result? {
         guard let direction else { return nil }
-        guard translation.isReady() else {
+        guard await translation.waitUntilLoaded() else {
             notice = String(localized: "The local model is not ready, so the text was pasted without translation.")
             return nil
         }
@@ -1000,7 +1007,9 @@ final class PushToTalkController {
             notice = String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation.")
             return nil
         }
-        let result = await TranslationStep.run(text, into: target, cleansUp: cleanup.isReady(), complete: translation.complete)
+        // The model is loaded by now, so this does not wait.
+        let cleansUp = await cleanup.waitUntilLoaded()
+        let result = await TranslationStep.run(text, into: target, cleansUp: cleansUp, complete: translation.complete)
         switch result.outcome {
         case .translated, .unchanged:
             break
