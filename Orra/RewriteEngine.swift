@@ -253,10 +253,11 @@ nonisolated enum CleanupStep {
     @concurrent
     static func run(_ text: String, timeout: Duration? = nil, complete: @escaping @Sendable (String) async throws -> String) async -> (text: String, outcome: Outcome) {
         let started = ContinuousClock.now
+        let limit = timeout ?? Self.timeout(for: text)
         let work = Task { try await complete(text) }
         let timer = Task {
             do {
-                try await Task.sleep(for: timeout ?? Self.timeout(for: text))
+                try await Task.sleep(for: limit)
             } catch {
                 return false
             }
@@ -265,7 +266,9 @@ nonisolated enum CleanupStep {
         }
         let result = await work.result
         timer.cancel()
-        let timedOut = await timer.value
+        // On a busy Mac the timer can start late, so an answer that came after the limit
+        // counts as timed out even if the timer never fired.
+        let timedOut = await timer.value || started.duration(to: .now) > limit
         let outcome: Outcome
         var cleaned = text
         if timedOut {
