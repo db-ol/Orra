@@ -59,7 +59,8 @@ actor Qwen3Engine {
     private func run(_ model: Qwen3ASRModel, on samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) -> String {
         let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
         // No language hint by default: docs/asr-baseline.md shows that a fixed hint hurts
-        // mixed Chinese and English. The token budget grows with the length of the audio.
+        // mixed Chinese and English. LanguageGuard asks for one only when the model chose
+        // a language other than these two. The token budget grows with the length of the audio.
         // Use the options overload on purpose. The shorter overload bans any repeated
         // three token sequence once audio passes 15 seconds, which changes repeated
         // numbers and words. Loops are cut by TranscriptGuard and the token budget instead.

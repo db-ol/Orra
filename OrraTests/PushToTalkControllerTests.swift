@@ -1182,6 +1182,16 @@ struct PushToTalkControllerTests {
         #expect(controller.problem == nil)
     }
 
+    @Test func aTranscriptInAThirdLanguageIsTranscribedAgainInChineseWithTheVocabulary() async throws {
+        speech.reply = "Pan om ol är en typ av enkelt och lätt måltid som är populär i sommar."
+        speech.replyInLanguage = [.chinese: "Pa amb Oli 是一种在夏天流行的简单晚餐。"]
+        let controller = await controller(vocabulary: ["Pa amb Oli"])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Pa amb Oli", "Pa amb Oli"])
+        #expect(speech.receivedLanguages == [nil, .chinese])
+        #expect(inserter.inserted == ["Pa amb Oli 是一种在夏天流行的简单晚餐。"])
+    }
+
     @Test func speechWithMoreThanTermsIsTranscribedOnce() async throws {
         speech.reply = "我们用 Orra 写字"
         speech.replyWithoutContext = ""
