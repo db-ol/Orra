@@ -21,7 +21,7 @@ struct TranslationGuardTests {
     }
 
     /// The Swift port gives every output the verdict and the reason guards2.py and the
-    /// acronym check gave.
+    /// acronym check gave. The exact match for long numbers changes none of them.
     @Test func everyOutputGetsThePythonVerdict() throws {
         #expect(Self.cases.count == 1947)
         #expect(Self.cases.filter { $0.kind == "measured" }.count == 1050)
@@ -64,6 +64,19 @@ struct TranslationGuardTests {
         #expect(Self.check(.chinese, "We need 2 dozen eggs.", "我们需要24个鸡蛋。") == "")
         #expect(Self.check(.english, "周日见。", "See you on day 7.") == "")
         #expect(Self.check(.english, "三点五个小时。", "3.5 hours.") == "")
+    }
+
+    /// A number of 7 or more digits has to come through exactly, unless the speaker
+    /// corrected it. guards2.py let a changed last digit through.
+    @Test func longNumbersComeThroughExactly() {
+        #expect(TranslationGuard.check(source: "电话是13812345678。", output: "The phone number is 13812345679.", target: .english) == .newNumber(["13812345679"]))
+        #expect(TranslationGuard.check(source: "My ID is 4401061990.", output: "我的身份证号是4401061991。", target: .chinese) == .newNumber(["4401061991"]))
+        #expect(Self.check(.english, "电话是13812345678。", "The phone number is 13812345678.") == "")
+        #expect(Self.check(.english, "他的电话是13812345678，不对，最后一位是9。", "His phone number is 13812345679.") == "")
+        // Shorter numbers keep the tolerance of guards2.py, and long ones may still be
+        // written another way.
+        #expect(Self.check(.english, "预算是一亿二。", "The budget is 120,000,000.") == "")
+        #expect(Self.check(.chinese, "We raised 3 million dollars.", "我们融资了3000000美元。") == "")
     }
 
     @Test func theValuesOfTheSourceAreReadAsGuards2ReadsThem() {
