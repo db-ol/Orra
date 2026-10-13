@@ -375,6 +375,48 @@ nonisolated enum CorrectionFinder {
 
 }
 
+nonisolated extension CorrectionFinder {
+    /// What a fix in a paste with replacements teaches.
+    enum Translation: Equatable, Sendable {
+        /// A fix to judge as usual, with the heard spelling as the speech model wrote it.
+        case finding(Finding)
+        /// The user put back what the model wrote in place of these kept pairs.
+        case reverted([Correction])
+        /// Nothing to learn.
+        case dropped
+    }
+
+    /// A fix seen in a paste where Orra replaced words, in terms of what the speech model
+    /// wrote, so the pair learned is always the model's spelling and the user's word. A fix
+    /// away from the replaced words stays as it is. A fix of a replaced word is learned with
+    /// the model's spelling, and when it puts that spelling back, the pairs that replaced it
+    /// are reported as reverted. A fix of part of a replaced word, or an offered word that
+    /// takes in one, teaches nothing.
+    static func translate(_ item: Located, pasted: [Character], replacements: [Replacement]) -> Translation {
+        let touched = replacements.filter { $0.span.overlaps(item.span) }.sorted { $0.span.lowerBound < $1.span.lowerBound }
+        guard !touched.isEmpty else { return .finding(item.finding) }
+        guard case .word(let correction) = item.finding, item.span.upperBound <= pasted.count,
+              touched.allSatisfy({ item.span.lowerBound <= $0.span.lowerBound && $0.span.upperBound <= item.span.upperBound })
+        else { return .dropped }
+        var heard = ""
+        var position = item.span.lowerBound
+        for replacement in touched {
+            heard += String(pasted[position..<replacement.span.lowerBound]) + replacement.heard
+            position = replacement.span.upperBound
+        }
+        heard += String(pasted[position..<item.span.upperBound])
+        heard = heard.trimmingCharacters(in: .whitespaces)
+        let corrected = correction.corrected
+        if heard == corrected || (heard.lowercased() == corrected.lowercased() && heard.dropFirst() == corrected.dropFirst()) {
+            return .reverted(touched.map(\.pair))
+        }
+        guard isWordLike(heard), fits(heard), hanCount(heard) != 1,
+              !differsOnlyInFirstLetterCase(heard, corrected), !differsOnlyInEnding(heard, corrected),
+              SoundAlike.soundsAlike(heard, corrected) else { return .dropped }
+        return .finding(.word(Correction(heard: heard, corrected: corrected)))
+    }
+}
+
 /// Follows where the pasted text is in a field while the user edits it. Each reading is
 /// compared with the one before: an edit before the paste moves it, an edit after it leaves
 /// it alone, and an edit inside it changes the pasted text. So typing or fixing other lines
@@ -576,6 +618,11 @@ nonisolated struct CorrectionStore: Codable, Equatable, Sendable {
     mutating func forgetAccepted(of word: String) {
         let word = word.lowercased()
         entries.removeAll { $0.state == .accepted && $0.correction.corrected.lowercased() == word }
+    }
+
+    /// The pairs the user kept: learned on their own and not undone, or offered and added.
+    var acceptedPairs: [Correction] {
+        entries.filter { $0.state == .accepted }.map(\.correction)
     }
 
     /// The words that have accepted pairs.
