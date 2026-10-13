@@ -251,11 +251,11 @@ nonisolated enum RewriteGuard {
     private static let thousandsSeparator = try! NSRegularExpression(pattern: #"(?<=\d),(?=\d{3})"#)
     private static let digitRun = try! NSRegularExpression(pattern: #"\d+"#)
 
-    private static func count(_ text: String, where predicate: (Unicode.Scalar) -> Bool) -> Int {
+    static func count(_ text: String, where predicate: (Unicode.Scalar) -> Bool) -> Int {
         text.unicodeScalars.reduce(0) { $0 + (predicate($1) ? 1 : 0) }
     }
 
-    private static func isLatinLetter(_ scalar: Unicode.Scalar) -> Bool {
+    static func isLatinLetter(_ scalar: Unicode.Scalar) -> Bool {
         ("A"..."Z").contains(scalar) || ("a"..."z").contains(scalar)
     }
 
@@ -264,17 +264,17 @@ nonisolated enum RewriteGuard {
     }
 
     /// Kana, Hangul and Cyrillic, which a cleanup should never produce on its own.
-    private static func hasForeignScript(_ text: String) -> Bool {
+    static func hasForeignScript(_ text: String) -> Bool {
         text.unicodeScalars.contains { scalar in
             (0x3040...0x30FF).contains(scalar.value) || (0xAC00...0xD7AF).contains(scalar.value) || (0x0400...0x04FF).contains(scalar.value)
         }
     }
 
-    private static func newlines(_ text: String) -> Int {
+    static func newlines(_ text: String) -> Int {
         text.unicodeScalars.filter { $0 == "\n" }.count
     }
 
-    private static func hasMarkup(_ text: String) -> Bool {
+    static func hasMarkup(_ text: String) -> Bool {
         text.contains(/(^|\n)\s*(```|#{1,3} |[-*•] |\d+[.)] )/)
     }
 
