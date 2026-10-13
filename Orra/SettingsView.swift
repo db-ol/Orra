@@ -137,6 +137,7 @@ private struct GeneralSettings: View {
                 // Only while translation is on, since the key does nothing otherwise.
                 if cleanup.translationIsOn {
                     TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
+                        .help(Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free."))
                 }
                 LabeledContent {
                     HStack(spacing: 12) {
@@ -576,13 +577,7 @@ private struct TranslationOptions: View {
                     )
                 }
             } header: {
-                Text("Translation key")
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.")
-                    Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free.")
-                }
-                .foregroundStyle(.secondary)
+                Text("Direction")
             }
             Section {
                 Label {

@@ -1305,8 +1305,10 @@ the badge were rendered to PNG by the opt in tests, in English and in Chinese, b
 in the running app:
 
 - [ ] Settings shows Translation (翻译) after Clean Up Text, with its switch off and no
-  translation key row. Options… next to it shows the explanation, Translate into with
-  its explanation for each choice, and Good to know. Turning it on without the model asks "Download the model for
+  translation key row. Options… next to it shows the explanation, Translate into under
+  Direction (翻译方向) with its explanation for each choice, and Good to know. Pointing at
+  the translation key field shows which keys can be the translation key, that the two keys
+  swap, and the wait before it records. Turning it on without the model asks "Download the model for
   translation?", and Cancel leaves it off. With cleanup on and the model in place it turns
   on at once, and with cleanup on and the model downloading it turns on without asking.
 - [ ] With translation on and cleanup off, the model loads ("Loading the local model…")
