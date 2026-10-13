@@ -163,8 +163,8 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
 - The controller tells the tap when no hands free dictation runs, for example after the
   limit or when a double press came while the previous dictation was still being
   transcribed, so Escape is never kept from the app by mistake.
-- Settings, Dictation (General before 2026-10-12) and the Talk Key menu have a switch
-  "Double press for hands free", on by default. While it is off, a short press is a hold
+- Advanced… in Settings (Dictation from 2026-10-12, General before) and the Talk Key menu
+  have a switch "Double press for hands free", on by default. While it is off, a short press is a hold
   as before.
 - Hold to talk is unchanged for the right modifiers and fn. A quick tap still records
   nothing that reaches the model.
@@ -186,8 +186,8 @@ names keyboards print on the keys. Implemented in `Orra/TalkKey.swift`,
   Control, right Option, right Command, left Control, left Option, left Command. fn comes
   first because right Control is the default, so a user who turned fn on chose it on
   purpose. The detector and the tap still take a set of keys, which now holds one.
-- Settings, Dictation (General before 2026-10-12) shows a recorder field like the shortcut
-  recorders of Mac apps. It shows the key with its symbol and Mac name, such as "⌥ Right
+- Settings, General (Dictation from 2026-10-12 to 2026-10-13) shows a recorder field like
+  the shortcut recorders of Mac apps. It shows the key with its symbol and Mac name, such as "⌥ Right
   Option", and a small hint with the label of other keyboards: Alt for Option and Windows
   key for Command, which a keyboard with a Windows layout prints on the keys macOS uses as
   Option and Command, and Globe 🌐 for fn. Control needs none. Clicking the field or
