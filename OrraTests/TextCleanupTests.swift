@@ -99,7 +99,7 @@ struct TextCleanupTests {
         #expect(!cleanup.isOn)
         #expect(saved.isEmpty)
         #expect(calls.withLock { $0 } == 0)
-        #expect(cleanup.model.isReady() == false)
+        #expect(await cleanup.model.waitUntilLoaded() == false)
     }
 
     @Test func confirmingDownloadsAndCancellingTurnsItOff() async {
@@ -135,7 +135,7 @@ struct TextCleanupTests {
         await cleanup.start()
         await cleanup.waitForLoad()
         #expect(cleanup.engineState == .failed)
-        #expect(cleanup.model.isReady() == false)
+        #expect(await cleanup.model.waitUntilLoaded() == false)
     }
 
     /// With the model in place, turning on needs no download, and turning off unloads.
@@ -177,7 +177,7 @@ struct TextCleanupTests {
         #expect(fake.loads == 2)
         #expect(fake.isLoaded)
         #expect(cleanup.engineState == .ready)
-        #expect(cleanup.model.isReady())
+        #expect(await cleanup.model.waitUntilLoaded())
     }
 
     /// Turned off during a load: the model is unloaded once the load is over.
@@ -194,7 +194,7 @@ struct TextCleanupTests {
         await cleanup.waitForLoad()
         #expect(!fake.isLoaded)
         #expect(cleanup.engineState == .unloaded)
-        #expect(cleanup.model.isReady() == false)
+        #expect(await cleanup.model.waitUntilLoaded() == false)
     }
 
     @Test func tryAgainLoadsAfterAFailedLoad() async throws {

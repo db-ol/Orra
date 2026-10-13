@@ -536,6 +536,9 @@ final class PushToTalkController {
                 handle(.cancelled)
                 return
             }
+            // Loads the cleanup model when it was unloaded while idle, so it loads while
+            // the user speaks.
+            cleanup.dictationStarted()
             startRecording(cueDelay: transition == .startedHandsFree ? .zero : listeningCueDelay)
         case .awaitingSecondPress:
             // The recording goes on until the second press or the end of the window.
@@ -579,9 +582,11 @@ final class PushToTalkController {
                 }
             }
             endCue(holdMessage ?? problem)
+            cleanup.dictationEnded()
         case .finished:
             endUserActivity()
             endCue(holdMessage ?? problem ?? notice)
+            cleanup.dictationEnded()
         }
     }
 
@@ -800,9 +805,10 @@ final class PushToTalkController {
                 return
             }
             // The rule steps come first, so the model sees their result, and any problem
-            // with the model leaves exactly that text.
+            // with the model leaves exactly that text. A model that the press of the talk
+            // key started to load is waited for, a bounded time.
             let ruled = text
-            if cleanup.isReady(), CleanupStep.isWorthCleaning(text) {
+            if CleanupStep.isWorthCleaning(text), await cleanup.waitUntilLoaded() {
                 text = await CleanupStep.run(text, complete: cleanup.complete).text
             }
             originalText = text == ruled ? nil : ruled
