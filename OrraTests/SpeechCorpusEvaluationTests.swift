@@ -39,7 +39,7 @@ struct SpeechCorpusEvaluationTests {
         let engine = Qwen3Engine(folder: { modelFolder }, modelID: modelID)
         let transcription = Transcription(
             load: { try await engine.load() },
-            transcribe: { samples, context in try await engine.transcribe(samples, context: context) }
+            transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) }
         )
         let loadStarted = ContinuousClock.now
         try await transcription.load()

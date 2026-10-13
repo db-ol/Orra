@@ -83,8 +83,12 @@ final class FakeSpeech {
     var delay: Duration = .zero
     private(set) var loads = 0
     private(set) var receivedSampleCounts: [Int] = []
+    /// The reply when the model is told to write a language.
+    var replyInLanguage: [SpeechLanguage: String] = [:]
     /// The context each transcription got.
     private(set) var receivedContexts: [String?] = []
+    /// The language each transcription was told to write, nil when none.
+    private(set) var receivedLanguages: [SpeechLanguage?] = []
 
     var transcription: Transcription {
         Transcription(
@@ -95,14 +99,16 @@ final class FakeSpeech {
                 }
                 if let error = self.loadError { throw error }
             },
-            transcribe: { samples, context in
+            transcribe: { samples, context, language in
                 self.receivedContexts.append(context)
+                self.receivedLanguages.append(language)
                 self.receivedSampleCounts.append(samples.count)
                 if self.delay > .zero {
                     try await Task.sleep(for: self.delay)
                 }
                 if let error = self.transcribeError { throw error }
                 if context == nil, let error = self.transcribeErrorWithoutContext { throw error }
+                if let language, let hinted = self.replyInLanguage[language] { return hinted }
                 if context == nil, let plain = self.replyWithoutContext { return plain }
                 return self.reply
             }

@@ -7,8 +7,9 @@ struct Transcription {
     /// Loads the model. Throws when it cannot be loaded.
     var load: () async throws -> Void
     /// Turns 16 kHz mono samples into text. The context is the user's vocabulary, one
-    /// term per line, or nil.
-    var transcribe: (_ samples: [Float], _ context: String?) async throws -> String
+    /// term per line, or nil. The language is the one the model must write, or nil to let
+    /// it choose.
+    var transcribe: (_ samples: [Float], _ context: String?, _ language: SpeechLanguage?) async throws -> String
 }
 
 extension Transcription {
@@ -23,13 +24,13 @@ extension Transcription {
     /// hears it is dropped like an echo.
     /// Logs a timing and whether speech was heard, never the text.
     func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double) async throws -> String {
-        let text = try await transcribe(samples, Vocabulary.context(terms))
+        let text = try await transcribe(samples, Vocabulary.context(terms), nil)
         guard !terms.isEmpty, await Self.isOnlyTerms(text, of: terms) else { return text }
         let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
         let started = ContinuousClock.now
         let plain: String
         do {
-            plain = try await transcribe(samples, nil)
+            plain = try await transcribe(samples, nil, nil)
         } catch is CancellationError {
             throw CancellationError()
         } catch {
