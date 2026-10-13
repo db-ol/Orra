@@ -159,12 +159,12 @@ final class RecordingFeedback {
 
     func handle(_ cue: DictationCue) {
         switch cue {
-        case .listening:
+        case .listening(_):
             if playsSounds {
                 play(.start)
             }
             show(.listening)
-        case .handsFree(let hint):
+        case .handsFree(let hint, _):
             // A hold that turned hands free has played the start sound already.
             if playsSounds, display?.showsMeter != true {
                 play(.start)

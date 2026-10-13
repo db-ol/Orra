@@ -570,6 +570,16 @@
         }
       }
     },
+    "Dictations over %lld characters are pasted without translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 %lld 个字符的听写不会翻译，会直接粘贴原文。"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2141,6 +2151,16 @@
         }
       }
     },
+    "The local model is not ready, so the text was pasted without translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地模型还没准备好，所以粘贴的是未翻译的文字。"
+          }
+        }
+      }
+    },
     "The microphone changed during the recording. Try again." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2343,6 +2363,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此版本缺少麦克风用途说明"
+          }
+        }
+      }
+    },
+    "This dictation was pasted without translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写没有翻译，粘贴的是原文。"
           }
         }
       }

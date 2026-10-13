@@ -12,10 +12,15 @@ import os
 /// clear.
 nonisolated enum DictationCue: Equatable, Sendable {
     /// The hold has lasted long enough to be a dictation, and the microphone is recording.
-    case listening
+    /// `translation` is the direction when the translation key started it, so the
+    /// indicator shows that the text will be pasted translated.
+    case listening(translation: TranslationDirection?)
     /// A hands free dictation records. The hint says how to finish it, such as "Press
-    /// right Control to finish".
-    case handsFree(finishHint: String)
+    /// right Control to finish". `translation` as for listening.
+    case handsFree(finishHint: String, translation: TranslationDirection? = nil)
+
+    /// A dictation of the talk key is recording.
+    static let listening = DictationCue.listening(translation: nil)
     /// The talk key was released after a hold long enough to transcribe.
     case transcribing
     /// The microphone stopped after a hold long enough to transcribe. A recording without
@@ -31,6 +36,10 @@ nonisolated enum DictationCue: Equatable, Sendable {
 /// A hold records. The release stops the recording, the speech model turns it into text
 /// off the main actor, and the text is pasted into the frontmost app. A quick double press
 /// records hands free until the next press of the key, see PushToTalkStateMachine.
+///
+/// While translation is on, the translation key works the same way, and its dictation is
+/// translated after the rule steps, see TranslationStep. Whenever the translation cannot
+/// be used, the text is pasted without it, never nothing.
 @Observable
 final class PushToTalkController {
     nonisolated enum ModelState: Equatable, Sendable {
@@ -124,14 +133,16 @@ final class PushToTalkController {
     /// The text of the latest dictation, kept in memory only, so the menu can copy it when
     /// the paste missed. Never logged.
     private(set) var lastTranscript: String?
-    /// The latest dictation as the rule steps left it, when the cleanup model changed it
-    /// before the paste, so Paste Original Text in the menu can bring it back. In memory
-    /// only, never logged.
+    /// The latest dictation before the model changed it, so Paste Original Text in the
+    /// menu can bring it back: the text before translation when the paste was translated,
+    /// and otherwise the text as the rule steps left it, when the cleanup model changed it.
+    /// In memory only, never logged.
     private(set) var originalText: String?
     /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
     @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
     /// Told after each paste, with the text, the app it went into and the text before the
-    /// cleanup model changed it, if it did, so Orra can learn from a correction.
+    /// cleanup model changed it, if it did, so Orra can learn from a correction. Never told
+    /// about a translated paste, since a fix of a translation is no misheard word.
     /// AppDelegate sets it.
     @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t, _ beforeCleanup: String?) -> Void = { _, _, _ in }
     /// Told when Paste Original Text pastes over a cleaned paste, with the cleaned text, so
@@ -141,6 +152,10 @@ final class PushToTalkController {
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
     @ObservationIgnored private let cleanup: CleanupModel
+    @ObservationIgnored private let translation: TranslationModel
+    /// The direction of the dictation under way when the translation key started it, read
+    /// at its start. Nil for a dictation of the talk key.
+    @ObservationIgnored private var holdTranslation: TranslationDirection?
     @ObservationIgnored private let insert: @MainActor (String) async -> InsertionResult
     @ObservationIgnored private let frontmostApp: @MainActor () -> pid_t?
     @ObservationIgnored private let lidIsClosed: @MainActor () -> Bool
@@ -201,6 +216,8 @@ final class PushToTalkController {
     ///   - transcription: The speech model. Tests pass fakes.
     ///   - cleanup: The cleanup model, which runs after the rule steps when it is ready.
     ///     Tests pass fakes.
+    ///   - translation: The model's translations, for dictations of the translation key.
+    ///     Tests pass fakes.
     ///   - insert: Puts text into the frontmost app. Tests pass fakes.
     ///   - frontmostApp: The process ID of the frontmost app. Tests pass fakes.
     ///   - lidIsClosed: Whether the MacBook's lid is closed, read when a recording holds
@@ -239,6 +256,7 @@ final class PushToTalkController {
         capture: AudioCapture,
         transcription: Transcription,
         cleanup: CleanupModel = .off,
+        translation: TranslationModel = .off,
         insert: @escaping @MainActor (String) async -> InsertionResult,
         frontmostApp: @escaping @MainActor () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
         lidIsClosed: @escaping @MainActor () -> Bool = { Lid.isClosed() },
@@ -269,6 +287,7 @@ final class PushToTalkController {
         self.capture = capture
         self.transcription = transcription
         self.cleanup = cleanup
+        self.translation = translation
         self.insert = insert
         self.frontmostApp = frontmostApp
         self.lidIsClosed = lidIsClosed
@@ -305,7 +324,7 @@ final class PushToTalkController {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
         tap = HotkeyTap(keys: watchedKeys, delayedKeys: delayedKeys, handsFree: handsFreeOn, install: installTap) { [weak self] event in
-            self?.handle(event)
+            self?.handle(event, key: self?.tap?.activeKey)
         } onSwitchedOff: { [weak self] reason in
             self?.tapWasSwitchedOff(reason)
         }
@@ -588,8 +607,10 @@ final class PushToTalkController {
         }
     }
 
-    /// Applies one push to talk event. Internal so tests can drive it.
-    func handle(_ event: PushToTalkStateMachine.Event) {
+    /// Applies one push to talk event. `key` is the key the event is about, which tells a
+    /// dictation of the translation key from one of the talk key. Internal so tests can
+    /// drive it.
+    func handle(_ event: PushToTalkStateMachine.Event, key: TalkKey? = nil) {
         // The tap keeps Escape and the next press for a hands free dictation only while one
         // runs. It may have ended here some other way, or never started.
         defer {
@@ -600,6 +621,13 @@ final class PushToTalkController {
         guard let transition = machine.handle(event) else { return }
         state = machine.state
         logger.debug("Push to talk transition: \(String(describing: transition), privacy: .public)")
+        switch transition {
+        case .startedListening, .startedHandsFree, .resumedListening:
+            // The direction is read once, so the indicator and the paste agree.
+            holdTranslation = translationKeyIsOn && key == translationKey ? translation.direction() : nil
+        default:
+            break
+        }
         switch transition {
         case .startedListening, .startedHandsFree:
             problem = nil
@@ -644,8 +672,9 @@ final class PushToTalkController {
             let target = frontmostApp()
             let start = captureStart
             let chosen = holdMicrophone
+            let translating = holdTranslation
             Task { [weak self] in
-                await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, releasedAt: released)
+                await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, translating: translating, releasedAt: released)
                 self?.handle(.processingFinished)
             }
         case .cancelledListening:
@@ -784,10 +813,10 @@ final class PushToTalkController {
             switch state {
             case .listening:
                 indicatorShown = true
-                onCue(.listening)
+                onCue(.listening(translation: holdTranslation))
             case .handsFree:
                 indicatorShown = true
-                onCue(.handsFree(finishHint: handsFreeKey.finishHint()))
+                onCue(.handsFree(finishHint: handsFreeKey.finishHint(), translation: holdTranslation))
             case .idle, .waitingForSecondPress, .processing:
                 break
             }
@@ -815,7 +844,8 @@ final class PushToTalkController {
 
     /// Ends a hold that was released: waits for the microphone to have started, records
     /// the short tail, stops, and transcribes unless the hold was too short or cut.
-    private func finishRecording(start: Task<Bool, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, releasedAt released: ContinuousClock.Instant) async {
+    /// `translating` is the direction when the translation key started the dictation.
+    private func finishRecording(start: Task<Bool, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
         // A failed start already set the problem.
         guard await start?.value == true else { return }
         if releaseTail > .zero {
@@ -839,11 +869,12 @@ final class PushToTalkController {
                 microphoneNotice = String(localized: "\(chosen.name) is not connected, so the system default input recorded.")
             }
         }
-        await transcribeAndInsert(recording, chosen: chosen, target: target, releasedAt: released)
+        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, releasedAt: released)
     }
 
-    /// Turns a recording into text and pastes it. Logs timings, never the text.
-    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, releasedAt released: ContinuousClock.Instant) async {
+    /// Turns a recording into text and pastes it, translated when `translating` is set and
+    /// the translation passes its checks. Logs timings, never the text.
+    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
         do {
             let (samples, silent) = await Self.prepared(recording)
             guard !samples.isEmpty else {
@@ -882,10 +913,19 @@ final class PushToTalkController {
             // The rule steps come first, so the model sees their result, and any problem
             // with the model leaves exactly that text.
             let ruled = text
-            if cleanup.isReady(), CleanupStep.isWorthCleaning(text) {
+            let translated = await translate(text, translating)
+            if let translated {
+                // In place of the cleanup step, since the translation prompt cleans up too.
+                text = translated.text
+            } else if cleanup.isReady(), CleanupStep.isWorthCleaning(text) {
                 text = await CleanupStep.run(text, complete: cleanup.complete).text
             }
-            originalText = text == ruled ? nil : ruled
+            let isTranslation = translated?.isTranslation == true
+            if isTranslation {
+                originalText = translated?.untranslated
+            } else {
+                originalText = text == ruled ? nil : ruled
+            }
             lastTranscript = text
             // Paste only into the app that was in front when the key was released.
             if let target, let current = frontmostApp(), current != target {
@@ -897,8 +937,11 @@ final class PushToTalkController {
                 // Notice rather than info, so the timing stays in the log store for later
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(released.duration(to: .now), privacy: .public) for \(recording.duration, privacy: .public) s of audio")
-                markVocabularyUsed(in: text)
-                if let app = target ?? frontmostApp() {
+                // The words are in the text before translation.
+                markVocabularyUsed(in: isTranslation ? originalText ?? text : text)
+                // Orra never learns from a translated paste: a fix of the translation is no
+                // misheard word.
+                if !isTranslation, let app = target ?? frontmostApp() {
                     onPasted(text, app, originalText)
                 }
             case .skippedPasswordField:
@@ -913,8 +956,8 @@ final class PushToTalkController {
     }
 
     /// Paste Original Text in the menu: pastes the latest dictation as it was before the
-    /// cleanup model changed it, into the frontmost app. Orra does not learn from this
-    /// paste, and Copy Last Dictation still copies the cleaned text.
+    /// model translated it or cleaned it up, into the frontmost app. Orra does not learn
+    /// from this paste, and Copy Last Dictation still copies what was pasted first.
     func pasteOriginal() async {
         guard state == .idle, let originalText else { return }
         if let lastTranscript {
@@ -926,6 +969,33 @@ final class PushToTalkController {
         case .skippedPasswordField:
             notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
         }
+    }
+
+    /// The translation of a dictation of the translation key, or nil when the translation
+    /// step did not run: not a dictation of the translation key, the model not ready, the
+    /// text too long, or nothing in it to translate, such as digits only. The step's result
+    /// holds the text without translation whenever the translation cannot be used. Every
+    /// case that pastes the text untranslated, other than one with nothing to translate or
+    /// already in the target language, leaves a notice that says so.
+    private func translate(_ text: String, _ direction: TranslationDirection?) async -> TranslationStep.Result? {
+        guard let direction else { return nil }
+        guard translation.isReady() else {
+            notice = String(localized: "The local model is not ready, so the text was pasted without translation.")
+            return nil
+        }
+        guard let target = direction.target(for: text) else { return nil }
+        guard text.count <= TranslationStep.maximumLength else {
+            notice = String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation.")
+            return nil
+        }
+        let result = await TranslationStep.run(text, into: target, cleansUp: cleanup.isReady(), complete: translation.complete)
+        switch result.outcome {
+        case .translated, .unchanged:
+            break
+        case .unreadable, .heldBack, .timedOut, .failed:
+            notice = String(localized: "This dictation was pasted without translation.")
+        }
+        return result
     }
 
     /// Resampling and the silence check run off the main actor, because a long recording
