@@ -240,6 +240,41 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
     func finishHint(in locale: Locale = .interface) -> String {
         String(localized: LocalizedStringResource("Press \(sentenceName(in: locale)) to finish", locale: locale))
     }
+
+    /// The hint in the menu while translation is on, such as "Hold right Option to
+    /// translate".
+    func translateHint(in locale: Locale = .interface) -> String {
+        String(localized: LocalizedStringResource("Hold \(sentenceName(in: locale)) to translate", locale: locale))
+    }
+
+    /// The translation key Orra uses until the user picks one: right Option, next to the
+    /// default talk key, or right Command when the talk key is right Option. Either key is
+    /// a right hand modifier, so the left hand keeps its shortcuts.
+    static func defaultTranslationKey(talkKey: TalkKey) -> TalkKey {
+        talkKey == .rightOption ? .rightCommand : .rightOption
+    }
+}
+
+/// Orra's two keys: the talk key, which pastes what was said, and the translation key,
+/// which pastes it translated. They are never the same key.
+nonisolated enum KeySlot: Equatable, Sendable {
+    case talk
+    case translation
+}
+
+/// What the user sees after picking for one slot the key of the other: the two keys
+/// swapped, and this is where each one went.
+nonisolated struct KeySwap: Equatable, Sendable {
+    let talkKey: TalkKey
+    let translationKey: TalkKey
+
+    /// Such as "The two keys swapped. The talk key is now right Option and the translation
+    /// key right Control."
+    func message(in locale: Locale = .interface) -> String {
+        let talk = talkKey.sentenceName(in: locale)
+        let translation = translationKey.sentenceName(in: locale)
+        return String(localized: LocalizedStringResource("The two keys swapped. The talk key is now \(talk) and the translation key \(translation).", locale: locale))
+    }
 }
 
 /// Records the talk key the user presses, like the shortcut recorders of Mac apps. A key
@@ -350,9 +385,12 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
 
 extension KeyRecorder.Rejection {
     /// What the recorder says about the press, such as "Shift can't be the talk key" with
-    /// the reason.
-    @MainActor func message(in locale: Locale = .interface) -> String {
-        switch self {
+    /// the reason. `slot` names the key being recorded.
+    @MainActor func message(in locale: Locale = .interface, for slot: KeySlot = .talk) -> String {
+        if slot == .translation {
+            return translationKeyMessage(in: locale)
+        }
+        return switch self {
         case .shift:
             String(localized: LocalizedStringResource("Shift can't be the talk key. On its own, it switches input methods between Chinese and English.", locale: locale))
         case .capsLock:
@@ -368,6 +406,28 @@ extension KeyRecorder.Rejection {
                 String(localized: LocalizedStringResource("The \(name) key can't be the talk key. Holding it would type or do something in the app in front.", locale: locale))
             } else {
                 String(localized: LocalizedStringResource("This key can't be the talk key. Holding it would type or do something in the app in front.", locale: locale))
+            }
+        }
+    }
+
+    /// The same notes while the user records the translation key.
+    @MainActor private func translationKeyMessage(in locale: Locale) -> String {
+        switch self {
+        case .shift:
+            String(localized: LocalizedStringResource("Shift can't be the translation key. On its own, it switches input methods between Chinese and English.", locale: locale))
+        case .capsLock:
+            String(localized: LocalizedStringResource("Caps Lock can't be the translation key. It turns capitals or the input method on and off.", locale: locale))
+        case .combination(let modifiers, let keyCode):
+            if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode, locale: locale) {
+                String(localized: LocalizedStringResource("\(keys) is a key combination and can't be the translation key.", locale: locale))
+            } else {
+                String(localized: LocalizedStringResource("A key combination can't be the translation key.", locale: locale))
+            }
+        case .key(let keyCode):
+            if let name = KeyName.name(forKeyCode: keyCode, locale: locale) {
+                String(localized: LocalizedStringResource("The \(name) key can't be the translation key. Holding it would type or do something in the app in front.", locale: locale))
+            } else {
+                String(localized: LocalizedStringResource("This key can't be the translation key. Holding it would type or do something in the app in front.", locale: locale))
             }
         }
     }
@@ -464,5 +524,25 @@ nonisolated enum TalkKeyPreference {
     /// done.
     static func isSaved(in defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: defaultsKey) != nil
+    }
+}
+
+/// Keeps the user's translation key in UserDefaults. Until the user picks one, or picks
+/// the talk key's key for it and the keys swap, nothing is saved and the key follows the
+/// talk key, see `TalkKey.defaultTranslationKey(talkKey:)`.
+nonisolated enum TranslationKeyPreference {
+    static let defaultsKey = "translationKey"
+
+    /// The saved key, or the default for this talk key when nothing usable is saved. A
+    /// saved key equal to the talk key, which Orra never saves itself, gives the default.
+    static func load(talkKey: TalkKey, from defaults: UserDefaults = .standard) -> TalkKey {
+        if let saved = defaults.string(forKey: defaultsKey).flatMap(TalkKey.init(rawValue:)), saved != talkKey {
+            return saved
+        }
+        return TalkKey.defaultTranslationKey(talkKey: talkKey)
+    }
+
+    static func save(_ key: TalkKey, to defaults: UserDefaults = .standard) {
+        defaults.set(key.rawValue, forKey: defaultsKey)
     }
 }

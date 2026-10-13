@@ -679,12 +679,16 @@ struct MicrophoneToggles: View {
     }
 }
 
-/// The talk key recorder, like the shortcut recorders of Mac apps: a field that shows the
-/// key, such as "⌥ Right Option (Alt)". Clicking it, or Change…, starts recording, and the
-/// next key the user presses and releases on its own becomes the talk key. A press that
-/// cannot be one shows why under the field. In Settings and in the welcome window.
+/// The key recorder, like the shortcut recorders of Mac apps: a field that shows the talk
+/// key or the translation key, such as "⌥ Right Option (Alt)". Clicking it, or Change…,
+/// starts recording, and the next key the user presses and releases on its own becomes
+/// the key. A press that cannot be one shows why under the field, and so does a swap of
+/// the two keys. The talk key's recorder is in Settings and in the welcome window, the
+/// translation key's in Settings.
 struct TalkKeyRecorder: View {
     let pushToTalk: PushToTalkController
+    /// Which key this field shows and records.
+    var slot: KeySlot = .talk
     /// Whether "Talk key" is shown in front of the field, as a row in Settings.
     var showsLabel = false
     /// Whether the line with the recommended keys is shown under the field.
@@ -698,7 +702,15 @@ struct TalkKeyRecorder: View {
     @State private var startedHere = false
 
     private var isRecording: Bool {
-        pushToTalk.isChoosingTalkKey
+        pushToTalk.choosingKeySlot == slot
+    }
+
+    private var key: TalkKey {
+        slot == .talk ? pushToTalk.talkKey : pushToTalk.translationKey
+    }
+
+    private var name: Text {
+        slot == .talk ? Text("Talk key") : Text("Translation key")
     }
 
     var body: some View {
@@ -708,14 +720,18 @@ struct TalkKeyRecorder: View {
                     fieldAndButton
                 } label: {
                     // The field carries the same label for VoiceOver, so it is read once.
-                    Label("Talk key", systemImage: "keyboard")
-                        .accessibilityHidden(true)
+                    Label {
+                        name
+                    } icon: {
+                        Image(systemName: slot == .talk ? "keyboard" : "character.bubble")
+                    }
+                    .accessibilityHidden(true)
                 }
             } else {
                 fieldAndButton
             }
             if isRecording {
-                if let note = pushToTalk.keyChoiceRejection?.message(in: interfaceLocale) {
+                if let note = pushToTalk.keyChoiceRejection?.message(in: interfaceLocale, for: slot) {
                     // Already in the language of the window, so shown as it is.
                     // Orange on the icon only: orange text that small is too faint on a
                     // light background.
@@ -734,11 +750,27 @@ struct TalkKeyRecorder: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                // Which keys can be the talk key, before the user starts recording.
-                Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+                if let swap = pushToTalk.keySwap {
+                    // Already in the language of the window, so shown as it is.
+                    Label {
+                        Text(verbatim: swap.message(in: interfaceLocale))
+                    } icon: {
+                        Image(systemName: "arrow.left.arrow.right")
+                    }
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                }
+                // Which keys can be the key, before the user starts recording.
+                Group {
+                    if slot == .talk {
+                        Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+                    } else {
+                        Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.")
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
             if showsRecommendation {
                 Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard.")
@@ -749,18 +781,21 @@ struct TalkKeyRecorder: View {
         }
         .onDisappear {
             if startedHere {
-                pushToTalk.stopChoosingTalkKey()
+                pushToTalk.stopChoosingKey()
             }
         }
-        .onChange(of: pushToTalk.isChoosingTalkKey) { _, recording in
-            if !recording {
-                startedHere = false
+        .onChange(of: pushToTalk.choosingKeySlot) { old, new in
+            guard old == slot, new != slot else { return }
+            // VoiceOver reads a swap of the keys, which only shows as text under the field.
+            if startedHere, new == nil, let swap = pushToTalk.keySwap {
+                AccessibilityNotification.Announcement(swap.message(in: interfaceLocale)).post()
             }
+            startedHere = false
         }
         .onChange(of: pushToTalk.keyChoiceRejection) { _, rejection in
             // VoiceOver reads a refused press, which only shows as text under the field.
             // Only the recorder that started the recording speaks, so it is said once.
-            if startedHere, let note = rejection?.message(in: interfaceLocale) {
+            if startedHere, let note = rejection?.message(in: interfaceLocale, for: slot) {
                 let keys = String(localized: LocalizedStringResource("Use fn, Control, Option or Command on its own. Escape cancels.", locale: interfaceLocale))
                 AccessibilityNotification.Announcement("\(note) \(keys)").post()
             }
@@ -776,11 +811,11 @@ struct TalkKeyRecorder: View {
             // While recording, a click on the field ends the recording, as any click in
             // Orra does, rather than starting it again.
             .allowsHitTesting(!isRecording)
-            .accessibilityLabel(Text("Talk key"))
-            .accessibilityValue(isRecording ? Text("Press the key you want to hold") : Text(verbatim: pushToTalk.talkKey.fullName(in: interfaceLocale)))
+            .accessibilityLabel(name)
+            .accessibilityValue(isRecording ? Text("Press the key you want to hold") : Text(verbatim: key.fullName(in: interfaceLocale)))
             if isRecording {
                 Button("Cancel") {
-                    pushToTalk.stopChoosingTalkKey()
+                    pushToTalk.stopChoosingKey()
                 }
             } else {
                 Button("Change…", action: start)
@@ -794,8 +829,8 @@ struct TalkKeyRecorder: View {
                 Text("Press the key you want to hold")
                     .foregroundStyle(Color.accentColor)
             } else {
-                Text(verbatim: pushToTalk.talkKey.title(in: interfaceLocale))
-                if let other = pushToTalk.talkKey.otherLabelInParentheses(in: interfaceLocale) {
+                Text(verbatim: key.title(in: interfaceLocale))
+                if let other = key.otherLabelInParentheses(in: interfaceLocale) {
                     Text(verbatim: other)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -815,7 +850,7 @@ struct TalkKeyRecorder: View {
     }
 
     private func start() {
-        pushToTalk.startChoosingTalkKey()
+        pushToTalk.startChoosingKey(for: slot)
         startedHere = true
         // Only the field's value changes, which VoiceOver does not read on its own.
         AccessibilityNotification.Announcement(

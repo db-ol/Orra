@@ -63,17 +63,31 @@ final class PushToTalkController {
     /// Whether the user has chosen the talk key, here or in an earlier launch. The welcome
     /// window marks its talk key step as done then.
     private(set) var hasChosenTalkKey: Bool
-    /// Whether a quick double press of the talk key starts a hands free dictation. Saved
-    /// through `saveHandsFree` whenever it changes.
+    /// The key that starts a dictation that is pasted translated, while translation is
+    /// on, see `translationKeyIsOn`. Never the talk key. Saved through
+    /// `saveTranslationKey` when the user picks it, or when picking the talk key moved it.
+    private(set) var translationKey: TalkKey
+    /// Whether the translation key is watched: translation is on. AppDelegate keeps it in
+    /// step with the switch on the Translation page.
+    private(set) var translationKeyIsOn = false
+    /// Whether a quick double press of the talk key, or of the translation key, starts a
+    /// hands free dictation. Saved through `saveHandsFree` whenever it changes.
     private(set) var handsFreeOn: Bool
+    /// Which key the user records by pressing it, if any.
+    private(set) var choosingKeySlot: KeySlot?
     /// True while the user records a talk key by pressing it.
-    private(set) var isChoosingTalkKey = false
-    /// Why the last press while recording a talk key cannot be one, such as Shift.
+    var isChoosingTalkKey: Bool {
+        choosingKeySlot == .talk
+    }
+    /// Why the last press while recording a key cannot be one, such as Shift.
     private(set) var keyChoiceRejection: KeyRecorder.Rejection?
     /// What the recorder says about that press, in the language Orra started with.
     var keyChoiceNote: String? {
-        keyChoiceRejection?.message()
+        keyChoiceRejection?.message(for: choosingKeySlot ?? .talk)
     }
+    /// Set when the latest key the user picked was the other key's, so the two keys
+    /// swapped. Cleared when the user records a key again.
+    private(set) var keySwap: KeySwap?
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
     private(set) var microphone: MicrophoneChoice?
@@ -163,6 +177,7 @@ final class PushToTalkController {
     @ObservationIgnored private var machine = PushToTalkStateMachine()
     @ObservationIgnored private var tap: HotkeyTap?
     @ObservationIgnored private let saveTalkKey: (TalkKey) -> Void
+    @ObservationIgnored private let saveTranslationKey: (TalkKey) -> Void
     @ObservationIgnored private let saveHandsFree: (Bool) -> Void
     /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
     /// installed, which needs no permission.
@@ -206,6 +221,9 @@ final class PushToTalkController {
     ///   - talkKey: The key that starts a dictation, as saved by the user.
     ///   - saveTalkKey: Saves the key after the user changes it.
     ///   - talkKeyChosen: Whether the user has saved a talk key before.
+    ///   - translationKey: The translation key, as saved, or nil for the default next to
+    ///     the talk key, see `TalkKey.defaultTranslationKey(talkKey:)`.
+    ///   - saveTranslationKey: Saves the translation key after it changes.
     ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
     ///   - saveHandsFree: Saves the choice after the user changes it.
     ///   - microphone: The microphone the user chose, or nil for the system default.
@@ -234,6 +252,8 @@ final class PushToTalkController {
         talkKey: TalkKey = TalkKey.defaultKey,
         saveTalkKey: @escaping (TalkKey) -> Void = { _ in },
         talkKeyChosen: Bool = false,
+        translationKey: TalkKey? = nil,
+        saveTranslationKey: @escaping (TalkKey) -> Void = { _ in },
         handsFree: Bool = true,
         saveHandsFree: @escaping (Bool) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
@@ -262,6 +282,8 @@ final class PushToTalkController {
         self.talkKey = talkKey
         self.saveTalkKey = saveTalkKey
         self.hasChosenTalkKey = talkKeyChosen
+        self.translationKey = translationKey.flatMap { $0 == talkKey ? nil : $0 } ?? TalkKey.defaultTranslationKey(talkKey: talkKey)
+        self.saveTranslationKey = saveTranslationKey
         self.handsFreeOn = handsFree
         self.saveHandsFree = saveHandsFree
         self.microphone = microphone
@@ -282,7 +304,7 @@ final class PushToTalkController {
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
-        tap = HotkeyTap(keys: [talkKey], handsFree: handsFreeOn, install: installTap) { [weak self] event in
+        tap = HotkeyTap(keys: watchedKeys, delayedKeys: delayedKeys, handsFree: handsFreeOn, install: installTap) { [weak self] event in
             self?.handle(event)
         } onSwitchedOff: { [weak self] reason in
             self?.tapWasSwitchedOff(reason)
@@ -379,12 +401,60 @@ final class PushToTalkController {
 
     /// Makes `key` the talk key and saves the choice. Saved even when it is the key in use
     /// already, such as the default, so the welcome window counts the step as done on the
-    /// next launch too.
+    /// next launch too. When `key` is the translation key, the translation key becomes the
+    /// old talk key and `keySwap` says so.
     func chooseTalkKey(_ key: TalkKey) {
         hasChosenTalkKey = true
+        keySwap = nil
+        if key == translationKey, key != talkKey {
+            translationKey = talkKey
+            saveTranslationKey(talkKey)
+            keySwap = KeySwap(talkKey: key, translationKey: translationKey)
+        }
         talkKey = key
         saveTalkKey(key)
-        tap?.setKeys([key])
+        updateTapKeys()
+    }
+
+    /// Makes `key` the translation key and saves the choice. When `key` is the talk key,
+    /// the talk key becomes the old translation key and `keySwap` says so.
+    func chooseTranslationKey(_ key: TalkKey) {
+        keySwap = nil
+        if key == talkKey, key != translationKey {
+            talkKey = translationKey
+            hasChosenTalkKey = true
+            saveTalkKey(talkKey)
+            keySwap = KeySwap(talkKey: talkKey, translationKey: key)
+        }
+        translationKey = key
+        saveTranslationKey(key)
+        updateTapKeys()
+    }
+
+    /// Starts or stops watching the translation key, when translation is turned on or off.
+    /// Turning it off ends a dictation the translation key started, as a change of keys
+    /// does.
+    func setTranslationKeyOn(_ on: Bool) {
+        guard on != translationKeyIsOn else { return }
+        translationKeyIsOn = on
+        updateTapKeys()
+    }
+
+    /// The keys the tap watches: the talk key, and the translation key while translation
+    /// is on.
+    private var watchedKeys: Set<TalkKey> {
+        translationKeyIsOn ? [talkKey, translationKey] : [talkKey]
+    }
+
+    /// The translation key waits before it records, as a left hand key does, so Option
+    /// shortcuts and the characters right Option types keep working. The talk key does
+    /// not.
+    private var delayedKeys: Set<TalkKey> {
+        translationKeyIsOn ? [translationKey] : []
+    }
+
+    private func updateTapKeys() {
+        tap?.setKeys(watchedKeys, delayedKeys: delayedKeys)
     }
 
     /// Turns double press for hands free on or off and saves the choice.
@@ -395,16 +465,23 @@ final class PushToTalkController {
         tap?.setHandsFree(on)
     }
 
-    /// Starts recording the key the user wants as the talk key, see KeyRecorder. A key
-    /// that can be a talk key, pressed and released on its own, becomes the talk key.
-    /// Anything else leaves a note and the recording goes on. Escape, a click anywhere in
-    /// Orra, or switching to another app stops it. Only presses in Orra count: the tap
-    /// checks that Orra is the active app, and without the tap a local monitor sees only
-    /// Orra's own events. Neither needs a new permission.
+    /// Starts recording the key the user wants as the talk key, see `startChoosingKey`.
     func startChoosingTalkKey() {
-        guard !isChoosingTalkKey else { return }
-        isChoosingTalkKey = true
+        startChoosingKey(for: .talk)
+    }
+
+    /// Starts recording the key the user wants for `slot`, see KeyRecorder. A key that can
+    /// be a talk key, pressed and released on its own, becomes the key. Anything else
+    /// leaves a note and the recording goes on. Escape, a click anywhere in Orra, or
+    /// switching to another app stops it. Only presses in Orra count: the tap checks that
+    /// Orra is the active app, and without the tap a local monitor sees only Orra's own
+    /// events. Neither needs a new permission. A recording for the other slot stops first.
+    func startChoosingKey(for slot: KeySlot) {
+        guard choosingKeySlot != slot else { return }
+        stopChoosingKey()
+        choosingKeySlot = slot
         keyChoiceRejection = nil
+        keySwap = nil
         keyRecorder = KeyRecorder()
         tap?.chooseKey { [weak self] type, keyCode, flags in
             self?.keyChoice(type: type, keyCode: keyCode, flags: flags)
@@ -412,7 +489,7 @@ final class PushToTalkController {
         keyChoiceMonitors = [
             NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
                 // The tap has seen the event first when it is installed.
-                guard let self, isChoosingTalkKey, tap?.isInstalled != true else { return event }
+                guard let self, choosingKeySlot != nil, tap?.isInstalled != true else { return event }
                 let flags = event.cgEvent?.flags ?? CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
                 let type: CGEventType = event.type == .keyDown ? .keyDown : .flagsChanged
                 keyChoice(type: type, keyCode: Int64(event.keyCode), flags: flags)
@@ -423,7 +500,7 @@ final class PushToTalkController {
             // A click anywhere in Orra ends the recording, as in the shortcut recorders of
             // Mac apps. The click itself goes on to what was clicked.
             NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
-                self?.stopChoosingTalkKey()
+                self?.stopChoosingKey()
                 return event
             },
         ].compactMap { $0 }
@@ -433,15 +510,15 @@ final class PushToTalkController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.stopChoosingTalkKey()
+                self?.stopChoosingKey()
             }
         }
     }
 
-    /// Stops recording a talk key without changing it.
-    func stopChoosingTalkKey() {
-        guard isChoosingTalkKey else { return }
-        isChoosingTalkKey = false
+    /// Stops recording a key without changing it.
+    func stopChoosingKey() {
+        guard choosingKeySlot != nil else { return }
+        choosingKeySlot = nil
         keyChoiceRejection = nil
         tap?.chooseKey(nil)
         keyChoiceMonitors.forEach(NSEvent.removeMonitor)
@@ -452,10 +529,10 @@ final class PushToTalkController {
         resignObserver = nil
     }
 
-    /// One key down or flags changed event while the user records a talk key. Internal so
-    /// tests can drive it.
+    /// One key down or flags changed event while the user records a key. Internal so tests
+    /// can drive it.
     func keyChoice(type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
-        guard isChoosingTalkKey else { return }
+        guard let slot = choosingKeySlot else { return }
         guard let outcome = keyRecorder.handle(type: type, keyCode: keyCode, flags: flags) else {
             // A key that can be the talk key is down, so the note about an earlier press
             // no longer applies.
@@ -466,12 +543,15 @@ final class PushToTalkController {
         }
         switch outcome {
         case .chosen(let key):
-            stopChoosingTalkKey()
-            chooseTalkKey(key)
+            stopChoosingKey()
+            switch slot {
+            case .talk: chooseTalkKey(key)
+            case .translation: chooseTranslationKey(key)
+            }
         case .rejected(let rejection):
             keyChoiceRejection = rejection
         case .cancelled:
-            stopChoosingTalkKey()
+            stopChoosingKey()
         }
     }
 

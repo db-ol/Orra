@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         talkKey: TalkKeyPreference.load(),
         saveTalkKey: { TalkKeyPreference.save($0) },
         talkKeyChosen: TalkKeyPreference.isSaved(),
+        translationKey: TranslationKeyPreference.load(talkKey: TalkKeyPreference.load()),
+        saveTranslationKey: { TranslationKeyPreference.save($0) },
         handsFree: HandsFreePreference.load(),
         saveHandsFree: { HandsFreePreference.save($0) },
         microphone: MicrophonePreference.load(),

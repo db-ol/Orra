@@ -1557,13 +1557,123 @@ struct PushToTalkControllerTests {
         )
         controller.startChoosingTalkKey()
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [.maskControl, TalkKey.rightControl.downFlag])
-        controller.stopChoosingTalkKey()
+        controller.stopChoosingKey()
         // A new recording starts afresh, so the earlier press's release chooses nothing.
         controller.startChoosingTalkKey()
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey)
         #expect(controller.talkKey == .fn)
-        controller.stopChoosingTalkKey()
+        controller.stopChoosingKey()
+    }
+
+    // MARK: The translation key
+
+    @Test func theTranslationKeyDefaultsToTheKeyBesideTheTalkKey() {
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        #expect(controller.translationKey == .rightOption)
+        let optionTalker = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .rightOption)
+        #expect(optionTalker.translationKey == .rightCommand)
+        let saved = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .fn, translationKey: .leftOption)
+        #expect(saved.translationKey == .leftOption)
+        // Never the talk key.
+        let clash = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .fn, translationKey: .fn)
+        #expect(clash.translationKey == .rightOption)
+    }
+
+    @Test func pickingTheTranslationKeyAsTheTalkKeySwapsThem() {
+        var savedTalk: [TalkKey] = []
+        var savedTranslation: [TalkKey] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .rightControl,
+            saveTalkKey: { savedTalk.append($0) },
+            saveTranslationKey: { savedTranslation.append($0) }
+        )
+        controller.chooseTalkKey(.rightOption)
+        #expect(controller.talkKey == .rightOption)
+        #expect(controller.translationKey == .rightControl)
+        #expect(savedTalk == [.rightOption])
+        #expect(savedTranslation == [.rightControl])
+        #expect(controller.keySwap == KeySwap(talkKey: .rightOption, translationKey: .rightControl))
+        #expect(controller.keySwap?.message() == "The two keys swapped. The talk key is now right Option and the translation key right Control.")
+        // A key without a clash leaves the translation key, and the note goes.
+        controller.chooseTalkKey(.fn)
+        #expect(controller.translationKey == .rightControl)
+        #expect(controller.keySwap == nil)
+        #expect(savedTranslation == [.rightControl])
+    }
+
+    @Test func pickingTheTalkKeyAsTheTranslationKeySwapsThem() {
+        var savedTalk: [TalkKey] = []
+        var savedTranslation: [TalkKey] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .fn,
+            saveTalkKey: { savedTalk.append($0) },
+            translationKey: .rightOption,
+            saveTranslationKey: { savedTranslation.append($0) }
+        )
+        controller.startChoosingKey(for: .translation)
+        #expect(controller.choosingKeySlot == .translation)
+        #expect(controller.isChoosingTalkKey == false)
+        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
+        #expect(controller.keyChoiceNote == "The Return key can't be the translation key. Holding it would type or do something in the app in front.")
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [])
+        #expect(controller.choosingKeySlot == nil)
+        #expect(controller.translationKey == .fn)
+        #expect(controller.talkKey == .rightOption)
+        #expect(savedTranslation == [.fn])
+        #expect(savedTalk == [.rightOption])
+        #expect(controller.hasChosenTalkKey)
+        #expect(controller.keySwap == KeySwap(talkKey: .rightOption, translationKey: .fn))
+        // Recording again clears the note, and Escape changes nothing.
+        controller.startChoosingKey(for: .translation)
+        #expect(controller.keySwap == nil)
+        controller.keyChoice(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [])
+        #expect(controller.translationKey == .fn)
+        #expect(savedTranslation == [.fn])
+    }
+
+    @Test func recordingOneKeyStopsTheOther() {
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
+        controller.startChoosingKey(for: .translation)
+        // The half press belonged to the talk key's recording, so its release picks nothing.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [])
+        #expect(controller.choosingKeySlot == .translation)
+        #expect(controller.translationKey == .rightOption)
+        #expect(controller.talkKey == .rightControl)
+        controller.stopChoosingKey()
+        #expect(controller.choosingKeySlot == nil)
+    }
+
+    /// The tap watches the translation key only while translation is on, and that key
+    /// waits before it records while the talk key starts at once.
+    @Test func theTapWatchesTheTranslationKeyOnlyWhileTranslationIsOn() async throws {
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        let optionDown = TalkKey.rightOption.downFlag.union(.maskAlternate)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown)
+        #expect(tap.activeKey == nil)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [])
+        controller.setTranslationKeyOn(true)
+        #expect(controller.translationKeyIsOn)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown)
+        #expect(tap.activeKey == .rightOption)
+        #expect(controller.state == .idle)
+        tap.fireTimer()
+        #expect(controller.state == .listening)
+        controller.setTranslationKeyOn(false)
+        // Turning translation off ends the translation key's dictation.
+        #expect(controller.state == .idle)
+        #expect(tap.activeKey == nil)
+        try await waitUntil { mic.calls.contains("cancel") }
     }
 
     @Test func keepingTheDefaultKeySavesIt() {

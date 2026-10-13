@@ -63,6 +63,16 @@
         }
       }
     },
+    "%@ is a key combination and can't be the translation key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是组合键，不能作为翻译键。"
+          }
+        }
+      }
+    },
     "%@ is chosen under Microphone. Choose another microphone or System Default there." : {
       "localizations" : {
         "zh-Hans" : {
@@ -141,6 +151,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "组合键不能作为说话键。"
+          }
+        }
+      }
+    },
+    "A key combination can't be the translation key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "组合键不能作为翻译键。"
           }
         }
       }
@@ -323,6 +343,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "大写锁定键不能作为说话键。它用来开关大写字母或切换输入法。"
+          }
+        }
+      }
+    },
+    "Caps Lock can't be the translation key. It turns capitals or the input method on and off." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大写锁定键不能作为翻译键。它用来开关大写字母或切换输入法。"
           }
         }
       }
@@ -805,6 +835,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住%@说话"
+          }
+        }
+      }
+    },
+    "Hold %@ to translate" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住%@翻译"
           }
         }
       }
@@ -1843,6 +1883,16 @@
         }
       }
     },
+    "Shift can't be the translation key. On its own, it switches input methods between Chinese and English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shift 键不能作为翻译键。单独按下它会切换中英文输入法。"
+          }
+        }
+      }
+    },
     "Show Orra in the Dock" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2021,6 +2071,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@”键不能作为说话键。按住它会输入文字或在前台 App 中执行操作。"
+          }
+        }
+      }
+    },
+    "The %@ key can't be the translation key. Holding it would type or do something in the app in front." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”键不能作为翻译键。按住它会输入文字或在前台 App 中执行操作。"
           }
         }
       }
@@ -2251,6 +2311,32 @@
         }
       }
     },
+    "The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键可以用 fn 键，或者左侧、右侧的 Control、Option、Command 键。选了说话键的话，两个键会互换。"
+          }
+        }
+      }
+    },
+    "The two keys swapped. The talk key is now %@ and the translation key %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The two keys swapped. The talk key is now %1$@ and the translation key %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "两个键已互换。现在说话键是%1$@，翻译键是%2$@。"
+          }
+        }
+      }
+    },
     "This build has no microphone usage description" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2267,6 +2353,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这个键不能作为说话键。按住它会输入文字或在前台 App 中执行操作。"
+          }
+        }
+      }
+    },
+    "This key can't be the translation key. Holding it would type or do something in the app in front." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个键不能作为翻译键。按住它会输入文字或在前台 App 中执行操作。"
           }
         }
       }
@@ -2297,6 +2393,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在转写…"
+          }
+        }
+      }
+    },
+    "Translation key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键"
           }
         }
       }
