@@ -2,16 +2,63 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// What the settings window opens over its one page: the options of a row on the page, the
-/// vocabulary, the advanced settings and About.
-enum SettingsSheet: String, CaseIterable, Identifiable {
-    case cleanup
-    case translation
+/// The tabs in the sidebar of the settings window, in their order.
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case general
     case vocabulary
-    case advanced
     case about
 
     var id: String { rawValue }
+
+    /// The name in the sidebar and the window's title.
+    var title: LocalizedStringKey {
+        switch self {
+        case .general: "General"
+        case .vocabulary: "Vocabulary"
+        case .about: "About"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: "gearshape.fill"
+        case .vocabulary: "character.book.closed.fill"
+        case .about: "info.circle.fill"
+        }
+    }
+
+    /// The color behind the icon, as System Settings gives each pane its own.
+    var tint: Color {
+        switch self {
+        case .general: .gray
+        case .vocabulary: .blue
+        case .about: .indigo
+        }
+    }
+}
+
+/// What General opens over itself: the options of cleanup and the advanced settings.
+enum SettingsSheet: String, CaseIterable, Identifiable {
+    case cleanup
+    case advanced
+
+    var id: String { rawValue }
+}
+
+/// A symbol in a colored rounded square, as in the sidebar of System Settings.
+private struct SettingsIcon: View {
+    let symbol: String
+    let tint: Color
+    var size: CGFloat = 20
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.55, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(tint.gradient))
+            .accessibilityHidden(true)
+    }
 }
 
 /// A setting's name with what it does in smaller text right under it, as System Settings
@@ -36,8 +83,9 @@ private struct DescribedLabel: View {
     }
 }
 
-/// The settings window: one page with the basics, as General in System Settings, and a
-/// sheet for the options of a row, the vocabulary, the advanced settings and About.
+/// The settings window: a sidebar with General, Vocabulary and About, like System
+/// Settings. General holds what a user sets up, in blocks by purpose, and opens a sheet for
+/// the options of cleanup and for the advanced settings.
 struct SettingsView: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
@@ -48,37 +96,59 @@ struct SettingsView: View {
     let learning: CorrectionLearning
     let dockIcon: DockIcon
     let updater: AppUpdater
+    @State private var tab: SettingsTab? = .general
     @State private var sheet: SettingsSheet?
-    /// The height of the page, which no sheet may pass, so a sheet never hangs below the
-    /// window.
-    @State private var pageHeight: CGFloat = 400
+    /// The height of the window's content, which no sheet may pass, so a sheet never hangs
+    /// below the window.
+    @State private var pageHeight: CGFloat = SettingsWindow.defaultSize.height
 
     var body: some View {
-        VStack(spacing: 0) {
-            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, openAtLogin: openAtLogin, cleanup: cleanup) { sheet = $0 }
-            Divider()
-            HStack {
-                Button("Advanced…") { sheet = .advanced }
-                Spacer()
-                Button("About Orra") { sheet = .about }
+        NavigationSplitView {
+            List(SettingsTab.allCases, selection: $tab) { tab in
+                Label {
+                    Text(tab.title)
+                } icon: {
+                    SettingsIcon(symbol: tab.symbol, tint: tab.tint)
+                }
+                .tag(tab)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
+            page(for: tab ?? .general)
         }
+        .toolbar(removing: .sidebarToggle)
         .sheet(item: $sheet) { sheet in
             content(for: sheet)
                 .environment(\.settingsSheetHeightLimit, pageHeight - SettingsSheetLimits.margin)
         }
-        // A window that opens shows the sheet asked for, and one that is open already
-        // turns to it.
-        .onAppear {
-            sheet = SettingsWindow.takeOpeningSheet()
-        }
+        // A window that opens shows the tab and sheet asked for, and one that is open
+        // already turns to them.
+        .onAppear(perform: takeRequest)
         .onReceive(NotificationCenter.default.publisher(for: SettingsWindow.showNotification)) { _ in
-            sheet = SettingsWindow.takeOpeningSheet()
+            takeRequest()
         }
-        .frame(minWidth: 520, idealWidth: 600, maxWidth: .infinity, minHeight: 400, idealHeight: 480, maxHeight: .infinity)
+        .frame(minWidth: 680, idealWidth: SettingsWindow.defaultSize.width, maxWidth: .infinity, minHeight: 440, idealHeight: SettingsWindow.defaultSize.height, maxHeight: .infinity)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
+    }
+
+    private func takeRequest() {
+        let request = SettingsWindow.takeRequest()
+        tab = request.tab
+        sheet = request.sheet
+    }
+
+    /// The page on the right of the sidebar.
+    @ViewBuilder
+    func page(for tab: SettingsTab) -> some View {
+        switch tab {
+        case .general:
+            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, openAtLogin: openAtLogin, cleanup: cleanup) { sheet = $0 }
+        case .vocabulary:
+            VocabularySettings(pushToTalk: pushToTalk, learning: learning)
+        case .about:
+            AboutSettings(models: models, pushToTalk: pushToTalk, updater: updater)
+        }
     }
 
     /// What a sheet holds.
@@ -87,20 +157,15 @@ struct SettingsView: View {
         switch sheet {
         case .cleanup:
             CleanupOptions(pushToTalk: pushToTalk, cleanup: cleanup)
-        case .translation:
-            TranslationOptions(cleanup: cleanup)
-        case .vocabulary:
-            VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .advanced:
-            AdvancedSettings(pushToTalk: pushToTalk, feedback: feedback, learning: learning, dockIcon: dockIcon, updater: updater)
-        case .about:
-            AboutSettings(models: models, pushToTalk: pushToTalk)
+            AdvancedSettings(pushToTalk: pushToTalk, feedback: feedback, learning: learning, dockIcon: dockIcon)
         }
     }
 }
 
-/// The one page: the talk key, the microphone, the switches of the features with their
-/// options, the vocabulary and opening at login.
+/// General: the keys, the features with their options, the microphone, and how Orra starts
+/// with Advanced… for the rest, each in a block of its own. The target language of
+/// translation sits right under its switch, so it takes no extra click.
 private struct GeneralSettings: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
@@ -111,10 +176,53 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             Section {
-                // The note about swapped keys shows once, under the translation key while it is
-                // on the page.
-                TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: !cleanup.translationIsOn)
+                // The note about swapped keys shows once, under the translation key.
+                TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false)
                     .help(Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.") + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
+                VStack(alignment: .leading, spacing: 6) {
+                    TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
+                        // The key does nothing while translation is off.
+                        .disabled(!cleanup.translationIsOn)
+                    if !cleanup.translationIsOn {
+                        Text("Turn on Translation under Features to use this key.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .help(Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free."))
+            } header: {
+                Text("Keys")
+            }
+            Section {
+                CleanupRow(cleanup: cleanup) { open(.cleanup) }
+                TranslationRow(cleanup: cleanup)
+                if cleanup.translationIsOn {
+                    LocalModelStatus(cleanup: cleanup, use: .translation)
+                }
+                Picker(selection: Binding(
+                    get: { cleanup.translationDirection },
+                    set: { cleanup.setTranslationDirection($0) }
+                )) {
+                    ForEach(TranslationDirection.allCases, id: \.self) { direction in
+                        Text(direction.title).tag(direction)
+                    }
+                } label: {
+                    DescribedLabel(
+                        title: "Translate into",
+                        detail: cleanup.translationDirection.detail,
+                        systemImage: "arrow.left.arrow.right"
+                    )
+                }
+                .pickerStyle(.radioGroup)
+                .disabled(!cleanup.translationIsOn)
+            } header: {
+                Text("Features")
+            } footer: {
+                Text("Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
                 Picker(selection: Binding(
                     get: { pushToTalk.microphone?.uid ?? "" },
                     set: { uid in pushToTalk.setMicrophone(choice(forUID: uid)) }
@@ -127,33 +235,11 @@ private struct GeneralSettings: View {
                         Text(MicrophoneLabels.missing(chosen)).tag(chosen.uid)
                     }
                 } label: {
-                    Label("Microphone", systemImage: "mic")
+                    Label("Input device", systemImage: "mic")
                 }
                 .help(Text("While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off."))
-            }
-            Section {
-                CleanupRow(cleanup: cleanup) { open(.cleanup) }
-                TranslationRow(cleanup: cleanup) { open(.translation) }
-                // Only while translation is on, since the key does nothing otherwise.
-                if cleanup.translationIsOn {
-                    TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
-                        .help(Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free."))
-                }
-                LabeledContent {
-                    HStack(spacing: 12) {
-                        Group {
-                            if pushToTalk.vocabulary.count == 1 {
-                                Text("1 word")
-                            } else {
-                                Text("\(pushToTalk.vocabulary.count) words")
-                            }
-                        }
-                        .foregroundStyle(.secondary)
-                        Button("Edit…") { open(.vocabulary) }
-                    }
-                } label: {
-                    Label("Vocabulary", systemImage: "character.book.closed")
-                }
+            } header: {
+                Text("Microphone")
             }
             Section {
                 Toggle(isOn: Binding(
@@ -171,6 +257,17 @@ private struct GeneralSettings: View {
                     Text(verbatim: problem)
                         .foregroundStyle(.secondary)
                 }
+                LabeledContent {
+                    Button("Advanced…") { open(.advanced) }
+                } label: {
+                    DescribedLabel(
+                        title: "More settings",
+                        detail: "Language, hands free, the on screen hint, sounds, learning from corrections and the Dock icon.",
+                        systemImage: "slider.horizontal.3"
+                    )
+                }
+            } header: {
+                Text("System")
             }
         }
         .formStyle(.grouped)
@@ -261,9 +358,6 @@ private struct SettingsSheetContent<Content: View>: View {
     var height: CGFloat = 520
     /// Whether the user can make the sheet larger, for a long list.
     var resizable = false
-    /// Whether Return presses Done. A sheet with a field that takes Return leaves it out,
-    /// and Escape presses Done there.
-    var doneIsDefault = true
     @ViewBuilder let content: Content
     @Environment(\.dismiss) private var dismiss
     @Environment(\.settingsSheetHeightLimit) private var heightLimit
@@ -283,7 +377,7 @@ private struct SettingsSheetContent<Content: View>: View {
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }
-                    .keyboardShortcut(doneIsDefault ? .defaultAction : .cancelAction)
+                    .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
@@ -494,42 +588,27 @@ nonisolated enum CleanupLabels {
     }
 }
 
-/// The switch for translation with the translation key and Options… for the rest, as for
-/// cleanup. While the model is on its way, one line under the name says where it stands.
+/// The switch for translation with the translation key. While the model is on its way,
+/// the row under it on General says where it stands.
 private struct TranslationRow: View {
     @Bindable var cleanup: TextCleanup
-    let showOptions: () -> Void
 
     var body: some View {
         let models = cleanup.models
         let total = models.manifest.totalBytes
-        LabeledContent {
-            HStack(spacing: 12) {
-                Toggle("Translate with the translation key", isOn: Binding(
-                    get: { cleanup.translationIsOn },
-                    set: { $0 ? cleanup.turnOnTranslation() : cleanup.turnOffTranslation() }
-                ))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                // Off while Orra looks for the model on disk, a moment at launch.
-                .disabled(!cleanup.translationIsOn && !cleanup.canTurnOn)
-                Button("Options…", action: showOptions)
-            }
-        } label: {
-            Label {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Translation")
-                    if cleanup.translationIsOn, let status = CleanupLabels.status(models.state, engine: cleanup.engineState, total: total, use: .translation) {
-                        Text(verbatim: status)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            } icon: {
-                Image(systemName: "translate")
-            }
+        Toggle(isOn: Binding(
+            get: { cleanup.translationIsOn },
+            set: { $0 ? cleanup.turnOnTranslation() : cleanup.turnOffTranslation() }
+        )) {
+            DescribedLabel(
+                title: "Translation",
+                detail: "Hold the translation key, speak, and let go. Orra pastes what you said in another language.",
+                systemImage: "translate"
+            )
         }
+        // Off while Orra looks for the model on disk, a moment at launch.
+        .disabled(!cleanup.translationIsOn && !cleanup.canTurnOn)
+        .help(Text("Dictations over \(TranslationStep.maximumLength) characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost.") + Text(verbatim: "\n") + Text("Paste Original Text in the Orra menu brings back the text from before the translation, and Copy Last Dictation copies the translation.") + Text(verbatim: "\n") + Text("Orra never learns corrections from a translated paste."))
         .alert("Download the model for translation?", isPresented: $cleanup.isConfirmingTranslationDownload) {
             Button(CleanupLabels.downloadButton(models.state, total: total)) {
                 cleanup.confirmTranslationDownload()
@@ -537,68 +616,6 @@ private struct TranslationRow: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
-        }
-    }
-}
-
-/// The options of translation: what it does with the model's download and loading, the
-/// direction, and what to expect.
-private struct TranslationOptions: View {
-    let cleanup: TextCleanup
-
-    var body: some View {
-        let size = ModelInstaller.State.size(cleanup.models.manifest.totalBytes)
-        SettingsSheetContent(title: "Translation", height: 700, resizable: true) {
-            Section {
-                DescribedLabel(
-                    title: "Translate with the translation key",
-                    detail: "Hold the translation key, speak, and let go. Orra pastes what you said in the other language. It uses the local model of Clean Up Text, also while cleanup is off: a \(size) download that needs about 4 GB of memory and runs on this Mac.",
-                    systemImage: "translate"
-                )
-                if cleanup.translationIsOn {
-                    LocalModelStatus(cleanup: cleanup, use: .translation)
-                }
-            } header: {
-                Text("Local model")
-            }
-            Section {
-                Picker(selection: Binding(
-                    get: { cleanup.translationDirection },
-                    set: { cleanup.setTranslationDirection($0) }
-                )) {
-                    ForEach(TranslationDirection.allCases, id: \.self) { direction in
-                        Text(direction.title).tag(direction)
-                    }
-                } label: {
-                    DescribedLabel(
-                        title: "Translate into",
-                        detail: cleanup.translationDirection.detail,
-                        systemImage: "arrow.left.arrow.right"
-                    )
-                }
-            } header: {
-                Text("Direction")
-            }
-            Section {
-                Label {
-                    Text("Dictations over \(TranslationStep.maximumLength) characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost.")
-                } icon: {
-                    Image(systemName: "text.badge.checkmark")
-                }
-                Label {
-                    Text("Paste Original Text in the Orra menu brings back the text from before the translation, and Copy Last Dictation copies the translation.")
-                } icon: {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                Label {
-                    Text("Orra never learns corrections from a translated paste.")
-                } icon: {
-                    Image(systemName: "character.cursor.ibeam")
-                }
-            } header: {
-                Text("Good to know")
-            }
-            .foregroundStyle(.secondary)
         }
     }
 }
@@ -624,7 +641,7 @@ extension TranslationDirection {
 }
 
 /// The user's words and names, laid out as System Settings shows text replacements: a
-/// field to add a word, then the words in a table.
+/// field to add a word, then the words in a table, over the full height of the window.
 private struct VocabularySettings: View {
     let pushToTalk: PushToTalkController
     let learning: CorrectionLearning
@@ -632,8 +649,7 @@ private struct VocabularySettings: View {
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
-        // Return adds the word typed in the field, so it does not close the sheet.
-        SettingsSheetContent(title: "Vocabulary", width: 680, height: 600, resizable: true, doneIsDefault: false) {
+        Form {
             Section {
                 HStack(spacing: 8) {
                     // A visible box with the hint inside it, so it reads as a place to type.
@@ -658,6 +674,8 @@ private struct VocabularySettings: View {
                 Text(verbatim: VocabularyList.summary(count: pushToTalk.vocabulary.count))
             }
         }
+        .formStyle(.grouped)
+        .navigationTitle("Vocabulary")
         .onAppear { fieldFocused = true }
     }
 
@@ -669,13 +687,12 @@ private struct VocabularySettings: View {
 }
 
 /// Everything that is set once or rarely: the language, hands free, what Orra shows and
-/// plays while dictating, learning from corrections, the Dock icon and updates.
+/// plays while dictating, learning from corrections and the Dock icon.
 private struct AdvancedSettings: View {
     let pushToTalk: PushToTalkController
     @Bindable var feedback: RecordingFeedback
     @Bindable var learning: CorrectionLearning
     @Bindable var dockIcon: DockIcon
-    @Bindable var updater: AppUpdater
     @State private var language = AppLanguage.load()
 
     var body: some View {
@@ -777,27 +794,6 @@ private struct AdvancedSettings: View {
                     )
                 }
             }
-            Section {
-                Toggle(isOn: $updater.checksAutomatically) {
-                    DescribedLabel(
-                        title: "Check for updates automatically",
-                        detail: "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it.",
-                        systemImage: "arrow.triangle.2.circlepath"
-                    )
-                }
-                .disabled(!AppUpdater.updatesEnabled)
-                Button("Check for Updates…") {
-                    updater.checkForUpdates()
-                }
-                .disabled(!updater.canCheckForUpdates)
-                // A build run from Xcode never updates, see AppUpdater.updatesEnabled.
-                if !AppUpdater.updatesEnabled {
-                    Text("Development build, updates are off")
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Updates")
-            }
         }
     }
 }
@@ -814,13 +810,14 @@ extension OnScreenHint {
     }
 }
 
-/// The version, the speech model, and what Orra does with speech.
+/// The version and its updates, the speech model, and what Orra does with speech.
 private struct AboutSettings: View {
     let models: ModelInstaller
     let pushToTalk: PushToTalkController
+    @Bindable var updater: AppUpdater
 
     var body: some View {
-        SettingsSheetContent(title: "About Orra", height: 380) {
+        Form {
             Section {
                 HStack(spacing: 14) {
                     Image(nsImage: NSApplication.shared.applicationIconImage)
@@ -841,12 +838,28 @@ private struct AboutSettings: View {
                         .foregroundStyle(.secondary)
                     }
                 }
-            }
-            Section {
                 LabeledContent("Speech model") {
                     Text(modelStatus)
                         .foregroundStyle(.secondary)
                 }
+            }
+            Section {
+                // The line under the version says when a build run from Xcode has updates
+                // off, see AppUpdater.updatesEnabled.
+                Toggle(isOn: $updater.checksAutomatically) {
+                    DescribedLabel(
+                        title: "Check for updates automatically",
+                        detail: "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it.",
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                }
+                .disabled(!AppUpdater.updatesEnabled)
+                Button("Check for Updates…") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
+            } header: {
+                Text("Updates")
             }
             Section {
                 Text("Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the speech model or the cleanup model when you ask it to, and to check for updates when you allow it.")
@@ -854,6 +867,8 @@ private struct AboutSettings: View {
                 Link("Source code and privacy details", destination: URL(string: "https://github.com/db-ol/Orra")!)
             }
         }
+        .formStyle(.grouped)
+        .navigationTitle("About")
     }
 
     private static var version: String {

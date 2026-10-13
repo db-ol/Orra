@@ -4,8 +4,8 @@ import SwiftUI
 import Testing
 @testable import Orra
 
-/// The page of the settings window, its sheets, and how the window is turned to one.
-/// Serialized, since the sheet asked for is shared.
+/// The tabs of the settings window, the sheets of General, and how the window is turned
+/// to one. Serialized, since the request is shared.
 @MainActor
 @Suite(.serialized)
 struct SettingsPageTests {
@@ -14,30 +14,40 @@ struct SettingsPageTests {
     let inserter = FakeInserter()
     let temporary = TemporaryModelFolders()
 
-    @Test func aSheetAskedForOpensOnceAndSettingsOpensThePage() {
+    @Test func theSidebarHasGeneralVocabularyAndAbout() {
+        #expect(SettingsTab.allCases == [.general, .vocabulary, .about])
+        #expect(SettingsSheet.allCases == [.cleanup, .advanced])
+    }
+
+    @Test func aTabAskedForOpensOnceAndSettingsOpensGeneral() {
         SettingsWindow.show(.vocabulary)
-        #expect(SettingsWindow.takeOpeningSheet() == .vocabulary)
-        // Settings… after that opens on the page alone.
-        #expect(SettingsWindow.takeOpeningSheet() == nil)
+        #expect(SettingsWindow.takeRequest() == .init(tab: .vocabulary, sheet: nil))
+        // Settings… after that opens on General alone.
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: nil))
     }
 
-    @Test func changeTalkKeyOpensThePageAlone() {
-        SettingsWindow.show(.advanced)
-        // Change Talk Key… closes a sheet that is open, since the talk key is on the page.
-        SettingsWindow.show()
-        #expect(SettingsWindow.takeOpeningSheet() == nil)
+    @Test func aSheetOpensOverGeneral() {
+        SettingsWindow.show(.about, sheet: .advanced)
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: .advanced))
     }
 
-    @Test func anOpenWindowIsToldToShowTheSheet() {
+    @Test func changeTalkKeyOpensGeneralAlone() {
+        SettingsWindow.show(sheet: .advanced)
+        // Change Talk Key… closes a sheet that is open, since the keys are on General.
+        SettingsWindow.show(.general)
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: nil))
+    }
+
+    @Test func anOpenWindowIsToldToTurn() {
         let received = Received()
         // Posted on the main thread, so the observer runs before show returns.
         let observer = NotificationCenter.default.addObserver(forName: SettingsWindow.showNotification, object: nil, queue: nil) { _ in
             MainActor.assumeIsolated { received.count += 1 }
         }
         defer { NotificationCenter.default.removeObserver(observer) }
-        SettingsWindow.show(.cleanup)
+        SettingsWindow.show(sheet: .cleanup)
         #expect(received.count == 1)
-        #expect(SettingsWindow.takeOpeningSheet() == .cleanup)
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: .cleanup))
     }
 
     /// A sheet opens at its own height in a tall window, and no taller than the window in
@@ -59,8 +69,8 @@ struct SettingsPageTests {
         #expect(CleanupLabels.status(.downloading(bytes: 50, source: nil), engine: .unloaded, total: 100, use: .cleanup)?.hasPrefix("Downloading the cleanup model: 50%") == true)
     }
 
-    /// The Translation options show the direction with its explanation for each choice,
-    /// and the row on the page says where the model stands in the words of translation.
+    /// The target picker under Translation shows each direction with its explanation, and
+    /// the row under the switch says where the model stands in the words of translation.
     @Test func everyDirectionHasATitleAndAnExplanation() {
         #expect(TranslationDirection.allCases == [.automatic, .english, .chinese])
         let details = TranslationDirection.allCases.map { "\($0.detail)" }
@@ -77,34 +87,42 @@ struct SettingsPageTests {
         var count = 0
     }
 
-    /// Renders the page and each sheet of the settings window to a PNG, for a look at the
+    /// Renders each tab of the settings window and each sheet to a PNG, for a look at the
     /// layout without running the app. Off unless ORRA_SETTINGS_SNAPSHOTS names a folder to
     /// write to, which the test command passes as TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS. CI
     /// never sets it. Run with -testLanguage zh-Hans for the Chinese text.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
-    func renderThePageAndEverySheet() async throws {
+    func renderEveryTabAndSheet() async throws {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let language = Bundle.main.preferredLocalizations.first ?? "en"
-        try await render(nil, cleanupOn: false, name: "\(language)-0-general")
-        try await render(nil, cleanupOn: true, name: "\(language)-0-general-cleanup-on")
-        try await render(.cleanup, cleanupOn: false, name: "\(language)-1-cleanup-options")
-        try await render(.cleanup, cleanupOn: true, name: "\(language)-1-cleanup-options-on")
-        try await render(nil, cleanupOn: false, translationOn: true, name: "\(language)-0-general-translation-on")
-        try await render(nil, cleanupOn: false, translationOn: true, swapped: true, name: "\(language)-0-general-translation-swapped")
-        try await render(.translation, cleanupOn: false, name: "\(language)-2-translation-options")
-        try await render(.translation, cleanupOn: false, translationOn: true, name: "\(language)-2-translation-options-on")
-        try await render(.vocabulary, cleanupOn: false, name: "\(language)-3-vocabulary")
-        try await render(.advanced, cleanupOn: false, name: "\(language)-4-advanced")
-        try await render(.about, cleanupOn: false, name: "\(language)-5-about")
+        try await render(.tab(.general), name: "\(language)-0-general")
+        try await render(.tab(.general), cleanupOn: true, name: "\(language)-0-general-cleanup-on")
+        try await render(.tab(.general), translationOn: true, name: "\(language)-0-general-translation-on")
+        try await render(.tab(.general), translationOn: true, swapped: true, name: "\(language)-0-general-translation-swapped")
+        try await render(.tab(.general), cleanupOn: true, translationOn: true, height: 1000, name: "\(language)-0-general-full-height")
+        try await render(.tab(.vocabulary), name: "\(language)-1-vocabulary")
+        try await render(.tab(.about), name: "\(language)-2-about")
+        try await render(.tab(.about), height: 900, name: "\(language)-2-about-full-height")
+        try await render(.sheet(.cleanup), name: "\(language)-3-cleanup-options")
+        try await render(.sheet(.cleanup), cleanupOn: true, name: "\(language)-3-cleanup-options-on")
+        try await render(.sheet(.advanced), name: "\(language)-4-advanced")
+        try await render(.sheet(.advanced), full: true, name: "\(language)-4-advanced-full-height")
     }
 
     private var folder: URL {
         URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
     }
 
-    /// The page for a nil sheet, or the sheet alone at its own size, since a sheet does not
-    /// draw outside a window on screen.
-    private func render(_ sheet: SettingsSheet?, cleanupOn: Bool, translationOn: Bool = false, swapped: Bool = false, name: String) async throws {
+    private enum Shown {
+        case tab(SettingsTab)
+        case sheet(SettingsSheet)
+    }
+
+    /// A tab in the whole window, at the window's first size or `height`, or a sheet alone
+    /// at the size it opens at over that window, since a sheet does not draw outside a
+    /// window on screen. `full` renders a sheet at its own height, without the window's
+    /// limit, to show what scrolls.
+    private func render(_ shown: Shown, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, height: CGFloat? = nil, full: Bool = false, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -141,27 +159,29 @@ struct SettingsPageTests {
             updater: AppUpdater()
         )
         // The window's first size, and each sheet at the size it opens at over that window.
-        let page = NSSize(width: 600, height: 480)
-        let limit = page.height - SettingsSheetLimits.margin
-        let content: AnyView = if let sheet {
-            AnyView(view.content(for: sheet).environment(\.settingsSheetHeightLimit, limit))
-        } else {
-            AnyView(view)
-        }
-        let size = switch sheet {
-        case nil: page
-        case .cleanup: NSSize(width: 540, height: SettingsSheetLimits.height(560, limit: limit))
-        case .translation: NSSize(width: 540, height: SettingsSheetLimits.height(700, limit: limit))
-        case .vocabulary: NSSize(width: 680, height: SettingsSheetLimits.height(600, limit: limit))
-        case .advanced: NSSize(width: 600, height: SettingsSheetLimits.height(640, limit: limit))
-        case .about: NSSize(width: 540, height: SettingsSheetLimits.height(380, limit: limit))
+        let window = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)
+        let limit = full ? .infinity : window.height - SettingsSheetLimits.margin
+        let content: AnyView
+        let size: NSSize
+        switch shown {
+        case .tab(let tab):
+            // The view takes the request when it appears, as the window does.
+            SettingsWindow.show(tab)
+            content = AnyView(view)
+            size = window
+        case .sheet(let sheet):
+            content = AnyView(view.content(for: sheet).environment(\.settingsSheetHeightLimit, limit))
+            size = switch sheet {
+            case .cleanup: NSSize(width: 540, height: SettingsSheetLimits.height(560, limit: limit))
+            case .advanced: NSSize(width: 600, height: SettingsSheetLimits.height(full ? 1000 : 640, limit: limit))
+            }
         }
         let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
         hosting.frame = NSRect(origin: .zero, size: size)
         // A window that is never ordered front, so the view appears without showing.
-        let window = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = hosting
+        let offscreen = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        offscreen.isReleasedWhenClosed = false
+        offscreen.contentView = hosting
         for _ in 0..<20 {
             hosting.layoutSubtreeIfNeeded()
             try await Task.sleep(for: .milliseconds(50))
@@ -170,6 +190,6 @@ struct SettingsPageTests {
         hosting.cacheDisplay(in: hosting.bounds, to: image)
         let png = try #require(image.representation(using: .png, properties: [:]))
         try png.write(to: folder.appendingPathComponent("\(name).png"))
-        window.close()
+        offscreen.close()
     }
 }

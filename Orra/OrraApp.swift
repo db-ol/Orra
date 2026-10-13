@@ -20,7 +20,7 @@ import SwiftUI
             SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
         }
         .windowResizability(.contentMinSize)
-        .defaultSize(width: 600, height: 480)
+        .defaultSize(SettingsWindow.defaultSize)
         .defaultLaunchBehavior(.suppressed)
         .commands {
             CommandGroup(replacing: .appSettings) {
@@ -39,25 +39,33 @@ import SwiftUI
 /// The settings window's identity, for openWindow.
 enum SettingsWindow {
     static let id = "settings"
-    /// Posted to show the sheet `show` asked for in an open settings window.
+    /// The size the window first opens at.
+    static let defaultSize = CGSize(width: 720, height: 560)
+    /// Posted to turn an open settings window to what `show` asked for.
     static let showNotification = Notification.Name("io.github.db-ol.Orra.showSettings")
 
-    /// The sheet the window opens when it appears or gets the notification. Back to none
-    /// once a window took it, so Settings… opens on the page alone.
-    private static var openingSheet: SettingsSheet?
+    /// A tab of the window, and a sheet of General to open over it.
+    struct Request: Equatable {
+        var tab = SettingsTab.general
+        var sheet: SettingsSheet?
+    }
 
-    /// Turns the settings window to `sheet`, such as the options of cleanup, or to the page
-    /// alone for nil, where the talk key is chosen. Called before the window opens, the
-    /// window opens with that sheet.
-    static func show(_ sheet: SettingsSheet? = nil) {
-        openingSheet = sheet
+    /// What the window shows when it appears or gets the notification. Back to General
+    /// alone once a window took it, so Settings… opens on General.
+    private static var opening = Request()
+
+    /// Turns the settings window to `tab`, such as General, where the keys are chosen, and
+    /// opens `sheet` over General, such as the options of cleanup. Called before the
+    /// window opens, the window opens that way.
+    static func show(_ tab: SettingsTab = .general, sheet: SettingsSheet? = nil) {
+        opening = Request(tab: sheet == nil ? tab : .general, sheet: sheet)
         NotificationCenter.default.post(name: showNotification, object: nil)
     }
 
-    /// The sheet asked for, which resets the request to none.
-    static func takeOpeningSheet() -> SettingsSheet? {
-        defer { openingSheet = nil }
-        return openingSheet
+    /// What was asked for, which resets the request to General alone.
+    static func takeRequest() -> Request {
+        defer { opening = Request() }
+        return opening
     }
 }
 

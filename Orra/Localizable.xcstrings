@@ -165,22 +165,22 @@
         }
       }
     },
+    "About" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于"
+          }
+        }
+      }
+    },
     "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 大约每天向 GitHub 查询一次最新版本。和所有网页请求一样，查询会带上你偏好的语言，除此之外不发送任何关于你的 Mac 的信息。每次更新都要你同意后才会安装。"
-          }
-        }
-      }
-    },
-    "About Orra" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关于 Orra"
           }
         }
       }
@@ -640,16 +640,6 @@
         }
       }
     },
-    "Direction" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻译方向"
-          }
-        }
-      }
-    },
     "Done" : {
       "localizations" : {
         "zh-Hans" : {
@@ -799,16 +789,6 @@
         }
       }
     },
-    "Edit…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑…"
-          }
-        }
-      }
-    },
     "End" : {
       "comment" : "A key name",
       "localizations" : {
@@ -857,6 +837,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你说的内容都会以英文粘贴。"
+          }
+        }
+      }
+    },
+    "Features" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "功能"
           }
         }
       }
@@ -930,16 +920,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "地球仪 🌐"
-          }
-        }
-      }
-    },
-    "Good to know" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "说明"
           }
         }
       }
@@ -1035,12 +1015,12 @@
         }
       }
     },
-    "Hold the translation key, speak, and let go. Orra pastes what you said in the other language. It uses the local model of Clean Up Text, also while cleanup is off: a %@ download that needs about 4 GB of memory and runs on this Mac." : {
+    "Hold the translation key, speak, and let go. Orra pastes what you said in another language." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按住翻译键，说话，然后松开。Orra 会把你说的话翻译成另一种语言再粘贴。它使用“整理文字”中的本地模型，即使整理文字关闭也能用：需要下载 %@，约占 4 GB 内存，全部在这台 Mac 上运行。"
+            "value" : "按住翻译键说话，松开后 Orra 会粘贴译文。"
           }
         }
       }
@@ -1052,6 +1032,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Home"
+          }
+        }
+      }
+    },
+    "Input device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入设备"
           }
         }
       }
@@ -1076,12 +1066,32 @@
         }
       }
     },
+    "Keys" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按键"
+          }
+        }
+      }
+    },
     "Language" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "语言"
+          }
+        }
+      }
+    },
+    "Language, hands free, the on screen hint, sounds, learning from corrections and the Dock icon." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言、免手持、屏幕提示、提示音、从修改中学习和程序坞图标。"
           }
         }
       }
@@ -1286,6 +1296,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风访问权限已关闭。请在系统设置的“麦克风”中打开 Orra。"
+          }
+        }
+      }
+    },
+    "More settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多设置"
           }
         }
       }
@@ -2190,6 +2210,16 @@
         }
       }
     },
+    "System" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统"
+          }
+        }
+      }
+    },
     "System Default" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2673,16 +2703,6 @@
         }
       }
     },
-    "Translate with the translation key" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用翻译键翻译"
-          }
-        }
-      }
-    },
     "Translation" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2713,6 +2733,16 @@
         }
       }
     },
+    "Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译在这台 Mac 上使用“整理文字”的本地模型，约占 4 GB 内存，即使整理文字关闭也能用。听写太长，或者译文没通过 Orra 的检查时，会按原话粘贴。"
+          }
+        }
+      }
+    },
     "Try Again" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2729,6 +2759,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在任何 App 中试试：按住说话键，说点什么，然后松开。文字会出现在你正在输入的位置。"
+          }
+        }
+      }
+    },
+    "Turn on Translation under Features to use this key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“功能”里打开“翻译”后才能使用这个键。"
           }
         }
       }
