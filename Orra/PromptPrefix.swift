@@ -3,7 +3,8 @@ import Foundation
 /// The start of the cleanup prompt that is the same for every transcript: the system text,
 /// the examples and the start of the last user message. RewriteEngine runs the model on
 /// these tokens once after it loads and keeps the cache, so a cleanup only has to run the
-/// model on the tokens that follow.
+/// model on the tokens that follow. The translation prompts have one each, filled when
+/// they are first used.
 ///
 /// The prefix is found by comparing the tokens of two prompts with different transcripts,
 /// as the prefix cache test of the translation benchmark did. The tokenizer can merge the
@@ -18,6 +19,12 @@ nonisolated enum PromptPrefix {
     /// transcript, which differ from their first character.
     static func cleanupPrompt(encode: (String) -> [Int]) -> [Int] {
         shared(encode(RewritePrompt.text(for: "你好")), encode(RewritePrompt.text(for: "Hello there")))
+    }
+
+    /// The prefix of the translation prompt for a target, found the same way. Each target
+    /// has its own prompt and so its own prefix.
+    static func translationPrompt(into target: TranslationTarget, encode: (String) -> [Int]) -> [Int] {
+        shared(encode(TranslationPrompt.text(for: "你好", into: target)), encode(TranslationPrompt.text(for: "Hello there", into: target)))
     }
 
     /// The tokens two prompts share at their start, less `margin`. Empty when they share
