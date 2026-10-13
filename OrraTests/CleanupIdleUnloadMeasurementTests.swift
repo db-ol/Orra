@@ -191,7 +191,7 @@ struct CleanupIdleUnloadMeasurementTests {
             capture: mic.capture,
             transcription: Transcription(
                 load: { try await speechEngine.load() },
-                transcribe: { samples, context in try await speechEngine.transcribe(samples, context: context) }
+                transcribe: { samples, context, language in try await speechEngine.transcribe(samples, context: context, language: language) }
             ),
             cleanup: model,
             insert: { text in

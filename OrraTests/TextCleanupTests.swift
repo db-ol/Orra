@@ -8,10 +8,21 @@ import Testing
 struct TextCleanupTests {
     let temporary = TemporaryModelFolders()
 
-    private func makeCleanup(isOn: Bool = false, fetch: FileFetch, saved: @escaping (Bool) -> Void = { _ in }, engine: CleanupEngine = .live()) -> TextCleanup {
+    private func makeCleanup(
+        isOn: Bool = false,
+        translationIsOn: Bool = false,
+        fetch: FileFetch,
+        saved: @escaping (Bool) -> Void = { _ in },
+        savedTranslation: @escaping (Bool) -> Void = { _ in },
+        savedDirection: @escaping (TranslationDirection) -> Void = { _ in },
+        engine: CleanupEngine = .live()
+    ) -> TextCleanup {
         TextCleanup(
             isOn: isOn,
             save: saved,
+            translationIsOn: translationIsOn,
+            saveTranslation: savedTranslation,
+            saveDirection: savedDirection,
             models: ModelInstaller(
                 manifest: temporary.manifest,
                 folders: temporary.folders,
@@ -31,14 +42,22 @@ struct TextCleanupTests {
         private(set) var running = 0
         private(set) var mostRunning = 0
         private(set) var isLoaded = false
+        /// The targets whose translation prompts were read ahead, in order.
+        private(set) var prepared: [TranslationTarget] = []
         private var held: [CheckedContinuation<Void, Never>] = []
 
         var engine: CleanupEngine {
             CleanupEngine(
                 load: { [self] _ in try await load() },
                 unload: { [self] in await unload() },
-                complete: { _ in #"{"cleaned": ""}"# }
+                complete: { _ in #"{"cleaned": ""}"# },
+                translate: { _, _ in #"{"cleaned": "", "translation": ""}"# },
+                prepareTranslation: { [self] target in await prepare(target) }
             )
+        }
+
+        private func prepare(_ target: TranslationTarget) {
+            prepared.append(target)
         }
 
         private func load() async throws {
@@ -245,5 +264,139 @@ struct TextCleanupTests {
         cleanup.turnOn()
         await cleanup.waitForLoad()
         #expect(cleanup.engineState == .ready)
+    }
+
+    // MARK: Translation
+
+    @Test func translationIsOffUntilSavedAndTheDirectionIsAutomatic() throws {
+        let suite = "io.github.db-ol.OrraTests.translation-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(TranslationPreference.load(from: defaults) == false)
+        TranslationPreference.save(true, to: defaults)
+        #expect(TranslationPreference.load(from: defaults))
+        #expect(TranslationDirection.load(from: defaults) == .automatic)
+        TranslationDirection.chinese.save(to: defaults)
+        #expect(TranslationDirection.load(from: defaults) == .chinese)
+    }
+
+    /// Turning translation on without the model asks as cleanup does, and nothing goes
+    /// online until the user agrees.
+    @Test func turningTranslationOnAsksBeforeTheDownload() async {
+        defer { temporary.remove() }
+        let calls = Mutex(0)
+        var saved: [Bool] = []
+        let cleanup = makeCleanup(fetch: FileFetch { _, _, _, _, _, _ in calls.withLock { $0 += 1 } }, savedTranslation: { saved.append($0) })
+        await cleanup.start()
+        cleanup.turnOnTranslation()
+        #expect(cleanup.isConfirmingTranslationDownload)
+        #expect(!cleanup.isConfirmingDownload)
+        #expect(!cleanup.translationIsOn)
+        #expect(saved.isEmpty)
+        #expect(calls.withLock { $0 } == 0)
+        #expect(cleanup.translation.isReady() == false)
+    }
+
+    /// Agreeing to the download for translation turns translation on and leaves cleanup
+    /// off. Cleanup then turns on without asking again, and Cancel Download turns both off.
+    @Test func confirmingTheDownloadForTranslationAndCancelling() async {
+        defer { temporary.remove() }
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(50))])
+        defer { servers.close() }
+        var saved: [Bool] = []
+        var savedTranslation: [Bool] = []
+        let cleanup = makeCleanup(fetch: servers.fetch, saved: { saved.append($0) }, savedTranslation: { savedTranslation.append($0) })
+        await cleanup.start()
+        cleanup.turnOnTranslation()
+        cleanup.confirmTranslationDownload()
+        #expect(cleanup.translationIsOn)
+        #expect(!cleanup.isOn)
+        #expect(!cleanup.isConfirmingTranslationDownload)
+        guard case .downloading = cleanup.models.state else {
+            Issue.record("Expected a download, got \(cleanup.models.state)")
+            return
+        }
+        cleanup.turnOn()
+        #expect(cleanup.isOn)
+        #expect(!cleanup.isConfirmingDownload)
+        cleanup.cancelDownload()
+        await cleanup.models.waitForDownload()
+        #expect(!cleanup.isOn)
+        #expect(!cleanup.translationIsOn)
+        #expect(saved == [true, false])
+        #expect(savedTranslation == [true, false])
+    }
+
+    /// Translation on and cleanup off still loads the model, and the translation prompts
+    /// are read ahead for both targets, since the automatic direction picks one per
+    /// dictation. The cleanup closure stays off.
+    @Test func translationAloneLoadsTheModelAndReadsBothPromptsAhead() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = FakeEngine()
+        let cleanup = makeCleanup(translationIsOn: true, fetch: FileFetch { _, _, _, _, _, _ in }, engine: fake.engine)
+        await cleanup.start()
+        await cleanup.waitForLoad()
+        #expect(fake.isLoaded)
+        #expect(cleanup.engineState == .ready)
+        #expect(fake.prepared == [.english, .chinese])
+        #expect(cleanup.translation.isReady())
+        #expect(await cleanup.model.waitUntilLoaded() == false)
+    }
+
+    /// With the model loaded for cleanup, turning translation on reads the prompts ahead
+    /// at once, a fixed direction only its own, and a change of direction the new one.
+    /// Turning translation off leaves the model to cleanup.
+    @Test func turningTranslationOnWithTheModelLoadedReadsThePromptAhead() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = FakeEngine()
+        var directions: [TranslationDirection] = []
+        let cleanup = makeCleanup(isOn: true, fetch: FileFetch { _, _, _, _, _, _ in }, savedDirection: { directions.append($0) }, engine: fake.engine)
+        await cleanup.start()
+        await cleanup.waitForLoad()
+        #expect(fake.prepared.isEmpty)
+        cleanup.setTranslationDirection(.chinese)
+        #expect(directions == [.chinese])
+        await cleanup.waitForLoad()
+        // Translation is off, so nothing is read ahead yet.
+        #expect(fake.prepared.isEmpty)
+        cleanup.turnOnTranslation()
+        #expect(cleanup.translationIsOn)
+        #expect(!cleanup.isConfirmingTranslationDownload)
+        await cleanup.waitForLoad()
+        #expect(fake.prepared == [.chinese])
+        #expect(cleanup.translation.direction() == .chinese)
+        cleanup.setTranslationDirection(.english)
+        await cleanup.waitForLoad()
+        #expect(fake.prepared == [.chinese, .english])
+        cleanup.turnOffTranslation()
+        await cleanup.waitForLoad()
+        #expect(fake.isLoaded)
+        #expect(await cleanup.model.waitUntilLoaded())
+        #expect(cleanup.translation.isReady() == false)
+        // The last switch off unloads.
+        cleanup.turnOff()
+        await cleanup.waitForLoad()
+        #expect(!fake.isLoaded)
+        #expect(cleanup.engineState == .unloaded)
+    }
+
+    /// Cleanup off while translation is on keeps the model loaded.
+    @Test func cleanupOffKeepsTheModelForTranslation() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = FakeEngine()
+        let cleanup = makeCleanup(isOn: true, translationIsOn: true, fetch: FileFetch { _, _, _, _, _, _ in }, engine: fake.engine)
+        await cleanup.start()
+        await cleanup.waitForLoad()
+        cleanup.turnOff()
+        await cleanup.waitForLoad()
+        #expect(fake.isLoaded)
+        #expect(cleanup.engineState == .ready)
+        #expect(cleanup.translation.isReady())
+        #expect(await cleanup.model.waitUntilLoaded() == false)
+        #expect(TextCleanup.preparedTargets(.automatic) == [.english, .chinese])
+        #expect(TextCleanup.preparedTargets(.english) == [.english])
     }
 }

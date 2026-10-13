@@ -356,6 +356,22 @@ struct TalkKeyDetectorTests {
         #expect(rightControlUp(&detector).event == .released)
     }
 
+    @Test func aDelayedKeyWaitsWhileHandsFreeIsOff() {
+        var detector = TalkKeyDetector(keys: [.rightControl, .rightOption], delayedKeys: [.rightOption], handsFreeEnabled: false)
+        let optionDown = TalkKey.rightOption.downFlag.union(.maskAlternate)
+        #expect(detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown) == .passThrough)
+        #expect(detector.phase == .arming(.rightOption))
+        // Released before the wait: nothing was recorded and nothing is left behind.
+        #expect(detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: []) == .passThrough)
+        #expect(detector.phase == .up)
+        // Held through the wait, it is a hold like any other.
+        _ = detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown)
+        #expect(detector.timerFired(generation: detector.generation) == .pressed(isRepeat: false))
+        #expect(detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: []).event == .released)
+        // The talk key starts at once.
+        #expect(rightControlDown(&detector).event == .pressed(isRepeat: false))
+    }
+
     // MARK: Into the state model
 
     /// Feeds raw events through the detector into the state model and returns

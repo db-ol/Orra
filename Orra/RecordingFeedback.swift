@@ -6,7 +6,8 @@ import Observation
 ///
 /// The indicator shows white bars that move with the voice while Orra listens, with how to
 /// finish during a hands free dictation, a slow wave of the same bars while it transcribes,
-/// and for a few seconds the reason when a hold ends without a paste. In between, while
+/// and for a few seconds the reason when a hold ends without a paste. Next to the bars of a
+/// dictation of the translation key, a small badge says that it will be translated. In between, while
 /// Orra can dictate, a small bar at the bottom of the screen shows that it is ready, unless
 /// Settings turns it off.
 @Observable
@@ -37,11 +38,15 @@ final class RecordingFeedback {
 
     /// What the indicator shows, or nil while there is nothing to show.
     private(set) var display: Display?
+    /// The direction of the dictation on screen when the translation key started it, so
+    /// the indicator shows the badge, from its listening cue until it finishes. Nil for a
+    /// dictation of the talk key.
+    private(set) var translation: TranslationDirection?
     /// The microphone level for the meter, from 0 to 1, falling slowly after a peak.
     private(set) var level = 0.0
     var showsIndicator: Bool {
         didSet {
-            guard showsIndicator != oldValue else { return }
+            guard showsIndicator != oldValue, !isSettingHint else { return }
             savePreferences()
             present(presented)
             updateLevelTask()
@@ -49,11 +54,28 @@ final class RecordingFeedback {
     }
     var showsIdleBar: Bool {
         didSet {
-            guard showsIdleBar != oldValue else { return }
+            guard showsIdleBar != oldValue, !isSettingHint else { return }
             savePreferences()
             present(presented)
         }
     }
+    /// Both switches above as the one choice Settings shows. Setting it saves once and
+    /// updates the panel once.
+    var onScreenHint: OnScreenHint {
+        get { OnScreenHint(showsIndicator: showsIndicator, showsIdleBar: showsIdleBar) }
+        set {
+            guard newValue != onScreenHint else { return }
+            isSettingHint = true
+            showsIndicator = newValue.showsIndicator
+            showsIdleBar = newValue.showsIdleBar
+            isSettingHint = false
+            savePreferences()
+            present(presented)
+            updateLevelTask()
+        }
+    }
+    /// True while onScreenHint sets both switches, so they do not save one by one.
+    @ObservationIgnored private var isSettingHint = false
     /// True while the pointer is over the idle bar, which then shows how to talk.
     var pointerIsOverIdleBar = false
     /// Whether a hold would dictate: the talk key is watched and the model is loaded.
@@ -142,12 +164,14 @@ final class RecordingFeedback {
 
     func handle(_ cue: DictationCue) {
         switch cue {
-        case .listening:
+        case .listening(let translation):
             if playsSounds {
                 play(.start)
             }
+            self.translation = translation
             show(.listening)
-        case .handsFree(let hint):
+        case .handsFree(let hint, let translation):
+            self.translation = translation
             // A hold that turned hands free has played the start sound already.
             if playsSounds, display?.showsMeter != true {
                 play(.start)
@@ -160,6 +184,7 @@ final class RecordingFeedback {
                 play(.stop)
             }
         case .finished(let message?):
+            translation = nil
             show(.message(message))
             let shown = display
             hideTask = Task { [weak self, messageDuration] in
@@ -168,6 +193,7 @@ final class RecordingFeedback {
                 show(nil)
             }
         case .finished(nil):
+            translation = nil
             show(nil)
         }
     }
@@ -219,6 +245,28 @@ final class RecordingFeedback {
     }
 }
 
+extension TranslationDirection {
+    /// The badge next to the bars: 译 when the language is picked per dictation, and the
+    /// target, EN or 中, when it is fixed. The same in both interface languages, like a
+    /// keycap.
+    var badge: String {
+        switch self {
+        case .automatic: "译"
+        case .english: "EN"
+        case .chinese: "中"
+        }
+    }
+
+    /// What VoiceOver says about the badge.
+    func badgeDescription(in locale: Locale = .interface) -> String {
+        switch self {
+        case .automatic: String(localized: LocalizedStringResource("This dictation will be translated.", locale: locale))
+        case .english: String(localized: LocalizedStringResource("This dictation will be translated into English.", locale: locale))
+        case .chinese: String(localized: LocalizedStringResource("This dictation will be translated into Chinese.", locale: locale))
+        }
+    }
+}
+
 /// Whether the recording indicator shows, the sounds play and the idle bar shows. All are
 /// on until the user turns them off in Settings.
 nonisolated enum FeedbackPreference {
@@ -244,6 +292,50 @@ nonisolated enum FeedbackPreference {
         defaults.set(values.showsIndicator, forKey: indicatorKey)
         defaults.set(values.playsSounds, forKey: soundsKey)
         defaults.set(values.showsIdleBar, forKey: idleBarKey)
+    }
+}
+
+/// What Settings offers as the on screen hint. It is saved as the two switches of earlier
+/// versions, the recording indicator and the idle bar, so a saved choice keeps meaning
+/// what it did and nothing is rewritten on disk.
+nonisolated enum OnScreenHint: String, CaseIterable, Identifiable, Sendable {
+    /// The indicator while dictating, and the idle bar while Orra is ready.
+    case always
+    /// The indicator only.
+    case whileDictating
+    /// Neither. The menu bar icon then shows listening and transcribing.
+    case off
+    /// The idle bar only. Settings offers it only to someone who had turned the indicator
+    /// off and kept the bar, so their choice still shows.
+    case whileReady
+
+    var id: String { rawValue }
+
+    init(showsIndicator: Bool, showsIdleBar: Bool) {
+        switch (showsIndicator, showsIdleBar) {
+        case (true, true): self = .always
+        case (true, false): self = .whileDictating
+        case (false, false): self = .off
+        case (false, true): self = .whileReady
+        }
+    }
+
+    init(_ values: FeedbackPreference.Values) {
+        self.init(showsIndicator: values.showsIndicator, showsIdleBar: values.showsIdleBar)
+    }
+
+    var showsIndicator: Bool {
+        self == .always || self == .whileDictating
+    }
+
+    var showsIdleBar: Bool {
+        self == .always || self == .whileReady
+    }
+
+    /// The choices in Settings, in order. Only the bar while ready is left out, unless it
+    /// is the current choice.
+    static func choices(current: OnScreenHint) -> [OnScreenHint] {
+        current == .whileReady ? allCases : [.always, .whileDictating, .off]
     }
 }
 

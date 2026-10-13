@@ -2,15 +2,19 @@ import Foundation
 import Observation
 import os
 
-/// Cleanup with the local text model: the setting, the model's download and loading, and
-/// the closures PushToTalkController calls.
+/// Cleanup and translation with the local text model: the two settings, the model's
+/// download and loading, and the closures PushToTalkController calls.
 ///
-/// Off until the user turns it on. Turning it on asks first when the model still has to be
-/// downloaded, and nothing goes online before the user confirms. While cleanup is on the
-/// model is loaded at launch and stays loaded while the user dictates. After
-/// `idleUnloadDelay` without a dictation it is unloaded, and the next press of the talk key
-/// loads it again while the user speaks, see `dictationStarted()`. Turning cleanup off
-/// unloads it and stops a download.
+/// Both are off until the user turns them on. They share one model, which translates as
+/// well as it cleans up. Turning either on asks first when the model still has to be
+/// downloaded and no download was agreed to for the other, and nothing goes online before
+/// the user confirms. While either is on the model is loaded at launch and stays loaded
+/// while the user dictates. After `idleUnloadDelay` without a dictation it is unloaded, and
+/// the next press of the talk key or the translation key loads it again while the user
+/// speaks, see `dictationStarted()`. Turning the last one off unloads it and stops a
+/// download. Translation works with cleanup off: the translation prompt cleans up and
+/// translates in one answer, and the cleanup in it is used only while cleanup is on, see
+/// TranslationStep.
 @Observable
 final class TextCleanup {
     nonisolated enum EngineState: Equatable, Sendable {
@@ -22,10 +26,18 @@ final class TextCleanup {
 
     /// Whether the user turned cleanup on. Saved through `save` whenever it changes.
     private(set) var isOn: Bool
-    /// True while Settings asks whether to download the model.
+    /// Whether the user turned translation on, so the translation key pastes translated
+    /// text. Saved through `saveTranslation` whenever it changes.
+    private(set) var translationIsOn: Bool
+    /// Which way dictations are translated. Saved through `saveDirection` whenever it
+    /// changes.
+    private(set) var translationDirection: TranslationDirection
+    /// True while the Clean Up Text page asks whether to download the model.
     var isConfirmingDownload = false
-    /// Whether cleanup can run. Ready also covers a model unloaded after a while without a
-    /// dictation, see `isUnloadedWhileIdle`, since the next dictation loads it again and
+    /// True while Settings asks whether to download the model for translation.
+    var isConfirmingTranslationDownload = false
+    /// Whether the model can run. Ready also covers a model unloaded after a while without
+    /// a dictation, see `isUnloadedWhileIdle`, since the next dictation loads it again and
     /// Settings has nothing to show for it.
     private(set) var engineState: EngineState = .unloaded
     /// True while the model is out of memory because nobody dictated for
@@ -36,6 +48,8 @@ final class TextCleanup {
 
     @ObservationIgnored private let engine: CleanupEngine
     @ObservationIgnored private let save: (Bool) -> Void
+    @ObservationIgnored private let saveTranslation: (Bool) -> Void
+    @ObservationIgnored private let saveDirection: (TranslationDirection) -> Void
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     /// The latest load or unload. Each waits for the one before it, so they never overlap
     /// and never swap order.
@@ -53,27 +67,37 @@ final class TextCleanup {
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     /// Unloads the model once `idleUnloadDelay` has passed without a dictation.
     @ObservationIgnored private var idleTimer: Task<Void, Never>?
-    /// True from the press of the talk key until the dictation is over. No idle unload
+    /// True from the press of the talk key or the translation key until the dictation is over. No idle unload
     /// happens in between.
     @ObservationIgnored private var isDictating = false
-    /// Transcripts waiting for the load under way, resumed when it ends, when cleanup is
-    /// turned off or when their wait is over.
+    /// Transcripts waiting for the load under way, resumed when it ends, when the last of
+    /// cleanup and translation is turned off or when their wait is over.
     @ObservationIgnored private var loadWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
     @ObservationIgnored private var nextWaiter = 0
+    /// True once a wait of this dictation ran out, so it does not wait again.
+    @ObservationIgnored private var loadWaitRanOut = false
 
     /// - Parameters:
-    ///   - isOn: As saved.
+    ///   - isOn: Whether cleanup is on, as saved.
     ///   - save: Saves the setting after the user changes it.
+    ///   - translationIsOn: Whether translation is on, as saved.
+    ///   - saveTranslation: Saves that setting after the user changes it.
+    ///   - translationDirection: Which way to translate, as saved.
+    ///   - saveDirection: Saves the direction after the user changes it.
     ///   - models: The installer for the cleanup model. Tests pass one with temporary
     ///     folders and a stand in network.
     ///   - engine: Loads and runs the model. Tests pass a stand in.
     ///   - idleUnloadDelay: How long the model stays loaded without a dictation, nil for
-    ///     as long as cleanup is on.
+    ///     as long as cleanup or translation is on.
     ///   - loadWait: The longest a finished transcript waits for the model to load.
     ///   - sleep: Waits for a time. Tests pass a clock they move.
     init(
         isOn: Bool,
         save: @escaping (Bool) -> Void,
+        translationIsOn: Bool = false,
+        saveTranslation: @escaping (Bool) -> Void = { _ in },
+        translationDirection: TranslationDirection = .automatic,
+        saveDirection: @escaping (TranslationDirection) -> Void = { _ in },
         models: ModelInstaller,
         engine: CleanupEngine = .live(),
         idleUnloadDelay: Duration? = CleanupIdlePreference.defaultDelay,
@@ -82,6 +106,10 @@ final class TextCleanup {
     ) {
         self.isOn = isOn
         self.save = save
+        self.translationIsOn = translationIsOn
+        self.saveTranslation = saveTranslation
+        self.translationDirection = translationDirection
+        self.saveDirection = saveDirection
         self.models = models
         self.engine = engine
         self.idleUnloadDelay = idleUnloadDelay
@@ -98,6 +126,10 @@ final class TextCleanup {
         TextCleanup(
             isOn: CleanupPreference.load(),
             save: { CleanupPreference.save($0) },
+            translationIsOn: TranslationPreference.load(),
+            saveTranslation: { TranslationPreference.save($0) },
+            translationDirection: TranslationDirection.load(),
+            saveDirection: { $0.save() },
             models: ModelInstaller(
                 manifest: .qwen35Cleanup,
                 folders: .liveCleanup,
@@ -109,15 +141,17 @@ final class TextCleanup {
     }
 
     /// How long a finished transcript waits at most for the model, which the press of the
-    /// talk key started to load. On an M5 Pro in a Release build, the model was loaded 1.1 s
-    /// after the press, and the first load in a new process took 1.2 to 2.1 s, so only a
-    /// hold under about 1.2 s waits at all. 3 s leaves room for a slower Mac or disk. Past
-    /// it the ruled text is pasted, as when a cleanup takes too long.
+    /// talk key or the translation key started to load. On an M5 Pro in a Release build,
+    /// the model was loaded 1.1 s after the press, and the first load in a new process took
+    /// 1.2 to 2.1 s, so only a hold under about 1.2 s waits at all. 3 s leaves room for a
+    /// slower Mac or disk. Past it the text is pasted without the model, as when a cleanup
+    /// takes too long.
     static let defaultLoadWait: Duration = .seconds(3)
 
-    /// At launch: looks for the model with local files only, and loads it when cleanup is
-    /// on, so a failed load shows in Settings at once and the first dictation needs no
-    /// wait. Without a dictation it is unloaded after `idleUnloadDelay`. Never goes online.
+    /// At launch: looks for the model with local files only, and loads it when cleanup or
+    /// translation is on, so a failed load shows in Settings at once and the first
+    /// dictation needs no wait. Without a dictation it is unloaded after
+    /// `idleUnloadDelay`. Never goes online.
     func start() async {
         await models.prepare()
     }
@@ -132,14 +166,16 @@ final class TextCleanup {
         )
     }
 
-    /// The talk key went down. Stops the idle timer, and loads the model again when it was
-    /// unloaded while idle, so the load overlaps the recording. Loading, filling the prefix
-    /// cache and warming up took about 1.2 s in a Release build, less than most holds.
+    /// The talk key or the translation key went down. Stops the idle timer, and loads the
+    /// model again when it was unloaded while idle, so the load overlaps the recording.
+    /// Loading, filling the prefix cache and warming up took about 1.2 s in a Release
+    /// build, less than most holds.
     func dictationStarted() {
         isDictating = true
+        loadWaitRanOut = false
         idleTimer?.cancel()
         idleTimer = nil
-        guard isOn, isUnloadedWhileIdle, let folder else { return }
+        guard needsModel, isUnloadedWhileIdle, let folder else { return }
         isUnloadedWhileIdle = false
         engineState = .unloaded
         Logger.rewrite.notice("Loading the cleanup model again for a dictation")
@@ -154,24 +190,43 @@ final class TextCleanup {
 
     /// Whether the model can clean up the transcript now. Waits for a load under way, at
     /// most `loadWait`, and false when cleanup is off, the model failed to load or the
-    /// wait ran out. Logs how long it waited, never text.
+    /// wait ran out.
     func waitUntilLoaded() async -> Bool {
-        if isOn, engineState == .loading {
-            let started = ContinuousClock.now
-            await waitForLoadUnderWay()
-            let loaded = isOn && engineState == .ready && !isUnloadedWhileIdle
-            Logger.rewrite.notice("Waited \(started.duration(to: .now), privacy: .public) for the cleanup model, loaded: \(loaded, privacy: .public)")
-            return loaded
-        }
-        return isOn && engineState == .ready && !isUnloadedWhileIdle
+        await waitUntilLoaded(for: "cleanup") { $0.isOn }
     }
 
-    /// Returns when the load under way ends, cleanup is turned off, or `loadWait` passes.
+    /// Whether the model can translate the transcript now, the same way.
+    func waitUntilLoadedForTranslation() async -> Bool {
+        await waitUntilLoaded(for: "translation") { $0.translationIsOn }
+    }
+
+    /// True when the model is in memory and nothing unloads it before the next dictation.
+    private var isLoaded: Bool {
+        engineState == .ready && !isUnloadedWhileIdle
+    }
+
+    /// Waits for a load under way while `isWanted` holds, once per dictation, so a
+    /// translation that ran out of time is not followed by a second wait for cleanup.
+    /// Logs how long it waited and for what, never text.
+    private func waitUntilLoaded(for use: String, isWanted: (TextCleanup) -> Bool) async -> Bool {
+        if isWanted(self), engineState == .loading, !loadWaitRanOut {
+            let started = ContinuousClock.now
+            await waitForLoadUnderWay()
+            let loaded = isWanted(self) && isLoaded
+            Logger.rewrite.notice("Waited \(started.duration(to: .now), privacy: .public) for the cleanup model for \(use, privacy: .public), loaded: \(loaded, privacy: .public)")
+            return loaded
+        }
+        return isWanted(self) && isLoaded
+    }
+
+    /// Returns when the load under way ends, the last of cleanup and translation is turned
+    /// off, or `loadWait` passes.
     private func waitForLoadUnderWay() async {
         nextWaiter += 1
         let id = nextWaiter
         let timer = Task { [sleep, loadWait] in
             guard (try? await sleep(loadWait)) != nil else { return }
+            self.loadWaitRanOut = true
             self.resumeWaiter(id)
         }
         await withCheckedContinuation { continuation in
@@ -192,12 +247,12 @@ final class TextCleanup {
         }
     }
 
-    /// Starts the idle timer again, unless cleanup is off, a dictation is under way or the
-    /// model is not loaded.
+    /// Starts the idle timer again, unless cleanup and translation are off, a dictation is
+    /// under way or the model is not loaded.
     private func scheduleIdleUnload() {
         idleTimer?.cancel()
         idleTimer = nil
-        guard let idleUnloadDelay, isOn, !isDictating, engineState == .ready, !isUnloadedWhileIdle else { return }
+        guard let idleUnloadDelay, needsModel, !isDictating, isLoaded else { return }
         idleTimer = Task { [weak self, sleep] in
             guard (try? await sleep(idleUnloadDelay)) != nil, !Task.isCancelled else { return }
             self?.unloadWhileIdle()
@@ -206,25 +261,76 @@ final class TextCleanup {
 
     /// Unloads the model after `idleUnloadDelay` without a dictation. Queued like every
     /// load and unload, so a press of the talk key during the unload loads the model again
-    /// right after it.
+    /// right after it. The unload drops the translation prefix caches too, and the next
+    /// load fills them again.
     private func unloadWhileIdle() {
         idleTimer = nil
-        guard isOn, !isDictating, engineState == .ready, !isUnloadedWhileIdle else { return }
+        guard needsModel, !isDictating, isLoaded else { return }
         isUnloadedWhileIdle = true
         Logger.rewrite.notice("Unloading the cleanup model after no dictation for \(self.idleUnloadDelay ?? .zero, privacy: .public)")
         enqueue { [engine] in await engine.unload() }
     }
 
-    /// The switch in Settings was turned on. With the model in place cleanup starts at
-    /// once, otherwise Settings asks before anything is downloaded. While Orra still looks
-    /// for the model on disk, Settings keeps the switch off, see `canTurnOn`.
+    /// The closures for PushToTalkController's translations.
+    var translation: TranslationModel {
+        TranslationModel(
+            isReady: { [weak self] in self?.translationIsOn == true && self?.isLoaded == true },
+            waitUntilLoaded: { [weak self] in await self?.waitUntilLoadedForTranslation() ?? false },
+            direction: { [weak self] in self?.translationDirection ?? .automatic },
+            complete: engine.translate
+        )
+    }
+
+    /// Whether the model is wanted: cleanup or translation is on.
+    var needsModel: Bool {
+        isOn || translationIsOn
+    }
+
+    /// The switch on the Clean Up Text page was turned on. With the model in place cleanup
+    /// starts at once. While translation is on, the user agreed to the download already,
+    /// so cleanup is on at once and waits for the model like translation does. Otherwise
+    /// Settings asks before anything is downloaded. While Orra still looks for the model on
+    /// disk, Settings keeps the switch off, see `canTurnOn`.
     func turnOn() {
         guard !isOn, canTurnOn else { return }
         if case .installed(let folder) = models.state {
             setOn(true)
             load(from: folder)
+        } else if translationIsOn {
+            setOn(true)
         } else {
             isConfirmingDownload = true
+        }
+    }
+
+    /// The Translation switch in Settings was turned on, which works like cleanup's
+    /// switch, see `turnOn`. With the model loaded already, its translation prompts are
+    /// read ahead, so the first translation is fast. A model unloaded while idle is left
+    /// alone, and the next press of a key loads it and reads them.
+    func turnOnTranslation() {
+        guard !translationIsOn, canTurnOn else { return }
+        if case .installed(let folder) = models.state {
+            setTranslationOn(true)
+            if isLoaded {
+                prepareTranslation()
+            } else if !isUnloadedWhileIdle {
+                load(from: folder)
+            }
+        } else if isOn {
+            setTranslationOn(true)
+        } else {
+            isConfirmingTranslationDownload = true
+        }
+    }
+
+    /// The user picked which way to translate. Reads the prompt for the new target ahead
+    /// while translation is on and the model is loaded.
+    func setTranslationDirection(_ direction: TranslationDirection) {
+        guard direction != translationDirection else { return }
+        translationDirection = direction
+        saveDirection(direction)
+        if translationIsOn, isLoaded {
+            prepareTranslation()
         }
     }
 
@@ -234,31 +340,54 @@ final class TextCleanup {
         models.state != .checking
     }
 
-    /// The user agreed to download the model.
+    /// The user agreed to download the model for cleanup.
     func confirmDownload() {
         isConfirmingDownload = false
         setOn(true)
         models.download()
     }
 
-    /// Download, Resume Download or Try Again under the switch, which name the size
-    /// themselves, while cleanup is on.
-    func download() {
-        guard isOn else { return }
+    /// The user agreed to download the model for translation.
+    func confirmTranslationDownload() {
+        isConfirmingTranslationDownload = false
+        setTranslationOn(true)
         models.download()
     }
 
-    /// Cancel Download under the switch. The bytes stay for the next time, and cleanup is
-    /// off until the user turns it on again.
+    /// Download, Resume Download or Try Again under a switch, which name the size
+    /// themselves, while cleanup or translation is on.
+    func download() {
+        guard needsModel else { return }
+        models.download()
+    }
+
+    /// Cancel Download under a switch. The bytes stay for the next time, and cleanup and
+    /// translation are off until the user turns one on again, since neither works without
+    /// the model.
     func cancelDownload() {
         models.cancel()
         setOn(false)
+        setTranslationOn(false)
     }
 
-    /// The switch was turned off: stops a download and unloads the model.
+    /// The cleanup switch was turned off. Stops a download and unloads the model unless
+    /// translation still needs it.
     func turnOff() {
         guard isOn else { return }
         setOn(false)
+        releaseModelIfUnneeded()
+    }
+
+    /// The translation switch was turned off. Stops a download and unloads the model
+    /// unless cleanup still needs it.
+    func turnOffTranslation() {
+        guard translationIsOn else { return }
+        setTranslationOn(false)
+        releaseModelIfUnneeded()
+    }
+
+    private func releaseModelIfUnneeded() {
+        guard !needsModel else { return }
         if case .downloading = models.state {
             models.cancel()
         }
@@ -286,8 +415,48 @@ final class TextCleanup {
         save(on)
     }
 
+    private func setTranslationOn(_ on: Bool) {
+        guard on != translationIsOn else { return }
+        translationIsOn = on
+        saveTranslation(on)
+    }
+
+    /// The targets whose translation prompts are read ahead for a direction: the fixed
+    /// one, or both for the automatic direction, which picks one per dictation. English
+    /// first, since most dictations into Orra are Chinese. Each takes about 0.8 s on the
+    /// GPU and keeps about 110 MB, see docs/manual-testing.md.
+    nonisolated static func preparedTargets(_ direction: TranslationDirection) -> [TranslationTarget] {
+        switch direction {
+        case .automatic: [.english, .chinese]
+        case .english: [.english]
+        case .chinese: [.chinese]
+        }
+    }
+
+    /// Reads the translation prompts ahead after the work queued before, see
+    /// RewriteEngine.prepareTranslation.
+    private func prepareTranslation() {
+        let generation = loadGeneration
+        enqueue { [weak self] in
+            // Unloaded, or translation off, since.
+            guard let self, generation == loadGeneration else { return }
+            await fillTranslationPrefixes()
+        }
+    }
+
+    private func fillTranslationPrefixes() async {
+        guard translationIsOn, isLoaded else { return }
+        for target in Self.preparedTargets(translationDirection) {
+            do {
+                try await engine.prepareTranslation(target)
+            } catch {
+                Logger.rewrite.error("Reading the translation prompt ahead failed with \(String(reflecting: type(of: error)), privacy: .public)")
+            }
+        }
+    }
+
     private func load(from folder: URL) {
-        guard isOn, engineState == .unloaded || engineState == .failed else { return }
+        guard needsModel, engineState == .unloaded || engineState == .failed else { return }
         self.folder = folder
         engineState = .loading
         loadGeneration += 1
@@ -310,6 +479,10 @@ final class TextCleanup {
             engineState = loaded ? .ready : .failed
             loadTask = nil
             resumeAllWaiters()
+            // With translation on, its prompts are read before any other work on the model.
+            if loaded {
+                await fillTranslationPrefixes()
+            }
             scheduleIdleUnload()
         }
     }
@@ -358,12 +531,19 @@ struct CleanupEngine {
     var unload: @Sendable () async -> Void
     /// The model's answer for a transcript, see RewriteEngine.cleanUp.
     var complete: @Sendable (String) async throws -> String
+    /// The model's answer for a transcript and a target, see RewriteEngine.translate.
+    var translate: @Sendable (String, TranslationTarget) async throws -> String = { _, _ in throw RewriteError.notLoaded }
+    /// Reads the translation prompt for a target ahead, see
+    /// RewriteEngine.prepareTranslation.
+    var prepareTranslation: @Sendable (TranslationTarget) async throws -> Void = { _ in }
 
     static func live(_ engine: RewriteEngine = RewriteEngine()) -> CleanupEngine {
         CleanupEngine(
             load: { try await engine.load(from: $0) },
             unload: { await engine.unload() },
-            complete: { try await engine.cleanUp($0).answer }
+            complete: { try await engine.cleanUp($0).answer },
+            translate: { try await engine.translate($0, into: $1).answer },
+            prepareTranslation: { try await engine.prepareTranslation(into: $0) }
         )
     }
 }

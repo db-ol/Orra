@@ -536,6 +536,80 @@ struct CorrectionLearningTests {
         #expect(learning.store.entries.isEmpty)
     }
 
+    // MARK: Replacements
+
+    /// Only pairs the user kept replace words, and only while learning is on.
+    @Test func replacementPairsAreTheKeptPairsWhileLearningIsOn() {
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: ScriptedField([""]), vocabulary: vocabulary)
+        var learned: [CorrectionLearning.Learned] = []
+        learning.onLearned = { learned.append($0) }
+        learning.record(pair)
+        let orra = Correction(heard: "Ora", corrected: "Orra")
+        learning.record(orra)
+        let suggestion = WordSuggestion(change: Correction(heard: "一", corrected: "义"), pair: Correction(heard: "通一千问", corrected: "通义千问"))
+        learning.decline(suggestion)
+        #expect(Set(learning.replacementPairs) == [pair, orra])
+        // Undone.
+        learning.undo(learned[1])
+        #expect(learning.replacementPairs == [pair])
+        // Taken out of the vocabulary.
+        vocabulary.words.removeAll { $0 == "Claude" }
+        learning.removedFromVocabulary("Claude")
+        #expect(learning.replacementPairs.isEmpty)
+        learning.record(pair)
+        #expect(learning.replacementPairs == [pair])
+        learning.isOn = false
+        #expect(learning.replacementPairs.isEmpty)
+    }
+
+    private let replacedClaude = Replacement(span: 3..<9, heard: "克劳德", corrected: "Claude", pair: Correction(heard: "克劳德", corrected: "Claude"))
+
+    /// The user puts back what the model wrote: the pair stops replacing, the word stays,
+    /// and Orra's word is not taken for a mishearing of the model's.
+    @Test func puttingBackAReplacedWordForgetsItsPair() async {
+        let pasted = "我在用Claude写代码"
+        let field = ScriptedField([pasted, pasted, "我在用克劳德写代码"])
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: field, vocabulary: vocabulary)
+        learning.record(pair)
+        learning.pasted(pasted, in: 42, replacements: [replacedClaude])
+        await waitForReads(field)
+        #expect(learning.store.entries.isEmpty)
+        #expect(learning.replacementPairs.isEmpty)
+        #expect(vocabulary.words == ["Claude"])
+    }
+
+    /// A fix of a replaced word is learned with what the model wrote. The two pairs for 克劳德
+    /// then disagree, so neither replaces it any more.
+    @Test func aFixOfAReplacedWordIsLearnedWithTheHeardSpelling() async {
+        let pasted = "我在用Claude写代码"
+        let field = ScriptedField([pasted, pasted, "我在用Clyde写代码"])
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: field, vocabulary: vocabulary)
+        learning.record(pair)
+        learning.pasted(pasted, in: 42, replacements: [replacedClaude])
+        await waitForReads(field)
+        let clyde = Correction(heard: "克劳德", corrected: "Clyde")
+        #expect(Set(accepted(learning)) == [pair, clyde])
+        #expect(vocabulary.words == ["Claude", "Clyde"])
+        #expect(WordReplacement.usablePairs(learning.replacementPairs, vocabulary: vocabulary.words, ordinary: OrdinaryWords([])).isEmpty)
+    }
+
+    /// After a cleanup the replaced words cannot be placed in the paste, so a fix that
+    /// touches one is not learned.
+    @Test func afterACleanupAFixOfAReplacedWordIsNotLearned() async {
+        let cleaned = "我们在用Claude写代码"
+        let field = ScriptedField([cleaned, cleaned, "我们在用Clyde写代码"])
+        let vocabulary = VocabularyBox()
+        let learning = makeLearning(isOn: true, field: field, vocabulary: vocabulary)
+        learning.record(pair)
+        learning.pasted(cleaned, in: 42, beforeCleanup: "我在用Claude写代码", replacements: [replacedClaude])
+        await waitForReads(field)
+        #expect(accepted(learning) == [pair])
+        #expect(vocabulary.words == ["Claude"])
+    }
+
     @Test func undoKeepsAWordTheUserHadAddedBefore() {
         let vocabulary = VocabularyBox()
         vocabulary.words = ["Claude"]
