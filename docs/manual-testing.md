@@ -1302,8 +1302,10 @@ in test in SettingsPageTests, in English and in Chinese, but not seen in the run
   goes. It scrolls when more than fits, and it can be made larger.
 - [ ] Each row of Dictation and System shows one short line under its name at most.
   Pointing at Double press for hands free, the on screen hint, Learn from my corrections
-  and Interface language shows the rest of what they do in a tooltip. Choosing another
-  interface language brings up Restart Orra under the picker.
+  and Interface language shows the rest of what they do in a tooltip. The line under
+  Learn from my corrections says that Orra reads the field you dictated into for 3
+  minutes after a paste, without pointing at it. Choosing another interface language
+  brings up Restart Orra under the picker.
 - [ ] About shows the version, the speech model status, Updates with Check for updates
   automatically and Check for Updates…, and the privacy text with its link. Run from
   Xcode, the line under the version says "Development build, updates are off" and the

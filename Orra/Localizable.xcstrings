@@ -235,16 +235,6 @@
         }
       }
     },
-    "Adds a misheard word you fix after a dictation to your vocabulary." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "听写后你改正了听错的词，Orra 会把它加入个人词库。"
-          }
-        }
-      }
-    },
     "Allow Accessibility" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1810,6 +1800,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出 Orra"
+          }
+        }
+      }
+    },
+    "Reads the field you dictated into for 3 minutes after a paste and adds a misheard word you fix to your vocabulary." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴后 3 分钟内读取你听写的输入框，把你改正的听错的词加入个人词库。"
           }
         }
       }

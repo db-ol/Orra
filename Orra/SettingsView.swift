@@ -279,7 +279,7 @@ private struct GeneralSettings: View {
                 Toggle(isOn: $learning.isOn) {
                     DescribedLabel(
                         title: "Learn from my corrections",
-                        detail: "Adds a misheard word you fix after a dictation to your vocabulary.",
+                        detail: "Reads the field you dictated into for 3 minutes after a paste and adds a misheard word you fix to your vocabulary.",
                         systemImage: "character.cursor.ibeam"
                     )
                 }
