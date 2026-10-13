@@ -8,6 +8,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case general
     case dictation
     case cleanup
+    case translation
     case vocabulary
     case about
 
@@ -30,6 +31,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             Info(title: "Dictation", symbol: "mic.fill", tint: .orange, summary: "The talk key, the microphone, and what you see and hear while dictating.")
         case .cleanup:
             Info(title: "Clean Up Text", symbol: "wand.and.sparkles", tint: .purple, summary: "How Orra tidies the text before it pastes, with rules and an optional local model.")
+        case .translation:
+            Info(title: "Translation", symbol: "translate", tint: .teal, summary: "Hold the translation key to paste what you say in the other language, translated on this Mac.")
         case .vocabulary:
             Info(title: "Vocabulary", symbol: "character.book.closed.fill", tint: .blue, summary: "Words and names that Orra should write your way, and learning from your corrections.")
         case .about:
@@ -153,6 +156,8 @@ struct SettingsView: View {
             DictationSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback)
         case .cleanup:
             CleanupSettings(pushToTalk: pushToTalk, cleanup: cleanup)
+        case .translation:
+            TranslationSettings(pushToTalk: pushToTalk, cleanup: cleanup)
         case .vocabulary:
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .about:
@@ -434,23 +439,31 @@ private struct CleanupSetting: View {
             Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
         }
         if cleanup.isOn {
-            status(models.state, total: total)
+            LocalModelStatus(cleanup: cleanup, use: .cleanup)
         }
     }
+}
 
-    @ViewBuilder
-    private func status(_ state: ModelInstaller.State, total: Int64) -> some View {
+/// The model's download and loading under the switch of cleanup or of translation, while
+/// that switch is on: progress, Download or Try Again, or nothing once the model is ready.
+private struct LocalModelStatus: View {
+    let cleanup: TextCleanup
+    let use: CleanupLabels.Use
+
+    var body: some View {
+        let total = cleanup.models.manifest.totalBytes
+        let state = cleanup.models.state
         switch state {
         case .installed:
             switch cleanup.engineState {
             case .unloaded, .loading:
-                Text("Loading the cleanup model…")
+                Text(CleanupLabels.loading(use))
                     .foregroundStyle(.secondary)
             case .ready:
                 EmptyView()
             case .failed:
                 HStack {
-                    Text("The cleanup model could not be loaded")
+                    Text(CleanupLabels.failedToLoad(use))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Try Again") {
@@ -469,7 +482,7 @@ private struct CleanupSetting: View {
         case .downloading(let bytes, let source):
             VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: Double(bytes), total: Double(max(total, 1))) {
-                    Text(CleanupLabels.progress(bytes: bytes, total: total))
+                    Text(CleanupLabels.progress(bytes: bytes, total: total, use: use))
                 } currentValueLabel: {
                     if let source {
                         Text(String(localized: "From \(source.rawValue)"))
@@ -482,7 +495,7 @@ private struct CleanupSetting: View {
         case .missing, .failed:
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(CleanupLabels.lines(state, total: total), id: \.self) { line in
+                    ForEach(CleanupLabels.lines(state, total: total, use: use), id: \.self) { line in
                         Text(verbatim: line)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -499,8 +512,34 @@ private struct CleanupSetting: View {
 
 /// The text about the cleanup model's download, kept apart so tests can read it.
 nonisolated enum CleanupLabels {
-    static func progress(bytes: Int64, total: Int64) -> String {
-        String(localized: "Downloading the cleanup model: \(ModelInstaller.State.percent(bytes, of: total))% of \(ModelInstaller.State.size(total))")
+    /// Which page the text is for. Clean Up Text calls the model the cleanup model, and
+    /// Translation calls the same model the local model.
+    nonisolated enum Use: Equatable, Sendable {
+        case cleanup
+        case translation
+    }
+
+    static func progress(bytes: Int64, total: Int64, use: Use = .cleanup) -> String {
+        let percent = ModelInstaller.State.percent(bytes, of: total)
+        let size = ModelInstaller.State.size(total)
+        return switch use {
+        case .cleanup: String(localized: "Downloading the cleanup model: \(percent)% of \(size)")
+        case .translation: String(localized: "Downloading the local model: \(percent)% of \(size)")
+        }
+    }
+
+    static func loading(_ use: Use) -> String {
+        switch use {
+        case .cleanup: String(localized: "Loading the cleanup model…")
+        case .translation: String(localized: "Loading the local model…")
+        }
+    }
+
+    static func failedToLoad(_ use: Use) -> String {
+        switch use {
+        case .cleanup: String(localized: "The cleanup model could not be loaded")
+        case .translation: String(localized: "The local model could not be loaded")
+        }
     }
 
     /// Download with the size, or how much is left when part of it is on disk already.
@@ -515,13 +554,123 @@ nonisolated enum CleanupLabels {
         }
     }
 
-    /// What stands in the way while cleanup is on and the model is not in place.
-    static func lines(_ state: ModelInstaller.State, total: Int64) -> [String] {
-        switch state {
-        case .missing:
+    /// What stands in the way while cleanup or translation is on and the model is not in
+    /// place.
+    static func lines(_ state: ModelInstaller.State, total: Int64, use: Use = .cleanup) -> [String] {
+        switch (state, use) {
+        case (.missing, .cleanup):
             [String(localized: "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup.")]
+        case (.missing, .translation):
+            [String(localized: "The local model is not on this Mac yet. Until it is, Orra pastes the text without translation.")]
         default:
             state.menuLines(total: total)
+        }
+    }
+}
+
+/// Translation with the translation key: the switch with the model's download first, as
+/// the choice of the feature, then the key and the direction, then what to expect.
+private struct TranslationSettings: View {
+    let pushToTalk: PushToTalkController
+    @Bindable var cleanup: TextCleanup
+
+    var body: some View {
+        let models = cleanup.models
+        let total = models.manifest.totalBytes
+        let size = ModelInstaller.State.size(total)
+        Form {
+            PageHeader(page: .translation)
+            Section {
+                Toggle(isOn: Binding(
+                    get: { cleanup.translationIsOn },
+                    set: { $0 ? cleanup.turnOnTranslation() : cleanup.turnOffTranslation() }
+                )) {
+                    DescribedLabel(
+                        title: "Translate with the translation key",
+                        detail: "Hold the translation key, speak, and let go. Orra pastes what you said in the other language. It uses the local model of Clean Up Text, also while cleanup is off: a \(size) download that needs about 4 GB of memory and runs on this Mac.",
+                        systemImage: "translate"
+                    )
+                }
+                // Off while Orra looks for the model on disk, a moment at launch.
+                .disabled(!cleanup.translationIsOn && !cleanup.canTurnOn)
+                .alert("Download the model for translation?", isPresented: $cleanup.isConfirmingTranslationDownload) {
+                    Button(CleanupLabels.downloadButton(models.state, total: total)) {
+                        cleanup.confirmTranslationDownload()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
+                }
+                if cleanup.translationIsOn {
+                    LocalModelStatus(cleanup: cleanup, use: .translation)
+                }
+            } header: {
+                Text("Local model")
+            }
+            Section {
+                TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true)
+                Picker(selection: Binding(
+                    get: { cleanup.translationDirection },
+                    set: { cleanup.setTranslationDirection($0) }
+                )) {
+                    ForEach(TranslationDirection.allCases, id: \.self) { direction in
+                        Text(direction.title).tag(direction)
+                    }
+                } label: {
+                    DescribedLabel(
+                        title: "Translate into",
+                        detail: cleanup.translationDirection.detail,
+                        systemImage: "arrow.left.arrow.right"
+                    )
+                }
+            } header: {
+                Text("Translation key")
+            } footer: {
+                Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Label {
+                    Text("Dictations over \(TranslationStep.maximumLength) characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost.")
+                } icon: {
+                    Image(systemName: "text.badge.checkmark")
+                }
+                Label {
+                    Text("Paste Original Text in the Orra menu brings back the text from before the translation, and Copy Last Dictation copies the translation.")
+                } icon: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                Label {
+                    Text("Orra never learns corrections from a translated paste.")
+                } icon: {
+                    Image(systemName: "character.cursor.ibeam")
+                }
+            } header: {
+                Text("Good to know")
+            }
+            .foregroundStyle(.secondary)
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Translation")
+    }
+}
+
+extension TranslationDirection {
+    /// The name in the picker.
+    var title: LocalizedStringKey {
+        switch self {
+        case .automatic: "Automatic"
+        case .english: "English"
+        case .chinese: "Chinese"
+        }
+    }
+
+    /// What the choice does, under the picker.
+    var detail: LocalizedStringKey {
+        switch self {
+        case .automatic: "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in."
+        case .english: "Everything you say is pasted in English."
+        case .chinese: "Everything you say is pasted in Chinese. Common English terms, such as PR or iPhone, may stay in English."
         }
     }
 }

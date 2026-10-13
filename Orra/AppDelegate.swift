@@ -4,12 +4,13 @@ import AppKit
 /// DockIcon. The policy is set here at launch rather than through LSUIElement, so it can
 /// follow the setting.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Cleanup with the local text model, off until the user turns it on.
+    /// Cleanup and translation with the local text model, off until the user turns them on.
     let cleanup = TextCleanup.live()
     lazy var pushToTalk = PushToTalkController(
         capture: .live(),
         transcription: .qwen3(),
         cleanup: cleanup.model,
+        translation: cleanup.translation,
         insert: TextInserter.live().insert,
         talkKey: TalkKeyPreference.load(),
         saveTalkKey: { TalkKeyPreference.save($0) },
@@ -85,6 +86,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Watches the translation key while translation is on, now and after every change of
+    /// the switch.
+    private func followTranslation() {
+        pushToTalk.setTranslationKeyOn(withObservationTracking {
+            cleanup.translationIsOn
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followTranslation()
+            }
+        })
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         guard !Self.isHostedByXcode else {
             NSApplication.shared.setActivationPolicy(.accessory)
@@ -134,6 +147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.onPasteOriginal = { [learning] cleaned in learning.pastedOriginal(replacing: cleaned) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         learning.onSuggest = { [learnedNotice] suggestion in learnedNotice.suggest(suggestion) }
+        // Before the tap is installed, so it watches the translation key from the start.
+        followTranslation()
         pushToTalk.start()
         followReadiness()
         openAtLogin.refreshWhenMenusOpen()
@@ -146,7 +161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()
             }
-            // Loads the cleanup model when cleanup is on and the model is in place.
+            // Loads the cleanup model when cleanup or translation is on and the model is in
+            // place.
             await cleanup.start()
         }
     }

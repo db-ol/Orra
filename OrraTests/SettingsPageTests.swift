@@ -15,7 +15,7 @@ struct SettingsPageTests {
     let temporary = TemporaryModelFolders()
 
     @Test func theSidebarListsThePagesInOrder() {
-        #expect(SettingsPage.allCases == [.general, .dictation, .cleanup, .vocabulary, .about])
+        #expect(SettingsPage.allCases == [.general, .dictation, .cleanup, .translation, .vocabulary, .about])
     }
 
     @Test func everyPageHasItsOwnIconAndColor() {
@@ -31,6 +31,23 @@ struct SettingsPageTests {
         #expect(SettingsWindow.takeOpeningPage() == .dictation)
         // Settings… after that opens on General again.
         #expect(SettingsWindow.takeOpeningPage() == .general)
+    }
+
+    @Test func changeTranslationKeyOpensTranslation() {
+        SettingsWindow.show(.translation)
+        #expect(SettingsWindow.takeOpeningPage() == .translation)
+    }
+
+    /// The Translation page shows the master switch, the key, the direction, and the
+    /// direction's explanation for each choice.
+    @Test func everyDirectionHasATitleAndAnExplanation() {
+        #expect(TranslationDirection.allCases == [.automatic, .english, .chinese])
+        let details = TranslationDirection.allCases.map { "\($0.detail)" }
+        #expect(Set(details).count == details.count)
+        #expect(CleanupLabels.lines(.missing(bytesPresent: 0), total: 100, use: .translation) == ["The local model is not on this Mac yet. Until it is, Orra pastes the text without translation."])
+        #expect(CleanupLabels.loading(.translation) == "Loading the local model…")
+        #expect(CleanupLabels.loading(.cleanup) == "Loading the cleanup model…")
+        #expect(CleanupLabels.progress(bytes: 50, total: 100, use: .translation).hasPrefix("Downloading the local model: 50%"))
     }
 
     @Test func anOpenWindowIsToldToTurnToThePage() {
@@ -62,13 +79,15 @@ struct SettingsPageTests {
             try await render(page, cleanupOn: false, name: "\(language)-\(SettingsPage.allCases.firstIndex(of: page)!)-\(page.rawValue)")
         }
         try await render(.cleanup, cleanupOn: true, name: "\(language)-2-cleanup-on")
+        try await render(.translation, cleanupOn: false, translationOn: true, name: "\(language)-3-translation-on")
+        try await render(.translation, cleanupOn: false, translationOn: true, swapped: true, name: "\(language)-3-translation-swapped")
     }
 
     private var folder: URL {
         URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
     }
 
-    private func render(_ page: SettingsPage, cleanupOn: Bool, name: String) async throws {
+    private func render(_ page: SettingsPage, cleanupOn: Bool, translationOn: Bool = false, swapped: Bool = false, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -80,12 +99,17 @@ struct SettingsPageTests {
         let cleanup = TextCleanup(
             isOn: cleanupOn,
             save: { _ in },
+            translationIsOn: translationOn,
             models: models,
             engine: CleanupEngine(load: { _ in }, unload: {}, complete: { $0 })
         )
         let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
         for word in ["Orra", "Qwen3-ASR", "克劳德"] {
             pushToTalk.addToVocabulary(word)
+        }
+        if swapped {
+            // As after picking right Control, the talk key, for the translation key.
+            pushToTalk.chooseTranslationKey(.rightControl)
         }
         let input = AudioInput(id: 1, uid: "built-in", name: "MacBook Pro Microphone", isInternalMicrophone: true)
         let view = SettingsView(
