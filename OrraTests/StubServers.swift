@@ -29,6 +29,9 @@ struct StubBehavior: Sendable {
     /// Drops the connection once, after this many body bytes, on the first file longer than
     /// that.
     var dropAfter: Int?
+    /// Holds the drop back until this is true, so a test can wait for bytes to reach the
+    /// disk however slow the Mac is.
+    var dropWhen: (@Sendable () -> Bool)?
     /// Waits this long before each piece of 64 KiB.
     var chunkDelay: Duration = .zero
 }
@@ -47,7 +50,7 @@ final class StubServers: Sendable {
     /// What one request gets.
     enum Answer {
         case failure(URLError)
-        case response(status: Int, headers: [String: String], body: Data, dropAfter: Int?, chunkDelay: Duration)
+        case response(status: Int, headers: [String: String], body: Data, dropAfter: Int?, dropWhen: (@Sendable () -> Bool)?, chunkDelay: Duration)
     }
 
     private struct State {
@@ -137,7 +140,7 @@ final class StubServers: Sendable {
         if behavior.offline { return .failure(URLError(.notConnectedToInternet)) }
         if behavior.unreachable { return .failure(URLError(.cannotConnectToHost)) }
         func plain(_ status: Int) -> Answer {
-            .response(status: status, headers: [:], body: Data(), dropAfter: nil, chunkDelay: .zero)
+            .response(status: status, headers: [:], body: Data(), dropAfter: nil, dropWhen: nil, chunkDelay: .zero)
         }
         guard var body = file else { return plain(404) }
         if let status = behavior.status { return plain(status) }
@@ -150,7 +153,7 @@ final class StubServers: Sendable {
         }
         let size = body.count
         func send(_ status: Int, _ headers: [String: String], _ data: Data) -> Answer {
-            .response(status: status, headers: headers, body: data, dropAfter: behavior.dropAfter, chunkDelay: behavior.chunkDelay)
+            .response(status: status, headers: headers, body: data, dropAfter: behavior.dropAfter, dropWhen: behavior.dropWhen, chunkDelay: behavior.chunkDelay)
         }
         let fullRange = ["Content-Range": "bytes 0-\(size - 1)/\(size)"]
         guard let range = entry.range, range.hasPrefix("bytes="), range.hasSuffix("-"),
@@ -204,7 +207,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         switch servers.answer(request) {
         case .failure(let error):
             client?.urlProtocol(self, didFailWithError: error)
-        case .response(let status, let headers, let body, let dropAfter, let chunkDelay):
+        case .response(let status, let headers, let body, let dropAfter, let dropWhen, let chunkDelay):
             var all = headers
             if all["Content-Length"] == nil {
                 all["Content-Length"] = String(body.count)
@@ -212,7 +215,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
             let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: all)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             let limit = dropAfter.map { min($0, body.count) } ?? body.count
-            send(body, from: 0, limit: limit, delay: chunkDelay, box: RunLoopBox(loop: CFRunLoopGetCurrent()))
+            send(body, from: 0, limit: limit, delay: chunkDelay, dropWhen: dropWhen, box: RunLoopBox(loop: CFRunLoopGetCurrent()))
         }
     }
 
@@ -220,9 +223,16 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         stopped.withLock { $0 = true }
     }
 
-    private func send(_ body: Data, from start: Int, limit: Int, delay: Duration, box: RunLoopBox) {
+    private func send(_ body: Data, from start: Int, limit: Int, delay: Duration, dropWhen: (@Sendable () -> Bool)?, box: RunLoopBox) {
         if stopped.withLock({ $0 }) { return }
         guard start < limit else {
+            if limit < body.count, let dropWhen, !dropWhen() {
+                let again: @Sendable () -> Void = { [self] in
+                    send(body, from: start, limit: limit, delay: delay, dropWhen: dropWhen, box: box)
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.01) { box.perform(again) }
+                return
+            }
             if limit < body.count {
                 client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
             } else {
@@ -233,7 +243,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         let end = min(start + 64 * 1024, limit)
         client?.urlProtocol(self, didLoad: body.subdata(in: start..<end))
         let next: @Sendable () -> Void = { [self] in
-            send(body, from: end, limit: limit, delay: delay, box: box)
+            send(body, from: end, limit: limit, delay: delay, dropWhen: dropWhen, box: box)
         }
         if delay > .zero {
             let seconds = Double(delay.components.seconds) + Double(delay.components.attoseconds) / 1e18

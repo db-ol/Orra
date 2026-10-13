@@ -60,6 +60,12 @@ struct StatusMenu: View {
                     TextInserter.copy(transcript, to: .general)
                 }
             }
+            if pushToTalk.originalText != nil {
+                // The dictation as it was before the cleanup model changed it.
+                Button("Paste Original Text") {
+                    Task { await pushToTalk.pasteOriginal() }
+                }
+            }
         } else {
             Text("The talk key needs Accessibility access")
             Button("Grant Accessibility Access…") {

@@ -20,7 +20,8 @@ struct ProblemReportTests {
         talkKeyActive: true,
         talkKey: "fn",
         microphone: "System default (MacBook Pro Microphone)",
-        settings: [.init(name: "Sounds", on: true), .init(name: "Show in Dock", on: false)],
+        settings: [.init(name: "Sounds", on: true), .init(name: "Show in Dock", on: false), .init(name: "Clean up with a local model", on: true)],
+        cleanupModelState: "installed, loaded",
         vocabularyCount: 12,
         learnedPairCount: 3
     )
@@ -78,6 +79,8 @@ struct ProblemReportTests {
         #expect(report.contains("Folder size: 2.5 GB"))
         #expect(report.contains("Accessibility: granted"))
         #expect(report.contains("Talk key: fn"))
+        #expect(report.contains("Clean up with a local model: on"))
+        #expect(report.contains("Cleanup model: installed, loaded"))
         #expect(report.contains("Sounds: on"))
         #expect(report.contains("Show in Dock: off"))
         #expect(report.contains("Vocabulary: 12 words"))

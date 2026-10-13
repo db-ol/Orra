@@ -17,7 +17,7 @@ import SwiftUI
         // A plain window rather than SwiftUI's Settings scene, whose window cannot be
         // resized. It opens only when asked for, never at launch.
         Window("Orra Settings", id: SettingsWindow.id) {
-            SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
+            SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 780, height: 620)
