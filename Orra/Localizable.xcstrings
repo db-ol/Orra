@@ -145,22 +145,22 @@
         }
       }
     },
-    "About" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关于"
-          }
-        }
-      }
-    },
     "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 大约每天向 GitHub 查询一次最新版本。和所有网页请求一样，查询会带上你偏好的语言，除此之外不发送任何关于你的 Mac 的信息。每次更新都要你同意后才会安装。"
+          }
+        }
+      }
+    },
+    "About Orra" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于 Orra"
           }
         }
       }
@@ -211,6 +211,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你添加的"
+          }
+        }
+      }
+    },
+    "Advanced" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高级"
+          }
+        }
+      }
+    },
+    "Advanced…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "高级…"
           }
         }
       }
@@ -530,16 +550,6 @@
         }
       }
     },
-    "Dictation" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "听写"
-          }
-        }
-      }
-    },
     "Done" : {
       "localizations" : {
         "zh-Hans" : {
@@ -659,6 +669,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载…"
+          }
+        }
+      }
+    },
+    "Edit…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑…"
           }
         }
       }
@@ -836,16 +856,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Home"
-          }
-        }
-      }
-    },
-    "How Orra tidies the text before it pastes, with rules and an optional local model." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "粘贴之前，Orra 如何用规则和可选的本地模型整理文字。"
           }
         }
       }
@@ -1262,6 +1272,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开声音设置…"
+          }
+        }
+      }
+    },
+    "Options…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选项…"
           }
         }
       }
@@ -1934,16 +1954,6 @@
         }
       }
     },
-    "Starting and finding Orra" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "启动和查找 Orra"
-          }
-        }
-      }
-    },
     "System Default" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2241,16 +2251,6 @@
         }
       }
     },
-    "The talk key, the microphone, and what you see and hear while dictating." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "说话键、麦克风，以及听写时看到和听到的提示。"
-          }
-        }
-      }
-    },
     "This build has no microphone usage description" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2392,16 +2392,6 @@
         }
       }
     },
-    "Version, speech model and privacy." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "版本、语音模型和隐私。"
-          }
-        }
-      }
-    },
     "Vocabulary" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2513,16 +2503,6 @@
         }
       }
     },
-    "Words and names that Orra should write your way, and learning from your corrections." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "让 Orra 按你的写法输出的词和名字，以及从你的修改中学习。"
-          }
-        }
-      }
-    },
     "Write numbers as digits" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2533,22 +2513,12 @@
         }
       }
     },
-    "You can change this later in Settings, General." : {
+    "You can change this later under Advanced… in Settings." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "之后也可以在“设置”的“通用”中更改。"
-          }
-        }
-      }
-    },
-    "Your language, how Orra starts, and updates." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "界面语言、Orra 如何启动，以及更新。"
+            "value" : "之后也可以在“设置”的“高级…”中更改。"
           }
         }
       }

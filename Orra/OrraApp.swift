@@ -20,7 +20,7 @@ import SwiftUI
             SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
         }
         .windowResizability(.contentMinSize)
-        .defaultSize(width: 780, height: 620)
+        .defaultSize(width: 600, height: 520)
         .defaultLaunchBehavior(.suppressed)
         .commands {
             CommandGroup(replacing: .appSettings) {
@@ -39,24 +39,25 @@ import SwiftUI
 /// The settings window's identity, for openWindow.
 enum SettingsWindow {
     static let id = "settings"
-    /// Posted to turn an open settings window to the page `show` asked for.
-    static let showPageNotification = Notification.Name("io.github.db-ol.Orra.showSettingsPage")
+    /// Posted to show the sheet `show` asked for in an open settings window.
+    static let showNotification = Notification.Name("io.github.db-ol.Orra.showSettings")
 
-    /// The page the window shows when it opens or gets the notification. Back to General
-    /// once a window took it, so Settings… opens on General.
-    private static var openingPage = SettingsPage.general
+    /// The sheet the window opens when it appears or gets the notification. Back to none
+    /// once a window took it, so Settings… opens on the page alone.
+    private static var openingSheet: SettingsSheet?
 
-    /// Turns the settings window to `page`, such as Dictation, where the talk key is
-    /// chosen. Called before the window opens, the window starts on that page.
-    static func show(_ page: SettingsPage) {
-        openingPage = page
-        NotificationCenter.default.post(name: showPageNotification, object: nil)
+    /// Turns the settings window to `sheet`, such as the options of cleanup, or to the page
+    /// alone for nil, where the talk key is chosen. Called before the window opens, the
+    /// window opens with that sheet.
+    static func show(_ sheet: SettingsSheet? = nil) {
+        openingSheet = sheet
+        NotificationCenter.default.post(name: showNotification, object: nil)
     }
 
-    /// The page asked for, which resets the request to General.
-    static func takeOpeningPage() -> SettingsPage {
-        defer { openingPage = .general }
-        return openingPage
+    /// The sheet asked for, which resets the request to none.
+    static func takeOpeningSheet() -> SettingsSheet? {
+        defer { openingSheet = nil }
+        return openingSheet
     }
 }
 
