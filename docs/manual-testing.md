@@ -38,7 +38,9 @@ Build and test commands, run in the repository root:
   in TEST SUCCEEDED with 2294 test cases passed and 6 skipped on 2026-10-13, and after
   the sheets were fitted to the window, with 2296 passed and 6 skipped the same day.
   With the sidebar of General, Vocabulary and About, it ended in TEST SUCCEEDED with 2299
-  passed and 5 skipped the same day, the opt in rendering turned on and passing.
+  passed and 5 skipped the same day, the opt in rendering turned on and passing. With
+  the settings of Advanced… moved onto General, it ended in TEST SUCCEEDED the same day
+  with the same test cases passed and the same 5 skipped, the opt in rendering turned on.
   - SettingsPageTests checks the three tabs and the sheet of General, that a tab or sheet
     asked for, such as Vocabulary, opens once while Settings… afterwards opens General
     alone, that a sheet opens over General, that Change Talk Key… asks for General alone,
