@@ -549,8 +549,9 @@ struct PushToTalkControllerTests {
 
     @Test func holdShorterThanTheMinimumIsNotTranscribed() async throws {
         // Far longer than any hold in a test, so the hold is short on any machine. With
-        // 300 ms, a slow CI runner took longer than that just to start the fake microphone.
-        let controller = await makeController(minimumHold: .seconds(10))
+        // 300 ms, a slow CI runner took longer than that just to start the fake microphone,
+        // and with 10 s a stalled runner still went past it.
+        let controller = await makeController(minimumHold: .seconds(3600))
         try await dictate(controller)
         #expect(controller.state == .idle)
         // The microphone is still stopped, but nothing is transcribed.
