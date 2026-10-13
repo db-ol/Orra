@@ -49,6 +49,9 @@ struct SettingsView: View {
     let dockIcon: DockIcon
     let updater: AppUpdater
     @State private var sheet: SettingsSheet?
+    /// The height of the page, which no sheet may pass, so a sheet never hangs below the
+    /// window.
+    @State private var pageHeight: CGFloat = 400
 
     var body: some View {
         VStack(spacing: 0) {
@@ -64,6 +67,7 @@ struct SettingsView: View {
         }
         .sheet(item: $sheet) { sheet in
             content(for: sheet)
+                .environment(\.settingsSheetHeightLimit, pageHeight - SettingsSheetLimits.margin)
         }
         // A window that opens shows the sheet asked for, and one that is open already
         // turns to it.
@@ -74,6 +78,7 @@ struct SettingsView: View {
             sheet = SettingsWindow.takeOpeningSheet()
         }
         .frame(minWidth: 520, idealWidth: 600, maxWidth: .infinity, minHeight: 400, idealHeight: 480, maxHeight: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
     }
 
     /// What a sheet holds.
@@ -109,6 +114,7 @@ private struct GeneralSettings: View {
                 // The note about swapped keys shows once, under the translation key while it is
                 // on the page.
                 TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: !cleanup.translationIsOn)
+                    .help(Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.") + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
                 Picker(selection: Binding(
                     get: { pushToTalk.microphone?.uid ?? "" },
                     set: { uid in pushToTalk.setMicrophone(choice(forUID: uid)) }
@@ -228,6 +234,25 @@ private struct CleanupRow: View {
     }
 }
 
+extension EnvironmentValues {
+    /// The tallest a sheet of the settings window may open, the height of the window's
+    /// page less a margin. Unlimited outside the window.
+    @Entry var settingsSheetHeightLimit: CGFloat = .infinity
+}
+
+/// How the sheets fit in the settings window.
+enum SettingsSheetLimits {
+    /// How much shorter than the page a sheet stays at most.
+    static let margin: CGFloat = 24
+    /// The shortest a sheet gets, also in the smallest window. Its form scrolls.
+    static let minimumHeight: CGFloat = 300
+
+    /// The height a sheet opens at: its own height, but no taller than the window allows.
+    static func height(_ height: CGFloat, limit: CGFloat) -> CGFloat {
+        min(height, max(limit, minimumHeight))
+    }
+}
+
 /// A sheet of the settings window: its title, a grouped form, and Done.
 private struct SettingsSheetContent<Content: View>: View {
     let title: LocalizedStringKey
@@ -235,8 +260,12 @@ private struct SettingsSheetContent<Content: View>: View {
     var height: CGFloat = 520
     /// Whether the user can make the sheet larger, for a long list.
     var resizable = false
+    /// Whether Return presses Done. A sheet with a field that takes Return leaves it out,
+    /// and Escape presses Done there.
+    var doneIsDefault = true
     @ViewBuilder let content: Content
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.settingsSheetHeightLimit) private var heightLimit
 
     var body: some View {
         VStack(spacing: 0) {
@@ -253,15 +282,19 @@ private struct SettingsSheetContent<Content: View>: View {
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut(doneIsDefault ? .defaultAction : .cancelAction)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
         .frame(
             minWidth: width, idealWidth: width, maxWidth: resizable ? .infinity : width,
-            minHeight: resizable ? 400 : height, idealHeight: height, maxHeight: resizable ? .infinity : height
+            minHeight: min(fitted, SettingsSheetLimits.minimumHeight), idealHeight: fitted, maxHeight: resizable ? .infinity : fitted
         )
+    }
+
+    private var fitted: CGFloat {
+        SettingsSheetLimits.height(height, limit: heightLimit)
     }
 }
 
@@ -273,7 +306,7 @@ private struct CleanupOptions: View {
 
     var body: some View {
         let size = ModelInstaller.State.size(cleanup.models.manifest.totalBytes)
-        SettingsSheetContent(title: "Clean Up Text", height: 560) {
+        SettingsSheetContent(title: "Clean Up Text", height: 560, resizable: true) {
             Section {
                 DescribedLabel(
                     title: "Clean up with a local model",
@@ -604,7 +637,8 @@ private struct VocabularySettings: View {
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
-        SettingsSheetContent(title: "Vocabulary", width: 680, height: 600, resizable: true) {
+        // Return adds the word typed in the field, so it does not close the sheet.
+        SettingsSheetContent(title: "Vocabulary", width: 680, height: 600, resizable: true, doneIsDefault: false) {
             Section {
                 HStack(spacing: 8) {
                     // A visible box with the hint inside it, so it reads as a place to type.
@@ -703,13 +737,7 @@ private struct AdvancedSettings: View {
                     )
                 }
             } header: {
-                Text("Talk Key")
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.")
-                    Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard.")
-                }
-                .foregroundStyle(.secondary)
+                Text("Hands Free")
             }
             Section {
                 Picker(selection: $feedback.onScreenHint) {

@@ -698,7 +698,7 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
 One talk key in a recorder field, added later on 2026-10-10, not verified yet:
 
 - [ ] Settings, General shows one field with the talk key, such as "⌃ Right Control", and
-  the Talk Key section under Advanced… says "Recommended: fn on a Mac's built in
+  pointing at it shows a tooltip that ends with "Recommended: fn on a Mac's built in
   keyboard, right Control on an external keyboard." Option shows a small "(Alt)", Command "(Windows key)" and fn "(Globe 🌐)".
   The same in Chinese, with full width parentheses.
 - [ ] Clicking the field, or Change…, shows "Press the key you want to hold" with a blue
@@ -1274,8 +1274,13 @@ English and in Chinese, but not seen in the running app:
   explanation, the progress, Cancel Download, Resume Download, loading and Try Again under
   Local model, then the filler and number rules under Rules. Done closes it.
 - [ ] Edit… opens the vocabulary in a sheet that can be made larger, with the field
-  focused.
-- [ ] Advanced… holds Language, Double press for hands free, the on screen hint, the
+  focused. Type a word and press Return: the word is added, the field is empty and
+  focused again, and the sheet stays open. Escape or Done closes it.
+- [ ] Pointing at the talk key field shows how to hold the key and the recommended keys.
+- [ ] Every sheet opens inside the window and never hangs below its bottom edge, at the
+  window's first size and after making the window as short as it goes. A sheet with more
+  than fits scrolls, and Clean Up Text, Vocabulary and Advanced can be made larger.
+- [ ] Advanced… holds Language, Double press for hands free under Hands Free, the on screen hint, the
   sounds, Learn from my corrections with Forget Learned Corrections, Show Orra in the
   Dock, and Updates. Run from Xcode, the update switch and button are off and
   "Development build, updates are off" shows under them. In a release build both work.
