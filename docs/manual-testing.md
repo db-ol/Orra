@@ -40,7 +40,9 @@ Build and test commands, run in the repository root:
   tests, and the opt in renderings of the settings pages and of the indicator's badge.
   With the settings on one page and its sheets merged in, it ended in TEST SUCCEEDED with
   2375 test cases passed and the same 9 skipped on 2026-10-13, and settings-pages alone
-  with 2294 passed and 6 skipped.
+  with 2294 passed and 6 skipped. After the sheets were fitted to the window, it ended
+  in TEST SUCCEEDED with 2376 passed and the same 9 skipped, and settings-pages alone
+  with 2296 passed and 6 skipped, the same day.
   - SettingsPageTests checks that a sheet asked for, such as the vocabulary, opens once
     while Settings… afterwards opens the page alone, that Change Talk Key… asks for the
     page alone, that an open window is told, the line under Clean Up Text for each state
