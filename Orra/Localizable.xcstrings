@@ -788,6 +788,16 @@
         }
       }
     },
+    "Hands Free" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免手持"
+          }
+        }
+      }
+    },
     "Heard as" : {
       "localizations" : {
         "zh-Hans" : {

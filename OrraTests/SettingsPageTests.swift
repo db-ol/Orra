@@ -40,6 +40,15 @@ struct SettingsPageTests {
         #expect(SettingsWindow.takeOpeningSheet() == .cleanup)
     }
 
+    /// A sheet opens at its own height in a tall window, and no taller than the window in
+    /// a short one, but never shorter than the form needs to scroll.
+    @Test func aSheetFitsInTheWindow() {
+        #expect(SettingsSheetLimits.height(560, limit: 700) == 560)
+        #expect(SettingsSheetLimits.height(560, limit: 376) == 376)
+        #expect(SettingsSheetLimits.height(560, limit: 100) == SettingsSheetLimits.minimumHeight)
+        #expect(SettingsSheetLimits.height(560, limit: .infinity) == 560)
+    }
+
     /// The line under Clean Up Text on the page: nothing while cleanup has its model
     /// ready, and where the model stands otherwise.
     @Test func theCleanupRowSaysWhereTheModelStands() {
@@ -109,14 +118,20 @@ struct SettingsPageTests {
             dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
             updater: AppUpdater()
         )
-        let content: AnyView = if let sheet { AnyView(view.content(for: sheet)) } else { AnyView(view) }
-        // The window's first size, and the sheets' sizes, with Advanced at full length.
+        // The window's first size, and each sheet at the size it opens at over that window.
+        let page = NSSize(width: 600, height: 400)
+        let limit = page.height - SettingsSheetLimits.margin
+        let content: AnyView = if let sheet {
+            AnyView(view.content(for: sheet).environment(\.settingsSheetHeightLimit, limit))
+        } else {
+            AnyView(view)
+        }
         let size = switch sheet {
-        case nil: NSSize(width: 600, height: 400)
-        case .cleanup: NSSize(width: 540, height: 560)
-        case .vocabulary: NSSize(width: 680, height: 600)
-        case .advanced: NSSize(width: 600, height: 1180)
-        case .about: NSSize(width: 540, height: 380)
+        case nil: page
+        case .cleanup: NSSize(width: 540, height: SettingsSheetLimits.height(560, limit: limit))
+        case .vocabulary: NSSize(width: 680, height: SettingsSheetLimits.height(600, limit: limit))
+        case .advanced: NSSize(width: 600, height: SettingsSheetLimits.height(640, limit: limit))
+        case .about: NSSize(width: 540, height: SettingsSheetLimits.height(380, limit: limit))
         }
         let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
         hosting.frame = NSRect(origin: .zero, size: size)
