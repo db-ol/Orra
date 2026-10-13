@@ -377,6 +377,16 @@
         }
       }
     },
+    "Change Translation Key…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改翻译键…"
+          }
+        }
+      }
+    },
     "Change…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2679,6 +2689,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "翻译键"
+          }
+        }
+      }
+    },
+    "Translation Key: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键：%@"
           }
         }
       }

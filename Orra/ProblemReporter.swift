@@ -245,6 +245,7 @@ final class ProblemReporter {
                     .init(name: "Show in Dock", on: dockIcon.showsInDock),
                     .init(name: "Learn from corrections", on: learning.isOn),
                     .init(name: "Clean up with a local model", on: cleanup.isOn),
+                    .init(name: "Translate with the translation key", on: cleanup.translationIsOn),
                     .init(name: "Check for updates automatically", on: updater.checksAutomatically),
                 ],
                 cleanupModelState: describe(cleanup.models.state, cleanup.engineState),
