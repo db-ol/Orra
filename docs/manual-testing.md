@@ -188,6 +188,20 @@ Build and test commands, run in the repository root:
     mishearing, Undo, that a learned word removed from the vocabulary is learned
     again, that after a cleanup only a fix of a word the speech model wrote is learned,
     and that Paste Original Text ends the watch of the cleaned paste. LearnedNoticeTests checks the notice and its panel.
+  - WordReplacementTests covers putting the user's words back into a transcript: a kept
+    pair replaces its heard spelling only while its word is in the vocabulary, Latin
+    spellings at word boundaries and but for the case of the first letter, never a heard
+    spelling of ordinary English words, of one character or of one word of the system's
+    Chinese lexicon, never inside a vocabulary word, the word of another pair or a word
+    the system's word breaker finds, the longest spelling first, no chained replacements,
+    and pairs that disagree replace nothing. It also covers what a fix of a replaced word
+    teaches: the model's spelling with the new word, the pair forgotten when the user puts
+    the model's spelling back, and nothing for a fix of part of a replaced word.
+    CorrectionLearningTests checks that only kept pairs replace, and none while learning is
+    off, after Undo or after the word left the vocabulary, and the learning side of those
+    fixes, also after a cleanup. PushToTalkControllerTests checks that the replacement
+    runs after the rule steps and before the cleanup model, and that Paste Original Text
+    keeps the replaced words.
     OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
     character: grammar pairs never offered, the guessed word from the system tokenizer,
     and adding, editing and declining the offered word.
@@ -922,7 +936,8 @@ corrections under Vocabulary in Settings first:
   second or two after you stop typing, a notice above the recording indicator says the
   name was added to the vocabulary. A ring counts down the 10 seconds it stays. With the
   pointer over it the ring shows a pause sign, and after the pointer leaves it counts 4. The app you are in keeps the focus. The next dictation is more likely to
-  write it right, and Orra never changes the text itself.
+  write it right, and where the model still writes the misheard spelling, Orra writes your
+  word, see Replacing learned words below.
 - [ ] Changing a word's meaning, such as 明天 to 后天 or Monday to Sunday, fixing one
   Chinese character as grammar such as 的 to 得, deleting words, or rewriting the sentence
   adds nothing. Fixing a word and then typing a period learns the word without the period.
@@ -956,6 +971,22 @@ corrections under Vocabulary in Settings first:
 - [ ] With the setting off, nothing is recorded. Forget Learned Corrections deletes the
   pairs and keeps the vocabulary.
 - [ ] Typing feels the same in the app you dictated into while Orra watches the field.
+
+Replacing learned words, added on 2026-10-12, not verified yet. With Learn from my
+corrections on:
+
+- [ ] Dictate 我在用 Claude 写代码 until it comes out as 克劳德 and fix it to Claude, so the
+  notice says it was learned. Dictate it again: wherever the model writes 克劳德, Claude is
+  pasted. Copy Last Dictation copies Claude too.
+- [ ] Change that pasted Claude back to 克劳德: the next dictation pastes 克劳德 as the model
+  wrote it, and nothing new is added to the vocabulary. Fix 克劳德 to Claude again and the
+  replacement comes back.
+- [ ] Fix a replaced Claude to another name that sounds alike, such as Clyde: Clyde is
+  learned, and since 克劳德 now has two words, neither replaces it any more.
+- [ ] Remove Claude from the vocabulary in Settings, or Undo the notice, or turn Learn from
+  my corrections off: 克劳德 is pasted as the model wrote it.
+- [ ] A learned pair for an ordinary word, such as there to their, never changes there.
+- [ ] With cleanup on, the cleaned text and Paste Original Text both have Claude.
 
 App icon, added on 2026-10-07, not verified yet:
 
