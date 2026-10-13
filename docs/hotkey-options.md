@@ -163,9 +163,9 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
 - The controller tells the tap when no hands free dictation runs, for example after the
   limit or when a double press came while the previous dictation was still being
   transcribed, so Escape is never kept from the app by mistake.
-- Advanced… in Settings (Dictation from 2026-10-12, General before) and the Talk Key menu
-  have a switch "Double press for hands free", on by default. While it is off, a short press is a hold
-  as before.
+- The Dictation block of Settings, General (Advanced… before 2026-10-13, the Dictation page
+  before that, General at first) and the Talk Key menu have a switch "Double press for
+  hands free", on by default. While it is off, a short press is a hold as before.
 - Hold to talk is unchanged for the right modifiers and fn. A quick tap still records
   nothing that reaches the model.
 

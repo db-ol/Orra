@@ -37,10 +37,9 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// What General opens over itself: the options of cleanup and the advanced settings.
+/// What General opens over itself: the options of cleanup.
 enum SettingsSheet: String, CaseIterable, Identifiable {
     case cleanup
-    case advanced
 
     var id: String { rawValue }
 }
@@ -97,8 +96,8 @@ private struct DescribedLabel: View {
 }
 
 /// The settings window: a sidebar with General, Vocabulary and About, like System
-/// Settings. General holds what a user sets up, in blocks by purpose, and opens a sheet for
-/// the options of cleanup and for the advanced settings.
+/// Settings. General holds every setting, in blocks by purpose, and opens a sheet for the
+/// options of cleanup.
 struct SettingsView: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
@@ -161,7 +160,7 @@ struct SettingsView: View {
     func page(for tab: SettingsTab) -> some View {
         switch tab {
         case .general:
-            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, openAtLogin: openAtLogin, cleanup: cleanup) { sheet = $0 }
+            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback, openAtLogin: openAtLogin, cleanup: cleanup, learning: learning, dockIcon: dockIcon) { sheet = $0 }
         case .vocabulary:
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .about:
@@ -175,20 +174,23 @@ struct SettingsView: View {
         switch sheet {
         case .cleanup:
             CleanupOptions(pushToTalk: pushToTalk, cleanup: cleanup)
-        case .advanced:
-            AdvancedSettings(pushToTalk: pushToTalk, feedback: feedback, learning: learning, dockIcon: dockIcon)
         }
     }
 }
 
-/// General: the keys, the features with their options, the microphone, and how Orra starts
-/// with Advanced… for the rest, each in a block of its own. The target language of
-/// translation sits right under its switch, so it takes no extra click.
+/// General: the keys, the features with their options, dictation, the microphone, and the
+/// system, each in a block of its own. The target language of translation sits right under
+/// its switch, so it takes no extra click. A setting shows one short line under its name,
+/// and the rest of what it does when the pointer rests on it. The page scrolls when the
+/// window is short.
 private struct GeneralSettings: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
+    @Bindable var feedback: RecordingFeedback
     let openAtLogin: OpenAtLogin
     let cleanup: TextCleanup
+    @Bindable var learning: CorrectionLearning
+    @Bindable var dockIcon: DockIcon
     let open: (SettingsSheet) -> Void
 
     var body: some View {
@@ -248,6 +250,49 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section {
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.handsFreeOn },
+                    set: { pushToTalk.setHandsFreeOn($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Double press for hands free",
+                        detail: "Press the talk key twice quickly to keep recording after you let go.",
+                        systemImage: "hand.raised"
+                    )
+                }
+                .help(Text("Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before."))
+                Picker(selection: $feedback.onScreenHint) {
+                    ForEach(OnScreenHint.choices(current: feedback.onScreenHint)) { hint in
+                        Text(hint.title).tag(hint)
+                    }
+                } label: {
+                    DescribedLabel(
+                        title: "On screen hint",
+                        detail: "Bars at the bottom of the screen that move with your voice.",
+                        systemImage: "waveform"
+                    )
+                }
+                .help(Text("While you dictate, white bars at the bottom of the screen move with your voice, and say why when nothing is pasted. Always also keeps a small bar there while Orra is ready, which shows how to talk when you point at it."))
+                Toggle(isOn: $feedback.playsSounds) {
+                    Label("Play sounds when recording starts and stops", systemImage: "speaker.wave.2")
+                }
+                Toggle(isOn: $learning.isOn) {
+                    DescribedLabel(
+                        title: "Learn from my corrections",
+                        detail: "Adds a misheard word you fix after a dictation to your vocabulary.",
+                        systemImage: "character.cursor.ibeam"
+                    )
+                }
+                .help(Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu."))
+                if !learning.store.entries.isEmpty {
+                    Button("Forget Learned Corrections") {
+                        learning.removeAll()
+                    }
+                }
+            } header: {
+                Text("Dictation")
+            }
+            Section {
                 Picker(selection: Binding(
                     get: { pushToTalk.microphone?.uid ?? "" },
                     set: { uid in pushToTalk.setMicrophone(choice(forUID: uid)) }
@@ -267,6 +312,7 @@ private struct GeneralSettings: View {
                 Text("Microphone")
             }
             Section {
+                InterfaceLanguageRow()
                 Toggle(isOn: Binding(
                     get: { openAtLogin.isOn },
                     set: { openAtLogin.setOn($0) }
@@ -282,13 +328,11 @@ private struct GeneralSettings: View {
                     Text(verbatim: problem)
                         .foregroundStyle(.secondary)
                 }
-                LabeledContent {
-                    Button("Advanced…") { open(.advanced) }
-                } label: {
+                Toggle(isOn: $dockIcon.showsInDock) {
                     DescribedLabel(
-                        title: "More settings",
-                        detail: "Language, hands free, the on screen hint, sounds, learning from corrections and the Dock icon.",
-                        systemImage: "slider.horizontal.3"
+                        title: "Show Orra in the Dock",
+                        detail: "Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.",
+                        systemImage: "dock.rectangle"
                     )
                 }
             } header: {
@@ -712,113 +756,46 @@ private struct VocabularySettings: View {
     }
 }
 
-/// Everything that is set once or rarely: the language, hands free, what Orra shows and
-/// plays while dictating, learning from corrections and the Dock icon.
-private struct AdvancedSettings: View {
-    let pushToTalk: PushToTalkController
-    @Bindable var feedback: RecordingFeedback
-    @Bindable var learning: CorrectionLearning
-    @Bindable var dockIcon: DockIcon
+/// The language of Orra's menus and windows, with Restart Orra while it differs from the one
+/// Orra started in.
+private struct InterfaceLanguageRow: View {
     @State private var language = AppLanguage.load()
 
     var body: some View {
-        SettingsSheetContent(title: "Advanced", width: 600, height: 640, resizable: true) {
-            Section {
-                Picker(selection: $language) {
-                    ForEach(AppLanguage.allCases) { language in
-                        if let name = language.nativeName {
-                            Text(verbatim: name).tag(language)
-                        } else {
-                            Text("Same as the Mac").tag(language)
-                        }
-                    }
-                } label: {
-                    Label("Language", systemImage: "globe")
+        Picker(selection: $language) {
+            ForEach(AppLanguage.allCases) { language in
+                if let name = language.nativeName {
+                    Text(verbatim: name).tag(language)
+                } else {
+                    Text("Same as the Mac").tag(language)
                 }
-                .onChange(of: language) { _, language in
-                    language.save()
-                }
-                // The welcome window can change the language while Settings is open. The
-                // vocabulary is saved on another thread, so changes are read on the main one.
-                .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: DispatchQueue.main)) { _ in
-                    let saved = AppLanguage.load()
-                    if saved != language {
-                        language = saved
-                    }
-                }
-                // Compared with what macOS loaded at launch, so a language picked in the
-                // welcome window counts, and picking English on a Mac in English needs no
-                // restart.
-                if language.localization() != AppLanguage.launchLocalization {
-                    HStack {
-                        Text("Orra shows the new language after it restarts.")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Restart Orra") {
-                            AppLanguage.restart()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-            } header: {
-                Text("Language")
             }
-            Section {
-                Toggle(isOn: Binding(
-                    get: { pushToTalk.handsFreeOn },
-                    set: { pushToTalk.setHandsFreeOn($0) }
-                )) {
-                    DescribedLabel(
-                        title: "Double press for hands free",
-                        detail: "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before.",
-                        systemImage: "hand.raised"
-                    )
-                }
-            } header: {
-                Text("Hands Free")
+        } label: {
+            Label("Interface language", systemImage: "globe")
+        }
+        .help(Text("The language of Orra's menus and windows."))
+        .onChange(of: language) { _, language in
+            language.save()
+        }
+        // The welcome window can change the language while Settings is open. The
+        // vocabulary is saved on another thread, so changes are read on the main one.
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: DispatchQueue.main)) { _ in
+            let saved = AppLanguage.load()
+            if saved != language {
+                language = saved
             }
-            Section {
-                Picker(selection: $feedback.onScreenHint) {
-                    ForEach(OnScreenHint.choices(current: feedback.onScreenHint)) { hint in
-                        Text(hint.title).tag(hint)
-                    }
-                } label: {
-                    DescribedLabel(
-                        title: "On screen hint",
-                        detail: "While you dictate, white bars at the bottom of the screen move with your voice, and say why when nothing is pasted. Always also keeps a small bar there while Orra is ready, which shows how to talk when you point at it.",
-                        systemImage: "waveform"
-                    )
+        }
+        // Compared with what macOS loaded at launch, so a language picked in the welcome
+        // window counts, and picking English on a Mac in English needs no restart.
+        if language.localization() != AppLanguage.launchLocalization {
+            HStack {
+                Text("Orra shows the new language after it restarts.")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Restart Orra") {
+                    AppLanguage.restart()
                 }
-                Toggle(isOn: $feedback.playsSounds) {
-                    Label("Play sounds when recording starts and stops", systemImage: "speaker.wave.2")
-                }
-            } header: {
-                Text("While you dictate")
-            }
-            Section {
-                Toggle(isOn: $learning.isOn) {
-                    DescribedLabel(
-                        title: "Learn from my corrections",
-                        detail: "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.",
-                        systemImage: "character.cursor.ibeam"
-                    )
-                }
-                if !learning.store.entries.isEmpty {
-                    Button("Forget Learned Corrections") {
-                        learning.removeAll()
-                    }
-                }
-            } header: {
-                Text("Learning")
-            }
-            Section {
-                Toggle(isOn: $dockIcon.showsInDock) {
-                    DescribedLabel(
-                        title: "Show Orra in the Dock",
-                        detail: "Orra is always in the menu bar. While this is off, it shows in the Dock only while one of its windows is open.",
-                        systemImage: "dock.rectangle"
-                    )
-                }
+                .buttonStyle(.borderedProminent)
             }
         }
     }

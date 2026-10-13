@@ -235,22 +235,12 @@
         }
       }
     },
-    "Advanced" : {
+    "Adds a misheard word you fix after a dictation to your vocabulary." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "高级"
-          }
-        }
-      }
-    },
-    "Advanced…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高级…"
+            "value" : "听写后你改正了听错的词，Orra 会把它加入个人词库。"
           }
         }
       }
@@ -343,6 +333,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自动"
+          }
+        }
+      }
+    },
+    "Bars at the bottom of the screen that move with your voice." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕底部随你的声音跳动的音量条。"
           }
         }
       }
@@ -616,6 +616,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开发版，不检查更新"
+          }
+        }
+      }
+    },
+    "Dictation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写"
           }
         }
       }
@@ -934,16 +944,6 @@
         }
       }
     },
-    "Hands Free" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "免手持"
-          }
-        }
-      }
-    },
     "Heard as" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1056,6 +1056,16 @@
         }
       }
     },
+    "Interface language" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "界面语言"
+          }
+        }
+      }
+    },
     "It holds Orra’s version, settings, permissions and log from the last hour, facts about your Mac and recent crash reports. It holds no dictated text and no audio. Your name and your Mac’s name are taken out." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1086,16 +1096,6 @@
         }
       }
     },
-    "Language, hands free, the on screen hint, sounds, learning from corrections and the Dock icon." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "语言、免手持、屏幕提示、提示音、从修改中学习和程序坞图标。"
-          }
-        }
-      }
-    },
     "Last used" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1122,16 +1122,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "学到的"
-          }
-        }
-      }
-    },
-    "Learning" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "学习"
           }
         }
       }
@@ -1296,16 +1286,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风访问权限已关闭。请在系统设置的“麦克风”中打开 Orra。"
-          }
-        }
-      }
-    },
-    "More settings" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更多设置"
           }
         }
       }
@@ -1810,6 +1790,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "快速连按两下说话键，松开后 Orra 会继续录音。再按一下说话键就会粘贴，按 Esc 键则取消。按住说话的用法不变。"
+          }
+        }
+      }
+    },
+    "Press the talk key twice quickly to keep recording after you let go." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速连按两下说话键，松开后继续录音。"
           }
         }
       }
@@ -2353,6 +2343,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载的文件与预期的校验值不符。"
+          }
+        }
+      }
+    },
+    "The language of Orra's menus and windows." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 的菜单和窗口所用的语言。"
           }
         }
       }
@@ -2914,16 +2914,6 @@
         }
       }
     },
-    "While you dictate" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "听写时"
-          }
-        }
-      }
-    },
     "While you dictate, white bars at the bottom of the screen move with your voice, and say why when nothing is pasted. Always also keeps a small bar there while Orra is ready, which shows how to talk when you point at it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2965,12 +2955,12 @@
         }
       }
     },
-    "You can change this later under Advanced… in Settings." : {
+    "You can change this later in Settings, under General." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "之后也可以在“设置”的“高级…”中更改。"
+            "value" : "之后也可以在“设置”的“通用”中更改。"
           }
         }
       }
