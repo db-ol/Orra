@@ -89,7 +89,7 @@ struct StatusMenu: View {
             Text("Talk Key: \(pushToTalk.talkKey.fullName())")
             Button("Change Talk Key…") {
                 NSApplication.shared.activate()
-                SettingsWindow.show()
+                SettingsWindow.show(.general)
                 openWindow(id: SettingsWindow.id)
             }
             Divider()

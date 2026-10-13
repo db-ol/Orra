@@ -145,22 +145,22 @@
         }
       }
     },
+    "About" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于"
+          }
+        }
+      }
+    },
     "About once a day Orra asks GitHub for the latest version. Like any web request, the check carries your preferred languages, and nothing else about your Mac. Each update is installed only after you choose it." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 大约每天向 GitHub 查询一次最新版本。和所有网页请求一样，查询会带上你偏好的语言，除此之外不发送任何关于你的 Mac 的信息。每次更新都要你同意后才会安装。"
-          }
-        }
-      }
-    },
-    "About Orra" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关于 Orra"
           }
         }
       }
@@ -673,16 +673,6 @@
         }
       }
     },
-    "Edit…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑…"
-          }
-        }
-      }
-    },
     "End" : {
       "comment" : "A key name",
       "localizations" : {
@@ -701,6 +691,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enter"
+          }
+        }
+      }
+    },
+    "Features" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "功能"
           }
         }
       }
@@ -870,6 +870,16 @@
         }
       }
     },
+    "Input device" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入设备"
+          }
+        }
+      }
+    },
     "Install Orra %@…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -890,12 +900,32 @@
         }
       }
     },
+    "Keys" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按键"
+          }
+        }
+      }
+    },
     "Language" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "语言"
+          }
+        }
+      }
+    },
+    "Language, hands free, the on screen hint, sounds, learning from corrections and the Dock icon." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言、免手持、屏幕提示、提示音、从修改中学习和程序坞图标。"
           }
         }
       }
@@ -1090,6 +1120,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风访问权限已关闭。请在系统设置的“麦克风”中打开 Orra。"
+          }
+        }
+      }
+    },
+    "More settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多设置"
           }
         }
       }
@@ -1960,6 +2000,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型"
+          }
+        }
+      }
+    },
+    "System" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统"
           }
         }
       }
