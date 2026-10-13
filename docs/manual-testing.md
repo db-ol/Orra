@@ -39,10 +39,10 @@ Build and test commands, run in the repository root:
   the sheets were fitted to the window, with 2296 passed and 6 skipped the same day.
   With the sidebar of General, Vocabulary and About, it ended in TEST SUCCEEDED with 2299
   passed and 5 skipped the same day, the opt in rendering turned on and passing.
-  - SettingsPageTests checks the three tabs and two sheets, that a tab or sheet asked
-    for, such as Vocabulary, opens once while Settings… afterwards opens General alone,
-    that a sheet opens over General, that Change Talk Key… asks for General alone, that
-    an open window is told, and the line under Clean Up Text for each state of the
+  - SettingsPageTests checks the three tabs and the sheet of General, that a tab or sheet
+    asked for, such as Vocabulary, opens once while Settings… afterwards opens General
+    alone, that a sheet opens over General, that Change Talk Key… asks for General alone,
+    that an open window is told, and the line under Clean Up Text for each state of the
     model. With TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab
     and sheet to a PNG there, which CI never does.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
@@ -850,9 +850,9 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
   off it shows "Microphone access is off". Dictating into a password field shows "Orra does
   not paste into password fields. Use Copy Last Dictation." Holding the key without
   speaking shows "No speech was recognized".
-- [ ] Under Advanced… in Settings, setting the on screen hint to Off and turning off "Play
-  sounds when recording starts and stops" takes effect at the next hold, and both stay
-  off after quitting and reopening Orra.
+- [ ] Under Dictation in Settings, General, setting the on screen hint to Off and turning
+  off "Play sounds when recording starts and stops" takes effect at the next hold, and both
+  stay off after quitting and reopening Orra.
 
 Calmer recording indicator, added on 2026-10-10, not verified yet:
 
@@ -891,8 +891,8 @@ Idle bar, added on 2026-10-09, not verified yet:
   in front, the hint may not show (a known limit).
 - [ ] Over a full screen app and on another Space the bar shows too. Adding or removing a
   display, or moving the Dock, keeps it at the bottom.
-- [ ] Setting the on screen hint to Only while dictating under Advanced… in Settings hides it
-  at once, and it stays off after reopening Orra.
+- [ ] Setting the on screen hint to Only while dictating under Dictation in Settings hides
+  it at once, and it stays off after reopening Orra.
 
 Personal vocabulary, added on 2026-10-08, not verified yet:
 
@@ -932,7 +932,7 @@ Vocabulary without the 100 word limit, added on 2026-10-10, not verified yet:
   200.
 
 Learning from corrections, added on 2026-10-08, not verified yet. Turn on Learn from my
-corrections under Advanced… in Settings first:
+corrections under Dictation in Settings, General first:
 
 - [ ] Dictate a sentence with a name Orra gets wrong into Notes and fix the name by hand: a
   second or two after you stop typing, a notice above the recording indicator says the
@@ -1001,7 +1001,7 @@ Dock icon, added on 2026-10-10, not verified yet:
 
 - [ ] After launch Orra is in the Dock and in Command Tab, and still in the menu bar.
   Clicking the Dock icon opens Settings, or the welcome window while setup needs you.
-- [ ] Turning off "Show Orra in the Dock" under Advanced… in Settings keeps the icon until the
+- [ ] Turning off "Show Orra in the Dock" under System in Settings keeps the icon until the
   Settings window closes, then it goes. Opening Settings or the welcome window from the
   menu brings it back while the window is open. The choice stays after reopening Orra.
 - [ ] Dictating into another app works the same with the icon shown, and the recording
@@ -1040,28 +1040,28 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
 
 Interface language, added on 2026-10-10, not verified yet:
 
-- [ ] Language under Advanced… in Settings offers Same as the Mac, English and 简体中文. Choosing one
-  other than the language Orra shows now brings up Restart Orra, and after the restart
-  the menu, Settings, the welcome window and the indicator use that language. Same as the
-  Mac follows System Settings again. Choosing English on a Mac in English shows no Restart
-  Orra.
+- [ ] Interface language under System in Settings, General offers Same as the Mac, English
+  and 简体中文. Choosing one other than the language Orra shows now brings up Restart Orra, and
+  after the restart the menu, Settings, the welcome window and the indicator use that
+  language. Same as the Mac follows System Settings again. Choosing English on a Mac in
+  English shows no Restart Orra.
 - [ ] Settings looks like System Settings: colored icons in the sidebar, grouped blocks
-  with headers and icons on the rows of General, and Language as the first section of
-  Advanced…. The window can be made larger, keeps its size, and cannot be made smaller
+  with headers and icons on the rows of General, and Interface language as the first row
+  of System. The window can be made larger, keeps its size, and cannot be made smaller
   than its content.
 
 Language in the welcome window, added on 2026-10-10, not verified yet. Prepare a first
 launch as for the welcome window above, with the Mac in English:
 
 - [ ] Under the header, the welcome window shows Language with Same as the Mac, English and
-  简体中文, and under it "You can change this later under Advanced… in Settings."
+  简体中文, and under it "You can change this later in Settings, under General."
 - [ ] Choosing 简体中文 turns the whole window Chinese at once, without a restart: the
   title, the header, the language note, every step with its buttons and status lines (the
   download's progress too), the talk key field, a refused key's note while recording, the
   recommendation with its Use button, and Not Now. The menu stays in English.
 - [ ] Choosing English or Same as the Mac turns the window back to English.
-- [ ] With Settings open at the same time, its Language picker follows the welcome window,
-  and shows Restart Orra once the language differs from the one Orra shows.
+- [ ] With Settings open at the same time, its Interface language picker follows the welcome
+  window, and shows Restart Orra once the language differs from the one Orra shows.
 - [ ] With a step left, choose 简体中文 and click Not Now, with a download running: Orra
   does not restart and the download goes on. The next launch shows the menu, Settings and
   the welcome window in Chinese.
@@ -1131,15 +1131,18 @@ Cleanup with a local model, added on 2026-10-10, not verified yet:
   `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`.
 
 Settings with a sidebar, added on 2026-10-12 as pages, changed to one page with sheets on
-2026-10-13 and then to a sidebar with General, Vocabulary and About the same day, not
-verified yet. Rendered to PNG by the opt in test in SettingsPageTests, in English and in
-Chinese, but not seen in the running app:
+2026-10-13, then to a sidebar with General, Vocabulary and About the same day, and then with
+the settings of Advanced… moved onto General, not verified yet. Rendered to PNG by the opt
+in test in SettingsPageTests, in English and in Chinese, but not seen in the running app:
 
 - [ ] Settings… opens on General (通用 in Chinese), with General, Vocabulary and About
-  (通用, 个人词库, 关于) in the sidebar and nothing else. General shows four blocks with
-  headers: Keys with the talk key, Features with Clean Up Text, its switch and
-  Options…, Microphone with the input device, and System with Open at Login and
-  Advanced….
+  (通用, 个人词库, 关于) in the sidebar and nothing else. General shows five blocks with
+  headers, in this order: Keys with the talk key, Features with Clean Up Text, its switch
+  and Options…, Dictation (听写) with Double press for hands free, the on screen hint,
+  the sounds and Learn from my corrections with Forget Learned Corrections, Microphone
+  with the input device, and System with Interface language (界面语言), Open at Login
+  and Show Orra in the Dock. There is no Advanced… button. The page scrolls when the
+  window is short.
 - [ ] The sidebar cannot be hidden. Dragging the divider to the left edge leaves it at its
   narrowest width, there is no sidebar button in the toolbar, and View > Hide Sidebar
   (Control Command S), where it shows, keeps it in place.
@@ -1153,12 +1156,13 @@ Chinese, but not seen in the running app:
   window. Type a word and press Return: the word is added, and the field is empty and
   focused again.
 - [ ] Pointing at the talk key field shows how to hold the key and the recommended keys.
-- [ ] Every sheet opens inside the window and never hangs below its bottom edge, at the
-  window's first size and after making the window as short as it goes. A sheet with more
-  than fits scrolls, and Clean Up Text and Advanced can be made larger.
-- [ ] Advanced… holds Language, Double press for hands free under Hands Free, the on screen
-  hint, the sounds, Learn from my corrections with Forget Learned Corrections, and Show
-  Orra in the Dock. The sheet scrolls when the window is short.
+- [ ] The Options… sheet of Clean Up Text opens inside the window and never hangs below
+  its bottom edge, at the window's first size and after making the window as short as it
+  goes. It scrolls when more than fits, and it can be made larger.
+- [ ] Each row of Dictation and System shows one short line under its name at most.
+  Pointing at Double press for hands free, the on screen hint, Learn from my corrections
+  and Interface language shows the rest of what they do in a tooltip. Choosing another
+  interface language brings up Restart Orra under the picker.
 - [ ] About shows the version, the speech model status, Updates with Check for updates
   automatically and Check for Updates…, and the privacy text with its link. Run from
   Xcode, the line under the version says "Development build, updates are off" and the
