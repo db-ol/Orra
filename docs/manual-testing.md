@@ -354,6 +354,52 @@ Build and test commands, run in the repository root:
     2026-10-12 they took 0.36, 0.88, 1.75 and 3.41 s, and 0.34, 0.78, 1.48 and 2.33 s. Each
     stayed within the limit of 2 s plus 15 ms a character. Text over 400 characters is
     pasted without cleanup.
+- SpeechCorpusEvaluationTests runs Orra's speech recognition on the 392 clips Voxt checks
+    its runtime on (LibriSpeech test-clean, FLEURS Chinese, ASCEND and 8 synthetic clips),
+    only with TEST_RUNNER_ORRA_SPEECH_EVAL=1. It takes a dictation's path up to the
+    transcript (resampling, the silence check, Qwen3Engine without a vocabulary,
+    TranscriptGuard, ChineseText.simplified) and writes each clip's text and timing to a
+    JSON file that Tools/speech-eval/score.py scores with Voxt's normalization.
+    Tools/speech-eval/README.md describes how to build the corpus and score. In Release:
+
+        TEST_RUNNER_ORRA_SPEECH_EVAL=1 TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=<corpus folder> TEST_RUNNER_ORRA_SPEECH_EVAL_OUT=<results folder> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/SpeechCorpusEvaluationTests
+
+    On 2026-10-12, on an M5 Pro with 48 GB and the installed Qwen3-ASR 1.7B 8 bit, the
+    build script rebuilt all 392 clips with the hashes Voxt pins, and two Release runs
+    took 192 and 162 s and gave the same text for every clip. score.py gives exactly
+    Voxt's published error rates from Voxt's own hypotheses. Orra against Voxt's golden
+    files for the Apple M5:
+
+    | | Orra 1.7B 8 bit | Voxt 1.7B 8 bit | Voxt 1.7B 6 bit | Voxt 0.6B 4 bit |
+    |---|---|---|---|---|
+    | wer_en | 2.06% | 2.06% | 2.15% | 2.93% |
+    | cer_zh | 4.47% | 5.26% | 4.97% | 6.71% |
+    | mer_mixed | 8.23% | 12.94% | 12.51% | 16.62% |
+    | silence and noise clips with output, of 8 | 0 | 8 | 8 | 8 |
+
+    The decode took a median of 0.24 to 0.30 s and 1.75 to 1.79 s at p95, a real time
+    factor of 0.031 to 0.036 over all audio. Voxt's runs put "language English" in every
+    prompt, which turned 10 Chinese and mixed clips into English translations. Orra gives
+    no hint, and its automatic choice wrote one Chinese clip in Swedish (0226_zh_mid, 41
+    of its 361 Chinese errors). ChineseText.simplified fixed one clip the model wrote in
+    traditional characters, which Voxt keeps. The README has the table per stratum and the
+    causes of every difference.
+
+    With LanguageGuard on 2026-10-13, the same run caught only 0226_zh_mid, transcribed it
+    again with Chinese as the language and brought it from 46 to 6 errors: zh_mid went
+    from 5.21% to 3.65% and cer_zh from 4.47% to 3.98%, and every other clip kept its
+    text. On a copy of the corpus with quiet noise and a pause added around the speech, as
+    in a dictation, it also caught only 0226_zh_mid, 50 errors to 5. The second pass added 0.37 s and 0.33 s to that clip. The text check alone takes
+    about 0.3 ms a transcript.
+  - LanguageGuardTests checks which transcripts count as another language: Chinese,
+    English, their mix, Cantonese and English with accented names do not, Swedish,
+    German, Indonesian, Japanese, Korean and Russian do. With a stand in engine it checks
+    that such a transcript is transcribed again with Chinese and then English as the
+    language, that the first pass in Chinese or English stands, that the vocabulary
+    stays on those passes, that the text stands when no pass helps or one fails, that
+    cancellation still ends the dictation, and that the echo check runs on the new
+    text. PushToTalkControllerTests checks that the dictation pastes the text of the
+    pass in Chinese.
 - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
@@ -1117,6 +1163,19 @@ Report a Problem, added on 2026-10-10, not verified yet:
   and the cut marker at its end, the window says the full text is on the clipboard,
   and pasting gives the whole text. Nothing is sent without you submitting the form.
 - [ ] With the interface in Chinese, the menu item and the window read in Chinese.
+
+Transcripts in a third language, added on 2026-10-13, not verified yet:
+
+- [ ] Dictate in Mandarin a sentence that starts with a foreign name, such as "Pa amb Oli
+  是一种在夏天很流行的简单晚餐". Orra pastes it in Chinese, not in Swedish or another
+  language, and at most about half a second later than a dictation of the same length.
+- [ ] Dictate ordinary Chinese, English and mixed sentences, including English ones with
+  names such as São Paulo or Erdoğan: they are pasted as before and the log shows no
+  line starting "Transcript was in another language".
+- [ ] With a name in the vocabulary, dictate a Chinese sentence that starts with it: the
+  name is written the vocabulary's way.
+- [ ] The log says which pass stood and how long it took, and no text:
+  `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"'`.
 
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 
