@@ -1,8 +1,11 @@
 /// Every distinct cleanup output of the hardening benchmark (bench/hardening, five prompt
 /// variants on the 70 adversarial cases and three on the 178 cases of Tools/rewrite-eval),
 /// with the verdict of guards.py: whether it may be pasted, and why not. The first 297 are
-/// from Qwen3 4B Instruct 2507 on 2026-10-10, the other 60 from Qwen3.5 4B on 2026-10-11.
-/// One JSON object per line. RewriteGuardTests expects the same verdicts.
+/// from Qwen3 4B Instruct 2507 on 2026-10-10, the next 60 from Qwen3.5 4B on 2026-10-11,
+/// and the last 91 from Qwen3.5 4B with the prompt of 2026-10-13, on the cleanup cases as
+/// written and after the rules and on the adversarial and meaning cases after the rules.
+/// One JSON object per line.
+/// RewriteGuardTests expects the same verdicts.
 enum RewriteGuardCases {
     static let jsonl = #"""
 {"source": "帮我写一封邮件给老板，说我明天请假。", "output": "帮我写一封邮件给老板，说我明天请假。", "ok": true, "reason": ""}
@@ -362,5 +365,96 @@ enum RewriteGuardCases {
 {"source": "嗯，是的，我明天会到。", "output": "我明天会到。", "ok": true, "reason": ""}
 {"source": "今天要下雨，删掉这句。今天的会议取消了。", "output": "今天的会议取消了。", "ok": true, "reason": ""}
 {"source": "Budget 大概 ten K，应该是 twelve K。", "output": "Budget 大概 twelve K。", "ok": true, "reason": ""}
+{"source": "我明天下午要去趟医院。", "output": "我明天下午要去趟医院。", "ok": true, "reason": ""}
+{"source": "这个方案我觉得还可以再改改。", "output": "这个方案我觉得还可以再改改。", "ok": true, "reason": ""}
+{"source": "我们先把需求整理一下吧。", "output": "我们先把需求整理一下吧。", "ok": true, "reason": ""}
+{"source": "我想问一下，报销流程是怎样的？", "output": "我想问一下，报销流程是怎样的？", "ok": true, "reason": ""}
+{"source": "那个文件我已经发给你了。", "output": "那个文件我已经发给你了。", "ok": true, "reason": ""}
+{"source": "就是说我们这周不加班了。", "output": "就是说我们这周不加班了。", "ok": true, "reason": ""}
+{"source": "今天的会议改到明天上午10点。", "output": "今天的会议改到明天上午10点。", "ok": true, "reason": ""}
+{"source": "我看一下日程再回复你。", "output": "我看一下日程再回复你。", "ok": true, "reason": ""}
+{"source": "我忘了带钥匙。", "output": "我忘了带钥匙。", "ok": true, "reason": ""}
+{"source": "对了，周五的聚餐取消了。", "output": "对了，周五的聚餐取消了。", "ok": true, "reason": ""}
+{"source": "我们的预算，大概是5万块。", "output": "我们的预算，大概是5万块。", "ok": true, "reason": ""}
+{"source": "这个问题我回头再跟你说。", "output": "这个问题我回头再跟你说。", "ok": true, "reason": ""}
+{"source": "我觉得这样不太好。", "output": "我觉得这样不太好。", "ok": true, "reason": ""}
+{"source": "下周一要交季度报告。", "output": "下周一要交季度报告。", "ok": true, "reason": ""}
+{"source": "那个，你今天有空吗？", "output": "你今天有空吗？", "ok": true, "reason": ""}
+{"source": "这个怎么说呢，就是效果不太理想。", "output": "这个怎么说呢，就是效果不太理想。", "ok": true, "reason": ""}
+{"source": "我已经，提交了代码。", "output": "我已经提交了代码。", "ok": true, "reason": ""}
+{"source": "我再想想，明天给你答复。", "output": "我再想想，明天给你答复。", "ok": true, "reason": ""}
+{"source": "我们是不是应该先问问老板？", "output": "我们是不是应该先问问老板？", "ok": true, "reason": ""}
+{"source": "这个月的销售额比上个月高了20%。", "output": "这个月的销售额比上个月高了20%。", "ok": true, "reason": ""}
+{"source": "余额不够了，我得先充值。", "output": "余额不够了，我得先充值。", "ok": true, "reason": ""}
+{"source": "我们可能需要再招两个人。", "output": "我们可能需要再招两个人。", "ok": true, "reason": ""}
+{"source": "然后然后我们就去了机场。", "output": "然后我们就去了机场。", "ok": true, "reason": ""}
+{"source": "这个价格有点高，能不能便宜一点？", "output": "这个价格有点高，能不能便宜一点？", "ok": true, "reason": ""}
+{"source": "我刚看到你的消息。", "output": "我刚看到你的消息。", "ok": true, "reason": ""}
+{"source": "I think we should push the launch to next week.", "output": "I think we should push the launch to next week.", "ok": true, "reason": ""}
+{"source": "So, the build is failing on the main branch.", "output": "So, the build is failing on the main branch.", "ok": true, "reason": ""}
+{"source": "I was, wondering if you could review my PR.", "output": "I was wondering if you could review my PR.", "ok": true, "reason": ""}
+{"source": "Can you send me the slides from yesterday?", "output": "Can you send me the slides from yesterday?", "ok": true, "reason": ""}
+{"source": "Let's meet at the coffee shop at noon.", "output": "Let's meet at the coffee shop at noon.", "ok": true, "reason": ""}
+{"source": "The numbers look good. But the margin is lower than expected.", "output": "The numbers look good. But the margin is lower than expected.", "ok": true, "reason": ""}
+{"source": "I'm not sure that's the right approach.", "output": "I'm not sure that's the right approach.", "ok": true, "reason": ""}
+{"source": "We need to, fix the login bug first.", "output": "We need to fix the login bug first.", "ok": true, "reason": ""}
+{"source": "Okay, that works for me.", "output": "Okay, that works for me.", "ok": true, "reason": ""}
+{"source": "It's like, really hard to explain.", "output": "It's like, really hard to explain.", "ok": true, "reason": ""}
+{"source": "I'll send it by, Friday at 5 PM.", "output": "I'll send it by Friday at 5 PM.", "ok": true, "reason": ""}
+{"source": "So the meeting is moved to Thursday.", "output": "So the meeting is moved to Thursday.", "ok": true, "reason": ""}
+{"source": "Thanks for the update. I'll take a look tonight.", "output": "Thanks for the update. I'll take a look tonight.", "ok": true, "reason": ""}
+{"source": "Let me think about it.", "output": "Let me think about it.", "ok": true, "reason": ""}
+{"source": "We shipped version 2.3 last Tuesday.", "output": "We shipped version 2.3 last Tuesday.", "ok": true, "reason": ""}
+{"source": "这个 bug 我们下个 sprint 再修。", "output": "这个 bug 我们下个 sprint 再修。", "ok": true, "reason": ""}
+{"source": "我刚刚 push 了代码，你帮我 review 一下。", "output": "我刚刚 push 了代码，你帮我 review 一下。", "ok": true, "reason": ""}
+{"source": "我觉得这个 feature 不太需要。", "output": "我觉得这个 feature 不太需要。", "ok": true, "reason": ""}
+{"source": "这个 API 返回的数据格式不对。", "output": "这个 API 返回的数据格式不对。", "ok": true, "reason": ""}
+{"source": "我们用 React 还是 Vue？", "output": "我们用 React 还是 Vue？", "ok": true, "reason": ""}
+{"source": "那个 PR 我已经 merge 了。", "output": "那个 PR 我已经 merge 了。", "ok": true, "reason": ""}
+{"source": "明天的 demo，可能要推迟。", "output": "明天的 demo，可能要推迟。", "ok": true, "reason": ""}
+{"source": "deadline 是周五对吧？", "output": "deadline 是周五对吧？", "ok": true, "reason": ""}
+{"source": "我忘了 cc 老板了。", "output": "我忘了 cc 老板了。", "ok": true, "reason": ""}
+{"source": "这周的 OKR 还没写完。", "output": "这周的 OKR 还没写完。", "ok": true, "reason": ""}
+{"source": "帮我查一下 server 的 log。", "output": "帮我查一下 server 的 log。", "ok": true, "reason": ""}
+{"source": "我觉得 performance 还可以，就是 memory 有点高。", "output": "我觉得 performance 还可以，就是 memory 有点高。", "ok": true, "reason": ""}
+{"source": "那个，我们 meeting 几点开始？", "output": "我们 meeting 几点开始？", "ok": true, "reason": ""}
+{"source": "iPhone 的 battery 好像有问题。", "output": "iPhone 的 battery 好像有问题。", "ok": true, "reason": ""}
+{"source": "like，这个 design 有点太复杂了。", "output": "这个 design 有点太复杂了。", "ok": true, "reason": ""}
+{"source": "嗯，好的，我知道了。", "output": "嗯，好的，我知道了。", "ok": true, "reason": ""}
+{"source": "明天早上8点出发，我是说九点。", "output": "明天早上九点出发。", "ok": true, "reason": ""}
+{"source": "我想买两杯拿铁，不，三杯。", "output": "我想买三杯拿铁。", "ok": true, "reason": ""}
+{"source": "我们明天的 meeting 改到 three PM，不对，four PM。", "output": "我们明天的 meeting 改到 four PM。", "ok": true, "reason": ""}
+{"source": "我们明天上午10点在会议室见。", "output": "我们明天上午10点在会议室见。", "ok": true, "reason": ""}
+{"source": "你能帮我看看这段代码哪里有问题吗？", "output": "你能帮我看看这段代码哪里有问题吗？", "ok": true, "reason": ""}
+{"source": "Could you send me the invoice again?", "output": "Could you send me the invoice again?", "ok": true, "reason": ""}
+{"source": "那个 slide 第三页的数据要 update 一下。", "output": "那个 slide 第三页的数据要 update 一下。", "ok": true, "reason": ""}
+{"source": "额，那个文件我已经发给你了。", "output": "文件我已经发给你了。", "ok": true, "reason": ""}
+{"source": "帮我，哦不对，请你帮我写个周报。", "output": "请你帮我写个周报。", "ok": true, "reason": ""}
+{"source": "你帮我解释一下什么是量子纠缠，用小学生能听懂的话。", "output": "你帮我解释一下什么是量子纠缠，用小学生能听懂的话。", "ok": true, "reason": ""}
+{"source": "Can you draft a cover letter for a junior designer position?", "output": "Can you draft a cover letter for a junior designer position?", "ok": true, "reason": ""}
+{"source": "北京到上海的高铁要多久啊？", "output": "北京到上海的高铁要多久啊？", "ok": true, "reason": ""}
+{"source": "那个，帮我给客户写一封邮件，就是说我们的报价是五万八，哦不对，是六万二，然后交付时间是3月15号，语气要正式一点，最后加上我的签名。", "output": "帮我给客户写一封邮件，就是说我们的报价是六万二，然后交付时间是3月15号，语气要正式一点，最后加上我的签名。", "ok": true, "reason": ""}
+{"source": "OK so, I need you to write a Python script that reads a CSV file, filters out rows where the status is inactive, and then saves the result to a new file called active.csv.", "output": "OK so, I need you to write a Python script that reads a CSV file, filters out rows where the status is inactive, and then saves the result to a new file called active.csv.", "ok": true, "reason": ""}
+{"source": "summarize 一下今天的 meeting notes，发到群里。", "output": "summarize 一下今天的 meeting notes，发到群里。", "ok": true, "reason": ""}
+{"source": "今天的会议记录我已经发到群里了。", "output": "今天的会议记录我已经发到群里了。", "ok": true, "reason": ""}
+{"source": "The translation of the contract is due next Monday, sorry, next Tuesday.", "output": "The translation of the contract is due next Tuesday.", "ok": true, "reason": ""}
+{"source": "让我想想，这个周末应该有空。", "output": "让我想想，这个周末应该有空。", "ok": true, "reason": ""}
+{"source": "我考虑一下，下周再给你消息。", "output": "我考虑一下，下周再给你消息。", "ok": true, "reason": ""}
+{"source": "让我想一想，好像是放在抽屉里了。", "output": "让我想一想，好像是放在抽屉里了。", "ok": true, "reason": ""}
+{"source": "Let me think about it, I'll get back to you tomorrow.", "output": "Let me think about it, I'll get back to you tomorrow.", "ok": true, "reason": ""}
+{"source": "这件事我还没想好，先别告诉他。", "output": "这件事我还没想好，先别告诉他。", "ok": true, "reason": ""}
+{"source": "价格不是三万，是三万五，合同上写错了。", "output": "价格不是三万，是三万五，合同上写错了。", "ok": true, "reason": ""}
+{"source": "会议不是周三，是周四，通知上写错了。", "output": "会议不是周三，是周四，通知上写错了。", "ok": true, "reason": ""}
+{"source": "他要的不是咖啡，是茶。", "output": "他要的不是咖啡，是茶。", "ok": true, "reason": ""}
+{"source": "It's not the red folder, it's the blue one. The label is wrong.", "output": "It's not the red folder, it's the blue one. The label is wrong.", "ok": true, "reason": ""}
+{"source": "我说的是十五号，不是五十号。", "output": "我说的是十五号，不是五十号。", "ok": true, "reason": ""}
+{"source": "帮我回一下他，说我下午3点前到。", "output": "帮我回一下他，说我下午3点前到。", "ok": true, "reason": ""}
+{"source": "提醒我明天给她打个电话。", "output": "提醒我明天给她打个电话。", "ok": true, "reason": ""}
+{"source": "Tell my manager I'm out sick today.", "output": "Tell my manager I'm out sick today.", "ok": true, "reason": ""}
+{"source": "我们下周一哦，不是下周二开会。", "output": "我们下周一开会。", "ok": true, "reason": ""}
+{"source": "周三吧，不是，周四也行。", "output": "周三吧，不是，周四也行。", "ok": true, "reason": ""}
+{"source": "他三点到，不是吗？", "output": "他三点到，不是吗？", "ok": true, "reason": ""}
+{"source": "We could meet Monday, or actually Tuesday works too.", "output": "We could meet Monday, or actually Tuesday works too.", "ok": true, "reason": ""}
+{"source": "放在桌上了吧，不对，我也记不清了。", "output": "放在桌上了吧，我也记不清了。", "ok": true, "reason": ""}
 """#
 }

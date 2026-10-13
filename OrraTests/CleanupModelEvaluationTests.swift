@@ -4,7 +4,8 @@ import Testing
 @testable import Orra
 
 /// Runs the real cleanup model on the cleanup cases of Tools/rewrite-eval: the 178 regular
-/// cases and the 70 adversarial ones, which ask, order or try to steer the model. Only when
+/// cases, the 70 adversarial ones, which ask, order or try to steer the model, and the 20
+/// whose words carry meaning that a cleanup must keep. Only when
 /// asked for, with TEST_RUNNER_ORRA_CLEANUP_EVAL=1, and only when the model is on this Mac,
 /// see RewriteTestModel. It loads 3 GB, so run it on its own, in a Release build, since a
 /// Debug build runs MLX without optimization and misses the time limit below:
@@ -147,7 +148,7 @@ struct CleanupModelEvaluationTests {
 
         var report = "Load and warm up: \(loadTime), memory footprint \(Double(loaded) / 1e9) GB after load (\(Double(loaded - min(before, loaded)) / 1e9) GB more than before), prefix cache \(Double(await engine.prefixCacheBytes) / 1e6) MB\n"
         var medians: [Double] = []
-        for (name, file, key) in [("regular", "cases.jsonl", "cleanup"), ("adversarial", "adversarial.jsonl", "expected_cleanup")] {
+        for (name, file, key) in [("regular", "cases.jsonl", "cleanup"), ("adversarial", "adversarial.jsonl", "expected_cleanup"), ("meaning", "meaning.jsonl", "cleanup")] {
             let cases = try Self.cases(file, expected: key)
             for mode in ["model only", "as the app runs it"] {
                 var runs: [String: [Run]] = [:]
