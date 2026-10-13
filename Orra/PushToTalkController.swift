@@ -77,7 +77,7 @@ final class PushToTalkController {
     /// `saveTranslationKey` when the user picks it, or when picking the talk key moved it.
     private(set) var translationKey: TalkKey
     /// Whether the translation key is watched: translation is on. AppDelegate keeps it in
-    /// step with the switch on the Translation page.
+    /// step with the Translation switch in Settings.
     private(set) var translationKeyIsOn = false
     /// Whether a quick double press of the talk key, or of the translation key, starts a
     /// hands free dictation. Saved through `saveHandsFree` whenever it changes.

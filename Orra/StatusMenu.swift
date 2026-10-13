@@ -92,14 +92,14 @@ struct StatusMenu: View {
             Text("Talk Key: \(pushToTalk.talkKey.fullName())")
             Button("Change Talk Key…") {
                 NSApplication.shared.activate()
-                SettingsWindow.show(.dictation)
+                SettingsWindow.show()
                 openWindow(id: SettingsWindow.id)
             }
             if pushToTalk.translationKeyIsOn {
                 Text("Translation Key: \(pushToTalk.translationKey.fullName())")
                 Button("Change Translation Key…") {
                     NSApplication.shared.activate()
-                    SettingsWindow.show(.translation)
+                    SettingsWindow.show()
                     openWindow(id: SettingsWindow.id)
                 }
             }

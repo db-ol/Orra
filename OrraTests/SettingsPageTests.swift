@@ -4,8 +4,8 @@ import SwiftUI
 import Testing
 @testable import Orra
 
-/// The pages of the settings window and how the window is turned to one. Serialized, since
-/// the page asked for is shared.
+/// The page of the settings window, its sheets, and how the window is turned to one.
+/// Serialized, since the sheet asked for is shared.
 @MainActor
 @Suite(.serialized)
 struct SettingsPageTests {
@@ -14,32 +14,44 @@ struct SettingsPageTests {
     let inserter = FakeInserter()
     let temporary = TemporaryModelFolders()
 
-    @Test func theSidebarListsThePagesInOrder() {
-        #expect(SettingsPage.allCases == [.general, .dictation, .cleanup, .translation, .vocabulary, .about])
+    @Test func aSheetAskedForOpensOnceAndSettingsOpensThePage() {
+        SettingsWindow.show(.vocabulary)
+        #expect(SettingsWindow.takeOpeningSheet() == .vocabulary)
+        // Settings… after that opens on the page alone.
+        #expect(SettingsWindow.takeOpeningSheet() == nil)
     }
 
-    @Test func everyPageHasItsOwnIconAndColor() {
-        let symbols = SettingsPage.allCases.map(\.symbol)
-        #expect(Set(symbols).count == symbols.count)
-        #expect(symbols.allSatisfy { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil })
-        let tints = SettingsPage.allCases.map(\.tint)
-        #expect(Set(tints.map(\.description)).count == tints.count)
+    @Test func changeTalkKeyOpensThePageAlone() {
+        SettingsWindow.show(.advanced)
+        // Change Talk Key… closes a sheet that is open, since the talk key is on the page.
+        SettingsWindow.show()
+        #expect(SettingsWindow.takeOpeningSheet() == nil)
     }
 
-    @Test func changeTalkKeyOpensDictationAndSettingsOpensGeneral() {
-        SettingsWindow.show(.dictation)
-        #expect(SettingsWindow.takeOpeningPage() == .dictation)
-        // Settings… after that opens on General again.
-        #expect(SettingsWindow.takeOpeningPage() == .general)
+    @Test func anOpenWindowIsToldToShowTheSheet() {
+        let received = Received()
+        // Posted on the main thread, so the observer runs before show returns.
+        let observer = NotificationCenter.default.addObserver(forName: SettingsWindow.showNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated { received.count += 1 }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        SettingsWindow.show(.cleanup)
+        #expect(received.count == 1)
+        #expect(SettingsWindow.takeOpeningSheet() == .cleanup)
     }
 
-    @Test func changeTranslationKeyOpensTranslation() {
-        SettingsWindow.show(.translation)
-        #expect(SettingsWindow.takeOpeningPage() == .translation)
+    /// The line under Clean Up Text on the page: nothing while cleanup has its model
+    /// ready, and where the model stands otherwise.
+    @Test func theCleanupRowSaysWhereTheModelStands() {
+        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .ready, total: 100, use: .cleanup) == nil)
+        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .loading, total: 100, use: .cleanup) == "Loading the cleanup model…")
+        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .failed, total: 100, use: .cleanup) == "The cleanup model could not be loaded")
+        #expect(CleanupLabels.status(.missing(bytesPresent: 0), engine: .unloaded, total: 100, use: .cleanup) == "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup.")
+        #expect(CleanupLabels.status(.downloading(bytes: 50, source: nil), engine: .unloaded, total: 100, use: .cleanup)?.hasPrefix("Downloading the cleanup model: 50%") == true)
     }
 
-    /// The Translation page shows the master switch, the key, the direction, and the
-    /// direction's explanation for each choice.
+    /// The Translation options show the direction with its explanation for each choice,
+    /// and the row on the page says where the model stands in the words of translation.
     @Test func everyDirectionHasATitleAndAnExplanation() {
         #expect(TranslationDirection.allCases == [.automatic, .english, .chinese])
         let details = TranslationDirection.allCases.map { "\($0.detail)" }
@@ -48,18 +60,7 @@ struct SettingsPageTests {
         #expect(CleanupLabels.loading(.translation) == "Loading the local model…")
         #expect(CleanupLabels.loading(.cleanup) == "Loading the cleanup model…")
         #expect(CleanupLabels.progress(bytes: 50, total: 100, use: .translation).hasPrefix("Downloading the local model: 50%"))
-    }
-
-    @Test func anOpenWindowIsToldToTurnToThePage() {
-        let received = Received()
-        // Posted on the main thread, so the observer runs before show returns.
-        let observer = NotificationCenter.default.addObserver(forName: SettingsWindow.showPageNotification, object: nil, queue: nil) { _ in
-            MainActor.assumeIsolated { received.count += 1 }
-        }
-        defer { NotificationCenter.default.removeObserver(observer) }
-        SettingsWindow.show(.cleanup)
-        #expect(received.count == 1)
-        #expect(SettingsWindow.takeOpeningPage() == .cleanup)
+        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .loading, total: 100, use: .translation) == "Loading the local model…")
     }
 
     @MainActor
@@ -67,27 +68,34 @@ struct SettingsPageTests {
         var count = 0
     }
 
-    /// Renders each page of the settings window to a PNG, for a look at the layout without
-    /// running the app. Off unless ORRA_SETTINGS_SNAPSHOTS names a folder to write to, which
-    /// the test command passes as TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS. CI never sets it. Run
-    /// with -testLanguage zh-Hans for the Chinese pages.
+    /// Renders the page and each sheet of the settings window to a PNG, for a look at the
+    /// layout without running the app. Off unless ORRA_SETTINGS_SNAPSHOTS names a folder to
+    /// write to, which the test command passes as TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS. CI
+    /// never sets it. Run with -testLanguage zh-Hans for the Chinese text.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
-    func renderEveryPage() async throws {
+    func renderThePageAndEverySheet() async throws {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let language = Bundle.main.preferredLocalizations.first ?? "en"
-        for page in SettingsPage.allCases {
-            try await render(page, cleanupOn: false, name: "\(language)-\(SettingsPage.allCases.firstIndex(of: page)!)-\(page.rawValue)")
-        }
-        try await render(.cleanup, cleanupOn: true, name: "\(language)-2-cleanup-on")
-        try await render(.translation, cleanupOn: false, translationOn: true, name: "\(language)-3-translation-on")
-        try await render(.translation, cleanupOn: false, translationOn: true, swapped: true, name: "\(language)-3-translation-swapped")
+        try await render(nil, cleanupOn: false, name: "\(language)-0-general")
+        try await render(nil, cleanupOn: true, name: "\(language)-0-general-cleanup-on")
+        try await render(.cleanup, cleanupOn: false, name: "\(language)-1-cleanup-options")
+        try await render(.cleanup, cleanupOn: true, name: "\(language)-1-cleanup-options-on")
+        try await render(nil, cleanupOn: false, translationOn: true, name: "\(language)-0-general-translation-on")
+        try await render(nil, cleanupOn: false, translationOn: true, swapped: true, name: "\(language)-0-general-translation-swapped")
+        try await render(.translation, cleanupOn: false, name: "\(language)-2-translation-options")
+        try await render(.translation, cleanupOn: false, translationOn: true, name: "\(language)-2-translation-options-on")
+        try await render(.vocabulary, cleanupOn: false, name: "\(language)-3-vocabulary")
+        try await render(.advanced, cleanupOn: false, name: "\(language)-4-advanced")
+        try await render(.about, cleanupOn: false, name: "\(language)-5-about")
     }
 
     private var folder: URL {
         URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
     }
 
-    private func render(_ page: SettingsPage, cleanupOn: Bool, translationOn: Bool = false, swapped: Bool = false, name: String) async throws {
+    /// The page for a nil sheet, or the sheet alone at its own size, since a sheet does not
+    /// draw outside a window on screen.
+    private func render(_ sheet: SettingsSheet?, cleanupOn: Bool, translationOn: Bool = false, swapped: Bool = false, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -123,11 +131,19 @@ struct SettingsPageTests {
             dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
             updater: AppUpdater()
         )
-        // The page alone, since the sidebar's list does not draw outside a window on screen.
-        let size = NSSize(width: 590, height: 1000)
-        let hosting = NSHostingView(rootView: view.detail(for: page).frame(width: size.width, height: size.height))
+        let content: AnyView = if let sheet { AnyView(view.content(for: sheet)) } else { AnyView(view) }
+        // The window's first size, and the sheets' sizes, with Advanced at full length.
+        let size = switch sheet {
+        case nil: NSSize(width: 600, height: 520)
+        case .cleanup: NSSize(width: 540, height: 560)
+        case .translation: NSSize(width: 540, height: 600)
+        case .vocabulary: NSSize(width: 680, height: 600)
+        case .advanced: NSSize(width: 600, height: 1180)
+        case .about: NSSize(width: 540, height: 420)
+        }
+        let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
         hosting.frame = NSRect(origin: .zero, size: size)
-        // A window that is never ordered front, so the page appears without showing.
+        // A window that is never ordered front, so the view appears without showing.
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = hosting

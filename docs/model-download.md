@@ -194,9 +194,9 @@ A new server, or any other network use, needs the maintainer's approval, see AGE
 ## The cleanup model
 
 Qwen3.5 4B in the 4 bit MLX build (mlx-community/Qwen3.5-4B-4bit, Apache-2.0), for
-"Clean up with a local model" in Settings > Clean Up Text and, since 2026-10-13, for
-"Translate with the translation key" in Settings > Translation, which use the same files
-and the same download. The pins are in
+the Clean Up Text switch in Settings ("Clean up with a local model") and, since
+2026-10-13, for the Translation switch ("Translate with the translation key"), which use
+the same files and the same download. The pins are in
 `ModelManifest.qwen35Cleanup` in Orra/RewriteEngine.swift, and Orra/TextCleanup.swift
 drives the download from Settings. Everything above about servers, retries, ranges,
 hashes, staging and backups applies to it as well. It replaced Qwen3 4B Instruct 2507

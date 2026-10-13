@@ -31,7 +31,7 @@ final class TextCleanup {
     private(set) var translationDirection: TranslationDirection
     /// True while the Clean Up Text page asks whether to download the model.
     var isConfirmingDownload = false
-    /// True while the Translation page asks whether to download the model.
+    /// True while Settings asks whether to download the model for translation.
     var isConfirmingTranslationDownload = false
     private(set) var engineState: EngineState = .unloaded
     let models: ModelInstaller
@@ -145,7 +145,7 @@ final class TextCleanup {
         }
     }
 
-    /// The switch on the Translation page was turned on, which works like cleanup's
+    /// The Translation switch in Settings was turned on, which works like cleanup's
     /// switch, see `turnOn`. With the model loaded already, its translation prompts are
     /// read ahead, so the first translation is fast.
     func turnOnTranslation() {
