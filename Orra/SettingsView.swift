@@ -514,7 +514,7 @@ private struct TranslationOptions: View {
 
     var body: some View {
         let size = ModelInstaller.State.size(cleanup.models.manifest.totalBytes)
-        SettingsSheetContent(title: "Translation", height: 600) {
+        SettingsSheetContent(title: "Translation", height: 700, resizable: true) {
             Section {
                 DescribedLabel(
                     title: "Translate with the translation key",

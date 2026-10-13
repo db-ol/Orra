@@ -136,7 +136,7 @@ struct SettingsPageTests {
         let size = switch sheet {
         case nil: NSSize(width: 600, height: 480)
         case .cleanup: NSSize(width: 540, height: 560)
-        case .translation: NSSize(width: 540, height: 600)
+        case .translation: NSSize(width: 540, height: 700)
         case .vocabulary: NSSize(width: 680, height: 600)
         case .advanced: NSSize(width: 600, height: 1180)
         case .about: NSSize(width: 540, height: 380)
