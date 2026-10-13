@@ -347,7 +347,12 @@ Build and test commands, run in the repository root:
     TranslationPromptTests checks both translation prompts character for character against
     the model's chat template, and the reading of the answer. TranslationGuardTests checks
     that the translation checks give each of 1947 outputs the verdict and reason of
-    guards2.py and the acronym check, and one case for each check by hand.
+    guards2.py and the acronym check, and one case for each check by hand. One rule
+    deliberately differs from guards2.py: a number of 7 or more digits has to match the
+    source exactly unless the source has a correction cue, so a phone number with a
+    changed last digit (13812345678 to 13812345679) and an ID with a changed digit are
+    held back, while 13812345678，不对，最后一位是9 still passes. guards2.py let both
+    through. None of the 1947 outputs gets another verdict from it.
     TranslationStepTests checks with a stand in model that a translation that fails a
     check, an unreadable answer, an error or a timeout pastes the text without
     translation, the model's cleanup when cleanup is on and it passes the cleanup checks.
@@ -370,7 +375,8 @@ Build and test commands, run in the repository root:
     comparison took 22 minutes. Loading, filling the cleanup cache and warming up took
     1.2 s. Filling the translation cache took 0.78 s into English and 0.80 s into Chinese,
     and each holds 110 MB. The memory footprint grew by 5.0 GB after load and was 6.5 GB
-    with both translation caches filled. Every one of the 728 answers was the same with
+    with both translation caches filled, see the memory test below for why and the fix.
+    Every one of the 728 answers was the same with
     and without the cache, token for token. Acceptable means the same letters, digits and
     Han characters as the expected translation, and counts the exact ones too. The times
     are for the step, with the cache and without it.
@@ -400,6 +406,29 @@ Build and test commands, run in the repository root:
     translated. An earlier run the same night, while the Mac was busy with other work,
     gave the same answers with the cache, but two short Chinese translations took 4 and
     5 s and timed out.
+
+    Its memoryAroundTranslations test loads the model, fills both translation caches and
+    runs 50 translations (25 regular cases into each target), and reads the memory
+    footprint and MLX's active and cached memory after each step, waiting 3 s for the
+    footprint to settle. MLX keeps freed GPU buffers in its buffer cache for reuse, and
+    without a limit (Orra sets none, speech-swift sets one only while its model is loaded)
+    that cache held 2.3 GB after load, 3.6 GB after both fills and 4.5 GB after 50
+    translations. Since 2026-10-13 the engine empties it after filling a prefix cache and
+    after each run, as speech-swift does after each transcription. Measured on the same
+    M5 Pro in Release builds, one after the other:
+
+    | Reading | Before | After |
+    |---|---|---|
+    | Footprint after load | 4.97 GB | 2.71 GB |
+    | Footprint after both translation caches | 6.43 GB | 2.84 GB |
+    | Footprint after 50 translations | 7.38 GB | 2.96 GB |
+    | MLX buffer cache after 50 translations | 4.53 GB | 0.12 GB |
+    | Median and p95 of the 50 translations | 0.318 s, 0.411 s | 0.312 s, 0.408 s |
+
+    MLX's active memory grows by 221 MB with both translation caches, which is what they
+    hold, and the footprint now rises by 0.13 GB. cleanupCases after the change gave the
+    same exact counts (157, 156, 65 and 66) with medians of 0.162 to 0.187 s, and its
+    footprint grew by 2.9 GB after load instead of 3.7 GB.
 - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.

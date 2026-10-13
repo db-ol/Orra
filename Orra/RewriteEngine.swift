@@ -179,6 +179,9 @@ actor RewriteEngine {
         _ = try TokenIterator(input: LMInput(tokens: MLXArray(tokens)), model: context.model, cache: cache, parameters: GenerateParameters(maxTokens: 1, temperature: 0))
         eval(cache)
         Stream().synchronize()
+        // Reading the prefix leaves about 0.6 GB of freed buffers in MLX's buffer cache,
+        // which has no limit unless the speech model set one.
+        Memory.clearCache()
         let filled: Prefix = (tokens, cache)
         Logger.rewrite.notice("Prefix cache for \(task, privacy: .public) of \(tokens.count, privacy: .public) tokens and \(Self.bytes(filled), privacy: .public) bytes filled in \(started.duration(to: .now), privacy: .public)")
         return filled
@@ -226,8 +229,11 @@ actor RewriteEngine {
                 break
             }
         }
-        // The iterator evaluates ahead. Let that finish before the next use of MLX.
+        // The iterator evaluates ahead. Let that finish before the next use of MLX, and
+        // return the freed buffers, as speech-swift does after each transcription, so the
+        // buffer cache does not grow from run to run.
         Stream().synchronize()
+        Memory.clearCache()
         let answer = RewritePrompt.prefill + context.tokenizer.decode(tokenIds: generated, skipSpecialTokens: true)
         let cached = prompt.count - input.count
         let prefillTime = started.duration(to: prefilled)
