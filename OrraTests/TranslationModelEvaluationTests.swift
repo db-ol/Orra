@@ -189,6 +189,8 @@ struct TranslationModelEvaluationTests {
                     "outcome": run.result?.outcome.logName ?? "not run", "expected": item.expected[target] ?? NSNull(),
                     "automatic": TranslationDirection.automatic.target(for: source) == target, "seconds": run.seconds,
                     "answer": run.completion?.answer ?? NSNull(),
+                    "uncachedSeconds": uncached[item.set + item.id]?[target]?.seconds ?? NSNull(),
+                    "uncachedOutcome": uncached[item.set + item.id]?[target]?.result?.outcome.logName ?? NSNull(),
                 ]
                 details += String(decoding: try JSONSerialization.data(withJSONObject: line, options: [.sortedKeys, .withoutEscapingSlashes]), as: UTF8.self) + "\n"
             }
@@ -208,6 +210,8 @@ struct TranslationModelEvaluationTests {
                 var seconds: [Double] = []
                 var prefill: [Double] = []
                 var uncachedCount = 0
+                var plainSeconds: [Double] = []
+                var plainPrefill: [Double] = []
                 for item in items {
                     let source = Self.appRules(item.input)
                     guard let target = mode.target(for: source), let run = runs[item.set + item.id]?[target] else {
@@ -220,6 +224,10 @@ struct TranslationModelEvaluationTests {
                     case nil: "not translated, too long"
                     }
                     counts[kind, default: 0] += 1
+                    if let plain = uncached[item.set + item.id]?[target], let completion = plain.completion {
+                        plainSeconds.append(plain.seconds)
+                        plainPrefill.append(Self.seconds(completion.prefillTime))
+                    }
                     if let completion = run.completion {
                         seconds.append(run.seconds)
                         prefill.append(Self.seconds(completion.prefillTime))
@@ -250,6 +258,9 @@ struct TranslationModelEvaluationTests {
                     medians[set] = Self.median(seconds)
                 }
                 report += "\n\(set), \(mode.rawValue): \(items.count) cases, scored \(scored), exact \(exact), acceptable \(acceptable) more, model runs \(seconds.count), median \(Self.format(Self.median(seconds))) s, p95 \(Self.format(Self.p95(seconds))) s, max \(Self.format(seconds.max() ?? 0)) s, prefill median \(Self.format(Self.median(prefill))) s, runs without the prefix cache \(uncachedCount)\n"
+                if !plainSeconds.isEmpty {
+                    report += "  without the prefix cache: median \(Self.format(Self.median(plainSeconds))) s, p95 \(Self.format(Self.p95(plainSeconds))) s, max \(Self.format(plainSeconds.max() ?? 0)) s, prefill median \(Self.format(Self.median(plainPrefill))) s\n"
+                }
                 for (kind, count) in counts.sorted(by: { $0.key < $1.key }) {
                     report += "  \(kind): \(count)\n"
                 }
