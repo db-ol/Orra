@@ -163,8 +163,9 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
 - The controller tells the tap when no hands free dictation runs, for example after the
   limit or when a double press came while the previous dictation was still being
   transcribed, so Escape is never kept from the app by mistake.
-- Settings, General and the Talk Key menu have a switch "Double press for hands free", on
-  by default. While it is off, a short press is a hold as before.
+- Settings, Dictation (General before 2026-10-12) and the Talk Key menu have a switch
+  "Double press for hands free", on by default. While it is off, a short press is a hold
+  as before.
 - Hold to talk is unchanged for the right modifiers and fn. A quick tap still records
   nothing that reaches the model.
 
@@ -185,14 +186,14 @@ names keyboards print on the keys. Implemented in `Orra/TalkKey.swift`,
   Control, right Option, right Command, left Control, left Option, left Command. fn comes
   first because right Control is the default, so a user who turned fn on chose it on
   purpose. The detector and the tap still take a set of keys, which now holds one.
-- Settings, General shows a recorder field like the shortcut recorders of Mac apps. It
-  shows the key with its symbol and Mac name, such as "⌥ Right Option", and a small hint
-  with the label of other keyboards: Alt for Option and Windows key for Command, which a
-  keyboard with a Windows layout prints on the keys macOS uses as Option and Command, and
-  Globe 🌐 for fn. Control needs none. Clicking the field or Change… starts recording,
-  and the line under it says "Use fn, Control, Option or Command on its own. Escape
-  cancels." A line under the field recommends fn on a Mac's built in keyboard and right
-  Control on an external one.
+- Settings, Dictation (General before 2026-10-12) shows a recorder field like the shortcut
+  recorders of Mac apps. It shows the key with its symbol and Mac name, such as "⌥ Right
+  Option", and a small hint with the label of other keyboards: Alt for Option and Windows
+  key for Command, which a keyboard with a Windows layout prints on the keys macOS uses as
+  Option and Command, and Globe 🌐 for fn. Control needs none. Clicking the field or
+  Change… starts recording, and the line under it says "Use fn, Control, Option or Command
+  on its own. Escape cancels." A line under the field recommends fn on a Mac's built in
+  keyboard and right Control on an external one.
 - `KeyRecorder` decides. A key that can be a talk key counts when it goes down on its own
   and comes up again with nothing pressed in between, so Command C is never taken for
   Command, and the tap needs no special case for the release of the chosen key. Anything
@@ -216,7 +217,7 @@ names keyboards print on the keys. Implemented in `Orra/TalkKey.swift`,
 - The welcome step shows the same recorder field, with the Use fn or Use right Control
   button under the recommendation.
 - Talk Key in the menu is a line with the key, such as "Talk Key: ⌥ Right Option (Alt)",
-  and Change Talk Key…, which opens Settings on General. A menu cannot record a key
+  and Change Talk Key…, which opens Settings on Dictation. A menu cannot record a key
   press. The hands free switch stays there.
 
 Not verified on hardware yet: how the recorder feels, whether a Windows layout keyboard

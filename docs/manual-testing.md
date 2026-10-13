@@ -6,7 +6,8 @@ results added on 2026-10-03, 2026-10-05 and 2026-10-06, the fn hotkey added on
 of microphone added on 2026-10-05, on 2026-10-07 the model download, the recording
 indicator and sounds, the welcome window, the Chinese interface and the app icon, and on
 2026-10-10 the left hand talk keys, choosing the key by pressing it and hands free, one
-talk key set in a recorder field, and the optional cleanup with a local model. Three
+talk key set in a recorder field, and the optional cleanup with a local model, and on
+2026-10-12 the settings pages General, Dictation, Clean Up Text, Vocabulary and About. Three
 sections: what a build or test run verified, what only a person at the Mac can verify, and
 what does not exist yet.
 
@@ -30,7 +31,16 @@ Build and test commands, run in the repository root:
   run for that change, which does not touch transcription. With the prefix cache of the
   cleanup model, the test command ended in TEST SUCCEEDED with 2282 test cases passed and
   5 skipped on 2026-10-12, the skipped ones being the cleanup evaluation and the three
-  heavier real model tests.
+  heavier real model tests. With the settings pages, it ended in TEST SUCCEEDED with
+  2294 test cases passed and 6 skipped on 2026-10-12, the sixth being the opt in
+  rendering of the settings pages.
+  - SettingsPageTests checks the sidebar's pages and their order, that each has its own
+    icon, and that Change Talk Key… asks for Dictation while Settings… afterwards opens
+    on General. With TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders
+    every page to a PNG there, which CI never does.
+  - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
+    switches to its on screen hint and back, so saved settings keep their meaning, and
+    checks that a picked hint sets both switches and saves once.
   - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
     35 rows) and each edge case decision, including cancel, a tap that waits for a second
     press, a second press that resumes listening and ends as a double press or a hold, a
@@ -462,8 +472,8 @@ Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still 
   committed unchanged in the baseline commit.
 
 Fn hotkey, added on 2026-10-04, not verified yet. Since 2026-10-05 fn is no longer the
-default talk key. Set it in Settings, General for the fn checks, and keep "Show
-the recording indicator" on in Settings. The indicator shows only once the microphone
+default talk key. Set it in Settings, Dictation for the fn checks, and keep the on screen
+hint at Always or Only while dictating in Settings. The indicator shows only once the microphone
 records, so for the checks that expect no indicator, also listen for no start sound and
 look for no orange microphone indicator in the menu bar:
 
@@ -551,7 +561,7 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
 
 One talk key in a recorder field, added later on 2026-10-10, not verified yet:
 
-- [ ] Settings, General shows one field with the talk key, such as "⌃ Right Control", and
+- [ ] Settings, Dictation shows one field with the talk key, such as "⌃ Right Control", and
   under it "Recommended: fn on a Mac's built in keyboard, right Control on an external
   keyboard." Option shows a small "(Alt)", Command "(Windows key)" and fn "(Globe 🌐)".
   The same in Chinese, with full width parentheses.
@@ -573,7 +583,7 @@ One talk key in a recorder field, added later on 2026-10-10, not verified yet:
 - [ ] With an earlier version that had right Control, right Option and fn on, the update
   keeps fn. With right Control and right Command on, it keeps right Control.
 - [ ] Talk Key in the menu shows "Talk Key: ⌃ Right Control" as a line that cannot be
-  clicked, and Change Talk Key… opens Settings on General, also when Settings was open on
+  clicked, and Change Talk Key… opens Settings on Dictation, also when Settings was open on
   another page.
 - [ ] The welcome step "Choose your talk key" records the key the same way.
 - [ ] VoiceOver reads the Settings row as "Talk key" once, with the key as its value.
@@ -833,9 +843,9 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
   off it shows "Microphone access is off". Dictating into a password field shows "Orra does
   not paste into password fields. Use Copy Last Dictation." Holding the key without
   speaking shows "No speech was recognized".
-- [ ] In Settings, turning off "Show the recording indicator" and "Play sounds when
-  recording starts and stops" takes effect at the next hold, and both stay off after
-  quitting and reopening Orra.
+- [ ] In Settings, Dictation, setting the on screen hint to Off and turning off "Play
+  sounds when recording starts and stops" takes effect at the next hold, and both stay
+  off after quitting and reopening Orra.
 
 Calmer recording indicator, added on 2026-10-10, not verified yet:
 
@@ -844,7 +854,7 @@ Calmer recording indicator, added on 2026-10-10, not verified yet:
   Orra icon stays the same too. If the icon showed a warning triangle from the last
   dictation, it turns into the plain mic when you press the key, since a new hold clears
   the last problem.
-- [ ] With "Show the recording indicator" off in Settings, a dictation fills the Orra icon
+- [ ] With the on screen hint set to Off in Settings, a dictation fills the Orra icon
   while you hold the key and turns it into a waveform after release until the text is
   pasted. Then it is the plain mic again.
 - [ ] During hands free, the Orra icon behaves as during a hold: it stays the plain mic
@@ -874,13 +884,13 @@ Idle bar, added on 2026-10-09, not verified yet:
   in front, the hint may not show (a known limit).
 - [ ] Over a full screen app and on another Space the bar shows too. Adding or removing a
   display, or moving the Dock, keeps it at the bottom.
-- [ ] Turning off "Show a small bar at the bottom of the screen while Orra is ready" in
-  Settings hides it at once, and it stays off after reopening Orra.
+- [ ] Setting the on screen hint to Only while dictating in Settings, Dictation hides it
+  at once, and it stays off after reopening Orra.
 
 Personal vocabulary, added on 2026-10-08, not verified yet:
 
-- [ ] Settings opens with a sidebar: General, Microphone, Vocabulary and About. Each page
-  fits without scrolling, in English and in Chinese.
+- [ ] Settings opens with a sidebar: General, Dictation, Clean Up Text, Vocabulary and
+  About (since 2026-10-12). Each page fits without scrolling, in English and in Chinese.
 - [ ] Under Vocabulary, add a few names and terms that Orra got wrong before, with the field
   and Return or Add, and remove one with its minus button. Dictate sentences with them:
   they come out spelled as in the list.
@@ -997,7 +1007,7 @@ Filler removal, added on 2026-10-10, not verified yet:
   "呃，我明天下午要去趟医院" and "Um, I think we should push the launch". The pasted text
   has no 呃 and no Um, and the English sentence starts with a capital.
 - [ ] Dictate "好啊，那就这么定了" and a bare "嗯嗯". Both paste as said.
-- [ ] Turn the setting off in Settings, General: the same dictations keep their fillers.
+- [ ] Turn the setting off in Settings, Clean Up Text: the same dictations keep their fillers.
   The choice stays after reopening Orra.
 
 Numbers as digits, added on 2026-10-10, not verified yet:
@@ -1006,7 +1016,7 @@ Numbers as digits, added on 2026-10-10, not verified yet:
   三五零" and "明天下午三点开会，预算三百五十块". The paste reads RX 350, 下午3点 and
   350块, with the space before 350 as the model wrote it.
 - [ ] Dictate "我们一起去，三五成群" and "我买了三本书". Both paste as said.
-- [ ] Turn the setting off in Settings, General: the numbers stay in Chinese characters.
+- [ ] Turn the setting off in Settings, Clean Up Text: the numbers stay in Chinese characters.
   The choice stays after reopening Orra.
 
 Updates from inside the app, added on 2026-10-10, not verified yet:
@@ -1014,7 +1024,7 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
 - [ ] A release DMG installs by dragging Orra to Applications and opens without a warning.
   The first launch reaches no network until you download the model.
 - [ ] At the second launch Orra asks whether to check for updates automatically. Settings,
-  About shows the answer and changes it.
+  General shows the answer and changes it.
 - [ ] Check for Updates in the menu says Orra is up to date for the newest release, and
   offers the newer one with its notes from an older release. Installing it replaces Orra
   and opens the new version, which keeps Accessibility and the microphone.
@@ -1089,7 +1099,7 @@ Report a Problem, added on 2026-10-10, not verified yet:
 
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 
-- [ ] Settings > General shows "Clean up with a local model" off, with its explanation.
+- [ ] Settings > Clean Up Text shows "Clean up with a local model" off, with its explanation.
   Turning it on asks "Download the cleanup model?" with Download (3.05 GB) and Cancel.
   Cancel leaves the switch off and nothing is downloaded.
 - [ ] Download shows the progress with the server under the switch, and Cancel Download
@@ -1112,6 +1122,37 @@ Cleanup with a local model, added on 2026-10-10, not verified yet:
 - [ ] Quit and reopen with cleanup on: the model loads at launch without going online.
 - [ ] The rewrite log shows timings, token counts and outcomes, and no text:
   `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`.
+
+Settings pages, added on 2026-10-12, not verified yet. Rendered to PNG by the opt in
+test in SettingsPageTests, in English and in Chinese, but not seen in the running app:
+
+- [ ] The sidebar shows General, Dictation, Clean Up Text, Vocabulary and About (通用,
+  听写, 整理文字, 个人词库, 关于), each with its own colored icon. Settings… opens on
+  General.
+- [ ] General holds Language, Starting and finding Orra (Open at Login, Show Orra in the
+  Dock) and Updates (the automatic check switch and Check for Updates…). Run from Xcode,
+  the switch and the button are off and "Development build, updates are off" shows under
+  them. In a release build both work as they did under About.
+- [ ] Dictation holds the talk key with double press for hands free, the microphone
+  picker, the on screen hint and the sounds switch. The microphone picker works as it did
+  on the Microphone page, also with a chosen microphone that is not connected.
+- [ ] Clean Up Text shows the local model switch first, then the filler and number rules
+  under Rules. Turning the model on asks before the download, and the progress, Cancel
+  Download, Resume Download, loading and Try Again show under the switch as before.
+- [ ] About shows the version, the speech model status and the privacy text with its
+  link, and no update settings.
+- [ ] Change Talk Key… in the menu opens Settings on Dictation, from a closed window and
+  from one open on another page. Settings… afterwards opens on General.
+- [ ] The on screen hint offers Always, Only while dictating and Off (始终显示, 仅在听写时显示,
+  不显示). Always shows the indicator and the idle bar, Only while dictating only the
+  indicator, Off neither, and the menu bar icon then shows listening and transcribing.
+- [ ] Saved settings keep their meaning after the update. With Orra quit, try each pair
+  and reopen Orra:
+  `defaults write io.github.db-ol.Orra showsRecordingIndicator -bool NO` and
+  `defaults write io.github.db-ol.Orra showsIdleBar -bool YES` show "Only while ready" in
+  the picker, with the idle bar and no indicator. Indicator YES and bar NO show Only while
+  dictating, both NO show Off, and both YES (or nothing saved) show Always. After picking
+  another choice, Only while ready is no longer offered.
 
 ## Not implemented
 
