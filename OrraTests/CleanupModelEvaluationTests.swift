@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Orra
 
@@ -14,6 +15,8 @@ import Testing
 /// it, after the filler and number rules. The report lists exact matches, what the step did
 /// with each output, and every output that was pasted and differs from the expected text,
 /// for a person to judge. The cases are written by hand and hold no one's dictation.
+/// With TEST_RUNNER_ORRA_CLEANUP_COMPARE=1 as well, each case also runs without the prefix
+/// cache, and the report lists every case where the two differ.
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["ORRA_CLEANUP_EVAL"] != nil && RewriteTestModel.folder != nil))
 struct CleanupModelEvaluationTests {
     private struct Case {
@@ -96,59 +99,119 @@ struct CleanupModelEvaluationTests {
         }
     }
 
+    /// What one run of the step gave for a case.
+    private struct Run {
+        let text: String
+        let outcome: CleanupStep.Outcome
+        let seconds: Double
+        /// The model's completion, nil when the step did not run the model.
+        let completion: RewriteEngine.Completion?
+    }
+
+    private static func seconds(_ duration: Duration) -> Double {
+        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+    }
+
+    /// The median and the 95th percentile, as the benchmark computed them.
+    private static func median(_ values: [Double]) -> Double {
+        values.sorted()[values.count / 2]
+    }
+
+    private static func p95(_ values: [Double]) -> Double {
+        values.sorted()[Int(Double(values.count) * 0.95) - 1]
+    }
+
+    private static func run(_ source: String, engine: RewriteEngine, usingPrefixCache: Bool) async -> Run {
+        let completions = Mutex<[RewriteEngine.Completion]>([])
+        let started = ContinuousClock.now
+        let result = await CleanupStep.run(source, complete: { text in
+            let completion = try await engine.cleanUp(text, usingPrefixCache: usingPrefixCache)
+            completions.withLock { $0.append(completion) }
+            return completion.answer
+        })
+        return Run(text: result.text, outcome: result.outcome, seconds: seconds(started.duration(to: .now)), completion: completions.withLock { $0.last })
+    }
+
+    /// Runs every case with the prefix cache, as the app does. With
+    /// TEST_RUNNER_ORRA_CLEANUP_COMPARE=1 it also runs each case without the cache, right
+    /// after, and reports both and every case where the two differ.
     @Test func cleanupCases() async throws {
         let folder = try #require(RewriteTestModel.folder)
+        let compares = ProcessInfo.processInfo.environment["ORRA_CLEANUP_COMPARE"] != nil
         let engine = RewriteEngine()
         let before = MemoryFootprint.current()
         let loadStarted = ContinuousClock.now
         try await engine.load(from: folder)
         let loadTime = loadStarted.duration(to: .now)
         let loaded = MemoryFootprint.current()
-        let complete: @Sendable (String) async throws -> String = { try await engine.cleanUp($0).answer }
 
-        var report = "Load and warm up: \(loadTime), memory footprint \(Double(loaded) / 1e9) GB after load (\(Double(loaded - min(before, loaded)) / 1e9) GB more than before)\n"
+        var report = "Load and warm up: \(loadTime), memory footprint \(Double(loaded) / 1e9) GB after load (\(Double(loaded - min(before, loaded)) / 1e9) GB more than before), prefix cache \(Double(await engine.prefixCacheBytes) / 1e6) MB\n"
         var medians: [Double] = []
         for (name, file, key) in [("regular", "cases.jsonl", "cleanup"), ("adversarial", "adversarial.jsonl", "expected_cleanup")] {
             let cases = try Self.cases(file, expected: key)
             for mode in ["model only", "as the app runs it"] {
-                var exact = 0
-                var outcomes: [String: Int] = [:]
-                var seconds: [Double] = []
-                var differing: [String] = []
+                var runs: [String: [Run]] = [:]
+                var sources: [String] = []
+                var expectations: [String] = []
                 for item in cases {
                     let source = mode == "model only" ? item.input : Self.appRules(item.input)
-                    let expected = mode == "model only" ? item.expected : Self.appRules(item.expected)
-                    let started = ContinuousClock.now
-                    let result: (text: String, outcome: CleanupStep.Outcome)
-                    if mode == "model only" || CleanupStep.isWorthCleaning(source) {
-                        result = await CleanupStep.run(source, complete: complete)
-                    } else {
-                        result = (source, .unchanged)
-                    }
-                    let elapsed = started.duration(to: .now)
-                    seconds.append(Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18)
-                    let kind = switch result.outcome {
-                    case .heldBack(let failure): "held back: \(failure.logName)"
-                    default: result.outcome.logName
-                    }
-                    outcomes[kind, default: 0] += 1
-                    if Self.folded(result.text) == Self.folded(expected) {
-                        exact += 1
-                    } else if result.outcome == .cleaned || result.outcome == .unchanged {
-                        differing.append("  \(item.id) [\(result.outcome.logName)] \(source) -> \(result.text) (expected \(expected))")
+                    sources.append(source)
+                    expectations.append(mode == "model only" ? item.expected : Self.appRules(item.expected))
+                    for (way, cached) in [("cached", true), ("uncached", false)] where cached || compares {
+                        let run = if mode == "model only" || CleanupStep.isWorthCleaning(source) {
+                            await Self.run(source, engine: engine, usingPrefixCache: cached)
+                        } else {
+                            Run(text: source, outcome: .unchanged, seconds: 0, completion: nil)
+                        }
+                        runs[way, default: []].append(run)
                     }
                 }
-                let sorted = seconds.sorted()
-                let median = sorted[sorted.count / 2]
-                let p95 = sorted[Int(Double(sorted.count) * 0.95) - 1]
-                if mode == "model only" {
-                    medians.append(median)
+                for way in ["cached", "uncached"] {
+                    guard let results = runs[way] else { continue }
+                    var exact = 0
+                    var outcomes: [String: Int] = [:]
+                    var differing: [String] = []
+                    for (index, result) in results.enumerated() {
+                        let kind = switch result.outcome {
+                        case .heldBack(let failure): "held back: \(failure.logName)"
+                        default: result.outcome.logName
+                        }
+                        outcomes[kind, default: 0] += 1
+                        if Self.folded(result.text) == Self.folded(expectations[index]) {
+                            exact += 1
+                        } else if result.outcome == .cleaned || result.outcome == .unchanged {
+                            differing.append("  \(cases[index].id) [\(result.outcome.logName)] \(sources[index]) -> \(result.text) (expected \(expectations[index]))")
+                        }
+                    }
+                    let seconds = results.map(\.seconds)
+                    let completions = results.compactMap(\.completion)
+                    if mode == "model only" && way == "cached" {
+                        medians.append(Self.median(seconds))
+                    }
+                    report += "\n\(name), \(mode), \(way): \(cases.count) cases, exact \(exact), median \(String(format: "%.3f", Self.median(seconds))) s, p95 \(String(format: "%.3f", Self.p95(seconds))) s, max \(String(format: "%.3f", seconds.max() ?? 0)) s\n"
+                    if !completions.isEmpty {
+                        let prefill = completions.map { Self.seconds($0.prefillTime) }
+                        let read = completions.map { Double($0.promptTokens - $0.cachedPromptTokens) }
+                        report += "  model runs \(completions.count), prompt tokens median \(Int(Self.median(completions.map { Double($0.promptTokens) }))), cached median \(Int(Self.median(completions.map { Double($0.cachedPromptTokens) }))), read median \(Int(Self.median(read))), prefill median \(String(format: "%.3f", Self.median(prefill))) s, p95 \(String(format: "%.3f", Self.p95(prefill))) s\n"
+                    }
+                    for (kind, count) in outcomes.sorted(by: { $0.key < $1.key }) {
+                        report += "  \(kind): \(count)\n"
+                    }
+                    report += "  pasted and not as expected: \(differing.count)\n" + differing.joined(separator: "\n") + "\n"
                 }
-                report += "\n\(name), \(mode): \(cases.count) cases, exact \(exact), median \(String(format: "%.3f", median)) s, p95 \(String(format: "%.3f", p95)) s, max \(String(format: "%.3f", sorted.last ?? 0)) s\n"
-                for (kind, count) in outcomes.sorted(by: { $0.key < $1.key }) {
-                    report += "  \(kind): \(count)\n"
+                if let cached = runs["cached"], let uncached = runs["uncached"] {
+                    var lines: [String] = []
+                    var answers = 0
+                    for index in cached.indices {
+                        if cached[index].completion?.answer != uncached[index].completion?.answer {
+                            answers += 1
+                        }
+                        if cached[index].text != uncached[index].text || cached[index].outcome != uncached[index].outcome {
+                            lines.append("  \(cases[index].id) \(sources[index]) -> cached [\(cached[index].outcome.logName)] \(cached[index].text) | uncached [\(uncached[index].outcome.logName)] \(uncached[index].text)")
+                        }
+                    }
+                    report += "\(name), \(mode): answers that differ with and without the cache \(answers), pasted texts or outcomes that differ \(lines.count)\n" + lines.joined(separator: "\n") + "\n"
                 }
-                report += "  pasted and not as expected: \(differing.count)\n" + differing.joined(separator: "\n") + "\n"
             }
         }
         await engine.unload()
@@ -157,7 +220,8 @@ struct CleanupModelEvaluationTests {
         if let path = ProcessInfo.processInfo.environment["ORRA_CLEANUP_REPORT"] {
             try report.write(toFile: path, atomically: true, encoding: .utf8)
         }
-        // The setting promises under a second. A Release build measured 0.60 and 0.69 s.
+        // The setting promises under a second. A Release build measured 0.17 and 0.21 s
+        // with the prefix cache, and 0.66 and 0.74 s without it.
         for median in medians {
             #expect(median < 1.0)
         }

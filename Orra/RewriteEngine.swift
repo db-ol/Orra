@@ -53,24 +53,42 @@ actor RewriteEngine {
         /// The prefill and what the model wrote after it.
         let answer: String
         let promptTokens: Int
+        /// How many of the prompt tokens came from the prefix cache, see PromptPrefix.
+        let cachedPromptTokens: Int
+        /// How long the model took to read the prompt tokens that were not cached.
+        let prefillTime: Duration
         let generatedTokens: Int
     }
 
     private var context: ModelContext?
 
+    /// The model's cache after the fixed start of the cleanup prompt and its tokens, filled
+    /// once after loading. A cleanup runs on a copy, so this one never changes. Dropped with
+    /// the model.
+    private var prefix: (tokens: [Int], cache: [any KVCache])?
+
     var isLoaded: Bool {
         context != nil
     }
 
-    /// Loads the model from an installed folder and runs one short cleanup, so the first
-    /// dictation does not pay for compiling GPU programs. Reads local files only.
+    /// The bytes the prefix cache holds, 0 without one.
+    var prefixCacheBytes: Int {
+        prefix?.cache.reduce(0) { total, cache in
+            total + cache.innerState().reduce(0) { $0 + $1.nbytes }
+        } ?? 0
+    }
+
+    /// Loads the model from an installed folder, runs it on the fixed start of the prompt,
+    /// and runs one short cleanup, so the first dictation does not pay for compiling GPU
+    /// programs. Reads local files only.
     func load(from folder: URL) async throws {
         guard context == nil else { return }
         let started = ContinuousClock.now
         let loaded = try await LLMModelFactory.shared.load(from: folder, using: CleanupTokenizerLoader())
         context = loaded
         do {
-            _ = try generate("好的。", maximumTokens: 4)
+            try fillPrefixCache()
+            _ = try generate("好的。", maximumTokens: 4, usingPrefixCache: true)
         } catch {
             unload()
             throw error
@@ -78,33 +96,71 @@ actor RewriteEngine {
         Logger.rewrite.notice("Cleanup model loaded and warmed up in \(started.duration(to: .now), privacy: .public)")
     }
 
-    /// Drops the model and the GPU buffers MLX keeps for reuse.
+    /// Drops the model, its prefix cache and the GPU buffers MLX keeps for reuse.
     func unload() {
         guard context != nil else { return }
+        prefix = nil
         context = nil
         Memory.clearCache()
         Logger.rewrite.notice("Cleanup model unloaded")
     }
 
     /// Runs the cleanup prompt on a transcript. Greedy, so the same text always gets the
-    /// same answer. Stops early when the task is cancelled, see CleanupStep.
-    func cleanUp(_ text: String) throws -> Completion {
+    /// same answer. Stops early when the task is cancelled, see CleanupStep. Without the
+    /// prefix cache it runs the model on the whole prompt, which the evaluation compares.
+    func cleanUp(_ text: String, usingPrefixCache: Bool = true) throws -> Completion {
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
-        return try generate(text, maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens))
+        return try generate(text, maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens), usingPrefixCache: usingPrefixCache)
     }
 
-    private func generate(_ text: String, maximumTokens: Int) throws -> Completion {
+    /// Runs the model on the start of the prompt that every transcript shares and keeps its
+    /// cache. Without a shared start there is no cache and every cleanup reads the whole
+    /// prompt.
+    private func fillPrefixCache() throws {
+        guard let context else { throw RewriteError.notLoaded }
+        let started = ContinuousClock.now
+        let tokens = PromptPrefix.cleanupPrompt { context.tokenizer.encode(text: $0, addSpecialTokens: false) }
+        guard !tokens.isEmpty else {
+            Logger.rewrite.error("Cleanup prompt has no shared start, so no prefix cache")
+            return
+        }
+        let cache = context.model.newCache(parameters: nil)
+        // Setting up the iterator runs the model on every token and fills the cache. The
+        // token it picks after them is never read, so it never enters the cache.
+        _ = try TokenIterator(input: LMInput(tokens: MLXArray(tokens)), model: context.model, cache: cache, parameters: GenerateParameters(maxTokens: 1, temperature: 0))
+        eval(cache)
+        Stream().synchronize()
+        prefix = (tokens, cache)
+        Logger.rewrite.notice("Cleanup prefix cache of \(tokens.count, privacy: .public) tokens and \(self.prefixCacheBytes, privacy: .public) bytes filled in \(started.duration(to: .now), privacy: .public)")
+    }
+
+    private func generate(_ text: String, maximumTokens: Int, usingPrefixCache: Bool) throws -> Completion {
         guard let context else { throw RewriteError.notLoaded }
         let started = ContinuousClock.now
         let prompt = context.tokenizer.encode(text: RewritePrompt.text(for: text), addSpecialTokens: false)
+        // With the prefix cache, the model reads only the tokens after the prefix, on a copy
+        // of the cache. A prompt that does not start with the prefix's tokens reads them all.
+        var input = prompt
+        var cache: [any KVCache]?
+        if usingPrefixCache, let prefix {
+            if let remainder = PromptPrefix.remainder(of: prompt, after: prefix.tokens) {
+                input = remainder
+                cache = prefix.cache.map { $0.copy() }
+            } else {
+                Logger.rewrite.notice("Cleanup prompt does not start with the cached prefix, so all of it is read")
+            }
+        }
         // The end of turn tokens from generation_config.json and the tokenizer.
         var stop = context.configuration.eosTokenIds
         if let end = context.tokenizer.eosTokenId {
             stop.insert(end)
         }
         let parameters = GenerateParameters(maxTokens: maximumTokens, temperature: 0)
-        var iterator = try TokenIterator(input: LMInput(tokens: MLXArray(prompt)), model: context.model, parameters: parameters)
+        var iterator = try TokenIterator(input: LMInput(tokens: MLXArray(input)), model: context.model, cache: cache, parameters: parameters)
+        // The iterator evaluates the first token ahead. Wait for it, so the time is the
+        // time the model took to read the prompt.
+        Stream().synchronize()
         let prefilled = ContinuousClock.now
         var generated: [Int] = []
         var reason = "the token limit"
@@ -122,8 +178,10 @@ actor RewriteEngine {
         // The iterator evaluates ahead. Let that finish before the next use of MLX.
         Stream().synchronize()
         let answer = RewritePrompt.prefill + context.tokenizer.decode(tokenIds: generated, skipSpecialTokens: true)
-        Logger.rewrite.notice("Cleanup ran in \(started.duration(to: .now), privacy: .public): \(prompt.count, privacy: .public) prompt tokens in \(started.duration(to: prefilled), privacy: .public), \(generated.count, privacy: .public) of at most \(maximumTokens, privacy: .public) tokens written, stopped by \(reason, privacy: .public)")
-        return Completion(answer: answer, promptTokens: prompt.count, generatedTokens: generated.count)
+        let cached = prompt.count - input.count
+        let prefillTime = started.duration(to: prefilled)
+        Logger.rewrite.notice("Cleanup ran in \(started.duration(to: .now), privacy: .public): \(prompt.count, privacy: .public) prompt tokens, \(cached, privacy: .public) of them cached and \(input.count, privacy: .public) read in \(prefillTime, privacy: .public), \(generated.count, privacy: .public) of at most \(maximumTokens, privacy: .public) tokens written, stopped by \(reason, privacy: .public)")
+        return Completion(answer: answer, promptTokens: prompt.count, cachedPromptTokens: cached, prefillTime: prefillTime, generatedTokens: generated.count)
     }
 }
 
@@ -172,9 +230,10 @@ nonisolated enum CleanupStep {
 
     /// The longest Orra waits for a cleanup of this text before it pastes the text without
     /// it. The model writes the whole text again, so the time grows with its length. On an
-    /// M5 Pro, CleanupModelEvaluationTests measured 1.1 s for 46 Chinese characters, 3.3 to
-    /// 5.6 s for 400 and 2.5 s for 905 English ones in a Release build. This allows 2.7 s,
-    /// 8 s and 15.6 s for them, so a slower Mac still gets most cleanups.
+    /// M5 Pro, CleanupModelEvaluationTests measured 0.36 s for 46 Chinese characters, 3.4 s
+    /// for 400 and 2.3 s for 905 English ones in a Release build with the prefix cache, and
+    /// 1.1 s, 3.3 to 5.6 s and 2.5 s before it. This allows 2.7 s, 8 s and 15.6 s for them,
+    /// so a slower Mac still gets most cleanups.
     static func timeout(for text: String) -> Duration {
         .seconds(2) + .milliseconds(15) * text.count
     }
