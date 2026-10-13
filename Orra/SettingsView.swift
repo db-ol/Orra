@@ -111,12 +111,15 @@ struct SettingsView: View {
     let updater: AppUpdater
     @State private var tab = SettingsTab.general
     @State private var sheet: SettingsSheet?
+    /// The sidebar always shows, like the one of System Settings. Without it a user who drags
+    /// the divider to the edge, or picks Hide Sidebar, has no way back to the other tabs.
+    @State private var columns = NavigationSplitViewVisibility.all
     /// The height of the window's content, which no sheet may pass, so a sheet never hangs
     /// below the window.
     @State private var pageHeight: CGFloat = SettingsWindow.defaultSize.height
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             // A click on the empty part of the sidebar keeps the tab that is shown.
             List(SettingsTab.allCases, selection: Binding<SettingsTab?>(
                 get: { tab },
@@ -130,7 +133,9 @@ struct SettingsView: View {
         } detail: {
             page(for: tab)
         }
-        .toolbar(removing: .sidebarToggle)
+        .onChange(of: columns) { _, new in
+            if new != .all { columns = .all }
+        }
         .sheet(item: $sheet) { sheet in
             content(for: sheet)
                 .environment(\.settingsSheetHeightLimit, pageHeight - SettingsSheetLimits.margin)
