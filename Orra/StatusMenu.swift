@@ -89,8 +89,8 @@ struct StatusMenu: View {
             Text("Talk Key: \(pushToTalk.talkKey.fullName())")
             Button("Change Talk Key…") {
                 NSApplication.shared.activate()
+                SettingsWindow.show(.dictation)
                 openWindow(id: SettingsWindow.id)
-                SettingsWindow.showGeneral()
             }
             Divider()
             Toggle("Double Press for Hands Free", isOn: Binding(

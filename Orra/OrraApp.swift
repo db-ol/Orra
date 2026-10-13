@@ -39,13 +39,24 @@ import SwiftUI
 /// The settings window's identity, for openWindow.
 enum SettingsWindow {
     static let id = "settings"
-    /// Posted to turn an open settings window to its General page. A window that opens
-    /// starts there anyway.
-    static let showGeneralNotification = Notification.Name("io.github.db-ol.Orra.showGeneralSettings")
+    /// Posted to turn an open settings window to the page `show` asked for.
+    static let showPageNotification = Notification.Name("io.github.db-ol.Orra.showSettingsPage")
 
-    /// Turns the settings window to its General page, where the talk key is chosen.
-    static func showGeneral() {
-        NotificationCenter.default.post(name: showGeneralNotification, object: nil)
+    /// The page the window shows when it opens or gets the notification. Back to General
+    /// once a window took it, so Settings… opens on General.
+    private static var openingPage = SettingsPage.general
+
+    /// Turns the settings window to `page`, such as Dictation, where the talk key is
+    /// chosen. Called before the window opens, the window starts on that page.
+    static func show(_ page: SettingsPage) {
+        openingPage = page
+        NotificationCenter.default.post(name: showPageNotification, object: nil)
+    }
+
+    /// The page asked for, which resets the request to General.
+    static func takeOpeningPage() -> SettingsPage {
+        defer { openingPage = .general }
+        return openingPage
     }
 }
 

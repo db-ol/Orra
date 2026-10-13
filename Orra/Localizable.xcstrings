@@ -266,6 +266,17 @@
         }
       }
     },
+    "Always" : {
+      "comment" : "A choice of the on screen hint: the bars while dictating and the small bar while Orra is ready",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始终显示"
+          }
+        }
+      }
+    },
     "Another app came to the front, so the text was not pasted. Use Copy Last Dictation." : {
       "localizations" : {
         "zh-Hans" : {
@@ -406,6 +417,16 @@
         }
       }
     },
+    "Clean Up Text" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理文字"
+          }
+        }
+      }
+    },
     "Clean up with a local model" : {
       "localizations" : {
         "zh-Hans" : {
@@ -499,12 +520,22 @@
       }
     },
     "Development build, updates are off" : {
-      "comment" : "Shown in About instead of the version in a build run from Xcode",
+      "comment" : "Shown in About instead of the version, and under the update settings in General, in a build run from Xcode",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "开发版，不检查更新"
+          }
+        }
+      }
+    },
+    "Dictation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写"
           }
         }
       }
@@ -809,6 +840,16 @@
         }
       }
     },
+    "How Orra tidies the text before it pastes, with rules and an optional local model." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴之前，Orra 如何用规则和可选的本地模型整理文字。"
+          }
+        }
+      }
+    },
     "Install Orra %@…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -993,6 +1034,16 @@
         }
       }
     },
+    "Local model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地模型"
+          }
+        }
+      }
+    },
     "Microphone" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1123,6 +1174,17 @@
         }
       }
     },
+    "Off" : {
+      "comment" : "A choice of the on screen hint: nothing shows at the bottom of the screen",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不显示"
+          }
+        }
+      }
+    },
     "On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn. On a Mac's built in keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1133,12 +1195,43 @@
         }
       }
     },
+    "On screen hint" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕提示"
+          }
+        }
+      }
+    },
     "On this Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, choose right Control, because some, such as the Logitech MX Keys, never send fn." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "在这台 Mac 自带的键盘上，左下角的 fn（地球仪）键在右手用鼠标时很顺手。用外接键盘时请选右侧 Control 键，因为有些外接键盘（比如 Logitech MX Keys）的 fn 键信号根本传不到 Mac。"
+          }
+        }
+      }
+    },
+    "Only while dictating" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅在听写时显示"
+          }
+        }
+      }
+    },
+    "Only while ready" : {
+      "comment" : "A choice of the on screen hint, offered only to someone who kept the idle bar and turned the recording indicator off",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅在待命时显示"
           }
         }
       }
@@ -1680,6 +1773,16 @@
         }
       }
     },
+    "Rules" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "规则"
+          }
+        }
+      }
+    },
     "Same as the Mac" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1740,16 +1843,6 @@
         }
       }
     },
-    "Show a small bar at the bottom of the screen while Orra is ready" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 待命时，在屏幕底部显示一条小横条"
-          }
-        }
-      }
-    },
     "Show Orra in the Dock" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1766,16 +1859,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示报告文件"
-          }
-        }
-      }
-    },
-    "Show the recording indicator" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示录音提示"
           }
         }
       }
@@ -2078,6 +2161,16 @@
         }
       }
     },
+    "The rules run on every dictation, with or without the local model, and before it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次听写都会应用这些规则，不论是否打开本地模型，而且在模型之前。"
+          }
+        }
+      }
+    },
     "The speech model could not be loaded" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2144,6 +2237,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "说话键需要辅助功能权限"
+          }
+        }
+      }
+    },
+    "The talk key, the microphone, and what you see and hear while dictating." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键、麦克风，以及听写时看到和听到的提示。"
           }
         }
       }
@@ -2249,6 +2352,16 @@
         }
       }
     },
+    "Updates" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
+        }
+      }
+    },
     "Use %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2279,12 +2392,12 @@
         }
       }
     },
-    "Version, speech model, updates and privacy." : {
+    "Version, speech model and privacy." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "版本、语音模型、更新和隐私。"
+            "value" : "版本、语音模型和隐私。"
           }
         }
       }
@@ -2349,16 +2462,6 @@
         }
       }
     },
-    "Which microphone Orra records from." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 用哪个麦克风录音。"
-          }
-        }
-      }
-    },
     "While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2375,6 +2478,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "听写时"
+          }
+        }
+      }
+    },
+    "While you dictate, white bars at the bottom of the screen move with your voice, and say why when nothing is pasted. Always also keeps a small bar there while Orra is ready, which shows how to talk when you point at it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写时，屏幕底部的白色音量条随你的声音跳动，没有粘贴时会说明原因。选择“始终显示”时，Orra 待命时那里还会有一条小横条，指针移到上面会显示怎样说话。"
           }
         }
       }
@@ -2430,12 +2543,12 @@
         }
       }
     },
-    "Your language, the talk key, what you see and hear while dictating, and how Orra starts." : {
+    "Your language, how Orra starts, and updates." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "界面语言、说话键、听写时的提示，以及 Orra 如何启动。"
+            "value" : "界面语言、Orra 如何启动，以及更新。"
           }
         }
       }
