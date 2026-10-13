@@ -12,10 +12,15 @@ import os
 /// clear.
 nonisolated enum DictationCue: Equatable, Sendable {
     /// The hold has lasted long enough to be a dictation, and the microphone is recording.
-    case listening
+    /// `translation` is the direction when the translation key started it, so the
+    /// indicator shows that the text will be pasted translated.
+    case listening(translation: TranslationDirection?)
     /// A hands free dictation records. The hint says how to finish it, such as "Press
-    /// right Control to finish".
-    case handsFree(finishHint: String)
+    /// right Control to finish". `translation` as for listening.
+    case handsFree(finishHint: String, translation: TranslationDirection? = nil)
+
+    /// A dictation of the talk key is recording.
+    static let listening = DictationCue.listening(translation: nil)
     /// The talk key was released after a hold long enough to transcribe.
     case transcribing
     /// The microphone stopped after a hold long enough to transcribe. A recording without
@@ -31,6 +36,10 @@ nonisolated enum DictationCue: Equatable, Sendable {
 /// A hold records. The release stops the recording, the speech model turns it into text
 /// off the main actor, and the text is pasted into the frontmost app. A quick double press
 /// records hands free until the next press of the key, see PushToTalkStateMachine.
+///
+/// While translation is on, the translation key works the same way, and its dictation is
+/// translated after the rule steps, see TranslationStep. Whenever the translation cannot
+/// be used, the text is pasted without it, never nothing.
 @Observable
 final class PushToTalkController {
     nonisolated enum ModelState: Equatable, Sendable {
@@ -63,17 +72,31 @@ final class PushToTalkController {
     /// Whether the user has chosen the talk key, here or in an earlier launch. The welcome
     /// window marks its talk key step as done then.
     private(set) var hasChosenTalkKey: Bool
-    /// Whether a quick double press of the talk key starts a hands free dictation. Saved
-    /// through `saveHandsFree` whenever it changes.
+    /// The key that starts a dictation that is pasted translated, while translation is
+    /// on, see `translationKeyIsOn`. Never the talk key. Saved through
+    /// `saveTranslationKey` when the user picks it, or when picking the talk key moved it.
+    private(set) var translationKey: TalkKey
+    /// Whether the translation key is watched: translation is on. AppDelegate keeps it in
+    /// step with the switch on the Translation page.
+    private(set) var translationKeyIsOn = false
+    /// Whether a quick double press of the talk key, or of the translation key, starts a
+    /// hands free dictation. Saved through `saveHandsFree` whenever it changes.
     private(set) var handsFreeOn: Bool
+    /// Which key the user records by pressing it, if any.
+    private(set) var choosingKeySlot: KeySlot?
     /// True while the user records a talk key by pressing it.
-    private(set) var isChoosingTalkKey = false
-    /// Why the last press while recording a talk key cannot be one, such as Shift.
+    var isChoosingTalkKey: Bool {
+        choosingKeySlot == .talk
+    }
+    /// Why the last press while recording a key cannot be one, such as Shift.
     private(set) var keyChoiceRejection: KeyRecorder.Rejection?
     /// What the recorder says about that press, in the language Orra started with.
     var keyChoiceNote: String? {
-        keyChoiceRejection?.message()
+        keyChoiceRejection?.message(for: choosingKeySlot ?? .talk)
     }
+    /// Set when the latest key the user picked was the other key's, so the two keys
+    /// swapped. Cleared when the user records a key again.
+    private(set) var keySwap: KeySwap?
     /// The microphone the user chose in Orra, or nil for the system default input. Saved
     /// through `saveMicrophone` whenever it changes.
     private(set) var microphone: MicrophoneChoice?
@@ -110,14 +133,16 @@ final class PushToTalkController {
     /// The text of the latest dictation, kept in memory only, so the menu can copy it when
     /// the paste missed. Never logged.
     private(set) var lastTranscript: String?
-    /// The latest dictation as the rule steps left it, when the cleanup model changed it
-    /// before the paste, so Paste Original Text in the menu can bring it back. In memory
-    /// only, never logged.
+    /// The latest dictation before the model changed it, so Paste Original Text in the
+    /// menu can bring it back: the text before translation when the paste was translated,
+    /// and otherwise the text as the rule steps left it, when the cleanup model changed it.
+    /// In memory only, never logged.
     private(set) var originalText: String?
     /// Receives the cues for the recording indicator and the sounds. AppDelegate sets it.
     @ObservationIgnored var onCue: (DictationCue) -> Void = { _ in }
     /// Told after each paste, with the text, the app it went into and the text before the
-    /// cleanup model changed it, if it did, so Orra can learn from a correction.
+    /// cleanup model changed it, if it did, so Orra can learn from a correction. Never told
+    /// about a translated paste, since a fix of a translation is no misheard word.
     /// AppDelegate sets it.
     @ObservationIgnored var onPasted: (_ text: String, _ app: pid_t, _ beforeCleanup: String?) -> Void = { _, _, _ in }
     /// Told when Paste Original Text pastes over a cleaned paste, with the cleaned text, so
@@ -127,6 +152,10 @@ final class PushToTalkController {
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
     @ObservationIgnored private let cleanup: CleanupModel
+    @ObservationIgnored private let translation: TranslationModel
+    /// The direction of the dictation under way when the translation key started it, read
+    /// at its start. Nil for a dictation of the talk key.
+    @ObservationIgnored private var holdTranslation: TranslationDirection?
     @ObservationIgnored private let insert: @MainActor (String) async -> InsertionResult
     @ObservationIgnored private let frontmostApp: @MainActor () -> pid_t?
     @ObservationIgnored private let lidIsClosed: @MainActor () -> Bool
@@ -163,6 +192,7 @@ final class PushToTalkController {
     @ObservationIgnored private var machine = PushToTalkStateMachine()
     @ObservationIgnored private var tap: HotkeyTap?
     @ObservationIgnored private let saveTalkKey: (TalkKey) -> Void
+    @ObservationIgnored private let saveTranslationKey: (TalkKey) -> Void
     @ObservationIgnored private let saveHandsFree: (Bool) -> Void
     /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
     /// installed, which needs no permission.
@@ -186,6 +216,8 @@ final class PushToTalkController {
     ///   - transcription: The speech model. Tests pass fakes.
     ///   - cleanup: The cleanup model, which runs after the rule steps when it is ready.
     ///     Tests pass fakes.
+    ///   - translation: The model's translations, for dictations of the translation key.
+    ///     Tests pass fakes.
     ///   - insert: Puts text into the frontmost app. Tests pass fakes.
     ///   - frontmostApp: The process ID of the frontmost app. Tests pass fakes.
     ///   - lidIsClosed: Whether the MacBook's lid is closed, read when a recording holds
@@ -206,6 +238,9 @@ final class PushToTalkController {
     ///   - talkKey: The key that starts a dictation, as saved by the user.
     ///   - saveTalkKey: Saves the key after the user changes it.
     ///   - talkKeyChosen: Whether the user has saved a talk key before.
+    ///   - translationKey: The translation key, as saved, or nil for the default next to
+    ///     the talk key, see `TalkKey.defaultTranslationKey(talkKey:)`.
+    ///   - saveTranslationKey: Saves the translation key after it changes.
     ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
     ///   - saveHandsFree: Saves the choice after the user changes it.
     ///   - microphone: The microphone the user chose, or nil for the system default.
@@ -221,6 +256,7 @@ final class PushToTalkController {
         capture: AudioCapture,
         transcription: Transcription,
         cleanup: CleanupModel = .off,
+        translation: TranslationModel = .off,
         insert: @escaping @MainActor (String) async -> InsertionResult,
         frontmostApp: @escaping @MainActor () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
         lidIsClosed: @escaping @MainActor () -> Bool = { Lid.isClosed() },
@@ -234,6 +270,8 @@ final class PushToTalkController {
         talkKey: TalkKey = TalkKey.defaultKey,
         saveTalkKey: @escaping (TalkKey) -> Void = { _ in },
         talkKeyChosen: Bool = false,
+        translationKey: TalkKey? = nil,
+        saveTranslationKey: @escaping (TalkKey) -> Void = { _ in },
         handsFree: Bool = true,
         saveHandsFree: @escaping (Bool) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
@@ -249,6 +287,7 @@ final class PushToTalkController {
         self.capture = capture
         self.transcription = transcription
         self.cleanup = cleanup
+        self.translation = translation
         self.insert = insert
         self.frontmostApp = frontmostApp
         self.lidIsClosed = lidIsClosed
@@ -262,6 +301,8 @@ final class PushToTalkController {
         self.talkKey = talkKey
         self.saveTalkKey = saveTalkKey
         self.hasChosenTalkKey = talkKeyChosen
+        self.translationKey = translationKey.flatMap { $0 == talkKey ? nil : $0 } ?? TalkKey.defaultTranslationKey(talkKey: talkKey)
+        self.saveTranslationKey = saveTranslationKey
         self.handsFreeOn = handsFree
         self.saveHandsFree = saveHandsFree
         self.microphone = microphone
@@ -282,8 +323,8 @@ final class PushToTalkController {
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
-        tap = HotkeyTap(keys: [talkKey], handsFree: handsFreeOn, install: installTap) { [weak self] event in
-            self?.handle(event)
+        tap = HotkeyTap(keys: watchedKeys, delayedKeys: delayedKeys, handsFree: handsFreeOn, install: installTap) { [weak self] event in
+            self?.handle(event, key: self?.tap?.activeKey)
         } onSwitchedOff: { [weak self] reason in
             self?.tapWasSwitchedOff(reason)
         }
@@ -379,12 +420,60 @@ final class PushToTalkController {
 
     /// Makes `key` the talk key and saves the choice. Saved even when it is the key in use
     /// already, such as the default, so the welcome window counts the step as done on the
-    /// next launch too.
+    /// next launch too. When `key` is the translation key, the translation key becomes the
+    /// old talk key and `keySwap` says so.
     func chooseTalkKey(_ key: TalkKey) {
         hasChosenTalkKey = true
+        keySwap = nil
+        if key == translationKey, key != talkKey {
+            translationKey = talkKey
+            saveTranslationKey(talkKey)
+            keySwap = KeySwap(talkKey: key, translationKey: translationKey)
+        }
         talkKey = key
         saveTalkKey(key)
-        tap?.setKeys([key])
+        updateTapKeys()
+    }
+
+    /// Makes `key` the translation key and saves the choice. When `key` is the talk key,
+    /// the talk key becomes the old translation key and `keySwap` says so.
+    func chooseTranslationKey(_ key: TalkKey) {
+        keySwap = nil
+        if key == talkKey, key != translationKey {
+            talkKey = translationKey
+            hasChosenTalkKey = true
+            saveTalkKey(talkKey)
+            keySwap = KeySwap(talkKey: talkKey, translationKey: key)
+        }
+        translationKey = key
+        saveTranslationKey(key)
+        updateTapKeys()
+    }
+
+    /// Starts or stops watching the translation key, when translation is turned on or off.
+    /// Turning it off ends a dictation the translation key started, as a change of keys
+    /// does.
+    func setTranslationKeyOn(_ on: Bool) {
+        guard on != translationKeyIsOn else { return }
+        translationKeyIsOn = on
+        updateTapKeys()
+    }
+
+    /// The keys the tap watches: the talk key, and the translation key while translation
+    /// is on.
+    private var watchedKeys: Set<TalkKey> {
+        translationKeyIsOn ? [talkKey, translationKey] : [talkKey]
+    }
+
+    /// The translation key waits before it records, as a left hand key does, so Option
+    /// shortcuts and the characters right Option types keep working. The talk key does
+    /// not.
+    private var delayedKeys: Set<TalkKey> {
+        translationKeyIsOn ? [translationKey] : []
+    }
+
+    private func updateTapKeys() {
+        tap?.setKeys(watchedKeys, delayedKeys: delayedKeys)
     }
 
     /// Turns double press for hands free on or off and saves the choice.
@@ -395,16 +484,23 @@ final class PushToTalkController {
         tap?.setHandsFree(on)
     }
 
-    /// Starts recording the key the user wants as the talk key, see KeyRecorder. A key
-    /// that can be a talk key, pressed and released on its own, becomes the talk key.
-    /// Anything else leaves a note and the recording goes on. Escape, a click anywhere in
-    /// Orra, or switching to another app stops it. Only presses in Orra count: the tap
-    /// checks that Orra is the active app, and without the tap a local monitor sees only
-    /// Orra's own events. Neither needs a new permission.
+    /// Starts recording the key the user wants as the talk key, see `startChoosingKey`.
     func startChoosingTalkKey() {
-        guard !isChoosingTalkKey else { return }
-        isChoosingTalkKey = true
+        startChoosingKey(for: .talk)
+    }
+
+    /// Starts recording the key the user wants for `slot`, see KeyRecorder. A key that can
+    /// be a talk key, pressed and released on its own, becomes the key. Anything else
+    /// leaves a note and the recording goes on. Escape, a click anywhere in Orra, or
+    /// switching to another app stops it. Only presses in Orra count: the tap checks that
+    /// Orra is the active app, and without the tap a local monitor sees only Orra's own
+    /// events. Neither needs a new permission. A recording for the other slot stops first.
+    func startChoosingKey(for slot: KeySlot) {
+        guard choosingKeySlot != slot else { return }
+        stopChoosingKey()
+        choosingKeySlot = slot
         keyChoiceRejection = nil
+        keySwap = nil
         keyRecorder = KeyRecorder()
         tap?.chooseKey { [weak self] type, keyCode, flags in
             self?.keyChoice(type: type, keyCode: keyCode, flags: flags)
@@ -412,7 +508,7 @@ final class PushToTalkController {
         keyChoiceMonitors = [
             NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
                 // The tap has seen the event first when it is installed.
-                guard let self, isChoosingTalkKey, tap?.isInstalled != true else { return event }
+                guard let self, choosingKeySlot != nil, tap?.isInstalled != true else { return event }
                 let flags = event.cgEvent?.flags ?? CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
                 let type: CGEventType = event.type == .keyDown ? .keyDown : .flagsChanged
                 keyChoice(type: type, keyCode: Int64(event.keyCode), flags: flags)
@@ -423,7 +519,7 @@ final class PushToTalkController {
             // A click anywhere in Orra ends the recording, as in the shortcut recorders of
             // Mac apps. The click itself goes on to what was clicked.
             NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
-                self?.stopChoosingTalkKey()
+                self?.stopChoosingKey()
                 return event
             },
         ].compactMap { $0 }
@@ -433,15 +529,15 @@ final class PushToTalkController {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.stopChoosingTalkKey()
+                self?.stopChoosingKey()
             }
         }
     }
 
-    /// Stops recording a talk key without changing it.
-    func stopChoosingTalkKey() {
-        guard isChoosingTalkKey else { return }
-        isChoosingTalkKey = false
+    /// Stops recording a key without changing it.
+    func stopChoosingKey() {
+        guard choosingKeySlot != nil else { return }
+        choosingKeySlot = nil
         keyChoiceRejection = nil
         tap?.chooseKey(nil)
         keyChoiceMonitors.forEach(NSEvent.removeMonitor)
@@ -452,10 +548,10 @@ final class PushToTalkController {
         resignObserver = nil
     }
 
-    /// One key down or flags changed event while the user records a talk key. Internal so
-    /// tests can drive it.
+    /// One key down or flags changed event while the user records a key. Internal so tests
+    /// can drive it.
     func keyChoice(type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
-        guard isChoosingTalkKey else { return }
+        guard let slot = choosingKeySlot else { return }
         guard let outcome = keyRecorder.handle(type: type, keyCode: keyCode, flags: flags) else {
             // A key that can be the talk key is down, so the note about an earlier press
             // no longer applies.
@@ -466,12 +562,15 @@ final class PushToTalkController {
         }
         switch outcome {
         case .chosen(let key):
-            stopChoosingTalkKey()
-            chooseTalkKey(key)
+            stopChoosingKey()
+            switch slot {
+            case .talk: chooseTalkKey(key)
+            case .translation: chooseTranslationKey(key)
+            }
         case .rejected(let rejection):
             keyChoiceRejection = rejection
         case .cancelled:
-            stopChoosingTalkKey()
+            stopChoosingKey()
         }
     }
 
@@ -508,8 +607,10 @@ final class PushToTalkController {
         }
     }
 
-    /// Applies one push to talk event. Internal so tests can drive it.
-    func handle(_ event: PushToTalkStateMachine.Event) {
+    /// Applies one push to talk event. `key` is the key the event is about, which tells a
+    /// dictation of the translation key from one of the talk key. Internal so tests can
+    /// drive it.
+    func handle(_ event: PushToTalkStateMachine.Event, key: TalkKey? = nil) {
         // The tap keeps Escape and the next press for a hands free dictation only while one
         // runs. It may have ended here some other way, or never started.
         defer {
@@ -520,6 +621,13 @@ final class PushToTalkController {
         guard let transition = machine.handle(event) else { return }
         state = machine.state
         logger.debug("Push to talk transition: \(String(describing: transition), privacy: .public)")
+        switch transition {
+        case .startedListening, .startedHandsFree, .resumedListening:
+            // The direction is read once, so the indicator and the paste agree.
+            holdTranslation = translationKeyIsOn && key == translationKey ? translation.direction() : nil
+        default:
+            break
+        }
         switch transition {
         case .startedListening, .startedHandsFree:
             problem = nil
@@ -536,8 +644,8 @@ final class PushToTalkController {
                 handle(.cancelled)
                 return
             }
-            // Loads the cleanup model when it was unloaded while idle, so it loads while
-            // the user speaks.
+            // Loads the model when it was unloaded while idle, so it loads while the user
+            // speaks, for cleanup and for translation.
             cleanup.dictationStarted()
             startRecording(cueDelay: transition == .startedHandsFree ? .zero : listeningCueDelay)
         case .awaitingSecondPress:
@@ -567,8 +675,9 @@ final class PushToTalkController {
             let target = frontmostApp()
             let start = captureStart
             let chosen = holdMicrophone
+            let translating = holdTranslation
             Task { [weak self] in
-                await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, releasedAt: released)
+                await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, translating: translating, releasedAt: released)
                 self?.handle(.processingFinished)
             }
         case .cancelledListening:
@@ -709,10 +818,10 @@ final class PushToTalkController {
             switch state {
             case .listening:
                 indicatorShown = true
-                onCue(.listening)
+                onCue(.listening(translation: holdTranslation))
             case .handsFree:
                 indicatorShown = true
-                onCue(.handsFree(finishHint: handsFreeKey.finishHint()))
+                onCue(.handsFree(finishHint: handsFreeKey.finishHint(), translation: holdTranslation))
             case .idle, .waitingForSecondPress, .processing:
                 break
             }
@@ -740,7 +849,8 @@ final class PushToTalkController {
 
     /// Ends a hold that was released: waits for the microphone to have started, records
     /// the short tail, stops, and transcribes unless the hold was too short or cut.
-    private func finishRecording(start: Task<Bool, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, releasedAt released: ContinuousClock.Instant) async {
+    /// `translating` is the direction when the translation key started the dictation.
+    private func finishRecording(start: Task<Bool, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
         // A failed start already set the problem.
         guard await start?.value == true else { return }
         if releaseTail > .zero {
@@ -764,11 +874,12 @@ final class PushToTalkController {
                 microphoneNotice = String(localized: "\(chosen.name) is not connected, so the system default input recorded.")
             }
         }
-        await transcribeAndInsert(recording, chosen: chosen, target: target, releasedAt: released)
+        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, releasedAt: released)
     }
 
-    /// Turns a recording into text and pastes it. Logs timings, never the text.
-    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, releasedAt released: ContinuousClock.Instant) async {
+    /// Turns a recording into text and pastes it, translated when `translating` is set and
+    /// the translation passes its checks. Logs timings, never the text.
+    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
         do {
             let (samples, silent) = await Self.prepared(recording)
             guard !samples.isEmpty else {
@@ -805,13 +916,22 @@ final class PushToTalkController {
                 return
             }
             // The rule steps come first, so the model sees their result, and any problem
-            // with the model leaves exactly that text. A model that the press of the talk
-            // key started to load is waited for, a bounded time.
+            // with the model leaves exactly that text. A model that the press of the key
+            // started to load is waited for, a bounded time.
             let ruled = text
-            if CleanupStep.isWorthCleaning(text), await cleanup.waitUntilLoaded() {
+            let translated = await translate(text, translating)
+            if let translated {
+                // In place of the cleanup step, since the translation prompt cleans up too.
+                text = translated.text
+            } else if CleanupStep.isWorthCleaning(text), await cleanup.waitUntilLoaded() {
                 text = await CleanupStep.run(text, complete: cleanup.complete).text
             }
-            originalText = text == ruled ? nil : ruled
+            let isTranslation = translated?.isTranslation == true
+            if isTranslation {
+                originalText = translated?.untranslated
+            } else {
+                originalText = text == ruled ? nil : ruled
+            }
             lastTranscript = text
             // Paste only into the app that was in front when the key was released.
             if let target, let current = frontmostApp(), current != target {
@@ -823,8 +943,11 @@ final class PushToTalkController {
                 // Notice rather than info, so the timing stays in the log store for later
                 // checks. Numbers only.
                 logger.notice("Release to paste took \(released.duration(to: .now), privacy: .public) for \(recording.duration, privacy: .public) s of audio")
-                markVocabularyUsed(in: text)
-                if let app = target ?? frontmostApp() {
+                // The words are in the text before translation.
+                markVocabularyUsed(in: isTranslation ? originalText ?? text : text)
+                // Orra never learns from a translated paste: a fix of the translation is no
+                // misheard word.
+                if !isTranslation, let app = target ?? frontmostApp() {
                     onPasted(text, app, originalText)
                 }
             case .skippedPasswordField:
@@ -839,8 +962,8 @@ final class PushToTalkController {
     }
 
     /// Paste Original Text in the menu: pastes the latest dictation as it was before the
-    /// cleanup model changed it, into the frontmost app. Orra does not learn from this
-    /// paste, and Copy Last Dictation still copies the cleaned text.
+    /// model translated it or cleaned it up, into the frontmost app. Orra does not learn
+    /// from this paste, and Copy Last Dictation still copies what was pasted first.
     func pasteOriginal() async {
         guard state == .idle, let originalText else { return }
         if let lastTranscript {
@@ -852,6 +975,36 @@ final class PushToTalkController {
         case .skippedPasswordField:
             notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
         }
+    }
+
+    /// The translation of a dictation of the translation key, or nil when the translation
+    /// step did not run: not a dictation of the translation key, the model not ready, also
+    /// after a bounded wait for a load the press of the key started, the text too long, or
+    /// nothing in it to translate, such as digits only. The step's result
+    /// holds the text without translation whenever the translation cannot be used. Every
+    /// case that pastes the text untranslated, other than one with nothing to translate or
+    /// already in the target language, leaves a notice that says so.
+    private func translate(_ text: String, _ direction: TranslationDirection?) async -> TranslationStep.Result? {
+        guard let direction else { return nil }
+        guard await translation.waitUntilLoaded() else {
+            notice = String(localized: "The local model is not ready, so the text was pasted without translation.")
+            return nil
+        }
+        guard let target = direction.target(for: text) else { return nil }
+        guard text.count <= TranslationStep.maximumLength else {
+            notice = String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation.")
+            return nil
+        }
+        // The model is loaded by now, so this does not wait.
+        let cleansUp = await cleanup.waitUntilLoaded()
+        let result = await TranslationStep.run(text, into: target, cleansUp: cleansUp, complete: translation.complete)
+        switch result.outcome {
+        case .translated, .unchanged:
+            break
+        case .unreadable, .heldBack, .timedOut, .failed:
+            notice = String(localized: "This dictation was pasted without translation.")
+        }
+        return result
     }
 
     /// Resampling and the silence check run off the main actor, because a long recording

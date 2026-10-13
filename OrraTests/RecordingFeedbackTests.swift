@@ -198,6 +198,70 @@ struct RecordingFeedbackTests {
         #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false))
     }
 
+    /// Every pair of the two switches saved by earlier versions reads as one choice of the
+    /// on screen hint, and that choice saves the same pair again, so nobody's hint changes.
+    @Test(arguments: [
+        (true, true, OnScreenHint.always),
+        (true, false, OnScreenHint.whileDictating),
+        (false, false, OnScreenHint.off),
+        (false, true, OnScreenHint.whileReady),
+    ])
+    func savedSwitchesKeepTheirMeaningAsTheOnScreenHint(indicator: Bool, idleBar: Bool, hint: OnScreenHint) throws {
+        let suite = "io.github.db-ol.OrraTests.hint-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(indicator, forKey: FeedbackPreference.indicatorKey)
+        defaults.set(idleBar, forKey: FeedbackPreference.idleBarKey)
+        let saved = FeedbackPreference.load(from: defaults)
+        #expect(OnScreenHint(saved) == hint)
+        #expect(hint.showsIndicator == indicator)
+        #expect(hint.showsIdleBar == idleBar)
+        let feedback = makeFeedback(preferences: saved)
+        #expect(feedback.onScreenHint == hint)
+        #expect(feedback.showsIndicator == indicator)
+        #expect(feedback.showsIdleBar == idleBar)
+    }
+
+    @Test func nothingSavedMeansTheHintShowsAlways() throws {
+        let suite = "io.github.db-ol.OrraTests.hint-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(OnScreenHint(FeedbackPreference.load(from: defaults)) == .always)
+    }
+
+    @Test func theBarOnlyWhileReadyIsOfferedOnlyToWhoeverHasIt() {
+        #expect(OnScreenHint.choices(current: .always) == [.always, .whileDictating, .off])
+        #expect(OnScreenHint.choices(current: .whileDictating) == [.always, .whileDictating, .off])
+        #expect(OnScreenHint.choices(current: .off) == [.always, .whileDictating, .off])
+        #expect(OnScreenHint.choices(current: .whileReady) == [.always, .whileDictating, .off, .whileReady])
+    }
+
+    @Test func pickingAHintSetsBothSwitchesAndSavesOnce() {
+        let feedback = makeFeedback(preferences: .init())
+        feedback.canDictate = true
+        feedback.onScreenHint = .off
+        #expect(outputs.saved == [FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false)])
+        #expect(outputs.presented == [.idle, nil])
+        #expect(feedback.showsIndicator == false)
+        #expect(feedback.showsIdleBar == false)
+        feedback.onScreenHint = .whileDictating
+        #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: true, showsIdleBar: false))
+        feedback.handle(.listening)
+        #expect(outputs.lastPresented == .listening)
+        feedback.onScreenHint = .always
+        #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: true, showsIdleBar: true))
+        // The same choice again saves nothing.
+        let saves = outputs.saved.count
+        feedback.onScreenHint = .always
+        #expect(outputs.saved.count == saves)
+    }
+
+    @Test func pickingAHintKeepsTheSounds() {
+        let feedback = makeFeedback(preferences: .init(showsIndicator: true, playsSounds: false, showsIdleBar: true))
+        feedback.onScreenHint = .whileDictating
+        #expect(outputs.saved == [FeedbackPreference.Values(showsIndicator: true, playsSounds: false, showsIdleBar: false)])
+    }
+
     /// The panel the app shows, made but never ordered front, so no window appears.
     @Test func theIndicatorPanelNeverTakesTheFocusOrTheClicks() throws {
         let feedback = makeFeedback()
@@ -260,6 +324,99 @@ struct RecordingFeedbackTests {
         #expect(try opacityAtTheBar(feedback) == 0)
         feedback.canDictate = true
         #expect(try opacityAtTheBar(feedback) > 0.3)
+    }
+
+    // MARK: The translation badge
+
+    @Test func theBadgeFollowsADictationOfTheTranslationKey() {
+        let feedback = makeFeedback()
+        feedback.handle(.listening(translation: .english))
+        #expect(feedback.display == .listening)
+        #expect(feedback.translation == .english)
+        feedback.handle(.transcribing)
+        #expect(feedback.translation == .english)
+        feedback.handle(.recordingStopped)
+        feedback.handle(.finished(message: nil))
+        #expect(feedback.translation == nil)
+        // A dictation of the talk key shows none.
+        feedback.handle(.listening)
+        #expect(feedback.translation == nil)
+        feedback.handle(.finished(message: nil))
+        feedback.handle(.handsFree(finishHint: "Press right Option to finish", translation: .automatic))
+        #expect(feedback.translation == .automatic)
+        #expect(feedback.display == .handsFree(finishHint: "Press right Option to finish"))
+        feedback.handle(.finished(message: "This dictation was pasted without translation."))
+        #expect(feedback.translation == nil)
+        // A hold that turns hands free keeps its badge and plays the start sound once.
+        feedback.handle(.listening(translation: .chinese))
+        feedback.handle(.handsFree(finishHint: "Press right Option to finish", translation: .chinese))
+        #expect(feedback.translation == .chinese)
+        #expect(outputs.played.filter { $0 == .start }.count == 4)
+    }
+
+    @Test func theBadgeAndWhatVoiceOverSays() {
+        #expect(TranslationDirection.automatic.badge == "译")
+        #expect(TranslationDirection.english.badge == "EN")
+        #expect(TranslationDirection.chinese.badge == "中")
+        #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: nil) == "Listening")
+        #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: .automatic) == "Listening This dictation will be translated.")
+        #expect(RecordingIndicatorView.accessibilityLabel("Press right Option to finish", translation: .english) == "Press right Option to finish This dictation will be translated into English.")
+        #expect(TranslationDirection.chinese.badgeDescription() == "This dictation will be translated into Chinese.")
+    }
+
+    /// The pixels of the indicator that are not clear.
+    private func drawnPixels(_ feedback: RecordingFeedback) throws -> Int {
+        let view = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
+        view.frame = NSRect(origin: .zero, size: RecordingIndicatorView.panelSize)
+        view.layoutSubtreeIfNeeded()
+        let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: image)
+        var count = 0
+        for x in 0..<image.pixelsWide {
+            for y in 0..<image.pixelsHigh where (image.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 {
+                count += 1
+            }
+        }
+        return count
+    }
+
+    @Test func theViewDrawsTheBadgeNextToTheBars() throws {
+        let plain = makeFeedback()
+        plain.handle(.listening)
+        let translated = makeFeedback()
+        translated.handle(.listening(translation: .english))
+        #expect(try drawnPixels(translated) > drawnPixels(plain))
+    }
+
+    /// Renders the indicator with the badge to PNGs, for a look without running the app.
+    /// Off unless ORRA_SETTINGS_SNAPSHOTS names a folder, as for the settings pages.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
+    func renderTheBadge() throws {
+        let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let language = Bundle.main.preferredLocalizations.first ?? "en"
+        let hint = TalkKey.rightOption.finishHint()
+        let cues: [(String, [DictationCue])] = [
+            ("listening-automatic", [.listening(translation: .automatic)]),
+            ("listening-english", [.listening(translation: .english)]),
+            ("listening-chinese", [.listening(translation: .chinese)]),
+            ("listening-talk-key", [.listening]),
+            ("hands-free-automatic", [.handsFree(finishHint: hint, translation: .automatic)]),
+            ("transcribing-english", [.listening(translation: .english), .transcribing]),
+        ]
+        for (name, sequence) in cues {
+            let feedback = makeFeedback(FeedbackOutputs())
+            sequence.forEach(feedback.handle)
+            // On a mid gray, like a window behind the panel, so the dark capsule shows.
+            let view = RecordingIndicatorView(feedback: feedback)
+                .background(Color(white: 0.55))
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 2
+            let image = try #require(renderer.nsImage)
+            let tiff = try #require(image.tiffRepresentation)
+            let png = try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+            try png.write(to: folder.appendingPathComponent("\(language)-badge-\(name).png"))
+        }
     }
 
     @Test func theIdleBarWaitsUntilOrraCanDictate() {

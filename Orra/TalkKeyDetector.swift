@@ -26,7 +26,9 @@ import CoreGraphics
 /// - A left hand modifier is part of many shortcuts, such as Command+C, so its hold starts
 ///   only once the key has been held alone for `leftKeyDelay`. Until then nothing records
 ///   and no cue plays, and any other key, modifier or click turns the press into a shortcut
-///   silently and lets every event through. The right hand modifiers and fn start at once.
+///   silently and lets every event through. The right hand modifiers and fn start at once,
+///   unless they are among `delayedKeys`, which wait the same way. The translation key is
+///   one, so Option shortcuts and the characters right Option types keep working.
 /// - Any other key going down, or another modifier changing, during a hold turns the hold
 ///   into a shortcut such as Fn+Delete (forward delete), Fn+arrows (Home, End, Page Up,
 ///   Page Down) or right Control+C. The hold is cancelled and the other key passes through
@@ -172,6 +174,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     static let escapeKeyCode: Int64 = 0x35
 
     private(set) var keys: Set<TalkKey>
+    /// Keys that wait for `leftKeyDelay` before they record, like the left hand keys, even
+    /// on the right hand side. Only keys in `keys` count.
+    private(set) var delayedKeys: Set<TalkKey>
     /// Whether a double press starts a hands free dictation.
     private(set) var handsFreeEnabled: Bool
     private(set) var phase: Phase = .up {
@@ -189,9 +194,15 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     /// double press.
     private var isSecondPress = false
 
-    init(keys: Set<TalkKey>, handsFreeEnabled: Bool = true) {
+    init(keys: Set<TalkKey>, delayedKeys: Set<TalkKey> = [], handsFreeEnabled: Bool = true) {
         self.keys = keys
+        self.delayedKeys = delayedKeys
         self.handsFreeEnabled = handsFreeEnabled
+    }
+
+    /// Whether a press of `key` waits for `leftKeyDelay` before it records.
+    func waitsBeforeRecording(_ key: TalkKey) -> Bool {
+        key.waitsBeforeRecording || delayedKeys.contains(key)
     }
 
     /// The timer the current phase needs, if any.
@@ -203,10 +214,12 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         }
     }
 
-    /// Replaces the talk keys. Returns `.cancelled` when a hold, a tap's recording or a hands
-    /// free dictation of a key that is no longer a talk key was in progress.
-    mutating func setKeys(_ newKeys: Set<TalkKey>) -> PushToTalkStateMachine.Event? {
+    /// Replaces the talk keys and the keys among them that wait. Returns `.cancelled` when a
+    /// hold, a tap's recording or a hands free dictation of a key that is no longer a talk
+    /// key was in progress. A press under way keeps the wait it started with.
+    mutating func setKeys(_ newKeys: Set<TalkKey>, delayedKeys newDelayedKeys: Set<TalkKey> = []) -> PushToTalkStateMachine.Event? {
         keys = newKeys
+        delayedKeys = newDelayedKeys
         guard let active = phase.key, !newKeys.contains(active) else { return nil }
         return reset()
     }
@@ -337,7 +350,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
                 return .passThrough
             }
             pressedAt = now
-            if key.waitsBeforeRecording {
+            if waitsBeforeRecording(key) {
                 phase = .arming(key)
                 return Decision(event: nil, swallow: swallow)
             }
@@ -380,7 +393,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             // key or click before then makes it a shortcut.
             pressedAt = now
             isSecondPress = true
-            if key.waitsBeforeRecording {
+            if waitsBeforeRecording(key) {
                 // A left hand key's tap never recorded, see `tapLimit`.
                 phase = .arming(key)
                 return Decision(event: recording ? .cancelled : nil, swallow: swallow)

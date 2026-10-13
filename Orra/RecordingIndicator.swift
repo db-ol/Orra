@@ -165,18 +165,29 @@ struct RecordingIndicatorView: View {
         .environment(\.colorScheme, .dark)
     }
 
+    /// What VoiceOver reads for the indicator: what it shows, and that the dictation will
+    /// be translated when the badge shows.
+    static func accessibilityLabel(_ shown: String, translation: TranslationDirection?) -> String {
+        guard let translation else { return shown }
+        return "\(shown) \(translation.badgeDescription())"
+    }
+
     @ViewBuilder private var content: some View {
         switch feedback.presented {
         case .listening:
-            IndicatorBars(heights: IndicatorBars.heights(level: feedback.level))
-                .animation(.linear(duration: 0.08), value: feedback.level)
-                .barCapsuleStyle()
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Listening")
+            HStack(spacing: 8) {
+                IndicatorBars(heights: IndicatorBars.heights(level: feedback.level))
+                    .animation(.linear(duration: 0.08), value: feedback.level)
+                badge
+            }
+            .barCapsuleStyle()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: Self.accessibilityLabel(String(localized: "Listening"), translation: feedback.translation)))
         case .handsFree(let hint):
             HStack(spacing: 10) {
                 IndicatorBars(heights: IndicatorBars.heights(level: feedback.level))
                     .animation(.linear(duration: 0.08), value: feedback.level)
+                badge
                 // Already in the user's language, so shown as it is.
                 Text(verbatim: hint)
                     .font(.callout)
@@ -184,12 +195,15 @@ struct RecordingIndicatorView: View {
             }
             .barCapsuleStyle()
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(verbatim: hint))
+            .accessibilityLabel(Text(verbatim: Self.accessibilityLabel(hint, translation: feedback.translation)))
         case .transcribing:
-            TranscribingBars()
-                .barCapsuleStyle()
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Transcribing…")
+            HStack(spacing: 8) {
+                TranscribingBars()
+                badge
+            }
+            .barCapsuleStyle()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: Self.accessibilityLabel(String(localized: "Transcribing…"), translation: feedback.translation)))
         case .message(let text):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "exclamationmark.circle")
@@ -218,6 +232,33 @@ struct RecordingIndicatorView: View {
         case nil:
             EmptyView()
         }
+    }
+}
+
+extension RecordingIndicatorView {
+    /// The badge of a dictation that will be translated, or nothing.
+    @ViewBuilder fileprivate var badge: some View {
+        if let translation = feedback.translation {
+            TranslationBadge(direction: translation)
+        }
+    }
+}
+
+/// The small badge next to the bars of a dictation of the translation key: dark text on a
+/// white rounded square, the color of the bars, so it reads on the dark capsule. It never
+/// moves, so it needs nothing for Reduce Motion, and VoiceOver reads it with the
+/// indicator's label.
+struct TranslationBadge: View {
+    let direction: TranslationDirection
+
+    var body: some View {
+        Text(verbatim: direction.badge)
+            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 4)
+            .frame(minWidth: 18, minHeight: 16)
+            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(.white))
+            .accessibilityHidden(true)
     }
 }
 

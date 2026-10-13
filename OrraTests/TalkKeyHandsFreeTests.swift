@@ -10,6 +10,7 @@ struct TalkKeyHandsFreeTests {
 
     static let escape: Int64 = 53
     static let c: Int64 = 8
+    static let e: Int64 = 14
     static let tab: Int64 = 48
     static let shift: Int64 = 56
     static let rightControlFlags = CGEventFlags(rawValue: CGEventFlags.maskControl.rawValue | 0x2000)
@@ -461,6 +462,119 @@ struct TalkKeyHandsFreeTests {
         #expect(detector.phase == .passingThrough(.leftControl))
     }
 
+    // MARK: Keys that wait on the right hand side
+
+    /// The translation key waits like a left hand key, so right Option still types its
+    /// characters and works in shortcuts, while the talk key next to it starts at once.
+    @Test mutating func aDelayedRightKeyRecordsOnlyAfterTheDelay() {
+        var detector = TalkKeyDetector(keys: [.rightControl, .rightOption], delayedKeys: [.rightOption])
+        #expect(detector.waitsBeforeRecording(.rightOption))
+        #expect(detector.waitsBeforeRecording(.rightControl) == false)
+        #expect(down(.rightOption, &detector) == .passThrough)
+        #expect(detector.phase == .arming(.rightOption))
+        #expect(detector.timer == .leftKeyDelay)
+        #expect(TalkKeyDetector.leftKeyDelay == .milliseconds(300))
+        clock.advance(TalkKeyDetector.leftKeyDelay)
+        #expect(fire(&detector) == .pressed(isRepeat: false))
+        #expect(detector.phase == .holding(.rightOption))
+        clock.advance(.seconds(2))
+        #expect(up(.rightOption, &detector) == Decision(event: .released, swallow: false))
+        // The talk key does not wait.
+        clock.advance(.seconds(1))
+        #expect(down(.rightControl, &detector) == Decision(event: .pressed(isRepeat: false), swallow: false))
+    }
+
+    @Test mutating func anOptionShortcutDuringTheWaitIsSilent() {
+        var detector = TalkKeyDetector(keys: [.rightControl, .rightOption], delayedKeys: [.rightOption])
+        let optionFlags = TalkKey.rightOption.downFlag.union(.maskAlternate)
+        _ = down(.rightOption, &detector)
+        clock.advance(.milliseconds(120))
+        // Option E types an accent: nothing records and every event passes through.
+        #expect(keyDown(Self.e, &detector, flags: optionFlags) == .passThrough)
+        #expect(detector.phase == .passingThrough(.rightOption))
+        #expect(detector.timer == nil)
+        clock.advance(.milliseconds(400))
+        #expect(up(.rightOption, &detector) == .passThrough)
+        #expect(detector.phase == .up)
+        // Option with another modifier and a click during the wait are silent too.
+        _ = down(.rightOption, &detector)
+        #expect(detector.handle(type: .flagsChanged, keyCode: Self.shift, flags: optionFlags.union(.maskShift), at: clock.now) == .passThrough)
+        #expect(detector.phase == .passingThrough(.rightOption))
+        _ = up(.rightOption, &detector, with: .maskShift)
+        _ = down(.rightOption, &detector)
+        #expect(detector.cancelForClick() == nil)
+        #expect(detector.phase == .passingThrough(.rightOption))
+    }
+
+    @Test mutating func aShortcutAfterTheWaitCancelsTheRecording() {
+        var detector = TalkKeyDetector(keys: [.rightOption], delayedKeys: [.rightOption])
+        _ = down(.rightOption, &detector)
+        clock.advance(TalkKeyDetector.leftKeyDelay)
+        #expect(fire(&detector) == .pressed(isRepeat: false))
+        #expect(keyDown(Self.e, &detector, flags: TalkKey.rightOption.downFlag.union(.maskAlternate)) == Decision(event: .cancelled, swallow: false))
+    }
+
+    @Test mutating func aDoublePressOfTheTranslationKeyStartsHandsFree() {
+        var detector = TalkKeyDetector(keys: [.rightControl, .rightOption], delayedKeys: [.rightOption])
+        var machine = PushToTalkStateMachine()
+        var transitions: [PushToTalkStateMachine.Transition] = []
+        for event in startHandsFree(.rightOption, &detector) {
+            if let transition = machine.handle(event) {
+                transitions.append(transition)
+            }
+        }
+        // As for a left hand key, the tap never recorded, so the microphone starts once.
+        #expect(transitions == [.startedHandsFree])
+        #expect(detector.phase == .handsFree(.rightOption))
+        // The talk key does not end it, the translation key does.
+        clock.advance(.seconds(3))
+        _ = down(.rightControl, &detector)
+        #expect(up(.rightControl, &detector).event == nil)
+        #expect(detector.phase == .handsFree(.rightOption))
+        _ = down(.rightOption, &detector)
+        clock.advance(.milliseconds(100))
+        #expect(up(.rightOption, &detector) == Decision(event: .released, swallow: false))
+    }
+
+    @Test mutating func withHandsFreeOffADelayedKeyTapLeavesNothing() {
+        var detector = TalkKeyDetector(keys: [.rightOption], delayedKeys: [.rightOption], handsFreeEnabled: false)
+        #expect(tap(.rightOption, &detector) == [])
+        #expect(detector.phase == .up)
+        #expect(detector.timer == nil)
+    }
+
+    /// A tap of the talk key, then the translation key within the window: the tap's
+    /// recording is dropped, and the translation key records after its own wait.
+    @Test mutating func theTranslationKeyAfterATalkKeyTapStartsItsOwnRecording() {
+        var detector = TalkKeyDetector(keys: [.rightControl, .rightOption], delayedKeys: [.rightOption])
+        var machine = PushToTalkStateMachine()
+        var transitions: [PushToTalkStateMachine.Transition] = []
+        func feed(_ event: Event?) {
+            if let event, let transition = machine.handle(event) {
+                transitions.append(transition)
+            }
+        }
+        feed(down(.rightControl, &detector).event)
+        clock.advance(.milliseconds(80))
+        feed(up(.rightControl, &detector).event)
+        clock.advance(.milliseconds(100))
+        feed(down(.rightOption, &detector).event)
+        #expect(detector.phase == .arming(.rightOption))
+        clock.advance(TalkKeyDetector.leftKeyDelay)
+        feed(fire(&detector))
+        #expect(detector.phase == .holding(.rightOption))
+        #expect(transitions == [.startedListening, .awaitingSecondPress, .cancelledListening, .startedListening])
+    }
+
+    @Test func changingTheDelayedKeysKeepsAPressUnderWay() {
+        var detector = TalkKeyDetector(keys: [.rightOption], delayedKeys: [.rightOption])
+        _ = detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: TalkKey.rightOption.downFlag.union(.maskAlternate), at: .now)
+        #expect(detector.setKeys([.rightOption, .rightCommand], delayedKeys: [.rightCommand]) == nil)
+        #expect(detector.phase == .arming(.rightOption))
+        #expect(detector.delayedKeys == [.rightCommand])
+        #expect(detector.waitsBeforeRecording(.rightOption) == false)
+    }
+
     // MARK: Random sequences
 
     /// Plays thousands of random presses of eight modifiers with hands free on, with key
@@ -487,10 +601,12 @@ struct TalkKeyHandsFreeTests {
             Modifier(keyCode: 54, shared: .maskCommand, bit: CGEventFlags(rawValue: 0x10)),
             Modifier(keyCode: Self.shift, shared: .maskShift, bit: CGEventFlags(rawValue: 0x02)),
         ]
-        let keySets: [Set<TalkKey>] = [[.rightControl], [.fn], [.leftCommand], [.rightControl, .fn], [.leftControl, .rightOption], Set(TalkKey.allCases)]
+        let keySets: [Set<TalkKey>] = [[.rightControl], [.fn], [.leftCommand], [.rightControl, .fn], [.leftControl, .rightOption], [.rightControl, .rightOption], Set(TalkKey.allCases)]
+        // Every other seed has right Option wait as the translation key does.
+        let delayed: Set<TalkKey> = seed.isMultiple(of: 2) ? [.rightOption] : []
         var random = TalkKeyDetectorTests.SplitMix(state: seed)
         var down = Array(repeating: false, count: modifiers.count)
-        var detector = TalkKeyDetector(keys: keySets[Int(seed) % keySets.count])
+        var detector = TalkKeyDetector(keys: keySets[Int(seed) % keySets.count], delayedKeys: delayed)
         var machine = PushToTalkStateMachine()
         var now = ContinuousClock.now
 
@@ -514,7 +630,7 @@ struct TalkKeyHandsFreeTests {
             now = now.advanced(by: .milliseconds(Int(random.next() % 250)))
             let roll = random.next() % 100
             if roll < 2 {
-                feed(detector.setKeys(keySets[Int(random.next() % UInt64(keySets.count))]))
+                feed(detector.setKeys(keySets[Int(random.next() % UInt64(keySets.count))], delayedKeys: delayed))
             } else if roll < 3 {
                 feed(detector.reset())
             } else if roll < 7 {

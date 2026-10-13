@@ -194,7 +194,9 @@ A new server, or any other network use, needs the maintainer's approval, see AGE
 ## The cleanup model
 
 Qwen3.5 4B in the 4 bit MLX build (mlx-community/Qwen3.5-4B-4bit, Apache-2.0), for
-"Clean up with a local model" in Settings > General. The pins are in
+"Clean up with a local model" in Settings > Clean Up Text and, since 2026-10-13, for
+"Translate with the translation key" in Settings > Translation, which use the same files
+and the same download. The pins are in
 `ModelManifest.qwen35Cleanup` in Orra/RewriteEngine.swift, and Orra/TextCleanup.swift
 drives the download from Settings. Everything above about servers, retries, ranges,
 hashes, staging and backups applies to it as well. It replaced Qwen3 4B Instruct 2507
@@ -203,12 +205,13 @@ cleanup.
 
 When Orra goes online for it:
 
-- Only after the user turns cleanup on and agrees to the download in the dialog that
-  names its size, 3.05 GB, or chooses Download, Resume Download or Try Again under the
-  switch while cleanup is on. Cancel Download keeps the bytes on disk and turns cleanup
-  off again.
-- Never at launch, and never while cleanup is off. Launch only looks at the installed
-  folder's file sizes. Loading uses local files only.
+- Only after the user turns cleanup or translation on and agrees to the download in the
+  dialog that names its size, 3.05 GB, or chooses Download, Resume Download or Try Again
+  under a switch that is on. Turning on the other switch while a download was agreed to
+  for one asks nothing more. Cancel Download keeps the bytes on disk and turns both
+  switches off again.
+- Never at launch, and never while cleanup and translation are both off. Launch only
+  looks at the installed folder's file sizes. Loading uses local files only.
 
 Servers, at these commits. On 2026-10-11 each of the three served the three small files
 and tokenizer.json with the pinned SHA-256 values and answered a Range request on the
