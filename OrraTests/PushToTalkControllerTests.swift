@@ -926,7 +926,9 @@ struct PushToTalkControllerTests {
     }
 
     @Test func aShortHoldClearsTheIndicatorAtTheRelease() async throws {
-        let controller = await makeController(minimumHold: .seconds(10))
+        // An hour, so a runner that stalls for seconds before the release still makes a
+        // short hold. On main, with 10 s, a stall of the busy runner made it a long one.
+        let controller = await makeController(minimumHold: .seconds(3600))
         let cues = CueRecorder(controller)
         controller.handle(.pressed(isRepeat: false))
         try await waitUntil { cues.list == [.listening] && mic.calls.contains("start") }
