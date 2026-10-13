@@ -73,7 +73,7 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: SettingsWindow.showNotification)) { _ in
             sheet = SettingsWindow.takeOpeningSheet()
         }
-        .frame(minWidth: 520, idealWidth: 600, maxWidth: .infinity, minHeight: 360, idealHeight: 400, maxHeight: .infinity)
+        .frame(minWidth: 520, idealWidth: 600, maxWidth: .infinity, minHeight: 400, idealHeight: 480, maxHeight: .infinity)
     }
 
     /// What a sheet holds.

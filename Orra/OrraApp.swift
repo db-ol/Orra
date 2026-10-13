@@ -20,7 +20,7 @@ import SwiftUI
             SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
         }
         .windowResizability(.contentMinSize)
-        .defaultSize(width: 600, height: 400)
+        .defaultSize(width: 600, height: 480)
         .defaultLaunchBehavior(.suppressed)
         .commands {
             CommandGroup(replacing: .appSettings) {
