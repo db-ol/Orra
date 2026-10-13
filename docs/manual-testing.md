@@ -1278,6 +1278,9 @@ Chinese, but not seen in the running app:
   its switch and Options…, then Translation with its switch and Translate into right
   under it, Microphone with the input device, and System with Open at Login and
   Advanced….
+- [ ] The sidebar cannot be hidden. Dragging the divider to the left edge leaves it at its
+  narrowest width, there is no sidebar button in the toolbar, and View > Hide Sidebar
+  (Control Command S), where it shows, keeps it in place.
 - [ ] The talk key field and Change… work as before. The microphone picker works as it did
   on the Microphone page, also with a chosen microphone that is not connected, and its
   tooltip explains the system default.
