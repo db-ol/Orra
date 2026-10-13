@@ -1441,7 +1441,7 @@ struct PushToTalkControllerTests {
         let controller = await controller(translation: translation)
         var reported: [String] = []
         var stopped: [String] = []
-        controller.onPasted = { text, _, _ in reported.append(text) }
+        controller.onPasted = { text, _, _, _ in reported.append(text) }
         controller.onPasteOriginal = { stopped.append($0) }
         speech.reply = Self.spoken
         try await dictate(controller, with: .rightOption)
@@ -1482,7 +1482,7 @@ struct PushToTalkControllerTests {
         let translation = FakeTranslation()
         let controller = await controller(translation: translation)
         var reported: [String] = []
-        controller.onPasted = { text, _, _ in reported.append(text) }
+        controller.onPasted = { text, _, _, _ in reported.append(text) }
         try await dictate(controller, with: .rightControl)
         try await dictate(controller)
         #expect(translation.calls == 0)
@@ -1497,7 +1497,7 @@ struct PushToTalkControllerTests {
         let translation = FakeTranslation(answer: #"{"cleaned": "我们下周二开会。", "translation": "We have a meeting next Tuesday at 3."}"#)
         let controller = await controller(translation: translation)
         var reported: [String] = []
-        controller.onPasted = { text, _, _ in reported.append(text) }
+        controller.onPasted = { text, _, _, _ in reported.append(text) }
         speech.reply = Self.spoken
         try await dictate(controller, with: .rightOption)
         let ruled = try #require(inserter.inserted.first)
