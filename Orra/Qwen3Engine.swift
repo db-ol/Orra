@@ -11,12 +11,18 @@ import Qwen3ASR
 actor Qwen3Engine {
     private var model: Qwen3ASRModel?
     private let folder: @Sendable () -> URL?
+    private let modelID: String
 
-    /// - Parameter folder: The folder to load the model from, or nil while it is not there.
-    ///   The app passes the folder ModelInstaller fills. The real model tests pass the copy
-    ///   on this Mac.
-    init(folder: @escaping @Sendable () -> URL? = { SpeechModel.installedFolder() }) {
+    /// - Parameters:
+    ///   - folder: The folder to load the model from, or nil while it is not there. The app
+    ///     passes the folder ModelInstaller fills. The real model tests pass the copy on
+    ///     this Mac.
+    ///   - modelID: The Hugging Face ID of the build in the folder. speech-swift reads the
+    ///     model size and the quantization bits from it. The app uses SpeechModel.id. The
+    ///     speech corpus evaluation passes another to try another build.
+    init(folder: @escaping @Sendable () -> URL? = { SpeechModel.installedFolder() }, modelID: String = SpeechModel.id) {
         self.folder = folder
+        self.modelID = modelID
     }
 
     func load() async throws {
@@ -28,7 +34,7 @@ actor Qwen3Engine {
         // dictations. It also raises MLX's wired limit (MetalBudget.pinMemory in
         // speech-swift), so the model's MLX buffers stay wired in memory while Orra runs.
         // That last point is read from the source, not measured.
-        let loaded = try await Qwen3ASRModel.fromPretrained(modelId: SpeechModel.id, cacheDir: folder, offlineMode: true)
+        let loaded = try await Qwen3ASRModel.fromPretrained(modelId: modelID, cacheDir: folder, offlineMode: true)
         // One second of silence before the first dictation. MLX reads the weights only when
         // they are first used. In a benchmark on 2026-10-05, the first launch of a program
         // with a freshly compiled MLX Metal library also took about 2 s for its first
