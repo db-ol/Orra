@@ -40,7 +40,9 @@ Build and test commands, run in the repository root:
   tests, and the opt in renderings of the settings pages and of the indicator's badge.
   With the idle unload of the cleanup model, before the translation key was merged, it
   ended in TEST SUCCEEDED with 2300 test cases passed and 7 skipped on 2026-10-13, the
-  two more skipped ones being the opt in idle unload measurements.
+  two more skipped ones being the opt in idle unload measurements. With both merged, the
+  test command ended in TEST SUCCEEDED with 2399 test cases passed and 11 skipped on
+  2026-10-13, the skipped ones being the 9 above and the two idle unload measurements.
   - SettingsPageTests checks the sidebar's pages and their order, Translation after Clean
     Up Text, that each has its own icon, that Change Talk Key… asks for Dictation while
     Settings… afterwards opens on General, that Change Translation Key… asks for
