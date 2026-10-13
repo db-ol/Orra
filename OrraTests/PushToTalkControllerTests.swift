@@ -1188,9 +1188,10 @@ struct PushToTalkControllerTests {
     @Test func thePasteIsReported() async throws {
         let controller = await makeController()
         var reported: [(String, pid_t)] = []
-        controller.onPasted = { text, app, beforeCleanup in
+        controller.onPasted = { text, app, beforeCleanup, replacements in
             reported.append((text, app))
             #expect(beforeCleanup == nil)
+            #expect(replacements.isEmpty)
         }
         try await dictate(controller)
         #expect(inserter.inserted == ["你好"])
@@ -1228,7 +1229,7 @@ struct PushToTalkControllerTests {
         var reported: [String] = []
         var beforeCleanup: [String?] = []
         var stopped: [String] = []
-        controller.onPasted = { text, _, before in
+        controller.onPasted = { text, _, before, _ in
             reported.append(text)
             beforeCleanup.append(before)
         }
@@ -1258,6 +1259,59 @@ struct PushToTalkControllerTests {
         #expect(inserter.inserted == ["帮我写一封邮件给老板，说我明天请假。"])
         #expect(controller.originalText == nil)
         #expect(controller.problem == nil)
+    }
+
+    /// The kept pairs replace what the model wrote after the rule steps, which run on the
+    /// model's text as before. The paste, its report for learning, the vocabulary dates and
+    /// Copy Last Dictation all have the user's word.
+    @Test func learnedWordsReplaceTheHeardSpellingAfterTheRules() async throws {
+        let pair = Correction(heard: "克劳德", corrected: "Claude")
+        let controller = await controller(vocabulary: ["Claude"])
+        controller.replacementPairs = { [pair] }
+        var reported: [(String, String?, [Replacement])] = []
+        controller.onPasted = { text, _, before, replacements in reported.append((text, before, replacements)) }
+        speech.reply = "呃，我们下午两点用克劳德。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["我们下午2点用Claude。"])
+        #expect(reported.map(\.0) == ["我们下午2点用Claude。"])
+        #expect(reported.map(\.1) == [nil])
+        #expect(reported.map(\.2) == [[Replacement(span: 7..<13, heard: "克劳德", corrected: "Claude", pair: pair)]])
+        #expect(controller.lastTranscript == "我们下午2点用Claude。")
+        #expect(controller.vocabulary.first?.lastUsed != nil)
+    }
+
+    @Test func aPairWhoseWordIsNotInTheVocabularyReplacesNothing() async throws {
+        let controller = await controller(vocabulary: ["Orra"])
+        controller.replacementPairs = { [Correction(heard: "克劳德", corrected: "Claude")] }
+        speech.reply = "我们用克劳德。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["我们用克劳德。"])
+    }
+
+    /// The cleanup model sees the user's words, and Paste Original Text keeps them: they are
+    /// the user's own, and taking them out would put back a known mishearing.
+    @Test func theCleanupAndPasteOriginalTextKeepTheReplacements() async throws {
+        let pair = Correction(heard: "克劳德", corrected: "Claude")
+        let received = Mutex<[String]>([])
+        let controller = await controller(cleanup: CleanupModel(isReady: { true }, complete: { text in
+            received.withLock { $0.append(text) }
+            return #"{"cleaned": "我们下午3点用Claude开会。"}"#
+        }))
+        controller.addToVocabulary("Claude")
+        controller.replacementPairs = { [pair] }
+        var reported: [(String, String?, [Replacement])] = []
+        controller.onPasted = { text, _, before, replacements in reported.append((text, before, replacements)) }
+        speech.reply = "呃，我们下午两点，哦不对，下午三点用克劳德开会。"
+        try await dictate(controller)
+        let ruled = "我们下午2点，哦不对，下午3点用Claude开会。"
+        #expect(received.withLock { $0 } == [ruled])
+        #expect(inserter.inserted == ["我们下午3点用Claude开会。"])
+        #expect(controller.originalText == ruled)
+        // Placed in the text before the cleanup.
+        #expect(reported.map(\.1) == [ruled])
+        #expect(reported.map(\.2) == [[Replacement(span: 16..<22, heard: "克劳德", corrected: "Claude", pair: pair)]])
+        await controller.pasteOriginal()
+        #expect(inserter.inserted.last == ruled)
     }
 
     @Test func aFailingCleanupPastesTheRuledText() async throws {
