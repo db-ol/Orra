@@ -340,6 +340,31 @@ Build and test commands, run in the repository root:
     2026-10-12 they took 0.36, 0.88, 1.75 and 3.41 s, and 0.34, 0.78, 1.48 and 2.33 s. Each
     stayed within the limit of 2 s plus 15 ms a character. Text over 400 characters is
     pasted without cleanup.
+  - Translation with the local model, added on 2026-10-12 and not yet in the interface:
+  - TranslationDirectionTests checks that the direction rule gives each of 493 texts the
+    source language direction.py of the translation benchmark gave it, the 358 it was
+    tuned on among them, and that it is wrong on one labelled case only (cm04).
+    TranslationPromptTests checks both translation prompts character for character against
+    the model's chat template, and the reading of the answer. TranslationGuardTests checks
+    that the translation checks give each of 1947 outputs the verdict and reason of
+    guards2.py and the acronym check, and one case for each check by hand.
+    TranslationStepTests checks with a stand in model that a translation that fails a
+    check, an unreadable answer, an error or a timeout pastes the text without
+    translation, the model's cleanup when cleanup is on and it passes the cleanup checks.
+    TranslationTokenizerTests, which needs only the tokenizer files, checks the token IDs
+    of both prompts and that every prompt of the translation evaluation starts with its
+    target's cached prefix.
+  - TranslationModelEvaluationTests runs the real model on the 178 regular, 70
+    adversarial and 116 translation probe cases of Tools/rewrite-eval, into both targets,
+    only with TEST_RUNNER_ORRA_TRANSLATION_EVAL=1, in a Release build like the cleanup
+    evaluation:
+
+        TEST_RUNNER_ORRA_TRANSLATION_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<model folder> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/TranslationModelEvaluationTests
+
+    The report holds counts, times and case IDs only. With
+    TEST_RUNNER_ORRA_TRANSLATION_DETAILS=<file> it also writes every run with its text, so
+    a person can judge the listed translations, and with
+    TEST_RUNNER_ORRA_TRANSLATION_COMPARE=1 each case also runs without the prefix cache.
 - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
