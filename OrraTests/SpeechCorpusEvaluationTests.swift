@@ -18,6 +18,10 @@ import Testing
 /// The cleanup model is not run. Clips run whole, also the long ones over Orra's 60 s
 /// recording limit.
 ///
+/// LanguageGuard is part of that path: language_passes counts the passes it added to a
+/// clip. With TEST_RUNNER_ORRA_SPEECH_EVAL_HINTS=1 the test also writes text_chinese and
+/// text_english, the clip transcribed with each language as the hint, and their times.
+///
 /// Optional: TEST_RUNNER_ORRA_SPEECH_MODEL_DIR picks another model folder, and
 /// TEST_RUNNER_ORRA_SPEECH_MODEL_ID the Hugging Face ID speech-swift reads its size and
 /// bits from (SpeechModel.id by default). TEST_RUNNER_ORRA_SPEECH_EVAL_NAME names the
@@ -37,9 +41,14 @@ struct SpeechCorpusEvaluationTests {
         #expect(clips.count == 392)
 
         let engine = Qwen3Engine(folder: { modelFolder }, modelID: modelID)
+        // Counts the passes LanguageGuard asks for, with Chinese or English as the language.
+        let hintedPasses = PassCounter()
         let transcription = Transcription(
             load: { try await engine.load() },
-            transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) }
+            transcribe: { samples, context, language in
+                if language != nil { hintedPasses.count += 1 }
+                return try await engine.transcribe(samples, context: context, language: language)
+            }
         )
         let loadStarted = ContinuousClock.now
         try await transcription.load()
@@ -60,6 +69,7 @@ struct SpeechCorpusEvaluationTests {
                 row["skipped_silent"] = true
             } else {
                 let started = ContinuousClock.now
+                hintedPasses.count = 0
                 let raw = try await transcription.transcribe(samples, vocabulary: [], audioSeconds: audioSeconds)
                 let decodeSeconds = SpeechCorpus.seconds(started.duration(to: .now))
                 let guarded = TranscriptGuard.clean(raw, audioSeconds: audioSeconds)
@@ -70,8 +80,21 @@ struct SpeechCorpusEvaluationTests {
                 // Which post step changed the model's text, for reading the differences.
                 row["guard_changed"] = raw.trimmingCharacters(in: .whitespacesAndNewlines) != guarded
                 row["simplified_changed"] = guarded != text
+                row["language_passes"] = hintedPasses.count
                 decodeTotal += decodeSeconds
                 audioTotal += audioSeconds
+                // Optional: the same clip with each language as the hint, for studying
+                // LanguageGuard. Straight from the engine, not part of decode_seconds.
+                if SpeechCorpus.environment["ORRA_SPEECH_EVAL_HINTS"] != nil {
+                    for language in [SpeechLanguage.chinese, .english] {
+                        let hintStarted = ContinuousClock.now
+                        let hinted = try await engine.transcribe(samples, language: language)
+                        let hintSeconds = SpeechCorpus.seconds(hintStarted.duration(to: .now))
+                        let key = language.rawValue.lowercased()
+                        row["text_\(key)"] = ChineseText.simplified(TranscriptGuard.clean(hinted, audioSeconds: audioSeconds))
+                        row["decode_seconds_\(key)"] = hintSeconds
+                    }
+                }
             }
             results[clip] = row
         }
@@ -100,6 +123,11 @@ struct SpeechCorpusEvaluationTests {
         print(summary)
         Attachment.record(summary, named: "speech-corpus-evaluation.txt")
     }
+}
+
+@MainActor
+final class PassCounter {
+    var count = 0
 }
 
 enum SpeechCorpus {

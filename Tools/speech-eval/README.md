@@ -78,6 +78,11 @@ Orra's runs, decode time and real time factor (decode time over audio time).
 
        TEST_RUNNER_ORRA_SPEECH_EVAL=1 TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=$HOME/projects/orra-project/bench/speech-corpus TEST_RUNNER_ORRA_SPEECH_EVAL_OUT=$HOME/projects/orra-project/bench/speech-corpus/results xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/SpeechCorpusEvaluationTests
 
+   The path includes LanguageGuard, and `language_passes` counts the passes it added to a
+   clip. With `TEST_RUNNER_ORRA_SPEECH_EVAL_HINTS=1` the test also writes `text_chinese`
+   and `text_english`, each clip transcribed with that language as the hint, and their
+   times.
+
    Optional: `TEST_RUNNER_ORRA_SPEECH_MODEL_DIR` for another model folder,
    `TEST_RUNNER_ORRA_SPEECH_MODEL_ID` for the Hugging Face ID that speech-swift reads the
    size and the bits from (it knows 4, 5 and 8 bit at commit 1f54e56), and
@@ -161,3 +166,39 @@ TranscriptGuard changed no clip. Without 0226, Orra's zh_mid is 3.48% against Vo
 3.33%, and its cer_zh 3.93% against 5.22%. So the gaps come from the language hint and
 the simplification, not from the model, and the two runtimes otherwise agree to within
 a few words.
+
+## Language check
+
+LanguageGuard (Orra/LanguageGuard.swift) catches a transcript in a language other than
+Chinese or English and transcribes the clip again, with Chinese as the language and then
+with English, keeping the first pass that gives Chinese or English. speech-swift at
+1f54e56 strips the model's "language X<asr_text>" prefix and reports no language, so the
+check reads the text: letters of scripts other than Han and Latin make up 20% or more, or
+Latin text of 20 letters or more without Han that NLLanguageRecognizer gives less than a 2%
+chance of being English.
+
+Run on 2026-10-13 on the same Mac and model. The padded copy adds quiet noise and a pause
+around the speech of every clip, as in a dictation, and is kept outside the repository.
+
+| | Corpus, before | Corpus, after | Padded, before | Padded, after |
+|---|---|---|---|---|
+| clips caught | | 1 of 388 | | 1 of 388 |
+| en_short, en_mid, en_long, snr10_en | 19, 44, 48, 7 | the same | 25, 45, 49, 7 | the same |
+| zh_short, zh_numbers, zh_long, snr10_zh | 65, 57, 100, 5 | the same | 80, 91, 96, 5 | the same |
+| zh_mid errors | 134 (5.21%) | 94 (3.65%) | 143 (5.56%) | 98 (3.81%) |
+| mixed errors | 96 | 96 | 106 | 106 |
+| cer_zh | 4.47% | 3.98% | 5.14% | 4.59% |
+| 0226_zh_mid errors, decode | 46, 0.62 s | 6, 0.99 s | 50, 0.72 s | 5, 1.05 s |
+
+The clip caught both times is 0226_zh_mid, Mandarin that starts with "Pa amb Oli",
+which the model wrote in Swedish. Every other clip kept its text. The check on the text
+takes about 0.3 ms.
+
+With `TEST_RUNNER_ORRA_SPEECH_EVAL_HINTS=1`, each language as the hint for every clip
+shows why Chinese goes first. With Chinese, the model still wrote 137 of the 147 English
+clips in English and translated 10 (5 short, 2 mid and 3 long). With English, it kept
+170 of the 173 Chinese clips in Chinese and translated 3 into English, 0226_zh_mid among
+them. On the stored FLEURS and ASCEND transcripts of the earlier evaluation (600 clips
+with this model and no hint), the check catches nothing. Two English transcripts there
+hold an accented name, Asunción and Erdoğan, and pass.
+
