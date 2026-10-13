@@ -105,11 +105,15 @@ struct TranslationStepTests {
         #expect(result.outcome == .timedOut)
     }
 
-    /// A model that ignores cancellation and answers late is still not used.
-    @Test func aLateAnswerIsNotUsed() async {
+    /// A model that ignores cancellation and answers late is still not used. It answers
+    /// only once the timeout has cancelled it, so the test does not depend on how long a
+    /// busy Mac takes to run the timer.
+    @Test(.timeLimit(.minutes(1)))
+    func aLateAnswerIsNotUsed() async {
         let result = await TranslationStep.run(Self.source, into: .english, cleansUp: true, timeout: .milliseconds(50), complete: { _, _ in
-            let until = ContinuousClock.now + .milliseconds(300)
-            while ContinuousClock.now < until {}
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
             return Self.good
         })
         #expect(result.text == Self.source)

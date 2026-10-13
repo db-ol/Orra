@@ -131,3 +131,18 @@ nonisolated enum TranslationStep {
         return Result(text: translation ?? untranslated, untranslated: untranslated, outcome: outcome)
     }
 }
+
+/// What PushToTalkController needs from the model for translations. Closures, so tests
+/// pass fakes.
+struct TranslationModel {
+    /// Whether translation is on and the model is loaded, so a translation can start at
+    /// once.
+    var isReady: () -> Bool
+    /// Which way to translate, as the user set it.
+    var direction: () -> TranslationDirection
+    /// The model's answer for a transcript and a target, see RewriteEngine.translate.
+    var complete: @Sendable (String, TranslationTarget) async throws -> String
+
+    /// No translation, for tests and previews.
+    static let off = TranslationModel(isReady: { false }, direction: { .automatic }, complete: { _, _ in throw RewriteError.notLoaded })
+}

@@ -63,6 +63,16 @@
         }
       }
     },
+    "%@ is a key combination and can't be the translation key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是组合键，不能作为翻译键。"
+          }
+        }
+      }
+    },
     "%@ is chosen under Microphone. Choose another microphone or System Default there." : {
       "localizations" : {
         "zh-Hans" : {
@@ -141,6 +151,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "组合键不能作为说话键。"
+          }
+        }
+      }
+    },
+    "A key combination can't be the translation key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "组合键不能作为翻译键。"
           }
         }
       }
@@ -297,6 +317,16 @@
         }
       }
     },
+    "Automatic" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动"
+          }
+        }
+      }
+    },
     "Bars at the bottom of the screen that move with your voice." : {
       "localizations" : {
         "zh-Hans" : {
@@ -337,12 +367,32 @@
         }
       }
     },
+    "Caps Lock can't be the translation key. It turns capitals or the input method on and off." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大写锁定键不能作为翻译键。它用来开关大写字母或切换输入法。"
+          }
+        }
+      }
+    },
     "Change Talk Key…" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "更改说话键…"
+          }
+        }
+      }
+    },
+    "Change Translation Key…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改翻译键…"
           }
         }
       }
@@ -403,6 +453,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在检查…"
+          }
+        }
+      }
+    },
+    "Chinese" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中文"
+          }
+        }
+      }
+    },
+    "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中文翻译成英文，英文翻译成中文。中英混说时，按说得多的那种语言来判断。"
           }
         }
       }
@@ -550,6 +620,26 @@
         }
       }
     },
+    "Dictations over %lld characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 %lld 个字符的听写不会翻译。译文没通过 Orra 的检查或者用时太长时也一样，会直接粘贴原文，所以你说的话不会丢。"
+          }
+        }
+      }
+    },
+    "Dictations over %lld characters are pasted without translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 %lld 个字符的听写不会翻译，会直接粘贴原文。"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "zh-Hans" : {
@@ -621,6 +711,16 @@
         }
       }
     },
+    "Download the model for translation?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要下载翻译用的模型吗？"
+          }
+        }
+      }
+    },
     "Download the speech model" : {
       "localizations" : {
         "zh-Hans" : {
@@ -643,6 +743,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载整理模型：%1$lld%%，共 %2$@"
+          }
+        }
+      }
+    },
+    "Downloading the local model: %lld%% of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Downloading the local model: %1$lld%% of %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载本地模型：%1$lld%%，共 %2$@"
           }
         }
       }
@@ -684,6 +800,16 @@
         }
       }
     },
+    "English" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "英文"
+          }
+        }
+      }
+    },
     "Enter" : {
       "comment" : "A key name",
       "localizations" : {
@@ -691,6 +817,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enter"
+          }
+        }
+      }
+    },
+    "Everything you say is pasted in Chinese. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以中文粘贴。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
+    "Everything you say is pasted in English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以英文粘贴。"
           }
         }
       }
@@ -829,6 +975,16 @@
         }
       }
     },
+    "Hold %@ to translate" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住%@翻译"
+          }
+        }
+      }
+    },
     "Hold a key, speak, and let go. Orra types what you said into the app you are using. Your voice is turned into text on this Mac." : {
       "localizations" : {
         "zh-Hans" : {
@@ -845,6 +1001,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "单独按住说话键，说话，然后松开。左侧 Control、Option 或 Command 键要单独按住片刻才开始录音，所以它们的快捷键照常可用。"
+          }
+        }
+      }
+    },
+    "Hold the translation key, speak, and let go. Orra pastes what you said in another language." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住翻译键说话，松开后 Orra 会粘贴译文。"
           }
         }
       }
@@ -1040,6 +1206,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在载入整理模型…"
+          }
+        }
+      }
+    },
+    "Loading the local model…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在载入本地模型…"
           }
         }
       }
@@ -1426,6 +1602,16 @@
         }
       }
     },
+    "Orra never learns corrections from a translated paste." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 不会从翻译后粘贴的文字中学习更正。"
+          }
+        }
+      }
+    },
     "Orra opens the folder with the report file. Drag the file into the page on GitHub." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1504,6 +1690,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "粘贴原文"
+          }
+        }
+      }
+    },
+    "Paste Original Text in the Orra menu brings back the text from before the translation, and Copy Last Dictation copies the translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 菜单中的“粘贴原文”可以找回翻译之前的文字，“拷贝上次听写”拷贝的是译文。"
           }
         }
       }
@@ -1903,6 +2099,16 @@
         }
       }
     },
+    "Shift can't be the translation key. On its own, it switches input methods between Chinese and English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shift 键不能作为翻译键。单独按下它会切换中英文输入法。"
+          }
+        }
+      }
+    },
     "Show Orra in the Dock" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2085,6 +2291,16 @@
         }
       }
     },
+    "The %@ key can't be the translation key. Holding it would type or do something in the app in front." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”键不能作为翻译键。按住它会输入文字或在前台 App 中执行操作。"
+          }
+        }
+      }
+    },
     "The cleanup model could not be loaded" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2147,6 +2363,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "盖子已合上，内建麦克风已关闭"
+          }
+        }
+      }
+    },
+    "The local model could not be loaded" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法载入本地模型"
+          }
+        }
+      }
+    },
+    "The local model is not on this Mac yet. Until it is, Orra pastes the text without translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有本地模型。下载好之前，Orra 会粘贴未翻译的文字。"
+          }
+        }
+      }
+    },
+    "The local model is not ready, so the text was pasted without translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地模型还没准备好，所以粘贴的是未翻译的文字。"
           }
         }
       }
@@ -2311,6 +2557,42 @@
         }
       }
     },
+    "The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键可以用 fn 键，或者左侧、右侧的 Control、Option、Command 键。选了说话键的话，两个键会互换。"
+          }
+        }
+      }
+    },
+    "The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键要按住片刻才开始录音，所以它的快捷键和 Option 键输入的字符照常可用。打开“连按两下进入免手持模式”后，快速连按两下翻译键，就能免手持翻译。"
+          }
+        }
+      }
+    },
+    "The two keys swapped. The talk key is now %@ and the translation key %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "The two keys swapped. The talk key is now %1$@ and the translation key %2$@."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "两个键已互换。现在说话键是%1$@，翻译键是%2$@。"
+          }
+        }
+      }
+    },
     "This build has no microphone usage description" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2321,12 +2603,62 @@
         }
       }
     },
+    "This dictation was pasted without translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写没有翻译，粘贴的是原文。"
+          }
+        }
+      }
+    },
+    "This dictation will be translated into Chinese." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写会被翻译成中文。"
+          }
+        }
+      }
+    },
+    "This dictation will be translated into English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写会被翻译成英文。"
+          }
+        }
+      }
+    },
+    "This dictation will be translated." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写会被翻译。"
+          }
+        }
+      }
+    },
     "This key can't be the talk key. Holding it would type or do something in the app in front." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "这个键不能作为说话键。按住它会输入文字或在前台 App 中执行操作。"
+          }
+        }
+      }
+    },
+    "This key can't be the translation key. Holding it would type or do something in the app in front." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个键不能作为翻译键。按住它会输入文字或在前台 App 中执行操作。"
           }
         }
       }
@@ -2361,6 +2693,56 @@
         }
       }
     },
+    "Translate into" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译成"
+          }
+        }
+      }
+    },
+    "Translation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译"
+          }
+        }
+      }
+    },
+    "Translation key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键"
+          }
+        }
+      }
+    },
+    "Translation Key: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键：%@"
+          }
+        }
+      }
+    },
+    "Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译在这台 Mac 上使用“整理文字”的本地模型，约占 4 GB 内存，即使整理文字关闭也能用。听写太长，或者译文没通过 Orra 的检查时，会按原话粘贴。"
+          }
+        }
+      }
+    },
     "Try Again" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2377,6 +2759,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在任何 App 中试试：按住说话键，说点什么，然后松开。文字会出现在你正在输入的位置。"
+          }
+        }
+      }
+    },
+    "Turn on Translation under Features to use this key." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“功能”里打开“翻译”后才能使用这个键。"
           }
         }
       }

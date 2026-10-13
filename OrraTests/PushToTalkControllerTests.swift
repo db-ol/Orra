@@ -168,10 +168,11 @@ struct PushToTalkControllerTests {
 
     /// A started controller whose keyboard tap is a fake, so no real tap is installed. The
     /// fake allows the tap, so the hotkey is active.
-    private func startedController() async throws -> PushToTalkController {
+    private func startedController(translation: TranslationModel = .off) async throws -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
+            translation: translation,
             insert: inserter.insert,
             frontmostApp: { [workspace] in workspace.frontmost },
             isTrusted: tapSystem.isTrusted,
@@ -1358,6 +1359,286 @@ struct PushToTalkControllerTests {
         #expect(inserter.inserted.count == 2)
     }
 
+    // MARK: Translation
+
+    private static let spoken = "呃，我们下周一，哦不是，下周二开会。"
+    private static let goodTranslation = #"{"cleaned": "我们下周二开会。", "translation": "We have a meeting next Tuesday."}"#
+
+    /// A stand in for the model's translations, which records what it was asked.
+    @MainActor
+    final class FakeTranslation {
+        /// What the model closure reads and writes off the main actor.
+        final class Shared: Sendable {
+            let answer: Mutex<String>
+            let received = Mutex<[String]>([])
+            let fails = Mutex(false)
+
+            init(answer: String) {
+                self.answer = Mutex(answer)
+            }
+        }
+
+        var ready = true
+        var direction = TranslationDirection.automatic
+        let shared: Shared
+
+        init(answer: String = PushToTalkControllerTests.goodTranslation) {
+            shared = Shared(answer: answer)
+        }
+
+        var model: TranslationModel {
+            TranslationModel(
+                isReady: { self.ready },
+                direction: { self.direction },
+                complete: { [shared] text, target in
+                    shared.received.withLock { $0.append("\(target.rawValue) \(text)") }
+                    if shared.fails.withLock({ $0 }) { throw TestError() }
+                    return shared.answer.withLock { $0 }
+                }
+            )
+        }
+
+        var received: [String] {
+            shared.received.withLock { $0 }
+        }
+
+        var calls: Int {
+            received.count
+        }
+    }
+
+    private func controller(translation: FakeTranslation, cleanup: CleanupModel = .off) async -> PushToTalkController {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            cleanup: cleanup,
+            translation: translation.model,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero
+        )
+        controller.setTranslationKeyOn(true)
+        await controller.loadModel()
+        return controller
+    }
+
+    /// A hold of `key` that records and is released.
+    private func dictate(_ controller: PushToTalkController, with key: TalkKey) async throws {
+        let starts = mic.calls.filter { $0 == "start" }.count
+        controller.handle(.pressed(isRepeat: false), key: key)
+        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        controller.handle(.released, key: key)
+        try await waitUntil { controller.state == .idle }
+    }
+
+    /// The translation key pastes the translation of the text the rules left. Copy Last
+    /// Dictation copies the translation, Paste Original Text pastes the text before it,
+    /// and Orra never learns from the translated paste.
+    @Test func theTranslationKeyPastesTheTranslation() async throws {
+        let translation = FakeTranslation()
+        let controller = await controller(translation: translation)
+        var reported: [String] = []
+        var stopped: [String] = []
+        controller.onPasted = { text, _, _, _ in reported.append(text) }
+        controller.onPasteOriginal = { stopped.append($0) }
+        speech.reply = Self.spoken
+        try await dictate(controller, with: .rightOption)
+        let asked = try #require(translation.received.first)
+        #expect(asked.hasPrefix("en "))
+        let ruled = String(asked.dropFirst(3))
+        #expect(!ruled.contains("呃"))
+        #expect(inserter.inserted == ["We have a meeting next Tuesday."])
+        #expect(controller.lastTranscript == "We have a meeting next Tuesday.")
+        // Cleanup is off, so the text before translation is the text the rules left.
+        #expect(controller.originalText == ruled)
+        #expect(controller.notice == nil)
+        #expect(reported.isEmpty)
+        await controller.pasteOriginal()
+        #expect(inserter.inserted == ["We have a meeting next Tuesday.", ruled])
+        #expect(reported.isEmpty)
+        #expect(stopped == ["We have a meeting next Tuesday."])
+    }
+
+    /// With cleanup on, the translation step does the cleanup, so the cleanup step does
+    /// not run, and Paste Original Text pastes the cleaned text.
+    @Test func withCleanupOnTheTextBeforeTranslationIsCleanedUp() async throws {
+        let translation = FakeTranslation()
+        let cleanups = Mutex(0)
+        let controller = await controller(translation: translation, cleanup: CleanupModel(isReady: { true }, complete: { _ in
+            cleanups.withLock { $0 += 1 }
+            return #"{"cleaned": "x"}"#
+        }))
+        speech.reply = Self.spoken
+        try await dictate(controller, with: .rightOption)
+        #expect(inserter.inserted == ["We have a meeting next Tuesday."])
+        #expect(controller.originalText == "我们下周二开会。")
+        #expect(cleanups.withLock { $0 } == 0)
+    }
+
+    /// The talk key never translates, also while translation is on.
+    @Test func theTalkKeyDoesNotTranslate() async throws {
+        let translation = FakeTranslation()
+        let controller = await controller(translation: translation)
+        var reported: [String] = []
+        controller.onPasted = { text, _, _, _ in reported.append(text) }
+        try await dictate(controller, with: .rightControl)
+        try await dictate(controller)
+        #expect(translation.calls == 0)
+        #expect(inserter.inserted == ["你好", "你好"])
+        #expect(reported == ["你好", "你好"])
+    }
+
+    /// A translation that fails a check, or a model that fails, pastes the text without
+    /// translation and says so. That paste is the dictation itself, so Orra may learn
+    /// from it.
+    @Test func aTranslationThatCannotBeUsedPastesTheTextWithoutIt() async throws {
+        let translation = FakeTranslation(answer: #"{"cleaned": "我们下周二开会。", "translation": "We have a meeting next Tuesday at 3."}"#)
+        let controller = await controller(translation: translation)
+        var reported: [String] = []
+        controller.onPasted = { text, _, _, _ in reported.append(text) }
+        speech.reply = Self.spoken
+        try await dictate(controller, with: .rightOption)
+        let ruled = try #require(inserter.inserted.first)
+        #expect(ruled.contains("下周二"))
+        #expect(controller.notice == "This dictation was pasted without translation.")
+        #expect(controller.originalText == nil)
+        #expect(reported == [ruled])
+        translation.shared.fails.withLock { $0 = true }
+        try await dictate(controller, with: .rightOption)
+        #expect(inserter.inserted == [ruled, ruled])
+        #expect(controller.notice == "This dictation was pasted without translation.")
+        // An unreadable answer too.
+        translation.shared.fails.withLock { $0 = false }
+        translation.shared.answer.withLock { $0 = "We have a meeting next Tuesday." }
+        try await dictate(controller, with: .rightOption)
+        #expect(inserter.inserted == [ruled, ruled, ruled])
+    }
+
+    @Test func aLongDictationIsPastedWithoutTranslation() async throws {
+        let translation = FakeTranslation()
+        let controller = await controller(translation: translation)
+        let long = String(repeating: "我们明天下午开会讨论一下。", count: 25)
+        #expect(long.count > TranslationStep.maximumLength)
+        speech.reply = long
+        // Long enough to have said it, so the length cap of TranscriptGuard keeps it all.
+        mic.recording = AudioRecording(samples: FakeMicrophone.tone(count: 16_000 * 50), sampleRate: 16_000)
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.calls == 0)
+        #expect(inserter.inserted.count == 1)
+        #expect(inserter.inserted.first?.count == long.count)
+        #expect(controller.notice == "Dictations over 300 characters are pasted without translation.")
+    }
+
+    @Test func withoutTheModelTheTextIsPastedWithoutTranslation() async throws {
+        let translation = FakeTranslation()
+        translation.ready = false
+        let controller = await controller(translation: translation)
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.calls == 0)
+        #expect(inserter.inserted == ["你好"])
+        #expect(controller.notice == "The local model is not ready, so the text was pasted without translation.")
+    }
+
+    /// Text with nothing to translate, such as digits, is pasted as it is without a
+    /// notice, and so is text already in a fixed target language.
+    @Test func textWithNothingToTranslateIsPastedQuietly() async throws {
+        let translation = FakeTranslation(answer: #"{"cleaned": "我们下周二开会。", "translation": "我们下周二开会。"}"#)
+        translation.direction = .chinese
+        let controller = await controller(translation: translation)
+        speech.reply = "123"
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.calls == 0)
+        #expect(inserter.inserted == ["123"])
+        #expect(controller.notice == nil)
+        speech.reply = "我们下周二开会。"
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.received == ["zh 我们下周二开会。"])
+        #expect(inserter.inserted == ["123", "我们下周二开会。"])
+        #expect(controller.notice == nil)
+    }
+
+    /// The indicator learns that the dictation will be translated, and which way, for
+    /// holds of the translation key only.
+    @Test func theCuesOfATranslationSayWhichWay() async throws {
+        let translation = FakeTranslation()
+        translation.direction = .english
+        let controller = await controller(translation: translation)
+        let cues = CueRecorder(controller)
+        try await dictate(controller, with: .rightOption)
+        #expect(cues.list == [.listening(translation: .english), .transcribing, .recordingStopped, .finished(message: nil)])
+        try await dictate(controller, with: .rightControl)
+        #expect(cues.list.suffix(4) == [.listening, .transcribing, .recordingStopped, .finished(message: nil)])
+        // A key of no dictation, such as the translation key while translation is off,
+        // never translates.
+        controller.setTranslationKeyOn(false)
+        try await dictate(controller, with: .rightOption)
+        #expect(cues.list.suffix(4).first == .listening)
+        #expect(translation.calls == 1)
+    }
+
+    /// A double press of the translation key, through the tap, records hands free and
+    /// pastes the translation at the next press, after the key's wait, as for the talk key.
+    @Test func aDoublePressOfTheTranslationKeyTranslatesHandsFree() async throws {
+        let translation = FakeTranslation()
+        speech.reply = Self.spoken
+        let controller = try await startedController(translation: translation.model)
+        controller.setTranslationKeyOn(true)
+        let cues = CueRecorder(controller)
+        let tap = try #require(tapSystem.installed)
+        let key = TalkKey.rightOption
+        let down = key.downFlag.union(.maskAlternate)
+        var now = ContinuousClock.now
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now)
+        now = now.advanced(by: .milliseconds(80))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        // The tap of a key that waits records nothing.
+        #expect(controller.state == .idle)
+        now = now.advanced(by: .milliseconds(100))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now)
+        now = now.advanced(by: .milliseconds(80))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        #expect(controller.state == .handsFree)
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.handsFree(finishHint: "Press right Option to finish", translation: .automatic)])
+        now = now.advanced(by: .seconds(2))
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now)
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        #expect(inserter.inserted == ["We have a meeting next Tuesday."])
+        #expect(mic.calls == ["start", "stop"])
+    }
+
+    /// An Option shortcut during the translation key's wait records nothing, and a hold
+    /// through the wait records.
+    @Test func anOptionShortcutDuringTheWaitRecordsNothing() async throws {
+        let translation = FakeTranslation()
+        let controller = try await startedController(translation: translation.model)
+        controller.setTranslationKeyOn(true)
+        let tap = try #require(tapSystem.installed)
+        let key = TalkKey.rightOption
+        let down = key.downFlag.union(.maskAlternate)
+        #expect(tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down) == false)
+        // Option E types an accent and passes through.
+        #expect(tap.handle(type: .keyDown, keyCode: 14, flags: down) == false)
+        tap.fireTimer()
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [])
+        #expect(controller.state == .idle)
+        #expect(mic.calls.isEmpty)
+        // Held through the wait: the timer fires and recording starts. The times are
+        // given, so the release counts as the end of a hold, not as a tap.
+        let pressed = ContinuousClock.now
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: pressed)
+        #expect(controller.state == .idle)
+        tap.fireTimer()
+        #expect(controller.state == .listening)
+        try await waitUntil { mic.calls.contains("start") }
+        _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: pressed.advanced(by: .seconds(2)))
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        #expect(translation.calls == 1)
+    }
+
     @Test func theLevelComesFromTheMicrophone() async {
         mic.level = 0.25
         let controller = await makeController()
@@ -1628,13 +1909,123 @@ struct PushToTalkControllerTests {
         )
         controller.startChoosingTalkKey()
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [.maskControl, TalkKey.rightControl.downFlag])
-        controller.stopChoosingTalkKey()
+        controller.stopChoosingKey()
         // A new recording starts afresh, so the earlier press's release chooses nothing.
         controller.startChoosingTalkKey()
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey)
         #expect(controller.talkKey == .fn)
-        controller.stopChoosingTalkKey()
+        controller.stopChoosingKey()
+    }
+
+    // MARK: The translation key
+
+    @Test func theTranslationKeyDefaultsToTheKeyBesideTheTalkKey() {
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        #expect(controller.translationKey == .rightOption)
+        let optionTalker = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .rightOption)
+        #expect(optionTalker.translationKey == .rightCommand)
+        let saved = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .fn, translationKey: .leftOption)
+        #expect(saved.translationKey == .leftOption)
+        // Never the talk key.
+        let clash = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkKey: .fn, translationKey: .fn)
+        #expect(clash.translationKey == .rightOption)
+    }
+
+    @Test func pickingTheTranslationKeyAsTheTalkKeySwapsThem() {
+        var savedTalk: [TalkKey] = []
+        var savedTranslation: [TalkKey] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .rightControl,
+            saveTalkKey: { savedTalk.append($0) },
+            saveTranslationKey: { savedTranslation.append($0) }
+        )
+        controller.chooseTalkKey(.rightOption)
+        #expect(controller.talkKey == .rightOption)
+        #expect(controller.translationKey == .rightControl)
+        #expect(savedTalk == [.rightOption])
+        #expect(savedTranslation == [.rightControl])
+        #expect(controller.keySwap == KeySwap(talkKey: .rightOption, translationKey: .rightControl))
+        #expect(controller.keySwap?.message() == "The two keys swapped. The talk key is now right Option and the translation key right Control.")
+        // A key without a clash leaves the translation key, and the note goes.
+        controller.chooseTalkKey(.fn)
+        #expect(controller.translationKey == .rightControl)
+        #expect(controller.keySwap == nil)
+        #expect(savedTranslation == [.rightControl])
+    }
+
+    @Test func pickingTheTalkKeyAsTheTranslationKeySwapsThem() {
+        var savedTalk: [TalkKey] = []
+        var savedTranslation: [TalkKey] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: .fn,
+            saveTalkKey: { savedTalk.append($0) },
+            translationKey: .rightOption,
+            saveTranslationKey: { savedTranslation.append($0) }
+        )
+        controller.startChoosingKey(for: .translation)
+        #expect(controller.choosingKeySlot == .translation)
+        #expect(controller.isChoosingTalkKey == false)
+        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
+        #expect(controller.keyChoiceNote == "The Return key can't be the translation key. Holding it would type or do something in the app in front.")
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [])
+        #expect(controller.choosingKeySlot == nil)
+        #expect(controller.translationKey == .fn)
+        #expect(controller.talkKey == .rightOption)
+        #expect(savedTranslation == [.fn])
+        #expect(savedTalk == [.rightOption])
+        #expect(controller.hasChosenTalkKey)
+        #expect(controller.keySwap == KeySwap(talkKey: .rightOption, translationKey: .fn))
+        // Recording again clears the note, and Escape changes nothing.
+        controller.startChoosingKey(for: .translation)
+        #expect(controller.keySwap == nil)
+        controller.keyChoice(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [])
+        #expect(controller.translationKey == .fn)
+        #expect(savedTranslation == [.fn])
+    }
+
+    @Test func recordingOneKeyStopsTheOther() {
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        controller.startChoosingTalkKey()
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
+        controller.startChoosingKey(for: .translation)
+        // The half press belonged to the talk key's recording, so its release picks nothing.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [])
+        #expect(controller.choosingKeySlot == .translation)
+        #expect(controller.translationKey == .rightOption)
+        #expect(controller.talkKey == .rightControl)
+        controller.stopChoosingKey()
+        #expect(controller.choosingKeySlot == nil)
+    }
+
+    /// The tap watches the translation key only while translation is on, and that key
+    /// waits before it records while the talk key starts at once.
+    @Test func theTapWatchesTheTranslationKeyOnlyWhileTranslationIsOn() async throws {
+        let controller = try await startedController()
+        let tap = try #require(tapSystem.installed)
+        let optionDown = TalkKey.rightOption.downFlag.union(.maskAlternate)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown)
+        #expect(tap.activeKey == nil)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [])
+        controller.setTranslationKeyOn(true)
+        #expect(controller.translationKeyIsOn)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown)
+        #expect(tap.activeKey == .rightOption)
+        #expect(controller.state == .idle)
+        tap.fireTimer()
+        #expect(controller.state == .listening)
+        controller.setTranslationKeyOn(false)
+        // Turning translation off ends the translation key's dictation.
+        #expect(controller.state == .idle)
+        #expect(tap.activeKey == nil)
+        try await waitUntil { mic.calls.contains("cancel") }
     }
 
     @Test func keepingTheDefaultKeySavesIt() {

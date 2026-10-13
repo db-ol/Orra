@@ -106,3 +106,17 @@ nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
 
     private static let word = try! NSRegularExpression(pattern: "[A-Za-z]+(?:['’][A-Za-z]+)*")
 }
+
+/// Whether the user turned translation on, so the translation key pastes translated text.
+/// Off until they do.
+nonisolated enum TranslationPreference {
+    static let defaultsKey = "translatesWithTranslationKey"
+
+    static func load(from defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: defaultsKey) as? Bool ?? false
+    }
+
+    static func save(_ on: Bool, to defaults: UserDefaults = .standard) {
+        defaults.set(on, forKey: defaultsKey)
+    }
+}

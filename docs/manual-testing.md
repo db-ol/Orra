@@ -34,19 +34,31 @@ Build and test commands, run in the repository root:
   5 skipped on 2026-10-12, the skipped ones being the cleanup evaluation and the three
   heavier real model tests. With the settings pages, it ended in TEST SUCCEEDED with
   2294 test cases passed and 6 skipped on 2026-10-12, the sixth being the opt in
-  rendering of the settings pages. With the settings on one page and its sheets, it ended
-  in TEST SUCCEEDED with 2294 test cases passed and 6 skipped on 2026-10-13, and after
-  the sheets were fitted to the window, with 2296 passed and 6 skipped the same day.
-  With the sidebar of General, Vocabulary and About, it ended in TEST SUCCEEDED with 2299
-  passed and 5 skipped the same day, the opt in rendering turned on and passing. With
-  the settings of Advanced… moved onto General, it ended in TEST SUCCEEDED the same day
-  with the same test cases passed and the same 5 skipped, the opt in rendering turned on.
+  rendering of the settings pages. With the translation key, merged with the translation
+  core, it ended in TEST SUCCEEDED with 2376 test cases passed and 9 skipped on
+  2026-10-13, the real model tests included. The skipped ones are the cleanup and the
+  translation evaluations with the translation memory test, the three heavier real model
+  tests, and the opt in renderings of the settings pages and of the indicator's badge.
+  With the settings on one page and its sheets merged in, it ended in TEST SUCCEEDED with
+  2375 test cases passed and the same 9 skipped on 2026-10-13, and settings-pages alone
+  with 2294 passed and 6 skipped. After the sheets were fitted to the window, it ended
+  in TEST SUCCEEDED with 2376 passed and the same 9 skipped, and settings-pages alone
+  with 2296 passed and 6 skipped, the same day.
+  With the settings sidebar of General, Vocabulary and About merged in, it ended in TEST
+  SUCCEEDED with 2381 passed and 7 skipped the same day, the opt in renderings of the
+  settings and of the badge turned on and passing, and settings-pages alone with 2299
+  passed and 5 skipped the same way. With the settings of Advanced… moved onto General
+  merged in, it ended in TEST SUCCEEDED the same day with the same test cases passed and
+  the same 7 skipped, the opt in renderings turned on, and settings-pages alone the same
+  way.
   - SettingsPageTests checks the three tabs and the sheet of General, that a tab or sheet
     asked for, such as Vocabulary, opens once while Settings… afterwards opens General
     alone, that a sheet opens over General, that Change Talk Key… asks for General alone,
-    that an open window is told, and the line under Clean Up Text for each state of the
-    model. With TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab
-    and sheet to a PNG there, which CI never does.
+    that an open window is told, the line under Clean Up Text for each state of the model,
+    and the texts of the model's status for translation. With
+    TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab and sheet
+    to a PNG there, General also with translation on and after a swap of the keys,
+    which CI never does.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
@@ -373,7 +385,44 @@ Build and test commands, run in the repository root:
     2026-10-12 they took 0.36, 0.88, 1.75 and 3.41 s, and 0.34, 0.78, 1.48 and 2.33 s. Each
     stayed within the limit of 2 s plus 15 ms a character. Text over 400 characters is
     pasted without cleanup.
-  - Translation with the local model, added on 2026-10-12 and not yet in the interface:
+  - Translation with the local model, added on 2026-10-12, with the translation key, the
+    translation settings and the badge since 2026-10-13:
+  - TalkKeyHandsFreeTests and TalkKeyDetectorTests check a key that waits on the right
+    hand side, as the translation key does: it records only after 0.3 s, Option E, Shift
+    or a click during the wait records nothing and passes through, a shortcut after the
+    wait cancels the hold, a double press of it starts hands free with one start of the
+    microphone and only that key ends it, with hands free off a tap of it leaves nothing,
+    a tap of the talk key followed by it drops the tap's recording and records after the
+    wait, and changing the waiting keys keeps a press under way. The random sequences run
+    with right Option waiting for every other seed.
+  - TalkKeyTests and TranslationKeyPreferenceTests check the default translation key,
+    right Option or right Command next to a right Option talk key, the saved key, a saved
+    key equal to the talk key or unknown, the notes that name the translation key, the
+    swap note and the menu's hint.
+  - PushToTalkControllerTests checks the default key, the swap from either side with
+    both keys saved and the note, that recording one key stops the other, and through the
+    tap that the translation key is watched only while translation is on and that turning
+    translation off ends its dictation. With a stand in model, it checks that the
+    translation key pastes the translation of the text the rules left, that Copy Last
+    Dictation holds the translation and Paste Original Text pastes the text before it,
+    the cleaned text when cleanup is on, without running the cleanup step, that a
+    translated paste is never reported for learning, that the talk key never translates,
+    that a held back, failed or unreadable translation, text over 300 characters and a
+    model that is not ready paste the untranslated text with a notice, that digits only
+    and text already in a fixed target paste quietly, that the cues carry the direction
+    for the translation key only, and through the tap a double press of the translation
+    key that translates hands free and an Option shortcut during the wait.
+  - TextCleanupTests checks that translation is off until saved and the direction
+    automatic, that turning translation on asks before the download, that the download
+    agreed for translation turns cleanup on without asking again and Cancel Download turns
+    both off, that translation alone loads the model and reads both prompts ahead, that a
+    fixed direction reads only its own and a change of direction the new one, and that the
+    model stays loaded until the last switch is off.
+  - RecordingFeedbackTests checks that the badge follows a dictation of the translation
+    key from its listening or hands free cue to its end and none shows for the talk key,
+    the badge texts 译, EN and 中, what VoiceOver reads, and that the indicator draws more
+    with the badge than without. With TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set, it renders
+    the indicator with the badge to PNG files.
   - TranslationDirectionTests checks that the direction rule gives each of 493 texts the
     source language direction.py of the translation benchmark gave it, the 358 it was
     tuned on among them, and that it is wrong on one labelled case only (cm04).
@@ -1318,12 +1367,13 @@ in test in SettingsPageTests, in English and in Chinese, but not seen in the run
 
 - [ ] Settings… opens on General (通用 in Chinese), with General, Vocabulary and About
   (通用, 个人词库, 关于) in the sidebar and nothing else. General shows five blocks with
-  headers, in this order: Keys with the talk key, Features with Clean Up Text, its switch
-  and Options…, Dictation (听写) with Double press for hands free, the on screen hint,
-  the sounds and Learn from my corrections with Forget Learned Corrections, Microphone
-  with the input device, and System with Interface language (界面语言), Open at Login
-  and Show Orra in the Dock. There is no Advanced… button. The page scrolls when the
-  window is short.
+  headers, in this order: Keys with the talk key and the translation key, Features with
+  Clean Up Text, its switch and Options…, then Translation with its switch and Translate
+  into right under it, Dictation (听写) with Double press for hands free, the on screen
+  hint, the sounds and Learn from my corrections with Forget Learned Corrections,
+  Microphone with the input device, and System with Interface language (界面语言), Open
+  at Login and Show Orra in the Dock. There is no Advanced… button. The page scrolls when
+  the window is short.
 - [ ] The sidebar cannot be hidden. Dragging the divider to the left edge leaves it at its
   narrowest width, there is no sidebar button in the toolbar, and View > Hide Sidebar
   (Control Command S), where it shows, keeps it in place.
@@ -1364,10 +1414,70 @@ in test in SettingsPageTests, in English and in Chinese, but not seen in the run
   dictating, both NO show Off, and both YES (or nothing saved) show Always. After picking
   another choice, Only while ready is no longer offered.
 
+Translation key, added on 2026-10-13, not verified yet. The translation rows on General and
+the badge were rendered to PNG by the opt in tests, in English and in Chinese, but not seen
+in the running app:
+
+- [ ] Settings, General shows Translation (翻译) after Clean Up Text under Features, with
+  its switch off, and Translate into (翻译成) right under it with Automatic, English and
+  Chinese as choices and the explanation of the chosen one, dimmed while translation is
+  off. The footer says what the model needs. Under Keys the translation key field is
+  dimmed with "Turn on Translation under Features to use this key." until translation is
+  on. Pointing at the Translation switch shows the length limit, Paste Original Text
+  and that Orra never learns from a translated paste. Pointing at the translation key
+  field shows which keys can be the translation key, that the two keys
+  swap, and the wait before it records. Turning it on without the model asks "Download the model for
+  translation?", and Cancel leaves it off. With cleanup on and the model in place it turns
+  on at once, and with cleanup on and the model downloading it turns on without asking.
+- [ ] While translation is on and the model is not ready, a row under Translate into,
+  lined up with the names above it, shows the progress with Cancel Download, or Download,
+  Resume Download, loading and Try Again, also while cleanup is off. With Clean Up Text
+  on as well, this row is the only status in the block, and no line shows under Clean Up
+  Text.
+- [ ] With translation on and cleanup off, the model loads ("Loading the local model…")
+  and the menu says "Hold right Option to translate" under the hold hint. Cleanup stays
+  off: the talk key pastes the text as the rules leave it.
+- [ ] Hold right Option, say "我们下周二开会", let go: "We have a meeting next Tuesday."
+  or a close translation is pasted in Notes. The first translation after turning
+  translation on is not slower than the next ones. Say "Let's meet next Tuesday" and
+  the Chinese is pasted.
+- [ ] The wait: hold right Option for less than a moment and type Option E then E (é),
+  and Option Command Escape opens Force Quit. Neither records, shows the indicator or
+  plays a sound. A hold of right Option shows the indicator only after about 0.3 s.
+- [ ] The badge: while the translation key records, the bars show 译 next to them, EN or
+  中 with Into English or Into Chinese picked, also while transcribing. The talk key
+  shows no badge. With Reduce Motion on in Accessibility settings the badge is the same
+  and does not move. VoiceOver reads "Listening This dictation will be translated." or
+  the hands free hint with the same sentence.
+- [ ] Hands free: double press right Option, speak, press right Option again: the
+  translation is pasted. The indicator says "Press right Option to finish" with the
+  badge. Pressing the talk key during it does nothing, and Escape cancels.
+- [ ] Fallback: dictate over 300 characters with the translation key: the text is pasted
+  untranslated and the indicator and the menu say "Dictations over 300 characters are
+  pasted without translation." Turn the model off by turning translation off and on with
+  the model still loading: the text is pasted untranslated with "The local model is not
+  ready, so the text was pasted without translation."
+- [ ] Recovery: after a translated paste, Copy Last Dictation copies the translation and
+  Paste Original Text pastes the Chinese, cleaned when cleanup is on. With "Learn from my
+  corrections" on, fixing a word in the translation adds nothing to the vocabulary.
+- [ ] The swap: in Settings, click the translation key field and press right Control,
+  the talk key: the field shows ⌃ Right Control, the note under it says "The two keys
+  swapped. The talk key is now right Option and the translation key right Control.",
+  and the talk key field and the menu show right Option as the talk key. The note shows
+  once, under the translation key. The same from the talk key field and from the
+  welcome window. Both keys stay after a restart.
+- [ ] With the talk key set to right Option before translation was ever used, the
+  translation key shows right Command.
+- [ ] Into Chinese: "Please review this PR on my iPhone" keeps PR and iPhone in English.
+- [ ] Turning translation off stops watching right Option at once, and right Option then
+  types and holds as it did before Orra.
+- [ ] The problem report says "Translate with the translation key: on" while it is on.
+- [ ] The rewrite log shows "Translation into English translated after" with times and
+  no text.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
 - Key combinations and mouse buttons as talk keys.
-- Translation with the local model.

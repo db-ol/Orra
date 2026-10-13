@@ -62,11 +62,24 @@ struct SettingsPageTests {
     /// The line under Clean Up Text on the page: nothing while cleanup has its model
     /// ready, and where the model stands otherwise.
     @Test func theCleanupRowSaysWhereTheModelStands() {
-        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .ready, total: 100) == nil)
-        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .loading, total: 100) == "Loading the cleanup model…")
-        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .failed, total: 100) == "The cleanup model could not be loaded")
-        #expect(CleanupLabels.status(.missing(bytesPresent: 0), engine: .unloaded, total: 100) == "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup.")
-        #expect(CleanupLabels.status(.downloading(bytes: 50, source: nil), engine: .unloaded, total: 100)?.hasPrefix("Downloading the cleanup model: 50%") == true)
+        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .ready, total: 100, use: .cleanup) == nil)
+        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .loading, total: 100, use: .cleanup) == "Loading the cleanup model…")
+        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .failed, total: 100, use: .cleanup) == "The cleanup model could not be loaded")
+        #expect(CleanupLabels.status(.missing(bytesPresent: 0), engine: .unloaded, total: 100, use: .cleanup) == "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup.")
+        #expect(CleanupLabels.status(.downloading(bytes: 50, source: nil), engine: .unloaded, total: 100, use: .cleanup)?.hasPrefix("Downloading the cleanup model: 50%") == true)
+    }
+
+    /// The target picker under Translation shows each direction with its explanation, and
+    /// the row under the switch says where the model stands in the words of translation.
+    @Test func everyDirectionHasATitleAndAnExplanation() {
+        #expect(TranslationDirection.allCases == [.automatic, .english, .chinese])
+        let details = TranslationDirection.allCases.map { "\($0.detail)" }
+        #expect(Set(details).count == details.count)
+        #expect(CleanupLabels.lines(.missing(bytesPresent: 0), total: 100, use: .translation) == ["The local model is not on this Mac yet. Until it is, Orra pastes the text without translation."])
+        #expect(CleanupLabels.loading(.translation) == "Loading the local model…")
+        #expect(CleanupLabels.loading(.cleanup) == "Loading the cleanup model…")
+        #expect(CleanupLabels.progress(bytes: 50, total: 100, use: .translation).hasPrefix("Downloading the local model: 50%"))
+        #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .loading, total: 100, use: .translation) == "Loading the local model…")
     }
 
     @MainActor
@@ -84,7 +97,9 @@ struct SettingsPageTests {
         let language = Bundle.main.preferredLocalizations.first ?? "en"
         try await render(.tab(.general), name: "\(language)-0-general")
         try await render(.tab(.general), cleanupOn: true, name: "\(language)-0-general-cleanup-on")
-        try await render(.tab(.general), cleanupOn: true, height: 1100, name: "\(language)-0-general-full-height")
+        try await render(.tab(.general), translationOn: true, name: "\(language)-0-general-translation-on")
+        try await render(.tab(.general), translationOn: true, swapped: true, name: "\(language)-0-general-translation-swapped")
+        try await render(.tab(.general), cleanupOn: true, translationOn: true, height: 1400, name: "\(language)-0-general-full-height")
         try await render(.tab(.vocabulary), name: "\(language)-1-vocabulary")
         try await render(.tab(.about), name: "\(language)-2-about")
         try await render(.tab(.about), height: 900, name: "\(language)-2-about-full-height")
@@ -104,7 +119,7 @@ struct SettingsPageTests {
     /// A tab in the whole window, at the window's first size or `height`, or a sheet alone
     /// at the size it opens at over that window, since a sheet does not draw outside a
     /// window on screen.
-    private func render(_ shown: Shown, cleanupOn: Bool = false, height: CGFloat? = nil, name: String) async throws {
+    private func render(_ shown: Shown, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -116,12 +131,17 @@ struct SettingsPageTests {
         let cleanup = TextCleanup(
             isOn: cleanupOn,
             save: { _ in },
+            translationIsOn: translationOn,
             models: models,
             engine: CleanupEngine(load: { _ in }, unload: {}, complete: { $0 })
         )
         let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
         for word in ["Orra", "Qwen3-ASR", "克劳德"] {
             pushToTalk.addToVocabulary(word)
+        }
+        if swapped {
+            // As after picking right Control, the talk key, for the translation key.
+            pushToTalk.chooseTranslationKey(.rightControl)
         }
         let input = AudioInput(id: 1, uid: "built-in", name: "MacBook Pro Microphone", isInternalMicrophone: true)
         let view = SettingsView(

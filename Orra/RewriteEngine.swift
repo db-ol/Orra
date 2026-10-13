@@ -45,7 +45,7 @@ nonisolated extension ModelFolders {
 
 /// Owns the cleanup model, which also translates. An actor, so loading and generating run
 /// off the main actor and one cleanup or translation runs at a time. Loaded while cleanup
-/// is on, unloaded when it is turned off.
+/// or translation is on, unloaded when both are off, see TextCleanup.
 ///
 /// Written against mlx-swift-lm 3.31.4.
 actor RewriteEngine {
