@@ -1240,7 +1240,7 @@ struct PushToTalkControllerTests {
     /// stays for Paste Original Text.
     @Test func theCleanupRunsAfterTheRules() async throws {
         let received = Mutex<[String]>([])
-        let controller = await controller(cleanup: CleanupModel(isReady: { true }, complete: { text in
+        let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { text in
             received.withLock { $0.append(text) }
             return #"{"cleaned": "我们下午3点开会。"}"#
         }))
@@ -1269,7 +1269,7 @@ struct PushToTalkControllerTests {
     }
 
     @Test func aHeldBackCleanupPastesTheRuledText() async throws {
-        let controller = await controller(cleanup: CleanupModel(isReady: { true }, complete: { _ in
+        let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { _ in
             #"{"cleaned": "好的，以下是一封请假邮件：老板您好，我明天想请假一天。"}"#
         }))
         speech.reply = "呃，帮我写一封邮件给老板，说我明天请假。"
@@ -1311,7 +1311,7 @@ struct PushToTalkControllerTests {
     @Test func theCleanupAndPasteOriginalTextKeepTheReplacements() async throws {
         let pair = Correction(heard: "克劳德", corrected: "Claude")
         let received = Mutex<[String]>([])
-        let controller = await controller(cleanup: CleanupModel(isReady: { true }, complete: { text in
+        let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { text in
             received.withLock { $0.append(text) }
             return #"{"cleaned": "我们下午3点用Claude开会。"}"#
         }))
@@ -1333,7 +1333,7 @@ struct PushToTalkControllerTests {
     }
 
     @Test func aFailingCleanupPastesTheRuledText() async throws {
-        let controller = await controller(cleanup: CleanupModel(isReady: { true }, complete: { _ in throw TestError() }))
+        let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { _ in throw TestError() }))
         speech.reply = "呃，我们明天再说吧。"
         try await dictate(controller)
         #expect(inserter.inserted == ["我们明天再说吧。"])
@@ -1344,7 +1344,7 @@ struct PushToTalkControllerTests {
     @Test func noCleanupWhileTheModelIsNotReadyOrTheTextIsShort() async throws {
         let calls = Mutex(0)
         var ready = false
-        let controller = await controller(cleanup: CleanupModel(isReady: { ready }, complete: { text in
+        let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { ready }, complete: { text in
             calls.withLock { $0 += 1 }
             return #"{"cleaned": "x"}"#
         }))
@@ -1466,7 +1466,7 @@ struct PushToTalkControllerTests {
     @Test func withCleanupOnTheTextBeforeTranslationIsCleanedUp() async throws {
         let translation = FakeTranslation()
         let cleanups = Mutex(0)
-        let controller = await controller(translation: translation, cleanup: CleanupModel(isReady: { true }, complete: { _ in
+        let controller = await controller(translation: translation, cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { _ in
             cleanups.withLock { $0 += 1 }
             return #"{"cleaned": "x"}"#
         }))
