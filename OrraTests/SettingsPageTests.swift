@@ -134,12 +134,12 @@ struct SettingsPageTests {
         let content: AnyView = if let sheet { AnyView(view.content(for: sheet)) } else { AnyView(view) }
         // The window's first size, and the sheets' sizes, with Advanced at full length.
         let size = switch sheet {
-        case nil: NSSize(width: 600, height: 520)
+        case nil: NSSize(width: 600, height: 400)
         case .cleanup: NSSize(width: 540, height: 560)
         case .translation: NSSize(width: 540, height: 600)
         case .vocabulary: NSSize(width: 680, height: 600)
         case .advanced: NSSize(width: 600, height: 1180)
-        case .about: NSSize(width: 540, height: 420)
+        case .about: NSSize(width: 540, height: 380)
         }
         let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
         hosting.frame = NSRect(origin: .zero, size: size)
