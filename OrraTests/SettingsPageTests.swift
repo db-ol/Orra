@@ -16,7 +16,7 @@ struct SettingsPageTests {
 
     @Test func theSidebarHasGeneralVocabularyAndAbout() {
         #expect(SettingsTab.allCases == [.general, .vocabulary, .about])
-        #expect(SettingsSheet.allCases == [.cleanup, .advanced])
+        #expect(SettingsSheet.allCases == [.cleanup])
     }
 
     @Test func aTabAskedForOpensOnceAndSettingsOpensGeneral() {
@@ -27,12 +27,12 @@ struct SettingsPageTests {
     }
 
     @Test func aSheetOpensOverGeneral() {
-        SettingsWindow.show(.about, sheet: .advanced)
-        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: .advanced))
+        SettingsWindow.show(.about, sheet: .cleanup)
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: .cleanup))
     }
 
     @Test func changeTalkKeyOpensGeneralAlone() {
-        SettingsWindow.show(sheet: .advanced)
+        SettingsWindow.show(sheet: .cleanup)
         // Change Talk Key… closes a sheet that is open, since the keys are on General.
         SettingsWindow.show(.general)
         #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: nil))
@@ -84,14 +84,12 @@ struct SettingsPageTests {
         let language = Bundle.main.preferredLocalizations.first ?? "en"
         try await render(.tab(.general), name: "\(language)-0-general")
         try await render(.tab(.general), cleanupOn: true, name: "\(language)-0-general-cleanup-on")
-        try await render(.tab(.general), cleanupOn: true, height: 900, name: "\(language)-0-general-full-height")
+        try await render(.tab(.general), cleanupOn: true, height: 1100, name: "\(language)-0-general-full-height")
         try await render(.tab(.vocabulary), name: "\(language)-1-vocabulary")
         try await render(.tab(.about), name: "\(language)-2-about")
         try await render(.tab(.about), height: 900, name: "\(language)-2-about-full-height")
         try await render(.sheet(.cleanup), name: "\(language)-3-cleanup-options")
         try await render(.sheet(.cleanup), cleanupOn: true, name: "\(language)-3-cleanup-options-on")
-        try await render(.sheet(.advanced), name: "\(language)-4-advanced")
-        try await render(.sheet(.advanced), full: true, name: "\(language)-4-advanced-full-height")
     }
 
     private var folder: URL {
@@ -105,9 +103,8 @@ struct SettingsPageTests {
 
     /// A tab in the whole window, at the window's first size or `height`, or a sheet alone
     /// at the size it opens at over that window, since a sheet does not draw outside a
-    /// window on screen. `full` renders a sheet at its own height, without the window's
-    /// limit, to show what scrolls.
-    private func render(_ shown: Shown, cleanupOn: Bool = false, height: CGFloat? = nil, full: Bool = false, name: String) async throws {
+    /// window on screen.
+    private func render(_ shown: Shown, cleanupOn: Bool = false, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -140,7 +137,7 @@ struct SettingsPageTests {
         )
         // The window's first size, and each sheet at the size it opens at over that window.
         let window = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)
-        let limit = full ? .infinity : window.height - SettingsSheetLimits.margin
+        let limit = window.height - SettingsSheetLimits.margin
         let content: AnyView
         let size: NSSize
         switch shown {
@@ -169,7 +166,6 @@ struct SettingsPageTests {
             content = AnyView(view.content(for: sheet).environment(\.settingsSheetHeightLimit, limit))
             size = switch sheet {
             case .cleanup: NSSize(width: 540, height: SettingsSheetLimits.height(560, limit: limit))
-            case .advanced: NSSize(width: 600, height: SettingsSheetLimits.height(full ? 1000 : 640, limit: limit))
             }
         }
         let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
