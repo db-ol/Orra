@@ -41,7 +41,7 @@ final class RecordingFeedback {
     private(set) var level = 0.0
     var showsIndicator: Bool {
         didSet {
-            guard showsIndicator != oldValue else { return }
+            guard showsIndicator != oldValue, !isSettingHint else { return }
             savePreferences()
             present(presented)
             updateLevelTask()
@@ -49,11 +49,28 @@ final class RecordingFeedback {
     }
     var showsIdleBar: Bool {
         didSet {
-            guard showsIdleBar != oldValue else { return }
+            guard showsIdleBar != oldValue, !isSettingHint else { return }
             savePreferences()
             present(presented)
         }
     }
+    /// Both switches above as the one choice Settings shows. Setting it saves once and
+    /// updates the panel once.
+    var onScreenHint: OnScreenHint {
+        get { OnScreenHint(showsIndicator: showsIndicator, showsIdleBar: showsIdleBar) }
+        set {
+            guard newValue != onScreenHint else { return }
+            isSettingHint = true
+            showsIndicator = newValue.showsIndicator
+            showsIdleBar = newValue.showsIdleBar
+            isSettingHint = false
+            savePreferences()
+            present(presented)
+            updateLevelTask()
+        }
+    }
+    /// True while onScreenHint sets both switches, so they do not save one by one.
+    @ObservationIgnored private var isSettingHint = false
     /// True while the pointer is over the idle bar, which then shows how to talk.
     var pointerIsOverIdleBar = false
     /// Whether a hold would dictate: the talk key is watched and the model is loaded.
@@ -244,6 +261,50 @@ nonisolated enum FeedbackPreference {
         defaults.set(values.showsIndicator, forKey: indicatorKey)
         defaults.set(values.playsSounds, forKey: soundsKey)
         defaults.set(values.showsIdleBar, forKey: idleBarKey)
+    }
+}
+
+/// What Settings offers as the on screen hint. It is saved as the two switches of earlier
+/// versions, the recording indicator and the idle bar, so a saved choice keeps meaning
+/// what it did and nothing is rewritten on disk.
+nonisolated enum OnScreenHint: String, CaseIterable, Identifiable, Sendable {
+    /// The indicator while dictating, and the idle bar while Orra is ready.
+    case always
+    /// The indicator only.
+    case whileDictating
+    /// Neither. The menu bar icon then shows listening and transcribing.
+    case off
+    /// The idle bar only. Settings offers it only to someone who had turned the indicator
+    /// off and kept the bar, so their choice still shows.
+    case whileReady
+
+    var id: String { rawValue }
+
+    init(showsIndicator: Bool, showsIdleBar: Bool) {
+        switch (showsIndicator, showsIdleBar) {
+        case (true, true): self = .always
+        case (true, false): self = .whileDictating
+        case (false, false): self = .off
+        case (false, true): self = .whileReady
+        }
+    }
+
+    init(_ values: FeedbackPreference.Values) {
+        self.init(showsIndicator: values.showsIndicator, showsIdleBar: values.showsIdleBar)
+    }
+
+    var showsIndicator: Bool {
+        self == .always || self == .whileDictating
+    }
+
+    var showsIdleBar: Bool {
+        self == .always || self == .whileReady
+    }
+
+    /// The choices in Settings, in order. Only the bar while ready is left out, unless it
+    /// is the current choice.
+    static func choices(current: OnScreenHint) -> [OnScreenHint] {
+        current == .whileReady ? allCases : [.always, .whileDictating, .off]
     }
 }
 
