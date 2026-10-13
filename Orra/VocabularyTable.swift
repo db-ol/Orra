@@ -181,14 +181,14 @@ struct VocabularyTable: View {
 
     /// Tall enough for every row up to `maximumHeight`, then the table scrolls. So the Remove
     /// button and its hint sit right under the last word instead of under empty space.
-    static func height(rows: Int) -> CGFloat {
+    nonisolated static func height(rows: Int) -> CGFloat {
         let header: CGFloat = 28
         let row: CGFloat = 24
         let shownRows = max(rows, 3)
         return min(header + row * CGFloat(shownRows) + 6, maximumHeight)
     }
 
-    static let maximumHeight: CGFloat = 320
+    nonisolated static let maximumHeight: CGFloat = 320
 
     /// The two orders the Sort by menu offers, matching the sortable columns.
     enum SortChoice: Hashable {
