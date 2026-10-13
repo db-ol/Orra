@@ -246,7 +246,7 @@ Build and test commands, run in the repository root:
     only the tokens after it, and that a prompt that does not start with it, or has
     nothing after it, reads the whole prompt instead. With the model's tokenizer, it checks
     that every prompt of the cleanup evaluation, as written and after the rules, starts
-    with the cached start of 892 tokens.
+    with the cached start of 1143 tokens (892 before the prompt of 2026-10-13).
   - RewriteTokenizerTests compares CleanupTokenizer, the tokenizer of swift-transformers,
     with the IDs that transformers in Python gave for the model on 20 strings and 4 whole
     prompts, decodes text back and loads it through the loader the engine uses. It needs
@@ -267,8 +267,9 @@ Build and test commands, run in the repository root:
     for learning and ends learning's watch of the cleaned paste, that a held back or failing cleanup pastes the ruled text, and
     that nothing runs while the model is not ready or for text under three letters or
     digits.
-  - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases and the 70
-    adversarial cases of Tools/rewrite-eval, only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
+  - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases, the 70
+    adversarial cases and the 20 meaning cases of Tools/rewrite-eval, only with
+    TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
     Its timings hold for a Release build, since a Debug build runs MLX without
     optimization:
 
@@ -276,6 +277,40 @@ Build and test commands, run in the repository root:
 
     With TEST_RUNNER_ORRA_CLEANUP_COMPARE=1 as well, each case also runs without the prefix
     cache right after, and the report lists every case where the two differ.
+
+    On 2026-10-13 the prompt gained rules and two examples that keep words with meaning:
+    pronouns, phrases such as 我再想想 and 我考虑一下, both parts of 不是 X，是 Y that sets
+    a document or someone else right, and the text as it is when a correction is unclear.
+    A Release build with the comparison, on the same M5 Pro with the installed model, took
+    490 s for cleanupCases. The cached start grew to 1143 of about 1194 tokens and the
+    cache to 93 MB, and loading took 1.2 s. The model still reads about 51 tokens after the
+    cache, in a median of 0.055 s. Main measured in the same way just before, without the
+    comparison, gave the numbers in brackets (it timed out once on a regular case then):
+
+    | Set | Run | Exact | Held back | Median with cache | p95 with cache | Median without |
+    |---|---|---|---|---|---|---|
+    | regular, 178 | model only | 157 (157) | 1 (1) | 0.159 s (0.160 s) | 0.225 s | 0.667 s |
+    | regular, 178 | as the app runs it | 162 (155) | 1 (1) | 0.161 s (0.164 s) | 0.238 s | 0.672 s |
+    | adversarial, 70 | model only | 66 (65) | 0 (0) | 0.183 s (0.180 s) | 0.318 s | 0.698 s |
+    | adversarial, 70 | as the app runs it | 66 (66) | 0 (0) | 0.193 s (0.181 s) | 0.494 s | 0.789 s |
+    | meaning, 20 | model only | 16 (9) | 0 (0) | 0.183 s (0.172 s) | 0.235 s | 0.753 s |
+    | meaning, 20 | as the app runs it | 18 (9) | 0 (0) | 0.184 s (0.175 s) | 0.526 s | 0.734 s |
+
+    Every answer was the same with and without the cache, except three adversarial ones
+    run on the dictation as written, which timed out without the cache (up to 4.0 s while
+    the Mac was busy) and so pasted the dictation. The pasted adversarial outputs that
+    differ from the expected text are the same four as before, and none answered or
+    carried out a request. As the app runs it, the prompt now keeps 我再想想, 那个 as a
+    demonstrative, 嗯 as a reply in 嗯，好的 and 嗯对, Uh-huh, 啊 in 真好啊 and 这个怎么说呢,
+    and keeps both prices in 价格不是三万，是三万五，合同上写错了. It no longer applies two
+    corrections and keeps them as said instead (删掉这句, 两杯拿铁，不，三杯), and keeps the
+    filler like in "It's like, really hard to explain". Still wrong: 我们下周一哦，不是下周二开会
+    becomes 我们下周一开会, 放在桌上了吧，不对，我也记不清了 loses 不对, the longer
+    这个方案没问题，不过价格不是三万，是三万五，合同上写错了 still loses 不是三万, and 我的意思是
+    still goes. On the dictation as written, the meaning cases with 呃 or 嗯 before
+    我考虑一下 or 让我想一想 lose those words too, and 额，那个文件 loses 那个. The long
+    dictations took 0.37, 0.90, 2.19 and 2.90 s for 46 to 400 Chinese characters and 0.27,
+    0.71, 1.30 and 2.57 s for 86 to 905 English ones. The measurements before follow.
 
     Since 2026-10-12 the engine runs the model once on the start of the prompt that every
     transcript shares (the system text, the examples and the start of the last message,
