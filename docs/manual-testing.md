@@ -34,10 +34,10 @@ Build and test commands, run in the repository root:
   heavier real model tests. With the settings pages, it ended in TEST SUCCEEDED with
   2294 test cases passed and 6 skipped on 2026-10-12, the sixth being the opt in
   rendering of the settings pages. With the translation key, merged with the translation
-  core, it ended in TEST SUCCEEDED with 2375 test cases passed and 8 skipped on
+  core, it ended in TEST SUCCEEDED with 2376 test cases passed and 9 skipped on
   2026-10-13, the real model tests included. The skipped ones are the cleanup and the
-  translation evaluations, the three heavier real model tests, and the opt in renderings
-  of the settings pages and of the indicator's badge.
+  translation evaluations with the translation memory test, the three heavier real model
+  tests, and the opt in renderings of the settings pages and of the indicator's badge.
   - SettingsPageTests checks the sidebar's pages and their order, Translation after Clean
     Up Text, that each has its own icon, that Change Talk Key… asks for Dictation while
     Settings… afterwards opens on General, that Change Translation Key… asks for
