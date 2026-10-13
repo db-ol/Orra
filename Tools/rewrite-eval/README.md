@@ -51,6 +51,25 @@ OrraTests/RewriteGuardTests.swift runs that benchmark's cleanup outputs through 
 and OrraTests/CleanupModelEvaluationTests.swift runs the model on these cases and the
 cleanup cases above, see docs/manual-testing.md.
 
+## Meaning cases
+
+`meaning.jsonl` has 20 cases whose words carry meaning that a cleanup must keep, in the
+format of `cases.jsonl`. Four are transcripts of dictations where the cleanup model dropped
+such words in use (km01, km07, km12 and km16, after the filler and number rules), and the
+others were written by hand in the same kinds:
+
+| Category | Cases | What it tests |
+| --- | --- | --- |
+| hesitation_keep | 6 | 我再想想, 让我想想, 我考虑一下 and let me think say the speaker has not decided, so they stay |
+| contrast_keep | 5 | 不是 X，是 Y and not X, it's Y that set right a contract, a notice or a misunderstanding keep both values |
+| pronoun_keep | 4 | Requests keep their pronouns: 说我明天请假 keeps 我 |
+| ambiguous_keep | 5 | A correction cue whose target is unclear, such as 我们下周一哦，不是下周二开会 with the comma where speech recognition put it, keeps the text as it is |
+
+Each expected cleanup is the input, except that 呃 and 嗯 at the start go. The expected
+outputs were written by hand, and no case holds a recording. km12 repeats adv01, since that
+text lost 我 in use. None of them is a prompt example.
+OrraTests/CleanupModelEvaluationTests.swift runs them with the other cleanup cases.
+
 ## Numbers
 
 `numbers.jsonl` has 672 cases for writing spoken Chinese numbers as digits, one JSON
