@@ -72,7 +72,7 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: SettingsWindow.showNotification)) { _ in
             sheet = SettingsWindow.takeOpeningSheet()
         }
-        .frame(minWidth: 520, idealWidth: 600, maxWidth: .infinity, minHeight: 440, idealHeight: 520, maxHeight: .infinity)
+        .frame(minWidth: 520, idealWidth: 600, maxWidth: .infinity, minHeight: 360, idealHeight: 400, maxHeight: .infinity)
     }
 
     /// What a sheet holds.
@@ -622,7 +622,7 @@ private struct AboutSettings: View {
     let pushToTalk: PushToTalkController
 
     var body: some View {
-        SettingsSheetContent(title: "About Orra", height: 420) {
+        SettingsSheetContent(title: "About Orra", height: 380) {
             Section {
                 HStack(spacing: 14) {
                     Image(nsImage: NSApplication.shared.applicationIconImage)
