@@ -534,8 +534,15 @@ private struct AboutSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(verbatim: "Orra")
                             .font(.headline)
-                        Text("Version \(Self.version)")
-                            .foregroundStyle(.secondary)
+                        // A build run from Xcode has the project's placeholder version.
+                        Group {
+                            if AppUpdater.updatesEnabled {
+                                Text("Version \(Self.version)")
+                            } else {
+                                Text("Development build, updates are off")
+                            }
+                        }
+                        .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -553,6 +560,7 @@ private struct AboutSettings: View {
                         systemImage: "arrow.triangle.2.circlepath"
                     )
                 }
+                .disabled(!AppUpdater.updatesEnabled)
                 Button("Check for Updates…") {
                     updater.checkForUpdates()
                 }

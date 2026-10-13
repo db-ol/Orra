@@ -27,12 +27,22 @@ final class AppUpdater: NSObject {
         }
     }
 
+    /// False in a Debug build, the one Xcode runs. It carries the project's placeholder
+    /// version 1.0, which every release would look newer than. make-release.sh sets the
+    /// real version, so only release builds update.
+    #if DEBUG
+    static let updatesEnabled = false
+    #else
+    static let updatesEnabled = true
+    #endif
+
     @ObservationIgnored private var controller: SPUStandardUpdaterController?
     @ObservationIgnored private var observations: [NSKeyValueObservation] = []
 
-    /// Starts Sparkle. AppDelegate calls it at launch, never when Xcode hosts the tests.
+    /// Starts Sparkle. AppDelegate calls it at launch, never when Xcode hosts the tests, and
+    /// it does nothing in a Debug build.
     func start() {
-        guard controller == nil else { return }
+        guard Self.updatesEnabled, controller == nil else { return }
         let controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
         self.controller = controller
         let updater = controller.updater
