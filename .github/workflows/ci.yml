@@ -27,6 +27,10 @@ jobs:
       - name: Check the values that need the maintainer's approval
         run: python3 Tools/ci/check_rules.py
 
+      # The scorer of the speech corpus evaluation, which needs only the standard library.
+      - name: Test the speech evaluation scorer
+        run: python3 -m unittest discover -s Tools/speech-eval -p 'test_*.py' -v
+
   test:
     name: Build and test
     # The only GitHub hosted image with Xcode 27 so far. It is an arm64 Mac in public

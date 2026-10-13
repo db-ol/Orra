@@ -83,8 +83,12 @@ final class FakeSpeech {
     var delay: Duration = .zero
     private(set) var loads = 0
     private(set) var receivedSampleCounts: [Int] = []
+    /// The reply when the model is told to write a language.
+    var replyInLanguage: [SpeechLanguage: String] = [:]
     /// The context each transcription got.
     private(set) var receivedContexts: [String?] = []
+    /// The language each transcription was told to write, nil when none.
+    private(set) var receivedLanguages: [SpeechLanguage?] = []
 
     var transcription: Transcription {
         Transcription(
@@ -95,14 +99,16 @@ final class FakeSpeech {
                 }
                 if let error = self.loadError { throw error }
             },
-            transcribe: { samples, context in
+            transcribe: { samples, context, language in
                 self.receivedContexts.append(context)
+                self.receivedLanguages.append(language)
                 self.receivedSampleCounts.append(samples.count)
                 if self.delay > .zero {
                     try await Task.sleep(for: self.delay)
                 }
                 if let error = self.transcribeError { throw error }
                 if context == nil, let error = self.transcribeErrorWithoutContext { throw error }
+                if let language, let hinted = self.replyInLanguage[language] { return hinted }
                 if context == nil, let plain = self.replyWithoutContext { return plain }
                 return self.reply
             }
@@ -549,8 +555,9 @@ struct PushToTalkControllerTests {
 
     @Test func holdShorterThanTheMinimumIsNotTranscribed() async throws {
         // Far longer than any hold in a test, so the hold is short on any machine. With
-        // 300 ms, a slow CI runner took longer than that just to start the fake microphone.
-        let controller = await makeController(minimumHold: .seconds(10))
+        // 300 ms, a slow CI runner took longer than that just to start the fake microphone,
+        // and with 10 s a stalled runner still went past it.
+        let controller = await makeController(minimumHold: .seconds(3600))
         try await dictate(controller)
         #expect(controller.state == .idle)
         // The microphone is still stopped, but nothing is transcribed.
@@ -1176,6 +1183,16 @@ struct PushToTalkControllerTests {
         #expect(controller.problem == nil)
     }
 
+    @Test func aTranscriptInAThirdLanguageIsTranscribedAgainInChineseWithTheVocabulary() async throws {
+        speech.reply = "Pan om ol är en typ av enkelt och lätt måltid som är populär i sommar."
+        speech.replyInLanguage = [.chinese: "Pa amb Oli 是一种在夏天流行的简单晚餐。"]
+        let controller = await controller(vocabulary: ["Pa amb Oli"])
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Pa amb Oli", "Pa amb Oli"])
+        #expect(speech.receivedLanguages == [nil, .chinese])
+        #expect(inserter.inserted == ["Pa amb Oli 是一种在夏天流行的简单晚餐。"])
+    }
+
     @Test func speechWithMoreThanTermsIsTranscribedOnce() async throws {
         speech.reply = "我们用 Orra 写字"
         speech.replyWithoutContext = ""
@@ -1188,9 +1205,10 @@ struct PushToTalkControllerTests {
     @Test func thePasteIsReported() async throws {
         let controller = await makeController()
         var reported: [(String, pid_t)] = []
-        controller.onPasted = { text, app, beforeCleanup in
+        controller.onPasted = { text, app, beforeCleanup, replacements in
             reported.append((text, app))
             #expect(beforeCleanup == nil)
+            #expect(replacements.isEmpty)
         }
         try await dictate(controller)
         #expect(inserter.inserted == ["你好"])
@@ -1228,7 +1246,7 @@ struct PushToTalkControllerTests {
         var reported: [String] = []
         var beforeCleanup: [String?] = []
         var stopped: [String] = []
-        controller.onPasted = { text, _, before in
+        controller.onPasted = { text, _, before, _ in
             reported.append(text)
             beforeCleanup.append(before)
         }
@@ -1258,6 +1276,59 @@ struct PushToTalkControllerTests {
         #expect(inserter.inserted == ["帮我写一封邮件给老板，说我明天请假。"])
         #expect(controller.originalText == nil)
         #expect(controller.problem == nil)
+    }
+
+    /// The kept pairs replace what the model wrote after the rule steps, which run on the
+    /// model's text as before. The paste, its report for learning, the vocabulary dates and
+    /// Copy Last Dictation all have the user's word.
+    @Test func learnedWordsReplaceTheHeardSpellingAfterTheRules() async throws {
+        let pair = Correction(heard: "克劳德", corrected: "Claude")
+        let controller = await controller(vocabulary: ["Claude"])
+        controller.replacementPairs = { [pair] }
+        var reported: [(String, String?, [Replacement])] = []
+        controller.onPasted = { text, _, before, replacements in reported.append((text, before, replacements)) }
+        speech.reply = "呃，我们下午两点用克劳德。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["我们下午2点用Claude。"])
+        #expect(reported.map(\.0) == ["我们下午2点用Claude。"])
+        #expect(reported.map(\.1) == [nil])
+        #expect(reported.map(\.2) == [[Replacement(span: 7..<13, heard: "克劳德", corrected: "Claude", pair: pair)]])
+        #expect(controller.lastTranscript == "我们下午2点用Claude。")
+        #expect(controller.vocabulary.first?.lastUsed != nil)
+    }
+
+    @Test func aPairWhoseWordIsNotInTheVocabularyReplacesNothing() async throws {
+        let controller = await controller(vocabulary: ["Orra"])
+        controller.replacementPairs = { [Correction(heard: "克劳德", corrected: "Claude")] }
+        speech.reply = "我们用克劳德。"
+        try await dictate(controller)
+        #expect(inserter.inserted == ["我们用克劳德。"])
+    }
+
+    /// The cleanup model sees the user's words, and Paste Original Text keeps them: they are
+    /// the user's own, and taking them out would put back a known mishearing.
+    @Test func theCleanupAndPasteOriginalTextKeepTheReplacements() async throws {
+        let pair = Correction(heard: "克劳德", corrected: "Claude")
+        let received = Mutex<[String]>([])
+        let controller = await controller(cleanup: CleanupModel(isReady: { true }, complete: { text in
+            received.withLock { $0.append(text) }
+            return #"{"cleaned": "我们下午3点用Claude开会。"}"#
+        }))
+        controller.addToVocabulary("Claude")
+        controller.replacementPairs = { [pair] }
+        var reported: [(String, String?, [Replacement])] = []
+        controller.onPasted = { text, _, before, replacements in reported.append((text, before, replacements)) }
+        speech.reply = "呃，我们下午两点，哦不对，下午三点用克劳德开会。"
+        try await dictate(controller)
+        let ruled = "我们下午2点，哦不对，下午3点用Claude开会。"
+        #expect(received.withLock { $0 } == [ruled])
+        #expect(inserter.inserted == ["我们下午3点用Claude开会。"])
+        #expect(controller.originalText == ruled)
+        // Placed in the text before the cleanup.
+        #expect(reported.map(\.1) == [ruled])
+        #expect(reported.map(\.2) == [[Replacement(span: 16..<22, heard: "克劳德", corrected: "Claude", pair: pair)]])
+        await controller.pasteOriginal()
+        #expect(inserter.inserted.last == ruled)
     }
 
     @Test func aFailingCleanupPastesTheRuledText() async throws {
