@@ -217,7 +217,8 @@ names keyboards print on the keys. Implemented in `Orra/TalkKey.swift`,
 - The welcome step shows the same recorder field, with the Use fn or Use right Control
   button under the recommendation.
 - Talk Key in the menu is a line with the key, such as "Talk Key: ⌥ Right Option (Alt)",
-  and Change Talk Key…, which opens Settings on Dictation. A menu cannot record a key
+  and Change Talk Key…, which opens Settings on General (on Dictation from 2026-10-12 to
+  2026-10-13). A menu cannot record a key
   press. The hands free switch stays there.
 
 Not verified on hardware yet: how the recorder feels, whether a Windows layout keyboard

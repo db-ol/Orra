@@ -7,7 +7,8 @@ of microphone added on 2026-10-05, on 2026-10-07 the model download, the recordi
 indicator and sounds, the welcome window, the Chinese interface and the app icon, and on
 2026-10-10 the left hand talk keys, choosing the key by pressing it and hands free, one
 talk key set in a recorder field, and the optional cleanup with a local model, and on
-2026-10-12 the settings pages, which became one page with sheets on 2026-10-13. Three
+2026-10-12 the settings pages, which became one page with sheets on 2026-10-13 and then a
+sidebar with General, Vocabulary and About the same day. Three
 sections: what a build or test run verified, what only a person at the Mac can verify, and
 what does not exist yet.
 
@@ -36,11 +37,12 @@ Build and test commands, run in the repository root:
   rendering of the settings pages. With the settings on one page and its sheets, it ended
   in TEST SUCCEEDED with 2294 test cases passed and 6 skipped on 2026-10-13, and after
   the sheets were fitted to the window, with 2296 passed and 6 skipped the same day.
-  - SettingsPageTests checks that a sheet asked for, such as the vocabulary, opens once
-    while Settings… afterwards opens the page alone, that Change Talk Key… asks for the
-    page alone, that an open window is told, and the line under Clean Up Text for each
-    state of the model. With TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it
-    renders the page and every sheet to a PNG there, which CI never does.
+  - SettingsPageTests checks the three tabs and two sheets, that a tab or sheet asked
+    for, such as Vocabulary, opens once while Settings… afterwards opens General alone,
+    that a sheet opens over General, that Change Talk Key… asks for General alone, that
+    an open window is told, and the line under Clean Up Text for each state of the
+    model. With TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab
+    and sheet to a PNG there, which CI never does.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
@@ -586,8 +588,8 @@ One talk key in a recorder field, added later on 2026-10-10, not verified yet:
 - [ ] With an earlier version that had right Control, right Option and fn on, the update
   keeps fn. With right Control and right Command on, it keeps right Control.
 - [ ] Talk Key in the menu shows "Talk Key: ⌃ Right Control" as a line that cannot be
-  clicked, and Change Talk Key… opens Settings on its page, also when Settings was open
-  with a sheet.
+  clicked, and Change Talk Key… opens Settings on General, also when Settings was open
+  on another tab or with a sheet.
 - [ ] The welcome step "Choose your talk key" records the key the same way.
 - [ ] VoiceOver reads the Settings row as "Talk key" once, with the key as its value.
   Starting the recording says "Press the key you want to hold" and the keys to use, and
@@ -892,9 +894,8 @@ Idle bar, added on 2026-10-09, not verified yet:
 
 Personal vocabulary, added on 2026-10-08, not verified yet:
 
-- [ ] Settings opens on one page, with Edit… next to Vocabulary (since 2026-10-13). The
-  page fits without scrolling, in English and in Chinese.
-- [ ] In the vocabulary sheet, add a few names and terms that Orra got wrong before, with the field
+- [ ] Settings has Vocabulary in its sidebar (again since 2026-10-13), under General.
+- [ ] Under Vocabulary in Settings, add a few names and terms that Orra got wrong before, with the field
   and Return or Add, and remove one with its minus button. Dictate sentences with them:
   they come out spelled as in the list.
 - [ ] Dictate sentences without them: none of the listed words shows up.
@@ -904,7 +905,7 @@ Personal vocabulary, added on 2026-10-08, not verified yet:
 
 Vocabulary without the 100 word limit, added on 2026-10-10, not verified yet:
 
-- [ ] The vocabulary sheet (Edit… next to Vocabulary in Settings) shows the field to add
+- [ ] Vocabulary in Settings shows the field to add
   a word, then a table about 280 points high that scrolls, with the columns
   Word, Source, Heard as and Last used, in English and in Chinese. It fits the window
   without clipping and looks at home in the grouped page, in light and dark mode.
@@ -1026,8 +1027,8 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
 
 - [ ] A release DMG installs by dragging Orra to Applications and opens without a warning.
   The first launch reaches no network until you download the model.
-- [ ] At the second launch Orra asks whether to check for updates automatically. Advanced…
-  in Settings shows the answer and changes it.
+- [ ] At the second launch Orra asks whether to check for updates automatically. Settings,
+  About shows the answer and changes it.
 - [ ] Check for Updates in the menu says Orra is up to date for the newest release, and
   offers the newer one with its notes from an older release. Installing it replaces Orra
   and opens the new version, which keeps Accessibility and the microphone.
@@ -1042,9 +1043,10 @@ Interface language, added on 2026-10-10, not verified yet:
   the menu, Settings, the welcome window and the indicator use that language. Same as the
   Mac follows System Settings again. Choosing English on a Mac in English shows no Restart
   Orra.
-- [ ] Settings looks like System Settings: one grouped page with icons on its rows, and
-  Language as the first section of Advanced…. The window can be made larger, keeps its
-  size, and cannot be made smaller than its content.
+- [ ] Settings looks like System Settings: colored icons in the sidebar, grouped blocks
+  with headers and icons on the rows of General, and Language as the first section of
+  Advanced…. The window can be made larger, keeps its size, and cannot be made smaller
+  than its content.
 
 Language in the welcome window, added on 2026-10-10, not verified yet. Prepare a first
 launch as for the welcome window above, with the Mac in English:
@@ -1126,35 +1128,39 @@ Cleanup with a local model, added on 2026-10-10, not verified yet:
 - [ ] The rewrite log shows timings, token counts and outcomes, and no text:
   `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`.
 
-Settings on one page, added on 2026-10-12 as pages and changed to one page with sheets on
-2026-10-13, not verified yet. Rendered to PNG by the opt in test in SettingsPageTests, in
-English and in Chinese, but not seen in the running app:
+Settings with a sidebar, added on 2026-10-12 as pages, changed to one page with sheets on
+2026-10-13 and then to a sidebar with General, Vocabulary and About the same day, not
+verified yet. Rendered to PNG by the opt in test in SettingsPageTests, in English and in
+Chinese, but not seen in the running app:
 
-- [ ] Settings… opens one page with no sidebar (通用 in Chinese): Talk key, Microphone,
-  Clean Up Text with its switch and Options…, Vocabulary with the number of words and
-  Edit…, and Open at Login, then Advanced… and About Orra at the bottom.
+- [ ] Settings… opens on General (通用 in Chinese), with General, Vocabulary and About
+  (通用, 个人词库, 关于) in the sidebar and nothing else. General shows four blocks with
+  headers: Keys with the talk key, Features with Clean Up Text, its switch and
+  Options…, Microphone with the input device, and System with Open at Login and
+  Advanced….
 - [ ] The talk key field and Change… work as before. The microphone picker works as it did
   on the Microphone page, also with a chosen microphone that is not connected, and its
   tooltip explains the system default.
 - [ ] Turning Clean Up Text on asks before the download. Options… opens a sheet with the
   explanation, the progress, Cancel Download, Resume Download, loading and Try Again under
   Local model, then the filler and number rules under Rules. Done closes it.
-- [ ] Edit… opens the vocabulary in a sheet that can be made larger, with the field
-  focused. Type a word and press Return: the word is added, the field is empty and
-  focused again, and the sheet stays open. Escape or Done closes it.
+- [ ] Vocabulary shows the field, focused, and the table over the full height of the
+  window. Type a word and press Return: the word is added, and the field is empty and
+  focused again.
 - [ ] Pointing at the talk key field shows how to hold the key and the recommended keys.
 - [ ] Every sheet opens inside the window and never hangs below its bottom edge, at the
   window's first size and after making the window as short as it goes. A sheet with more
-  than fits scrolls, and Clean Up Text, Vocabulary and Advanced can be made larger.
-- [ ] Advanced… holds Language, Double press for hands free under Hands Free, the on screen hint, the
-  sounds, Learn from my corrections with Forget Learned Corrections, Show Orra in the
-  Dock, and Updates. Run from Xcode, the update switch and button are off and
-  "Development build, updates are off" shows under them. In a release build both work.
-  The sheet scrolls when the window is short.
-- [ ] About Orra shows the version, the speech model status and the privacy text with its
-  link.
-- [ ] Change Talk Key… in the menu opens Settings on the page, from a closed window and
-  from one open with a sheet, which closes. Settings… afterwards opens the page alone.
+  than fits scrolls, and Clean Up Text and Advanced can be made larger.
+- [ ] Advanced… holds Language, Double press for hands free under Hands Free, the on screen
+  hint, the sounds, Learn from my corrections with Forget Learned Corrections, and Show
+  Orra in the Dock. The sheet scrolls when the window is short.
+- [ ] About shows the version, the speech model status, Updates with Check for updates
+  automatically and Check for Updates…, and the privacy text with its link. Run from
+  Xcode, the line under the version says "Development build, updates are off" and the
+  update switch and button are off. In a release build both work.
+- [ ] Change Talk Key… in the menu opens Settings on General, from a closed window, from
+  one open on another tab, and from one open with a sheet, which closes. Settings…
+  afterwards opens General alone.
 - [ ] The on screen hint offers Always, Only while dictating and Off (始终显示, 仅在听写时显示,
   不显示). Always shows the indicator and the idle bar, Only while dictating only the
   indicator, Off neither, and the menu bar icon then shows listening and transcribing.
