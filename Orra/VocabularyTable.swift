@@ -110,13 +110,17 @@ struct VocabularyTable: View {
                 TextField("Search", text: $search, prompt: Text("Search"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
-                    // The picker next to it would take the whole row in a grouped form.
-                    .frame(minWidth: 180)
                 // The column titles sort too, but few people know they can be clicked.
+                // The name stands apart from the picker, which in a grouped form would
+                // otherwise stretch over the row and squeeze the search field.
+                Text("Sort by")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 Picker("Sort by", selection: sortChoice) {
                     Text("Recently used").tag(SortChoice.recent)
                     Text("Word").tag(SortChoice.word)
                 }
+                .labelsHidden()
                 .fixedSize()
             }
             Table(shown, selection: $selection, sortOrder: $sortOrder) {
