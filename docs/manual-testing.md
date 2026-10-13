@@ -44,6 +44,10 @@ Build and test commands, run in the repository root:
   with 2294 passed and 6 skipped. After the sheets were fitted to the window, it ended
   in TEST SUCCEEDED with 2376 passed and the same 9 skipped, and settings-pages alone
   with 2296 passed and 6 skipped, the same day.
+  With the settings sidebar of General, Vocabulary and About merged in, it ended in TEST
+  SUCCEEDED with 2381 passed and 7 skipped the same day, the opt in renderings of the
+  settings and of the badge turned on and passing, and settings-pages alone with 2299
+  passed and 5 skipped the same way.
   - SettingsPageTests checks the three tabs and two sheets, that a tab or sheet asked
     for, such as Vocabulary, opens once while Settings… afterwards opens General alone,
     that a sheet opens over General, that Change Talk Key… asks for General alone, that

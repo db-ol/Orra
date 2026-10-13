@@ -165,9 +165,25 @@ struct SettingsPageTests {
         let size: NSSize
         switch shown {
         case .tab(let tab):
-            // The view takes the request when it appears, as the window does.
-            SettingsWindow.show(tab)
-            content = AnyView(view)
+            // The sidebar's list does not draw outside a window on screen, so its rows
+            // stand next to the page in a plain column, at the sidebar's width.
+            content = AnyView(HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(SettingsTab.allCases) { row in
+                        SettingsTabLabel(tab: row)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(row == tab ? Color.secondary.opacity(0.2) : .clear))
+                    }
+                    Spacer()
+                }
+                .padding(10)
+                .frame(width: 180)
+                .background(Color(nsColor: .windowBackgroundColor))
+                Divider()
+                view.page(for: tab)
+            })
             size = window
         case .sheet(let sheet):
             content = AnyView(view.content(for: sheet).environment(\.settingsSheetHeightLimit, limit))
