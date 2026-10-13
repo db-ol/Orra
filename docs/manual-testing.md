@@ -315,9 +315,6 @@ Build and test commands, run in the repository root:
     for learning and ends learning's watch of the cleaned paste, that a held back or failing cleanup pastes the ruled text, and
     that nothing runs while the model is not ready or for text under three letters or
     digits.
-  - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases, the 70
-    adversarial cases and the 20 meaning cases of Tools/rewrite-eval, only with
-    TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
   - CleanupIdleUnloadTests, added on 2026-10-12, drives the idle unload with a stand in
     model and a clock the test moves: the model is unloaded after 15 minutes without a
     dictation and not a second earlier, every dictation starts that time again and none is
@@ -365,8 +362,9 @@ Build and test commands, run in the repository root:
     idle unload and 0.39, 0.47 and 0.25 s right after. The first two were cleaned up both
     times. The third text was not worth a cleanup either time, and its 0.34 s more after
     the unload is the speech model running slower while the cleanup model loads.
-  - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases and the 70
-    adversarial cases of Tools/rewrite-eval, only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
+  - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases, the 70
+    adversarial cases and the 20 meaning cases of Tools/rewrite-eval, only with
+    TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
     Its timings hold for a Release build, since a Debug build runs MLX without
     optimization:
 
