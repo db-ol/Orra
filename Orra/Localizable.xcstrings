@@ -2377,6 +2377,36 @@
         }
       }
     },
+    "This dictation will be translated into Chinese." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写会被翻译成中文。"
+          }
+        }
+      }
+    },
+    "This dictation will be translated into English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写会被翻译成英文。"
+          }
+        }
+      }
+    },
+    "This dictation will be translated." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写会被翻译。"
+          }
+        }
+      }
+    },
     "This key can't be the talk key. Holding it would type or do something in the app in front." : {
       "localizations" : {
         "zh-Hans" : {
