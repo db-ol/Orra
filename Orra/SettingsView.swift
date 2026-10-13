@@ -179,9 +179,10 @@ struct SettingsView: View {
 }
 
 /// General: the keys, the features with their options, dictation, the microphone, and the
-/// system, each in a block of its own. A setting shows one short line under its name, and
-/// the rest of what it does when the pointer rests on it. The page scrolls when the window
-/// is short.
+/// system, each in a block of its own. The target language of translation sits right under
+/// its switch, so it takes no extra click. A setting shows one short line under its name,
+/// and the rest of what it does when the pointer rests on it. The page scrolls when the
+/// window is short.
 private struct GeneralSettings: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
@@ -195,15 +196,58 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             Section {
-                TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false)
+                // The note about swapped keys shows once, under the translation key.
+                TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false)
                     .help(Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.") + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
+                VStack(alignment: .leading, spacing: 6) {
+                    TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
+                        // The key does nothing while translation is off.
+                        .disabled(!cleanup.translationIsOn)
+                    if !cleanup.translationIsOn {
+                        Text("Turn on Translation under Features to use this key.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .help(Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free."))
             } header: {
                 Text("Keys")
             }
             Section {
                 CleanupRow(cleanup: cleanup) { open(.cleanup) }
+                TranslationRow(cleanup: cleanup)
+                Picker(selection: Binding(
+                    get: { cleanup.translationDirection },
+                    set: { cleanup.setTranslationDirection($0) }
+                )) {
+                    ForEach(TranslationDirection.allCases, id: \.self) { direction in
+                        Text(direction.title).tag(direction)
+                    }
+                } label: {
+                    DescribedLabel(
+                        title: "Translate into",
+                        detail: cleanup.translationDirection.detail,
+                        systemImage: "arrow.left.arrow.right"
+                    )
+                }
+                .pickerStyle(.radioGroup)
+                .disabled(!cleanup.translationIsOn)
+                // One status for the model of both features, with its buttons, while
+                // translation is on. Its text starts where the names of the rows above do.
+                if cleanup.translationIsOn, CleanupLabels.status(cleanup.models.state, engine: cleanup.engineState, total: cleanup.models.manifest.totalBytes, use: .translation) != nil {
+                    Label {
+                        LocalModelStatus(cleanup: cleanup, use: .translation)
+                    } icon: {
+                        Image(systemName: "translate")
+                            .hidden()
+                    }
+                }
             } header: {
                 Text("Features")
+            } footer: {
+                Text("Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it.")
+                    .foregroundStyle(.secondary)
             }
             Section {
                 Toggle(isOn: Binding(
@@ -311,7 +355,8 @@ private struct GeneralSettings: View {
 }
 
 /// The switch for cleanup with the local model and Options… for the rest. While the model
-/// is on its way, one line under the name says where it stands.
+/// is on its way, one line under the name says where it stands, unless translation is on.
+/// Then the status row of the block, with its buttons, speaks for both.
 private struct CleanupRow: View {
     @Bindable var cleanup: TextCleanup
     let showOptions: () -> Void
@@ -335,7 +380,7 @@ private struct CleanupRow: View {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Clean Up Text")
-                    if cleanup.isOn, let status = CleanupLabels.status(models.state, engine: cleanup.engineState, total: total) {
+                    if cleanup.isOn, !cleanup.translationIsOn, let status = CleanupLabels.status(models.state, engine: cleanup.engineState, total: total, use: .cleanup) {
                         Text(verbatim: status)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -434,7 +479,7 @@ private struct CleanupOptions: View {
                     systemImage: "wand.and.sparkles"
                 )
                 if cleanup.isOn {
-                    LocalModelStatus(cleanup: cleanup)
+                    LocalModelStatus(cleanup: cleanup, use: .cleanup)
                 }
             } header: {
                 Text("Local model")
@@ -470,10 +515,11 @@ private struct CleanupOptions: View {
     }
 }
 
-/// The model's download and loading while cleanup is on: progress, Download or Try Again,
-/// or nothing once the model is ready.
+/// The model's download and loading under the switch of cleanup or of translation, while
+/// that switch is on: progress, Download or Try Again, or nothing once the model is ready.
 private struct LocalModelStatus: View {
     let cleanup: TextCleanup
+    let use: CleanupLabels.Use
 
     var body: some View {
         let total = cleanup.models.manifest.totalBytes
@@ -482,13 +528,13 @@ private struct LocalModelStatus: View {
         case .installed:
             switch cleanup.engineState {
             case .unloaded, .loading:
-                Text("Loading the cleanup model…")
+                Text(CleanupLabels.loading(use))
                     .foregroundStyle(.secondary)
             case .ready:
                 EmptyView()
             case .failed:
                 HStack {
-                    Text("The cleanup model could not be loaded")
+                    Text(CleanupLabels.failedToLoad(use))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Try Again") {
@@ -507,7 +553,7 @@ private struct LocalModelStatus: View {
         case .downloading(let bytes, let source):
             VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: Double(bytes), total: Double(max(total, 1))) {
-                    Text(CleanupLabels.progress(bytes: bytes, total: total))
+                    Text(CleanupLabels.progress(bytes: bytes, total: total, use: use))
                 } currentValueLabel: {
                     if let source {
                         Text(String(localized: "From \(source.rawValue)"))
@@ -520,7 +566,7 @@ private struct LocalModelStatus: View {
         case .missing, .failed:
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(CleanupLabels.lines(state, total: total), id: \.self) { line in
+                    ForEach(CleanupLabels.lines(state, total: total, use: use), id: \.self) { line in
                         Text(verbatim: line)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -537,8 +583,34 @@ private struct LocalModelStatus: View {
 
 /// The text about the cleanup model's download, kept apart so tests can read it.
 nonisolated enum CleanupLabels {
-    static func progress(bytes: Int64, total: Int64) -> String {
-        String(localized: "Downloading the cleanup model: \(ModelInstaller.State.percent(bytes, of: total))% of \(ModelInstaller.State.size(total))")
+    /// Which page the text is for. Clean Up Text calls the model the cleanup model, and
+    /// Translation calls the same model the local model.
+    nonisolated enum Use: Equatable, Sendable {
+        case cleanup
+        case translation
+    }
+
+    static func progress(bytes: Int64, total: Int64, use: Use = .cleanup) -> String {
+        let percent = ModelInstaller.State.percent(bytes, of: total)
+        let size = ModelInstaller.State.size(total)
+        return switch use {
+        case .cleanup: String(localized: "Downloading the cleanup model: \(percent)% of \(size)")
+        case .translation: String(localized: "Downloading the local model: \(percent)% of \(size)")
+        }
+    }
+
+    static func loading(_ use: Use) -> String {
+        switch use {
+        case .cleanup: String(localized: "Loading the cleanup model…")
+        case .translation: String(localized: "Loading the local model…")
+        }
+    }
+
+    static func failedToLoad(_ use: Use) -> String {
+        switch use {
+        case .cleanup: String(localized: "The cleanup model could not be loaded")
+        case .translation: String(localized: "The local model could not be loaded")
+        }
     }
 
     /// Download with the size, or how much is left when part of it is on disk already.
@@ -553,32 +625,87 @@ nonisolated enum CleanupLabels {
         }
     }
 
-    /// What stands in the way while cleanup is on and the model is not in place.
-    static func lines(_ state: ModelInstaller.State, total: Int64) -> [String] {
-        switch state {
-        case .missing:
+    /// What stands in the way while cleanup or translation is on and the model is not in
+    /// place.
+    static func lines(_ state: ModelInstaller.State, total: Int64, use: Use = .cleanup) -> [String] {
+        switch (state, use) {
+        case (.missing, .cleanup):
             [String(localized: "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup.")]
+        case (.missing, .translation):
+            [String(localized: "The local model is not on this Mac yet. Until it is, Orra pastes the text without translation.")]
         default:
             state.menuLines(total: total)
         }
     }
 
-    /// One line on the page under Clean Up Text while cleanup is on and the model is not
-    /// ready, or nil once it is. Options… shows the details.
-    static func status(_ state: ModelInstaller.State, engine: TextCleanup.EngineState, total: Int64) -> String? {
+    /// One line on the page under Clean Up Text or Translation while it is on and the
+    /// model is not ready, or nil once it is. Options… shows the details.
+    static func status(_ state: ModelInstaller.State, engine: TextCleanup.EngineState, total: Int64, use: Use) -> String? {
         switch state {
         case .installed:
             switch engine {
-            case .unloaded, .loading: String(localized: "Loading the cleanup model…")
+            case .unloaded, .loading: loading(use)
             case .ready: nil
-            case .failed: String(localized: "The cleanup model could not be loaded")
+            case .failed: failedToLoad(use)
             }
         case .checking:
             nil
         case .downloading(let bytes, _):
-            progress(bytes: bytes, total: total)
+            progress(bytes: bytes, total: total, use: use)
         case .verifying, .missing, .failed:
-            lines(state, total: total).joined(separator: " ")
+            lines(state, total: total, use: use).joined(separator: " ")
+        }
+    }
+}
+
+/// The switch for translation with the translation key. While the model is on its way,
+/// the row under the target picker on General says where it stands.
+private struct TranslationRow: View {
+    @Bindable var cleanup: TextCleanup
+
+    var body: some View {
+        let models = cleanup.models
+        let total = models.manifest.totalBytes
+        Toggle(isOn: Binding(
+            get: { cleanup.translationIsOn },
+            set: { $0 ? cleanup.turnOnTranslation() : cleanup.turnOffTranslation() }
+        )) {
+            DescribedLabel(
+                title: "Translation",
+                detail: "Hold the translation key, speak, and let go. Orra pastes what you said in another language.",
+                systemImage: "translate"
+            )
+        }
+        // Off while Orra looks for the model on disk, a moment at launch.
+        .disabled(!cleanup.translationIsOn && !cleanup.canTurnOn)
+        .help(Text("Dictations over \(TranslationStep.maximumLength) characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost.") + Text(verbatim: "\n") + Text("Paste Original Text in the Orra menu brings back the text from before the translation, and Copy Last Dictation copies the translation.") + Text(verbatim: "\n") + Text("Orra never learns corrections from a translated paste."))
+        .alert("Download the model for translation?", isPresented: $cleanup.isConfirmingTranslationDownload) {
+            Button(CleanupLabels.downloadButton(models.state, total: total)) {
+                cleanup.confirmTranslationDownload()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
+        }
+    }
+}
+
+extension TranslationDirection {
+    /// The name in the picker.
+    var title: LocalizedStringKey {
+        switch self {
+        case .automatic: "Automatic"
+        case .english: "English"
+        case .chinese: "Chinese"
+        }
+    }
+
+    /// What the choice does, under the picker.
+    var detail: LocalizedStringKey {
+        switch self {
+        case .automatic: "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in."
+        case .english: "Everything you say is pasted in English."
+        case .chinese: "Everything you say is pasted in Chinese. Common English terms, such as PR or iPhone, may stay in English."
         }
     }
 }
@@ -792,17 +919,24 @@ struct MicrophoneToggles: View {
     }
 }
 
-/// The talk key recorder, like the shortcut recorders of Mac apps: a field that shows the
-/// key, such as "⌥ Right Option (Alt)". Clicking it, or Change…, starts recording, and the
-/// next key the user presses and releases on its own becomes the talk key. A press that
-/// cannot be one shows why under the field. In Settings and in the welcome window.
+/// The key recorder, like the shortcut recorders of Mac apps: a field that shows the talk
+/// key or the translation key, such as "⌥ Right Option (Alt)". Clicking it, or Change…,
+/// starts recording, and the next key the user presses and releases on its own becomes
+/// the key. A press that cannot be one shows why under the field, and so does a swap of
+/// the two keys. The talk key's recorder is in Settings and in the welcome window, the
+/// translation key's in Settings.
 struct TalkKeyRecorder: View {
     let pushToTalk: PushToTalkController
+    /// Which key this field shows and records.
+    var slot: KeySlot = .talk
     /// Whether "Talk key" is shown in front of the field, as a row in Settings.
     var showsLabel = false
     /// Whether the line with the keys that work is shown under the field before the user
     /// starts recording. The settings page leaves it out to stay short.
     var showsHint = true
+    /// Whether the note about swapped keys shows under the field. Settings shows it under
+    /// one of its two fields only.
+    var showsSwap = true
     /// Whether the line with the recommended keys is shown under the field.
     var showsRecommendation = false
     /// The language of the text built here, which the welcome window sets to the one
@@ -814,7 +948,15 @@ struct TalkKeyRecorder: View {
     @State private var startedHere = false
 
     private var isRecording: Bool {
-        pushToTalk.isChoosingTalkKey
+        pushToTalk.choosingKeySlot == slot
+    }
+
+    private var key: TalkKey {
+        slot == .talk ? pushToTalk.talkKey : pushToTalk.translationKey
+    }
+
+    private var name: Text {
+        slot == .talk ? Text("Talk key") : Text("Translation key")
     }
 
     var body: some View {
@@ -824,14 +966,18 @@ struct TalkKeyRecorder: View {
                     fieldAndButton
                 } label: {
                     // The field carries the same label for VoiceOver, so it is read once.
-                    Label("Talk key", systemImage: "keyboard")
-                        .accessibilityHidden(true)
+                    Label {
+                        name
+                    } icon: {
+                        Image(systemName: slot == .talk ? "keyboard" : "character.bubble")
+                    }
+                    .accessibilityHidden(true)
                 }
             } else {
                 fieldAndButton
             }
             if isRecording {
-                if let note = pushToTalk.keyChoiceRejection?.message(in: interfaceLocale) {
+                if let note = pushToTalk.keyChoiceRejection?.message(in: interfaceLocale, for: slot) {
                     // Already in the language of the window, so shown as it is.
                     // Orange on the icon only: orange text that small is too faint on a
                     // light background.
@@ -849,12 +995,30 @@ struct TalkKeyRecorder: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-            } else if showsHint {
-                // Which keys can be the talk key, before the user starts recording.
-                Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+            } else {
+                if showsSwap, let swap = pushToTalk.keySwap {
+                    // Already in the language of the window, so shown as it is.
+                    Label {
+                        Text(verbatim: swap.message(in: interfaceLocale))
+                    } icon: {
+                        Image(systemName: "arrow.left.arrow.right")
+                    }
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                // Which keys can be the key, before the user starts recording.
+                if showsHint {
+                    Group {
+                        if slot == .talk {
+                            Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+                        } else {
+                            Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.")
+                        }
+                    }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if showsRecommendation {
                 Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard.")
@@ -865,18 +1029,21 @@ struct TalkKeyRecorder: View {
         }
         .onDisappear {
             if startedHere {
-                pushToTalk.stopChoosingTalkKey()
+                pushToTalk.stopChoosingKey()
             }
         }
-        .onChange(of: pushToTalk.isChoosingTalkKey) { _, recording in
-            if !recording {
-                startedHere = false
+        .onChange(of: pushToTalk.choosingKeySlot) { old, new in
+            guard old == slot, new != slot else { return }
+            // VoiceOver reads a swap of the keys, which only shows as text under the field.
+            if startedHere, new == nil, let swap = pushToTalk.keySwap {
+                AccessibilityNotification.Announcement(swap.message(in: interfaceLocale)).post()
             }
+            startedHere = false
         }
         .onChange(of: pushToTalk.keyChoiceRejection) { _, rejection in
             // VoiceOver reads a refused press, which only shows as text under the field.
             // Only the recorder that started the recording speaks, so it is said once.
-            if startedHere, let note = rejection?.message(in: interfaceLocale) {
+            if startedHere, let note = rejection?.message(in: interfaceLocale, for: slot) {
                 let keys = String(localized: LocalizedStringResource("Use fn, Control, Option or Command on its own. Escape cancels.", locale: interfaceLocale))
                 AccessibilityNotification.Announcement("\(note) \(keys)").post()
             }
@@ -892,11 +1059,11 @@ struct TalkKeyRecorder: View {
             // While recording, a click on the field ends the recording, as any click in
             // Orra does, rather than starting it again.
             .allowsHitTesting(!isRecording)
-            .accessibilityLabel(Text("Talk key"))
-            .accessibilityValue(isRecording ? Text("Press the key you want to hold") : Text(verbatim: pushToTalk.talkKey.fullName(in: interfaceLocale)))
+            .accessibilityLabel(name)
+            .accessibilityValue(isRecording ? Text("Press the key you want to hold") : Text(verbatim: key.fullName(in: interfaceLocale)))
             if isRecording {
                 Button("Cancel") {
-                    pushToTalk.stopChoosingTalkKey()
+                    pushToTalk.stopChoosingKey()
                 }
             } else {
                 Button("Change…", action: start)
@@ -910,8 +1077,8 @@ struct TalkKeyRecorder: View {
                 Text("Press the key you want to hold")
                     .foregroundStyle(Color.accentColor)
             } else {
-                Text(verbatim: pushToTalk.talkKey.title(in: interfaceLocale))
-                if let other = pushToTalk.talkKey.otherLabelInParentheses(in: interfaceLocale) {
+                Text(verbatim: key.title(in: interfaceLocale))
+                if let other = key.otherLabelInParentheses(in: interfaceLocale) {
                     Text(verbatim: other)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -931,7 +1098,7 @@ struct TalkKeyRecorder: View {
     }
 
     private func start() {
-        pushToTalk.startChoosingTalkKey()
+        pushToTalk.startChoosingKey(for: slot)
         startedHere = true
         // Only the field's value changes, which VoiceOver does not read on its own.
         AccessibilityNotification.Announcement(
