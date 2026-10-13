@@ -30,7 +30,9 @@ Build and test commands, run in the repository root:
   run for that change, which does not touch transcription. With the prefix cache of the
   cleanup model, the test command ended in TEST SUCCEEDED with 2282 test cases passed and
   5 skipped on 2026-10-12, the skipped ones being the cleanup evaluation and the three
-  heavier real model tests.
+  heavier real model tests. With the idle unload of the cleanup model, it ended in TEST
+  SUCCEEDED with 2300 test cases passed and 7 skipped on 2026-10-13, the two more
+  skipped ones being the opt-in idle unload measurements.
   - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
     35 rows) and each edge case decision, including cancel, a tap that waits for a second
     press, a second press that resumes listening and ends as a double press or a hold, a
@@ -267,6 +269,46 @@ Build and test commands, run in the repository root:
     for learning and ends learning's watch of the cleaned paste, that a held back or failing cleanup pastes the ruled text, and
     that nothing runs while the model is not ready or for text under three letters or
     digits.
+  - CleanupIdleUnloadTests, added on 2026-10-12, drives the idle unload with a stand in
+    model and a clock the test moves: the model is unloaded after 15 minutes without a
+    dictation and not a second earlier, every dictation starts that time again and none is
+    unloaded while one runs, the press of the talk key loads an unloaded model again, a
+    hold or a hands free dictation after the unload is cleaned up once the load ends, a
+    transcript waits for the load under way and pastes the ruled text when the wait runs
+    out, a failed load is not used, turning cleanup off during a load ends the wait and
+    leaves the model unloaded, off and on during an unload ends loaded, a dictation
+    during the unload loads after it without overlap, a cancelled hold starts the idle time
+    again, and Paste Original Text needs no model.
+  - CleanupIdleUnloadMeasurementTests measures the idle unload with the real cleanup
+    model, only with TEST_RUNNER_ORRA_CLEANUP_IDLE_MEASURE=1, in a Release build:
+
+        TEST_RUNNER_ORRA_CLEANUP_IDLE_MEASURE=1 xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/CleanupIdleUnloadMeasurementTests
+
+    memoryAndWaits uses a stand in speech model that answers at once, so the waits it
+    measures are the most a hold of that length waits. Three runs on 2026-10-13 on the
+    M5 Pro with the installed model gave the same numbers within a few hundredths of a
+    second. The memory footprint of the test process was 0.06 GB before the load, 5.03 GB
+    after it and 5.19 GB after one cleanup. An idle unload brought it to 0.2 to 0.3 GB
+    within 250 ms, and turning cleanup off did the same. The first load took 1.18 to
+    2.09 s, and from the press of the talk key to a loaded model took 1.10 to 1.17 s in
+    nine rounds. From the release to the paste:
+
+    | Hold | After an idle unload | Right after that |
+    |---|---|---|
+    | 0.4 s | 0.85 to 0.89 s | 0.16 to 0.17 s |
+    | 0.8 s | 0.44 to 0.46 s | 0.17 s |
+    | 1.2 s | 0.16 to 0.17 s | 0.17 to 0.20 s |
+    | 2.0 s | 0.17 s | 0.18 to 0.19 s |
+
+    So a hold under about 1.2 s waits for the load, at most 0.7 s here, and a longer
+    hold or the next dictation does not wait. Every dictation was cleaned up.
+
+    withTheSpeechModel, which also needs the speech model and the evaluation clips,
+    transcribes the first 3 s of three fleurs_zh clips with the real speech model after a
+    hold of 0.5 s. From the release to the paste it took 0.86, 0.95 and 0.59 s after an
+    idle unload and 0.39, 0.47 and 0.25 s right after. The first two were cleaned up both
+    times. The third text was not worth a cleanup either time, and its 0.34 s more after
+    the unload is the speech model running slower while the cleanup model loads.
   - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases and the 70
     adversarial cases of Tools/rewrite-eval, only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
     Its timings hold for a Release build, since a Debug build runs MLX without
@@ -1110,6 +1152,26 @@ Cleanup with a local model, added on 2026-10-10, not verified yet:
 - [ ] Turn cleanup off: Orra's memory drops back within a few seconds, and dictations are
   pasted as the rules leave them.
 - [ ] Quit and reopen with cleanup on: the model loads at launch without going online.
+
+Unloading the cleanup model when idle, added on 2026-10-12, not verified yet:
+
+- [ ] Run `defaults write io.github.db-ol.Orra cleanupIdleUnloadSeconds 60` and restart Orra
+  with cleanup on. A minute after the load or the last dictation, Orra's memory in
+  Activity Monitor drops by about 4 GB, the rewrite log says "Unloading the cleanup model
+  after no dictation", and Settings still shows cleanup on with no status line under it.
+- [ ] After that unload, dictate "呃，我们下周一，哦不是，下周二开会" with a normal hold:
+  我们下周二开会。 is pasted, and the rewrite log shows "Loading the cleanup model again
+  for a dictation" and how long the transcript waited. A second dictation right after
+  waits for nothing.
+- [ ] After an unload, a very short hold, such as "呃，好的，没问题", is still cleaned up,
+  or pasted as the rules leave it when the model is not loaded within 3 seconds.
+- [ ] After an unload, a hands free dictation (double press) is cleaned up too.
+- [ ] Paste Original Text after an unload still pastes the text from before the cleanup.
+- [ ] Turn cleanup off and on again during the unload or the load after it: cleanup works
+  on the next dictation.
+- [ ] `defaults write io.github.db-ol.Orra cleanupIdleUnloadSeconds 0` keeps the model
+  loaded, and `defaults delete io.github.db-ol.Orra cleanupIdleUnloadSeconds` brings back
+  15 minutes.
 - [ ] The rewrite log shows timings, token counts and outcomes, and no text:
   `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`.
 
