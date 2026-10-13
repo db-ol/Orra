@@ -37,7 +37,10 @@ struct PromptPrefixTests {
     @Test func theCleanupPromptPrefixEndsBeforeTheTranscript() throws {
         let encode = { (text: String) in text.unicodeScalars.map { Int($0.value) } }
         let prefix = PromptPrefix.cleanupPrompt(encode: encode)
-        let start = RewritePrompt.text(for: "X").components(separatedBy: "X")[0]
+        // The last X is the transcript, since the system text may hold an X of its own.
+        let marked = RewritePrompt.text(for: "X")
+        let position = try #require(marked.range(of: "X", options: .backwards))
+        let start = String(marked[..<position.lowerBound])
         #expect(start.hasSuffix(#"{"transcript": ""#))
         #expect(prefix == encode(String(start.unicodeScalars.dropLast(2))))
         for transcript in ["呃，我们下周二开会。", "Hello", "\"quoted\"", "1", " space", "\n"] {
@@ -61,7 +64,7 @@ struct PromptPrefixTokenizerTests {
         #expect(prefix.count > 800)
         let tools = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Tools/rewrite-eval")
         var count = 0
-        for file in ["cases.jsonl", "adversarial.jsonl"] {
+        for file in ["cases.jsonl", "adversarial.jsonl", "meaning.jsonl"] {
             for line in try String(contentsOf: tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
                 let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
                 let input = try #require(object["input"] as? String)
@@ -72,6 +75,6 @@ struct PromptPrefixTokenizerTests {
                 }
             }
         }
-        #expect(count == 2 * (178 + 70))
+        #expect(count == 2 * (178 + 70 + 20))
     }
 }
