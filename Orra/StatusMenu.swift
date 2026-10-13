@@ -17,6 +17,9 @@ struct StatusMenu: View {
         ModelMenuSection(models: models, pushToTalk: pushToTalk)
         if pushToTalk.isHotkeyActive {
             Text(pushToTalk.talkKey.holdHint())
+            if pushToTalk.translationKeyIsOn {
+                Text(pushToTalk.translationKey.translateHint())
+            }
             if let warning = MicrophoneLabels.lidWarning(
                 choice: pushToTalk.microphone,
                 inputs: inputs.inputs,
@@ -61,7 +64,7 @@ struct StatusMenu: View {
                 }
             }
             if pushToTalk.originalText != nil {
-                // The dictation as it was before the cleanup model changed it.
+                // The dictation as it was before the model translated it or cleaned it up.
                 Button("Paste Original Text") {
                     Task { await pushToTalk.pasteOriginal() }
                 }
@@ -89,8 +92,16 @@ struct StatusMenu: View {
             Text("Talk Key: \(pushToTalk.talkKey.fullName())")
             Button("Change Talk Key…") {
                 NSApplication.shared.activate()
+                SettingsWindow.show(.general)
                 openWindow(id: SettingsWindow.id)
-                SettingsWindow.showGeneral()
+            }
+            if pushToTalk.translationKeyIsOn {
+                Text("Translation Key: \(pushToTalk.translationKey.fullName())")
+                Button("Change Translation Key…") {
+                    NSApplication.shared.activate()
+                    SettingsWindow.show(.general)
+                    openWindow(id: SettingsWindow.id)
+                }
             }
             Divider()
             Toggle("Double Press for Hands Free", isOn: Binding(

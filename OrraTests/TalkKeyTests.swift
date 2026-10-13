@@ -215,6 +215,26 @@ struct KeyRecorderTests {
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_Space)).message() == "The Space key can't be the talk key. Holding it would type or do something in the app in front.")
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_F5)).message() == "The F5 key can't be the talk key. Holding it would type or do something in the app in front.")
     }
+
+    @Test @MainActor func rejectionsNameTheTranslationKeyWhileItIsRecorded() {
+        #expect(KeyRecorder.Rejection.shift.message(for: .translation) == "Shift can't be the translation key. On its own, it switches input methods between Chinese and English.")
+        #expect(KeyRecorder.Rejection.capsLock.message(for: .translation) == "Caps Lock can't be the translation key. It turns capitals or the input method on and off.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "⌘", keyCode: Int64(kVK_Return)).message(for: .translation) == "⌘ Return is a key combination and can't be the translation key.")
+        #expect(KeyRecorder.Rejection.combination(modifiers: "⌃", keyCode: nil).message(for: .translation) == "A key combination can't be the translation key.")
+        #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_Space)).message(for: .translation) == "The Space key can't be the translation key. Holding it would type or do something in the app in front.")
+    }
+
+    @Test func theTranslationKeyDefaultsToRightOptionBesideTheTalkKey() {
+        for talkKey in TalkKey.allCases where talkKey != .rightOption {
+            #expect(TalkKey.defaultTranslationKey(talkKey: talkKey) == .rightOption)
+        }
+        #expect(TalkKey.defaultTranslationKey(talkKey: .rightOption) == .rightCommand)
+    }
+
+    @Test func translateHintAndSwapNoteNameTheKeys() {
+        #expect(TalkKey.rightOption.translateHint() == "Hold right Option to translate")
+        #expect(KeySwap(talkKey: .rightOption, translationKey: .rightControl).message() == "The two keys swapped. The talk key is now right Option and the translation key right Control.")
+    }
 }
 
 @MainActor
@@ -285,6 +305,36 @@ struct TalkKeyPreferenceTests {
             #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKey)
             defaults.set([String](), forKey: TalkKeyPreference.defaultsKey)
             #expect(TalkKeyPreference.load(from: defaults) == TalkKey.defaultKey)
+        }
+    }
+}
+
+struct TranslationKeyPreferenceTests {
+    private func withDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) rethrows {
+        let suite = "io.github.db-ol.OrraTests.TranslationKeyPreference.\(name)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        try body(defaults)
+    }
+
+    @Test func nothingSavedFollowsTheTalkKey() {
+        withDefaults("nothingSaved") { defaults in
+            #expect(TranslationKeyPreference.load(talkKey: .rightControl, from: defaults) == .rightOption)
+            #expect(TranslationKeyPreference.load(talkKey: .fn, from: defaults) == .rightOption)
+            #expect(TranslationKeyPreference.load(talkKey: .rightOption, from: defaults) == .rightCommand)
+        }
+    }
+
+    @Test func theSavedKeyComesBackUnlessItIsTheTalkKey() {
+        withDefaults("saved") { defaults in
+            TranslationKeyPreference.save(.leftCommand, to: defaults)
+            #expect(TranslationKeyPreference.load(talkKey: .rightControl, from: defaults) == .leftCommand)
+            #expect(defaults.string(forKey: TranslationKeyPreference.defaultsKey) == "leftCommand")
+            // Orra never saves the talk key's key, but a hand edited file could.
+            #expect(TranslationKeyPreference.load(talkKey: .leftCommand, from: defaults) == .rightOption)
+            defaults.set("leftShift", forKey: TranslationKeyPreference.defaultsKey)
+            #expect(TranslationKeyPreference.load(talkKey: .rightControl, from: defaults) == .rightOption)
         }
     }
 }

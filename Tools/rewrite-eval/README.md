@@ -70,6 +70,26 @@ outputs were written by hand, and no case holds a recording. km12 repeats adv01,
 text lost 我 in use. None of them is a prompt example.
 OrraTests/CleanupModelEvaluationTests.swift runs them with the other cleanup cases.
 
+## Translation probes
+
+`translation-probes.jsonl` has 116 cases for translation, one JSON object per line with
+`id`, `kind`, `input`, `label` and `ref`:
+
+- `kind`: what the case probes. English with Chinese names and places (en_name), Chinese
+  with English terms (zh_term), short replies (short), digits and symbols alone (number),
+  mixed sentences (matrix), English (en_num) and Chinese (zh_num) numbers, dates and times,
+  text with a colon (colon), and long dictations of 120 to 738 characters (long).
+- `label`: the language the speaker used, zh or en, either when both are fair, and none
+  when there is nothing to translate.
+- `ref`: a translation in the automatic direction (Chinese into English, English into
+  Chinese), empty for the long cases.
+
+They come from the translation benchmark of 2026-10-12, which picked the prompt in
+Orra/TranslationPrompt.swift, the direction rule in Orra/TranslationDirection.swift and the
+checks in Orra/TranslationGuard.swift. Like the other cases they are synthetic and hold no
+one's dictation. OrraTests/TranslationModelEvaluationTests.swift runs the model on them,
+on the regular cases and on the adversarial ones, see docs/manual-testing.md.
+
 ## Numbers
 
 `numbers.jsonl` has 672 cases for writing spoken Chinese numbers as digits, one JSON

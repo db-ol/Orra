@@ -84,7 +84,7 @@ extension RealModelTests {
             try await engine.load()
             let transcription = Transcription(
                 load: { try await engine.load() },
-                transcribe: { samples, context in try await engine.transcribe(samples, context: context) }
+                transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) }
             )
             let terms = try Self.contextTerms()
             try #require(terms.count >= 100)
@@ -151,7 +151,7 @@ extension RealModelTests {
             try await engine.load()
             let transcription = Transcription(
                 load: { try await engine.load() },
-                transcribe: { samples, context in try await engine.transcribe(samples, context: context) }
+                transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) }
             )
             let terms = try Self.contextTerms()
             try #require(terms.count >= 100)

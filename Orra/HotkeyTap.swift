@@ -22,8 +22,9 @@ import CoreGraphics
 /// delay or change them, and for mouse events it needs no permission.
 ///
 /// The detector has no clock. The tap passes the time each event arrived, and runs the
-/// one timer the detector asks for at a time, for a left hand key's delay or a tap's
-/// double press window, as a task on the main actor that never blocks.
+/// one timer the detector asks for at a time, for the delay of a left hand key or the
+/// translation key, or for a tap's double press window, as a task on the main actor that
+/// never blocks.
 ///
 /// While the user records a talk key by pressing it, see `chooseKey`, the tap reports
 /// key events instead of detecting holds, but only while Orra is the active app.
@@ -57,6 +58,9 @@ final class HotkeyTap {
     private var chooser: Chooser?
 
     /// - Parameters:
+    ///   - keys: The keys that start a dictation.
+    ///   - delayedKeys: The keys among them that wait before they record, as the left hand
+    ///     keys do, see `TalkKeyDetector.delayedKeys`.
     ///   - install: Creates the tap, see `Install`.
     ///   - onEvent: Receives the push to talk events.
     ///   - onSwitchedOff: Called after the system switched the tap off and the tap removed
@@ -67,6 +71,7 @@ final class HotkeyTap {
     ///     choose a talk key is meant for Orra.
     init(
         keys: Set<TalkKey>,
+        delayedKeys: Set<TalkKey> = [],
         handsFree: Bool = true,
         install: @escaping Install,
         wait: @escaping Wait = { try? await Task.sleep(for: $0) },
@@ -74,7 +79,7 @@ final class HotkeyTap {
         onEvent: @escaping (PushToTalkStateMachine.Event) -> Void,
         onSwitchedOff: @escaping (CGEventType) -> Void = { _ in }
     ) {
-        detector = TalkKeyDetector(keys: keys, handsFreeEnabled: handsFree)
+        detector = TalkKeyDetector(keys: keys, delayedKeys: delayedKeys, handsFreeEnabled: handsFree)
         self.install = install
         self.wait = wait
         self.isAppActive = isAppActive
@@ -82,10 +87,11 @@ final class HotkeyTap {
         self.onSwitchedOff = onSwitchedOff
     }
 
-    /// Switches to other talk keys at once. Ends a hold or a hands free dictation of a key
-    /// that is no longer one.
-    func setKeys(_ keys: Set<TalkKey>) {
-        let event = detector.setKeys(keys)
+    /// Switches to other talk keys at once, and to the keys among them that wait before
+    /// they record, see `TalkKeyDetector.delayedKeys`. Ends a hold or a hands free
+    /// dictation of a key that is no longer one.
+    func setKeys(_ keys: Set<TalkKey>, delayedKeys: Set<TalkKey> = []) {
+        let event = detector.setKeys(keys, delayedKeys: delayedKeys)
         afterDetectorChange(event)
     }
 

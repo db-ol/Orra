@@ -1,0 +1,116 @@
+{"id": "pn01", "kind": "en_name", "input": "Send it to 王小明.", "label": "en", "ref": "发给王小明。"}
+{"id": "pn02", "kind": "en_name", "input": "Let's meet at 星巴克 on 中关村大街 tomorrow.", "label": "en", "ref": "我们明天在中关村大街的星巴克见吧。"}
+{"id": "pn03", "kind": "en_name", "input": "I'm flying to 深圳 next Monday.", "label": "en", "ref": "我下周一飞深圳。"}
+{"id": "pn04", "kind": "en_name", "input": "Did 李雷 reply to your email?", "label": "en", "ref": "李雷回复你的邮件了吗？"}
+{"id": "pn05", "kind": "en_name", "input": "Please book a table at 海底捞 for six people.", "label": "en", "ref": "请在海底捞订一张六人桌。"}
+{"id": "pn06", "kind": "en_name", "input": "Tell 张伟 the demo moved to Friday.", "label": "en", "ref": "告诉张伟演示改到周五了。"}
+{"id": "pn07", "kind": "en_name", "input": "My mom lives in 成都.", "label": "en", "ref": "我妈妈住在成都。"}
+{"id": "pn08", "kind": "en_name", "input": "We should try the 小笼包 at 鼎泰丰.", "label": "en", "ref": "我们应该去鼎泰丰尝尝小笼包。"}
+{"id": "pn09", "kind": "en_name", "input": "Ask 陈经理 to sign the form.", "label": "en", "ref": "让陈经理在表格上签字。"}
+{"id": "pn10", "kind": "en_name", "input": "The office is near 人民广场 station.", "label": "en", "ref": "办公室在人民广场站附近。"}
+{"id": "pn11", "kind": "en_name", "input": "Can you call 欧阳娜娜 after lunch?", "label": "en", "ref": "你午饭后能给欧阳娜娜打个电话吗？"}
+{"id": "pn12", "kind": "en_name", "input": "I bought it on 淘宝 last week.", "label": "en", "ref": "我上周在淘宝买的。"}
+{"id": "pn13", "kind": "en_name", "input": "Thanks, 老王.", "label": "en", "ref": "谢谢，老王。"}
+{"id": "pn14", "kind": "en_name", "input": "Happy birthday, 小美!", "label": "en", "ref": "生日快乐，小美！"}
+{"id": "pn15", "kind": "en_name", "input": "We're staying at the 北京饭店 near 王府井.", "label": "en", "ref": "我们住在王府井附近的北京饭店。"}
+{"id": "pn16", "kind": "en_name", "input": "The 春节 holiday starts on February 16.", "label": "en", "ref": "春节假期从2月16日开始。"}
+{"id": "pn17", "kind": "en_name", "input": "Did you see the news about 华为?", "label": "en", "ref": "你看到关于华为的新闻了吗？"}
+{"id": "pn18", "kind": "en_name", "input": "Remember to bring your 身份证.", "label": "en", "ref": "记得带你的身份证。"}
+{"id": "pn19", "kind": "en_name", "input": "Please check the 合同 before signing.", "label": "en", "ref": "签字前请检查一下合同。"}
+{"id": "pn20", "kind": "en_name", "input": "My Chinese name is 林嘉怡.", "label": "en", "ref": "我的中文名字是林嘉怡。"}
+{"id": "pn21", "kind": "en_name", "input": "Thank you, 李老师.", "label": "en", "ref": "谢谢您，李老师。"}
+{"id": "pn22", "kind": "en_name", "input": "Is 王总 joining the call?", "label": "en", "ref": "王总会参加电话会议吗？"}
+{"id": "pt01", "kind": "zh_term", "input": "这个 bug 明天修。", "label": "zh", "ref": "This bug will be fixed tomorrow."}
+{"id": "pt02", "kind": "zh_term", "input": "帮我把 PPT 发到群里。", "label": "zh", "ref": "Send the PPT to the group for me."}
+{"id": "pt03", "kind": "zh_term", "input": "我用 iPhone 拍的。", "label": "zh", "ref": "I took it with my iPhone."}
+{"id": "pt04", "kind": "zh_term", "input": "今天的 standup 取消了。", "label": "zh", "ref": "Today's standup is canceled."}
+{"id": "pt05", "kind": "zh_term", "input": "你 review 完了跟我说一声。", "label": "zh", "ref": "Let me know when you've finished the review."}
+{"id": "pt06", "kind": "zh_term", "input": "Wi-Fi 密码是多少？", "label": "zh", "ref": "What's the Wi-Fi password?"}
+{"id": "pt07", "kind": "zh_term", "input": "这个 API 的 latency 太高了。", "label": "zh", "ref": "This API's latency is too high."}
+{"id": "pt08", "kind": "zh_term", "input": "我在 Google Docs 里留了 comment。", "label": "zh", "ref": "I left a comment in Google Docs."}
+{"id": "pt09", "kind": "zh_term", "input": "下午的 meeting 我晚点到。", "label": "zh", "ref": "I'll be late for the afternoon meeting."}
+{"id": "pt10", "kind": "zh_term", "input": "把 deadline 往后推一周吧。", "label": "zh", "ref": "Let's push the deadline back a week."}
+{"id": "pt11", "kind": "zh_term", "input": "他是我们的 tech lead。", "label": "zh", "ref": "He's our tech lead."}
+{"id": "pt12", "kind": "zh_term", "input": "我刚 push 了代码，你 pull 一下。", "label": "zh", "ref": "I just pushed the code, please pull it."}
+{"id": "pt13", "kind": "zh_term", "input": "这个 project 的 budget 不够。", "label": "zh", "ref": "This project's budget isn't enough."}
+{"id": "pt14", "kind": "zh_term", "input": "用 Zoom 还是 Teams 开会？", "label": "zh", "ref": "Should we meet on Zoom or Teams?"}
+{"id": "pt15", "kind": "zh_term", "input": "Sarah 明天请假。", "label": "zh", "ref": "Sarah is taking tomorrow off."}
+{"id": "pt16", "kind": "zh_term", "input": "我在 New York 待三天。", "label": "zh", "ref": "I'm staying in New York for three days."}
+{"id": "pt17", "kind": "zh_term", "input": "Michael Jordan 是我最喜欢的球员。", "label": "zh", "ref": "Michael Jordan is my favorite player."}
+{"id": "pt18", "kind": "zh_term", "input": "这个 MacBook Pro 是 M5 的吗？", "label": "zh", "ref": "Is this MacBook Pro an M5?"}
+{"id": "pt19", "kind": "zh_term", "input": "我们去 Costco 买点东西吧。", "label": "zh", "ref": "Let's go to Costco and buy some things."}
+{"id": "pt20", "kind": "zh_term", "input": "你 free 吗？", "label": "zh", "ref": "Are you free?"}
+{"id": "pt21", "kind": "zh_term", "input": "这家 coffee shop 的 latte 很好喝。", "label": "zh", "ref": "The latte at this coffee shop is really good."}
+{"id": "pt22", "kind": "zh_term", "input": "我叫 Ethan。", "label": "zh", "ref": "My name is Ethan."}
+{"id": "pt23", "kind": "zh_term", "input": "Meeting 改到明天了。", "label": "zh", "ref": "The meeting has been moved to tomorrow."}
+{"id": "pt24", "kind": "zh_term", "input": "So 我们 next step 是什么？", "label": "zh", "ref": "So what's our next step?"}
+{"id": "pt25", "kind": "zh_term", "input": "OK，我知道了。", "label": "zh", "ref": "OK, I got it."}
+{"id": "pt26", "kind": "zh_term", "input": "请把 Q3 的 OKR 发给 HR。", "label": "zh", "ref": "Please send the Q3 OKRs to HR."}
+{"id": "pt27", "kind": "zh_term", "input": "这个 PR 有 conflict，你 rebase 一下 main branch。", "label": "zh", "ref": "This PR has a conflict, please rebase it on the main branch."}
+{"id": "ps01", "kind": "short", "input": "OK", "label": "en", "ref": "好的"}
+{"id": "ps02", "kind": "short", "input": "OK.", "label": "en", "ref": "好的。"}
+{"id": "ps03", "kind": "short", "input": "好的", "label": "zh", "ref": "OK"}
+{"id": "ps04", "kind": "short", "input": "好", "label": "zh", "ref": "OK"}
+{"id": "ps05", "kind": "short", "input": "嗯嗯", "label": "zh", "ref": "Mm-hmm."}
+{"id": "ps06", "kind": "short", "input": "Yes.", "label": "en", "ref": "是的。"}
+{"id": "ps07", "kind": "short", "input": "No problem.", "label": "en", "ref": "没问题。"}
+{"id": "ps08", "kind": "short", "input": "谢谢！", "label": "zh", "ref": "Thanks!"}
+{"id": "ps09", "kind": "short", "input": "Hi", "label": "en", "ref": "你好"}
+{"id": "ps10", "kind": "short", "input": "收到", "label": "zh", "ref": "Got it"}
+{"id": "ps11", "kind": "short", "input": "Thanks.", "label": "en", "ref": "谢谢。"}
+{"id": "ps12", "kind": "short", "input": "对。", "label": "zh", "ref": "Right."}
+{"id": "pz01", "kind": "number", "input": "123", "label": "none", "ref": "123"}
+{"id": "pz02", "kind": "number", "input": "13800138000", "label": "none", "ref": "13800138000"}
+{"id": "pz03", "kind": "number", "input": "3:30", "label": "none", "ref": "3:30"}
+{"id": "pz04", "kind": "number", "input": "100%", "label": "none", "ref": "100%"}
+{"id": "pz05", "kind": "number", "input": "2026年", "label": "zh", "ref": "2026"}
+{"id": "pm01", "kind": "matrix", "input": "I think 这个可以。", "label": "either", "ref": "I think this works."}
+{"id": "pm02", "kind": "matrix", "input": "Let's go 吃饭 now.", "label": "en", "ref": "我们现在去吃饭吧。"}
+{"id": "pm03", "kind": "matrix", "input": "我觉得 this is a good idea.", "label": "either", "ref": "I think this is a good idea."}
+{"id": "pm04", "kind": "matrix", "input": "Thank you 老师。", "label": "en", "ref": "谢谢老师。"}
+{"id": "pm05", "kind": "matrix", "input": "Can you 帮我看一下这个文件？", "label": "zh", "ref": "Can you take a look at this file for me?"}
+{"id": "pm06", "kind": "matrix", "input": "Please 尽快回复。", "label": "zh", "ref": "Please reply as soon as possible."}
+{"id": "pd01", "kind": "en_num", "input": "The meeting is on March 15 at 2:30 PM.", "label": "en", "ref": "会议在3月15日下午2:30。"}
+{"id": "pd02", "kind": "en_num", "input": "Lunch is at noon on Friday.", "label": "en", "ref": "午饭在周五中午。"}
+{"id": "pd03", "kind": "en_num", "input": "The server restarts at midnight.", "label": "en", "ref": "服务器在午夜重启。"}
+{"id": "pd04", "kind": "en_num", "input": "It costs $45.99 plus tax.", "label": "en", "ref": "价格是45.99美元，另加税。"}
+{"id": "pd05", "kind": "en_num", "input": "Our budget is 50K for Q3.", "label": "en", "ref": "我们第三季度的预算是5万。"}
+{"id": "pd06", "kind": "en_num", "input": "The file is 2.5 GB.", "label": "en", "ref": "文件有2.5 GB。"}
+{"id": "pd07", "kind": "en_num", "input": "I run 5 km every morning.", "label": "en", "ref": "我每天早上跑5公里。"}
+{"id": "pd08", "kind": "en_num", "input": "The rent went up to 12,000 yuan a month.", "label": "en", "ref": "房租涨到了每月12,000元。"}
+{"id": "pd09", "kind": "en_num", "input": "The flight on October 3rd leaves at 6:45 AM.", "label": "en", "ref": "10月3日的航班早上6:45起飞。"}
+{"id": "pd10", "kind": "en_num", "input": "We raised 3 million dollars last year.", "label": "en", "ref": "我们去年融资了300万美元。"}
+{"id": "pd11", "kind": "en_num", "input": "The package weighs 2 pounds.", "label": "en", "ref": "包裹重2磅。"}
+{"id": "pd12", "kind": "en_num", "input": "The deadline is the 21st.", "label": "en", "ref": "截止日期是21号。"}
+{"id": "pd13", "kind": "en_num", "input": "It's 30 degrees today.", "label": "en", "ref": "今天30度。"}
+{"id": "pd14", "kind": "en_num", "input": "He paid 200 euros for the ticket.", "label": "en", "ref": "他花200欧元买了票。"}
+{"id": "pd15", "kind": "en_num", "input": "The conference runs from June 2 to June 5.", "label": "en", "ref": "会议从6月2日开到6月5日。"}
+{"id": "pd16", "kind": "en_num", "input": "Set the timer for 90 seconds.", "label": "en", "ref": "把计时器设为90秒。"}
+{"id": "pd17", "kind": "en_num", "input": "About 1.5 billion people use it.", "label": "en", "ref": "大约15亿人在用它。"}
+{"id": "pd18", "kind": "en_num", "input": "The meeting moved from 3 to 4 PM.", "label": "en", "ref": "会议从3点改到了下午4点。"}
+{"id": "pd19", "kind": "en_num", "input": "See you at 8 tonight.", "label": "en", "ref": "今晚8点见。"}
+{"id": "pd20", "kind": "en_num", "input": "The call is at 10:30 AM on Tuesday, January 6.", "label": "en", "ref": "电话会在1月6日周二上午10:30。"}
+{"id": "pd21", "kind": "en_num", "input": "We need 2 dozen eggs.", "label": "en", "ref": "我们需要两打鸡蛋。"}
+{"id": "pd22", "kind": "en_num", "input": "The salary is 120K a year.", "label": "en", "ref": "年薪12万。"}
+{"id": "pc01", "kind": "zh_num", "input": "下午三点半在三楼开会。", "label": "zh", "ref": "The meeting is at 3:30 PM on the third floor."}
+{"id": "pc02", "kind": "zh_num", "input": "预算大概二十万。", "label": "zh", "ref": "The budget is about 200,000."}
+{"id": "pc03", "kind": "zh_num", "input": "十月一日放假。", "label": "zh", "ref": "We're off on October 1."}
+{"id": "pc04", "kind": "zh_num", "input": "这个月的房租是四千五百块。", "label": "zh", "ref": "This month's rent is 4,500 yuan."}
+{"id": "pc05", "kind": "zh_num", "input": "中午十二点吃饭。", "label": "zh", "ref": "Lunch is at 12 noon."}
+{"id": "pc06", "kind": "zh_num", "input": "晚上十点以后别打电话。", "label": "zh", "ref": "Don't call after 10 PM."}
+{"id": "pc07", "kind": "zh_num", "input": "他工资一个月三万五。", "label": "zh", "ref": "His salary is 35,000 a month."}
+{"id": "pc08", "kind": "zh_num", "input": "我们二零二六年十月十一日上线。", "label": "zh", "ref": "We go live on October 11, 2026."}
+{"id": "pr01", "kind": "colon", "input": "他说：明天再说。", "label": "zh", "ref": "He said: let's talk about it tomorrow."}
+{"id": "pr02", "kind": "colon", "input": "老板说：这个方案不行。", "label": "zh", "ref": "The boss said: this plan won't work."}
+{"id": "pr03", "kind": "colon", "input": "She said: I'll be late.", "label": "en", "ref": "她说：我会迟到。"}
+{"id": "pr04", "kind": "colon", "input": "提醒一下：明天放假。", "label": "zh", "ref": "A reminder: tomorrow is a holiday."}
+{"id": "pr05", "kind": "colon", "input": "注意：会议改到四点了。", "label": "zh", "ref": "Note: the meeting has moved to four."}
+{"id": "pr06", "kind": "colon", "input": "Quick update: the build is green.", "label": "en", "ref": "简单更新一下：构建通过了。"}
+{"id": "pr07", "kind": "colon", "input": "他问我：你什么时候回来？", "label": "zh", "ref": "He asked me: when are you coming back?"}
+{"id": "pr08", "kind": "colon", "input": "The sign says: no parking.", "label": "en", "ref": "牌子上写着：禁止停车。"}
+{"id": "pl01", "kind": "long", "input": "呃，我跟大家同步一下这周的进度。前端那边，登录页的改版已经做完了，嗯，下周一可以提测。后端这边，订单服务的重构还差两个接口，预计周三之前能完成。测试同学反馈说上周发现的那个支付超时的问题，复现的概率大概是百分之五，我们怀疑是第三方回调太慢，已经在加日志了。另外，设计那边给了新的图标，我看了一下，整体风格挺统一的，不过有几个颜色需要再调一调。运营那边希望我们在十月二十号之前上线活动页，时间有点紧，我建议先砍掉抽奖功能，只保留签到和积分兑换。还有，下周四下午三点要跟客户开一个评审会，大家把各自负责的部分准备一下，每个人大概讲五分钟。最后提醒一下，报销单这个月二十五号截止，别忘了交。", "label": "zh", "ref": ""}
+{"id": "pl02", "kind": "long", "input": "呃，我跟大家同步一下这周的进度。前端那边，登录页的改版已经做完了，嗯，下周一可以提测。后端这边，订单服务的重构还差两个接口，预计周三之前能完成。测试同学反馈说上周发现的那个支付超时的问题，复现的概率大概是百分之五，我们怀疑是第三方回调太慢，已经在加日志了。另外，设计那边给了新的图标，我看了一下，整体风格挺统一的，不过有几个颜色需要再调一调。运营那边希望我们在十月二十号之前上线活动页，时间有点紧，我建议先砍掉抽奖功能，只保留签到和积分兑换。还有，下周四下午三点要跟客户开一个评审会，大家把各自负责的部分准备一下，每个人大概讲五分钟。最后提醒一下，报销单这个月二十五号截止，别忘了交。如果有问题可以随时在群里说，或者直接找我。", "label": "zh", "ref": ""}
+{"id": "pl03", "kind": "long", "input": "Um, quick update on the migration. We moved the user database to the new cluster on Tuesday night, and so far the error rate looks normal. The search service is still on the old cluster because the index rebuild takes about six hours, so we plan to do it this Saturday when traffic is low. I talked to the finance team and they approved the extra budget for the larger instances, which is about 4,000 dollars a month. There are two open risks. First, the backup job failed twice last week and we haven't found the root cause yet. Second, the vendor says their API will change in November, and we need to update the client before then. Can everyone please review the runbook before Friday and leave comments if anything is unclear? Thanks.", "label": "en", "ref": ""}
+{"id": "pl04", "kind": "long", "input": "这个 sprint 的 scope 有点大，我建议把 analytics dashboard 往后放，先把 checkout flow 的 bug 修了。另外 design review 改到周四，大家记得提前看一下 Figma 里的 mockup，有 comment 直接留在上面。QA 那边说 regression test 还要两天，所以 release 可能要推到下周二。", "label": "zh", "ref": ""}
+{"id": "pl05", "kind": "long", "input": "Um, quick update on the migration. We moved the user database to the new cluster on Tuesday night, and so far the error rate looks normal. The search service is still on the old cluster because the in", "label": "en", "ref": ""}
+{"id": "pl06", "kind": "long", "input": "呃，我跟大家同步一下这周的进度。前端那边，登录页的改版已经做完了，嗯，下周一可以提测。后端这边，订单服务的重构还差两个接口，预计周三之前能完成。测试同学反馈说上周发现的那个支付超时的问题，复现的概率大概是百分之五，我们怀疑是第三方回调太慢，", "label": "zh", "ref": ""}

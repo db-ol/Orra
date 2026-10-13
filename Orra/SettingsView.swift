@@ -2,19 +2,18 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// The pages of the settings window, in the sidebar's order.
-enum SettingsPage: String, CaseIterable, Identifiable {
+/// The tabs in the sidebar of the settings window, in their order.
+enum SettingsTab: String, CaseIterable, Identifiable {
     case general
-    case microphone
     case vocabulary
     case about
 
     var id: String { rawValue }
 
+    /// The name in the sidebar and the window's title.
     var title: LocalizedStringKey {
         switch self {
         case .general: "General"
-        case .microphone: "Microphone"
         case .vocabulary: "Vocabulary"
         case .about: "About"
         }
@@ -23,7 +22,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .general: "gearshape.fill"
-        case .microphone: "mic.fill"
         case .vocabulary: "character.book.closed.fill"
         case .about: "info.circle.fill"
         }
@@ -33,28 +31,24 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .general: .gray
-        case .microphone: .orange
         case .vocabulary: .blue
         case .about: .indigo
         }
     }
+}
 
-    /// One line under the page's title.
-    var summary: LocalizedStringKey {
-        switch self {
-        case .general: "Your language, the talk key, what you see and hear while dictating, and how Orra starts."
-        case .microphone: "Which microphone Orra records from."
-        case .vocabulary: "Words and names that Orra should write your way, and learning from your corrections."
-        case .about: "Version, speech model, updates and privacy."
-        }
-    }
+/// What General opens over itself: the options of cleanup.
+enum SettingsSheet: String, CaseIterable, Identifiable {
+    case cleanup
+
+    var id: String { rawValue }
 }
 
 /// A symbol in a colored rounded square, as in the sidebar of System Settings.
-struct SettingsIcon: View {
+private struct SettingsIcon: View {
     let symbol: String
     let tint: Color
-    var size: CGFloat = 22
+    var size: CGFloat = 20
 
     var body: some View {
         Image(systemName: symbol)
@@ -63,6 +57,19 @@ struct SettingsIcon: View {
             .frame(width: size, height: size)
             .background(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(tint.gradient))
             .accessibilityHidden(true)
+    }
+}
+
+/// A tab's icon and name in the sidebar.
+struct SettingsTabLabel: View {
+    let tab: SettingsTab
+
+    var body: some View {
+        Label {
+            Text(tab.title)
+        } icon: {
+            SettingsIcon(symbol: tab.symbol, tint: tab.tint)
+        }
     }
 }
 
@@ -88,28 +95,9 @@ private struct DescribedLabel: View {
     }
 }
 
-/// The top of each page: its icon, title and what it holds.
-private struct PageHeader: View {
-    let page: SettingsPage
-
-    var body: some View {
-        Section {
-            HStack(spacing: 14) {
-                SettingsIcon(symbol: page.symbol, tint: page.tint, size: 44)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(page.title)
-                        .font(.title2.weight(.semibold))
-                    Text(page.summary)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.vertical, 4)
-        }
-    }
-}
-
-/// The settings window: a sidebar with one page per topic, like System Settings.
+/// The settings window: a sidebar with General, Vocabulary and About, like System
+/// Settings. General holds every setting, in blocks by purpose, and opens a sheet for the
+/// options of cleanup.
 struct SettingsView: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
@@ -120,146 +108,211 @@ struct SettingsView: View {
     let learning: CorrectionLearning
     let dockIcon: DockIcon
     let updater: AppUpdater
-    @State private var page: SettingsPage? = .general
+    @State private var tab = SettingsTab.general
+    @State private var sheet: SettingsSheet?
+    /// The sidebar always shows, like the one of System Settings. Without it a user who drags
+    /// the divider to the edge, or picks Hide Sidebar, has no way back to the other tabs.
+    @State private var columns = NavigationSplitViewVisibility.all
+    /// The height of the window's content, which no sheet may pass, so a sheet never hangs
+    /// below the window.
+    @State private var pageHeight: CGFloat = SettingsWindow.defaultSize.height
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsPage.allCases, selection: $page) { page in
-                Label {
-                    Text(page.title)
-                } icon: {
-                    SettingsIcon(symbol: page.symbol, tint: page.tint)
-                }
-                .padding(.vertical, 2)
-                .tag(page)
+        NavigationSplitView(columnVisibility: $columns) {
+            // A click on the empty part of the sidebar keeps the tab that is shown.
+            List(SettingsTab.allCases, selection: Binding<SettingsTab?>(
+                get: { tab },
+                set: { if let new = $0 { tab = new } }
+            )) { tab in
+                SettingsTabLabel(tab: tab)
+                    .tag(tab)
             }
-            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
+            .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
             .toolbar(removing: .sidebarToggle)
         } detail: {
-            switch page ?? .general {
-            case .general:
-                GeneralSettings(pushToTalk: pushToTalk, feedback: feedback, cleanup: cleanup, openAtLogin: openAtLogin, dockIcon: dockIcon)
-            case .microphone:
-                MicrophoneSettings(pushToTalk: pushToTalk, inputs: inputs)
-            case .vocabulary:
-                VocabularySettings(pushToTalk: pushToTalk, learning: learning)
-            case .about:
-                AboutSettings(models: models, pushToTalk: pushToTalk, updater: updater)
-            }
+            page(for: tab)
         }
-        .toolbar(removing: .sidebarToggle)
-        .onReceive(NotificationCenter.default.publisher(for: SettingsWindow.showGeneralNotification)) { _ in
-            page = .general
+        .onChange(of: columns) { _, new in
+            if new != .all { columns = .all }
         }
-        .frame(minWidth: 700, idealWidth: 780, maxWidth: .infinity, minHeight: 500, idealHeight: 620, maxHeight: .infinity)
+        .sheet(item: $sheet) { sheet in
+            content(for: sheet)
+                .environment(\.settingsSheetHeightLimit, pageHeight - SettingsSheetLimits.margin)
+        }
+        // A window that opens shows the tab and sheet asked for, and one that is open
+        // already turns to them.
+        .onAppear(perform: takeRequest)
+        .onReceive(NotificationCenter.default.publisher(for: SettingsWindow.showNotification)) { _ in
+            takeRequest()
+        }
+        .frame(minWidth: 680, idealWidth: SettingsWindow.defaultSize.width, maxWidth: .infinity, minHeight: 440, idealHeight: SettingsWindow.defaultSize.height, maxHeight: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
+    }
+
+    private func takeRequest() {
+        let request = SettingsWindow.takeRequest()
+        tab = request.tab
+        sheet = request.sheet
+    }
+
+    /// The page on the right of the sidebar.
+    @ViewBuilder
+    func page(for tab: SettingsTab) -> some View {
+        switch tab {
+        case .general:
+            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback, openAtLogin: openAtLogin, cleanup: cleanup, learning: learning, dockIcon: dockIcon) { sheet = $0 }
+        case .vocabulary:
+            VocabularySettings(pushToTalk: pushToTalk, learning: learning)
+        case .about:
+            AboutSettings(models: models, pushToTalk: pushToTalk, updater: updater)
+        }
+    }
+
+    /// What a sheet holds.
+    @ViewBuilder
+    func content(for sheet: SettingsSheet) -> some View {
+        switch sheet {
+        case .cleanup:
+            CleanupOptions(pushToTalk: pushToTalk, cleanup: cleanup)
+        }
     }
 }
 
-/// The talk keys, the feedback while dictating, Open at Login and the Dock icon.
+/// General: the keys, the features with their options, dictation, the microphone, and the
+/// system, each in a block of its own. The target language of translation sits right under
+/// its switch, so it takes no extra click. A setting shows one short line under its name,
+/// and the rest of what it does when the pointer rests on it. The page scrolls when the
+/// window is short.
 private struct GeneralSettings: View {
     let pushToTalk: PushToTalkController
+    let inputs: AudioInputList
     @Bindable var feedback: RecordingFeedback
-    @Bindable var cleanup: TextCleanup
     let openAtLogin: OpenAtLogin
+    let cleanup: TextCleanup
+    @Bindable var learning: CorrectionLearning
     @Bindable var dockIcon: DockIcon
-    @State private var language = AppLanguage.load()
+    let open: (SettingsSheet) -> Void
 
     var body: some View {
         Form {
-            PageHeader(page: .general)
             Section {
-                Picker(selection: $language) {
-                    ForEach(AppLanguage.allCases) { language in
-                        if let name = language.nativeName {
-                            Text(verbatim: name).tag(language)
-                        } else {
-                            Text("Same as the Mac").tag(language)
-                        }
+                // The note about swapped keys shows once, under the translation key.
+                TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false)
+                    .help(Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.") + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
+                VStack(alignment: .leading, spacing: 6) {
+                    TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
+                        // The key does nothing while translation is off.
+                        .disabled(!cleanup.translationIsOn)
+                    if !cleanup.translationIsOn {
+                        Text("Turn on Translation under Features to use this key.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .help(Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free."))
+            } header: {
+                Text("Keys")
+            }
+            Section {
+                CleanupRow(cleanup: cleanup) { open(.cleanup) }
+                TranslationRow(cleanup: cleanup)
+                Picker(selection: Binding(
+                    get: { cleanup.translationDirection },
+                    set: { cleanup.setTranslationDirection($0) }
+                )) {
+                    ForEach(TranslationDirection.allCases, id: \.self) { direction in
+                        Text(direction.title).tag(direction)
                     }
                 } label: {
-                    Label("Language", systemImage: "globe")
+                    DescribedLabel(
+                        title: "Translate into",
+                        detail: cleanup.translationDirection.detail,
+                        systemImage: "arrow.left.arrow.right"
+                    )
                 }
-                .onChange(of: language) { _, language in
-                    language.save()
-                }
-                // The welcome window can change the language while Settings is open. The
-                // vocabulary is saved on another thread, so changes are read on the main one.
-                .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: DispatchQueue.main)) { _ in
-                    let saved = AppLanguage.load()
-                    if saved != language {
-                        language = saved
-                    }
-                }
-                // Compared with what macOS loaded at launch, so a language picked in the
-                // welcome window counts, and picking English on a Mac in English needs no
-                // restart.
-                if language.localization() != AppLanguage.launchLocalization {
-                    HStack {
-                        Text("Orra shows the new language after it restarts.")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Restart Orra") {
-                            AppLanguage.restart()
-                        }
-                        .buttonStyle(.borderedProminent)
+                .pickerStyle(.radioGroup)
+                .disabled(!cleanup.translationIsOn)
+                // One status for the model of both features, with its buttons, while
+                // translation is on. Its text starts where the names of the rows above do.
+                if cleanup.translationIsOn, CleanupLabels.status(cleanup.models.state, engine: cleanup.engineState, total: cleanup.models.manifest.totalBytes, use: .translation) != nil {
+                    Label {
+                        LocalModelStatus(cleanup: cleanup, use: .translation)
+                    } icon: {
+                        Image(systemName: "translate")
+                            .hidden()
                     }
                 }
             } header: {
-                Text("Language")
+                Text("Features")
+            } footer: {
+                Text("Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it.")
+                    .foregroundStyle(.secondary)
             }
             Section {
-                TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsRecommendation: true)
                 Toggle(isOn: Binding(
                     get: { pushToTalk.handsFreeOn },
                     set: { pushToTalk.setHandsFreeOn($0) }
                 )) {
                     DescribedLabel(
                         title: "Double press for hands free",
-                        detail: "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before.",
+                        detail: "Press the talk key twice quickly to keep recording after you let go.",
                         systemImage: "hand.raised"
                     )
                 }
-            } header: {
-                Text("Talk Key")
-            } footer: {
-                Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Toggle(isOn: $feedback.showsIndicator) {
-                    Label("Show the recording indicator", systemImage: "waveform")
+                .help(Text("Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before."))
+                Picker(selection: $feedback.onScreenHint) {
+                    ForEach(OnScreenHint.choices(current: feedback.onScreenHint)) { hint in
+                        Text(hint.title).tag(hint)
+                    }
+                } label: {
+                    DescribedLabel(
+                        title: "On screen hint",
+                        detail: "Bars at the bottom of the screen that move with your voice.",
+                        systemImage: "waveform"
+                    )
                 }
+                .help(Text("While you dictate, white bars at the bottom of the screen move with your voice, and say why when nothing is pasted. Always also keeps a small bar there while Orra is ready, which shows how to talk when you point at it."))
                 Toggle(isOn: $feedback.playsSounds) {
                     Label("Play sounds when recording starts and stops", systemImage: "speaker.wave.2")
                 }
-                Toggle(isOn: $feedback.showsIdleBar) {
-                    Label("Show a small bar at the bottom of the screen while Orra is ready", systemImage: "minus.rectangle")
-                }
-                Toggle(isOn: Binding(
-                    get: { pushToTalk.removesFillerWords },
-                    set: { pushToTalk.setRemovesFillerWords($0) }
-                )) {
+                Toggle(isOn: $learning.isOn) {
                     DescribedLabel(
-                        title: "Remove filler words such as um and uh",
-                        detail: "Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.",
-                        systemImage: "text.badge.minus"
+                        title: "Learn from my corrections",
+                        detail: "Reads the field you dictated into for 3 minutes after a paste and adds a misheard word you fix to your vocabulary.",
+                        systemImage: "character.cursor.ibeam"
                     )
                 }
-                Toggle(isOn: Binding(
-                    get: { pushToTalk.writesNumbersAsDigits },
-                    set: { pushToTalk.setWritesNumbersAsDigits($0) }
-                )) {
-                    DescribedLabel(
-                        title: "Write numbers as digits",
-                        detail: "Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words.",
-                        systemImage: "number"
-                    )
+                .help(Text("When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu."))
+                if !learning.store.entries.isEmpty {
+                    Button("Forget Learned Corrections") {
+                        learning.removeAll()
+                    }
                 }
-                CleanupSetting(cleanup: cleanup)
             } header: {
-                Text("While you dictate")
+                Text("Dictation")
             }
             Section {
+                Picker(selection: Binding(
+                    get: { pushToTalk.microphone?.uid ?? "" },
+                    set: { uid in pushToTalk.setMicrophone(choice(forUID: uid)) }
+                )) {
+                    Text(MicrophoneLabels.systemDefault(inputs.defaultInput, lidClosed: inputs.lidClosed)).tag("")
+                    ForEach(inputs.inputs, id: \.uid) { input in
+                        Text(MicrophoneLabels.device(input, lidClosed: inputs.lidClosed)).tag(input.uid)
+                    }
+                    if let chosen = pushToTalk.microphone, !inputs.inputs.contains(where: { $0.uid == chosen.uid }) {
+                        Text(MicrophoneLabels.missing(chosen)).tag(chosen.uid)
+                    }
+                } label: {
+                    Label("Input device", systemImage: "mic")
+                }
+                .help(Text("While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off."))
+            } header: {
+                Text("Microphone")
+            }
+            Section {
+                InterfaceLanguageRow()
                 Toggle(isOn: Binding(
                     get: { openAtLogin.isOn },
                     set: { openAtLogin.setOn($0) }
@@ -283,34 +336,61 @@ private struct GeneralSettings: View {
                     )
                 }
             } header: {
-                Text("Starting and finding Orra")
+                Text("System")
             }
         }
         .formStyle(.grouped)
         .navigationTitle("General")
+        .onAppear { inputs.refresh() }
+    }
+
+    /// The choice for a UID from the picker. The empty tag is the system default.
+    private func choice(forUID uid: String) -> MicrophoneChoice? {
+        guard !uid.isEmpty else { return nil }
+        if let input = inputs.inputs.first(where: { $0.uid == uid }) {
+            return MicrophoneChoice(uid: input.uid, name: input.name)
+        }
+        return pushToTalk.microphone?.uid == uid ? pushToTalk.microphone : nil
     }
 }
 
-/// The switch for cleanup with the local model, and its download and loading under it.
-private struct CleanupSetting: View {
+/// The switch for cleanup with the local model and Options… for the rest. While the model
+/// is on its way, one line under the name says where it stands, unless translation is on.
+/// Then the status row of the block, with its buttons, speaks for both.
+private struct CleanupRow: View {
     @Bindable var cleanup: TextCleanup
+    let showOptions: () -> Void
 
     var body: some View {
         let models = cleanup.models
         let total = models.manifest.totalBytes
-        let size = ModelInstaller.State.size(total)
-        Toggle(isOn: Binding(
-            get: { cleanup.isOn },
-            set: { $0 ? cleanup.turnOn() : cleanup.turnOff() }
-        )) {
-            DescribedLabel(
-                title: "Clean up with a local model",
-                detail: "Removes fillers and applies spoken self corrections, such as “三点，哦不对，四点”. It needs a \(size) download and about 4 GB of memory, adds under a second to a short dictation and more to a long one, and runs on this Mac. Paste Original Text in the Orra menu brings back the text from before the cleanup.",
-                systemImage: "wand.and.sparkles"
-            )
+        LabeledContent {
+            HStack(spacing: 12) {
+                Toggle("Clean up with a local model", isOn: Binding(
+                    get: { cleanup.isOn },
+                    set: { $0 ? cleanup.turnOn() : cleanup.turnOff() }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                // Off while Orra looks for the model on disk, a moment at launch.
+                .disabled(!cleanup.isOn && !cleanup.canTurnOn)
+                Button("Options…", action: showOptions)
+            }
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Clean Up Text")
+                    if cleanup.isOn, !cleanup.translationIsOn, let status = CleanupLabels.status(models.state, engine: cleanup.engineState, total: total, use: .cleanup) {
+                        Text(verbatim: status)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } icon: {
+                Image(systemName: "wand.and.sparkles")
+            }
         }
-        // Off while Orra looks for the model on disk, a moment at launch.
-        .disabled(!cleanup.isOn && !cleanup.canTurnOn)
         .alert("Download the cleanup model?", isPresented: $cleanup.isConfirmingDownload) {
             Button(CleanupLabels.downloadButton(models.state, total: total)) {
                 cleanup.confirmDownload()
@@ -319,24 +399,142 @@ private struct CleanupSetting: View {
         } message: {
             Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
         }
-        if cleanup.isOn {
-            status(models.state, total: total)
+    }
+}
+
+extension EnvironmentValues {
+    /// The tallest a sheet of the settings window may open, the height of the window's
+    /// page less a margin. Unlimited outside the window.
+    @Entry var settingsSheetHeightLimit: CGFloat = .infinity
+}
+
+/// How the sheets fit in the settings window.
+enum SettingsSheetLimits {
+    /// How much shorter than the page a sheet stays at most.
+    static let margin: CGFloat = 24
+    /// The shortest a sheet gets, also in the smallest window. Its form scrolls.
+    static let minimumHeight: CGFloat = 300
+
+    /// The height a sheet opens at: its own height, but no taller than the window allows.
+    static func height(_ height: CGFloat, limit: CGFloat) -> CGFloat {
+        min(height, max(limit, minimumHeight))
+    }
+}
+
+/// A sheet of the settings window: its title, a grouped form, and Done.
+private struct SettingsSheetContent<Content: View>: View {
+    let title: LocalizedStringKey
+    var width: CGFloat = 540
+    var height: CGFloat = 520
+    /// Whether the user can make the sheet larger, for a long list.
+    var resizable = false
+    @ViewBuilder let content: Content
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.settingsSheetHeightLimit) private var heightLimit
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(title)
+                .font(.title3.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+            Form {
+                content
+            }
+            .formStyle(.grouped)
+            Divider()
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
+        .frame(
+            minWidth: width, idealWidth: width, maxWidth: resizable ? .infinity : width,
+            minHeight: min(fitted, SettingsSheetLimits.minimumHeight), idealHeight: fitted, maxHeight: resizable ? .infinity : fitted
+        )
     }
 
-    @ViewBuilder
-    private func status(_ state: ModelInstaller.State, total: Int64) -> some View {
+    private var fitted: CGFloat {
+        SettingsSheetLimits.height(height, limit: heightLimit)
+    }
+}
+
+/// The options of cleanup: the local model, its download and loading, and the rules that
+/// run on every dictation.
+private struct CleanupOptions: View {
+    let pushToTalk: PushToTalkController
+    let cleanup: TextCleanup
+
+    var body: some View {
+        let size = ModelInstaller.State.size(cleanup.models.manifest.totalBytes)
+        SettingsSheetContent(title: "Clean Up Text", height: 560, resizable: true) {
+            Section {
+                DescribedLabel(
+                    title: "Clean up with a local model",
+                    detail: "Removes fillers and applies spoken self corrections, such as “三点，哦不对，四点”. It needs a \(size) download and about 4 GB of memory, adds under a second to a short dictation and more to a long one, and runs on this Mac. Paste Original Text in the Orra menu brings back the text from before the cleanup.",
+                    systemImage: "wand.and.sparkles"
+                )
+                if cleanup.isOn {
+                    LocalModelStatus(cleanup: cleanup, use: .cleanup)
+                }
+            } header: {
+                Text("Local model")
+            }
+            Section {
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.removesFillerWords },
+                    set: { pushToTalk.setRemovesFillerWords($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Remove filler words such as um and uh",
+                        detail: "Removes um, uh and erm where they only fill a pause, and the same sounds in Chinese. Words that carry meaning stay as you said them.",
+                        systemImage: "text.badge.minus"
+                    )
+                }
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.writesNumbersAsDigits },
+                    set: { pushToTalk.setWritesNumbersAsDigits($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Write numbers as digits",
+                        detail: "Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words.",
+                        systemImage: "number"
+                    )
+                }
+            } header: {
+                Text("Rules")
+            } footer: {
+                Text("The rules run on every dictation, with or without the local model, and before it.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// The model's download and loading under the switch of cleanup or of translation, while
+/// that switch is on: progress, Download or Try Again, or nothing once the model is ready.
+private struct LocalModelStatus: View {
+    let cleanup: TextCleanup
+    let use: CleanupLabels.Use
+
+    var body: some View {
+        let total = cleanup.models.manifest.totalBytes
+        let state = cleanup.models.state
         switch state {
         case .installed:
             switch cleanup.engineState {
             case .unloaded, .loading:
-                Text("Loading the cleanup model…")
+                Text(CleanupLabels.loading(use))
                     .foregroundStyle(.secondary)
             case .ready:
                 EmptyView()
             case .failed:
                 HStack {
-                    Text("The cleanup model could not be loaded")
+                    Text(CleanupLabels.failedToLoad(use))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Try Again") {
@@ -355,7 +553,7 @@ private struct CleanupSetting: View {
         case .downloading(let bytes, let source):
             VStack(alignment: .leading, spacing: 6) {
                 ProgressView(value: Double(bytes), total: Double(max(total, 1))) {
-                    Text(CleanupLabels.progress(bytes: bytes, total: total))
+                    Text(CleanupLabels.progress(bytes: bytes, total: total, use: use))
                 } currentValueLabel: {
                     if let source {
                         Text(String(localized: "From \(source.rawValue)"))
@@ -368,7 +566,7 @@ private struct CleanupSetting: View {
         case .missing, .failed:
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(CleanupLabels.lines(state, total: total), id: \.self) { line in
+                    ForEach(CleanupLabels.lines(state, total: total, use: use), id: \.self) { line in
                         Text(verbatim: line)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -385,8 +583,34 @@ private struct CleanupSetting: View {
 
 /// The text about the cleanup model's download, kept apart so tests can read it.
 nonisolated enum CleanupLabels {
-    static func progress(bytes: Int64, total: Int64) -> String {
-        String(localized: "Downloading the cleanup model: \(ModelInstaller.State.percent(bytes, of: total))% of \(ModelInstaller.State.size(total))")
+    /// Which page the text is for. Clean Up Text calls the model the cleanup model, and
+    /// Translation calls the same model the local model.
+    nonisolated enum Use: Equatable, Sendable {
+        case cleanup
+        case translation
+    }
+
+    static func progress(bytes: Int64, total: Int64, use: Use = .cleanup) -> String {
+        let percent = ModelInstaller.State.percent(bytes, of: total)
+        let size = ModelInstaller.State.size(total)
+        return switch use {
+        case .cleanup: String(localized: "Downloading the cleanup model: \(percent)% of \(size)")
+        case .translation: String(localized: "Downloading the local model: \(percent)% of \(size)")
+        }
+    }
+
+    static func loading(_ use: Use) -> String {
+        switch use {
+        case .cleanup: String(localized: "Loading the cleanup model…")
+        case .translation: String(localized: "Loading the local model…")
+        }
+    }
+
+    static func failedToLoad(_ use: Use) -> String {
+        switch use {
+        case .cleanup: String(localized: "The cleanup model could not be loaded")
+        case .translation: String(localized: "The local model could not be loaded")
+        }
     }
 
     /// Download with the size, or how much is left when part of it is on disk already.
@@ -401,85 +625,101 @@ nonisolated enum CleanupLabels {
         }
     }
 
-    /// What stands in the way while cleanup is on and the model is not in place.
-    static func lines(_ state: ModelInstaller.State, total: Int64) -> [String] {
-        switch state {
-        case .missing:
+    /// What stands in the way while cleanup or translation is on and the model is not in
+    /// place.
+    static func lines(_ state: ModelInstaller.State, total: Int64, use: Use = .cleanup) -> [String] {
+        switch (state, use) {
+        case (.missing, .cleanup):
             [String(localized: "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup.")]
+        case (.missing, .translation):
+            [String(localized: "The local model is not on this Mac yet. Until it is, Orra pastes the text without translation.")]
         default:
             state.menuLines(total: total)
         }
     }
+
+    /// One line on the page under Clean Up Text or Translation while it is on and the
+    /// model is not ready, or nil once it is. Options… shows the details.
+    static func status(_ state: ModelInstaller.State, engine: TextCleanup.EngineState, total: Int64, use: Use) -> String? {
+        switch state {
+        case .installed:
+            switch engine {
+            case .unloaded, .loading: loading(use)
+            case .ready: nil
+            case .failed: failedToLoad(use)
+            }
+        case .checking:
+            nil
+        case .downloading(let bytes, _):
+            progress(bytes: bytes, total: total, use: use)
+        case .verifying, .missing, .failed:
+            lines(state, total: total, use: use).joined(separator: " ")
+        }
+    }
 }
 
-/// Which microphone records.
-private struct MicrophoneSettings: View {
-    let pushToTalk: PushToTalkController
-    let inputs: AudioInputList
+/// The switch for translation with the translation key. While the model is on its way,
+/// the row under the target picker on General says where it stands.
+private struct TranslationRow: View {
+    @Bindable var cleanup: TextCleanup
 
     var body: some View {
-        Form {
-            PageHeader(page: .microphone)
-            Section {
-                Picker("Microphone", selection: Binding(
-                    get: { pushToTalk.microphone?.uid ?? "" },
-                    set: { uid in pushToTalk.setMicrophone(choice(forUID: uid)) }
-                )) {
-                    Text(MicrophoneLabels.systemDefault(inputs.defaultInput, lidClosed: inputs.lidClosed)).tag("")
-                    ForEach(inputs.inputs, id: \.uid) { input in
-                        Text(MicrophoneLabels.device(input, lidClosed: inputs.lidClosed)).tag(input.uid)
-                    }
-                    if let chosen = pushToTalk.microphone, !inputs.inputs.contains(where: { $0.uid == chosen.uid }) {
-                        Text(MicrophoneLabels.missing(chosen)).tag(chosen.uid)
-                    }
-                }
-            } footer: {
-                Text("While this microphone is not connected, Orra uses the system default. With the lid closed, a MacBook's own microphone is off.")
-                    .foregroundStyle(.secondary)
+        let models = cleanup.models
+        let total = models.manifest.totalBytes
+        Toggle(isOn: Binding(
+            get: { cleanup.translationIsOn },
+            set: { $0 ? cleanup.turnOnTranslation() : cleanup.turnOffTranslation() }
+        )) {
+            DescribedLabel(
+                title: "Translation",
+                detail: "Hold the translation key, speak, and let go. Orra pastes what you said in another language.",
+                systemImage: "translate"
+            )
+        }
+        // Off while Orra looks for the model on disk, a moment at launch.
+        .disabled(!cleanup.translationIsOn && !cleanup.canTurnOn)
+        .help(Text("Dictations over \(TranslationStep.maximumLength) characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost.") + Text(verbatim: "\n") + Text("Paste Original Text in the Orra menu brings back the text from before the translation, and Copy Last Dictation copies the translation.") + Text(verbatim: "\n") + Text("Orra never learns corrections from a translated paste."))
+        .alert("Download the model for translation?", isPresented: $cleanup.isConfirmingTranslationDownload) {
+            Button(CleanupLabels.downloadButton(models.state, total: total)) {
+                cleanup.confirmTranslationDownload()
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
         }
-        .formStyle(.grouped)
-        .navigationTitle("Microphone")
-        .onAppear { inputs.refresh() }
-    }
-
-    /// The choice for a UID from the picker. The empty tag is the system default.
-    private func choice(forUID uid: String) -> MicrophoneChoice? {
-        guard !uid.isEmpty else { return nil }
-        if let input = inputs.inputs.first(where: { $0.uid == uid }) {
-            return MicrophoneChoice(uid: input.uid, name: input.name)
-        }
-        return pushToTalk.microphone?.uid == uid ? pushToTalk.microphone : nil
     }
 }
 
-/// The user's words and names, laid out as System Settings shows text replacements:
-/// learning from corrections first, then a field to add a word, then the words in a table.
+extension TranslationDirection {
+    /// The name in the picker.
+    var title: LocalizedStringKey {
+        switch self {
+        case .automatic: "Automatic"
+        case .english: "English"
+        case .chinese: "Chinese"
+        }
+    }
+
+    /// What the choice does, under the picker.
+    var detail: LocalizedStringKey {
+        switch self {
+        case .automatic: "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in."
+        case .english: "Everything you say is pasted in English."
+        case .chinese: "Everything you say is pasted in Chinese. Common English terms, such as PR or iPhone, may stay in English."
+        }
+    }
+}
+
+/// The user's words and names, laid out as System Settings shows text replacements: a
+/// field to add a word, then the words in a table, over the full height of the window.
 private struct VocabularySettings: View {
     let pushToTalk: PushToTalkController
-    @Bindable var learning: CorrectionLearning
+    let learning: CorrectionLearning
     @State private var newTerm = ""
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
         Form {
-            PageHeader(page: .vocabulary)
-            Section {
-                Toggle(isOn: $learning.isOn) {
-                    DescribedLabel(
-                        title: "Learn from my corrections",
-                        detail: "When this is on, Orra reads the text of the field you dictated into for up to 3 minutes after each paste, while you are in that field, never a password field. When you fix a misheard word, Orra adds the right spelling to your vocabulary and shows a notice where you can undo it. Orra keeps only the word pairs, on this Mac. It works in apps that let macOS read their text, such as Notes, Mail and Safari, but not in some editors and terminals. There, copy the right word and add it from the Orra menu.",
-                        systemImage: "character.cursor.ibeam"
-                    )
-                }
-                if !learning.store.entries.isEmpty {
-                    Button("Forget Learned Corrections") {
-                        learning.removeAll()
-                    }
-                }
-            } header: {
-                Text("Learning")
-            }
             Section {
                 HStack(spacing: 8) {
                     // A visible box with the hint inside it, so it reads as a place to type.
@@ -516,7 +756,64 @@ private struct VocabularySettings: View {
     }
 }
 
-/// The version, the speech model, and what Orra does with speech.
+/// The language of Orra's menus and windows, with Restart Orra while it differs from the one
+/// Orra started in.
+private struct InterfaceLanguageRow: View {
+    @State private var language = AppLanguage.load()
+
+    var body: some View {
+        Picker(selection: $language) {
+            ForEach(AppLanguage.allCases) { language in
+                if let name = language.nativeName {
+                    Text(verbatim: name).tag(language)
+                } else {
+                    Text("Same as the Mac").tag(language)
+                }
+            }
+        } label: {
+            Label("Interface language", systemImage: "globe")
+        }
+        .help(Text("The language of Orra's menus and windows."))
+        .onChange(of: language) { _, language in
+            language.save()
+        }
+        // The welcome window can change the language while Settings is open. The
+        // vocabulary is saved on another thread, so changes are read on the main one.
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: DispatchQueue.main)) { _ in
+            let saved = AppLanguage.load()
+            if saved != language {
+                language = saved
+            }
+        }
+        // Compared with what macOS loaded at launch, so a language picked in the welcome
+        // window counts, and picking English on a Mac in English needs no restart.
+        if language.localization() != AppLanguage.launchLocalization {
+            HStack {
+                Text("Orra shows the new language after it restarts.")
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Restart Orra") {
+                    AppLanguage.restart()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+}
+
+extension OnScreenHint {
+    /// The name in the picker.
+    var title: LocalizedStringKey {
+        switch self {
+        case .always: "Always"
+        case .whileDictating: "Only while dictating"
+        case .off: "Off"
+        case .whileReady: "Only while ready"
+        }
+    }
+}
+
+/// The version and its updates, the speech model, and what Orra does with speech.
 private struct AboutSettings: View {
     let models: ModelInstaller
     let pushToTalk: PushToTalkController
@@ -524,7 +821,6 @@ private struct AboutSettings: View {
 
     var body: some View {
         Form {
-            PageHeader(page: .about)
             Section {
                 HStack(spacing: 14) {
                     Image(nsImage: NSApplication.shared.applicationIconImage)
@@ -545,14 +841,14 @@ private struct AboutSettings: View {
                         .foregroundStyle(.secondary)
                     }
                 }
-            }
-            Section {
                 LabeledContent("Speech model") {
                     Text(modelStatus)
                         .foregroundStyle(.secondary)
                 }
             }
             Section {
+                // The line under the version says when a build run from Xcode has updates
+                // off, see AppUpdater.updatesEnabled.
                 Toggle(isOn: $updater.checksAutomatically) {
                     DescribedLabel(
                         title: "Check for updates automatically",
@@ -565,6 +861,8 @@ private struct AboutSettings: View {
                     updater.checkForUpdates()
                 }
                 .disabled(!updater.canCheckForUpdates)
+            } header: {
+                Text("Updates")
             }
             Section {
                 Text("Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the speech model or the cleanup model when you ask it to, and to check for updates when you allow it.")
@@ -621,14 +919,24 @@ struct MicrophoneToggles: View {
     }
 }
 
-/// The talk key recorder, like the shortcut recorders of Mac apps: a field that shows the
-/// key, such as "⌥ Right Option (Alt)". Clicking it, or Change…, starts recording, and the
-/// next key the user presses and releases on its own becomes the talk key. A press that
-/// cannot be one shows why under the field. In Settings and in the welcome window.
+/// The key recorder, like the shortcut recorders of Mac apps: a field that shows the talk
+/// key or the translation key, such as "⌥ Right Option (Alt)". Clicking it, or Change…,
+/// starts recording, and the next key the user presses and releases on its own becomes
+/// the key. A press that cannot be one shows why under the field, and so does a swap of
+/// the two keys. The talk key's recorder is in Settings and in the welcome window, the
+/// translation key's in Settings.
 struct TalkKeyRecorder: View {
     let pushToTalk: PushToTalkController
+    /// Which key this field shows and records.
+    var slot: KeySlot = .talk
     /// Whether "Talk key" is shown in front of the field, as a row in Settings.
     var showsLabel = false
+    /// Whether the line with the keys that work is shown under the field before the user
+    /// starts recording. The settings page leaves it out to stay short.
+    var showsHint = true
+    /// Whether the note about swapped keys shows under the field. Settings shows it under
+    /// one of its two fields only.
+    var showsSwap = true
     /// Whether the line with the recommended keys is shown under the field.
     var showsRecommendation = false
     /// The language of the text built here, which the welcome window sets to the one
@@ -640,7 +948,15 @@ struct TalkKeyRecorder: View {
     @State private var startedHere = false
 
     private var isRecording: Bool {
-        pushToTalk.isChoosingTalkKey
+        pushToTalk.choosingKeySlot == slot
+    }
+
+    private var key: TalkKey {
+        slot == .talk ? pushToTalk.talkKey : pushToTalk.translationKey
+    }
+
+    private var name: Text {
+        slot == .talk ? Text("Talk key") : Text("Translation key")
     }
 
     var body: some View {
@@ -650,14 +966,18 @@ struct TalkKeyRecorder: View {
                     fieldAndButton
                 } label: {
                     // The field carries the same label for VoiceOver, so it is read once.
-                    Label("Talk key", systemImage: "keyboard")
-                        .accessibilityHidden(true)
+                    Label {
+                        name
+                    } icon: {
+                        Image(systemName: slot == .talk ? "keyboard" : "character.bubble")
+                    }
+                    .accessibilityHidden(true)
                 }
             } else {
                 fieldAndButton
             }
             if isRecording {
-                if let note = pushToTalk.keyChoiceRejection?.message(in: interfaceLocale) {
+                if let note = pushToTalk.keyChoiceRejection?.message(in: interfaceLocale, for: slot) {
                     // Already in the language of the window, so shown as it is.
                     // Orange on the icon only: orange text that small is too faint on a
                     // light background.
@@ -676,11 +996,29 @@ struct TalkKeyRecorder: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                // Which keys can be the talk key, before the user starts recording.
-                Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+                if showsSwap, let swap = pushToTalk.keySwap {
+                    // Already in the language of the window, so shown as it is.
+                    Label {
+                        Text(verbatim: swap.message(in: interfaceLocale))
+                    } icon: {
+                        Image(systemName: "arrow.left.arrow.right")
+                    }
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                // Which keys can be the key, before the user starts recording.
+                if showsHint {
+                    Group {
+                        if slot == .talk {
+                            Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+                        } else {
+                            Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.")
+                        }
+                    }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if showsRecommendation {
                 Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard.")
@@ -691,18 +1029,21 @@ struct TalkKeyRecorder: View {
         }
         .onDisappear {
             if startedHere {
-                pushToTalk.stopChoosingTalkKey()
+                pushToTalk.stopChoosingKey()
             }
         }
-        .onChange(of: pushToTalk.isChoosingTalkKey) { _, recording in
-            if !recording {
-                startedHere = false
+        .onChange(of: pushToTalk.choosingKeySlot) { old, new in
+            guard old == slot, new != slot else { return }
+            // VoiceOver reads a swap of the keys, which only shows as text under the field.
+            if startedHere, new == nil, let swap = pushToTalk.keySwap {
+                AccessibilityNotification.Announcement(swap.message(in: interfaceLocale)).post()
             }
+            startedHere = false
         }
         .onChange(of: pushToTalk.keyChoiceRejection) { _, rejection in
             // VoiceOver reads a refused press, which only shows as text under the field.
             // Only the recorder that started the recording speaks, so it is said once.
-            if startedHere, let note = rejection?.message(in: interfaceLocale) {
+            if startedHere, let note = rejection?.message(in: interfaceLocale, for: slot) {
                 let keys = String(localized: LocalizedStringResource("Use fn, Control, Option or Command on its own. Escape cancels.", locale: interfaceLocale))
                 AccessibilityNotification.Announcement("\(note) \(keys)").post()
             }
@@ -718,11 +1059,11 @@ struct TalkKeyRecorder: View {
             // While recording, a click on the field ends the recording, as any click in
             // Orra does, rather than starting it again.
             .allowsHitTesting(!isRecording)
-            .accessibilityLabel(Text("Talk key"))
-            .accessibilityValue(isRecording ? Text("Press the key you want to hold") : Text(verbatim: pushToTalk.talkKey.fullName(in: interfaceLocale)))
+            .accessibilityLabel(name)
+            .accessibilityValue(isRecording ? Text("Press the key you want to hold") : Text(verbatim: key.fullName(in: interfaceLocale)))
             if isRecording {
                 Button("Cancel") {
-                    pushToTalk.stopChoosingTalkKey()
+                    pushToTalk.stopChoosingKey()
                 }
             } else {
                 Button("Change…", action: start)
@@ -736,8 +1077,8 @@ struct TalkKeyRecorder: View {
                 Text("Press the key you want to hold")
                     .foregroundStyle(Color.accentColor)
             } else {
-                Text(verbatim: pushToTalk.talkKey.title(in: interfaceLocale))
-                if let other = pushToTalk.talkKey.otherLabelInParentheses(in: interfaceLocale) {
+                Text(verbatim: key.title(in: interfaceLocale))
+                if let other = key.otherLabelInParentheses(in: interfaceLocale) {
                     Text(verbatim: other)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -757,7 +1098,7 @@ struct TalkKeyRecorder: View {
     }
 
     private func start() {
-        pushToTalk.startChoosingTalkKey()
+        pushToTalk.startChoosingKey(for: slot)
         startedHere = true
         // Only the field's value changes, which VoiceOver does not read on its own.
         AccessibilityNotification.Announcement(

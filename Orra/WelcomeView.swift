@@ -140,7 +140,7 @@ private struct LanguageRow: View {
                 Label("Language", systemImage: "globe")
             }
             .fixedSize()
-            Text("You can change this later in Settings, General.")
+            Text("You can change this later in Settings, under General.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

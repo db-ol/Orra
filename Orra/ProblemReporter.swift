@@ -245,9 +245,10 @@ final class ProblemReporter {
                     .init(name: "Show in Dock", on: dockIcon.showsInDock),
                     .init(name: "Learn from corrections", on: learning.isOn),
                     .init(name: "Clean up with a local model", on: cleanup.isOn),
+                    .init(name: "Translate with the translation key", on: cleanup.translationIsOn),
                     .init(name: "Check for updates automatically", on: updater.checksAutomatically),
                 ],
-                cleanupModelState: describe(cleanup.models.state, cleanup.engineState),
+                cleanupModelState: describe(cleanup.models.state, cleanup.engineState, unloadedWhileIdle: cleanup.isUnloadedWhileIdle),
                 vocabularyCount: pushToTalk.vocabulary.count,
                 learnedPairCount: learning.store.entries.count
             )
@@ -271,9 +272,12 @@ final class ProblemReporter {
         }
     }
 
-    private static func describe(_ installer: ModelInstaller.State, _ engine: TextCleanup.EngineState) -> String {
+    private static func describe(_ installer: ModelInstaller.State, _ engine: TextCleanup.EngineState, unloadedWhileIdle: Bool) -> String {
         guard case .installed = installer else {
             return describe(installer, .notLoaded)
+        }
+        if engine == .ready, unloadedWhileIdle {
+            return "installed, unloaded while idle"
         }
         switch engine {
         case .unloaded: return "installed, not loaded"

@@ -49,6 +49,28 @@ struct PromptPrefixTests {
             #expect(prefix + rest == prompt)
         }
     }
+
+    /// Each translation target has its own prefix, which ends inside `{"transcript": "` too.
+    @Test func eachTranslationPromptHasItsOwnPrefix() throws {
+        let encode = { (text: String) in text.unicodeScalars.map { Int($0.value) } }
+        var prefixes: [[Int]] = []
+        for target in TranslationTarget.allCases {
+            let prefix = PromptPrefix.translationPrompt(into: target, encode: encode)
+            let start = TranslationPrompt.text(for: "X", into: target).components(separatedBy: "X")[0]
+            #expect(start.hasSuffix(#"{"transcript": ""#))
+            #expect(prefix == encode(String(start.unicodeScalars.dropLast(2))))
+            for transcript in ["呃，我们下周二开会。", "Hello", "\"quoted\"", "1", " space", "\n"] {
+                let prompt = encode(TranslationPrompt.text(for: transcript, into: target))
+                let rest = try #require(PromptPrefix.remainder(of: prompt, after: prefix))
+                #expect(prefix + rest == prompt)
+            }
+            prefixes.append(prefix)
+        }
+        #expect(prefixes[0] != prefixes[1])
+        // The cleanup prefix fits neither.
+        let cleanup = PromptPrefix.cleanupPrompt(encode: encode)
+        #expect(PromptPrefix.remainder(of: encode(TranslationPrompt.text(for: "Hello", into: .english)), after: cleanup) == nil)
+    }
 }
 
 /// The prefix with the real tokenizer: every prompt of the cleanup evaluation starts with
