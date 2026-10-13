@@ -33,7 +33,8 @@ Build and test commands, run in the repository root:
   5 skipped on 2026-10-12, the skipped ones being the cleanup evaluation and the three
   heavier real model tests. With the settings pages, it ended in TEST SUCCEEDED with
   2294 test cases passed and 6 skipped on 2026-10-12, the sixth being the opt in
-  rendering of the settings pages.
+  rendering of the settings pages. With the settings on one page and its sheets, it ended
+  in TEST SUCCEEDED with 2294 test cases passed and 6 skipped on 2026-10-13.
   - SettingsPageTests checks that a sheet asked for, such as the vocabulary, opens once
     while Settings… afterwards opens the page alone, that Change Talk Key… asks for the
     page alone, that an open window is told, and the line under Clean Up Text for each
