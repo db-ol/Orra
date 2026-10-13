@@ -72,6 +72,11 @@ final class HoldingEngine {
     var holdsUnloads = false
     var failsNextLoad = false
     var answer = #"{"cleaned": "我们下午3点开会。"}"#
+    var translationAnswer = #"{"cleaned": "我们下周二开会。", "translation": "We have a meeting next Tuesday."}"#
+    /// The targets whose translation prompts were read ahead, in order.
+    private(set) var prepared: [TranslationTarget] = []
+    /// How many translations ran on a loaded model.
+    private(set) var translations = 0
     /// "load" and "unload" in the order they ran.
     private(set) var events: [String] = []
     private(set) var running = 0
@@ -91,8 +96,21 @@ final class HoldingEngine {
         CleanupEngine(
             load: { [self] _ in try await load() },
             unload: { [self] in await unload() },
-            complete: { [self] _ in await answer }
+            complete: { [self] _ in await answer },
+            translate: { [self] _, _ in try await translate() },
+            prepareTranslation: { [self] target in try await prepare(target) }
         )
+    }
+
+    private func translate() throws -> String {
+        guard isLoaded else { throw RewriteError.notLoaded }
+        translations += 1
+        return translationAnswer
+    }
+
+    private func prepare(_ target: TranslationTarget) throws {
+        guard isLoaded else { throw RewriteError.notLoaded }
+        prepared.append(target)
     }
 
     private func load() async throws {
@@ -147,13 +165,14 @@ struct CleanupIdleUnloadTests {
     let idle: Duration = .seconds(900)
     let loadWait: Duration = .seconds(3)
 
-    /// Cleanup that is on, with the stand in model files in place, started as at launch
-    /// and loaded.
-    private func makeCleanup(idleUnloadDelay: Duration?? = .none) async throws -> TextCleanup {
+    /// Cleanup that is on, or translation, with the stand in model files in place, started
+    /// as at launch and loaded.
+    private func makeCleanup(isOn: Bool = true, translationIsOn: Bool = false, idleUnloadDelay: Duration?? = .none) async throws -> TextCleanup {
         try temporary.writeAll(to: temporary.installed)
         let cleanup = TextCleanup(
-            isOn: true,
+            isOn: isOn,
             save: { _ in },
+            translationIsOn: translationIsOn,
             models: ModelInstaller(
                 manifest: temporary.manifest,
                 folders: temporary.folders,
@@ -439,12 +458,14 @@ struct CleanupIdleUnloadTests {
             capture: mic.capture,
             transcription: speech.transcription,
             cleanup: cleanup.model,
+            translation: cleanup.translation,
             insert: inserter.insert,
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
             listeningCueDelay: .zero
         )
+        controller.setTranslationKeyOn(cleanup.translationIsOn)
         await controller.loadModel()
         speech.reply = "呃，我们下午两点，哦不对，下午三点开会。"
         return controller
@@ -548,5 +569,149 @@ struct CleanupIdleUnloadTests {
         #expect(!fake.isLoaded)
         #expect(fake.events == ["load", "unload", "load", "unload"])
         #expect(inserter.inserted.isEmpty)
+    }
+
+    // MARK: With translation
+
+    /// The words the stand in translation fits, see HoldingEngine.translationAnswer.
+    private static let spokenForTranslation = "呃，我们下周一，哦不是，下周二开会。"
+
+    @Test func withTranslationAloneTheModelIsUnloadedAndReadsThePromptsAgain() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanup(isOn: false, translationIsOn: true)
+        #expect(fake.prepared == [.english, .chinese])
+        #expect(cleanup.translation.isReady())
+        try await unloadWhileIdle(cleanup)
+        #expect(fake.events == ["load", "unload"])
+        // Ready in Settings, but no translation can start on a model out of memory.
+        #expect(cleanup.engineState == .ready)
+        #expect(cleanup.translation.isReady() == false)
+        #expect(await cleanup.translation.waitUntilLoaded() == false)
+        cleanup.dictationStarted()
+        #expect(cleanup.engineState == .loading)
+        #expect(cleanup.translation.isReady() == false)
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load", "unload", "load"])
+        #expect(fake.prepared == [.english, .chinese, .english, .chinese])
+        #expect(cleanup.translation.isReady())
+        #expect(await cleanup.translation.waitUntilLoaded())
+        #expect(await cleanup.model.waitUntilLoaded() == false)
+        // The idle time starts again after the dictation.
+        cleanup.dictationEnded()
+        try await unloadWhileIdle(cleanup)
+        #expect(fake.events == ["load", "unload", "load", "unload"])
+    }
+
+    @Test func aTranslationWaitsForTheLoadUnderWay() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanup(isOn: false, translationIsOn: true)
+        try await unloadWhileIdle(cleanup)
+        fake.holdsLoads = true
+        cleanup.dictationStarted()
+        try await settle { fake.isHolding }
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.translation.waitUntilLoaded()
+        }
+        try await settle()
+        #expect(result == nil)
+        fake.letGo()
+        await waiting.value
+        #expect(result == true)
+    }
+
+    @Test func theTranslationKeyLoadsTheModelAndTheDictationIsTranslated() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanup(isOn: false, translationIsOn: true)
+        let (mic, speech, inserter) = (FakeMicrophone(), FakeSpeech(), FakeInserter())
+        let controller = await controller(cleanup, mic: mic, speech: speech, inserter: inserter)
+        speech.reply = Self.spokenForTranslation
+        try await unloadWhileIdle(cleanup)
+        fake.holdsLoads = true
+        controller.handle(.pressed(isRepeat: false), key: controller.translationKey)
+        // Loading starts at the press, before the release.
+        try await settle { fake.isHolding }
+        #expect(fake.loads == 2)
+        try await settle { mic.calls.contains("start") }
+        controller.handle(.released, key: controller.translationKey)
+        try await settle { speech.receivedSampleCounts.count == 1 }
+        try await settle()
+        #expect(inserter.inserted.isEmpty)
+        fake.letGo()
+        try await settle { controller.state == .idle }
+        #expect(inserter.inserted == ["We have a meeting next Tuesday."])
+        #expect(controller.notice == nil)
+        #expect(fake.translations == 1)
+        // The prompts were read again after the load.
+        #expect(fake.prepared == [.english, .chinese, .english, .chinese])
+        // The idle time starts again after the paste.
+        try await advance(by: idle)
+        await cleanup.waitForLoad()
+        #expect(!fake.isLoaded)
+    }
+
+    @Test func aTranslationLoadThatTakesTooLongPastesUntranslatedAndWaitsOnce() async throws {
+        defer { temporary.remove() }
+        // With cleanup on too, the cleanup step does not wait a second time.
+        let cleanup = try await makeCleanup(isOn: true, translationIsOn: true)
+        let (mic, speech, inserter) = (FakeMicrophone(), FakeSpeech(), FakeInserter())
+        let controller = await controller(cleanup, mic: mic, speech: speech, inserter: inserter)
+        speech.reply = Self.spokenForTranslation
+        try await unloadWhileIdle(cleanup)
+        fake.holdsLoads = true
+        controller.handle(.pressed(isRepeat: false), key: controller.translationKey)
+        try await settle { mic.calls.contains("start") }
+        controller.handle(.released, key: controller.translationKey)
+        try await settle { clock.sleeping > 0 }
+        clock.advance(by: loadWait)
+        try await settle { controller.state == .idle }
+        // The text the rules left, neither translated nor cleaned up.
+        let ruled = try #require(inserter.inserted.first)
+        #expect(inserter.inserted.count == 1)
+        #expect(ruled.contains("下周一") && !ruled.contains("呃"))
+        #expect(controller.notice == String(localized: "The local model is not ready, so the text was pasted without translation."))
+        #expect(fake.translations == 0)
+        // The load goes on, and the next press of the translation key translates at once.
+        fake.letGo()
+        await cleanup.waitForLoad()
+        controller.handle(.pressed(isRepeat: false), key: controller.translationKey)
+        try await settle { mic.calls.filter { $0 == "start" }.count == 2 }
+        controller.handle(.released, key: controller.translationKey)
+        try await settle { inserter.inserted.count == 2 }
+        #expect(inserter.inserted.last == "We have a meeting next Tuesday.")
+        #expect(fake.loads == 2)
+    }
+
+    @Test func cleanupOffWhileTranslationIsOnKeepsTheModel() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanup(isOn: true, translationIsOn: true)
+        cleanup.turnOff()
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load"])
+        #expect(fake.isLoaded)
+        #expect(cleanup.translation.isReady())
+        // The idle time still runs for translation, and a press loads the model again.
+        try await unloadWhileIdle(cleanup)
+        fake.holdsLoads = true
+        cleanup.dictationStarted()
+        try await settle { fake.isHolding }
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.translation.waitUntilLoaded()
+        }
+        try await settle()
+        // Turning off the last one ends the wait and unloads.
+        cleanup.turnOffTranslation()
+        await waiting.value
+        #expect(result == false)
+        fake.letGo()
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load", "unload", "load", "unload"])
+        #expect(!fake.isLoaded)
+        #expect(cleanup.engineState == .unloaded)
+        #expect(!cleanup.isUnloadedWhileIdle)
+        cleanup.dictationEnded()
+        try await settle()
+        #expect(clock.sleeping == 0)
     }
 }

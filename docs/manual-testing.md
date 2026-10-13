@@ -295,7 +295,14 @@ Build and test commands, run in the repository root:
     out, a failed load is not used, turning cleanup off during a load ends the wait and
     leaves the model unloaded, off and on during an unload ends loaded, a dictation
     during the unload loads after it without overlap, a cancelled hold starts the idle time
-    again, and Paste Original Text needs no model.
+    again, and Paste Original Text needs no model. Since the merge with the translation
+    key it also covers translation: with translation on and cleanup off the model is
+    unloaded and loaded again too, translation is not ready while the model is unloaded,
+    the load reads the translation prompts ahead again, a press of the translation key
+    loads the model and its dictation is translated once the load ends, a load that takes
+    too long pastes the text untranslated with the notice and is waited for once only,
+    and turning cleanup off while translation is on keeps the model, while turning off the
+    last one ends the wait and unloads.
   - CleanupIdleUnloadMeasurementTests measures the idle unload with the real cleanup
     model, only with TEST_RUNNER_ORRA_CLEANUP_IDLE_MEASURE=1, in a Release build:
 
