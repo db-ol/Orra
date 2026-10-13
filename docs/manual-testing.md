@@ -27,7 +27,10 @@ Build and test commands, run in the repository root:
   below. Three heavier real model tests are skipped unless asked for. After the change to
   one talk key, the test command with `-skip-testing:OrraTests/RealModelTests` ended in
   TEST SUCCEEDED with 2190 test cases passed on 2026-10-10. The real model tests were not
-  run for that change, which does not touch transcription.
+  run for that change, which does not touch transcription. With the prefix cache of the
+  cleanup model, the test command ended in TEST SUCCEEDED with 2282 test cases passed and
+  5 skipped on 2026-10-12, the skipped ones being the cleanup evaluation and the three
+  heavier real model tests.
   - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
     35 rows) and each edge case decision, including cancel, a tap that waits for a second
     press, a second press that resumes listening and ends as a double press or a hold, a
@@ -238,6 +241,12 @@ Build and test commands, run in the repository root:
     checks the pins of the
     cleanup model, its server addresses and its folder, and that neither model's leftover
     cleanup removes the other's folder.
+  - PromptPrefixTests checks with stand in token IDs that the cached start of the prompt
+    stops two tokens before the first token two prompts differ in, that a prompt reads
+    only the tokens after it, and that a prompt that does not start with it, or has
+    nothing after it, reads the whole prompt instead. With the model's tokenizer, it checks
+    that every prompt of the cleanup evaluation, as written and after the rules, starts
+    with the cached start of 892 tokens.
   - RewriteTokenizerTests compares CleanupTokenizer, the tokenizer of swift-transformers,
     with the IDs that transformers in Python gave for the model on 20 strings and 4 whole
     prompts, decodes text back and loads it through the loader the engine uses. It needs
@@ -264,6 +273,32 @@ Build and test commands, run in the repository root:
     optimization:
 
         TEST_RUNNER_ORRA_CLEANUP_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<model folder> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/CleanupModelEvaluationTests
+
+    With TEST_RUNNER_ORRA_CLEANUP_COMPARE=1 as well, each case also runs without the prefix
+    cache right after, and the report lists every case where the two differ.
+
+    Since 2026-10-12 the engine runs the model once on the start of the prompt that every
+    transcript shares (the system text, the examples and the start of the last message,
+    892 of about 943 tokens) when it loads, keeps that cache, and runs each cleanup on a
+    copy of it, so the model reads only the about 51 tokens after it. A prompt that does
+    not start with the cached tokens reads the whole prompt. On 2026-10-12, on the same
+    M5 Pro with the installed model, a Release build with the comparison took 474 s for
+    cleanupCases. Loading, filling the cache and warming up took 1.2 s, the memory
+    footprint grew by 3.7 GB, and the cache holds 85 MB. Every one of the 496 answers was
+    the same with and without the cache, token for token, so the counts below are the
+    same for both. The prompt read in a median of 0.062 to 0.070 s with the cache and 0.54
+    to 0.64 s without it, measured in the same run.
+
+    | Set | Run | Exact | Cleaned | Unchanged | Held back | Median with cache | p95 with cache | Median without | p95 without |
+    |---|---|---|---|---|---|---|---|---|---|
+    | regular, 178 | model only | 157 | 98 | 79 | 1 | 0.170 s | 0.271 s | 0.655 s | 0.861 s |
+    | regular, 178 | as the app runs it | 156 | 51 | 126 | 1 | 0.182 s | 0.318 s | 0.725 s | 1.055 s |
+    | adversarial, 70 | model only | 65 | 12 | 58 | 0 | 0.212 s | 0.302 s | 0.743 s | 0.980 s |
+    | adversarial, 70 | as the app runs it | 66 | 6 | 64 | 0 | 0.218 s | 0.445 s | 0.778 s | 1.234 s |
+
+    None was unreadable, timed out or failed. The pasted adversarial outputs that differ
+    from the expected text are the ones listed below, and none answered or carried out a
+    request. The measurement from before the cache follows.
 
     Without TEST_RUNNER_ORRA_REWRITE_MODEL_DIR it uses the installed model. On
     2026-10-11, on an M5 Pro with 48 GB, with Qwen3.5 4B's pinned files cloned from the
@@ -301,9 +336,10 @@ Build and test commands, run in the repository root:
     Its longDictations test runs written dictations of 1 to 10 different sentences. In the
     Release run a cleanup took 1.11 s for 46 Chinese characters, 1.93 s for 127, 3.64 s
     for 248 and 5.60 s for 400 (3.25 s when run again), and 0.92 s for 86 English
-    characters, 1.63 s for 264, 1.75 s for 557 and 2.54 s for 905. Each stayed within the
-    limit of 2 s plus 15 ms a character. Text over 400 characters is pasted without
-    cleanup.
+    characters, 1.63 s for 264, 1.75 s for 557 and 2.54 s for 905. With the prefix cache on
+    2026-10-12 they took 0.36, 0.88, 1.75 and 3.41 s, and 0.34, 0.78, 1.48 and 2.33 s. Each
+    stayed within the limit of 2 s plus 15 ms a character. Text over 400 characters is
+    pasted without cleanup.
 - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
@@ -1083,6 +1119,4 @@ Cleanup with a local model, added on 2026-10-10, not verified yet:
   0.5 seconds everywhere and needs a decision before it changes.
 - A choice of model, a personal dictionary, and the onboarding that adapts to the user.
 - Key combinations and mouse buttons as talk keys.
-- Translation with the local model. A cache of the fixed part of the cleanup prompt,
-  which is most of its 940 tokens and of the 0.36 s the benchmark waited for the first
-  token.
+- Translation with the local model.
