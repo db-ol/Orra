@@ -215,9 +215,6 @@ private struct GeneralSettings: View {
             Section {
                 CleanupRow(cleanup: cleanup) { open(.cleanup) }
                 TranslationRow(cleanup: cleanup)
-                if cleanup.translationIsOn {
-                    LocalModelStatus(cleanup: cleanup, use: .translation)
-                }
                 Picker(selection: Binding(
                     get: { cleanup.translationDirection },
                     set: { cleanup.setTranslationDirection($0) }
@@ -234,6 +231,16 @@ private struct GeneralSettings: View {
                 }
                 .pickerStyle(.radioGroup)
                 .disabled(!cleanup.translationIsOn)
+                // One status for the model of both features, with its buttons, while
+                // translation is on. Its text starts where the names of the rows above do.
+                if cleanup.translationIsOn, CleanupLabels.status(cleanup.models.state, engine: cleanup.engineState, total: cleanup.models.manifest.totalBytes, use: .translation) != nil {
+                    Label {
+                        LocalModelStatus(cleanup: cleanup, use: .translation)
+                    } icon: {
+                        Image(systemName: "translate")
+                            .hidden()
+                    }
+                }
             } header: {
                 Text("Features")
             } footer: {
@@ -304,7 +311,8 @@ private struct GeneralSettings: View {
 }
 
 /// The switch for cleanup with the local model and Options… for the rest. While the model
-/// is on its way, one line under the name says where it stands.
+/// is on its way, one line under the name says where it stands, unless translation is on.
+/// Then the status row of the block, with its buttons, speaks for both.
 private struct CleanupRow: View {
     @Bindable var cleanup: TextCleanup
     let showOptions: () -> Void
@@ -328,7 +336,7 @@ private struct CleanupRow: View {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Clean Up Text")
-                    if cleanup.isOn, let status = CleanupLabels.status(models.state, engine: cleanup.engineState, total: total, use: .cleanup) {
+                    if cleanup.isOn, !cleanup.translationIsOn, let status = CleanupLabels.status(models.state, engine: cleanup.engineState, total: total, use: .cleanup) {
                         Text(verbatim: status)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -607,7 +615,7 @@ nonisolated enum CleanupLabels {
 }
 
 /// The switch for translation with the translation key. While the model is on its way,
-/// the row under it on General says where it stands.
+/// the row under the target picker on General says where it stands.
 private struct TranslationRow: View {
     @Bindable var cleanup: TextCleanup
 

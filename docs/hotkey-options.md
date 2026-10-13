@@ -260,9 +260,10 @@ user can change. Implemented in `Orra/TalkKey.swift`, `Orra/TalkKeyDetector.swif
   dictation is ignored, as any other modifier.
 - A tap of the talk key followed within the double press window by the translation key
   drops the tap's recording, and the translation key records after its own wait.
-- Settings, General has a recorder field for the translation key like the talk key's,
-  under the Translation switch while translation is on (a Translation page until
-  2026-10-13).
+- Settings, General has a recorder field for the translation key under Keys, right after
+  the talk key's. It is always shown and dimmed with "Turn on Translation under Features
+  to use this key." while translation is off (a Translation page until 2026-10-13, then a
+  row under the Translation switch until the sidebar came back).
   The notes about a press that cannot be the key name the translation key while it is
   recorded. Recording one key stops a recording of the other.
 - The menu's Talk Key submenu shows the translation key with Change Translation Key…,

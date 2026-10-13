@@ -1330,9 +1330,11 @@ in the running app:
   swap, and the wait before it records. Turning it on without the model asks "Download the model for
   translation?", and Cancel leaves it off. With cleanup on and the model in place it turns
   on at once, and with cleanup on and the model downloading it turns on without asking.
-- [ ] While translation is on and the model is not ready, a row under the Translation
-  switch shows the progress with Cancel Download, or Download, Resume Download, loading
-  and Try Again, also while cleanup is off.
+- [ ] While translation is on and the model is not ready, a row under Translate into,
+  lined up with the names above it, shows the progress with Cancel Download, or Download,
+  Resume Download, loading and Try Again, also while cleanup is off. With Clean Up Text
+  on as well, this row is the only status in the block, and no line shows under Clean Up
+  Text.
 - [ ] With translation on and cleanup off, the model loads ("Loading the local model…")
   and the menu says "Hold right Option to translate" under the hold hint. Cleanup stays
   off: the talk key pastes the text as the rules leave it.
