@@ -110,6 +110,8 @@ struct VocabularyTable: View {
                 TextField("Search", text: $search, prompt: Text("Search"))
                     .labelsHidden()
                     .textFieldStyle(.roundedBorder)
+                    // The picker next to it would take the whole row in a grouped form.
+                    .frame(minWidth: 180)
                 // The column titles sort too, but few people know they can be clicked.
                 Picker("Sort by", selection: sortChoice) {
                     Text("Recently used").tag(SortChoice.recent)

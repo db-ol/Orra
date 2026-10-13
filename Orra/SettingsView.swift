@@ -61,6 +61,19 @@ private struct SettingsIcon: View {
     }
 }
 
+/// A tab's icon and name in the sidebar.
+struct SettingsTabLabel: View {
+    let tab: SettingsTab
+
+    var body: some View {
+        Label {
+            Text(tab.title)
+        } icon: {
+            SettingsIcon(symbol: tab.symbol, tint: tab.tint)
+        }
+    }
+}
+
 /// A setting's name with what it does in smaller text right under it, as System Settings
 /// shows them, so the explanation sits next to its switch.
 private struct DescribedLabel: View {
@@ -96,7 +109,7 @@ struct SettingsView: View {
     let learning: CorrectionLearning
     let dockIcon: DockIcon
     let updater: AppUpdater
-    @State private var tab: SettingsTab? = .general
+    @State private var tab = SettingsTab.general
     @State private var sheet: SettingsSheet?
     /// The height of the window's content, which no sheet may pass, so a sheet never hangs
     /// below the window.
@@ -104,18 +117,18 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsTab.allCases, selection: $tab) { tab in
-                Label {
-                    Text(tab.title)
-                } icon: {
-                    SettingsIcon(symbol: tab.symbol, tint: tab.tint)
-                }
-                .tag(tab)
+            // A click on the empty part of the sidebar keeps the tab that is shown.
+            List(SettingsTab.allCases, selection: Binding<SettingsTab?>(
+                get: { tab },
+                set: { if let new = $0 { tab = new } }
+            )) { tab in
+                SettingsTabLabel(tab: tab)
+                    .tag(tab)
             }
             .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
             .toolbar(removing: .sidebarToggle)
         } detail: {
-            page(for: tab ?? .general)
+            page(for: tab)
         }
         .toolbar(removing: .sidebarToggle)
         .sheet(item: $sheet) { sheet in
