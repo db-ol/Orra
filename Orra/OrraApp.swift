@@ -20,7 +20,7 @@ import SwiftUI
             SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
         }
         .windowResizability(.contentMinSize)
-        .defaultSize(width: 780, height: 620)
+        .defaultSize(SettingsWindow.defaultSize)
         .defaultLaunchBehavior(.suppressed)
         .commands {
             CommandGroup(replacing: .appSettings) {
@@ -39,13 +39,33 @@ import SwiftUI
 /// The settings window's identity, for openWindow.
 enum SettingsWindow {
     static let id = "settings"
-    /// Posted to turn an open settings window to its General page. A window that opens
-    /// starts there anyway.
-    static let showGeneralNotification = Notification.Name("io.github.db-ol.Orra.showGeneralSettings")
+    /// The size the window first opens at.
+    static let defaultSize = CGSize(width: 720, height: 560)
+    /// Posted to turn an open settings window to what `show` asked for.
+    static let showNotification = Notification.Name("io.github.db-ol.Orra.showSettings")
 
-    /// Turns the settings window to its General page, where the talk key is chosen.
-    static func showGeneral() {
-        NotificationCenter.default.post(name: showGeneralNotification, object: nil)
+    /// A tab of the window, and a sheet of General to open over it.
+    struct Request: Equatable {
+        var tab = SettingsTab.general
+        var sheet: SettingsSheet?
+    }
+
+    /// What the window shows when it appears or gets the notification. Back to General
+    /// alone once a window took it, so Settings… opens on General.
+    private static var opening = Request()
+
+    /// Turns the settings window to `tab`, such as General, where the keys are chosen, and
+    /// opens `sheet` over General, such as the options of cleanup. Called before the
+    /// window opens, the window opens that way.
+    static func show(_ tab: SettingsTab = .general, sheet: SettingsSheet? = nil) {
+        opening = Request(tab: sheet == nil ? tab : .general, sheet: sheet)
+        NotificationCenter.default.post(name: showNotification, object: nil)
+    }
+
+    /// What was asked for, which resets the request to General alone.
+    static func takeRequest() -> Request {
+        defer { opening = Request() }
+        return opening
     }
 }
 
