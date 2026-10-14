@@ -63,8 +63,10 @@ A set is a folder `<sets>/<name>/` with `clips/<id>.wav` (16 kHz mono) and
 - reference: the text Orra should paste with cleanup off, so after the filler and number
   rules, for example 3点 for 三点.
 - context: the vocabulary the dictation runs with, may be empty.
-- expect_terms: terms the text must hold. forbid_terms: terms it must not hold. Both are
-  matched ignoring case, spaces and punctuation.
+- expect_terms: terms the text must hold. forbid_terms: terms it must not hold. Spaces
+  inside a term are free (N P C matches NPC). A term with Latin letters matches with its
+  case and not inside a longer word, so the plain word cursor is not the term Cursor and
+  trust does not hold Rust. Other terms match anywhere in the text.
 
 The sentences, voices and references of each set are in
 `Tools/release-gate/sets/<name>/sentences.jsonl`, and

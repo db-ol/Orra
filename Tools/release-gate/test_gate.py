@@ -42,12 +42,18 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(scored["errors"], 1)
         self.assertEqual(scored["tokens"], 10)
 
-    def test_english_terms_ignore_case_and_spaces(self):
-        clip = {"language": "en", "reference": "ask Siobhan", "expect_terms": ["Siobhan"], "forbid_terms": ["Data dog"]}
-        scored = gate.score_set_clip(clip, "Ask SIOBHAN about datadog.")
+    def test_latin_terms_keep_case_and_ignore_spaces(self):
+        clip = {"language": "en", "reference": "ask Siobhan", "expect_terms": ["Siobhan", "NPC"], "forbid_terms": ["Data dog"]}
+        scored = gate.score_set_clip(clip, "Ask Siobhan and the N P C about Datadog.")
         self.assertEqual(scored["missing_terms"], [])
         self.assertEqual(scored["forbidden_found"], ["Data dog"])
-        self.assertEqual(scored["errors"], 2)
+
+    def test_plain_words_are_not_latin_terms(self):
+        clip = {"language": "en", "reference": "move the cursor", "expect_terms": ["Swift"], "forbid_terms": ["Cursor", "Rust"]}
+        scored = gate.score_set_clip(clip, "Move the cursor, I trust swift typing.")
+        self.assertEqual(scored["missing_terms"], ["Swift"])
+        self.assertEqual(scored["forbidden_found"], [])
+        self.assertEqual(gate.score_set_clip(clip, "Open Cursor.")["forbidden_found"], ["Cursor"])
 
     def test_percentile_is_nearest_rank(self):
         self.assertEqual(gate.percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.9), 9)

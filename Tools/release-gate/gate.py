@@ -64,6 +64,23 @@ def normalized(text: str) -> str:
     return "".join(character for character in text if character.isalnum())
 
 
+def term_found(term: str, text: str) -> bool:
+    """Whether the text holds the term as the vocabulary writes it.
+
+    White space inside the term is free, so "N P C" matches "NPC". A term with Latin
+    letters matches case sensitively and not inside a longer word, so the plain word
+    cursor is not the term Cursor and trust does not hold Rust. Other terms match as
+    a substring, as Chinese has no spaces between words.
+    """
+    characters = [character for character in unicodedata.normalize("NFKC", term) if not character.isspace()]
+    if not characters:
+        return False
+    pattern = r"\s*".join(re.escape(character) for character in characters)
+    if any(character.isascii() and character.isalpha() for character in characters):
+        pattern = rf"(?<![A-Za-z]){pattern}(?![A-Za-z])"
+    return re.search(pattern, unicodedata.normalize("NFKC", text)) is not None
+
+
 def rate(errors: int, tokens: int) -> float:
     return round(100 * errors / tokens, 3) if tokens else 0.0
 
@@ -173,15 +190,14 @@ def score_set_clip(clip: dict, text: str) -> dict:
     lang = "en" if clip.get("language") == "en" else "zh"
     reference = speech_score.tokens(clip.get("reference", ""), lang)
     errors = speech_score.edit_distance(reference, speech_score.tokens(text, lang))
-    heard = normalized(text)
     expect = [term for term in clip.get("expect_terms", []) if normalized(term)]
     forbid = [term for term in clip.get("forbid_terms", []) if normalized(term)]
     return {
         "errors": errors,
         "tokens": len(reference),
-        "missing_terms": [term for term in expect if normalized(term) not in heard],
+        "missing_terms": [term for term in expect if not term_found(term, text)],
         "expect_terms": len(expect),
-        "forbidden_found": [term for term in forbid if normalized(term) in heard],
+        "forbidden_found": [term for term in forbid if term_found(term, text)],
     }
 
 
