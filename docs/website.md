@@ -35,8 +35,8 @@ The Download button points to
 https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg, so every release must
 upload a copy of its DMG named Orra.dmg, as docs/releasing.md describes.
 
-The version under the top Download button is plain text, once in each page ("Version 0.3.0"
-and "版本 0.3.0"), next to the system requirements. After a release is published, change it
+The version under the top Download button is plain text, once in each page ("Version 0.3.1"
+and "版本 0.3.1"), next to the system requirements. After a release is published, change it
 in both pages and merge, so the site never names a version that is not out yet. To find
 every place:
 
