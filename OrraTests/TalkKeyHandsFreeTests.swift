@@ -606,7 +606,7 @@ struct TalkKeyHandsFreeTests {
         let delayed: Set<TalkKey> = seed.isMultiple(of: 2) ? [.rightOption] : []
         var random = TalkKeyDetectorTests.SplitMix(state: seed)
         var down = Array(repeating: false, count: modifiers.count)
-        var detector = TalkKeyDetector(keys: keySets[Int(seed) % keySets.count], delayedKeys: delayed)
+        var detector = TalkKeyDetector(keys: Set(keySets[Int(seed) % keySets.count].map(Hotkey.key)), delayedKeys: Set(delayed.map(Hotkey.key)))
         var machine = PushToTalkStateMachine()
         var now = ContinuousClock.now
 
@@ -630,7 +630,7 @@ struct TalkKeyHandsFreeTests {
             now = now.advanced(by: .milliseconds(Int(random.next() % 250)))
             let roll = random.next() % 100
             if roll < 2 {
-                feed(detector.setKeys(keySets[Int(random.next() % UInt64(keySets.count))], delayedKeys: delayed))
+                feed(detector.setKeys(Set(keySets[Int(random.next() % UInt64(keySets.count))].map(Hotkey.key)), delayedKeys: Set(delayed.map(Hotkey.key))))
             } else if roll < 3 {
                 feed(detector.reset())
             } else if roll < 7 {

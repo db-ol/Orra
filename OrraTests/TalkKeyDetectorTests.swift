@@ -173,7 +173,7 @@ struct TalkKeyDetectorTests {
 
     @Test func fnPassesThroughWhenItIsNotATalkKey() {
         // With the default keys, fn keeps its system action, such as the emoji picker.
-        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: [.key(TalkKey.defaultKey)], handsFreeEnabled: false)
         #expect(fnDown(&detector) == .passThrough)
         #expect(detector.phase == .up)
         #expect(fnUp(&detector) == .passThrough)
@@ -182,7 +182,7 @@ struct TalkKeyDetectorTests {
     // MARK: Right Control, the default
 
     @Test func rightControlAloneIsAHoldAndItsEventsPassThrough() {
-        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: [.key(TalkKey.defaultKey)], handsFreeEnabled: false)
         #expect(rightControlDown(&detector) == Decision(event: .pressed(isRepeat: false), swallow: false))
         #expect(detector.phase == .holding(.rightControl))
         #expect(rightControlUp(&detector) == Decision(event: .released, swallow: false))
@@ -234,7 +234,7 @@ struct TalkKeyDetectorTests {
 
     @Test(arguments: [TalkKey.rightOption, .rightCommand])
     func theOtherRightHandModifiersWorkTheSameWay(_ key: TalkKey) throws {
-        var detector = TalkKeyDetector(keys: [key], handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: [.key(key)], handsFreeEnabled: false)
         let sharedFlag = try #require(key.sharedFlag)
         let twinFlag = try #require(key.twinFlag)
         let down = detector.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [sharedFlag, key.downFlag])
@@ -242,7 +242,7 @@ struct TalkKeyDetectorTests {
         #expect(detector.handle(type: .flagsChanged, keyCode: key.keyCode, flags: []) == Decision(event: .released, swallow: false))
         // With the left key of the pair already down, it is a shortcut.
         #expect(detector.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [sharedFlag, key.downFlag, twinFlag]) == .passThrough)
-        #expect(detector.phase == .passingThrough(key))
+        #expect(detector.phase == .passingThrough(.key(key)))
     }
 
     // MARK: Clicks
@@ -271,7 +271,7 @@ struct TalkKeyDetectorTests {
     }
 
     @Test func rightControlClickIsAShortcutNotADictation() {
-        var detector = TalkKeyDetector(keys: [TalkKey.defaultKey], handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: [.key(TalkKey.defaultKey)], handsFreeEnabled: false)
         var machine = PushToTalkStateMachine()
         var transitions: [PushToTalkStateMachine.Transition] = []
         func feed(_ event: PushToTalkStateMachine.Event?) {
@@ -377,7 +377,7 @@ struct TalkKeyDetectorTests {
     /// Feeds raw events through the detector into the state model and returns
     /// the transitions, the way HotkeyTap and PushToTalkController do.
     private func transitions(keys: Set<TalkKey>, for events: [(CGEventType, Int64, CGEventFlags)]) -> (transitions: [PushToTalkStateMachine.Transition], machine: PushToTalkStateMachine) {
-        var detector = TalkKeyDetector(keys: keys, handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: Set(keys.map(Hotkey.key)), handsFreeEnabled: false)
         var machine = PushToTalkStateMachine()
         var result: [PushToTalkStateMachine.Transition] = []
         for (type, keyCode, flags) in events {
@@ -455,7 +455,7 @@ struct TalkKeyDetectorTests {
         let keySets: [Set<TalkKey>] = [[.rightControl], [.fn], [.rightControl, .fn], [.rightOption, .rightCommand], Set(TalkKey.allCases)]
         var random = SplitMix(state: seed)
         var down = Array(repeating: false, count: modifiers.count)
-        var detector = TalkKeyDetector(keys: keySets[Int(seed) % keySets.count], handsFreeEnabled: false)
+        var detector = TalkKeyDetector(keys: Set(keySets[Int(seed) % keySets.count].map(Hotkey.key)), handsFreeEnabled: false)
         var machine = PushToTalkStateMachine()
         var fnPressWasSwallowed = false
 
@@ -476,7 +476,7 @@ struct TalkKeyDetectorTests {
         for _ in 0..<4_000 {
             let roll = random.next() % 100
             if roll < 3 {
-                feed(detector.setKeys(keySets[Int(random.next() % UInt64(keySets.count))]))
+                feed(detector.setKeys(Set(keySets[Int(random.next() % UInt64(keySets.count))].map(Hotkey.key))))
             } else if roll < 4 {
                 feed(detector.reset())
             } else if roll < 8 {

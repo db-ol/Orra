@@ -3,10 +3,10 @@ import CoreGraphics
 /// Recognizes a hold of one of the user's talk keys on its own, and a quick double press
 /// that starts a hands free dictation, and turns them into push to talk events. The keys
 /// are modifiers: right Control by default, the other right and left Control, Option and
-/// Command keys, or fn (Globe).
+/// Command keys, or fn (Globe), or combinations, see below.
 ///
 /// Pure logic with no event tap and no clock of its own. `HotkeyTap` feeds it every key
-/// down and flags changed event with the time it arrived, runs the timer that `timer`
+/// down, key up and flags changed event with the time it arrived, runs the timer that `timer`
 /// asks for, and does what the returned decision says.
 ///
 /// Decisions about holds:
@@ -75,11 +75,36 @@ import CoreGraphics
 ///   used rather than the press, so a shortcut with the key, such as left Command+Tab,
 ///   never ends the dictation: a key, modifier or click before the release makes the press
 ///   a shortcut that passes through. Clicks and typing otherwise leave the dictation alone.
-/// - Escape during a hands free dictation cancels it without pasting and is swallowed. Its
-///   key up is not watched, so the app in front sees an Escape key up without the key down,
-///   which apps ignore. At any other time Escape passes through.
+/// - Escape during a hands free dictation cancels it without pasting and is swallowed, and
+///   so is its key up. At any other time Escape passes through.
 /// - While hands free is off, a short press is a hold like any other, which the controller
 ///   discards as too short.
+///
+/// Decisions about trigger modes, see TriggerMode. Each key has its own, and a key without
+/// one holds. Double press for hands free applies to keys in hold mode only.
+/// - Press to start and stop (`.toggle`): a press records as a hold does, and its release,
+///   however long the press, turns the recording into a hands free dictation (event
+///   `.doublePressed`). A left hand key released before `leftKeyDelay` starts it at the
+///   release. The next press on its own ends it as above. A shortcut during the first press
+///   cancels it, as it cancels a hold.
+/// - Double press (`.doubleTap`): a press records nothing. Released within `tapLimit` it is
+///   a tap, and a second tap within `doublePressWindow` starts a hands free dictation at its
+///   release. A press held longer than `tapLimit` does nothing.
+///
+/// Decisions about combinations, see KeyCombination. Left and right count the same.
+/// - Modifiers only, such as Control and Option, are down while exactly those modifiers
+///   are, and act like a single modifier: any other key, modifier or click makes the press
+///   a shortcut, and their events always pass through. Their modifiers going down one by
+///   one, or up after a press, are no other input.
+/// - With a regular key, such as Shift, Command and D, the press is the key down of D while
+///   exactly Shift and Command are held, and the release is its key up or the release of
+///   one of the modifiers. The key down, its repeats and its key up are swallowed whenever
+///   they match, also while another key records, so the app in front never types the D.
+///   D with other modifiers, or alone, passes through.
+/// - A combination wins over a single key when both go down with one event. When one of
+///   its own modifiers is a talk key that waits, such as right Control while the
+///   translation key is Control and Option, the combination takes over once its last
+///   modifier goes down before the wait is over.
 nonisolated struct TalkKeyDetector: Equatable, Sendable {
     /// What the event tap should do with one event.
     nonisolated struct Decision: Equatable, Sendable {
@@ -96,29 +121,29 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         case up
         /// A left hand key is down on its own, and `leftKeyDelay` has not passed yet. Nothing
         /// records.
-        case arming(TalkKey)
+        case arming(Hotkey)
         /// The key is held on its own. A push to talk hold is in progress.
-        case holding(TalkKey)
+        case holding(Hotkey)
         /// The key is still down but the hold was cancelled. For fn, its release is
         /// swallowed because its press was. If another modifier caused the cancel, apps
         /// that track flags changed events may think fn is still down until the next
         /// modifier change. That is cosmetic.
-        case cancelled(TalkKey)
+        case cancelled(Hotkey)
         /// The key went down as part of another shortcut. Its release passes through.
-        case passingThrough(TalkKey)
+        case passingThrough(Hotkey)
         /// The key was tapped and is up. A second press within `doublePressWindow` that is
         /// released within `tapLimit` starts a hands free dictation. `recording` is true when the tap sent `.pressed`, so the
         /// end of the window has to cancel that recording.
-        case tapped(TalkKey, recording: Bool)
+        case tapped(Hotkey, recording: Bool)
         /// A hands free dictation runs and the key is up.
-        case handsFree(TalkKey)
+        case handsFree(Hotkey)
         /// A hands free dictation runs and the key is down. Its release ends the dictation
         /// when `finishes` is true: the press came on its own, and no key, modifier or
         /// click came since.
-        case handsFreeKeyDown(TalkKey, finishes: Bool)
+        case handsFreeKeyDown(Hotkey, finishes: Bool)
 
         /// The talk key this phase is about, if any.
-        var key: TalkKey? {
+        var key: Hotkey? {
             switch self {
             case .up: nil
             case .arming(let key), .holding(let key), .cancelled(let key), .passingThrough(let key),
@@ -148,12 +173,16 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     nonisolated enum Timer: Equatable, Sendable {
         /// A left hand key is waiting to become a hold.
         case leftKeyDelay
+        /// A press of a key in double press mode is waiting to be a tap. Held longer, it is
+        /// nothing.
+        case tapLimit
         /// A tap is waiting for a second press.
         case doublePressWindow
 
         var duration: Duration {
             switch self {
             case .leftKeyDelay: TalkKeyDetector.leftKeyDelay
+            case .tapLimit: TalkKeyDetector.tapLimit
             case .doublePressWindow: TalkKeyDetector.doublePressWindow
             }
         }
@@ -173,11 +202,13 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     /// Escape, from HIToolbox Events.h.
     static let escapeKeyCode: Int64 = 0x35
 
-    private(set) var keys: Set<TalkKey>
+    private(set) var keys: Set<Hotkey>
     /// Keys that wait for `leftKeyDelay` before they record, like the left hand keys, even
     /// on the right hand side. Only keys in `keys` count.
-    private(set) var delayedKeys: Set<TalkKey>
-    /// Whether a double press starts a hands free dictation.
+    private(set) var delayedKeys: Set<Hotkey>
+    /// How each key starts a dictation, see TriggerMode. A key missing here holds.
+    private(set) var modes: [Hotkey: TriggerMode]
+    /// Whether a double press starts a hands free dictation, for keys in hold mode.
     private(set) var handsFreeEnabled: Bool
     private(set) var phase: Phase = .up {
         didSet {
@@ -193,77 +224,150 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     /// Whether the current press came within a tap's window, so its quick release is a
     /// double press.
     private var isSecondPress = false
+    /// The regular key whose key down was hidden, so its key up is hidden too.
+    private var hiddenKeyCode: Int64?
 
-    init(keys: Set<TalkKey>, delayedKeys: Set<TalkKey> = [], handsFreeEnabled: Bool = true) {
+    init(keys: Set<Hotkey>, delayedKeys: Set<Hotkey> = [], modes: [Hotkey: TriggerMode] = [:], handsFreeEnabled: Bool = true) {
         self.keys = keys
         self.delayedKeys = delayedKeys
+        self.modes = modes
         self.handsFreeEnabled = handsFreeEnabled
     }
 
     /// Whether a press of `key` waits for `leftKeyDelay` before it records.
-    func waitsBeforeRecording(_ key: TalkKey) -> Bool {
+    func waitsBeforeRecording(_ key: Hotkey) -> Bool {
         key.waitsBeforeRecording || delayedKeys.contains(key)
+    }
+
+    /// How `key` starts a dictation.
+    func mode(of key: Hotkey) -> TriggerMode {
+        modes[key] ?? .hold
+    }
+
+    /// Whether a quick double press of `key` starts a hands free dictation.
+    private func doublePressStartsHandsFree(_ key: Hotkey) -> Bool {
+        switch mode(of: key) {
+        case .hold: handsFreeEnabled
+        case .doubleTap: true
+        case .toggle: false
+        }
     }
 
     /// The timer the current phase needs, if any.
     var timer: Timer? {
         switch phase {
-        case .arming: .leftKeyDelay
+        case .arming(let key): mode(of: key) == .doubleTap ? .tapLimit : .leftKeyDelay
         case .tapped: .doublePressWindow
         default: nil
         }
     }
 
-    /// Replaces the talk keys and the keys among them that wait. Returns `.cancelled` when a
-    /// hold, a tap's recording or a hands free dictation of a key that is no longer a talk
-    /// key was in progress. A press under way keeps the wait it started with.
-    mutating func setKeys(_ newKeys: Set<TalkKey>, delayedKeys newDelayedKeys: Set<TalkKey> = []) -> PushToTalkStateMachine.Event? {
+    /// The keys in a fixed order: combinations first, so a combination wins over one of its
+    /// own modifiers, then the single keys.
+    private var orderedKeys: [Hotkey] {
+        let combinations = keys.compactMap(\.combination).sorted { $0.savedValue < $1.savedValue }.map(Hotkey.combination)
+        let singles = TalkKey.allCases.map(Hotkey.key).filter(keys.contains)
+        return combinations + singles
+    }
+
+    /// Replaces the talk keys, the keys among them that wait, and their modes. Returns
+    /// `.cancelled` when a hold, a tap's recording or a hands free dictation of a key that
+    /// is no longer a talk key was in progress. A press under way keeps the wait it started
+    /// with.
+    mutating func setKeys(_ newKeys: Set<Hotkey>, delayedKeys newDelayedKeys: Set<Hotkey> = [], modes newModes: [Hotkey: TriggerMode] = [:]) -> PushToTalkStateMachine.Event? {
         keys = newKeys
         delayedKeys = newDelayedKeys
+        modes = newModes
         guard let active = phase.key, !newKeys.contains(active) else { return nil }
         return reset()
     }
 
-    /// Turns double press for hands free on or off. Turning it off ends a tap's window and
-    /// returns `.cancelled` when the tap was recording. A hands free dictation that runs
-    /// already goes on until it is finished.
+    /// Turns double press for hands free on or off for keys in hold mode. Turning it off
+    /// ends a tap's window and returns `.cancelled` when the tap was recording. A hands
+    /// free dictation that runs already goes on until it is finished.
     mutating func setHandsFreeEnabled(_ on: Bool) -> PushToTalkStateMachine.Event? {
         handsFreeEnabled = on
-        guard !on, case .tapped(_, let recording) = phase else { return nil }
+        guard !on, case .tapped(let key, let recording) = phase, mode(of: key) == .hold else { return nil }
         phase = .up
         return recording ? .cancelled : nil
     }
 
-    /// Decides what to do with one key down or flags changed event that arrived at `now`.
+    /// Decides what to do with one key down, key up or flags changed event that arrived at
+    /// `now`.
     mutating func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags, at now: ContinuousClock.Instant = .now) -> Decision {
+        var decision = decide(type: type, keyCode: keyCode, flags: flags, at: now)
         switch type {
-        case .flagsChanged:
-            // Only the key this phase is about, or any talk key while no key is down,
-            // counts as a talk key event. Everything else is another modifier.
-            let key: TalkKey?
-            if case .tapped(let tapped, let recording) = phase, tapped.keyCode != keyCode,
-               let other = keys.first(where: { $0.keyCode == keyCode }) {
-                // Another talk key ends the tap's window and starts a press of its own.
-                // Its hold keeps the tap's recording. When it starts no recording at its
-                // press, the tap's recording is discarded.
-                phase = .up
-                var decision = handleChange(of: other, isDown: other.isDown(in: flags, wasDown: false), flags: flags, at: now)
-                if recording, decision.event == nil {
-                    decision.event = .cancelled
-                }
-                return decision
-            } else if let active = phase.key {
-                key = active.keyCode == keyCode ? active : nil
-            } else {
-                key = keys.first { $0.keyCode == keyCode }
-            }
-            guard let key else { return otherInput(isEscape: false) }
-            let isDown = key.isDown(in: flags, wasDown: phase.keyIsDown)
-            return handleChange(of: key, isDown: isDown, flags: flags, at: now)
+        case .keyDown where decision.swallow:
+            hiddenKeyCode = keyCode
+        case .keyDown where keyCode != Self.escapeKeyCode && matchesCombinationWithKey(keyCode: keyCode, flags: flags):
+            // A combination with a regular key never types into the app in front, also
+            // while another key records.
+            decision.swallow = true
+            hiddenKeyCode = keyCode
+        case .keyUp where keyCode == hiddenKeyCode:
+            hiddenKeyCode = nil
+            decision.swallow = true
+        default:
+            break
+        }
+        return decision
+    }
+
+    private func matchesCombinationWithKey(keyCode: Int64, flags: CGEventFlags) -> Bool {
+        keys.contains { $0.hasRegularKey && $0.signal(type: .keyDown, keyCode: keyCode, flags: flags, isDown: false) == .down }
+    }
+
+    private mutating func decide(type: CGEventType, keyCode: Int64, flags: CGEventFlags, at now: ContinuousClock.Instant) -> Decision {
+        switch type {
+        case .flagsChanged, .keyUp:
+            break
         case .keyDown where keyCode != Self.globeKeyCode:
-            return otherInput(isEscape: keyCode == Self.escapeKeyCode)
+            break
         default:
             return .passThrough
+        }
+        if case .tapped(let tapped, let recording) = phase,
+           let other = orderedKeys.first(where: { $0 != tapped && $0.signal(type: type, keyCode: keyCode, flags: flags, isDown: false) == .down }) {
+            // Another talk key ends the tap's window and starts a press of its own. Its
+            // hold keeps the tap's recording. When it starts no recording at its press,
+            // the tap's recording is discarded.
+            phase = .up
+            var decision = handleChange(of: other, isDown: true, type: type, flags: flags, at: now)
+            if recording, decision.event == nil {
+                decision.event = .cancelled
+            }
+            return decision
+        }
+        guard let active = phase.key else {
+            // Only a press counts while no key is down. A release without a press, for
+            // example of a key held since before launch, passes through.
+            if let key = orderedKeys.first(where: { $0.signal(type: type, keyCode: keyCode, flags: flags, isDown: false) == .down }) {
+                return handleChange(of: key, isDown: true, type: type, flags: flags, at: now)
+            }
+            return .passThrough
+        }
+        switch active.signal(type: type, keyCode: keyCode, flags: flags, isDown: phase.keyIsDown) {
+        case .down:
+            return handleChange(of: active, isDown: true, type: type, flags: flags, at: now)
+        case .up:
+            return handleChange(of: active, isDown: false, type: type, flags: flags, at: now)
+        case .ignore:
+            return .passThrough
+        case .other:
+            let decision = otherInput(isEscape: type == .keyDown && keyCode == Self.escapeKeyCode)
+            // A combination that one of its own modifiers began, such as Control and Option
+            // after a press of right Control that waited, takes over once nothing records.
+            switch phase {
+            case .passingThrough, .cancelled:
+                guard decision.event == nil,
+                      let combination = orderedKeys.first(where: { $0.combination != nil && $0 != active && $0.signal(type: type, keyCode: keyCode, flags: flags, isDown: false) == .down }) else {
+                    return decision
+                }
+                phase = .up
+                return handleChange(of: combination, isDown: true, type: type, flags: flags, at: now)
+            default:
+                return decision
+            }
         }
     }
 
@@ -272,6 +376,11 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     mutating func timerFired(generation: Int) -> PushToTalkStateMachine.Event? {
         guard generation == self.generation else { return nil }
         switch phase {
+        case .arming(let key) where mode(of: key) == .doubleTap:
+            // Held too long to be a tap. A hold does nothing in this mode.
+            isSecondPress = false
+            phase = .cancelled(key)
+            return nil
         case .arming(let key):
             // Held long enough to be a hold, even when it was a second press.
             isSecondPress = false
@@ -339,9 +448,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         }
     }
 
-    private mutating func handleChange(of key: TalkKey, isDown: Bool, flags: CGEventFlags, at now: ContinuousClock.Instant) -> Decision {
-        let swallow = key.swallowsItsEvents
-        let alone = flags.isDisjoint(with: key.otherModifiers)
+    private mutating func handleChange(of key: Hotkey, isDown: Bool, type: CGEventType, flags: CGEventFlags, at now: ContinuousClock.Instant) -> Decision {
+        let swallow = key.swallows(type)
+        let alone = key.isAlone(with: flags)
         switch (phase, isDown) {
         case (.up, true):
             isSecondPress = false
@@ -350,22 +459,27 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
                 return .passThrough
             }
             pressedAt = now
-            if waitsBeforeRecording(key) {
+            if waitsBeforeRecording(key) || mode(of: key) == .doubleTap {
                 phase = .arming(key)
                 return Decision(event: nil, swallow: swallow)
             }
             phase = .holding(key)
             return Decision(event: .pressed(isRepeat: false), swallow: swallow)
         case (.arming, false):
-            // Released before the delay: nothing recorded. A tap when hands free is on, and
-            // the end of a double press when it was the second press.
-            guard handsFreeEnabled, !key.twinIsDown(atReleaseWith: flags) else {
+            // Released before the delay: nothing recorded. A press to start in toggle mode,
+            // a tap when double presses count, and the end of a double press when it was
+            // the second press.
+            guard !key.twinIsDown(atReleaseWith: flags) else {
                 phase = .up
                 return Decision(event: nil, swallow: swallow)
             }
-            if isSecondPress {
+            if mode(of: key) == .toggle || (isSecondPress && doublePressStartsHandsFree(key)) {
                 phase = .handsFree(key)
                 return Decision(event: .doublePressed, swallow: swallow)
+            }
+            guard doublePressStartsHandsFree(key) else {
+                phase = .up
+                return Decision(event: nil, swallow: swallow)
             }
             phase = .tapped(key, recording: false)
             return Decision(event: nil, swallow: swallow)
@@ -374,7 +488,12 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
                 phase = .up
                 return Decision(event: .cancelled, swallow: swallow)
             }
-            if handsFreeEnabled, let pressedAt, pressedAt.duration(to: now) < Self.tapLimit {
+            if mode(of: key) == .toggle {
+                // The recording goes on after the press that started it.
+                phase = .handsFree(key)
+                return Decision(event: .doublePressed, swallow: swallow)
+            }
+            if doublePressStartsHandsFree(key), let pressedAt, pressedAt.duration(to: now) < Self.tapLimit {
                 if isSecondPress {
                     phase = .handsFree(key)
                     return Decision(event: .doublePressed, swallow: swallow)
@@ -393,7 +512,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             // key or click before then makes it a shortcut.
             pressedAt = now
             isSecondPress = true
-            if waitsBeforeRecording(key) {
+            if waitsBeforeRecording(key) || mode(of: key) == .doubleTap {
                 // A left hand key's tap never recorded, see `tapLimit`.
                 phase = .arming(key)
                 return Decision(event: recording ? .cancelled : nil, swallow: swallow)
@@ -422,7 +541,8 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             // repeated press that belongs to another shortcut.
             return .passThrough
         case (.arming, true), (.holding, true), (.cancelled, true), (.handsFreeKeyDown, true):
-            // A repeated press while the key is already down. Keep fn's events hidden.
+            // A repeated press while the key is already down. Keep fn's events, and the
+            // regular key of a combination, hidden.
             return Decision(event: nil, swallow: swallow)
         }
     }

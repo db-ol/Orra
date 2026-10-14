@@ -199,6 +199,7 @@ private struct GeneralSettings: View {
                 // The note about swapped keys shows once, under the translation key.
                 TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false)
                     .help(Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.") + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
+                TriggerModePicker(pushToTalk: pushToTalk, slot: .talk)
                 VStack(alignment: .leading, spacing: 6) {
                     TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
                         // The key does nothing while translation is off.
@@ -210,7 +211,9 @@ private struct GeneralSettings: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .help(Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free."))
+                .help(Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free."))
+                TriggerModePicker(pushToTalk: pushToTalk, slot: .translation)
+                    .disabled(!cleanup.translationIsOn)
             } header: {
                 Text("Keys")
             }
@@ -260,6 +263,8 @@ private struct GeneralSettings: View {
                         systemImage: "hand.raised"
                     )
                 }
+                // Only a key in hold mode has a double press of its own to add.
+                .disabled(!pushToTalk.handsFreeApplies)
                 .help(Text("Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before."))
                 Picker(selection: $feedback.onScreenHint) {
                     ForEach(OnScreenHint.choices(current: feedback.onScreenHint)) { hint in
@@ -919,6 +924,42 @@ struct MicrophoneToggles: View {
     }
 }
 
+/// How the key of one slot starts a dictation: hold, press to start and stop, or double
+/// press, with a line that says how it works.
+private struct TriggerModePicker: View {
+    let pushToTalk: PushToTalkController
+    let slot: KeySlot
+
+    private var mode: TriggerMode {
+        slot == .talk ? pushToTalk.talkMode : pushToTalk.translationMode
+    }
+
+    private var detail: LocalizedStringKey {
+        switch mode {
+        case .hold: "Hold the key while you speak, and let go to paste."
+        case .toggle: "Press the key once to start, and once more to paste. Escape cancels."
+        case .doubleTap: "Press the key twice quickly to start, and once more to paste. Escape cancels."
+        }
+    }
+
+    var body: some View {
+        Picker(selection: Binding(
+            get: { mode },
+            set: { pushToTalk.setTriggerMode($0, for: slot) }
+        )) {
+            ForEach(TriggerMode.allCases) { mode in
+                Text(verbatim: mode.title()).tag(mode)
+            }
+        } label: {
+            DescribedLabel(
+                title: slot == .talk ? "Talk key mode" : "Translation key mode",
+                detail: detail,
+                systemImage: "hand.tap"
+            )
+        }
+    }
+}
+
 /// The key recorder, like the shortcut recorders of Mac apps: a field that shows the talk
 /// key or the translation key, such as "⌥ Right Option (Alt)". Clicking it, or Change…,
 /// starts recording, and the next key the user presses and releases on its own becomes
@@ -951,7 +992,7 @@ struct TalkKeyRecorder: View {
         pushToTalk.choosingKeySlot == slot
     }
 
-    private var key: TalkKey {
+    private var key: Hotkey {
         slot == .talk ? pushToTalk.talkKey : pushToTalk.translationKey
     }
 
@@ -991,7 +1032,7 @@ struct TalkKeyRecorder: View {
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 // Also under a refused press, so the user sees which keys work.
-                Text("Use fn, Control, Option or Command on its own. Escape cancels.")
+                Text("Use fn, Control, Option or Command on its own, or a combination such as ⌃ ⌥ or ⇧ ⌘ D. Escape cancels.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1010,9 +1051,9 @@ struct TalkKeyRecorder: View {
                 if showsHint {
                     Group {
                         if slot == .talk {
-                            Text("The talk key can be fn, or Control, Option or Command on the left or right.")
+                            Text("The talk key can be fn, Control, Option or Command on the left or right, or a combination.")
                         } else {
-                            Text("The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap.")
+                            Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.")
                         }
                     }
                     .font(.subheadline)
@@ -1044,7 +1085,7 @@ struct TalkKeyRecorder: View {
             // VoiceOver reads a refused press, which only shows as text under the field.
             // Only the recorder that started the recording speaks, so it is said once.
             if startedHere, let note = rejection?.message(in: interfaceLocale, for: slot) {
-                let keys = String(localized: LocalizedStringResource("Use fn, Control, Option or Command on its own. Escape cancels.", locale: interfaceLocale))
+                let keys = String(localized: LocalizedStringResource("Use fn, Control, Option or Command on its own, or a combination such as ⌃ ⌥ or ⇧ ⌘ D. Escape cancels.", locale: interfaceLocale))
                 AccessibilityNotification.Announcement("\(note) \(keys)").post()
             }
         }
@@ -1060,7 +1101,7 @@ struct TalkKeyRecorder: View {
             // Orra does, rather than starting it again.
             .allowsHitTesting(!isRecording)
             .accessibilityLabel(name)
-            .accessibilityValue(isRecording ? Text("Press the key you want to hold") : Text(verbatim: key.fullName(in: interfaceLocale)))
+            .accessibilityValue(isRecording ? Text("Press a key or a combination") : Text(verbatim: key.fullName(in: interfaceLocale)))
             if isRecording {
                 Button("Cancel") {
                     pushToTalk.stopChoosingKey()
@@ -1074,7 +1115,7 @@ struct TalkKeyRecorder: View {
     private var field: some View {
         HStack(spacing: 4) {
             if isRecording {
-                Text("Press the key you want to hold")
+                Text("Press a key or a combination")
                     .foregroundStyle(Color.accentColor)
             } else {
                 Text(verbatim: key.title(in: interfaceLocale))
@@ -1102,7 +1143,7 @@ struct TalkKeyRecorder: View {
         startedHere = true
         // Only the field's value changes, which VoiceOver does not read on its own.
         AccessibilityNotification.Announcement(
-            String(localized: LocalizedStringResource("Press the key you want to hold. Use fn, Control, Option or Command on its own. Escape cancels.", locale: interfaceLocale))
+            String(localized: LocalizedStringResource("Press a key or a combination. Use fn, Control, Option or Command on its own, or a combination such as ⌃ ⌥ or ⇧ ⌘ D. Escape cancels.", locale: interfaceLocale))
         ).post()
     }
 }

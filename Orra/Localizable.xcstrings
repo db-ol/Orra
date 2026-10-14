@@ -650,6 +650,17 @@
         }
       }
     },
+    "Double press" : {
+      "comment" : "A trigger mode: press twice quickly to start",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两下"
+          }
+        }
+      }
+    },
     "Double press for hands free" : {
       "localizations" : {
         "zh-Hans" : {
@@ -965,6 +976,17 @@
         }
       }
     },
+    "Hold" : {
+      "comment" : "A trigger mode: hold the key while speaking",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住"
+          }
+        }
+      }
+    },
     "Hold %@ to talk" : {
       "localizations" : {
         "zh-Hans" : {
@@ -991,6 +1013,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按住一个键，说话，然后松开。Orra 会把你说的话输入到你正在使用的 App 中。语音在这台 Mac 上转成文字。"
+          }
+        }
+      }
+    },
+    "Hold the key while you speak, and let go to paste." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话时按住这个键，松开后粘贴。"
           }
         }
       }
@@ -1754,22 +1786,82 @@
         }
       }
     },
-    "Press the key you want to hold" : {
+    "Press %@ to talk, and again to finish" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按下你想按住说话的键"
+            "value" : "按%@说话，再按一下结束"
           }
         }
       }
     },
-    "Press the key you want to hold. Use fn, Control, Option or Command on its own. Escape cancels." : {
+    "Press %@ to translate, and again to finish" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按下你想按住说话的键。请单独按 fn、Control、Option 或 Command 键。按 Esc 键取消。"
+            "value" : "按%@翻译，再按一下结束"
+          }
+        }
+      }
+    },
+    "Press %@ twice to talk, and once more to finish" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两下%@说话，再按一下结束"
+          }
+        }
+      }
+    },
+    "Press %@ twice to translate, and once more to finish" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两下%@翻译，再按一下结束"
+          }
+        }
+      }
+    },
+    "Press a key or a combination" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下一个键或一组组合键"
+          }
+        }
+      }
+    },
+    "Press a key or a combination. Use fn, Control, Option or Command on its own, or a combination such as ⌃ ⌥ or ⇧ ⌘ D. Escape cancels." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下一个键或一组组合键。请单独按 fn、Control、Option 或 Command 键，或者按一组组合键，例如 ⌃ ⌥ 或 ⇧ ⌘ D。按 Esc 键取消。"
+          }
+        }
+      }
+    },
+    "Press the key once to start, and once more to paste. Escape cancels." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按一下这个键开始，再按一下粘贴。按 Esc 键取消。"
+          }
+        }
+      }
+    },
+    "Press the key twice quickly to start, and once more to paste. Escape cancels." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速连按两下这个键开始，再按一下粘贴。按 Esc 键取消。"
           }
         }
       }
@@ -1790,6 +1882,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "快速连按两下说话键，松开后继续录音。"
+          }
+        }
+      }
+    },
+    "Press to start and stop" : {
+      "comment" : "A trigger mode: press once to start and once more to stop",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按一下开始，再按一下结束"
           }
         }
       }
@@ -2271,6 +2374,16 @@
         }
       }
     },
+    "Talk key mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话键用法"
+          }
+        }
+      }
+    },
     "Talk Key: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2537,12 +2650,12 @@
         }
       }
     },
-    "The talk key can be fn, or Control, Option or Command on the left or right." : {
+    "The talk key can be fn, Control, Option or Command on the left or right, or a combination." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "说话键可以用 fn 键，或者左侧、右侧的 Control、Option、Command 键。"
+            "value" : "说话键可以用 fn 键，左侧、右侧的 Control、Option、Command 键，或者一组组合键。"
           }
         }
       }
@@ -2557,12 +2670,12 @@
         }
       }
     },
-    "The translation key can be fn, or Control, Option or Command on the left or right. Pick the talk key and the two keys swap." : {
+    "The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "翻译键可以用 fn 键，或者左侧、右侧的 Control、Option、Command 键。选了说话键的话，两个键会互换。"
+            "value" : "翻译键可以用 fn 键，左侧、右侧的 Control、Option、Command 键，或者一组组合键。选了说话键的话，两个键会互换。"
           }
         }
       }
@@ -2723,6 +2836,16 @@
         }
       }
     },
+    "Translation key mode" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键用法"
+          }
+        }
+      }
+    },
     "Translation Key: %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2824,12 +2947,12 @@
         }
       }
     },
-    "Use fn, Control, Option or Command on its own. Escape cancels." : {
+    "Use fn, Control, Option or Command on its own, or a combination such as ⌃ ⌥ or ⇧ ⌘ D. Escape cancels." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请单独按 fn、Control、Option 或 Command 键。按 Esc 键取消。"
+            "value" : "请单独按 fn、Control、Option 或 Command 键，或者按一组组合键，例如 ⌃ ⌥ 或 ⇧ ⌘ D。按 Esc 键取消。"
           }
         }
       }

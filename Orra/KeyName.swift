@@ -16,7 +16,7 @@ enum KeyName {
 
     /// Keys whose keycap shows a word or an arrow, by their codes in HIToolbox Events.h.
     /// The names are looked up in the language of `locale`.
-    static func namedKey(_ keyCode: Int64, locale: Locale = .interface) -> String? {
+    nonisolated static func namedKey(_ keyCode: Int64, locale: Locale = .interface) -> String? {
         switch Int(keyCode) {
         case kVK_Return: String(localized: LocalizedStringResource("Return", locale: locale, comment: "A key name"))
         case kVK_ANSI_KeypadEnter: String(localized: LocalizedStringResource("Enter", locale: locale, comment: "A key name"))
@@ -39,7 +39,7 @@ enum KeyName {
     }
 
     /// F1 to F20 by key code.
-    private static let functionKeys: [Int: Int] = [
+    nonisolated private static let functionKeys: [Int: Int] = [
         kVK_F1: 1, kVK_F2: 2, kVK_F3: 3, kVK_F4: 4, kVK_F5: 5, kVK_F6: 6, kVK_F7: 7,
         kVK_F8: 8, kVK_F9: 9, kVK_F10: 10, kVK_F11: 11, kVK_F12: 12, kVK_F13: 13,
         kVK_F14: 14, kVK_F15: 15, kVK_F16: 16, kVK_F17: 17, kVK_F18: 18, kVK_F19: 19,
@@ -49,7 +49,7 @@ enum KeyName {
     /// The character the key types without modifiers on the current keyboard layout that
     /// can type Latin letters, such as ABC under a Chinese input method. Reads the layout
     /// only, which needs no permission.
-    private static func character(forKeyCode keyCode: Int64) -> String? {
+    static func character(forKeyCode keyCode: Int64) -> String? {
         guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
               let property = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
             return nil

@@ -525,6 +525,24 @@ got worse than the baseline, see docs/release-gate.md.
     a tap of the talk key followed by it drops the tap's recording and records after the
     wait, and changing the waiting keys keeps a press under way. The random sequences run
     with right Option waiting for every other seed.
+  - TriggerModeTests and HotkeyPreferenceTests, added on 2026-10-14, check press to start
+    and stop (a press records and its release keeps recording, a long press too, a
+    shortcut cancels, a left key tapped starts at its release, Escape and its key up are
+    swallowed, the mode is per key), double press (a single press or a hold does nothing,
+    turning hands free off leaves it alone), that hold mode keeps hands free as before,
+    combinations of modifiers (Control alone is nothing, letting go of either ends it,
+    another key or Shift makes it a shortcut, it takes over from right Control while
+    that waits), Shift Command D (its key down, repeats and key up are swallowed only
+    while exactly Shift and Command are held, also during another key's dictation, a
+    modifier let go first ends it and hides the later key up, toggle mode, Option
+    joining cancels), the saved form of a combination, the titles and hints, and that a
+    saved single key loads as before and stays saved beside a combination for an older
+    Orra. KeyRecorderTests checks that combinations are chosen, Command C at the key
+    down and modifiers at the first release, that Shift first then Command and D works,
+    and that a turned down key spoils the modifiers until all are up.
+    PushToTalkControllerTests checks through the tap press to start and stop, a
+    translation combination taking over from right Control, the swap with a combination,
+    and a recorded Shift Command D.
   - TalkKeyTests and TranslationKeyPreferenceTests check the default translation key,
     right Option or right Command next to a right Option talk key, the saved key, a saved
     key equal to the talk key or unknown, the notes that name the translation key, the
@@ -1647,6 +1665,52 @@ in the running app:
 - [ ] The problem report says "Translate with the translation key: on" while it is on.
 - [ ] The rewrite log shows "Translation into English translated after" with times and
   no text.
+
+Trigger modes and key combinations, added on 2026-10-14, not verified yet. Each key has a
+mode under Keys in Settings: Hold (the default and the behavior before), Press to start and
+stop, or Double press. Either key can also be a combination of modifiers, such as ⌃ ⌥, or
+modifiers with a regular key, such as ⇧ ⌘ D:
+
+- [ ] After updating from 0.3.1 with right Control, fn or a left key saved as the talk key
+  and right Option or another key as the translation key, both keys and Double press for
+  hands free are unchanged, both modes show Hold, and holding and double pressing work as
+  before.
+- [ ] Settings, General, Keys: a "Talk key mode" (说话键用法) picker under the talk key and
+  a "Translation key mode" (翻译键用法) picker under the translation key, dimmed while
+  translation is off. The line under each says how the chosen mode works. In Chinese the
+  text uses full width punctuation and nothing is cut off.
+- [ ] Press to start and stop with right Control: a press starts recording with the
+  start sound, the recording goes on after the release, the indicator says "Press right
+  Control to finish", and the next press pastes. Escape cancels without pasting. Right
+  Control C during the first press copies and records nothing. The menu and the idle bar
+  say "Press right Control to talk, and again to finish".
+- [ ] Press to start and stop with left Command: a quick tap starts recording at the
+  release, Command C and Command Tab still work and record nothing.
+- [ ] Double press with fn: a single press or a hold does nothing and plays no sound, two
+  quick presses start a hands free dictation, one more press pastes. The "Press fn key
+  to" action in Keyboard settings does not fire.
+- [ ] With both keys in Press to start and stop or Double press, Double press for hands
+  free is dimmed in Settings and in the menu. Back in Hold it works again.
+- [ ] Recording ⌃ ⌥: click the talk key field, hold Control, press Option, let go: the
+  field shows ⌃ ⌥. Holding Control and Option records, letting go of either pastes.
+  Control Option Space or an arrow during the hold cancels and reaches the app in front.
+- [ ] Recording ⇧ ⌘ D: click the field, press Shift and Command, then D: the field shows
+  ⇧ ⌘ D at once. In TextEdit, holding Shift Command D records and types no D, letting go
+  of D or of a modifier pastes, and no stray D appears. Command D alone and Shift D alone
+  type as before. Holding D long does not type repeats.
+- [ ] The notes: pressing Shift alone shows the Shift note, which goes away once Command
+  joins. fn with an arrow shows "fn Up Arrow is a key combination and can't be the talk
+  key." Return alone shows its note. The help under the field names combinations in
+  both languages.
+- [ ] With the talk key right Control and the translation key ⌃ ⌥: right Control alone
+  records after about 0.3 s, right Control then Option within that time translates, and
+  Option then right Control translates too. Note that right Control then waits like a
+  left key in this setup.
+- [ ] Picking for the talk key the combination the translation key has swaps them and
+  shows the swap note with the combination's symbols.
+- [ ] After a restart, both combinations and both modes are kept. Picking a single key
+  again, then running Orra 0.3.1, keeps that single key.
+- [ ] The problem report names a combination by its symbols and key code only.
 
 ## Not implemented
 
