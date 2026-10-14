@@ -1,0 +1,7 @@
+{
+  "description": "Chinese and mixed sentences with years, amounts, percentages, times, digit runs, ordinals and negations. The reference is the text after NumberRules. Each sentence runs twice: with no context and with ten unrelated tech terms, to show what context does to numbers.",
+  "variants": [
+    {"suffix": "_ctx0", "context": []},
+    {"suffix": "_ctx10", "context": ["Kubernetes", "Terraform", "PostgreSQL", "Redis", "GraphQL", "Webpack", "Docker", "Grafana", "Elasticsearch", "Nginx"]}
+  ]
+}

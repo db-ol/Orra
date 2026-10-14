@@ -1,0 +1,52 @@
+{"id": "hom01", "language": "en", "say": "My files are stored in the cloud, so I can open them anywhere.", "reference": "My files are stored in the cloud, so I can open them anywhere.", "expect_terms": [], "forbid_terms": ["Claude"]}
+{"id": "hom02", "language": "en", "say": "The dark cloud over the hills means rain is coming.", "reference": "The dark cloud over the hills means rain is coming.", "expect_terms": [], "forbid_terms": ["Claude"]}
+{"id": "hom03", "language": "en", "say": "Every cloud has a silver lining.", "reference": "Every cloud has a silver lining.", "expect_terms": [], "forbid_terms": ["Claude"]}
+{"id": "hom04", "language": "en", "say": "I asked Claude to review the pull request this morning.", "reference": "I asked Claude to review the pull request this morning.", "expect_terms": ["Claude"], "forbid_terms": []}
+{"id": "hom05", "language": "en", "say": "Claude wrote the first draft of the release notes.", "reference": "Claude wrote the first draft of the release notes.", "expect_terms": ["Claude"], "forbid_terms": []}
+{"id": "hom06", "language": "en", "say": "Claude runs in the cloud, not on my laptop.", "reference": "Claude runs in the cloud, not on my laptop.", "expect_terms": ["Claude"], "forbid_terms": []}
+{"id": "hom07", "language": "mixed", "say": "我们的服务都部署在 cloud 上面。", "reference": "我们的服务都部署在 cloud 上面。", "expect_terms": [], "forbid_terms": ["Claude"]}
+{"id": "hom08", "language": "mixed", "say": "这些照片会自动同步到 cloud 里。", "reference": "这些照片会自动同步到 cloud 里。", "expect_terms": [], "forbid_terms": ["Claude"]}
+{"id": "hom09", "language": "mixed", "say": "我让 Claude 帮我改一下这段代码。", "reference": "我让 Claude 帮我改一下这段代码。", "expect_terms": ["Claude"], "forbid_terms": []}
+{"id": "hom10", "language": "en", "say": "Move the cursor to the end of the line and press enter.", "reference": "Move the cursor to the end of the line and press enter.", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom11", "language": "en", "say": "The blinking cursor disappears when I type fast.", "reference": "The blinking cursor disappears when I type fast.", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom12", "language": "en", "say": "Click where the mouse cursor turns into a hand.", "reference": "Click where the mouse cursor turns into a hand.", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom13", "language": "en", "say": "I opened the project in Cursor and ran the tests.", "reference": "I opened the project in Cursor and ran the tests.", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom14", "language": "mixed", "say": "我现在主要用 Cursor 写前端。", "reference": "我现在主要用 Cursor 写前端。", "expect_terms": ["Cursor"], "forbid_terms": []}
+{"id": "hom15", "language": "mixed", "say": "鼠标的 cursor 突然不见了。", "reference": "鼠标的 cursor 突然不见了。", "expect_terms": [], "forbid_terms": ["Cursor"]}
+{"id": "hom16", "language": "en", "say": "I have no notion of when the meeting starts.", "reference": "I have no notion of when the meeting starts.", "expect_terms": [], "forbid_terms": ["Notion"]}
+{"id": "hom17", "language": "en", "say": "That is a common notion among new developers.", "reference": "That is a common notion among new developers.", "expect_terms": [], "forbid_terms": ["Notion"]}
+{"id": "hom18", "language": "en", "say": "I keep all my meeting notes in Notion.", "reference": "I keep all my meeting notes in Notion.", "expect_terms": ["Notion"], "forbid_terms": []}
+{"id": "hom19", "language": "en", "say": "She had a notion to move all our docs into Notion.", "reference": "She had a notion to move all our docs into Notion.", "expect_terms": ["Notion"], "forbid_terms": []}
+{"id": "hom20", "language": "mixed", "say": "会议纪要我都记在 Notion 里了。", "reference": "会议纪要我都记在 Notion 里了。", "expect_terms": ["Notion"], "forbid_terms": []}
+{"id": "hom21", "language": "zh", "say": "我女朋友是双子座的，性格变化特别快。", "reference": "我女朋友是双子座的，性格变化特别快。", "expect_terms": [], "forbid_terms": ["Gemini"]}
+{"id": "hom22", "language": "zh", "say": "今晚能看到双子座流星雨。", "reference": "今晚能看到双子座流星雨。", "expect_terms": [], "forbid_terms": ["Gemini"]}
+{"id": "hom23", "language": "zh", "say": "双子星的故事你听说过吗？", "reference": "双子星的故事你听说过吗？", "expect_terms": [], "forbid_terms": ["Gemini"]}
+{"id": "hom24", "language": "mixed", "say": "我试了一下 Gemini，回答得还不错。", "reference": "我试了一下 Gemini，回答得还不错。", "expect_terms": ["Gemini"], "forbid_terms": []}
+{"id": "hom25", "language": "en", "say": "Gemini answered the question faster than I expected.", "reference": "Gemini answered the question faster than I expected.", "expect_terms": ["Gemini"], "forbid_terms": []}
+{"id": "hom26", "language": "zh", "say": "你千万别忘了明天交报告。", "reference": "你千万别忘了明天交报告。", "expect_terms": [], "forbid_terms": ["千问"]}
+{"id": "hom27", "language": "zh", "say": "这件事千万不能告诉他。", "reference": "这件事千万不能告诉他。", "expect_terms": [], "forbid_terms": ["千问"]}
+{"id": "hom28", "language": "zh", "say": "他们公司的估值上千万。", "reference": "他们公司的估值上千万。", "expect_terms": [], "forbid_terms": ["千问"]}
+{"id": "hom29", "language": "zh", "say": "出门千万要记得关灯。", "reference": "出门千万要记得关灯。", "expect_terms": [], "forbid_terms": ["千问"]}
+{"id": "hom30", "language": "zh", "say": "我用千问写了一份周报。", "reference": "我用千问写了一份周报。", "expect_terms": ["千问"], "forbid_terms": []}
+{"id": "hom31", "language": "mixed", "say": "通义千问的 API 今天升级了。", "reference": "通义千问的 API 今天升级了。", "expect_terms": ["千问"], "forbid_terms": []}
+{"id": "hom32", "language": "zh", "say": "千万别用千问写合同。", "reference": "千万别用千问写合同。", "expect_terms": ["千问"], "forbid_terms": []}
+{"id": "hom33", "language": "en", "say": "There is rust on the old bike chain.", "reference": "There is rust on the old bike chain.", "expect_terms": [], "forbid_terms": ["Rust"]}
+{"id": "hom34", "language": "en", "say": "Water and salt make the iron rust quickly.", "reference": "Water and salt make the iron rust quickly.", "expect_terms": [], "forbid_terms": ["Rust"]}
+{"id": "hom35", "language": "en", "say": "We rewrote the parser in Rust last year.", "reference": "We rewrote the parser in Rust last year.", "expect_terms": ["Rust"], "forbid_terms": []}
+{"id": "hom36", "language": "mixed", "say": "这个模块是用 Rust 写的。", "reference": "这个模块是用 Rust 写的。", "expect_terms": ["Rust"], "forbid_terms": []}
+{"id": "hom37", "language": "en", "say": "The team made a swift decision after the call.", "reference": "The team made a swift decision after the call.", "expect_terms": [], "forbid_terms": ["Swift"]}
+{"id": "hom38", "language": "en", "say": "A swift wind closed the door behind me.", "reference": "A swift wind closed the door behind me.", "expect_terms": [], "forbid_terms": ["Swift"]}
+{"id": "hom39", "language": "en", "say": "The app is written in Swift and runs on macOS.", "reference": "The app is written in Swift and runs on macOS.", "expect_terms": ["Swift"], "forbid_terms": []}
+{"id": "hom40", "language": "mixed", "say": "我们的客户端全部用 Swift 重写了。", "reference": "我们的客户端全部用 Swift 重写了。", "expect_terms": ["Swift"], "forbid_terms": []}
+{"id": "hom41", "language": "en", "say": "The zoo keeper fed the python a whole rabbit.", "reference": "The zoo keeper fed the python a whole rabbit.", "expect_terms": [], "forbid_terms": ["Python"]}
+{"id": "hom42", "language": "en", "say": "The scoring script is written in Python.", "reference": "The scoring script is written in Python.", "expect_terms": ["Python"], "forbid_terms": []}
+{"id": "hom43", "language": "mixed", "say": "这个脚本用 Python 跑一下就行。", "reference": "这个脚本用 Python 跑一下就行。", "expect_terms": ["Python"], "forbid_terms": []}
+{"id": "hom44", "language": "en", "say": "I use Python and Rust, but never Swift.", "reference": "I use Python and Rust, but never Swift.", "expect_terms": ["Python", "Rust", "Swift"], "forbid_terms": []}
+{"id": "hom45", "language": "zh", "say": "这颗珍珠又大又浑圆。", "reference": "这颗珍珠又大又浑圆。", "expect_terms": [], "forbid_terms": ["混元"]}
+{"id": "hom46", "language": "zh", "say": "他的手臂浑圆有力。", "reference": "他的手臂浑圆有力。", "expect_terms": [], "forbid_terms": ["混元"]}
+{"id": "hom47", "language": "zh", "say": "腾讯混元大模型发布了新版本。", "reference": "腾讯混元大模型发布了新版本。", "expect_terms": ["混元"], "forbid_terms": []}
+{"id": "hom48", "language": "zh", "say": "我们拿混元做了一次对比测试。", "reference": "我们拿混元做了一次对比测试。", "expect_terms": ["混元"], "forbid_terms": []}
+{"id": "hom49", "language": "zh", "say": "这个房间布置得很温馨。", "reference": "这个房间布置得很温馨。", "expect_terms": [], "forbid_terms": ["文心"]}
+{"id": "hom50", "language": "zh", "say": "谢谢你温馨的提醒。", "reference": "谢谢你温馨的提醒。", "expect_terms": [], "forbid_terms": ["文心"]}
+{"id": "hom51", "language": "zh", "say": "百度的文心一言也可以试试。", "reference": "百度的文心一言也可以试试。", "expect_terms": ["文心"], "forbid_terms": []}
+{"id": "hom52", "language": "zh", "say": "文心大模型这次更新了很多功能。", "reference": "文心大模型这次更新了很多功能。", "expect_terms": ["文心"], "forbid_terms": []}

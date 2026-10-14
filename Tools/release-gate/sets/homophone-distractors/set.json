@@ -1,0 +1,6 @@
+{
+  "description": "A vocabulary word that sounds like a common word. Half the clips say the common word (the vocabulary word is in forbid_terms), the rest say the vocabulary word (in expect_terms). Every clip is run with the whole vocabulary as context.",
+  "variants": [
+    {"suffix": "", "context": ["Claude", "Cursor", "Notion", "Gemini", "千问", "Rust", "Swift", "Python", "混元", "文心"]}
+  ]
+}
