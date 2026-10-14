@@ -5,8 +5,9 @@ Each folder next to this script is one set: sentences.jsonl with one sentence pe
 ({"id", "language", "say", "reference", "expect_terms", "forbid_terms"}, optional "voice"
 and "context") and an optional set.json with its context variants. A variant without a
 context, or a set without set.json, uses the context of each sentence. Every sentence is
-spoken once with `say`, then afconvert writes it as 16 kHz mono 16 bit WAVE. Each variant adds one clip and one manifest
-line per sentence, with the variant's suffix after the sentence id and its context.
+spoken once with `say`, then afconvert writes it as 16 kHz mono 16 bit WAVE. Each variant
+adds one clip and one manifest line per sentence, with the variant's suffix after the
+sentence id and its context.
 
 The output folder of a set holds clips/<id>.wav and manifest.jsonl, one line per clip:
 {"id", "language", "reference", "context", "expect_terms", "forbid_terms"}. The clips stay
