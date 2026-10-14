@@ -89,6 +89,17 @@ struct AudioRecorderTests {
         #expect(store.take().isEmpty)
     }
 
+    @Test func peekCopiesWithoutEmptying() {
+        let store = SampleStore()
+        store.begin(limit: 100)
+        store.append([1, 2])
+        #expect(store.peek() == [1, 2])
+        store.append([3])
+        #expect(store.peek() == [1, 2, 3])
+        #expect(store.take() == [1, 2, 3])
+        #expect(store.peek().isEmpty)
+    }
+
     @Test func storeStopsAtItsLimit() {
         let store = SampleStore()
         store.begin(limit: 10)

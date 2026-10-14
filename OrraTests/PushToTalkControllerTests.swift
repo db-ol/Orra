@@ -52,6 +52,7 @@ final class FakeMicrophone {
                 return self.recording
             },
             cancel: { self.calls.append("cancel") },
+            peek: { self.calls.last == "start" ? self.recording : nil },
             level: { self.level }
         )
     }
@@ -89,6 +90,9 @@ final class FakeSpeech {
     private(set) var receivedContexts: [String?] = []
     /// The language each transcription was told to write, nil when none.
     private(set) var receivedLanguages: [SpeechLanguage?] = []
+    /// The sample count and the context of each hypothesis made while the key was held.
+    private(set) var hypotheses: [(samples: Int, context: String?)] = []
+    private(set) var forgets = 0
 
     var transcription: Transcription {
         Transcription(
@@ -111,7 +115,11 @@ final class FakeSpeech {
                 if let language, let hinted = self.replyInLanguage[language] { return hinted }
                 if context == nil, let plain = self.replyWithoutContext { return plain }
                 return self.reply
-            }
+            },
+            hypothesize: { samples, context in
+                self.hypotheses.append((samples.count, context))
+            },
+            forgetHypothesis: { self.forgets += 1 }
         )
     }
 }
@@ -420,6 +428,67 @@ struct PushToTalkControllerTests {
         try await Task.sleep(for: .milliseconds(50))
         #expect(controller.state == .idle)
         #expect(mic.calls.isEmpty)
+    }
+
+    @Test func whileHeldTheAudioSoFarIsTranscribedWithTheFinalPassContext() async throws {
+        let words = [VocabularyWord("Orra", added: Date(timeIntervalSince1970: 0))]
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            hypothesisInterval: .milliseconds(20),
+            vocabulary: words
+        )
+        await controller.loadModel()
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { speech.hypotheses.count >= 2 }
+        #expect(speech.hypotheses.count >= 2)
+        #expect(speech.forgets == 1)
+        #expect(speech.receivedSampleCounts.isEmpty)
+        let context = Vocabulary.context(Vocabulary.forModel(words))
+        #expect(context != nil)
+        #expect(speech.hypotheses.allSatisfy { $0.samples == 16_000 && $0.context == context })
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(speech.receivedContexts.first == context)
+        #expect(inserter.inserted == ["你好"])
+        let made = speech.hypotheses.count
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(speech.hypotheses.count == made, "no hypothesis after the release")
+    }
+
+    @Test func aHoldShorterThanTheIntervalMakesNoHypothesis() async throws {
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.hypotheses.isEmpty)
+        #expect(speech.forgets == 1)
+        #expect(inserter.inserted == ["你好"])
+    }
+
+    @Test func aCancelledHoldStopsMakingHypotheses() async throws {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            hypothesisInterval: .milliseconds(20)
+        )
+        await controller.loadModel()
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { !speech.hypotheses.isEmpty }
+        controller.handle(.cancelled)
+        try await waitUntil { mic.calls.contains("cancel") }
+        let made = speech.hypotheses.count
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(speech.hypotheses.count == made)
+        #expect(speech.receivedSampleCounts.isEmpty)
     }
 
     @Test func holdRecordsAndReleaseTranscribesAndPastes() async throws {

@@ -170,6 +170,10 @@ final class PushToTalkController {
     @ObservationIgnored private let releaseTail: Duration
     @ObservationIgnored private let accessCheckDelay: Duration
     @ObservationIgnored private let listeningCueDelay: Duration
+    @ObservationIgnored private let hypothesisInterval: Duration
+    /// Transcribes the audio so far every `hypothesisInterval` while the key is held, see
+    /// `hypothesizeWhileHeld`.
+    @ObservationIgnored private var hypothesisTask: Task<Void, Never>?
     /// Sends the listening cue once the hold has lasted `listeningCueDelay`.
     @ObservationIgnored private var listeningCueTask: Task<Void, Never>?
     /// Whether the current hold has shown the indicator, so its end has to clear it.
@@ -239,6 +243,8 @@ final class PushToTalkController {
     ///     `watchAccess()`.
     ///   - listeningCueDelay: How long a hold lasts before the indicator shows and the
     ///     start sound plays. A shortcut with the talk key is over sooner.
+    ///   - hypothesisInterval: How often the audio so far is transcribed while the key is
+    ///     held, so the pass after the release generates only the last part.
     ///   - talkKey: The key that starts a dictation, as saved by the user.
     ///   - saveTalkKey: Saves the key after the user changes it.
     ///   - talkKeyChosen: Whether the user has saved a talk key before.
@@ -271,6 +277,7 @@ final class PushToTalkController {
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
         listeningCueDelay: Duration = .milliseconds(150),
+        hypothesisInterval: Duration = .seconds(5),
         talkKey: TalkKey = TalkKey.defaultKey,
         saveTalkKey: @escaping (TalkKey) -> Void = { _ in },
         talkKeyChosen: Bool = false,
@@ -302,6 +309,7 @@ final class PushToTalkController {
         self.releaseTail = releaseTail
         self.accessCheckDelay = accessCheckDelay
         self.listeningCueDelay = listeningCueDelay
+        self.hypothesisInterval = hypothesisInterval
         self.talkKey = talkKey
         self.saveTalkKey = saveTalkKey
         self.hasChosenTalkKey = talkKeyChosen
@@ -667,6 +675,7 @@ final class PushToTalkController {
         case .startedProcessing:
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
+            hypothesisTask?.cancel()
             let released = ContinuousClock.now
             let heldFor = pressedAt.map { $0.duration(to: released) } ?? .zero
             if heldFor >= minimumHold {
@@ -680,13 +689,18 @@ final class PushToTalkController {
             let start = captureStart
             let chosen = holdMicrophone
             let translating = holdTranslation
+            let hypothesis = hypothesisTask
             Task { [weak self] in
+                // The hypothesis pass stops between tokens. Waiting for it keeps it off the
+                // GPU during the final pass.
+                await hypothesis?.value
                 await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, translating: translating, releasedAt: released)
                 self?.handle(.processingFinished)
             }
         case .cancelledListening:
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
+            hypothesisTask?.cancel()
             endUserActivity()
             let start = captureStart
             captureCancel = Task { [capture] in
@@ -784,6 +798,12 @@ final class PushToTalkController {
                     return false
                 }
             }
+            let context = Vocabulary.context(Vocabulary.forModel(vocabulary))
+            let previousHypothesis = hypothesisTask
+            hypothesisTask = Task { [weak self, start = captureStart] in
+                await previousHypothesis?.value
+                await self?.hypothesizeWhileHeld(start: start, context: context)
+            }
             recordingLimitTask = Task { [weak self, maximumRecordingDuration] in
                 try? await Task.sleep(for: maximumRecordingDuration)
                 guard !Task.isCancelled, let self, state == .listening || state == .handsFree else { return }
@@ -803,6 +823,30 @@ final class PushToTalkController {
         case .notConfigured:
             holdMessage = String(localized: "This build has no microphone usage description")
             handle(.cancelled)
+        }
+    }
+
+    /// While the key is held, transcribes all audio so far every `hypothesisInterval`,
+    /// when the GPU would otherwise wait for the user. The engine keeps the latest result,
+    /// and the pass after the release starts from it with the same context, see
+    /// Qwen3Engine.transcribe. Cancelled at the release. A pass still running then stops
+    /// between tokens, and the one before it stands.
+    private func hypothesizeWhileHeld(start: Task<Bool, Never>?, context: String?) async {
+        await transcription.forgetHypothesis()
+        guard await start?.value == true else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: hypothesisInterval)
+            guard !Task.isCancelled, let recording = await capture.peek() else { return }
+            let (samples, silent) = await Self.prepared(recording)
+            guard !Task.isCancelled else { return }
+            guard !samples.isEmpty, !silent else { continue }
+            let started = ContinuousClock.now
+            do {
+                try await transcription.hypothesize(samples, context)
+                logger.debug("Hypothesis of \(recording.duration, privacy: .public) s took \(started.duration(to: .now), privacy: .public)")
+            } catch {
+                return
+            }
         }
     }
 

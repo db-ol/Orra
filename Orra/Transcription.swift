@@ -10,6 +10,12 @@ struct Transcription {
     /// term per line, or nil. The language is the one the model must write, or nil to let
     /// it choose.
     var transcribe: (_ samples: [Float], _ context: String?, _ language: SpeechLanguage?) async throws -> String
+    /// Transcribes the audio recorded so far while the key is held, with the context the
+    /// final pass will use, and keeps the result inside the engine, so the final pass after
+    /// the release generates only the last part. Fakes may leave it doing nothing.
+    var hypothesize: (_ samples: [Float], _ context: String?) async throws -> Void = { _, _ in }
+    /// Drops the hypothesis of an earlier hold.
+    var forgetHypothesis: () async -> Void = {}
 }
 
 extension Transcription {

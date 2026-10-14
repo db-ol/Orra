@@ -1,3 +1,4 @@
+import AudioCommon
 import Foundation
 import Qwen3ASR
 
@@ -10,6 +11,17 @@ import Qwen3ASR
 /// silently dropping out of the build.
 actor Qwen3Engine {
     private var model: Qwen3ASRModel?
+    /// The same vocabulary speech-swift reads, for PrefixedDecoder. Nil when the folder
+    /// has no vocab.json, and then no hypotheses are made.
+    private var tokenizer: Qwen3Tokenizer?
+    /// The latest hypothesis of the dictation in progress, see `hypothesize`.
+    private var hypothesis: Hypothesis?
+
+    private struct Hypothesis {
+        var context: String?
+        var sampleCount: Int
+        var tokens: [Int32]
+    }
     private let folder: @Sendable () -> URL?
     private let modelID: String
 
@@ -42,6 +54,12 @@ actor Qwen3Engine {
         // Silence gives no text, so this only moves such one time costs from the user's first
         // dictation to the launch.
         _ = run(loaded, on: [Float](repeating: 0, count: RecordingLimits.sampleRate))
+        let vocabulary = folder.appendingPathComponent("vocab.json")
+        if FileManager.default.fileExists(atPath: vocabulary.path) {
+            let loadedTokenizer = Qwen3Tokenizer()
+            try loadedTokenizer.load(from: vocabulary)
+            tokenizer = loadedTokenizer
+        }
         model = loaded
     }
 
@@ -50,10 +68,43 @@ actor Qwen3Engine {
     ///     speech-swift puts in the prompt's system turn. The app passes the user's
     ///     vocabulary. ContextEvaluationTests measures what a vocabulary does.
     ///   - language: The language the model must write, or nil to let it choose.
+    ///
+    /// When `hypothesize` left a hypothesis of the first part of these samples with the
+    /// same context, and no language is asked for, the hypothesis without its last tokens
+    /// (HypothesisPrefix) starts the answer, so only the rest is generated. The hypothesis
+    /// is used once.
     func transcribe(_ samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) throws -> String {
         guard let model else { throw TranscriptionError.modelMissing }
         guard !samples.isEmpty else { throw TranscriptionError.noAudio }
+        if language == nil, let tokenizer, let earlier = hypothesis, earlier.context == context, earlier.sampleCount <= samples.count {
+            hypothesis = nil
+            let prefix = HypothesisPrefix.cut(earlier.tokens)
+            if !prefix.isEmpty {
+                let tokens = try PrefixedDecoder.decode(model: model, tokenizer: tokenizer, samples: samples, context: context, language: nil, prefix: prefix)
+                return PrefixedDecoder.text(of: tokens, tokenizer: tokenizer)
+            }
+        }
         return run(model, on: samples, context: context, language: language)
+    }
+
+    /// Transcribes the audio recorded so far while the key is still held, when the GPU is
+    /// otherwise idle, and keeps the tokens for the final pass in `transcribe`. A hypothesis
+    /// with the same context from earlier in the hold starts this one the same way. Returns
+    /// nothing, and the text is never logged. Throws CancellationError between tokens when
+    /// the task is cancelled, and the earlier hypothesis then stays.
+    func hypothesize(_ samples: [Float], context: String?) throws {
+        guard let model, let tokenizer, !samples.isEmpty else { return }
+        var prefix: [Int32] = []
+        if let earlier = hypothesis, earlier.context == context, earlier.sampleCount <= samples.count {
+            prefix = HypothesisPrefix.cut(earlier.tokens)
+        }
+        let tokens = try PrefixedDecoder.decode(model: model, tokenizer: tokenizer, samples: samples, context: context, language: nil, prefix: prefix)
+        hypothesis = Hypothesis(context: context, sampleCount: samples.count, tokens: tokens)
+    }
+
+    /// Drops the hypothesis, at the start of each hold, so none outlives its dictation.
+    func forgetHypothesis() {
+        hypothesis = nil
     }
 
     private func run(_ model: Qwen3ASRModel, on samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) -> String {
@@ -85,7 +136,9 @@ extension Transcription {
         let engine = Qwen3Engine()
         return Transcription(
             load: { try await engine.load() },
-            transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) }
+            transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) },
+            hypothesize: { samples, context in try await engine.hypothesize(samples, context: context) },
+            forgetHypothesis: { await engine.forgetHypothesis() }
         )
     }
 }

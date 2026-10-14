@@ -114,6 +114,11 @@ nonisolated final class InputUnit {
         isRunning = true
     }
 
+    /// A copy of what was recorded so far, while the unit goes on recording.
+    func peek() -> [Float] {
+        context.buffer.samples()
+    }
+
     /// Stops the unit for good, lets go of the device, and returns what was recorded. Also
     /// right for a unit that never started.
     func stop() -> (samples: [Float], interrupted: Bool, lostCallbacks: Int) {
@@ -247,8 +252,8 @@ nonisolated final class InputRenderContext: @unchecked Sendable {
 
 /// Room for a whole recording. Allocated and touched before the recording starts, so the
 /// real time thread only copies. One thread appends, and the count it publishes with an
-/// atomic store covers only samples already written. Reading is for after the unit has
-/// stopped.
+/// atomic store covers only samples already written, so a read while the unit runs sees
+/// only finished samples.
 nonisolated final class CaptureBuffer: @unchecked Sendable {
     let capacity: Int
     private let storage: UnsafeMutablePointer<Float>
