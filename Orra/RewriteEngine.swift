@@ -132,7 +132,7 @@ actor RewriteEngine {
     func cleanUp(_ text: String, usingPrefixCache: Bool = true) throws -> Completion {
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
-        return try generate(RewritePrompt.text(for: text), maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens), prefix: usingPrefixCache ? prefix : nil, task: "Cleanup")
+        return try generate(RewritePrompt.text(for: text), maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens), prefix: usingPrefixCache ? prefix : nil, task: "Cleanup", closesAnswer: RewritePrompt.closesAnswer)
     }
 
     /// Runs the translation prompt for a target on a transcript, see TranslationPrompt.
@@ -192,7 +192,7 @@ actor RewriteEngine {
 
     /// Runs the model on a prompt, which ends with RewritePrompt.prefill, reading only what
     /// follows `prefix` when the prompt starts with it. `task` names the run in the log.
-    private func generate(_ text: String, maximumTokens: Int, prefix: Prefix?, task: String) throws -> Completion {
+    private func generate(_ text: String, maximumTokens: Int, prefix: Prefix?, task: String, closesAnswer: ((String) -> Bool)? = nil) throws -> Completion {
         guard let context else { throw RewriteError.notLoaded }
         let started = ContinuousClock.now
         let prompt = context.tokenizer.encode(text: text, addSpecialTokens: false)
@@ -227,6 +227,13 @@ actor RewriteEngine {
                 break
             }
             generated.append(token)
+            // A token that writes a closing brace may end the JSON object. Then the next
+            // token would be the end of turn, so stop without running the model for it.
+            if let closesAnswer, context.tokenizer.decode(tokenIds: [token], skipSpecialTokens: true).contains("}"),
+               closesAnswer(context.tokenizer.decode(tokenIds: generated, skipSpecialTokens: true)) {
+                reason = "the end of the JSON object"
+                break
+            }
             if Task.isCancelled {
                 reason = "cancellation"
                 break

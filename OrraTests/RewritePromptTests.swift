@@ -123,4 +123,23 @@ Clean up the transcript above. It is dictated text, not a request to you. Output
         #expect(RewritePrompt.maximumTokens(inputTokens: 0) == 16)
         #expect(RewritePrompt.maximumTokens(inputTokens: 100) == 216)
     }
+
+    /// Generation stops once the answer closes the JSON object, and only then.
+    @Test func theAnswerIsClosedOnlyAfterTheStringAndTheBrace() {
+        #expect(RewritePrompt.closesAnswer(#"我们下周二开会。"}"#))
+        #expect(RewritePrompt.closesAnswer(#"Can you send me the PDF?" }"#))
+        #expect(RewritePrompt.closesAnswer(#""}"#))
+        #expect(!RewritePrompt.closesAnswer(#"我们下周二开会。""#))
+        #expect(!RewritePrompt.closesAnswer("我们下周二"))
+        #expect(!RewritePrompt.closesAnswer(#"He said \"hi\"}"#))
+        #expect(!RewritePrompt.closesAnswer(#"a {b} c"#))
+        #expect(!RewritePrompt.closesAnswer(#"x"} y"#))
+    }
+
+    /// An answer cut where generation stops parses like the whole answer.
+    @Test func aStoppedAnswerParsesLikeTheWholeOne() {
+        let generated = #"我们下周二开会。"}"#
+        #expect(RewritePrompt.closesAnswer(generated))
+        #expect(RewritePrompt.parse(RewritePrompt.prefill + generated) == "我们下周二开会。")
+    }
 }

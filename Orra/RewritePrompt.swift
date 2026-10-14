@@ -106,6 +106,29 @@ nonisolated enum RewritePrompt {
         2 * inputTokens + 16
     }
 
+    /// Whether the model's answer so far, without the prefill, already closes the JSON
+    /// object: the string value has ended at an unescaped quote and a closing brace
+    /// follows it. The model would only write the end of turn token next, so generation
+    /// can stop there and skip that step.
+    static func closesAnswer(_ generated: String) -> Bool {
+        var escaping = false
+        var index = generated.unicodeScalars.startIndex
+        let scalars = generated.unicodeScalars
+        while index < scalars.endIndex {
+            let scalar = scalars[index]
+            if escaping {
+                escaping = false
+            } else if scalar == "\\" {
+                escaping = true
+            } else if scalar == "\"" {
+                let rest = String(scalars[scalars.index(after: index)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                return rest == "}"
+            }
+            index = scalars.index(after: index)
+        }
+        return false
+    }
+
     /// The cleaned text from the model's answer, which starts with the prefill, or nil when
     /// the answer is not the JSON object the prompt asks for.
     static func parse(_ answer: String) -> String? {
