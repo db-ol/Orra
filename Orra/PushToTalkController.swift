@@ -915,7 +915,12 @@ final class PushToTalkController {
                 logger.notice("The microphone delivered no sound for \(recording.duration, privacy: .public) s, lid closed: \(situation.lidClosed, privacy: .public)")
                 return
             }
-            let raw = try await transcription.transcribe(samples, vocabulary: Vocabulary.forModel(vocabulary), audioSeconds: recording.duration)
+            let raw = try await transcription.transcribe(
+                samples,
+                vocabulary: Vocabulary.forModel(vocabulary),
+                audioSeconds: recording.duration,
+                takingDigits: writesNumbersAsDigits
+            )
             timings.lap(.recognition)
             var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
             // The text as heard, before the filler rule, for the cleanup gate: a filler

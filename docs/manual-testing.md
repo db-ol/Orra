@@ -687,6 +687,13 @@ got worse than the baseline, see docs/release-gate.md.
     cancellation still ends the dictation, and that the echo check runs on the new
     text. PushToTalkControllerTests checks that the dictation pastes the text of the
     pass in Chinese.
+  - ContextNumbersTests checks which transcripts may hold a number in Chinese characters,
+    the value of Chinese numbers (一九六六, 两千零五, 三十三万, 六点五, none for 三万五), that
+    such a number written with the vocabulary takes the digits of the pass without it
+    only at the same value, with times, percentages, model numbers and a closing bracket,
+    that everything else and any vocabulary term with a numeral stays, and with a stand
+    in engine that the second pass runs only with a vocabulary and a possible number, and
+    that a failed pass keeps the text and cancellation still ends the dictation.
 - SupportTests covers the test scoring helper, the memory footprint helper, that the
     model loads only from a complete installed folder, tokenizer files included, and that
     the engine reports a missing model without loading anything.
@@ -1234,6 +1241,13 @@ Personal vocabulary, added on 2026-10-08, not verified yet:
 - [ ] Hold the talk key without speaking: no listed word appears.
 - [ ] The count above the list follows it, and the list is still there after
   quitting and reopening Orra.
+
+Numbers with a vocabulary, added on 2026-10-14, not verified yet:
+
+- [ ] With a few words in the vocabulary, dictate "我们一九九八年成立，现在有四百个员工，增长了百分之三十". The
+  numbers come out as 1998, 400 and 30%, as they do with an empty vocabulary, and the
+  vocabulary words in the same sentence are still spelled as in the list.
+- [ ] Dictate a sentence with a vocabulary word and no number: it pastes as fast as before.
 
 Vocabulary without the 100 word limit, added on 2026-10-10, not verified yet:
 

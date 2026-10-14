@@ -185,6 +185,8 @@ nonisolated enum Vocabulary {
 
     /// What the model gets: one term per line, as the evaluation measured, and nothing
     /// else, since instructions in the prompt can end up in the text. Nil without terms.
+    /// Any context makes the model write numbers in Chinese characters, whatever the
+    /// layout, so Transcription takes them back from a pass without it, see ContextNumbers.
     static func context(_ terms: [String]) -> String? {
         terms.isEmpty ? nil : terms.joined(separator: "\n")
     }
