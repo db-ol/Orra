@@ -150,16 +150,18 @@ struct CleanupModelEvaluationTests {
         var medians: [Double] = []
         for (name, file, key) in [("regular", "cases.jsonl", "cleanup"), ("adversarial", "adversarial.jsonl", "expected_cleanup"), ("meaning", "meaning.jsonl", "cleanup")] {
             let cases = try Self.cases(file, expected: key)
-            for mode in ["model only", "as the app runs it"] {
+            var exactIDs: [String: Set<String>] = [:]
+            for mode in ["model only", "as the app runs it", "with the skip gate"] {
                 var runs: [String: [Run]] = [:]
                 var sources: [String] = []
                 var expectations: [String] = []
                 for item in cases {
                     let source = mode == "model only" ? item.input : Self.appRules(item.input)
+                    let skipped = mode == "with the skip gate" && !CleanupStep.hasWorkForModel(source)
                     sources.append(source)
                     expectations.append(mode == "model only" ? item.expected : Self.appRules(item.expected))
                     for (way, cached) in [("cached", true), ("uncached", false)] where cached || compares {
-                        let run = if mode == "model only" || CleanupStep.isWorthCleaning(source) {
+                        let run = if mode == "model only" || (CleanupStep.isWorthCleaning(source) && !skipped) {
                             await Self.run(source, engine: engine, usingPrefixCache: cached)
                         } else {
                             Run(text: source, outcome: .unchanged, seconds: 0, completion: nil)
@@ -180,6 +182,7 @@ struct CleanupModelEvaluationTests {
                         outcomes[kind, default: 0] += 1
                         if Self.folded(result.text) == Self.folded(expectations[index]) {
                             exact += 1
+                            if way == "cached" { exactIDs[mode, default: []].insert(cases[index].id) }
                         } else if result.outcome == .cleaned || result.outcome == .unchanged {
                             differing.append("  \(cases[index].id) [\(result.outcome.logName)] \(sources[index]) -> \(result.text) (expected \(expectations[index]))")
                         }
@@ -194,6 +197,12 @@ struct CleanupModelEvaluationTests {
                         let prefill = completions.map { Self.seconds($0.prefillTime) }
                         let read = completions.map { Double($0.promptTokens - $0.cachedPromptTokens) }
                         report += "  model runs \(completions.count), prompt tokens median \(Int(Self.median(completions.map { Double($0.promptTokens) }))), cached median \(Int(Self.median(completions.map { Double($0.cachedPromptTokens) }))), read median \(Int(Self.median(read))), prefill median \(String(format: "%.3f", Self.median(prefill))) s, p95 \(String(format: "%.3f", Self.p95(prefill))) s\n"
+                    }
+                    if mode == "with the skip gate" && way == "cached" {
+                        let skippedCount = sources.filter { !CleanupStep.hasWorkForModel($0) }.count
+                        let app = exactIDs["as the app runs it", default: []]
+                        let gated = exactIDs[mode, default: []]
+                        report += "  skipped \(skippedCount), exact lost against the app \(app.subtracting(gated).sorted()), gained \(gated.subtracting(app).sorted())\n"
                     }
                     for (kind, count) in outcomes.sorted(by: { $0.key < $1.key }) {
                         report += "  \(kind): \(count)\n"
