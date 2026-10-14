@@ -22,12 +22,16 @@ extension Transcription {
     /// letter or a digit, so a pass that gives only punctuation heard nothing. When that
     /// pass fails, the text with the vocabulary stands too, as it did before the check. A
     /// known limit: a single term spoken so softly that only the pass with the vocabulary
-    /// hears it is dropped like an echo.
+    /// hears it is dropped like an echo. Any other text with the vocabulary gets its numbers
+    /// in digits from a pass without it, see `takingNumbers`.
     /// Logs a timing and whether speech was heard, never the text.
     func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double) async throws -> String {
         let context = Vocabulary.context(terms)
         let text = try await checkingLanguage(try await transcribe(samples, context, nil), of: samples, context: context)
-        guard !terms.isEmpty, await Self.isOnlyTerms(text, of: terms) else { return text }
+        guard !terms.isEmpty else { return text }
+        guard await Self.isOnlyTerms(text, of: terms) else {
+            return try await takingNumbers(into: text, of: samples, terms: terms)
+        }
         let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
         let started = ContinuousClock.now
         let plain: String
@@ -42,6 +46,29 @@ extension Transcription {
         let heardSpeech = !VocabularyEcho.normalized(TranscriptGuard.clean(plain, audioSeconds: audioSeconds)).isEmpty
         logger.notice("Transcript held only vocabulary terms, the pass without them took \(started.duration(to: .now), privacy: .public), speech heard: \(heardSpeech, privacy: .public)")
         return heardSpeech ? text : ""
+    }
+
+    /// The text written with the vocabulary, with its numbers in Chinese characters written
+    /// as digits where a pass without the vocabulary wrote the same number in digits, see
+    /// ContextNumbers. That pass runs only when the text may hold such a number. When it
+    /// fails, the text stands.
+    /// Logs a timing and how many numbers changed, never the text.
+    func takingNumbers(into text: String, of samples: [Float], terms: [String]) async throws -> String {
+        guard ContextNumbers.mayHoldSpokenNumber(text) else { return text }
+        let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
+        let started = ContinuousClock.now
+        let plain: String
+        do {
+            plain = try await transcribe(samples, nil, nil)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.error("Transcript may hold a number in words, the pass without the vocabulary failed after \(started.duration(to: .now), privacy: .public)")
+            return text
+        }
+        let merged = await Self.merging(text, plain: plain, terms: terms)
+        logger.notice("Transcript may hold a number in words, the pass without the vocabulary took \(started.duration(to: .now), privacy: .public), digits taken: \(merged != text, privacy: .public)")
+        return merged
     }
 
     /// Returns the text when LanguageGuard finds it in Chinese or English. Otherwise the
@@ -82,6 +109,12 @@ extension Transcription {
     @concurrent
     nonisolated private static func isForeign(_ text: String) async -> Bool {
         LanguageGuard.isForeign(text)
+    }
+
+    /// Off the main actor, since a long transcript is compared character by character.
+    @concurrent
+    nonisolated private static func merging(_ text: String, plain: String, terms: [String]) async -> String {
+        ContextNumbers.merging(text, plain: plain, terms: terms)
     }
 
     /// Off the main actor, since a long transcript is compared with every term.
