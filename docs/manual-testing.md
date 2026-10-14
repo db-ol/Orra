@@ -57,7 +57,9 @@ got worse than the baseline, see docs/release-gate.md.
   way.
   With the idle unload of the cleanup model, before the translation key was merged, it
   ended in TEST SUCCEEDED with 2300 test cases passed and 7 skipped on 2026-10-13, the
-  two more skipped ones being the opt in idle unload measurements.
+  two more skipped ones being the opt in idle unload measurements. With trigger modes and
+  key combinations, it ended in TEST SUCCEEDED with 2515 test cases passed and 17 skipped
+  on 2026-10-14 in 50 s, the real model tests included.
   - SettingsPageTests checks the three tabs and the sheet of General, that a tab or sheet
     asked for, such as Vocabulary, opens once while Settings… afterwards opens General
     alone, that a sheet opens over General, that Change Talk Key… asks for General alone,
