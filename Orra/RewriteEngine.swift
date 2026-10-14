@@ -106,7 +106,7 @@ actor RewriteEngine {
         context = loaded
         do {
             prefix = try fillPrefixCache(PromptPrefix.cleanupPrompt { loaded.tokenizer.encode(text: $0, addSpecialTokens: false) }, for: "cleanup")
-            _ = try generate(RewritePrompt.text(for: "好的。"), maximumTokens: 4, prefix: prefix, task: "Cleanup")
+            _ = try generate(RewritePrompt.text(for: "好的。"), maximumTokens: 4, prefix: prefix, lookingUp: true, task: "Cleanup")
         } catch {
             unload()
             throw error
@@ -132,7 +132,7 @@ actor RewriteEngine {
     func cleanUp(_ text: String, usingPrefixCache: Bool = true) throws -> Completion {
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
-        return try generate(RewritePrompt.text(for: text), maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens), prefix: usingPrefixCache ? prefix : nil, task: "Cleanup")
+        return try generate(RewritePrompt.text(for: text), maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens), prefix: usingPrefixCache ? prefix : nil, lookingUp: true, task: "Cleanup")
     }
 
     /// Runs the translation prompt for a target on a transcript, see TranslationPrompt.
@@ -192,7 +192,7 @@ actor RewriteEngine {
 
     /// Runs the model on a prompt, which ends with RewritePrompt.prefill, reading only what
     /// follows `prefix` when the prompt starts with it. `task` names the run in the log.
-    private func generate(_ text: String, maximumTokens: Int, prefix: Prefix?, task: String) throws -> Completion {
+    private func generate(_ text: String, maximumTokens: Int, prefix: Prefix?, lookingUp looksUp: Bool = false, task: String) throws -> Completion {
         guard let context else { throw RewriteError.notLoaded }
         let started = ContinuousClock.now
         let prompt = context.tokenizer.encode(text: text, addSpecialTokens: false)
@@ -213,23 +213,45 @@ actor RewriteEngine {
         if let end = context.tokenizer.eosTokenId {
             stop.insert(end)
         }
-        let parameters = GenerateParameters(maxTokens: maximumTokens, temperature: 0)
-        var iterator = try TokenIterator(input: LMInput(tokens: MLXArray(input)), model: context.model, cache: cache, parameters: parameters)
-        // The iterator evaluates the first token ahead. Wait for it, so the time is the
-        // time the model took to read the prompt.
-        Stream().synchronize()
-        let prefilled = ContinuousClock.now
         var generated: [Int] = []
         var reason = "the token limit"
-        while let token = iterator.next() {
-            if stop.contains(token) {
-                reason = "the end of the answer"
-                break
+        var lookup = PromptLookup.Counts()
+        let prefilled: ContinuousClock.Instant
+        if looksUp {
+            let cache = cache ?? context.model.newCache(parameters: nil)
+            var decoder = try PromptLookup(prompt: prompt, input: input, model: context.model, cache: cache)
+            prefilled = ContinuousClock.now
+            loop: while generated.count < maximumTokens {
+                for token in decoder.next(limit: maximumTokens - generated.count) {
+                    if stop.contains(token) {
+                        reason = "the end of the answer"
+                        break loop
+                    }
+                    generated.append(token)
+                }
+                if Task.isCancelled {
+                    reason = "cancellation"
+                    break
+                }
             }
-            generated.append(token)
-            if Task.isCancelled {
-                reason = "cancellation"
-                break
+            lookup = decoder.counts
+        } else {
+            let parameters = GenerateParameters(maxTokens: maximumTokens, temperature: 0)
+            var iterator = try TokenIterator(input: LMInput(tokens: MLXArray(input)), model: context.model, cache: cache, parameters: parameters)
+            // The iterator evaluates the first token ahead. Wait for it, so the time is the
+            // time the model took to read the prompt.
+            Stream().synchronize()
+            prefilled = ContinuousClock.now
+            while let token = iterator.next() {
+                if stop.contains(token) {
+                    reason = "the end of the answer"
+                    break
+                }
+                generated.append(token)
+                if Task.isCancelled {
+                    reason = "cancellation"
+                    break
+                }
             }
         }
         // The iterator evaluates ahead. Let that finish before the next use of MLX, and
@@ -240,13 +262,15 @@ actor RewriteEngine {
         let answer = RewritePrompt.prefill + context.tokenizer.decode(tokenIds: generated, skipSpecialTokens: true)
         let cached = prompt.count - input.count
         let prefillTime = started.duration(to: prefilled)
-        Logger.rewrite.notice("\(task, privacy: .public) ran in \(started.duration(to: .now), privacy: .public): \(prompt.count, privacy: .public) prompt tokens, \(cached, privacy: .public) of them cached and \(input.count, privacy: .public) read in \(prefillTime, privacy: .public), \(generated.count, privacy: .public) of at most \(maximumTokens, privacy: .public) tokens written, stopped by \(reason, privacy: .public)")
+        Logger.rewrite.notice("\(task, privacy: .public) ran in \(started.duration(to: .now), privacy: .public): \(prompt.count, privacy: .public) prompt tokens, \(cached, privacy: .public) of them cached and \(input.count, privacy: .public) read in \(prefillTime, privacy: .public), \(generated.count, privacy: .public) of at most \(maximumTokens, privacy: .public) tokens written, stopped by \(reason, privacy: .public), \(lookup.verifications, privacy: .public) lookups verified \(lookup.drafted, privacy: .public) drafted tokens and kept \(lookup.accepted, privacy: .public)")
         return Completion(answer: answer, promptTokens: prompt.count, cachedPromptTokens: cached, prefillTime: prefillTime, generatedTokens: generated.count)
     }
 }
 
 nonisolated enum RewriteError: Error, Equatable {
     case notLoaded
+    /// The model has a cache that PromptLookup can neither trim nor restore.
+    case cacheCannotRollBack
 }
 
 /// What PushToTalkController needs from the cleanup model. Closures, so tests pass fakes.
