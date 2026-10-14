@@ -152,6 +152,9 @@ final class PushToTalkController {
     /// Told when Paste Original Text pastes over a cleaned paste, with the cleaned text, so
     /// learning stops following it.
     @ObservationIgnored var onPasteOriginal: (_ cleaned: String) -> Void = { _ in }
+    /// Told the time of every step after a dictation was pasted. Durations only, never
+    /// text. LatencyMeasurementTests reads it, the app leaves it alone.
+    @ObservationIgnored var onTimings: (DictationTimings) -> Void = { _ in }
 
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
@@ -855,12 +858,16 @@ final class PushToTalkController {
     /// the short tail, stops, and transcribes unless the hold was too short or cut.
     /// `translating` is the direction when the translation key started the dictation.
     private func finishRecording(start: Task<Bool, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
+        var timings = DictationTimings(releasedAt: released)
         // A failed start already set the problem.
         guard await start?.value == true else { return }
+        timings.lap(.start)
         if releaseTail > .zero {
             try? await Task.sleep(for: releaseTail)
         }
+        timings.lap(.releaseTail)
         let recording = await capture.stop()
+        timings.lap(.microphoneStop)
         if recording.wasCut {
             problem = String(localized: "The microphone changed during the recording. Try again.")
             return
@@ -878,14 +885,16 @@ final class PushToTalkController {
                 microphoneNotice = String(localized: "\(chosen.name) is not connected, so the system default input recorded.")
             }
         }
-        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, releasedAt: released)
+        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, timings: &timings)
     }
 
     /// Turns a recording into text and pastes it, translated when `translating` is set and
-    /// the translation passes its checks. Logs timings, never the text.
-    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
+    /// the translation passes its checks. Logs timings, never the text. `timings` gets the
+    /// time of each step.
+    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, timings: inout DictationTimings) async {
         do {
             let (samples, silent) = await Self.prepared(recording)
+            timings.lap(.resampling)
             guard !samples.isEmpty else {
                 problem = String(localized: "The recording could not be transcribed")
                 logger.error("No samples after resampling \(recording.samples.count, privacy: .public) recorded samples")
@@ -907,14 +916,20 @@ final class PushToTalkController {
                 return
             }
             let raw = try await transcription.transcribe(samples, vocabulary: Vocabulary.forModel(vocabulary), audioSeconds: recording.duration)
+            timings.lap(.recognition)
             var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            // The text as heard, before the filler rule, for the cleanup gate: a filler
+            // cue the rule removed still asks for the model.
             let heard = text
+            timings.lap(.transcriptGuard)
             if removesFillerWords {
                 text = FillerRules.removingFillers(from: text)
             }
+            timings.lap(.fillers)
             if writesNumbersAsDigits {
                 text = NumberRules.writingNumbersAsDigits(in: text)
             }
+            timings.lap(.numbers)
             // The user's words go in after the rule steps, which learning saw the heard
             // spellings after, so no rule rewrites a user's word, and before the cleanup
             // model, so it sees them.
@@ -923,6 +938,7 @@ final class PushToTalkController {
             if !pairs.isEmpty, !text.isEmpty {
                 (text, replacements) = await Self.replacingWords(in: text, pairs: pairs, vocabulary: vocabulary.map(\.text))
             }
+            timings.lap(.wordReplacement)
             guard !text.isEmpty else {
                 holdMessage = String(localized: "No speech was recognized")
                 logger.notice("No speech recognized in \(recording.duration, privacy: .public) s of audio")
@@ -933,11 +949,24 @@ final class PushToTalkController {
             // started to load is waited for, a bounded time.
             let ruled = text
             let translated = await translate(text, translating)
+            timings.lap(.translation)
             if let translated {
                 // In place of the cleanup step, since the translation prompt cleans up too.
                 text = translated.text
-            } else if CleanupStep.isWorthCleaning(text), CleanupStep.hasWorkForModel(text, heard: heard), await cleanup.waitUntilLoaded() {
-                text = await CleanupStep.run(text, complete: cleanup.complete).text
+            } else if CleanupStep.isWorthCleaning(text) {
+                if CleanupStep.hasWorkForModel(text, heard: heard) {
+                    let loaded = await cleanup.waitUntilLoaded()
+                    timings.lap(.cleanupWait)
+                    if loaded {
+                        text = await CleanupStep.run(text, complete: cleanup.complete).text
+                        timings.lap(.cleanup)
+                    }
+                } else {
+                    // The gate found no filler or correction cue, so the model is skipped.
+                    // The check still ends the cleanup step, so its time is not counted
+                    // as part of the paste.
+                    timings.lap(.cleanup)
+                }
             }
             let isTranslation = translated?.isTranslation == true
             if isTranslation {
@@ -953,9 +982,12 @@ final class PushToTalkController {
             }
             switch await insert(text) {
             case .pasted:
+                timings.lap(.paste)
+                let pasted = timings
                 // Notice rather than info, so the timing stays in the log store for later
                 // checks. Numbers only.
-                logger.notice("Release to paste took \(released.duration(to: .now), privacy: .public) for \(recording.duration, privacy: .public) s of audio")
+                logger.notice("Release to paste took \(pasted.total, privacy: .public) for \(recording.duration, privacy: .public) s of audio: \(pasted.summary, privacy: .public)")
+                onTimings(pasted)
                 // The words are in the text before translation.
                 markVocabularyUsed(in: isTranslation ? originalText ?? text : text)
                 // Orra never learns from a translated paste: a fix of the translation is no

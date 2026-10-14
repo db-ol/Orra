@@ -332,6 +332,47 @@ Build and test commands, run in the repository root:
     too long pastes the text untranslated with the notice and is waited for once only,
     and turning cleanup off while translation is on keeps the model, while turning off the
     last one ends the wait and unloads.
+  - DictationTimingsTests, added on 2026-10-13, checks that DictationTimings adds up each
+    step as the time since the one before, and that PushToTalkController reports every
+    step once for a pasted dictation and nothing for one that pastes nothing.
+  - LatencyMeasurementTests measures each step from the release of the talk key to the
+    paste with the installed speech and cleanup models, only with
+    TEST_RUNNER_ORRA_LATENCY=1, in a Release build. It drives PushToTalkController with a
+    stand in microphone that returns a clip at 48 kHz, the real release tail, the real
+    models, the rules, CleanupStep and a real TextInserter on a private pasteboard that
+    builds the Command V events without posting them. Each clip runs with cleanup off and
+    on. A second test splits one speech model pass into mel features, audio encoder and
+    text decoder. The report holds durations and token counts only. Clips: synthetic
+    dictations made with macOS say into 16 kHz WAV files, short, mid and long, in
+    Chinese, English and mixed speech, plus three clips of each short and mid stratum of
+    the speech corpus:
+
+        TEST_RUNNER_ORRA_LATENCY=1 TEST_RUNNER_ORRA_LATENCY_CLIPS=<folder of say clips> TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=<corpus folder> TEST_RUNNER_ORRA_LATENCY_REPORT=<report file> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/LatencyMeasurementTests
+
+    A clip is made with, for example,
+    `say -v Tingting -o zh_short_1.wav --data-format=LEI16@16000 "明天下午三点开会。"`, and
+    its file name starts with the language and the length, as in zh_short_1.wav. The app's
+    log line "Release to paste took" lists the same steps for every real dictation, in
+    milliseconds. One run on 2026-10-13 on the M5 Pro, 28 clips (13 say clips and 15
+    corpus clips, 1.9 to 40.4 s of audio), two rounds, 56 dictations each way, in ms:
+
+    | Step | Off median | Off p90 | On median | On p90 |
+    |---|---|---|---|---|
+    | releaseTail | 151 | 152 | 151 | 152 |
+    | recognition | 303 | 973 | 310 | 978 |
+    | cleanup | 0 | 0 | 278 | 945 |
+    | of it prefill | | | 69 | 102 |
+    | of it generation | | | 242 | 849 |
+    | paste | 0.7 | 0.8 | 0.4 | 0.5 |
+    | total | 459 | 1131 | 790 | 1758 |
+
+    Every other step stayed under 5 ms at p90. The cleanup model read a median 62 prompt
+    tokens after the 1143 cached prefix tokens and generated a median 21 tokens (p90 62,
+    max 104) at 80.7 tokens per second (81.5 over all 1440 tokens). The two runs of the
+    508 character English clip skipped cleanup as too long. A speech model pass split
+    into 0.3 % mel features, 12.5 % audio encoder and 87.2 % text decoder, so token by
+    token decoding in both models is where the time goes, and the 150 ms release tail is
+    the next largest step.
   - CleanupIdleUnloadMeasurementTests measures the idle unload with the real cleanup
     model, only with TEST_RUNNER_ORRA_CLEANUP_IDLE_MEASURE=1, in a Release build:
 
