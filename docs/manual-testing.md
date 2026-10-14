@@ -351,9 +351,28 @@ Build and test commands, run in the repository root:
 
     A clip is made with, for example,
     `say -v Tingting -o zh_short_1.wav --data-format=LEI16@16000 "明天下午三点开会。"`, and
-    its file name starts with the language and the length, as in zh_short_1.wav. Not run
-    yet in Release: the first run waits for the numbers. The app's log line "Release to
-    paste took" lists the same steps for every real dictation, in milliseconds.
+    its file name starts with the language and the length, as in zh_short_1.wav. The app's
+    log line "Release to paste took" lists the same steps for every real dictation, in
+    milliseconds. One run on 2026-10-13 on the M5 Pro, 28 clips (13 say clips and 15
+    corpus clips, 1.9 to 40.4 s of audio), two rounds, 56 dictations each way, in ms:
+
+    | Step | Off median | Off p90 | On median | On p90 |
+    |---|---|---|---|---|
+    | releaseTail | 151 | 152 | 151 | 152 |
+    | recognition | 303 | 973 | 310 | 978 |
+    | cleanup | 0 | 0 | 278 | 945 |
+    | of it prefill | | | 69 | 102 |
+    | of it generation | | | 242 | 849 |
+    | paste | 0.7 | 0.8 | 0.4 | 0.5 |
+    | total | 459 | 1131 | 790 | 1758 |
+
+    Every other step stayed under 5 ms at p90. The cleanup model read a median 62 prompt
+    tokens after the 1143 cached prefix tokens and generated a median 21 tokens (p90 62,
+    max 104) at 80.7 tokens per second (81.5 over all 1440 tokens). The two runs of the
+    508 character English clip skipped cleanup as too long. A speech model pass split
+    into 0.3 % mel features, 12.5 % audio encoder and 87.2 % text decoder, so token by
+    token decoding in both models is where the time goes, and the 150 ms release tail is
+    the next largest step.
   - CleanupIdleUnloadMeasurementTests measures the idle unload with the real cleanup
     model, only with TEST_RUNNER_ORRA_CLEANUP_IDLE_MEASURE=1, in a Release build:
 
