@@ -31,7 +31,8 @@ import Testing
 /// `speechModelParts` splits one pass of the speech model into the mel features, the audio
 /// encoder and the text decoder, to see what could run while the key is held.
 ///
-/// The report holds durations and counts only, never text.
+/// The report holds durations and counts only, never text. With TEST_RUNNER_ORRA_GATE_OUT
+/// set, `dictations` also writes latency.json there for the release gate.
 @Suite(.serialized, .enabled(if: LatencyMeasurement.isRequested))
 @MainActor
 struct LatencyMeasurementTests {
@@ -151,6 +152,7 @@ struct LatencyMeasurementTests {
         if let path = LatencyMeasurement.environment["ORRA_LATENCY_REPORT"] {
             try report.write(toFile: path, atomically: true, encoding: .utf8)
         }
+        try GateOutput.write(LatencyReport(runs: runs, speechLoad: speechLoad, clips: clips).gateDocument, named: "latency")
     }
 
     /// One pass of the speech model in three parts: the mel features, the audio encoder,
@@ -406,6 +408,31 @@ struct LatencyReport {
             out += "| \(clip.name) | \(M.f(clip.recording.duration, 1)) | \(mine.first?.passes.count ?? 0) | \(M.f(M.percentile(off, 0.5), 0)) | \(M.f(M.percentile(on, 0.5), 0)) | \(tokens) |\n"
         }
         return out
+    }
+
+    /// The median and p90 of every step and of the total, with cleanup off and on, and
+    /// each clip's median total, in ms, for the release gate.
+    var gateDocument: [String: Any] {
+        var modes: [String: Any] = [:]
+        for cleanupOn in [false, true] {
+            let selected = runs.filter { $0.cleanupOn == cleanupOn }
+            var steps: [String: Any] = [:]
+            for step in DictationTimings.Step.allCases {
+                let values = selected.map { M.ms($0.timings.durations[step] ?? .zero) }
+                steps[step.rawValue] = ["median": M.percentile(values, 0.5), "p90": M.percentile(values, 0.9)]
+            }
+            let totals = selected.map { M.ms($0.timings.total) }
+            steps["total"] = ["median": M.percentile(totals, 0.5), "p90": M.percentile(totals, 0.9)]
+            var perClip: [String: Any] = [:]
+            for clip in clips {
+                let values = selected.filter { $0.clip.name == clip.name }.map { M.ms($0.timings.total) }
+                if !values.isEmpty {
+                    perClip[clip.name] = ["audio_seconds": clip.recording.duration, "median": M.percentile(values, 0.5)]
+                }
+            }
+            modes[cleanupOn ? "cleanup_on" : "cleanup_off"] = ["dictations": selected.count, "steps": steps, "clips": perClip]
+        }
+        return ["suite": "latency", "rounds": M.rounds, "speech_load_ms": M.ms(speechLoad), "modes": modes]
     }
 
     private func table(_ runs: [LatencyMeasurementTests.Run]) -> String {
