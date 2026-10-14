@@ -208,6 +208,8 @@ final class PushToTalkController {
     @ObservationIgnored private var keyRecorder = KeyRecorder()
     @ObservationIgnored private let saveMicrophone: (MicrophoneChoice?) -> Void
     @ObservationIgnored private let saveVocabulary: ([VocabularyWord]) -> Void
+    /// Names the model gets after the user's words while there is room, see BuiltinTerms.
+    @ObservationIgnored private let builtinTerms: [String]
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
     @ObservationIgnored private let saveWritesNumbersAsDigits: (Bool) -> Void
@@ -251,6 +253,8 @@ final class PushToTalkController {
     ///   - saveMicrophone: Saves the choice after the user changes it.
     ///   - vocabulary: The user's words and names, as saved.
     ///   - saveVocabulary: Saves the words after they change.
+    ///   - builtinTerms: Names the speech model gets after the user's words, see
+    ///     BuiltinTerms. The app passes `BuiltinTerms.common`, tests none by default.
     ///   - removesFillerWords: Whether fillers are removed, as saved.
     ///   - saveRemovesFillerWords: Saves the choice after the user changes it.
     ///   - writesNumbersAsDigits: Whether spoken numbers become digits, as saved.
@@ -282,6 +286,7 @@ final class PushToTalkController {
         saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in },
         vocabulary: [VocabularyWord] = [],
         saveVocabulary: @escaping ([VocabularyWord]) -> Void = { _ in },
+        builtinTerms: [String] = [],
         removesFillerWords: Bool = true,
         saveRemovesFillerWords: @escaping (Bool) -> Void = { _ in },
         writesNumbersAsDigits: Bool = true,
@@ -313,6 +318,7 @@ final class PushToTalkController {
         self.saveMicrophone = saveMicrophone
         self.vocabulary = vocabulary
         self.saveVocabulary = saveVocabulary
+        self.builtinTerms = builtinTerms
         self.removesFillerWords = removesFillerWords
         self.saveRemovesFillerWords = saveRemovesFillerWords
         self.writesNumbersAsDigits = writesNumbersAsDigits
@@ -906,7 +912,7 @@ final class PushToTalkController {
                 logger.notice("The microphone delivered no sound for \(recording.duration, privacy: .public) s, lid closed: \(situation.lidClosed, privacy: .public)")
                 return
             }
-            let raw = try await transcription.transcribe(samples, vocabulary: Vocabulary.forModel(vocabulary), audioSeconds: recording.duration)
+            let raw = try await transcription.transcribe(samples, vocabulary: BuiltinTerms.forModel(after: Vocabulary.forModel(vocabulary), from: builtinTerms), audioSeconds: recording.duration)
             var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
             if removesFillerWords {
                 text = FillerRules.removingFillers(from: text)

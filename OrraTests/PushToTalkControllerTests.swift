@@ -1110,6 +1110,33 @@ struct PushToTalkControllerTests {
         #expect(context.split(separator: "\n").map(String.init) == (100..<300).map { "term\($0)" })
     }
 
+    @Test func builtInTermsFollowTheUserWordsWhileThereIsRoom() async throws {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            vocabulary: vocabularyWords("Orra", "chatgpt"),
+            builtinTerms: ["ChatGPT", "Claude", "豆包"]
+        )
+        await controller.loadModel()
+        try await dictate(controller)
+        let context = try #require(speech.receivedContexts.first ?? nil)
+        #expect(context == "Orra\nchatgpt\nClaude\n豆包")
+        // A full vocabulary leaves no room.
+        controller.setVocabulary((0..<300).map { VocabularyWord("term\($0)", added: Date(timeIntervalSince1970: Double($0))) })
+        try await dictate(controller)
+        let full = try #require(speech.receivedContexts.last ?? nil)
+        #expect(full.split(separator: "\n").map(String.init) == (100..<300).map { "term\($0)" })
+        // Without words of the user's there is no context.
+        controller.setVocabulary([])
+        try await dictate(controller)
+        #expect(speech.receivedContexts.last == .some(nil))
+    }
+
     @Test func learningIsNeverRefusedBelowTheSanityCap() {
         let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
         controller.setVocabulary((0..<1_000).map { VocabularyWord("term\($0)", added: .distantPast) })

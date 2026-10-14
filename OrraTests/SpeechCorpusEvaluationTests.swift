@@ -26,6 +26,9 @@ import Testing
 /// TEST_RUNNER_ORRA_SPEECH_MODEL_ID the Hugging Face ID speech-swift reads its size and
 /// bits from (SpeechModel.id by default). TEST_RUNNER_ORRA_SPEECH_EVAL_NAME names the
 /// output file, orra-<model folder>.json by default.
+/// TEST_RUNNER_ORRA_SPEECH_EVAL_VOCAB gives every clip a vocabulary, see
+/// `SpeechCorpus.vocabulary()`, and TEST_RUNNER_ORRA_SPEECH_EVAL_CLIPS the number of clips
+/// another folder in the same format holds, such as the one of Tools/terms-eval.
 ///
 /// The texts go only to that file, never to the log or the test result. The corpus is
 /// public read and conversational speech, not anyone's dictation.
@@ -38,7 +41,8 @@ struct SpeechCorpusEvaluationTests {
         let modelFolder = try #require(SpeechCorpus.modelFolder, "no speech model on this Mac, or TEST_RUNNER_ORRA_SPEECH_MODEL_DIR is not a folder")
         let modelID = SpeechCorpus.environment["ORRA_SPEECH_MODEL_ID"] ?? SpeechModel.id
         let clips = try SpeechCorpus.manifest(in: corpus)
-        #expect(clips.count == 392)
+        #expect(clips.count == Int(SpeechCorpus.environment["ORRA_SPEECH_EVAL_CLIPS"] ?? "") ?? 392)
+        let vocabulary = try SpeechCorpus.vocabulary()
 
         let engine = Qwen3Engine(folder: { modelFolder }, modelID: modelID)
         // Counts the passes LanguageGuard asks for, with Chinese or English as the language.
@@ -70,7 +74,7 @@ struct SpeechCorpusEvaluationTests {
             } else {
                 let started = ContinuousClock.now
                 hintedPasses.count = 0
-                let raw = try await transcription.transcribe(samples, vocabulary: [], audioSeconds: audioSeconds)
+                let raw = try await transcription.transcribe(samples, vocabulary: vocabulary, audioSeconds: audioSeconds)
                 let decodeSeconds = SpeechCorpus.seconds(started.duration(to: .now))
                 let guarded = TranscriptGuard.clean(raw, audioSeconds: audioSeconds)
                 let text = ChineseText.simplified(guarded)
@@ -110,6 +114,7 @@ struct SpeechCorpusEvaluationTests {
             "device": SpeechCorpus.chip(),
             "build": build,
             "load_seconds": loadSeconds,
+            "vocabulary_terms": vocabulary.count,
             "clips": results,
         ]
         let name = SpeechCorpus.environment["ORRA_SPEECH_EVAL_NAME"] ?? "orra-\(modelFolder.lastPathComponent)"
@@ -143,6 +148,17 @@ enum SpeechCorpus {
         guard let path = environment["ORRA_SPEECH_CORPUS_DIR"] else { return nil }
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
         return FileManager.default.fileExists(atPath: url.appendingPathComponent("manifest.jsonl").path) ? url : nil
+    }
+
+    /// The vocabulary every clip gets: none by default. TEST_RUNNER_ORRA_SPEECH_EVAL_VOCAB
+    /// names a file with one term per line, in the order the model gets them, or is
+    /// "builtin" for every built-in term, `BuiltinTerms.all`, at most
+    /// `Vocabulary.modelLimit` of them.
+    static func vocabulary() throws -> [String] {
+        guard let path = environment["ORRA_SPEECH_EVAL_VOCAB"], !path.isEmpty else { return [] }
+        if path == "builtin" { return Array(BuiltinTerms.all.prefix(Vocabulary.modelLimit)) }
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        return Vocabulary.terms(from: try String(contentsOf: url, encoding: .utf8))
     }
 
     static var modelFolder: URL? {

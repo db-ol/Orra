@@ -1,0 +1,84 @@
+{"id": "000_en", "lang": "en", "voice": "Samantha", "reference": "I asked ChatGPT to summarize the meeting notes.", "terms": ["ChatGPT"], "control": false}
+{"id": "001_en", "lang": "en", "voice": "Daniel", "reference": "Claude Code fixed the failing test in two minutes.", "terms": ["Claude Code"], "control": false}
+{"id": "002_en", "lang": "en", "voice": "Reed (English (US))", "reference": "We switched the team from Copilot to Cursor last month.", "terms": ["Copilot", "Cursor"], "control": false}
+{"id": "003_en", "lang": "en", "voice": "Flo (English (US))", "reference": "DeepSeek released a new reasoning model this week.", "terms": ["DeepSeek"], "control": false}
+{"id": "004_en", "lang": "en", "voice": "Samantha", "reference": "Gemini can read the whole PDF at once.", "terms": ["Gemini"], "control": false}
+{"id": "005_en", "lang": "en", "voice": "Daniel", "reference": "Can you deploy the preview on Vercel and connect it to Supabase?", "terms": ["Vercel", "Supabase"], "control": false}
+{"id": "006_en", "lang": "en", "voice": "Reed (English (US))", "reference": "The cluster runs on Kubernetes with three nodes.", "terms": ["Kubernetes"], "control": false}
+{"id": "007_en", "lang": "en", "voice": "Flo (English (US))", "reference": "Rewrite the training loop in PyTorch.", "terms": ["PyTorch"], "control": false}
+{"id": "008_en", "lang": "en", "voice": "Samantha", "reference": "The front end is written in TypeScript with React.", "terms": ["TypeScript", "React"], "control": false}
+{"id": "009_en", "lang": "en", "voice": "Daniel", "reference": "Open the project in Xcode and preview the SwiftUI view.", "terms": ["Xcode", "SwiftUI"], "control": false}
+{"id": "010_en", "lang": "en", "voice": "Reed (English (US))", "reference": "Download the weights from Hugging Face.", "terms": ["Hugging Face"], "control": false}
+{"id": "011_en", "lang": "en", "voice": "Flo (English (US))", "reference": "The server speaks MCP so any agent can call it.", "terms": ["MCP"], "control": false}
+{"id": "012_en", "lang": "en", "voice": "Samantha", "reference": "Every LLM in the benchmark failed the same question.", "terms": ["LLM"], "control": false}
+{"id": "013_en", "lang": "en", "voice": "Daniel", "reference": "Post the design in Figma and share the link in Slack.", "terms": ["Figma", "Slack"], "control": false}
+{"id": "014_en", "lang": "en", "voice": "Reed (English (US))", "reference": "I keep my reading list in Notion.", "terms": ["Notion"], "control": false}
+{"id": "015_en", "lang": "en", "voice": "Flo (English (US))", "reference": "Push the branch to GitHub before lunch.", "terms": ["GitHub"], "control": false}
+{"id": "016_en", "lang": "en", "voice": "Samantha", "reference": "My new MacBook Pro runs the model in under a second.", "terms": ["MacBook Pro"], "control": false}
+{"id": "017_en", "lang": "en", "voice": "Daniel", "reference": "Test it on an iPhone and an iPad before the release.", "terms": ["iPhone", "iPad"], "control": false}
+{"id": "018_en", "lang": "en", "voice": "Reed (English (US))", "reference": "Anthropic and OpenAI both shipped new models in the same week.", "terms": ["Anthropic", "OpenAI"], "control": false}
+{"id": "019_en", "lang": "en", "voice": "Flo (English (US))", "reference": "Run Qwen3.5 locally with Ollama.", "terms": ["Qwen3.5", "Ollama"], "control": false, "say": "Run Kwen three point five locally with Oh llama."}
+{"id": "020_en", "lang": "en", "voice": "Samantha", "reference": "GPT-5 wrote the first draft and I edited it.", "terms": ["GPT-5"], "control": false, "say": "G P T five wrote the first draft and I edited it."}
+{"id": "021_en", "lang": "en", "voice": "Daniel", "reference": "We store sessions in Redis and orders in PostgreSQL.", "terms": ["Redis", "PostgreSQL"], "control": false, "say": "We store sessions in Redis and orders in Postgres Q L."}
+{"id": "022_en", "lang": "en", "voice": "Reed (English (US))", "reference": "The demo runs on Docker and Cloudflare.", "terms": ["Docker", "Cloudflare"], "control": false}
+{"id": "023_en", "lang": "en", "voice": "Flo (English (US))", "reference": "I watched a talk about LangChain on YouTube.", "terms": ["LangChain", "YouTube"], "control": false}
+{"id": "024_zh", "lang": "zh", "voice": "Tingting", "reference": "我用豆包写了一份周报。", "terms": ["豆包"], "control": false}
+{"id": "025_zh", "lang": "zh", "voice": "Eddy (Chinese (China mainland))", "reference": "通义千问的新版本支持更长的上下文。", "terms": ["通义千问"], "control": false}
+{"id": "026_zh", "lang": "zh", "voice": "Flo (Chinese (China mainland))", "reference": "文心一言今天更新了。", "terms": ["文心一言"], "control": false}
+{"id": "027_zh", "lang": "zh", "voice": "Reed (Chinese (China mainland))", "reference": "这家店在小红书上很火。", "terms": ["小红书"], "control": false}
+{"id": "028_zh", "lang": "zh", "voice": "Tingting", "reference": "她在抖音上发了一个视频。", "terms": ["抖音"], "control": false}
+{"id": "029_zh", "lang": "zh", "voice": "Eddy (Chinese (China mainland))", "reference": "会议链接我发到飞书群里了。", "terms": ["飞书"], "control": false}
+{"id": "030_zh", "lang": "zh", "voice": "Flo (Chinese (China mainland))", "reference": "请假要在钉钉上提交申请。", "terms": ["钉钉"], "control": false}
+{"id": "031_zh", "lang": "zh", "voice": "Reed (Chinese (China mainland))", "reference": "你加我微信吧。", "terms": ["微信"], "control": false}
+{"id": "032_zh", "lang": "zh", "voice": "Tingting", "reference": "这个功能要等鸿蒙的新版本。", "terms": ["鸿蒙"], "control": false}
+{"id": "033_zh", "lang": "zh", "voice": "Eddy (Chinese (China mainland))", "reference": "我在哔哩哔哩上看了那场发布会。", "terms": ["哔哩哔哩"], "control": false}
+{"id": "034_zh", "lang": "zh", "voice": "Flo (Chinese (China mainland))", "reference": "我们用腾讯会议开周会。", "terms": ["腾讯会议"], "control": false}
+{"id": "035_zh", "lang": "zh", "voice": "Reed (Chinese (China mainland))", "reference": "他在知乎上写了一篇长文。", "terms": ["知乎"], "control": false}
+{"id": "036_zh", "lang": "zh", "voice": "Tingting", "reference": "模型放在阿里云上，接口走火山引擎。", "terms": ["阿里云", "火山引擎"], "control": false}
+{"id": "037_zh", "lang": "zh", "voice": "Eddy (Chinese (China mainland))", "reference": "月之暗面和智谱都发布了新模型。", "terms": ["月之暗面", "智谱"], "control": false}
+{"id": "038_zh", "lang": "zh", "voice": "Flo (Chinese (China mainland))", "reference": "我用支付宝付过款了。", "terms": ["支付宝"], "control": false}
+{"id": "039_zh", "lang": "zh", "voice": "Reed (Chinese (China mainland))", "reference": "这个视频是用剪映剪的。", "terms": ["剪映"], "control": false}
+{"id": "040_zh", "lang": "zh", "voice": "Tingting", "reference": "外卖我在美团上点了。", "terms": ["美团"], "control": false}
+{"id": "041_zh", "lang": "zh", "voice": "Eddy (Chinese (China mainland))", "reference": "我在拼多多和京东上比了价格。", "terms": ["拼多多", "京东"], "control": false}
+{"id": "042_zh", "lang": "zh", "voice": "Flo (Chinese (China mainland))", "reference": "可灵和即梦都能生成视频。", "terms": ["可灵", "即梦"], "control": false}
+{"id": "043_zh", "lang": "zh", "voice": "Reed (Chinese (China mainland))", "reference": "腾讯元宝可以直接搜索公众号文章。", "terms": ["腾讯元宝"], "control": false}
+{"id": "044_mixed", "lang": "mixed", "voice": "Tingting", "reference": "我昨天用Claude写了一个脚本。", "terms": ["Claude"], "control": false}
+{"id": "045_mixed", "lang": "mixed", "voice": "Eddy (Chinese (China mainland))", "reference": "你试试Cursor的新功能。", "terms": ["Cursor"], "control": false}
+{"id": "046_mixed", "lang": "mixed", "voice": "Flo (Chinese (China mainland))", "reference": "这个任务交给DeepSeek跑一下。", "terms": ["DeepSeek"], "control": false}
+{"id": "047_mixed", "lang": "mixed", "voice": "Reed (Chinese (China mainland))", "reference": "我们把服务部署到Kubernetes上了。", "terms": ["Kubernetes"], "control": false}
+{"id": "048_mixed", "lang": "mixed", "voice": "Tingting", "reference": "数据处理用PyTorch重写一下。", "terms": ["PyTorch"], "control": false}
+{"id": "049_mixed", "lang": "mixed", "voice": "Eddy (Chinese (China mainland))", "reference": "前端统一改成TypeScript。", "terms": ["TypeScript"], "control": false}
+{"id": "050_mixed", "lang": "mixed", "voice": "Flo (Chinese (China mainland))", "reference": "这个页面在Figma里还没改完。", "terms": ["Figma"], "control": false}
+{"id": "051_mixed", "lang": "mixed", "voice": "Reed (Chinese (China mainland))", "reference": "会议纪要我放在Notion里了。", "terms": ["Notion"], "control": false}
+{"id": "052_mixed", "lang": "mixed", "voice": "Tingting", "reference": "代码已经推到GitHub上了。", "terms": ["GitHub"], "control": false}
+{"id": "053_mixed", "lang": "mixed", "voice": "Eddy (Chinese (China mainland))", "reference": "我的MacBook装不了这个版本的Xcode。", "terms": ["MacBook", "Xcode"], "control": false}
+{"id": "054_mixed", "lang": "mixed", "voice": "Flo (Chinese (China mainland))", "reference": "新买的iPhone拍照很清楚。", "terms": ["iPhone"], "control": false}
+{"id": "055_mixed", "lang": "mixed", "voice": "Reed (Chinese (China mainland))", "reference": "模型可以从Hugging Face或者ModelScope下载。", "terms": ["Hugging Face", "ModelScope"], "control": false}
+{"id": "056_mixed", "lang": "mixed", "voice": "Tingting", "reference": "这个工具支持MCP协议。", "terms": ["MCP"], "control": false}
+{"id": "057_mixed", "lang": "mixed", "voice": "Eddy (Chinese (China mainland))", "reference": "大家都在讨论LLM的推理成本。", "terms": ["LLM"], "control": false}
+{"id": "058_mixed", "lang": "mixed", "voice": "Flo (Chinese (China mainland))", "reference": "Gemini和ChatGPT哪个更好用？", "terms": ["Gemini", "ChatGPT"], "control": false}
+{"id": "059_mixed", "lang": "mixed", "voice": "Reed (Chinese (China mainland))", "reference": "用Copilot写单元测试很快。", "terms": ["Copilot"], "control": false}
+{"id": "060_mixed", "lang": "mixed", "voice": "Tingting", "reference": "Qwen3.5的小模型在本地跑得很快。", "terms": ["Qwen3.5"], "control": false, "say": "Kwen三点五的小模型在本地跑得很快。"}
+{"id": "061_mixed", "lang": "mixed", "voice": "Eddy (Chinese (China mainland))", "reference": "我们在Slack上讨论过这个问题。", "terms": ["Slack"], "control": false}
+{"id": "062_mixed", "lang": "mixed", "voice": "Flo (Chinese (China mainland))", "reference": "后端放在Supabase上，前端放在Vercel上。", "terms": ["Supabase", "Vercel"], "control": false}
+{"id": "063_mixed", "lang": "mixed", "voice": "Reed (Chinese (China mainland))", "reference": "用SwiftUI写界面比以前快多了。", "terms": ["SwiftUI"], "control": false}
+{"id": "064_control_en", "lang": "en", "voice": "Samantha", "reference": "Move the cursor to the end of the line.", "terms": [], "control": true}
+{"id": "065_control_en", "lang": "en", "voice": "Daniel", "reference": "There is some slack in the schedule this week.", "terms": [], "control": true}
+{"id": "066_control_en", "lang": "en", "voice": "Reed (English (US))", "reference": "I have a notion that the train will be late.", "terms": [], "control": true}
+{"id": "067_control_en", "lang": "en", "voice": "Flo (English (US))", "reference": "She was born under the sign of Gemini.", "terms": [], "control": true}
+{"id": "068_control_en", "lang": "en", "voice": "Samantha", "reference": "The cat clawed the sofa again.", "terms": [], "control": true}
+{"id": "069_control_en", "lang": "en", "voice": "Daniel", "reference": "We had dinner at a small restaurant near the river.", "terms": [], "control": true}
+{"id": "070_control_en", "lang": "en", "voice": "Reed (English (US))", "reference": "Please send me the report before Friday.", "terms": [], "control": true}
+{"id": "071_control_en", "lang": "en", "voice": "Flo (English (US))", "reference": "The weather was cold and the roads were empty.", "terms": [], "control": true}
+{"id": "072_control_zh", "lang": "zh", "voice": "Tingting", "reference": "今天下午三点开会。", "terms": [], "control": true}
+{"id": "073_control_zh", "lang": "zh", "voice": "Eddy (Chinese (China mainland))", "reference": "我把文件放在桌子上了。", "terms": [], "control": true}
+{"id": "074_control_zh", "lang": "zh", "voice": "Flo (Chinese (China mainland))", "reference": "这本书我已经看完了。", "terms": [], "control": true}
+{"id": "075_control_zh", "lang": "zh", "voice": "Reed (Chinese (China mainland))", "reference": "明天早上记得带伞。", "terms": [], "control": true}
+{"id": "076_control_zh", "lang": "zh", "voice": "Tingting", "reference": "我们晚上去吃火锅吧。", "terms": [], "control": true}
+{"id": "077_control_zh", "lang": "zh", "voice": "Eddy (Chinese (China mainland))", "reference": "这个问题我们下周再讨论。", "terms": [], "control": true}
+{"id": "078_control_mixed", "lang": "mixed", "voice": "Tingting", "reference": "这个PPT明天要交。", "terms": [], "control": true}
+{"id": "079_control_mixed", "lang": "mixed", "voice": "Eddy (Chinese (China mainland))", "reference": "你把这个bug修一下。", "terms": [], "control": true}
+{"id": "080_control_mixed", "lang": "mixed", "voice": "Flo (Chinese (China mainland))", "reference": "我们下午开个meeting。", "terms": [], "control": true}
+{"id": "081_control_mixed", "lang": "mixed", "voice": "Reed (Chinese (China mainland))", "reference": "这个deadline太紧了。", "terms": [], "control": true}
+{"id": "082_control_mixed", "lang": "mixed", "voice": "Tingting", "reference": "帮我review一下代码。", "terms": [], "control": true}
+{"id": "083_control_mixed", "lang": "mixed", "voice": "Eddy (Chinese (China mainland))", "reference": "这个feature先不做了。", "terms": [], "control": true}

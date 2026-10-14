@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         saveMicrophone: { MicrophonePreference.save($0) },
         vocabulary: VocabularyPreference.load(),
         saveVocabulary: { VocabularyPreference.saveInBackground($0) },
+        builtinTerms: BuiltinTerms.common,
         removesFillerWords: FillerPreference.load(),
         saveRemovesFillerWords: { FillerPreference.save($0) },
         writesNumbersAsDigits: NumberPreference.load(),
