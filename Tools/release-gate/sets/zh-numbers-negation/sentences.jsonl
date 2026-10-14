@@ -1,0 +1,60 @@
+{"id": "num01", "language": "zh", "say": "二零二六年十月十四号我们发布新版本。", "reference": "2026年10月14号我们发布新版本。", "expect_terms": ["2026年", "10月", "14号"], "forbid_terms": []}
+{"id": "num02", "language": "zh", "say": "他是一九九八年出生的。", "reference": "他是1998年出生的。", "expect_terms": ["1998年"], "forbid_terms": []}
+{"id": "num03", "language": "zh", "say": "这个项目从二零一九年就开始做了。", "reference": "这个项目从2019年就开始做了。", "expect_terms": ["2019年"], "forbid_terms": []}
+{"id": "num04", "language": "zh", "say": "不是三万，是三万五。", "reference": "不是三万，是三万五。", "expect_terms": ["不是三万", "三万五"], "forbid_terms": []}
+{"id": "num05", "language": "zh", "say": "预算不是三万块，是三万五千块。", "reference": "预算不是3万块，是3.5万块。", "expect_terms": ["3万", "3.5万", "不是"], "forbid_terms": []}
+{"id": "num06", "language": "zh", "say": "这台电脑花了一万两千元。", "reference": "这台电脑花了1.2万元。", "expect_terms": ["1.2万"], "forbid_terms": []}
+{"id": "num07", "language": "zh", "say": "午饭一共八十五块钱。", "reference": "午饭一共85块钱。", "expect_terms": ["85块"], "forbid_terms": []}
+{"id": "num08", "language": "zh", "say": "房租每个月四千五百元。", "reference": "房租每个月4500元。", "expect_terms": ["4500元"], "forbid_terms": []}
+{"id": "num09", "language": "zh", "say": "他借了我两千块，一直没有还。", "reference": "他借了我2000块，一直没有还。", "expect_terms": ["2000块", "没有"], "forbid_terms": []}
+{"id": "num10", "language": "zh", "say": "合同金额是一百二十万元。", "reference": "合同金额是120万元。", "expect_terms": ["120万"], "forbid_terms": []}
+{"id": "num11", "language": "zh", "say": "转化率提高了百分之十二。", "reference": "转化率提高了12%。", "expect_terms": ["12%"], "forbid_terms": []}
+{"id": "num12", "language": "zh", "say": "电量只剩百分之五了。", "reference": "电量只剩5%了。", "expect_terms": ["5%"], "forbid_terms": []}
+{"id": "num13", "language": "zh", "say": "准确率是百分之九十八点五。", "reference": "准确率是98.5%。", "expect_terms": ["98.5%"], "forbid_terms": []}
+{"id": "num14", "language": "zh", "say": "不是百分之三十，是百分之三十五。", "reference": "不是30%，是35%。", "expect_terms": ["30%", "35%", "不是"], "forbid_terms": []}
+{"id": "num15", "language": "zh", "say": "会议改到下午三点。", "reference": "会议改到下午3点。", "expect_terms": ["3点"], "forbid_terms": []}
+{"id": "num16", "language": "zh", "say": "明天早上八点半出发。", "reference": "明天早上8点半出发。", "expect_terms": ["8点"], "forbid_terms": []}
+{"id": "num17", "language": "zh", "say": "我们三点二十分在门口见。", "reference": "我们3点20分在门口见。", "expect_terms": ["3点", "20分"], "forbid_terms": []}
+{"id": "num18", "language": "zh", "say": "晚上十点以后别给我打电话。", "reference": "晚上10点以后别给我打电话。", "expect_terms": ["10点", "别"], "forbid_terms": []}
+{"id": "num19", "language": "zh", "say": "航班是上午十一点四十五分起飞。", "reference": "航班是上午11点45分起飞。", "expect_terms": ["11点", "45分"], "forbid_terms": []}
+{"id": "num20", "language": "zh", "say": "我的手机号是幺三八零零幺三八零零零。", "reference": "我的手机号是13800138000。", "expect_terms": ["13800138000"], "forbid_terms": []}
+{"id": "num21", "language": "zh", "say": "验证码是四七二九一六。", "reference": "验证码是472916。", "expect_terms": ["472916"], "forbid_terms": []}
+{"id": "num22", "language": "zh", "say": "我住在八零六房间。", "reference": "我住在806房间。", "expect_terms": ["806"], "forbid_terms": []}
+{"id": "num23", "language": "zh", "say": "请拨打幺零零八六。", "reference": "请拨打10086。", "expect_terms": ["10086"], "forbid_terms": []}
+{"id": "num24", "language": "zh", "say": "订单号是二零二六幺零幺四零零七。", "reference": "订单号是20261014007。", "expect_terms": ["20261014007"], "forbid_terms": []}
+{"id": "num25", "language": "zh", "say": "他考了第一名。", "reference": "他考了第一名。", "expect_terms": ["第一"], "forbid_terms": []}
+{"id": "num26", "language": "zh", "say": "这是第三次提醒你了。", "reference": "这是第三次提醒你了。", "expect_terms": ["第三"], "forbid_terms": []}
+{"id": "num27", "language": "zh", "say": "我们排在第二十五位。", "reference": "我们排在第二十五位。", "expect_terms": ["第二十五"], "forbid_terms": []}
+{"id": "num28", "language": "zh", "say": "第一季度的收入没有达到目标。", "reference": "第一季度的收入没有达到目标。", "expect_terms": ["第一", "没有"], "forbid_terms": []}
+{"id": "num29", "language": "zh", "say": "我不是不想去，是没有时间。", "reference": "我不是不想去，是没有时间。", "expect_terms": ["不是", "没有"], "forbid_terms": []}
+{"id": "num30", "language": "zh", "say": "别把文件发给他。", "reference": "别把文件发给他。", "expect_terms": ["别"], "forbid_terms": []}
+{"id": "num31", "language": "zh", "say": "不要在周五下午上线。", "reference": "不要在周五下午上线。", "expect_terms": ["不要"], "forbid_terms": []}
+{"id": "num32", "language": "zh", "say": "我没有说过这句话。", "reference": "我没有说过这句话。", "expect_terms": ["没有"], "forbid_terms": []}
+{"id": "num33", "language": "zh", "say": "这个功能不是我写的，是他写的。", "reference": "这个功能不是我写的，是他写的。", "expect_terms": ["不是"], "forbid_terms": []}
+{"id": "num34", "language": "zh", "say": "别忘了下午四点开会。", "reference": "别忘了下午4点开会。", "expect_terms": ["4点", "别"], "forbid_terms": []}
+{"id": "num35", "language": "zh", "say": "花费不要超过五百块钱。", "reference": "花费不要超过500块钱。", "expect_terms": ["500块", "不要"], "forbid_terms": []}
+{"id": "num36", "language": "zh", "say": "这里没有人超过三十岁。", "reference": "这里没有人超过30岁。", "expect_terms": ["30岁", "没有"], "forbid_terms": []}
+{"id": "num37", "language": "zh", "say": "他跑了十公里，中间没有休息。", "reference": "他跑了10公里，中间没有休息。", "expect_terms": ["10公里", "没有"], "forbid_terms": []}
+{"id": "num38", "language": "mixed", "say": "这个文件有三点五GB。", "reference": "这个文件有3.5GB。", "expect_terms": ["3.5GB"], "forbid_terms": []}
+{"id": "num39", "language": "mixed", "say": "这台 MacBook 有十六GB内存。", "reference": "这台 MacBook 有16GB内存。", "expect_terms": ["16GB"], "forbid_terms": []}
+{"id": "num40", "language": "mixed", "say": "升级到 macOS 十五点一。", "reference": "升级到 macOS 15.1。", "expect_terms": ["15.1"], "forbid_terms": []}
+{"id": "num41", "language": "mixed", "say": "新的 M五 芯片快了百分之二十。", "reference": "新的 M5 芯片快了20%。", "expect_terms": ["M5", "20%"], "forbid_terms": []}
+{"id": "num42", "language": "mixed", "say": "这部 iPhone 卖八千九百九十九元。", "reference": "这部 iPhone 卖8999元。", "expect_terms": ["8999元"], "forbid_terms": []}
+{"id": "num43", "language": "mixed", "say": "二零二五年八月发布了 GPT 五。", "reference": "2025年8月发布了 GPT 5。", "expect_terms": ["2025年", "8月", "GPT 5"], "forbid_terms": []}
+{"id": "num44", "language": "mixed", "say": "我们的 API 每秒能处理两千个请求。", "reference": "我们的 API 每秒能处理两千个请求。", "expect_terms": ["两千个"], "forbid_terms": []}
+{"id": "num45", "language": "mixed", "say": "这个 PR 改了三百多行代码。", "reference": "这个 PR 改了三百多行代码。", "expect_terms": ["三百多"], "forbid_terms": []}
+{"id": "num46", "language": "mixed", "say": "第二个 bug 还没有修。", "reference": "第二个 bug 还没有修。", "expect_terms": ["第二", "没有"], "forbid_terms": []}
+{"id": "num47", "language": "mixed", "say": "服务器延迟不是两百毫秒，是二十毫秒。", "reference": "服务器延迟不是两百毫秒，是二十毫秒。", "expect_terms": ["两百毫秒", "二十毫秒", "不是"], "forbid_terms": []}
+{"id": "num48", "language": "zh", "say": "下周一上午九点交付。", "reference": "下周一上午9点交付。", "expect_terms": ["9点"], "forbid_terms": []}
+{"id": "num49", "language": "zh", "say": "一共来了二十个人。", "reference": "一共来了二十个人。", "expect_terms": ["二十个"], "forbid_terms": []}
+{"id": "num50", "language": "zh", "say": "价格下降了百分之十五，不是百分之五十。", "reference": "价格下降了15%，不是50%。", "expect_terms": ["15%", "50%", "不是"], "forbid_terms": []}
+{"id": "num51", "language": "mixed", "say": "别在晚上十一点以后部署 server。", "reference": "别在晚上11点以后部署 server。", "expect_terms": ["11点", "别"], "forbid_terms": []}
+{"id": "num52", "language": "zh", "say": "不要买那个三千块的键盘。", "reference": "不要买那个3000块的键盘。", "expect_terms": ["3000块", "不要"], "forbid_terms": []}
+{"id": "num53", "language": "zh", "say": "这次没有涨价，还是九十九元。", "reference": "这次没有涨价，还是99元。", "expect_terms": ["99元", "没有"], "forbid_terms": []}
+{"id": "num54", "language": "zh", "say": "我们是二零二四年三月一号上线的。", "reference": "我们是2024年3月1号上线的。", "expect_terms": ["2024年", "3月", "1号"], "forbid_terms": []}
+{"id": "num55", "language": "zh", "say": "他在这家公司工作了十五年。", "reference": "他在这家公司工作了15年。", "expect_terms": ["15年"], "forbid_terms": []}
+{"id": "num56", "language": "zh", "say": "一九四九年十月一日是国庆节。", "reference": "1949年10月1日是国庆节。", "expect_terms": ["1949年", "10月", "1日"], "forbid_terms": []}
+{"id": "num57", "language": "zh", "say": "明天最低气温零下十五度。", "reference": "明天最低气温零下15度。", "expect_terms": ["15度"], "forbid_terms": []}
+{"id": "num58", "language": "zh", "say": "存款不到一万元，不是十万元。", "reference": "存款不到1万元，不是10万元。", "expect_terms": ["1万", "10万", "不是"], "forbid_terms": []}
+{"id": "num59", "language": "mixed", "say": "把 timeout 从三十秒改成六十秒，别改成六百秒。", "reference": "把 timeout 从30秒改成60秒，别改成600秒。", "expect_terms": ["30秒", "60秒", "600秒", "别"], "forbid_terms": []}
+{"id": "num60", "language": "mixed", "say": "这次 sprint 我们修了二十五个 bug，不是十五个。", "reference": "这次 sprint 我们修了二十五个 bug，不是十五个。", "expect_terms": ["二十五个", "十五个", "不是"], "forbid_terms": []}

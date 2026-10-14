@@ -17,6 +17,10 @@ Build and test commands, run in the repository root:
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData -testLanguage en -testRegion US test
 
+Before a release, `Tools/release-gate/run.sh --baseline <folder>` runs the speech corpus,
+ContextASR, cleanup, latency and gate set evaluations in Release and fails on any case that
+got worse than the baseline, see docs/release-gate.md.
+
 ## Automatically verified
 
 - The build command ends in BUILD SUCCEEDED on Xcode 27.0 (27A266a) and macOS 26.6.2,
