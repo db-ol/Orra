@@ -14,7 +14,10 @@ import Testing
 ///   when nobody speaks.
 ///
 /// The report holds numbers only, never transcript text. It goes to an attachment and to
-/// results/context-evaluation.txt in the evaluation folder.
+/// results/context-evaluation.txt in the evaluation folder. With TEST_RUNNER_ORRA_GATE_OUT
+/// set, context.json there holds the numbers of every clip for the release gate: the time
+/// of each pass, the terms found, the distractors inserted, the errors, and how long the
+/// raw output ran. TEST_RUNNER_ORRA_CONTEXT_COUNT sets the clips per set, 100 by default.
 extension RealModelTests {
     @MainActor
     @Suite
@@ -79,6 +82,7 @@ extension RealModelTests {
             let count = Int(ProcessInfo.processInfo.environment["ORRA_CONTEXT_COUNT"] ?? "") ?? 100
             var report: [String] = ["Context evaluation, \(count) clips per set at most"]
             var unrelatedTerms: [String] = []
+            var rows: [[String: Any]] = []
 
             for set in ["contextasr_zh", "contextasr_en"] where Self.hasSet(set) {
                 let clips = try EvaluationData.clips(in: set, count: count)
@@ -109,6 +113,12 @@ extension RealModelTests {
                     let counted = own.filter { reference.contains(Self.normalized($0)) }
                     termCount += counted.count
                     distractorCount += offered.count
+                    var row: [String: Any] = [
+                        "set": set, "id": clip.name,
+                        "audio_seconds": Double(speech.count) / Double(Self.rate),
+                        "terms": counted.count, "distractors": offered.count,
+                        "reference_tokens": TranscriptScoring.tokens(clip.reference, dropFillers: false).count,
+                    ]
                     for withContext in [false, true] {
                         let start = ContinuousClock.now
                         let raw = try await engine.transcribe(speech, context: withContext ? context : nil)
@@ -117,12 +127,23 @@ extension RealModelTests {
                         let heard = Self.normalized(text)
                         let found = counted.filter { heard.contains(Self.normalized($0)) }.count
                         let inserted = offered.filter { heard.contains(Self.normalized($0)) }.count
+                        let scored = TranscriptScoring.counts(references: [clip.reference], hypotheses: [text], dropFillers: false)
+                        // Numbers only: how long the pass took, what it found and how long
+                        // the raw output ran, which shows a loop that ran to the token limit.
+                        row[withContext ? "context" : "plain"] = [
+                            "seconds": elapsed, "found": found, "inserted": inserted,
+                            "errors": scored.errors,
+                            "raw_tokens": TranscriptScoring.tokens(raw, dropFillers: false).count,
+                            "raw_characters": raw.count,
+                            "guard_changed": raw.trimmingCharacters(in: .whitespacesAndNewlines) != TranscriptGuard.clean(raw, audioSeconds: Double(speech.count) / Double(Self.rate)),
+                        ] as [String: Any]
                         if withContext {
                             biased.hypotheses.append(text); biased.termsFound += found; biased.distractorsInserted += inserted; biased.latencies.append(elapsed)
                         } else {
                             plain.hypotheses.append(text); plain.termsFound += found; plain.distractorsInserted += inserted; plain.latencies.append(elapsed)
                         }
                     }
+                    rows.append(row)
                 }
                 let references = clips.map(\.reference)
                 let plainRate = TranscriptScoring.errorRate(references: references, hypotheses: plain.hypotheses, dropFillers: false)
@@ -135,6 +156,8 @@ extension RealModelTests {
                   latency: \(Self.latencyLine(plain.latencies)) without, \(Self.latencyLine(biased.latencies)) with
                 """)
             }
+
+            var summary: [String: Any] = [:]
 
             // A vocabulary that has nothing to do with the speech.
             let vocabulary = (unrelatedTerms.isEmpty ? ["Orra", "Qwen3-ASR", "speech-swift"] : unrelatedTerms).joined(separator: "\n")
@@ -156,6 +179,9 @@ extension RealModelTests {
                 let references = clips.map(\.reference)
                 let plainRate = TranscriptScoring.errorRate(references: references, hypotheses: plain, dropFillers: true)
                 let biasedRate = TranscriptScoring.errorRate(references: references, hypotheses: biased, dropFillers: true)
+                let counts = TranscriptScoring.counts(references: references, hypotheses: biased, dropFillers: true)
+                let plainCounts = TranscriptScoring.counts(references: references, hypotheses: plain, dropFillers: true)
+                summary["ascend_mixed"] = ["clips": clips.count, "unrelated_terms": unrelated.count, "inserted": inserted, "errors_plain": plainCounts.errors, "errors_context": counts.errors, "reference_tokens": counts.tokens]
                 report.append("ascend_mixed with \(unrelated.count) unrelated terms: error \(String(format: "%.2f", plainRate))% without, \(String(format: "%.2f", biasedRate))% with, \(inserted) terms inserted in \(clips.count) clips")
             }
 
@@ -170,6 +196,7 @@ extension RealModelTests {
                 let text = Self.finalText(try await engine.transcribe(samples, context: vocabulary), samples: samples)
                 if !text.isEmpty { spoken += 1 }
             }
+            summary["no_speech"] = ["clips": quiet.count, "gave_text": spoken]
             report.append("no speech with \(unrelated.count) terms as context: \(spoken) of \(quiet.count) gave text")
 
             let text = report.joined(separator: "\n")
@@ -177,6 +204,7 @@ extension RealModelTests {
             let results = EvaluationData.root.appendingPathComponent("results", isDirectory: true)
             try? FileManager.default.createDirectory(at: results, withIntermediateDirectories: true)
             try text.write(to: results.appendingPathComponent("context-evaluation.txt"), atomically: true, encoding: .utf8)
+            try GateOutput.write(["suite": "context", "clips_per_set": count, "clips": rows, "summary": summary], named: "context")
         }
     }
 }
