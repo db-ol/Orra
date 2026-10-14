@@ -8,11 +8,15 @@ https://db-ol.github.io/Orra/.
 - site/index.html is the English page.
 - site/zh/index.html is the Simplified Chinese page.
 - site/style.css is the one style sheet for both. It follows the system's light or dark mode.
+- site/site.js plays the animation at the top of the page and fades sections in as they
+  scroll into view. Without it, or when the Mac asks for reduced motion, the page shows the
+  animation's last frame and every section at once.
 - site/icon.png and site/favicon.png are the app icon at 512 and 64 pixels. They are exported
   from Orra/AppIcon.icon with the ictool that ships inside Icon Composer.
 
-The site is plain HTML and CSS. There is no build step, no script, no web font, no cookie,
-no analytics and no tracker. Keep it that way.
+The site is plain HTML and CSS with one small script of its own. There is no build step, no
+framework, no web font, no cookie, no analytics and no tracker, and the page loads nothing
+from another server. Keep it that way.
 
 ## Editing
 
@@ -29,8 +33,13 @@ no analytics and no tracker. Keep it that way.
 
 The Download button points to
 https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg, so every release must
-upload a copy of its DMG named Orra.dmg, as docs/releasing.md describes. A new release
-needs no change to the site.
+upload a copy of its DMG named Orra.dmg, as docs/releasing.md describes.
+
+The version under the Download buttons is plain text, twice in each page ("Version 0.3.0"
+and "版本 0.3.0"). After a release is published, change it in both pages and merge, so the
+site never names a version that is not out yet. To find every place:
+
+    grep -rn "0\.3\.0" site
 
 To export the icon again after the icon changes:
 
