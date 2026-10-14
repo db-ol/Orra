@@ -96,7 +96,7 @@ struct WelcomeView: View {
                         .font(.headline)
                     Text("Try it in any app: hold the talk key, say something, and let go. The text appears where you are typing.")
                         .fixedSize(horizontal: false, vertical: true)
-                    if pushToTalk.handsFreeOn {
+                    if pushToTalk.handsFreeOn, pushToTalk.talkMode == .hold {
                         Text("For a longer text, press the talk key twice quickly and talk hands free. Press it once more to paste.")
                             .fixedSize(horizontal: false, vertical: true)
                     }

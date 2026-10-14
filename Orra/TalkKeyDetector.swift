@@ -229,6 +229,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
 
     init(keys: Set<Hotkey>, delayedKeys: Set<Hotkey> = [], modes: [Hotkey: TriggerMode] = [:], handsFreeEnabled: Bool = true) {
         self.keys = keys
+        orderedKeys = Self.ordered(keys)
         self.delayedKeys = delayedKeys
         self.modes = modes
         self.handsFreeEnabled = handsFreeEnabled
@@ -263,8 +264,11 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     }
 
     /// The keys in a fixed order: combinations first, so a combination wins over one of its
-    /// own modifiers, then the single keys.
-    private var orderedKeys: [Hotkey] {
+    /// own modifiers, then the single keys. Kept with `keys`, because the tap asks for every
+    /// event.
+    private var orderedKeys: [Hotkey] = []
+
+    private static func ordered(_ keys: Set<Hotkey>) -> [Hotkey] {
         let combinations = keys.compactMap(\.combination).sorted { $0.savedValue < $1.savedValue }.map(Hotkey.combination)
         let singles = TalkKey.allCases.map(Hotkey.key).filter(keys.contains)
         return combinations + singles
@@ -276,6 +280,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     /// with.
     mutating func setKeys(_ newKeys: Set<Hotkey>, delayedKeys newDelayedKeys: Set<Hotkey> = [], modes newModes: [Hotkey: TriggerMode] = [:]) -> PushToTalkStateMachine.Event? {
         keys = newKeys
+        orderedKeys = Self.ordered(newKeys)
         delayedKeys = newDelayedKeys
         modes = newModes
         guard let active = phase.key, !newKeys.contains(active) else { return nil }
@@ -314,7 +319,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     }
 
     private func matchesCombinationWithKey(keyCode: Int64, flags: CGEventFlags) -> Bool {
-        keys.contains { $0.hasRegularKey && $0.signal(type: .keyDown, keyCode: keyCode, flags: flags, isDown: false) == .down }
+        orderedKeys.contains { $0.hasRegularKey && $0.signal(type: .keyDown, keyCode: keyCode, flags: flags, isDown: false) == .down }
     }
 
     private mutating func decide(type: CGEventType, keyCode: Int64, flags: CGEventFlags, at now: ContinuousClock.Instant) -> Decision {
