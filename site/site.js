@@ -24,15 +24,21 @@
     revealed.forEach(function (el) { el.classList.add("in"); });
   }
 
-  // Hero animation: hold the key, speak, release, and the text lands at the cursor.
+  // Hero animation in two scenes. Dictation: hold the talk key, speak, release,
+  // and the text lands at the cursor. Translation: hold the translation key,
+  // speak Chinese, release, and the English translation lands on the next line.
   var demo = document.querySelector(".demo");
   if (!demo) return;
 
   var phases = [
-    ["idle", 900],
-    ["hold", 700],
-    ["speak", 2600],
-    ["release", 4200]
+    ["dictate", "idle", 900],
+    ["dictate", "hold", 700],
+    ["dictate", "speak", 2600],
+    ["dictate", "release", 3400],
+    ["translate", "idle", 700],
+    ["translate", "hold", 700],
+    ["translate", "speak", 2600],
+    ["translate", "release", 4200]
   ];
   var index = 0;
   var timer = null;
@@ -40,9 +46,10 @@
 
   function step() {
     var phase = phases[index];
-    demo.setAttribute("data-phase", phase[0]);
+    demo.setAttribute("data-scene", phase[0]);
+    demo.setAttribute("data-phase", phase[1]);
     index = (index + 1) % phases.length;
-    timer = window.setTimeout(step, phase[1]);
+    timer = window.setTimeout(step, phase[2]);
   }
 
   function stop() {
@@ -59,6 +66,7 @@
 
   function finish() {
     stop();
+    demo.removeAttribute("data-scene");
     demo.removeAttribute("data-phase");
   }
 

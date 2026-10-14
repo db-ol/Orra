@@ -42,22 +42,26 @@
         </div>
 
         <figure class="demo">
-          <div class="demo-stage" role="img" aria-label="Animation: the talk key is held, a capsule of bars moves with the voice, and on release the words appear at the cursor without the filler um.">
+          <div class="demo-stage" role="img" aria-label="Animation in two scenes. Dictation: the talk key, control, is held, a capsule of bars moves with the voice, and on release the words appear at the cursor without the filler um. Translation: the translation key, option, is held, the capsule shows a small 译 badge, the Chinese sentence 明天下午三点开会 is spoken, and on release its English translation, Meeting tomorrow at 3 p.m., appears on the next line.">
             <div class="demo-said" aria-hidden="true">
-              <span class="demo-quote">“<span class="filler">Um, </span><span class="said-words">I’ll send the notes after lunch.</span>”</span>
+              <span class="demo-quote" data-for="dictate">“<span class="filler">Um, </span><span class="said-words">I’ll send the notes after lunch.</span>”</span>
+              <span class="demo-quote" data-for="translate" lang="zh-Hans">“<span class="said-words">明天下午三点开会。</span>”</span>
             </div>
             <div class="demo-window" aria-hidden="true">
               <div class="demo-chrome"><i></i><i></i><i></i></div>
               <p class="demo-line">Project update</p>
-              <p class="demo-line demo-target"><span class="pasted">I’ll send the notes after lunch.</span><span class="caret"></span></p>
+              <p class="demo-line demo-target" data-line="dictate"><span class="pasted">I’ll send the notes after lunch.</span><span class="caret"></span></p>
+              <p class="demo-line demo-target" data-line="translate"><span class="pasted">Meeting tomorrow at 3 p.m.</span><span class="caret"></span></p>
             </div>
             <div class="demo-bottom" aria-hidden="true">
-              <span class="keycap"><span class="keycap-glyph">⌃</span> control</span>
-              <span class="capsule"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="keycap" data-for="dictate"><span class="keycap-glyph">⌃</span> control</span>
+              <span class="keycap" data-for="translate"><span class="keycap-glyph">⌥</span> option</span>
+              <span class="capsule"><span class="badge" lang="zh-Hans">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
           </div>
           <figcaption class="demo-steps" aria-hidden="true">
-            <span data-step="hold">Hold</span><span data-step="speak">Speak</span><span data-step="release">Release</span>
+            <span class="steps-row" data-row="dictate"><span class="steps-name">Dictate</span><span data-step="hold">Hold</span><span data-step="speak">Speak</span><span data-step="release">Release</span></span>
+            <span class="steps-row" data-row="translate"><span class="steps-name">Translate</span><span data-step="hold">Hold</span><span data-step="speak">Speak</span><span data-step="release">Release</span></span>
           </figcaption>
         </figure>
       </div>
@@ -112,16 +116,20 @@
             <p>Add up to 5,000 names and terms, and Orra writes them your way.</p>
           </div>
           <div class="tile reveal">
-            <h3>Updates in the app</h3>
-            <p>Check for Updates in the menu, or let Orra check for you. Nothing installs until you choose it.</p>
+            <h3>Cleanup on your Mac</h3>
+            <p>Turn on Clean Up Text and a local model removes the fillers left and applies spoken corrections such as "Monday, I mean Tuesday". It uses a 3.05 GB model you download once, and nothing leaves your Mac.</p>
           </div>
           <div class="tile wide reveal">
-            <h3>Cleanup and translation, on your Mac</h3>
-            <p>Turn on Clean Up Text and a local model removes the fillers left and applies spoken corrections such as "Monday, I mean Tuesday". Hold the translation key and Orra pastes what you said in English or Chinese. Both use a 3.05 GB model you download once, and nothing leaves your Mac.</p>
+            <h3>Translation between Chinese and English</h3>
+            <p>Hold the translation key, right Option unless you pick another (right Command when right Option is your talk key), and speak. Orra pastes what you said translated, Chinese into English and English into Chinese, or always into English or always into Chinese. It runs on your Mac with the same downloaded model as cleanup, and nothing leaves your Mac.</p>
           </div>
-          <div class="tile wide reveal">
+          <div class="tile reveal">
             <h3>Learns from your corrections</h3>
             <p>Turn it on, fix a misheard word after a dictation in apps such as Notes, Mail and Safari, and Orra adds the right spelling to your vocabulary. A notice lets you undo it.</p>
+          </div>
+          <div class="tile reveal">
+            <h3>Updates in the app</h3>
+            <p>Check for Updates in the menu, or let Orra check for you. Nothing installs until you choose it.</p>
           </div>
           <div class="tile reveal">
             <h3>English and Chinese interface</h3>

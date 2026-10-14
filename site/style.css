@@ -241,7 +241,7 @@ h1 {
 }
 
 .demo-said {
-  height: 44px;
+  height: 62px;
   font-size: 17px;
   color: var(--muted);
   font-style: italic;
@@ -253,6 +253,14 @@ h1 {
   text-decoration: line-through;
   text-decoration-thickness: 2px;
   transition: opacity 0.4s var(--ease) 0.3s;
+}
+
+.demo-quote {
+  display: block;
+}
+
+.demo-quote:lang(zh) {
+  font-style: normal;
 }
 
 .said-words {
@@ -347,6 +355,18 @@ h1 {
   transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
 }
 
+.badge {
+  display: none;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 5px;
+  padding: 3px 5px;
+  margin-right: 6px;
+}
+
 .capsule i {
   width: 3px;
   height: 18px;
@@ -357,15 +377,54 @@ h1 {
 
 .demo-steps {
   display: flex;
-  justify-content: center;
-  gap: 28px;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   margin-top: 16px;
   font-size: 14px;
   color: var(--muted);
 }
 
-.demo-steps span {
+.steps-row {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  transition: opacity 0.3s var(--ease);
+}
+
+.steps-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.demo-steps [data-step] {
   transition: color 0.3s var(--ease);
+}
+
+/* The caret sits on the last line unless the dictation scene plays. */
+.demo-target[data-line="dictate"] .caret {
+  display: none;
+}
+
+/* Scenes. Without data-scene both scenes show their final state. */
+.demo[data-scene="dictate"] [data-for="translate"],
+.demo[data-scene="dictate"] [data-line="translate"],
+.demo[data-scene="translate"] [data-for="dictate"] {
+  display: none;
+}
+
+.demo[data-scene="dictate"] [data-line="dictate"] .caret {
+  display: inline-block;
+}
+
+.demo[data-scene="translate"] .badge {
+  display: inline-block;
+}
+
+.demo[data-scene="dictate"] [data-row="translate"],
+.demo[data-scene="translate"] [data-row="dictate"] {
+  opacity: 0.45;
 }
 
 /* Phases */
@@ -386,13 +445,13 @@ h1 {
   animation: speak 2.2s linear both;
 }
 
-.demo[data-phase="idle"] .pasted,
-.demo[data-phase="hold"] .pasted,
-.demo[data-phase="speak"] .pasted {
+.demo[data-scene="dictate"]:is([data-phase="idle"], [data-phase="hold"], [data-phase="speak"]) [data-line="dictate"] .pasted,
+.demo[data-scene="translate"]:is([data-phase="idle"], [data-phase="hold"], [data-phase="speak"]) [data-line="translate"] .pasted {
   display: none;
 }
 
-.demo[data-phase="release"] .pasted {
+.demo[data-scene="dictate"][data-phase="release"] [data-line="dictate"] .pasted,
+.demo[data-scene="translate"][data-phase="release"] [data-line="translate"] .pasted {
   animation: paste 0.3s var(--ease) 0.9s both;
 }
 
@@ -420,9 +479,12 @@ h1 {
 .demo .capsule i:nth-child(6) { animation-delay: -0.45s; }
 .demo .capsule i:nth-child(7) { animation-delay: -0.2s; }
 
-.demo[data-phase="hold"] [data-step="hold"],
-.demo[data-phase="speak"] [data-step="speak"],
-.demo[data-phase="release"] [data-step="release"] {
+.demo[data-scene="dictate"][data-phase="hold"] [data-row="dictate"] [data-step="hold"],
+.demo[data-scene="dictate"][data-phase="speak"] [data-row="dictate"] [data-step="speak"],
+.demo[data-scene="dictate"][data-phase="release"] [data-row="dictate"] [data-step="release"],
+.demo[data-scene="translate"][data-phase="hold"] [data-row="translate"] [data-step="hold"],
+.demo[data-scene="translate"][data-phase="speak"] [data-row="translate"] [data-step="speak"],
+.demo[data-scene="translate"][data-phase="release"] [data-row="translate"] [data-step="release"] {
   color: var(--text);
   font-weight: 600;
 }
@@ -689,8 +751,12 @@ footer p {
   }
 
   .demo-said {
-    height: 52px;
+    height: 62px;
     font-size: 15px;
+  }
+
+  .steps-row {
+    gap: 4px 20px;
   }
 
   .demo-line {

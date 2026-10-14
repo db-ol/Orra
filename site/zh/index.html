@@ -42,22 +42,26 @@
         </div>
 
         <figure class="demo">
-          <div class="demo-stage" role="img" aria-label="动画：按住说话键，胶囊里的音量条随声音跳动，松开后，去掉语气词“呃”的文字出现在光标处。">
+          <div class="demo-stage" role="img" aria-label="动画分两段。听写：按住说话键 control，胶囊里的音量条随声音跳动，松开后，去掉语气词“呃”的文字出现在光标处。翻译：按住翻译键 option，胶囊里的音量条旁出现一个小小的“译”字标记，说出“明天下午三点开会”，松开后，英文译文“Meeting tomorrow at 3 p.m.”出现在下一行。">
             <div class="demo-said" aria-hidden="true">
-              <span class="demo-quote">“<span class="filler">呃，</span><span class="said-words">午饭后我把会议记录发给你。</span>”</span>
+              <span class="demo-quote" data-for="dictate">“<span class="filler">呃，</span><span class="said-words">午饭后我把会议记录发给你。</span>”</span>
+              <span class="demo-quote" data-for="translate">“<span class="said-words">明天下午三点开会。</span>”</span>
             </div>
             <div class="demo-window" aria-hidden="true">
               <div class="demo-chrome"><i></i><i></i><i></i></div>
               <p class="demo-line">项目进展</p>
-              <p class="demo-line demo-target"><span class="pasted">午饭后我把会议记录发给你。</span><span class="caret"></span></p>
+              <p class="demo-line demo-target" data-line="dictate"><span class="pasted">午饭后我把会议记录发给你。</span><span class="caret"></span></p>
+              <p class="demo-line demo-target" data-line="translate" lang="en"><span class="pasted">Meeting tomorrow at 3 p.m.</span><span class="caret"></span></p>
             </div>
             <div class="demo-bottom" aria-hidden="true">
-              <span class="keycap"><span class="keycap-glyph">⌃</span> control</span>
-              <span class="capsule"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="keycap" data-for="dictate"><span class="keycap-glyph">⌃</span> control</span>
+              <span class="keycap" data-for="translate"><span class="keycap-glyph">⌥</span> option</span>
+              <span class="capsule"><span class="badge">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
           </div>
           <figcaption class="demo-steps" aria-hidden="true">
-            <span data-step="hold">按住</span><span data-step="speak">说话</span><span data-step="release">松开</span>
+            <span class="steps-row" data-row="dictate"><span class="steps-name">听写</span><span data-step="hold">按住</span><span data-step="speak">说话</span><span data-step="release">松开</span></span>
+            <span class="steps-row" data-row="translate"><span class="steps-name">翻译</span><span data-step="hold">按住</span><span data-step="speak">说中文</span><span data-step="release">松开，得到英文</span></span>
           </figcaption>
         </figure>
       </div>
@@ -112,16 +116,20 @@
             <p>最多可以放 5,000 个名字和术语，Orra 会按你的写法输出。</p>
           </div>
           <div class="tile reveal">
-            <h3>在 App 里更新</h3>
-            <p>在菜单里选择“检查更新…”，或者让 Orra 自动检查。每次更新都要你同意后才会安装。</p>
+            <h3>在你的 Mac 上整理文字</h3>
+            <p>打开“整理文字”，本地模型会去掉剩下的语气词，并按你说出口的更正改好内容，比如“三点，哦不对，四点”。它用一个只需下载一次的 3.05 GB 模型，文字不会离开你的 Mac。</p>
           </div>
           <div class="tile wide reveal">
-            <h3>在你的 Mac 上整理和翻译</h3>
-            <p>打开“整理文字”，本地模型会去掉剩下的语气词，并按你说出口的更正改好内容，比如“三点，哦不对，四点”。按住翻译键说话，Orra 会把你说的话翻译成英文或中文再粘贴。两者都用一个只需下载一次的 3.05 GB 模型，文字不会离开你的 Mac。</p>
+            <h3>中英互译</h3>
+            <p>按住翻译键说话，默认是右侧 Option 键，可以更改（右侧 Option 是说话键时，默认是右侧 Command 键）。Orra 会把你说的话翻译后再粘贴：中文翻成英文，英文翻成中文，也可以固定翻成英文或中文。翻译和整理用同一个下载好的模型，在你的 Mac 上运行，文字不会离开你的 Mac。</p>
           </div>
-          <div class="tile wide reveal">
+          <div class="tile reveal">
             <h3>从你的修改中学习</h3>
             <p>打开后，在备忘录、邮件和 Safari 等 App 里，听写后你改正了一个听错的词，Orra 会把正确的写法加入个人词库，并弹出提示，你可以撤销。</p>
+          </div>
+          <div class="tile reveal">
+            <h3>在 App 里更新</h3>
+            <p>在菜单里选择“检查更新…”，或者让 Orra 自动检查。每次更新都要你同意后才会安装。</p>
           </div>
           <div class="tile reveal">
             <h3>中英文界面</h3>
