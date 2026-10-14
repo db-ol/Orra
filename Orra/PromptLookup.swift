@@ -79,7 +79,10 @@ nonisolated struct PromptLookup {
             self.first = nil
             return [first]
         }
-        let draft = lookUp(count: min(Self.maximumDraft, limit - 1))
+        // Rejected drafts leave the kept tokens pending, and each round runs them again. Once
+        // as many are pending as one round may draft, a round without drafts puts them all in
+        // the cache, so a run of rejections costs a bounded amount per token.
+        let draft = pending.count > Self.maximumDraft ? [] : lookUp(count: min(Self.maximumDraft, limit - 1))
         let input = pending + draft
         let states = cache.map { ($0 as? ArraysCache).map { (state: $0.state, offset: $0.offset) } }
         let logits = model(MLXArray(input)[.newAxis], cache: cache)
