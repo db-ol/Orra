@@ -935,7 +935,7 @@ final class PushToTalkController {
             if let translated {
                 // In place of the cleanup step, since the translation prompt cleans up too.
                 text = translated.text
-            } else if CleanupStep.isWorthCleaning(text), await cleanup.waitUntilLoaded() {
+            } else if CleanupStep.isWorthCleaning(text), CleanupStep.hasWorkForModel(text), await cleanup.waitUntilLoaded() {
                 text = await CleanupStep.run(text, complete: cleanup.complete).text
             }
             let isTranslation = translated?.isTranslation == true
