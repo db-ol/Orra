@@ -17,8 +17,6 @@
   --window: #ffffff;
   --window-line: #e8e8ed;
   --capsule: #1d1d1f;
-  --key: #ffffff;
-  --key-pressed: #e8e8ed;
   --shadow: 0 20px 50px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
   --max: 980px;
   --radius: 22px;
@@ -42,9 +40,7 @@
     --window: #1d1d1f;
     --window-line: #333336;
     --capsule: #000000;
-    --key: #2c2c2e;
-    --key-pressed: #1d1d1f;
-    --shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px #333336;
+        --shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px #333336;
   }
 }
 
@@ -221,31 +217,62 @@ h1 {
 .version {
   font-size: 14px;
   color: var(--muted);
-  margin: 12px 0 0;
+  margin: 12px auto 0;
+  max-width: 34em;
 }
 
-/* Hero animation. The markup shows the final state, so it reads right without
-   script and with reduced motion. site.js sets data-phase to play it. */
-.demo {
+.needs {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* Demos of dictation and translation. The markup shows the final state, so
+   they read right without script and with reduced motion. site.js plays one
+   demo at a time by setting data-active on .demos and data-phase on it. */
+.demos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
   margin: 56px auto 0;
-  max-width: 640px;
+}
+
+.demo {
+  margin: 0;
+  transition: opacity 0.5s var(--ease);
+}
+
+.demos[data-active="dictate"] [data-demo="translate"],
+.demos[data-active="translate"] [data-demo="dictate"] {
+  opacity: 0.45;
+}
+
+.demo-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
 }
 
 .demo-stage {
   position: relative;
-  height: 330px;
+  height: 310px;
   border-radius: var(--radius);
   background: var(--bg-soft);
   overflow: hidden;
-  padding: 26px 22px 0;
+  padding: 24px 20px 0;
 }
 
 .demo-said {
-  height: 62px;
-  font-size: 17px;
+  height: 56px;
+  margin: 0;
+  font-size: 16px;
   color: var(--muted);
   font-style: italic;
   transition: opacity 0.4s var(--ease);
+}
+
+.demo-said:lang(zh) {
+  font-style: normal;
 }
 
 .filler {
@@ -253,14 +280,6 @@ h1 {
   text-decoration: line-through;
   text-decoration-thickness: 2px;
   transition: opacity 0.4s var(--ease) 0.3s;
-}
-
-.demo-quote {
-  display: block;
-}
-
-.demo-quote:lang(zh) {
-  font-style: normal;
 }
 
 .said-words {
@@ -273,10 +292,15 @@ h1 {
   background: var(--window);
   border-radius: 12px;
   box-shadow: var(--shadow);
-  max-width: 460px;
+  max-width: 400px;
   margin: 0 auto;
-  padding: 0 20px 18px;
+  padding: 0 18px 16px;
   min-height: 150px;
+  font-size: 16px;
+}
+
+.demo-window p {
+  margin: 0;
 }
 
 .demo-chrome {
@@ -292,15 +316,49 @@ h1 {
   background: var(--window-line);
 }
 
-.demo-line {
-  margin: 0;
-  font-size: 17px;
+.doc-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.demo-target {
   min-height: 1.6em;
 }
 
-.demo-line:first-of-type {
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
   font-weight: 600;
-  margin-bottom: 6px;
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--window-line);
+  margin-bottom: 12px;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--window-line);
+  font-size: 12px;
+}
+
+.demo-window .bubble {
+  display: inline-block;
+  background: var(--window-line);
+  border-radius: 14px;
+  padding: 5px 12px;
+  margin-bottom: 12px;
+}
+
+.composer {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 3px 12px;
 }
 
 .caret {
@@ -313,36 +371,10 @@ h1 {
   animation: blink 1.1s steps(1) infinite;
 }
 
-.demo-bottom {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 22px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 18px;
-}
-
-.keycap {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text);
-  background: var(--key);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 16px;
-  box-shadow: 0 2px 0 var(--border);
-  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease), background-color 0.15s var(--ease);
-}
-
-.keycap-glyph {
-  font-size: 15px;
-}
-
 .capsule {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -351,12 +383,11 @@ h1 {
   border-radius: 17px;
   background: var(--capsule);
   opacity: 0;
-  transform: scale(0.8);
+  transform: translateX(-50%) scale(0.8);
   transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
 }
 
 .badge {
-  display: none;
   font-size: 11px;
   font-style: normal;
   line-height: 1;
@@ -375,66 +406,19 @@ h1 {
   transform: scaleY(0.2);
 }
 
-.demo-steps {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  margin-top: 16px;
-  font-size: 14px;
-  color: var(--muted);
-}
+.capsule i:nth-of-type(2) { animation-delay: -0.3s; }
+.capsule i:nth-of-type(3) { animation-delay: -0.6s; }
+.capsule i:nth-of-type(4) { animation-delay: -0.15s; }
+.capsule i:nth-of-type(5) { animation-delay: -0.75s; }
+.capsule i:nth-of-type(6) { animation-delay: -0.45s; }
+.capsule i:nth-of-type(7) { animation-delay: -0.2s; }
 
-.steps-row {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 4px 28px;
-  transition: opacity 0.3s var(--ease);
-}
-
-.steps-name {
-  color: var(--text);
-  font-weight: 600;
-}
-
-.demo-steps [data-step] {
-  transition: color 0.3s var(--ease);
-}
-
-/* The caret sits on the last line unless the dictation scene plays. */
-.demo-target[data-line="dictate"] .caret {
-  display: none;
-}
-
-/* Scenes. Without data-scene both scenes show their final state. */
-.demo[data-scene="dictate"] [data-for="translate"],
-.demo[data-scene="dictate"] [data-line="translate"],
-.demo[data-scene="translate"] [data-for="dictate"] {
-  display: none;
-}
-
-.demo[data-scene="dictate"] [data-line="dictate"] .caret {
-  display: inline-block;
-}
-
-.demo[data-scene="translate"] .badge {
-  display: inline-block;
-}
-
-.demo[data-scene="dictate"] [data-row="translate"],
-.demo[data-scene="translate"] [data-row="dictate"] {
-  opacity: 0.45;
-}
-
-/* Phases */
-.demo[data-phase="idle"] .demo-said,
-.demo[data-phase="hold"] .demo-said {
+/* Phases: idle, speak, done. Without data-phase a demo shows its final state. */
+.demo[data-phase="idle"] .demo-said {
   opacity: 0;
 }
 
 .demo[data-phase="idle"] .filler,
-.demo[data-phase="hold"] .filler,
 .demo[data-phase="speak"] .filler {
   opacity: 1;
   text-decoration: none;
@@ -445,48 +429,22 @@ h1 {
   animation: speak 2.2s linear both;
 }
 
-.demo[data-scene="dictate"]:is([data-phase="idle"], [data-phase="hold"], [data-phase="speak"]) [data-line="dictate"] .pasted,
-.demo[data-scene="translate"]:is([data-phase="idle"], [data-phase="hold"], [data-phase="speak"]) [data-line="translate"] .pasted {
+.demo[data-phase="idle"] .pasted,
+.demo[data-phase="speak"] .pasted {
   display: none;
 }
 
-.demo[data-scene="dictate"][data-phase="release"] [data-line="dictate"] .pasted,
-.demo[data-scene="translate"][data-phase="release"] [data-line="translate"] .pasted {
-  animation: paste 0.3s var(--ease) 0.9s both;
+.demo[data-phase="done"] .pasted {
+  animation: paste 0.3s var(--ease) 0.5s both;
 }
 
-.demo[data-phase="hold"] .keycap,
-.demo[data-phase="speak"] .keycap {
-  transform: translateY(2px);
-  box-shadow: 0 0 0 var(--border);
-  background: var(--key-pressed);
-}
-
-.demo[data-phase="hold"] .capsule,
 .demo[data-phase="speak"] .capsule {
   opacity: 1;
-  transform: none;
+  transform: translateX(-50%);
 }
 
 .demo[data-phase="speak"] .capsule i {
   animation: level 0.9s ease-in-out infinite alternate;
-}
-
-.demo .capsule i:nth-child(2) { animation-delay: -0.3s; }
-.demo .capsule i:nth-child(3) { animation-delay: -0.6s; }
-.demo .capsule i:nth-child(4) { animation-delay: -0.15s; }
-.demo .capsule i:nth-child(5) { animation-delay: -0.75s; }
-.demo .capsule i:nth-child(6) { animation-delay: -0.45s; }
-.demo .capsule i:nth-child(7) { animation-delay: -0.2s; }
-
-.demo[data-scene="dictate"][data-phase="hold"] [data-row="dictate"] [data-step="hold"],
-.demo[data-scene="dictate"][data-phase="speak"] [data-row="dictate"] [data-step="speak"],
-.demo[data-scene="dictate"][data-phase="release"] [data-row="dictate"] [data-step="release"],
-.demo[data-scene="translate"][data-phase="hold"] [data-row="translate"] [data-step="hold"],
-.demo[data-scene="translate"][data-phase="speak"] [data-row="translate"] [data-step="speak"],
-.demo[data-scene="translate"][data-phase="release"] [data-row="translate"] [data-step="release"] {
-  color: var(--text);
-  font-weight: 600;
 }
 
 @keyframes speak {
@@ -533,41 +491,14 @@ h3 {
   margin: 0 0 8px;
 }
 
-.steps {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 40px;
-}
-
-.step-num {
-  display: block;
-  font-size: 48px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--link);
-  margin-bottom: 14px;
-}
-
-.steps p,
 .tile p {
   margin: 0;
   color: var(--muted);
 }
 
-.note {
-  font-size: 15px;
-  color: var(--muted);
-  max-width: 40em;
-  margin: 40px 0 0;
-}
-
 .tiles {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-auto-flow: dense;
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
 
@@ -575,14 +506,6 @@ h3 {
   background: var(--surface);
   border-radius: var(--radius);
   padding: 30px 28px;
-}
-
-.tile.wide {
-  grid-column: span 2;
-}
-
-.tile.wide h3 {
-  font-size: 28px;
 }
 
 .statement {
@@ -599,15 +522,6 @@ h3 {
 
 .prose p {
   margin: 0 0 16px;
-}
-
-.prose ul {
-  padding-left: 22px;
-  margin: 0 0 16px;
-}
-
-.prose li {
-  margin-bottom: 10px;
 }
 
 .split {
@@ -647,11 +561,7 @@ h3 {
   margin-bottom: 20px;
 }
 
-.closing .note {
-  margin: 28px auto 0;
-}
-
-footer {
+.closing footer {
   background: var(--bg-soft);
   border-top: 1px solid var(--border);
   color: var(--muted);
@@ -687,17 +597,6 @@ footer p {
   }
 }
 
-@media (max-width: 820px) {
-  .tiles {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .steps {
-    grid-template-columns: 1fr;
-    gap: 36px;
-  }
-}
-
 @media (max-width: 640px) {
   body {
     font-size: 16px;
@@ -729,38 +628,22 @@ footer p {
   }
 
   .tiles,
-  .split {
+  .split,
+  .demos {
     grid-template-columns: 1fr;
   }
 
-  .tile.wide {
-    grid-column: auto;
-  }
-
-  .tile.wide h3 {
-    font-size: 21px;
-  }
-
-  .demo {
+  .demos {
     margin-top: 40px;
+    gap: 28px;
   }
 
   .demo-stage {
-    height: 340px;
     padding: 20px 14px 0;
   }
 
   .demo-said {
-    height: 62px;
     font-size: 15px;
-  }
-
-  .steps-row {
-    gap: 4px 20px;
-  }
-
-  .demo-line {
-    font-size: 16px;
   }
 
   .statement {

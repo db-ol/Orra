@@ -1,4 +1,4 @@
-// Orra website: plays the hero animation and reveals sections on scroll.
+// Orra website: plays the demos and reveals sections on scroll.
 // Without this script, or with reduced motion, the page shows the final state.
 (function () {
   "use strict";
@@ -24,30 +24,36 @@
     revealed.forEach(function (el) { el.classList.add("in"); });
   }
 
-  // Hero animation in two scenes. Dictation: hold the talk key, speak, release,
-  // and the text lands at the cursor. Translation: hold the translation key,
-  // speak Chinese, release, and the English translation lands on the next line.
-  var demo = document.querySelector(".demo");
-  if (!demo) return;
+  // Demos: dictation, then translation. One plays while the other waits in
+  // its final state. Each goes idle, then speak, then done.
+  var demos = document.querySelector(".demos");
+  if (!demos) return;
 
   var phases = [
-    ["dictate", "idle", 900],
-    ["dictate", "hold", 700],
+    ["dictate", "idle", 800],
     ["dictate", "speak", 2600],
-    ["dictate", "release", 3400],
-    ["translate", "idle", 700],
-    ["translate", "hold", 700],
+    ["dictate", "done", 3400],
+    ["translate", "idle", 800],
     ["translate", "speak", 2600],
-    ["translate", "release", 4200]
+    ["translate", "done", 3800]
   ];
+  var figures = demos.querySelectorAll("[data-demo]");
   var index = 0;
   var timer = null;
   var visible = true;
 
+  function show(name, phase) {
+    if (name) demos.setAttribute("data-active", name);
+    else demos.removeAttribute("data-active");
+    figures.forEach(function (figure) {
+      if (figure.getAttribute("data-demo") === name) figure.setAttribute("data-phase", phase);
+      else figure.removeAttribute("data-phase");
+    });
+  }
+
   function step() {
     var phase = phases[index];
-    demo.setAttribute("data-scene", phase[0]);
-    demo.setAttribute("data-phase", phase[1]);
+    show(phase[0], phase[1]);
     index = (index + 1) % phases.length;
     timer = window.setTimeout(step, phase[2]);
   }
@@ -66,15 +72,14 @@
 
   function finish() {
     stop();
-    demo.removeAttribute("data-scene");
-    demo.removeAttribute("data-phase");
+    show(null);
   }
 
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(function (entries) {
       visible = entries[0].isIntersecting;
       if (visible) start(); else stop();
-    }).observe(demo);
+    }).observe(demos);
   }
 
   document.addEventListener("visibilitychange", function () {

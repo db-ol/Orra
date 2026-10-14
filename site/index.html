@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orra: voice input for your Mac</title>
-  <meta name="description" content="Orra is an open source voice input app for macOS. Hold a key, speak, release, and the words land in the app you were typing in. Speech becomes text on your Mac, never on a server.">
+  <meta name="description" content="Orra is an open source voice input app for macOS. Dictate in any app, and translate between Chinese and English as you speak. Speech becomes text on your Mac, never on a server.">
   <meta name="color-scheme" content="light dark">
   <link rel="canonical" href="https://db-ol.github.io/Orra/">
   <link rel="alternate" hreflang="en" href="https://db-ol.github.io/Orra/">
@@ -20,7 +20,6 @@
     <div class="wrap topbar-inner">
       <a class="brand" href="./"><img src="favicon.png" alt="" width="24" height="24">Orra</a>
       <nav aria-label="Main">
-        <a class="optional" href="#how">How it works</a>
         <a class="optional" href="#features">Features</a>
         <a class="optional" href="#privacy">Privacy</a>
         <a href="https://github.com/db-ol/Orra">GitHub</a>
@@ -34,60 +33,40 @@
       <div class="wrap">
         <img class="app-icon" src="icon.png" alt="Orra app icon" width="96" height="96">
         <p class="eyebrow">Orra</p>
-        <h1 id="hero-title">Hold a key.<br>Speak. Let go.</h1>
-        <p class="lede">Dictate anywhere on your Mac. Speech becomes text on your Mac, never on a server.</p>
+        <h1 id="hero-title">Speak,<br>and it’s written.</h1>
+        <p class="lede">Dictate and translate in any app. Everything runs on your Mac.</p>
         <div class="cta">
           <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Download for Mac</a>
-          <p class="version">Version 0.3.0. Needs macOS 15.6 or later on Apple silicon.</p>
+          <p class="version">Version 0.3.0 <span class="needs">Needs a Mac with Apple silicon, macOS 15.6 or later and about 3 GB of free space.</span></p>
         </div>
 
-        <figure class="demo">
-          <div class="demo-stage" role="img" aria-label="Animation in two scenes. Dictation: the talk key, control, is held, a capsule of bars moves with the voice, and on release the words appear at the cursor without the filler um. Translation: the translation key, option, is held, the capsule shows a small 译 badge, the Chinese sentence 明天下午三点开会 is spoken, and on release its English translation, Meeting tomorrow at 3 p.m., appears on the next line.">
-            <div class="demo-said" aria-hidden="true">
-              <span class="demo-quote" data-for="dictate">“<span class="filler">Um, </span><span class="said-words">I’ll send the notes after lunch.</span>”</span>
-              <span class="demo-quote" data-for="translate" lang="zh-Hans">“<span class="said-words">明天下午三点开会。</span>”</span>
+        <div class="demos">
+          <figure class="demo" data-demo="dictate">
+            <figcaption class="demo-name">Dictation</figcaption>
+            <div class="demo-stage" role="img" aria-label="Animation: someone says “Um, I’ll send the notes after lunch.” Orra’s capsule of bars moves with the voice, and the words appear in a note without the filler um.">
+              <p class="demo-said" aria-hidden="true">“<span class="filler">Um, </span><span class="said-words">I’ll send the notes after lunch.</span>”</p>
+              <div class="demo-window" aria-hidden="true">
+                <div class="demo-chrome"><i></i><i></i><i></i></div>
+                <p class="doc-title">Project update</p>
+                <p class="demo-target"><span class="pasted">I’ll send the notes after lunch.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
-            <div class="demo-window" aria-hidden="true">
-              <div class="demo-chrome"><i></i><i></i><i></i></div>
-              <p class="demo-line">Project update</p>
-              <p class="demo-line demo-target" data-line="dictate"><span class="pasted">I’ll send the notes after lunch.</span><span class="caret"></span></p>
-              <p class="demo-line demo-target" data-line="translate"><span class="pasted">Meeting tomorrow at 3 p.m.</span><span class="caret"></span></p>
-            </div>
-            <div class="demo-bottom" aria-hidden="true">
-              <span class="keycap" data-for="dictate"><span class="keycap-glyph">⌃</span> control</span>
-              <span class="keycap" data-for="translate"><span class="keycap-glyph">⌥</span> option</span>
-              <span class="capsule"><span class="badge" lang="zh-Hans">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-            </div>
-          </div>
-          <figcaption class="demo-steps" aria-hidden="true">
-            <span class="steps-row" data-row="dictate"><span class="steps-name">Dictate</span><span data-step="hold">Hold</span><span data-step="speak">Speak</span><span data-step="release">Release</span></span>
-            <span class="steps-row" data-row="translate"><span class="steps-name">Translate</span><span data-step="hold">Hold</span><span data-step="speak">Speak</span><span data-step="release">Release</span></span>
-          </figcaption>
-        </figure>
-      </div>
-    </section>
+          </figure>
 
-    <section id="how" class="band">
-      <div class="wrap">
-        <h2 class="reveal">Three steps.<br>Any app you can type in.</h2>
-        <ol class="steps">
-          <li class="reveal">
-            <span class="step-num" aria-hidden="true">1</span>
-            <h3>Hold a key</h3>
-            <p>Hold the talk key, right Control unless you pick another. Or press it twice quickly to talk hands free.</p>
-          </li>
-          <li class="reveal">
-            <span class="step-num" aria-hidden="true">2</span>
-            <h3>Speak</h3>
-            <p>Orra records while you hold it. White bars in a small capsule at the bottom of the screen move with your voice.</p>
-          </li>
-          <li class="reveal">
-            <span class="step-num" aria-hidden="true">3</span>
-            <h3>Release</h3>
-            <p>Orra turns your speech into text on your Mac and pastes it where your cursor is, in any app you can type in.</p>
-          </li>
-        </ol>
-        <p class="note reveal">The first time, a welcome window lets you pick its language and walks you through downloading the speech model (2.47 GB, once), allowing the microphone and Accessibility, and choosing your talk key.</p>
+          <figure class="demo" data-demo="translate">
+            <figcaption class="demo-name">Translation</figcaption>
+            <div class="demo-stage" role="img" aria-label="Animation: in a chat, a friend asks “When do we meet?” Someone says the Chinese sentence 明天下午三点开会. Orra’s capsule shows a small 译 badge, and the English translation, Meeting tomorrow at 3 p.m., appears in the message field.">
+              <p class="demo-said" aria-hidden="true" lang="zh-Hans">“<span class="said-words">明天下午三点开会。</span>”</p>
+              <div class="demo-window chat" aria-hidden="true">
+                <div class="chat-head"><span class="avatar">S</span>Sam</div>
+                <p class="bubble">When do we meet?</p>
+                <p class="demo-target composer"><span class="pasted">Meeting tomorrow at 3 p.m.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><span class="badge" lang="zh-Hans">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+        </div>
       </div>
     </section>
 
@@ -95,45 +74,21 @@
       <div class="wrap">
         <h2 class="reveal">Made for the way<br>you actually talk.</h2>
         <div class="tiles">
-          <div class="tile wide reveal">
-            <h3>Chinese, English and both at once</h3>
-            <p>Speak Chinese, English, or mix them in one sentence.</p>
-          </div>
-          <div class="tile reveal">
-            <h3>On device speech recognition</h3>
-            <p>Qwen3-ASR 1.7B runs on your Mac. What you say does not leave it.</p>
-          </div>
-          <div class="tile reveal">
-            <h3>Your talk key, or hands free</h3>
-            <p>Choose fn (Globe), or the left or right Control, Option or Command key, by pressing it. For a longer text, press it twice quickly and talk hands free.</p>
-          </div>
-          <div class="tile reveal">
-            <h3>Clean text</h3>
-            <p>Fillers such as um, uh and 呃 are removed, and numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits.</p>
-          </div>
           <div class="tile reveal">
             <h3>Your vocabulary</h3>
-            <p>Add up to 5,000 names and terms, and Orra writes them your way.</p>
-          </div>
-          <div class="tile reveal">
-            <h3>Cleanup on your Mac</h3>
-            <p>Turn on Clean Up Text and a local model removes the fillers left and applies spoken corrections such as "Monday, I mean Tuesday". It uses a 3.05 GB model you download once, and nothing leaves your Mac.</p>
-          </div>
-          <div class="tile wide reveal">
-            <h3>Translation between Chinese and English</h3>
-            <p>Hold the translation key, right Option unless you pick another (right Command when right Option is your talk key), and speak. Orra pastes what you said translated, Chinese into English and English into Chinese, or always into English or always into Chinese. It runs on your Mac with the same downloaded model as cleanup, and nothing leaves your Mac.</p>
+            <p>Add the names and terms you use, and Orra writes them your way.</p>
           </div>
           <div class="tile reveal">
             <h3>Learns from your corrections</h3>
-            <p>Turn it on, fix a misheard word after a dictation in apps such as Notes, Mail and Safari, and Orra adds the right spelling to your vocabulary. A notice lets you undo it.</p>
+            <p>Fix a misheard word after a dictation, and Orra adds it to your vocabulary. Off until you turn it on.</p>
           </div>
           <div class="tile reveal">
-            <h3>Updates in the app</h3>
-            <p>Check for Updates in the menu, or let Orra check for you. Nothing installs until you choose it.</p>
+            <h3>Chinese and English, mixed</h3>
+            <p>Speak Chinese, English, or both in one sentence.</p>
           </div>
           <div class="tile reveal">
-            <h3>English and Chinese interface</h3>
-            <p>Menus and windows are in English or Simplified Chinese. They follow your Mac's language, or the one you choose in Settings.</p>
+            <h3>Translation</h3>
+            <p>Speak Chinese and get English, or speak English and get Chinese. It runs on your Mac.</p>
           </div>
         </div>
       </div>
@@ -144,15 +99,8 @@
         <h2 class="reveal">Privacy</h2>
         <p class="statement reveal">What you say stays on your Mac.</p>
         <div class="prose reveal">
-          <p>Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own.</p>
-          <p>Orra goes online for three things only:</p>
-          <ul>
-            <li><strong>Downloading the speech model</strong>, after you choose Download Speech Model. It comes from Hugging Face, or from ModelScope or hf-mirror.com when Hugging Face cannot be reached. Orra checks the size and SHA-256 hash of every file before using it.</li>
-            <li><strong>Downloading the cleanup model</strong>, only after you turn on Clean Up Text or Translation and agree to its download. It comes from the same servers and is checked the same way.</li>
-            <li><strong>Checking for updates</strong>, only after you allow it. Launching Orra never touches the network before that.</li>
-          </ul>
-          <p>Learning from your corrections is off until you turn it on. Even then Orra keeps only word pairs, never your text. The <a href="https://github.com/db-ol/Orra#privacy">README</a> has the full details.</p>
-          <p>This website uses no cookies, no analytics and no trackers.</p>
+          <p>You need the internet once, to download Orra and its models. After that, Orra goes online only to check for updates, and only if you allow it. Everything else runs on your Mac, and Orra never saves your recordings or what you said.</p>
+          <p>If you turn on learning from your corrections, Orra keeps only word pairs. The <a href="https://github.com/db-ol/Orra#privacy">README</a> has the details.</p>
         </div>
       </div>
     </section>
@@ -181,12 +129,10 @@
     <section class="band closing" aria-labelledby="closing-title">
       <div class="wrap reveal">
         <h2 id="closing-title">Try Orra.</h2>
-        <p class="lede">Free and open source. Needs a Mac with Apple silicon, macOS 15.6 or later and about 3 GB of free space. Signed with a Developer ID and notarized by Apple.</p>
+        <p class="lede">Free and open source. Notarized by Apple.</p>
         <div class="cta">
           <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Download for Mac</a>
-          <p class="version">Version 0.3.0</p>
         </div>
-        <p class="note">Orra is an early preview. Expect rough edges and changes to the design.</p>
       </div>
     </section>
   </main>

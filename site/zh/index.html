@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orra：Mac 上的语音输入</title>
-  <meta name="description" content="Orra 是一款开源的 Mac 语音输入 App。按住一个键说话，松开后，文字就会出现在你正在输入的 App 里。语音在你自己的 Mac 上转成文字，从不经过服务器。">
+  <meta name="description" content="Orra 是一款开源的 Mac 语音输入 App。在任何 App 里听写，也能边说边在中英文之间翻译。语音在你自己的 Mac 上转成文字，从不经过服务器。">
   <meta name="color-scheme" content="light dark">
   <link rel="canonical" href="https://db-ol.github.io/Orra/zh/">
   <link rel="alternate" hreflang="en" href="https://db-ol.github.io/Orra/">
@@ -20,7 +20,6 @@
     <div class="wrap topbar-inner">
       <a class="brand" href="./"><img src="../favicon.png" alt="" width="24" height="24">Orra</a>
       <nav aria-label="主导航">
-        <a class="optional" href="#how">使用方法</a>
         <a class="optional" href="#features">功能</a>
         <a class="optional" href="#privacy">隐私</a>
         <a href="https://github.com/db-ol/Orra">GitHub</a>
@@ -34,60 +33,40 @@
       <div class="wrap">
         <img class="app-icon" src="../icon.png" alt="Orra 的 App 图标" width="96" height="96">
         <p class="eyebrow">Orra</p>
-        <h1 id="hero-title">按住一个键，<br>说话，松开。</h1>
-        <p class="lede">在 Mac 上随处语音输入。语音在你的 Mac 上转成文字，从不经过服务器。</p>
+        <h1 id="hero-title">说出来，<br>就写好了。</h1>
+        <p class="lede">在任何 App 里听写和翻译，全部在你的 Mac 上完成。</p>
         <div class="cta">
           <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">下载 Mac 版</a>
-          <p class="version">版本 0.3.0。需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac。</p>
+          <p class="version">版本 0.3.0 <span class="needs">需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。</span></p>
         </div>
 
-        <figure class="demo">
-          <div class="demo-stage" role="img" aria-label="动画分两段。听写：按住说话键 control，胶囊里的音量条随声音跳动，松开后，去掉语气词“呃”的文字出现在光标处。翻译：按住翻译键 option，胶囊里的音量条旁出现一个小小的“译”字标记，说出“明天下午三点开会”，松开后，英文译文“Meeting tomorrow at 3 p.m.”出现在下一行。">
-            <div class="demo-said" aria-hidden="true">
-              <span class="demo-quote" data-for="dictate">“<span class="filler">呃，</span><span class="said-words">午饭后我把会议记录发给你。</span>”</span>
-              <span class="demo-quote" data-for="translate">“<span class="said-words">明天下午三点开会。</span>”</span>
+        <div class="demos">
+          <figure class="demo" data-demo="dictate">
+            <figcaption class="demo-name">听写</figcaption>
+            <div class="demo-stage" role="img" aria-label="动画：有人说“呃，午饭后我把会议记录发给你。”Orra 的胶囊里，音量条随声音跳动，随后这句话出现在一篇笔记里，语气词“呃”已经去掉。">
+              <p class="demo-said" aria-hidden="true">“<span class="filler">呃，</span><span class="said-words">午饭后我把会议记录发给你。</span>”</p>
+              <div class="demo-window" aria-hidden="true">
+                <div class="demo-chrome"><i></i><i></i><i></i></div>
+                <p class="doc-title">项目进展</p>
+                <p class="demo-target"><span class="pasted">午饭后我把会议记录发给你。</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
-            <div class="demo-window" aria-hidden="true">
-              <div class="demo-chrome"><i></i><i></i><i></i></div>
-              <p class="demo-line">项目进展</p>
-              <p class="demo-line demo-target" data-line="dictate"><span class="pasted">午饭后我把会议记录发给你。</span><span class="caret"></span></p>
-              <p class="demo-line demo-target" data-line="translate" lang="en"><span class="pasted">Meeting tomorrow at 3 p.m.</span><span class="caret"></span></p>
-            </div>
-            <div class="demo-bottom" aria-hidden="true">
-              <span class="keycap" data-for="dictate"><span class="keycap-glyph">⌃</span> control</span>
-              <span class="keycap" data-for="translate"><span class="keycap-glyph">⌥</span> option</span>
-              <span class="capsule"><span class="badge">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-            </div>
-          </div>
-          <figcaption class="demo-steps" aria-hidden="true">
-            <span class="steps-row" data-row="dictate"><span class="steps-name">听写</span><span data-step="hold">按住</span><span data-step="speak">说话</span><span data-step="release">松开</span></span>
-            <span class="steps-row" data-row="translate"><span class="steps-name">翻译</span><span data-step="hold">按住</span><span data-step="speak">说中文</span><span data-step="release">松开，得到英文</span></span>
-          </figcaption>
-        </figure>
-      </div>
-    </section>
+          </figure>
 
-    <section id="how" class="band">
-      <div class="wrap">
-        <h2 class="reveal">三步完成。<br>哪里能打字，哪里就能说。</h2>
-        <ol class="steps">
-          <li class="reveal">
-            <span class="step-num" aria-hidden="true">1</span>
-            <h3>按住说话键</h3>
-            <p>默认是右侧 Control 键，也可以换成别的键。快速连按两下，就能免手持说话。</p>
-          </li>
-          <li class="reveal">
-            <span class="step-num" aria-hidden="true">2</span>
-            <h3>说话</h3>
-            <p>按住时 Orra 会录音，屏幕底部的小胶囊里，白色音量条会随你的声音跳动。</p>
-          </li>
-          <li class="reveal">
-            <span class="step-num" aria-hidden="true">3</span>
-            <h3>松开</h3>
-            <p>Orra 在你的 Mac 上把语音转成文字，粘贴到光标所在的位置，任何能打字的 App 都可以。</p>
-          </li>
-        </ol>
-        <p class="note reveal">第一次打开时，可以先在欢迎窗口里选择语言，然后它会带你下载语音模型（2.47 GB，只需一次），允许使用麦克风和辅助功能，并选择说话键。</p>
+          <figure class="demo" data-demo="translate">
+            <figcaption class="demo-name">翻译</figcaption>
+            <div class="demo-stage" role="img" aria-label="动画：在一个聊天窗口里，朋友用英文问“When do we meet?”。有人用中文说“明天下午三点开会”，Orra 的胶囊里显示一个小小的“译”字标记，随后英文译文“Meeting tomorrow at 3 p.m.”出现在输入框里。">
+              <p class="demo-said" aria-hidden="true">“<span class="said-words">明天下午三点开会。</span>”</p>
+              <div class="demo-window chat" aria-hidden="true" lang="en">
+                <div class="chat-head"><span class="avatar">S</span>Sam</div>
+                <p class="bubble">When do we meet?</p>
+                <p class="demo-target composer"><span class="pasted">Meeting tomorrow at 3 p.m.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><span class="badge">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+        </div>
       </div>
     </section>
 
@@ -95,45 +74,21 @@
       <div class="wrap">
         <h2 class="reveal">照你说话的样子，<br>写成文字。</h2>
         <div class="tiles">
-          <div class="tile wide reveal">
-            <h3>中文、英文和中英混说</h3>
+          <div class="tile reveal">
+            <h3>个人词库</h3>
+            <p>把常用的名字和术语加进来，Orra 会按你的写法输出。</p>
+          </div>
+          <div class="tile reveal">
+            <h3>自我学习</h3>
+            <p>听写后改正一个听错的词，Orra 会把它加入个人词库。默认关闭，打开后才会学习。</p>
+          </div>
+          <div class="tile reveal">
+            <h3>中英混合</h3>
             <p>说中文、说英文，或者在一句话里中英混说都可以。</p>
           </div>
           <div class="tile reveal">
-            <h3>在本机识别语音</h3>
-            <p>Qwen3-ASR 1.7B 模型在你的 Mac 上运行，你说的话不会离开这台 Mac。</p>
-          </div>
-          <div class="tile reveal">
-            <h3>自选说话键，也能免手持</h3>
-            <p>按一下就能选好说话键：fn（地球仪）键，或者左侧、右侧的 Control、Option、Command 键。要说一大段话时，快速连按两下，就不用一直按着。</p>
-          </div>
-          <div class="tile reveal">
-            <h3>干净的文字</h3>
-            <p>自动去掉“呃”“um”“uh”这类语气词，并把说出来的日期、时间、价格、百分比等数字写成阿拉伯数字。</p>
-          </div>
-          <div class="tile reveal">
-            <h3>个人词库</h3>
-            <p>最多可以放 5,000 个名字和术语，Orra 会按你的写法输出。</p>
-          </div>
-          <div class="tile reveal">
-            <h3>在你的 Mac 上整理文字</h3>
-            <p>打开“整理文字”，本地模型会去掉剩下的语气词，并按你说出口的更正改好内容，比如“三点，哦不对，四点”。它用一个只需下载一次的 3.05 GB 模型，文字不会离开你的 Mac。</p>
-          </div>
-          <div class="tile wide reveal">
-            <h3>中英互译</h3>
-            <p>按住翻译键说话，默认是右侧 Option 键，可以更改（右侧 Option 是说话键时，默认是右侧 Command 键）。Orra 会把你说的话翻译后再粘贴：中文翻成英文，英文翻成中文，也可以固定翻成英文或中文。翻译和整理用同一个下载好的模型，在你的 Mac 上运行，文字不会离开你的 Mac。</p>
-          </div>
-          <div class="tile reveal">
-            <h3>从你的修改中学习</h3>
-            <p>打开后，在备忘录、邮件和 Safari 等 App 里，听写后你改正了一个听错的词，Orra 会把正确的写法加入个人词库，并弹出提示，你可以撤销。</p>
-          </div>
-          <div class="tile reveal">
-            <h3>在 App 里更新</h3>
-            <p>在菜单里选择“检查更新…”，或者让 Orra 自动检查。每次更新都要你同意后才会安装。</p>
-          </div>
-          <div class="tile reveal">
-            <h3>中英文界面</h3>
-            <p>菜单和窗口有英文和简体中文，默认跟随你的 Mac，也可以在设置里选择。</p>
+            <h3>中英翻译</h3>
+            <p>说中文得到英文，说英文得到中文，都在你的 Mac 上完成。</p>
           </div>
         </div>
       </div>
@@ -144,15 +99,8 @@
         <h2 class="reveal">隐私</h2>
         <p class="statement reveal">你说的话，留在你的 Mac 上。</p>
         <div class="prose reveal">
-          <p>Orra 在你的 Mac 上把语音转成文字，从不把录音或文字发送到任何地方。它没有账号、没有统计，也没有自己的服务器。</p>
-          <p>Orra 只在三种情况下联网：</p>
-          <ul>
-            <li><strong>下载语音模型</strong>，只在你选择“下载语音模型”之后。模型来自 Hugging Face，连不上时改用 ModelScope 或 hf-mirror.com。使用之前，Orra 会核对每个文件的大小和 SHA-256 校验值。</li>
-            <li><strong>下载整理模型</strong>，只在你打开“整理文字”或“翻译”并同意下载之后。它来自同样的服务器，并用同样的方式核对。</li>
-            <li><strong>检查更新</strong>，只在你允许之后。在此之前，启动 Orra 从不联网。</li>
-          </ul>
-          <p>“从你的修改中学习”默认关闭。打开后，Orra 也只保存词对，从不保存你的文字。详情见 <a href="https://github.com/db-ol/Orra/blob/main/README.zh-CN.md#隐私">README</a>。</p>
-          <p>本网站不使用 Cookie，没有统计，也没有任何跟踪。</p>
+          <p>只有第一次下载 Orra 和模型时需要联网。之后，只有在你允许检查更新时，Orra 才会联网。其他一切都在你的 Mac 上完成，Orra 从不保存你的录音和说过的话。</p>
+          <p>打开“自我学习”后，Orra 也只保存词对。详情见 <a href="https://github.com/db-ol/Orra/blob/main/README.zh-CN.md#隐私">README</a>。</p>
         </div>
       </div>
     </section>
@@ -181,12 +129,10 @@
     <section class="band closing" aria-labelledby="closing-title">
       <div class="wrap reveal">
         <h2 id="closing-title">试试 Orra。</h2>
-        <p class="lede">免费开源。需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。使用 Developer ID 签名并经过苹果公证。</p>
+        <p class="lede">免费开源，经过苹果公证。</p>
         <div class="cta">
           <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">下载 Mac 版</a>
-          <p class="version">版本 0.3.0</p>
         </div>
-        <p class="note">Orra 目前是早期预览版。难免有不完善的地方，设计也还会调整。</p>
       </div>
     </section>
   </main>
