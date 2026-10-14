@@ -1073,6 +1073,27 @@ struct PushToTalkControllerTests {
         #expect(saved == [false, true])
     }
 
+    @Test func withAVocabularyNumbersComeFromASecondPassOnlyWhileTheSettingIsOn() async throws {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            vocabulary: vocabularyWords("Orra", added: Date(timeIntervalSince1970: 1_000))
+        )
+        await controller.loadModel()
+        speech.reply = "Orra 在二零二四年发布。"
+        speech.replyWithoutContext = "Aura 在2024年发布。"
+        try await dictate(controller)
+        controller.setWritesNumbersAsDigits(false)
+        try await dictate(controller)
+        #expect(inserter.inserted == ["Orra 在2024年发布。", "Orra 在二零二四年发布。"])
+        #expect(speech.receivedContexts == ["Orra", nil, "Orra"])
+    }
+
     @Test func aPasteDatesTheVocabularyWordsItHolds() async throws {
         let added = Date(timeIntervalSince1970: 1_000)
         let pasteTime = Date(timeIntervalSince1970: 5_000)

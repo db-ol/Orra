@@ -23,13 +23,15 @@ extension Transcription {
     /// pass fails, the text with the vocabulary stands too, as it did before the check. A
     /// known limit: a single term spoken so softly that only the pass with the vocabulary
     /// hears it is dropped like an echo. Any other text with the vocabulary gets its numbers
-    /// in digits from a pass without it, see `takingNumbers`.
+    /// in digits from a pass without it, see `takingNumbers`, unless `takingDigits` is off
+    /// because the user wants numbers in words.
     /// Logs a timing and whether speech was heard, never the text.
-    func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double) async throws -> String {
+    func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double, takingDigits: Bool = true) async throws -> String {
         let context = Vocabulary.context(terms)
         let text = try await checkingLanguage(try await transcribe(samples, context, nil), of: samples, context: context)
         guard !terms.isEmpty else { return text }
         guard await Self.isOnlyTerms(text, of: terms) else {
+            guard takingDigits else { return text }
             return try await takingNumbers(into: text, of: samples, terms: terms)
         }
         let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")

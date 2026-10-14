@@ -112,6 +112,14 @@ struct ContextNumbersTranscriptionTests {
         #expect(speech.receivedContexts == [nil])
     }
 
+    @Test func withDigitsOffThereIsNoSecondPass() async throws {
+        speech.reply = "Orra 在二零二四年发布。"
+        speech.replyWithoutContext = "Aura 在2024年发布。"
+        let text = try await speech.transcription.transcribe([0.1], vocabulary: ["Orra"], audioSeconds: 1, takingDigits: false)
+        #expect(text == "Orra 在二零二四年发布。")
+        #expect(speech.receivedContexts == ["Orra"])
+    }
+
     @Test func aFailedPassKeepsTheText() async throws {
         speech.reply = "Orra 在二零二四年发布。"
         speech.transcribeErrorWithoutContext = TestError()
