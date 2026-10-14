@@ -332,6 +332,28 @@ Build and test commands, run in the repository root:
     too long pastes the text untranslated with the notice and is waited for once only,
     and turning cleanup off while translation is on keeps the model, while turning off the
     last one ends the wait and unloads.
+  - DictationTimingsTests, added on 2026-10-13, checks that DictationTimings adds up each
+    step as the time since the one before, and that PushToTalkController reports every
+    step once for a pasted dictation and nothing for one that pastes nothing.
+  - LatencyMeasurementTests measures each step from the release of the talk key to the
+    paste with the installed speech and cleanup models, only with
+    TEST_RUNNER_ORRA_LATENCY=1, in a Release build. It drives PushToTalkController with a
+    stand in microphone that returns a clip at 48 kHz, the real release tail, the real
+    models, the rules, CleanupStep and a real TextInserter on a private pasteboard that
+    builds the Command V events without posting them. Each clip runs with cleanup off and
+    on. A second test splits one speech model pass into mel features, audio encoder and
+    text decoder. The report holds durations and token counts only. Clips: synthetic
+    dictations made with macOS say into 16 kHz WAV files, short, mid and long, in
+    Chinese, English and mixed speech, plus three clips of each short and mid stratum of
+    the speech corpus:
+
+        TEST_RUNNER_ORRA_LATENCY=1 TEST_RUNNER_ORRA_LATENCY_CLIPS=<folder of say clips> TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=<corpus folder> TEST_RUNNER_ORRA_LATENCY_REPORT=<report file> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/LatencyMeasurementTests
+
+    A clip is made with, for example,
+    `say -v Tingting -o zh_short_1.wav --data-format=LEI16@16000 "明天下午三点开会。"`, and
+    its file name starts with the language and the length, as in zh_short_1.wav. Not run
+    yet in Release: the first run waits for the numbers. The app's log line "Release to
+    paste took" lists the same steps for every real dictation, in milliseconds.
   - CleanupIdleUnloadMeasurementTests measures the idle unload with the real cleanup
     model, only with TEST_RUNNER_ORRA_CLEANUP_IDLE_MEASURE=1, in a Release build:
 
