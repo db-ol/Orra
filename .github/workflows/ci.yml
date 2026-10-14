@@ -31,6 +31,10 @@ jobs:
       - name: Test the speech evaluation scorer
         run: python3 -m unittest discover -s Tools/speech-eval -p 'test_*.py' -v
 
+      # The release gate's scorer and comparer, standard library only.
+      - name: Test the release gate comparer
+        run: python3 -m unittest discover -s Tools/release-gate -p 'test_*.py' -v
+
   test:
     name: Build and test
     # The only GitHub hosted image with Xcode 27 so far. It is an arm64 Mac in public

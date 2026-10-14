@@ -1,0 +1,135 @@
+# Release gate
+
+One local command builds Release once, runs the opt in evaluations one after another and
+compares every case with a baseline run. It fails when a case or a metric got worse, and
+prints the IDs of the cases behind each failure. It needs the speech model, the cleanup
+model and the data under `~/projects/orra-project`, so it runs on the maintainer's Mac,
+never in CI.
+
+    Tools/release-gate/run.sh [--baseline <dir>] [--only <suite>[,<suite>...]] [--out <dir>] [--skip-build]
+
+Exit status 0 means every suite ran and nothing got worse, 1 that a rule below failed,
+and 2 that the build or a suite did not run. Without `--baseline` it only runs and prints
+the numbers, which is how a baseline is made. The results go to `--out`, by default
+`~/projects/orra-project/bench/gate-runs/<commit>-<date and time>`, never into the
+repository.
+
+## Suites
+
+| Suite | Test | What it measures, per case |
+|---|---|---|
+| corpus | SpeechCorpusEvaluationTests | The 392 clips of the speech corpus (#40): errors per clip on the transcript and on the text after the filler and number rules, scored with Tools/speech-eval/score.py, so wer_en, cer_zh and mer_mixed |
+| context | RealModelTests/ContextEvaluationTests | 100 ContextASR clips per language, each without and with its terms and ten distractors as context: terms found, distractors inserted, errors and the time of each pass, plus ascend_mixed with unrelated terms and three clips without speech |
+| cleanup | CleanupModelEvaluationTests/cleanupCases() | The 178 regular, 70 adversarial and 20 meaning cases of Tools/rewrite-eval in three modes: exact match, outcome, time, and whether an adversarial case looks obeyed (pasted text more than 1.6 times as long as expected plus 4, as in the translation evaluation) |
+| latency | LatencyMeasurementTests/dictations() | Release to paste (#51) for the say clips of the latency-say set and 15 corpus clips, cleanup off and on: median and p90 of every step, and each clip's median |
+| sets | GateSetEvaluationTests | Every set under the gate sets folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
+
+Each suite is one run of xcodebuild test-without-building, so another job can use the
+GPU between suites.
+
+## Rules
+
+`Tools/release-gate/gate.py compare` checks these, with the tolerances as constants at
+the top of the file:
+
+- corpus: wer_en, cer_zh or mer_mixed, on the transcript or after the rules, more than
+  0.10 points above the baseline, or any clip with no error in the baseline that has one
+  now.
+- context: term recall with context more than 0.5 points lower, the error rate with
+  context more than 0.25 points higher, any clip that found all its terms and now misses
+  one, any clip with more distractors inserted, more terms inserted into ascend_mixed,
+  more clips without speech that give text, or a p90 time per pass more than 20 % and
+  0.1 s above the baseline.
+- cleanup: a lower exact count in any set and mode, any case that matched exactly and no
+  longer does, or any adversarial case that looks obeyed, baseline or not.
+- latency: a p90 of any step or of the total more than 20 % and 10 ms above the
+  baseline, with cleanup off or on. Clips whose median grew that much are listed.
+- sets: a set's error rate more than 0.5 points higher, any clip with no error that has
+  one now, any clip that lost an expected term, or any clip with a forbidden term that
+  the baseline did not have. A new set or clip only fails on a forbidden term.
+
+Every clip or case with more errors than in the baseline is listed under "cases got
+worse", also when no rule failed.
+
+## Test sets
+
+A set is a folder `<sets>/<name>/` with `clips/<id>.wav` (16 kHz mono) and
+`manifest.jsonl`, one line per clip:
+
+    {"id": "zh_terms_1", "language": "zh", "reference": "...", "context": ["Kubernetes"], "expect_terms": ["Kubernetes"], "forbid_terms": []}
+
+- language: "zh", "en" or "mixed". English is scored per word, the others per Chinese
+  character and per Latin word.
+- reference: the text Orra should paste with cleanup off, so after the filler and number
+  rules, for example 3点 for 三点.
+- context: the vocabulary the dictation runs with, may be empty.
+- expect_terms: terms the text must hold. forbid_terms: terms it must not hold. Spaces
+  inside a term are free (N P C matches NPC). A term with Latin letters matches with its
+  case and not inside a longer word, so the plain word cursor is not the term Cursor and
+  trust does not hold Rust. Other terms match anywhere in the text.
+
+The sentences, voices and references of each set are in
+`Tools/release-gate/sets/<name>/sentences.jsonl`, and
+
+    python3 Tools/release-gate/make_set.py --all
+
+makes the clips with macOS say into `~/projects/orra-project/bench/gate-sets`. Clips stay
+outside the repository. No recording of a person goes into a set.
+
+## Variables
+
+| Variable | Default |
+|---|---|
+| ORRA_BENCH | ~/projects/orra-project/bench |
+| GATE_CORPUS_DIR | $ORRA_BENCH/speech-corpus |
+| GATE_SETS_DIR | $ORRA_BENCH/gate-sets |
+| GATE_LATENCY_CLIPS | $GATE_SETS_DIR/latency-say/clips |
+| GATE_CONTEXT_COUNT | 100 clips per ContextASR set |
+| GATE_CLEANUP_MODEL_DIR | the installed cleanup model |
+| GATE_DERIVED_DATA | build/DerivedDataRelease |
+| GATE_LOCK | none. A folder made with mkdir before each suite and removed after, for a Mac where other jobs share the GPU |
+
+Before each suite the script waits while an Orra runs from anywhere but a DerivedData
+folder, since the test host is an Orra app too.
+
+## ContextASR timing
+
+The context evaluation of 2026-10-08 reported a p95 of 30.7 and 29.9 s on contextasr_zh and
+60.0 and 61.5 s on contextasr_en, without and with context. On 2026-10-14 the same clips, the
+same terms and distractors, the same engine and decoding options and the same speech-swift
+were run clip by clip with a command line build of Orra's speech files on the M5 Pro:
+
+| Set, build | Without context: median, p95, max | With context: median, p95, max |
+|---|---|---|
+| contextasr_zh, Release | 1.53, 2.30, 3.77 s | 1.57, 2.42, 4.00 s |
+| contextasr_en, Release | 1.39, 1.87, 2.37 s | 1.42, 1.87, 2.14 s |
+| contextasr_zh, Debug | 2.06, 3.06, 6.25 s | 2.12, 2.78, 6.13 s |
+
+The p95 uses the old test's rank. Every clip is 30 to 60 s of audio (median 47.9 s in
+Chinese and 43.8 s in English). Recall, insertions and error rates came out exactly as on
+2026-10-08 (84.5 % and 98.9 %, 1.95 % and 0.94 % in Chinese, 83.1 % and 95.7 %, 10.65 % and
+7.61 % and one distractor in English), and the Debug run gave the same errors on every
+clip, so the old run produced the same text. No output ran past its reference by more than
+4 words or characters, TranscriptGuard cut nothing, and the longest output was 262
+characters against a budget of 454 to 712 tokens, so no clip looped or ran to the token
+limit, as the pull request of 2026-10-08 assumed. No pass took more than 6.3 s in either
+build. The Debug build explains the old median (2.32 s against 2.06 s Debug and 1.53 s
+Release) but not the tail. The old run took 64 minutes, and contextasr_zh alone took 7.3
+minutes in Debug here, so the whole evaluation should take less than 20, and the 30 to 60 s passes most likely came from other work on the Mac slowing the
+GPU for part of that run, which this measurement cannot show directly. The gate now keeps
+the time of every pass in context.json and fails when a p90 grows by more than 20 %.
+
+## Baseline
+
+A baseline is a results folder of a run on main, kept outside the repository under
+`~/projects/orra-project/bench/gate-baseline/main-<short commit>`:
+
+    Tools/release-gate/run.sh --out ~/projects/orra-project/bench/gate-baseline/main-$(git rev-parse --short HEAD)
+
+A branch is then checked with
+
+    Tools/release-gate/run.sh --baseline ~/projects/orra-project/bench/gate-baseline/main-<short commit>
+
+Make a new baseline after a change that is meant to move a number, such as a new model,
+and say in the pull request which baseline the gate ran against. `gate.py show <folder>`
+prints the numbers of one folder.
