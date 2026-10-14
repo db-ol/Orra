@@ -2,9 +2,10 @@
 """Makes the synthetic test sets of the release gate with the macOS voices.
 
 Each folder next to this script is one set: sentences.jsonl with one sentence per line
-({"id", "language", "say", "reference", "expect_terms", "forbid_terms"}, optional "voice")
-and set.json with its context variants. Every sentence is spoken once with `say`, then
-afconvert writes it as 16 kHz mono 16 bit WAVE. Each variant adds one clip and one manifest
+({"id", "language", "say", "reference", "expect_terms", "forbid_terms"}, optional "voice"
+and "context") and an optional set.json with its context variants. A variant without a
+context, or a set without set.json, uses the context of each sentence. Every sentence is
+spoken once with `say`, then afconvert writes it as 16 kHz mono 16 bit WAVE. Each variant adds one clip and one manifest
 line per sentence, with the variant's suffix after the sentence id and its context.
 
 The output folder of a set holds clips/<id>.wav and manifest.jsonl, one line per clip:
@@ -15,8 +16,8 @@ Usage (macOS only, standard library only):
 
     python3 Tools/release-gate/sets/make_sets.py [--out FOLDER] [SET ...]
 
-The default output folder is ../bench/gate-sets next to the repository, as in the
-maintainer's checkout. With no set named, every set is made.
+The default output folder is $ORRA_BENCH/gate-sets, the folder the gate reads (ORRA_BENCH
+is ~/projects/orra-project/bench unless set). With no set named, every set is made.
 """
 
 from __future__ import annotations
@@ -31,13 +32,15 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_OUT = HERE.parents[3] / "bench" / "gate-sets"
+DEFAULT_OUT = Path(os.environ.get("ORRA_BENCH", Path.home() / "projects/orra-project/bench")) / "gate-sets"
+ONE_VARIANT = [{"suffix": ""}]
 VOICES = {"en": "Samantha", "zh": "Tingting", "mixed": "Tingting"}
 
 
 def load_set(folder: Path) -> tuple[list[dict], list[dict]]:
     sentences = [json.loads(line) for line in (folder / "sentences.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-    variants = json.loads((folder / "set.json").read_text(encoding="utf-8"))["variants"]
+    settings = folder / "set.json"
+    variants = json.loads(settings.read_text(encoding="utf-8"))["variants"] if settings.exists() else ONE_VARIANT
     ids = [row["id"] for row in sentences]
     if len(ids) != len(set(ids)):
         sys.exit(f"{folder.name}: duplicate sentence ids")
@@ -74,7 +77,7 @@ def make(folder: Path, out: Path) -> int:
                     "id": clip_id,
                     "language": row["language"],
                     "reference": row["reference"],
-                    "context": variant["context"],
+                    "context": variant.get("context", row.get("context", [])),
                     "expect_terms": row["expect_terms"],
                     "forbid_terms": row["forbid_terms"],
                 })

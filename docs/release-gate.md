@@ -71,9 +71,10 @@ A set is a folder `<sets>/<name>/` with `clips/<id>.wav` (16 kHz mono) and
 The sentences, voices and references of each set are in
 `Tools/release-gate/sets/<name>/sentences.jsonl`, and
 
-    python3 Tools/release-gate/make_set.py --all
+    python3 Tools/release-gate/sets/make_sets.py
 
-makes the clips with macOS say into `~/projects/orra-project/bench/gate-sets`. Clips stay
+makes the clips of every set with macOS say into `$ORRA_BENCH/gate-sets`. Its README
+describes the set files. Clips stay
 outside the repository. No recording of a person goes into a set.
 
 ## Variables

@@ -3,25 +3,34 @@
 Each folder here is one set of sentences, written by hand and spoken with the macOS voices.
 Only the sentences live in the repository. The clips are made again on any Mac:
 
-    python3 Tools/release-gate/sets/make_sets.py --out ../bench/gate-sets
+    python3 Tools/release-gate/sets/make_sets.py [SET ...]
 
 `make_sets.py` uses `say` (Samantha for English, Tingting for Chinese and mixed sentences,
 or the `voice` of a line) and `afconvert` to 16 kHz mono 16 bit WAVE. Standard library only.
-Without `--out` it writes to `bench/gate-sets` next to the repository folder.
+It writes to `$ORRA_BENCH/gate-sets`, where the gate reads the sets, unless `--out` names
+another folder.
 
 ## Files of a set
 
 - `sentences.jsonl`: one sentence per line, `{"id", "language", "say", "reference",
   "expect_terms", "forbid_terms"}`. `say` is the text given to the voice, `reference` is the
-  text Orra should paste. `language` is `zh`, `en` or `mixed`.
-- `set.json`: the context variants. Every sentence becomes one clip per variant, with the
+  text Orra should paste. `language` is `zh`, `en` or `mixed`. A line may hold its own
+  `voice` and `context`.
+- `set.json`, optional: the context variants. Every sentence becomes one clip per variant, with the
   variant's `suffix` after its id and the variant's `context` (the vocabulary given to the
-  speech model).
+  speech model). A variant without `context`, or a set without `set.json`, gives each clip
+  the context of its sentence.
 
 The output of a set is `clips/<id>.wav` and `manifest.jsonl`, one line per clip:
 `{"id", "language", "reference", "context", "expect_terms", "forbid_terms"}`.
 
 ## Sets
+
+### gate-core (12 clips) and latency-say (13 clips)
+
+gate-core holds short sentences with vocabulary terms in their own context, to check term
+recall and forbidden words. latency-say holds the clips #51 timed release to paste with.
+Both give each sentence its own context and have no `set.json`.
 
 ### homophone-distractors (52 clips)
 
