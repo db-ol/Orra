@@ -173,6 +173,12 @@ final class PushToTalkController {
     @ObservationIgnored private let releaseTail: Duration
     @ObservationIgnored private let accessCheckDelay: Duration
     @ObservationIgnored private let listeningCueDelay: Duration
+    @ObservationIgnored private let heldPassInterval: Duration
+    /// Transcribes the audio so far without the vocabulary while the key is held, see
+    /// `transcribeStartWhileHeld`.
+    @ObservationIgnored private var heldPassTask: Task<Void, Never>?
+    /// The latest pass of `heldPassTask` in the current hold.
+    @ObservationIgnored private var heldStart: PlainStart?
     /// Sends the listening cue once the hold has lasted `listeningCueDelay`.
     @ObservationIgnored private var listeningCueTask: Task<Void, Never>?
     /// Whether the current hold has shown the indicator, so its end has to clear it.
@@ -242,6 +248,8 @@ final class PushToTalkController {
     ///     `watchAccess()`.
     ///   - listeningCueDelay: How long a hold lasts before the indicator shows and the
     ///     start sound plays. A shortcut with the talk key is over sooner.
+    ///   - heldPassInterval: How long after the previous pass without the vocabulary the
+    ///     next one starts while the key is held, see `transcribeStartWhileHeld`.
     ///   - talkKey: The key that starts a dictation, as saved by the user.
     ///   - saveTalkKey: Saves the key after the user changes it.
     ///   - talkKeyChosen: Whether the user has saved a talk key before.
@@ -274,6 +282,7 @@ final class PushToTalkController {
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
         listeningCueDelay: Duration = .milliseconds(150),
+        heldPassInterval: Duration = .seconds(3),
         talkKey: TalkKey = TalkKey.defaultKey,
         saveTalkKey: @escaping (TalkKey) -> Void = { _ in },
         talkKeyChosen: Bool = false,
@@ -305,6 +314,7 @@ final class PushToTalkController {
         self.releaseTail = releaseTail
         self.accessCheckDelay = accessCheckDelay
         self.listeningCueDelay = listeningCueDelay
+        self.heldPassInterval = heldPassInterval
         self.talkKey = talkKey
         self.saveTalkKey = saveTalkKey
         self.hasChosenTalkKey = talkKeyChosen
@@ -670,6 +680,7 @@ final class PushToTalkController {
         case .startedProcessing:
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
+            heldPassTask?.cancel()
             let released = ContinuousClock.now
             let heldFor = pressedAt.map { $0.duration(to: released) } ?? .zero
             if heldFor >= minimumHold {
@@ -683,13 +694,15 @@ final class PushToTalkController {
             let start = captureStart
             let chosen = holdMicrophone
             let translating = holdTranslation
+            let heldPass = heldPassTask
             Task { [weak self] in
-                await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, translating: translating, releasedAt: released)
+                await self?.finishRecording(start: start, heldPass: heldPass, chosen: chosen, heldFor: heldFor, target: target, translating: translating, releasedAt: released)
                 self?.handle(.processingFinished)
             }
         case .cancelledListening:
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
+            heldPassTask?.cancel()
             endUserActivity()
             let start = captureStart
             captureCancel = Task { [capture] in
@@ -787,6 +800,13 @@ final class PushToTalkController {
                     return false
                 }
             }
+            heldStart = nil
+            heldPassTask = nil
+            if writesNumbersAsDigits, !vocabulary.isEmpty {
+                heldPassTask = Task { [weak self, start = captureStart] in
+                    await self?.transcribeStartWhileHeld(start: start, hold: hold)
+                }
+            }
             recordingLimitTask = Task { [weak self, maximumRecordingDuration] in
                 try? await Task.sleep(for: maximumRecordingDuration)
                 guard !Task.isCancelled, let self, state == .listening || state == .handsFree else { return }
@@ -806,6 +826,33 @@ final class PushToTalkController {
         case .notConfigured:
             holdMessage = String(localized: "This build has no microphone usage description")
             handle(.cancelled)
+        }
+    }
+
+    /// While the key is held with a vocabulary, transcribes the audio so far without the
+    /// vocabulary, up to its latest pause, so the pass for the numbers after the release has
+    /// only the rest to transcribe, see `Transcription.takingNumbers`. A pass starts
+    /// `heldPassInterval` after the previous one ended, or half a second later when the
+    /// audio has no pause yet, so one runs at a time. Cancelled at the release, and the
+    /// model stops before its next step, so the pass with the vocabulary hardly waits.
+    private func transcribeStartWhileHeld(start: Task<Bool, Never>?, hold: Int) async {
+        guard await start?.value == true else { return }
+        var wait = heldPassInterval
+        while !Task.isCancelled {
+            try? await Task.sleep(for: wait)
+            guard !Task.isCancelled, let recording = await capture.peek() else { return }
+            wait = .milliseconds(500)
+            guard let samples = await Self.untilPause(recording), samples.count > heldStart?.sampleCount ?? 0 else { continue }
+            let started = ContinuousClock.now
+            do {
+                let text = try await transcription.transcribe(samples, nil, nil)
+                guard hold == holdNumber else { return }
+                heldStart = PlainStart(text: text, sampleCount: samples.count)
+                logger.debug("Pass without the vocabulary over \(samples.count, privacy: .public) samples while held took \(started.duration(to: .now), privacy: .public)")
+            } catch {
+                return
+            }
+            wait = heldPassInterval
         }
     }
 
@@ -857,7 +904,7 @@ final class PushToTalkController {
     /// Ends a hold that was released: waits for the microphone to have started, records
     /// the short tail, stops, and transcribes unless the hold was too short or cut.
     /// `translating` is the direction when the translation key started the dictation.
-    private func finishRecording(start: Task<Bool, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
+    private func finishRecording(start: Task<Bool, Never>?, heldPass: Task<Void, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
         var timings = DictationTimings(releasedAt: released)
         // A failed start already set the problem.
         guard await start?.value == true else { return }
@@ -868,6 +915,10 @@ final class PushToTalkController {
         timings.lap(.releaseTail)
         let recording = await capture.stop()
         timings.lap(.microphoneStop)
+        // Cancelled at the release, so this returns within one step of the model.
+        await heldPass?.value
+        let heldStart = heldStart
+        self.heldStart = nil
         if recording.wasCut {
             problem = String(localized: "The microphone changed during the recording. Try again.")
             return
@@ -885,13 +936,13 @@ final class PushToTalkController {
                 microphoneNotice = String(localized: "\(chosen.name) is not connected, so the system default input recorded.")
             }
         }
-        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, timings: &timings)
+        await transcribeAndInsert(recording, heldStart: heldStart, chosen: chosen, target: target, translating: translating, timings: &timings)
     }
 
     /// Turns a recording into text and pastes it, translated when `translating` is set and
     /// the translation passes its checks. Logs timings, never the text. `timings` gets the
     /// time of each step.
-    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, timings: inout DictationTimings) async {
+    private func transcribeAndInsert(_ recording: AudioRecording, heldStart: PlainStart?, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, timings: inout DictationTimings) async {
         do {
             let (samples, silent) = await Self.prepared(recording)
             timings.lap(.resampling)
@@ -919,7 +970,8 @@ final class PushToTalkController {
                 samples,
                 vocabulary: Vocabulary.forModel(vocabulary),
                 audioSeconds: recording.duration,
-                takingDigits: writesNumbersAsDigits
+                takingDigits: writesNumbersAsDigits,
+                heldStart: heldStart
             )
             timings.lap(.recognition)
             var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
@@ -1070,6 +1122,15 @@ final class PushToTalkController {
     nonisolated private static func prepared(_ recording: AudioRecording) async -> (samples: [Float], silent: Bool) {
         let samples = AudioResampler.monoAt16kHz(recording)
         return (samples, Silence.isSilent(samples))
+    }
+
+    /// The recording so far at 16 kHz up to its latest pause, see `PlainStart.pause(in:)`,
+    /// or nil when it is silent or has no pause. Off the main actor, like `prepared`.
+    @concurrent
+    nonisolated private static func untilPause(_ recording: AudioRecording) async -> [Float]? {
+        let samples = AudioResampler.monoAt16kHz(recording)
+        guard !Silence.isSilent(samples), let pause = PlainStart.pause(in: samples) else { return nil }
+        return Array(samples.prefix(pause))
     }
 
     /// Opens System Settings at Sound, where the user picks the input device.

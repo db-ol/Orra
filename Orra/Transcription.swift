@@ -24,15 +24,17 @@ extension Transcription {
     /// known limit: a single term spoken so softly that only the pass with the vocabulary
     /// hears it is dropped like an echo. Any other text with the vocabulary gets its numbers
     /// in digits from a pass without it, see `takingNumbers`, unless `takingDigits` is off
-    /// because the user wants numbers in words.
+    /// because the user wants numbers in words. `heldStart` is that pass over the start of
+    /// the samples, made while the key was held, see PushToTalkController. Only the rest is then
+    /// transcribed after the release.
     /// Logs a timing and whether speech was heard, never the text.
-    func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double, takingDigits: Bool = true) async throws -> String {
+    func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double, takingDigits: Bool = true, heldStart: PlainStart? = nil) async throws -> String {
         let context = Vocabulary.context(terms)
         let text = try await checkingLanguage(try await transcribe(samples, context, nil), of: samples, context: context)
         guard !terms.isEmpty else { return text }
         guard await Self.isOnlyTerms(text, of: terms) else {
             guard takingDigits else { return text }
-            return try await takingNumbers(into: text, of: samples, terms: terms)
+            return try await takingNumbers(into: text, of: samples, terms: terms, heldStart: heldStart)
         }
         let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
         let started = ContinuousClock.now
@@ -52,16 +54,25 @@ extension Transcription {
 
     /// The text written with the vocabulary, with its numbers in Chinese characters written
     /// as digits where a pass without the vocabulary wrote the same number in digits, see
-    /// ContextNumbers. That pass runs only when the text may hold such a number. When it
-    /// fails, the text stands.
+    /// ContextNumbers. That pass runs only when the text may hold such a number. With a
+    /// `heldStart` it covers only the samples after it, from `PlainStart.overlap` before
+    /// its end, and the two transcripts together give the digits. When the pass fails, the
+    /// text stands.
     /// Logs a timing and whether digits were taken, never the text.
-    func takingNumbers(into text: String, of samples: [Float], terms: [String]) async throws -> String {
+    func takingNumbers(into text: String, of samples: [Float], terms: [String], heldStart: PlainStart? = nil) async throws -> String {
         guard ContextNumbers.mayHoldSpokenNumber(text) else { return text }
         let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
         let started = ContinuousClock.now
+        let tailStart = heldStart.map { max(0, min($0.sampleCount, samples.count) - PlainStart.overlap) } ?? 0
         let plain: String
         do {
-            plain = try await transcribe(samples, nil, nil)
+            if let heldStart, heldStart.sampleCount >= samples.count {
+                plain = heldStart.text
+            } else if let heldStart {
+                plain = PlainStart.joined(heldStart.text, try await transcribe(Array(samples[tailStart...]), nil, nil))
+            } else {
+                plain = try await transcribe(samples, nil, nil)
+            }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -69,7 +80,7 @@ extension Transcription {
             return text
         }
         let merged = await Self.merging(text, plain: plain, terms: terms)
-        logger.notice("Transcript may hold a number in words, the pass without the vocabulary took \(started.duration(to: .now), privacy: .public), digits taken: \(merged != text, privacy: .public)")
+        logger.notice("Transcript may hold a number in words, the pass without the vocabulary over \(samples.count - tailStart, privacy: .public) of \(samples.count, privacy: .public) samples took \(started.duration(to: .now), privacy: .public), digits taken: \(merged != text, privacy: .public)")
         return merged
     }
 
@@ -123,6 +134,52 @@ extension Transcription {
     @concurrent
     nonisolated private static func isOnlyTerms(_ text: String, of terms: [String]) async -> Bool {
         VocabularyEcho.isOnlyTerms(text, of: terms)
+    }
+}
+
+/// A transcript without the vocabulary of the first `sampleCount` samples of a recording,
+/// made while the key was held, so the pass for the numbers after the release has only
+/// the rest to transcribe, see `Transcription.takingNumbers`.
+nonisolated struct PlainStart: Equatable, Sendable {
+    var text: String
+    var sampleCount: Int
+
+    /// How far before the end of the start the pass after the release begins. None, since
+    /// the start ends in a pause, see `pause(in:)`.
+    static let overlap = 0
+
+    /// Where the samples so far may be cut for a start: the middle of the quietest 50 ms
+    /// in their last 2 seconds, when it is far quieter than the samples on average, so no
+    /// word, and no number, is cut in two. Nil when there is no such pause.
+    static func pause(in samples: [Float]) -> Int? {
+        let window = 800
+        let searched = 32_000
+        guard samples.count >= searched else { return nil }
+        let mean = samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count) * Float(window)
+        var best: (index: Int, energy: Float)?
+        var start = samples.count - searched
+        while start + window <= samples.count {
+            var energy: Float = 0
+            for index in start..<(start + window) {
+                energy += samples[index] * samples[index]
+            }
+            if best == nil || energy < best!.energy {
+                best = (start + window / 2, energy)
+            }
+            start += 160
+        }
+        guard let best, best.energy <= 0.05 * mean else { return nil }
+        return best.index
+    }
+
+    /// The two transcripts as one, with a space between two words in Latin letters or
+    /// digits.
+    static func joined(_ start: String, _ rest: String) -> String {
+        let start = start.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rest = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = start.unicodeScalars.last, let first = rest.unicodeScalars.first else { return start + rest }
+        let latin = { (scalar: Unicode.Scalar) in scalar.isASCII && !CharacterSet.whitespaces.contains(scalar) }
+        return latin(last) && latin(first) ? start + " " + rest : start + rest
     }
 }
 

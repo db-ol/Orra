@@ -52,6 +52,7 @@ final class FakeMicrophone {
                 return self.recording
             },
             cancel: { self.calls.append("cancel") },
+            peek: { self.calls.last == "start" ? self.recording : nil },
             level: { self.level }
         )
     }
@@ -1092,6 +1093,77 @@ struct PushToTalkControllerTests {
         try await dictate(controller)
         #expect(inserter.inserted == ["Orra 在2024年发布。", "Orra 在二零二四年发布。"])
         #expect(speech.receivedContexts == ["Orra", nil, "Orra"])
+    }
+
+    /// 1.5 s of tone, 0.3 s of silence, 1.2 s of tone: a pause in the last 2 seconds.
+    private static let recordingWithPause = AudioRecording(
+        samples: FakeMicrophone.tone(count: 24_000) + [Float](repeating: 0, count: 4_800) + FakeMicrophone.tone(count: 19_200),
+        sampleRate: 16_000
+    )
+
+    private func controllerWithHeldPasses(vocabulary: [VocabularyWord], digits: Bool = true) async -> PushToTalkController {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { [workspace] in workspace.frontmost },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero,
+            heldPassInterval: .milliseconds(20),
+            vocabulary: vocabulary,
+            writesNumbersAsDigits: digits
+        )
+        await controller.loadModel()
+        return controller
+    }
+
+    @Test func whileHeldTheStartIsTranscribedSoOnlyTheRestIsAfterTheRelease() async throws {
+        mic.recording = Self.recordingWithPause
+        let controller = await controllerWithHeldPasses(vocabulary: vocabularyWords("Orra", added: Date(timeIntervalSince1970: 1_000)))
+        speech.reply = "Orra 在二零二四年发布。"
+        speech.replyWithoutContext = "Aura 在2024年发布。"
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { !speech.receivedContexts.isEmpty }
+        // The recording does not grow, so there is no second pass.
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(speech.receivedContexts == [nil])
+        let start = try #require(speech.receivedSampleCounts.first)
+        #expect((24_000..<28_800).contains(start))
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(speech.receivedContexts == [nil, "Orra", nil])
+        #expect(speech.receivedSampleCounts == [start, 48_000, 48_000 - start + PlainStart.overlap])
+        #expect(inserter.inserted.count == 1)
+    }
+
+    @Test func noPassWhileHeldWithoutAVocabularyOrWithNumbersInWords() async throws {
+        mic.recording = Self.recordingWithPause
+        speech.reply = "在二零二四年发布。"
+        for controller in [
+            await controllerWithHeldPasses(vocabulary: []),
+            await controllerWithHeldPasses(vocabulary: vocabularyWords("Orra", added: Date(timeIntervalSince1970: 1_000)), digits: false),
+        ] {
+            controller.handle(.pressed(isRepeat: false))
+            try await waitUntil { mic.calls.contains("start") }
+            try await Task.sleep(for: .milliseconds(100))
+            controller.handle(.released)
+            try await waitUntil { controller.state == .idle }
+        }
+        #expect(speech.receivedSampleCounts == [48_000, 48_000])
+    }
+
+    @Test func aCancelledHoldStopsThePassesWhileHeld() async throws {
+        mic.recording = Self.recordingWithPause
+        let controller = await controllerWithHeldPasses(vocabulary: vocabularyWords("Orra", added: Date(timeIntervalSince1970: 1_000)))
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { !speech.receivedContexts.isEmpty }
+        controller.handle(.cancelled)
+        try await waitUntil { mic.calls.contains("cancel") }
+        let made = speech.receivedContexts.count
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(speech.receivedContexts.count == made)
+        #expect(inserter.inserted.isEmpty)
     }
 
     @Test func aPasteDatesTheVocabularyWordsItHolds() async throws {

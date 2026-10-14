@@ -41,7 +41,7 @@ actor Qwen3Engine {
         // transcription and later ones about 0.3 s, probably Metal compiling GPU programs.
         // Silence gives no text, so this only moves such one time costs from the user's first
         // dictation to the launch.
-        _ = run(loaded, on: [Float](repeating: 0, count: RecordingLimits.sampleRate))
+        _ = try? run(loaded, on: [Float](repeating: 0, count: RecordingLimits.sampleRate))
         model = loaded
     }
 
@@ -50,13 +50,16 @@ actor Qwen3Engine {
     ///     speech-swift puts in the prompt's system turn. The app passes the user's
     ///     vocabulary. ContextEvaluationTests measures what a vocabulary does.
     ///   - language: The language the model must write, or nil to let it choose.
+    /// Throws CancellationError when the calling task is cancelled, before the next token at
+    /// the latest, so a pass made while the key is held leaves the model to the pass after
+    /// the release, see PushToTalkController.
     func transcribe(_ samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) throws -> String {
         guard let model else { throw TranscriptionError.modelMissing }
         guard !samples.isEmpty else { throw TranscriptionError.noAudio }
-        return run(model, on: samples, context: context, language: language)
+        return try run(model, on: samples, context: context, language: language)
     }
 
-    private func run(_ model: Qwen3ASRModel, on samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) -> String {
+    private func run(_ model: Qwen3ASRModel, on samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) throws -> String {
         let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
         // No language hint by default: docs/asr-baseline.md shows that a fixed hint hurts
         // mixed Chinese and English. LanguageGuard asks for one only when the model chose
@@ -70,7 +73,9 @@ actor Qwen3Engine {
             context: context,
             longInputThresholdSeconds: .infinity
         )
-        return model.transcribe(audio: samples, sampleRate: RecordingLimits.sampleRate, options: options)
+        // Decodes exactly as transcribe(audio:sampleRate:options:) does, and checks for
+        // cancellation before each step.
+        return try model.transcribeCheckingCancellation(audio: samples, sampleRate: RecordingLimits.sampleRate, options: options)
     }
 }
 

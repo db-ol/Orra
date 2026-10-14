@@ -127,6 +127,46 @@ struct ContextNumbersTranscriptionTests {
         #expect(text == "Orra 在二零二四年发布。")
     }
 
+    @Test func withAStartHeardWhileHeldOnlyTheRestIsTranscribed() async throws {
+        var plainCounts: [Int] = []
+        let transcription = Transcription(load: {}, transcribe: { samples, context, _ in
+            guard context == nil else { return "Orra 在二零二四年发布了三百个。" }
+            plainCounts.append(samples.count)
+            return "发布了300个。"
+        })
+        let start = PlainStart(text: "Aura 在2024年", sampleCount: 30_000)
+        let samples = [Float](repeating: 0.1, count: 48_000)
+        let text = try await transcription.transcribe(samples, vocabulary: ["Orra"], audioSeconds: 3, heldStart: start)
+        #expect(text == "Orra 在2024年发布了300个。")
+        #expect(plainCounts == [48_000 - 30_000 + PlainStart.overlap])
+    }
+
+    @Test func aStartOfAllSamplesNeedsNoPassAfterTheRelease() async throws {
+        speech.reply = "Orra 在二零二四年发布。"
+        let start = PlainStart(text: "Aura 在2024年发布。", sampleCount: 16_000)
+        let text = try await speech.transcription.transcribe([Float](repeating: 0.1, count: 16_000), vocabulary: ["Orra"], audioSeconds: 1, heldStart: start)
+        #expect(text == "Orra 在2024年发布。")
+        #expect(speech.receivedContexts == ["Orra"])
+    }
+
+    @Test func theTwoPartsJoinWithASpaceOnlyBetweenLatinWords() {
+        #expect(PlainStart.joined("在2024年", "发布了。") == "在2024年发布了。")
+        #expect(PlainStart.joined("Version 3", " 2 shipped") == "Version 3 2 shipped")
+        #expect(PlainStart.joined("在 Orra", "里") == "在 Orra里")
+        #expect(PlainStart.joined("", "300个") == "300个")
+    }
+
+    @Test func aPauseIsFoundOnlyWhereTheAudioIsQuiet() throws {
+        let tone = FakeMicrophone.tone(count: 24_000)
+        let quiet = [Float](repeating: 0, count: 4_800)
+        let pause = try #require(PlainStart.pause(in: tone + quiet + tone))
+        #expect((24_000..<28_800).contains(pause))
+        #expect(PlainStart.pause(in: FakeMicrophone.tone(count: 48_000)) == nil)
+        // Only the last 2 seconds are searched.
+        #expect(PlainStart.pause(in: quiet + FakeMicrophone.tone(count: 40_000)) == nil)
+        #expect(PlainStart.pause(in: tone) == nil)
+    }
+
     @Test func cancellationIsNotSwallowed() async {
         speech.reply = "Orra 在二零二四年发布。"
         speech.transcribeErrorWithoutContext = CancellationError()

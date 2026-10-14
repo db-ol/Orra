@@ -154,6 +154,11 @@ nonisolated final class SampleStore: Sendable {
         }
     }
 
+    /// Returns a copy of everything collected so far and keeps it.
+    func peek() -> [Float] {
+        state.withLock { $0.samples }
+    }
+
     /// Returns everything collected so far and empties the store.
     func take() -> [Float] {
         state.withLock { current in
@@ -274,6 +279,19 @@ actor AudioRecorder {
         }
     }
 
+    /// A copy of what was recorded so far, while recording goes on, or nil between holds.
+    /// For the pass without the vocabulary made while the key is held.
+    func peek() -> AudioRecording? {
+        switch source {
+        case .unit(let unit):
+            return AudioRecording(samples: unit.peek(), sampleRate: unit.sampleRate, input: unit.device)
+        case .engine(let input):
+            return AudioRecording(samples: store.peek(), sampleRate: sampleRate, input: input)
+        case nil:
+            return nil
+        }
+    }
+
     /// Stops recording and throws the samples away.
     func cancel() {
         guard let source else { return }
@@ -372,6 +390,9 @@ struct AudioCapture {
     var start: (String?) async throws -> Void
     var stop: () async -> AudioRecording
     var cancel: () async -> Void
+    /// What was recorded so far, without stopping or emptying anything, or nil when
+    /// nothing records. Fakes may leave it at nil.
+    var peek: () async -> AudioRecording? = { nil }
     /// The peak of the latest audio while recording, from 0 to 1, for the recording
     /// indicator. Fakes may leave it at zero.
     var level: () -> Float = { 0 }
@@ -384,6 +405,7 @@ struct AudioCapture {
             start: { preferredInput in try await recorder.start(preferredInput: preferredInput) },
             stop: { await recorder.stop() },
             cancel: { await recorder.cancel() },
+            peek: { await recorder.peek() },
             level: { recorder.meter.peak }
         )
     }
