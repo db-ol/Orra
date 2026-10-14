@@ -157,7 +157,7 @@ struct CleanupModelEvaluationTests {
                 var expectations: [String] = []
                 for item in cases {
                     let source = mode == "model only" ? item.input : Self.appRules(item.input)
-                    let skipped = mode == "with the skip gate" && !CleanupStep.hasWorkForModel(source)
+                    let skipped = mode == "with the skip gate" && !CleanupStep.hasWorkForModel(source, heard: item.input)
                     sources.append(source)
                     expectations.append(mode == "model only" ? item.expected : Self.appRules(item.expected))
                     for (way, cached) in [("cached", true), ("uncached", false)] where cached || compares {
@@ -199,7 +199,7 @@ struct CleanupModelEvaluationTests {
                         report += "  model runs \(completions.count), prompt tokens median \(Int(Self.median(completions.map { Double($0.promptTokens) }))), cached median \(Int(Self.median(completions.map { Double($0.cachedPromptTokens) }))), read median \(Int(Self.median(read))), prefill median \(String(format: "%.3f", Self.median(prefill))) s, p95 \(String(format: "%.3f", Self.p95(prefill))) s\n"
                     }
                     if mode == "with the skip gate" && way == "cached" {
-                        let skippedCount = sources.filter { !CleanupStep.hasWorkForModel($0) }.count
+                        let skippedCount = zip(sources, cases).filter { !CleanupStep.hasWorkForModel($0, heard: $1.input) }.count
                         let app = exactIDs["as the app runs it", default: []]
                         let gated = exactIDs[mode, default: []]
                         report += "  skipped \(skippedCount), exact lost against the app \(app.subtracting(gated).sorted()), gained \(gated.subtracting(app).sorted())\n"

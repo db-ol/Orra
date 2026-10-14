@@ -29,4 +29,11 @@ nonisolated extension CleanupStep {
         if chineseCues.contains(where: text.contains) { return true }
         return text.contains(englishCuePattern)
     }
+
+    /// The gate the app uses. The filler rule removes um, uh and 呃 before the model runs,
+    /// and the text around them may still need the model, so a cue in the heard text
+    /// counts as well as one in the ruled text.
+    static func hasWorkForModel(_ ruled: String, heard: String) -> Bool {
+        hasWorkForModel(ruled) || hasWorkForModel(heard)
+    }
 }

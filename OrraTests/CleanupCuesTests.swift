@@ -17,4 +17,13 @@ struct CleanupCuesTests {
         // A cue only counts as a whole English word.
         #expect(!CleanupStep.hasWorkForModel("Please review the summary."))
     }
+
+    @Test func aFillerTheRuleRemovedStillGoesToTheModel() {
+        let heard = "呃，我们周五开会。"
+        let ruled = FillerRules.removingFillers(from: heard)
+        #expect(!CleanupStep.hasWorkForModel(ruled))
+        #expect(CleanupStep.hasWorkForModel(ruled, heard: heard))
+        #expect(CleanupStep.hasWorkForModel("Ship it today.", heard: "Um, ship it today."))
+        #expect(!CleanupStep.hasWorkForModel("周五的聚餐取消了。", heard: "周五的聚餐取消了。"))
+    }
 }

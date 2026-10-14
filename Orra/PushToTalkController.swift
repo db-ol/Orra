@@ -908,6 +908,7 @@ final class PushToTalkController {
             }
             let raw = try await transcription.transcribe(samples, vocabulary: Vocabulary.forModel(vocabulary), audioSeconds: recording.duration)
             var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            let heard = text
             if removesFillerWords {
                 text = FillerRules.removingFillers(from: text)
             }
@@ -935,7 +936,7 @@ final class PushToTalkController {
             if let translated {
                 // In place of the cleanup step, since the translation prompt cleans up too.
                 text = translated.text
-            } else if CleanupStep.isWorthCleaning(text), CleanupStep.hasWorkForModel(text), await cleanup.waitUntilLoaded() {
+            } else if CleanupStep.isWorthCleaning(text), CleanupStep.hasWorkForModel(text, heard: heard), await cleanup.waitUntilLoaded() {
                 text = await CleanupStep.run(text, complete: cleanup.complete).text
             }
             let isTranslation = translated?.isTranslation == true
