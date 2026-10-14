@@ -91,6 +91,33 @@ outside the repository. No recording of a person goes into a set.
 Before each suite the script waits while an Orra runs from anywhere but a DerivedData
 folder, since the test host is an Orra app too.
 
+## ContextASR timing
+
+The context evaluation of 2026-10-08 reported a p95 of 30.7 and 29.9 s on contextasr_zh and
+60.0 and 61.5 s on contextasr_en, without and with context. On 2026-10-14 the same clips, the
+same terms and distractors, the same engine and decoding options and the same speech-swift
+were run clip by clip with a command line build of Orra's speech files on the M5 Pro:
+
+| Set, build | Without context: median, p95, max | With context: median, p95, max |
+|---|---|---|
+| contextasr_zh, Release | 1.53, 2.30, 3.77 s | 1.57, 2.42, 4.00 s |
+| contextasr_en, Release | 1.39, 1.87, 2.37 s | 1.42, 1.87, 2.14 s |
+| contextasr_zh, Debug | 2.06, 3.06, 6.25 s | 2.12, 2.78, 6.13 s |
+
+The p95 uses the old test's rank. Every clip is 30 to 60 s of audio (median 47.9 s in
+Chinese and 43.8 s in English). Recall, insertions and error rates came out exactly as on
+2026-10-08 (84.5 % and 98.9 %, 1.95 % and 0.94 % in Chinese, 83.1 % and 95.7 %, 10.65 % and
+7.61 % and one distractor in English), and the Debug run gave the same errors on every
+clip, so the old run produced the same text. No output ran past its reference by more than
+4 words or characters, TranscriptGuard cut nothing, and the longest output was 262
+characters against a budget of 454 to 712 tokens, so no clip looped or ran to the token
+limit, as the pull request of 2026-10-08 assumed. No pass took more than 6.3 s in either
+build. The Debug build explains the old median (2.32 s against 2.06 s Debug and 1.53 s
+Release) but not the tail. The old run took 64 minutes, and contextasr_zh alone took 7.3
+minutes in Debug here, so the whole evaluation should take less than 20, and the 30 to 60 s passes most likely came from other work on the Mac slowing the
+GPU for part of that run, which this measurement cannot show directly. The gate now keeps
+the time of every pass in context.json and fails when a p90 grows by more than 20 %.
+
 ## Baseline
 
 BASELINE_SECTION

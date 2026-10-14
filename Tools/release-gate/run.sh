@@ -101,8 +101,13 @@ for suite in $suites; do
       env+=(TEST_RUNNER_ORRA_GATE_SETS=$sets)
       test_id=OrraTests/GateSetEvaluationTests ;;
   esac
-  wait_for_installed_orra
-  take_lock
+  # Waits for the lock with no Orra running, so neither starts while the other waits.
+  while true; do
+    wait_for_installed_orra
+    take_lock
+    pgrep -fl "Orra.app/Contents/MacOS/Orra" | grep -v "/DerivedData" > /dev/null || break
+    release_lock
+  done
   echo "$suite: started $(date +%H:%M:%S)"
   env $env $xcode test-without-building -only-testing:$test_id > $out/logs/$suite.log 2>&1
   code=$?
