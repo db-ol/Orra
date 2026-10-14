@@ -24,9 +24,8 @@ repository.
 | latency | LatencyMeasurementTests/dictations() | Release to paste (#51) for the say clips of the latency-say set and 15 corpus clips, cleanup off and on: median and p90 of every step, and each clip's median |
 | sets | GateSetEvaluationTests | Every set under the gate sets folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
 
-Each suite holds the GPU for one run of xcodebuild. On an M5 Pro the runs took about
-CORPUS_TIME for corpus, CONTEXT_TIME for context, CLEANUP_TIME for cleanup, LATENCY_TIME
-for latency and SETS_TIME for the sets.
+Each suite is one run of xcodebuild test-without-building, so another job can use the
+GPU between suites.
 
 ## Rules
 
@@ -120,4 +119,15 @@ the time of every pass in context.json and fails when a p90 grows by more than 2
 
 ## Baseline
 
-BASELINE_SECTION
+A baseline is a results folder of a run on main, kept outside the repository under
+`~/projects/orra-project/bench/gate-baseline/main-<short commit>`:
+
+    Tools/release-gate/run.sh --out ~/projects/orra-project/bench/gate-baseline/main-$(git rev-parse --short HEAD)
+
+A branch is then checked with
+
+    Tools/release-gate/run.sh --baseline ~/projects/orra-project/bench/gate-baseline/main-<short commit>
+
+Make a new baseline after a change that is meant to move a number, such as a new model,
+and say in the pull request which baseline the gate ran against. `gate.py show <folder>`
+prints the numbers of one folder.
