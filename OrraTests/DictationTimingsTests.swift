@@ -29,7 +29,8 @@ struct DictationTimingsTests {
         speech.delay = .milliseconds(30)
         let inserter = FakeInserter()
         let cleanup = CleanupModel(waitUntilLoaded: { true }, complete: { _ in #"{"cleaned":"你好，今天下午开会。"}"# })
-        speech.reply = "你好，今天下午开会"
+        // A cue, so the gate sends the text to the cleanup model.
+        speech.reply = "那个，你好，今天下午开会"
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -56,6 +57,41 @@ struct DictationTimingsTests {
         #expect(Set(timings.durations.keys) == Set(DictationTimings.Step.allCases))
         #expect(timings.durations[.releaseTail]! >= .milliseconds(20))
         #expect(timings.durations[.recognition]! >= .milliseconds(30))
+        let sum = timings.durations.values.reduce(Duration.zero, +)
+        #expect(sum == timings.total)
+    }
+
+    @Test func aDictationTheGateSkipsStillEndsTheCleanupStep() async throws {
+        let mic = FakeMicrophone()
+        let speech = FakeSpeech()
+        let inserter = FakeInserter()
+        // The model would add a full stop, so the paste shows whether it ran.
+        let cleanup = CleanupModel(waitUntilLoaded: { true }, complete: { _ in #"{"cleaned":"你好，今天下午开会。"}"# })
+        // No filler or correction cue, so the cleanup model is skipped.
+        speech.reply = "你好，今天下午开会"
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            cleanup: cleanup,
+            insert: inserter.insert,
+            frontmostApp: { 100 },
+            minimumHold: .zero,
+            releaseTail: .zero
+        )
+        var reported: [DictationTimings] = []
+        controller.onTimings = { reported.append($0) }
+        await controller.loadModel()
+        controller.handle(.pressed(isRepeat: false))
+        for _ in 0..<1_000 where !mic.calls.contains("start") {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        controller.handle(.released)
+        for _ in 0..<1_000 where controller.state != .idle {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(inserter.inserted == ["你好，今天下午开会"])
+        let timings = try #require(reported.first)
+        #expect(Set(timings.durations.keys) == Set(DictationTimings.Step.allCases).subtracting([.cleanupWait]))
         let sum = timings.durations.values.reduce(Duration.zero, +)
         #expect(sum == timings.total)
     }
