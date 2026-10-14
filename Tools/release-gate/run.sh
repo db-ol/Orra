@@ -57,9 +57,15 @@ fi
 
 # The test host is an Orra app. It must not run beside an installed Orra, so wait while
 # one runs from anywhere but a DerivedData folder.
+# Matches the executable path of each process, not its arguments, so a shell whose
+# command line names Orra does not count.
+installed_orra_runs() {
+  ps -axo comm= | grep -E '/Orra\.app/Contents/MacOS/Orra$' | grep -v "/DerivedData" > /dev/null
+}
+
 wait_for_installed_orra() {
   local said=0
-  while pgrep -fl "Orra.app/Contents/MacOS/Orra" | grep -v "/DerivedData" > /dev/null; do
+  while installed_orra_runs; do
     (( said )) || echo "waiting for the installed Orra to quit"
     said=1
     sleep 30
@@ -105,7 +111,7 @@ for suite in $suites; do
   while true; do
     wait_for_installed_orra
     take_lock
-    pgrep -fl "Orra.app/Contents/MacOS/Orra" | grep -v "/DerivedData" > /dev/null || break
+    installed_orra_runs || break
     release_lock
   done
   echo "$suite: started $(date +%H:%M:%S)"
