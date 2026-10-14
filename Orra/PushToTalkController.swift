@@ -918,6 +918,9 @@ final class PushToTalkController {
             let raw = try await transcription.transcribe(samples, vocabulary: Vocabulary.forModel(vocabulary), audioSeconds: recording.duration)
             timings.lap(.recognition)
             var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            // The text as heard, before the filler rule, for the cleanup gate: a filler
+            // cue the rule removed still asks for the model.
+            let heard = text
             timings.lap(.transcriptGuard)
             if removesFillerWords {
                 text = FillerRules.removingFillers(from: text)
@@ -951,10 +954,17 @@ final class PushToTalkController {
                 // In place of the cleanup step, since the translation prompt cleans up too.
                 text = translated.text
             } else if CleanupStep.isWorthCleaning(text) {
-                let loaded = await cleanup.waitUntilLoaded()
-                timings.lap(.cleanupWait)
-                if loaded {
-                    text = await CleanupStep.run(text, complete: cleanup.complete).text
+                if CleanupStep.hasWorkForModel(text, heard: heard) {
+                    let loaded = await cleanup.waitUntilLoaded()
+                    timings.lap(.cleanupWait)
+                    if loaded {
+                        text = await CleanupStep.run(text, complete: cleanup.complete).text
+                        timings.lap(.cleanup)
+                    }
+                } else {
+                    // The gate found no filler or correction cue, so the model is skipped.
+                    // The check still ends the cleanup step, so its time is not counted
+                    // as part of the paste.
                     timings.lap(.cleanup)
                 }
             }
