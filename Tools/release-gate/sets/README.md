@@ -49,6 +49,7 @@ when the error rate barely moves.
 
 ## Matching terms
 
-Terms are matched in the text after NumberRules with all white space removed, after NFKC.
-A term with Latin letters matches case sensitively and only between non letters, so the
-plain word cursor does not count as Cursor. Other terms match as substrings.
+Terms are matched in the text after NumberRules and NFKC, with any white space allowed
+between their characters (GPT 5 matches GPT5). A term with Latin letters matches case
+sensitively and only between non letters, so the plain word cursor does not count as
+Cursor. Other terms match as substrings.
