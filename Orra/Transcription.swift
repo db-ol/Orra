@@ -52,7 +52,7 @@ extension Transcription {
     /// as digits where a pass without the vocabulary wrote the same number in digits, see
     /// ContextNumbers. That pass runs only when the text may hold such a number. When it
     /// fails, the text stands.
-    /// Logs a timing and how many numbers changed, never the text.
+    /// Logs a timing and whether digits were taken, never the text.
     func takingNumbers(into text: String, of samples: [Float], terms: [String]) async throws -> String {
         guard ContextNumbers.mayHoldSpokenNumber(text) else { return text }
         let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
