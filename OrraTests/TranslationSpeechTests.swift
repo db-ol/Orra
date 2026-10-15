@@ -500,6 +500,34 @@ struct TranslationSpeechTests {
         #expect(calls.withLock { $0 } == 1)
     }
 
+    /// A stop while the speech model listens: the piece does not play, and what is left
+    /// of the translation is dropped. Later translations are checked again.
+    @Test func aStopDuringTheWordCheckDropsThePiece() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
+        let calls = Mutex(0)
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { [speech] _ in
+            calls.withLock { $0 += 1 }
+            speech.stop()
+            return "We have a meeting next Tuesday."
+        }
+        speech.speak("We have a meeting next Tuesday. Could you send the numbers before then?", in: .english)
+        await speech.waitUntilDone()
+        #expect(spoken == ["en We have a meeting next Tuesday."])
+        #expect(calls.withLock { $0 } == 1)
+        #expect(playback.calls == ["start Orra Microphone", "stop"])
+
+        speech.transcribeSpeech = { _ in
+            calls.withLock { $0 += 1 }
+            return "Thanks a lot, everyone."
+        }
+        speech.speak("Thanks a lot, everyone.", in: .english)
+        await speech.waitUntilDone()
+        #expect(calls.withLock { $0 } == 2)
+        #expect(playback.calls.filter { $0.hasPrefix("play") }.count == 1)
+    }
+
     /// Off in Settings, or with the speech model not ready, a piece plays unchecked.
     @Test func withoutTheWordCheckAPiecePlays() async {
         synthesizer.streamsPieces.withLock { $0 = false }
