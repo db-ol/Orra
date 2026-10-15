@@ -24,18 +24,63 @@
     revealed.forEach(function (el) { el.classList.add("in"); });
   }
 
-  // Demos: dictation, then translation. One plays while the other waits in
-  // its final state. Each goes idle, then speak, then done.
+  // Demos: dictation, then cleanup, then translation. One plays while the
+  // others wait in their final state. Each goes idle, then speak, then strike
+  // (the filler is crossed out), then done (the text is pasted).
   var demos = document.querySelector(".demos");
   if (!demos) return;
 
+  // Speech appears at about 8.5 Chinese characters or 3 English words a
+  // second. The spoken line is split into spans that fade in one after the
+  // other, so it wraps like normal text. The speak phase lasts as long as
+  // the line takes to appear, plus a short pause.
+  var speakMs = {};
+  demos.querySelectorAll("[data-demo]").forEach(function (figure) {
+    var said = figure.querySelector(".demo-said");
+    if (!said) return;
+    var chinese = /^zh/i.test((said.closest("[lang]") || document.documentElement).getAttribute("lang"));
+    var step = chinese ? 1 / 8.5 : 1 / 3;
+    var count = 0;
+    // The quotation marks around the line show with its first and last unit.
+    Array.from(said.childNodes).forEach(function (node) {
+      var part = node.nodeType === 1 ? node : document.createElement("span");
+      var units = chinese ? Array.from(node.textContent) : node.textContent.match(/\S+\s*/g) || [];
+      if (part !== node) said.replaceChild(part, node);
+      part.textContent = "";
+      units.forEach(function (unit) {
+        var span = document.createElement("span");
+        span.className = "unit";
+        span.textContent = unit;
+        if (part === node) {
+          span.style.setProperty("--i", count);
+          count += 1;
+        } else {
+          span.style.setProperty("--i", Math.max(count - 1, 0));
+        }
+        part.appendChild(span);
+      });
+    });
+    figure.style.setProperty("--step", step + "s");
+    speakMs[figure.getAttribute("data-demo")] = Math.round(count * step * 1000) + 400;
+  });
+
+  function speak(name) {
+    return speakMs[name] || 2600;
+  }
+
   var phases = [
     ["dictate", "idle", 800],
-    ["dictate", "speak", 2600],
-    ["dictate", "done", 3400],
+    ["dictate", "speak", speak("dictate")],
+    ["dictate", "strike", 500],
+    ["dictate", "done", 2700],
+    ["cleanup", "idle", 800],
+    ["cleanup", "speak", speak("cleanup")],
+    ["cleanup", "strike", 500],
+    ["cleanup", "done", 3100],
     ["translate", "idle", 800],
-    ["translate", "speak", 2600],
-    ["translate", "done", 3800]
+    ["translate", "speak", speak("translate")],
+    ["translate", "strike", 500],
+    ["translate", "done", 3300]
   ];
   var figures = demos.querySelectorAll("[data-demo]");
   var index = 0;
@@ -64,7 +109,7 @@
   }
 
   function start() {
-    if (timer === null && visible && !document.hidden) {
+    if (timer === null && visible && !document.hidden && !reduce.matches) {
       index = 0;
       step();
     }

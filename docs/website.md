@@ -8,9 +8,12 @@ https://db-ol.github.io/Orra/.
 - site/index.html is the English page.
 - site/zh/index.html is the Simplified Chinese page.
 - site/style.css is the one style sheet for both. It follows the system's light or dark mode.
-- site/site.js plays the two demos at the top of the page, dictation and then translation,
-  and fades sections in as they scroll into view. Without it, or when the Mac asks for reduced
-  motion, the page shows both demos in their last frame and every section at once.
+- site/site.js plays the three demos at the top of the page, dictation, cleanup and then
+  translation, and fades sections in as they scroll into view. Without it, or when the Mac asks
+  for reduced motion, the page shows all demos in their last frame and every section at once.
+  The spoken line of each demo appears at about 8.5 Chinese characters or 3 English words a
+  second, so a longer line takes longer. Keep each line and each pasted text to two lines at
+  375 pixels wide. The cleanup demo shows an optional feature, so its caption says so.
 - site/icon.png and site/favicon.png are the app icon at 512 and 64 pixels. They are exported
   from Orra/AppIcon.icon with the ictool that ships inside Icon Composer.
 
@@ -35,12 +38,12 @@ The Download button points to
 https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg, so every release must
 upload a copy of its DMG named Orra.dmg, as docs/releasing.md describes.
 
-The version under the top Download button is plain text, once in each page ("Version 0.3.1"
-and "版本 0.3.1"), next to the system requirements. After a release is published, change it
+The version under the top Download button is plain text, once in each page ("Version 0.3.2"
+and "版本 0.3.2"), next to the system requirements. After a release is published, change it
 in both pages and merge, so the site never names a version that is not out yet. To find
 every place:
 
-    grep -rn "0\.3\.0" site
+    grep -rn "0\.3\.2" site
 
 To export the icon again after the icon changes:
 
