@@ -3,9 +3,11 @@
 ## Approved
 
 - soniqo/speech-swift (Apache-2.0), pinned to commit
-  1f54e56cf137078ed681a03e0955e777f7314610, product Qwen3ASR only, linked to the Orra target
-  only. Approved by the maintainer on 2026-10-04 to run Qwen3-ASR 1.7B, and added in Xcode by
-  the maintainer on 2026-10-05.
+  1f54e56cf137078ed681a03e0955e777f7314610, products Qwen3ASR and Qwen3TTS, linked to the
+  Orra target only. Qwen3ASR was approved by the maintainer on 2026-10-04 to run Qwen3-ASR
+  1.7B, and added in Xcode by the maintainer on 2026-10-05. Qwen3TTS was approved and added
+  in Xcode by the maintainer on 2026-10-15 to speak translations with Qwen3-TTS. It needs no
+  package beyond what Qwen3ASR already builds.
 - sparkle-project/Sparkle (MIT), exact version 2.10.0, product Sparkle only, linked to the
   Orra target only. Approved by the maintainer on 2026-10-10 for updates from inside the app,
   and added in Xcode by the maintainer the same day. It is a prebuilt, signed framework that
@@ -30,17 +32,19 @@
 Xcode resolves 41 packages, listed in
 Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved. SwiftPM resolves
 every package that speech-swift declares, but the build compiles only the 12 that the
-Qwen3ASR, MLXLLM, MLXLMCommon and Tokenizers products need. The other 28 are fetched and never built
+Qwen3ASR, Qwen3TTS, MLXLLM, MLXLMCommon and Tokenizers products need. The other 28 are fetched and never built
 or linked. Versions come from Package.resolved and licenses from the GitHub API, both read
 on 2026-10-05. The compiled list comes from the build log of 2026-10-10, which added
 mlx-swift-lm and the MLXOptimizers target of mlx-swift and nothing else. Linking
 Tokenizers on 2026-10-11 added its target of swift-transformers and no other package.
+Linking Qwen3TTS on 2026-10-15 added its own target of speech-swift and no other package,
+since it depends only on AudioCommon, MLXCommon, MLX, MLXNN and MLXFast.
 
 ### Compiled for Orra
 
 | Package | Version | License | Why it is built |
 |---|---|---|---|
-| soniqo/speech-swift | 1f54e56 | Apache-2.0 | Qwen3ASR and its targets AudioCommon, MLXCommon and SpeechVAD |
+| soniqo/speech-swift | 1f54e56 | Apache-2.0 | Qwen3ASR, Qwen3TTS and their targets AudioCommon, MLXCommon and SpeechVAD |
 | ml-explore/mlx-swift | 0.31.6 | MIT | MLX, MLXNN, MLXFast, MLXFFT, MLXOptimizers and the Cmlx core with its 9 Metal shaders |
 | ml-explore/mlx-swift-lm | 3.31.4 | MIT | MLXLLM and MLXLMCommon, which load and run the cleanup model |
 | apple/swift-numerics | 1.1.1 | Apache-2.0 | Numerics, used by MLX |

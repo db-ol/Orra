@@ -141,6 +141,8 @@ EXPECTED_PACKAGE_REFERENCES = {
 EXPECTED_PRODUCTS = {
     "Orra": {
         ("Qwen3ASR", "https://github.com/soniqo/speech-swift"),
+        # Speak Translation, approved and linked in Xcode by the maintainer on 2026-10-15.
+        ("Qwen3TTS", "https://github.com/soniqo/speech-swift"),
         ("Sparkle", "https://github.com/sparkle-project/Sparkle"),
         ("MLXLLM", "https://github.com/ml-explore/mlx-swift-lm"),
         ("MLXLMCommon", "https://github.com/ml-explore/mlx-swift-lm"),
