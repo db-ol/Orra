@@ -47,43 +47,8 @@ enum VoiceEngine {
     }
 }
 
-/// Lowers a limit the whole process shares, such as MLX's buffer cache limit, while one or
-/// more pieces are spoken, and gives back the value from before the first of them once the
-/// last one ends. Pieces can overlap for a moment after a stop, because a streamed piece
-/// always runs to its end while the next one starts. If each piece put back the value it
-/// found, the second would find the lowered value and leave it in place for good.
-nonisolated struct SharedLimitCap {
-    let cap: Int
-    private var saved: Int?
-    private var holders = 0
-
-    init(cap: Int) {
-        self.cap = cap
-    }
-
-    /// Call as a piece starts, with the limit in effect now. Returns the limit to set.
-    mutating func begin(current: Int) -> Int {
-        if holders == 0 {
-            saved = current
-        }
-        holders += 1
-        return min(saved ?? current, cap)
-    }
-
-    /// Call as a piece ends. Returns the limit to put back once no piece holds the cap,
-    /// nil while another piece still does.
-    mutating func end() -> Int? {
-        guard holders > 0 else { return nil }
-        holders -= 1
-        guard holders == 0 else { return nil }
-        defer { saved = nil }
-        return saved
-    }
-}
-
 #if canImport(Qwen3TTS)
 import AudioCommon
-import MLX
 import Qwen3TTS
 
 /// Owns Qwen3-TTS from speech-swift. An actor, so loading and speaking run off the main
@@ -111,13 +76,6 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
     private var encoder: SpeechTokenizerEncoder?
     /// The stream of the piece being spoken without a voice sample, until it ended.
     private var streaming: Task<Void, Never>?
-
-    /// The most of MLX's buffer cache the voice may leave behind while it speaks. Without
-    /// a cap the scratch benchmark's process grew to 11 to 27 GB, and with 1 GB it stayed
-    /// at 4.6 to 6.4 GB.
-    nonisolated static let cacheCap = 1 << 30
-    /// Holds MLX's cache limit at `cacheCap` while pieces are spoken.
-    private var cacheLimitCap = SharedLimitCap(cap: Qwen3VoiceEngine.cacheCap)
 
     nonisolated enum EngineError: Error {
         /// A voice sample without what is said in it, which the clone call needs.
@@ -178,19 +136,9 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
         await settle()
         guard let model, let encoder else { throw TranscriptionError.modelMissing }
         let name = Self.languageName(language)
-        // MLX's buffer cache is one for the whole process, and the speech model sets its
-        // limit when it loads (4 GB at most). The voice lowers it only while it speaks and
-        // puts it back after, so the speech and cleanup models keep their own limit. A piece
-        // waits while the user dictates, so they rarely run during one. When one does, it
-        // only has fewer cached buffers to reuse for that moment.
-        // A piece left over from a stop can still be streaming when this one starts, see
-        // SharedLimitCap.
-        Memory.cacheLimit = cacheLimitCap.begin(current: Memory.cacheLimit)
-        defer {
-            if let limit = cacheLimitCap.end() {
-                Memory.cacheLimit = limit
-            }
-        }
+        // See VoiceCacheLimit.
+        VoiceCacheLimit.begin()
+        defer { VoiceCacheLimit.end() }
         if let voice {
             guard !voice.transcript.isEmpty else { throw EngineError.noTranscript }
             try Task.checkCancellation()
