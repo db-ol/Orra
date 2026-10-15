@@ -333,6 +333,53 @@ struct CaptionFollowTests {
         #expect(!follow.isFollowing)
     }
 
+    @Test func newOrLongerSentencesMoveTheViewDownWhileItFollows() {
+        var follow = CaptionFollow()
+        var moves = follow.update(offset: 0, contentHeight: 150, viewportHeight: 200)
+        #expect(!moves)
+        // A new sentence, or a translation longer than its original, pushes the bottom
+        // out of view. The view should move down.
+        moves = follow.update(offset: 0, contentHeight: 260, viewportHeight: 200)
+        #expect(moves)
+        // The move lands, in one step or several. None of them stops the following.
+        moves = follow.update(offset: 30, contentHeight: 260, viewportHeight: 200)
+        #expect(!moves)
+        #expect(follow.isFollowing)
+        moves = follow.update(offset: 60, contentHeight: 260, viewportHeight: 200)
+        #expect(!moves)
+        #expect(follow.isFollowing)
+        // The next sentence moves it down again.
+        moves = follow.update(offset: 60, contentHeight: 330, viewportHeight: 200)
+        #expect(moves)
+        #expect(follow.isFollowing)
+    }
+
+    @Test func aScrollTheViewReportsStopsTheFollowingEvenAsContentGrows() {
+        var follow = CaptionFollow()
+        follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 200)
+        // A sentence comes in during the same frame as the user's scroll up.
+        var moves = follow.update(offset: 600, contentHeight: 1_100, viewportHeight: 200, userScrolls: true)
+        #expect(!moves)
+        #expect(!follow.isFollowing)
+        // More sentences while the user reads: no move down.
+        moves = follow.update(offset: 600, contentHeight: 1_200, viewportHeight: 200)
+        #expect(!moves)
+        // The user scrolls back to the bottom and it follows again.
+        moves = follow.update(offset: 990, contentHeight: 1_200, viewportHeight: 200, userScrolls: true)
+        #expect(!moves)
+        #expect(follow.isFollowing)
+        moves = follow.update(offset: 990, contentHeight: 1_300, viewportHeight: 200)
+        #expect(moves)
+    }
+
+    @Test func aSmallerWindowKeepsTheLatestInView() {
+        var follow = CaptionFollow()
+        follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 200)
+        let moves = follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 120)
+        #expect(moves)
+        #expect(follow.isFollowing)
+    }
+
     @Test func jumpingToTheLatestFollowsAgain() {
         var follow = CaptionFollow()
         follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 200)

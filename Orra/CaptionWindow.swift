@@ -103,7 +103,10 @@ struct CaptionView: View {
         let viewportHeight: Double
     }
 
-    private static let bottom = "bottom"
+    /// Where the list is scrolled to, so the follow logic can move it to the bottom.
+    @State private var position = ScrollPosition(edge: .bottom)
+    /// True while the scroll view reports the user scrolling.
+    @State private var userScrolls = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -117,48 +120,42 @@ struct CaptionView: View {
             .fixedSize()
             .frame(maxWidth: .infinity)
             CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        if captions.store.sentences.isEmpty {
-                            Text("Captions appear here when someone speaks.")
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(captions.store.sentences) { sentence in
-                            CaptionSentenceView(lines: captions.displayMode.lines(for: sentence))
-                                .id(sentence.id)
-                        }
-                        Color.clear.frame(height: 1).id(Self.bottom)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    if captions.store.sentences.isEmpty {
+                        Text("Captions appear here when someone speaks.")
+                            .foregroundStyle(.secondary)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                }
-                .onScrollGeometryChange(for: ScrollGeometry.self) { geometry in
-                    ScrollGeometry(offset: geometry.contentOffset.y, contentHeight: geometry.contentSize.height, viewportHeight: geometry.containerSize.height)
-                } action: { _, geometry in
-                    captions.follow.update(offset: geometry.offset, contentHeight: geometry.contentHeight, viewportHeight: geometry.viewportHeight)
-                }
-                // Without animation: the steps of an animated scroll would read as the user
-                // scrolling up.
-                .onChange(of: captions.store.sentences) {
-                    if captions.follow.isFollowing {
-                        proxy.scrollTo(Self.bottom, anchor: .bottom)
+                    ForEach(captions.store.sentences) { sentence in
+                        CaptionSentenceView(lines: captions.displayMode.lines(for: sentence))
+                            .id(sentence.id)
                     }
                 }
-                .onChange(of: captions.displayMode) {
-                    if captions.follow.isFollowing {
-                        proxy.scrollTo(Self.bottom, anchor: .bottom)
-                    }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+            }
+            .scrollPosition($position)
+            .onScrollPhaseChange { _, phase in
+                userScrolls = phase == .interacting || phase == .decelerating
+            }
+            // Every change of the content or the window comes through here, after layout,
+            // so the move down sees the new height. Moving down from onChange of the
+            // sentences ran before layout and stopped at the old bottom.
+            .onScrollGeometryChange(for: ScrollGeometry.self) { geometry in
+                ScrollGeometry(offset: geometry.contentOffset.y, contentHeight: geometry.contentSize.height, viewportHeight: geometry.containerSize.height)
+            } action: { _, geometry in
+                if captions.follow.update(offset: geometry.offset, contentHeight: geometry.contentHeight, viewportHeight: geometry.viewportHeight, userScrolls: userScrolls) {
+                    position.scrollTo(edge: .bottom)
                 }
-                .overlay(alignment: .bottomTrailing) {
-                    if !captions.follow.isFollowing, !captions.store.sentences.isEmpty {
-                        Button("Jump to Latest") {
-                            captions.follow.jumpToLatest()
-                            proxy.scrollTo(Self.bottom, anchor: .bottom)
-                        }
-                        .controlSize(.small)
-                        .padding(6)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if !captions.follow.isFollowing, !captions.store.sentences.isEmpty {
+                    Button("Jump to Latest") {
+                        captions.follow.jumpToLatest()
+                        position.scrollTo(edge: .bottom)
                     }
+                    .controlSize(.small)
+                    .padding(6)
                 }
             }
         }

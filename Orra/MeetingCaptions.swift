@@ -91,21 +91,51 @@ nonisolated struct CaptionFollow: Equatable, Sendable {
     /// How close to the bottom counts as at the bottom, in points.
     static let tolerance: Double = 24
 
+    private struct Geometry: Equatable {
+        let offset: Double
+        let contentHeight: Double
+        let viewportHeight: Double
+    }
+
     private(set) var isFollowing = true
-    private var offset: Double?
+    private var last: Geometry?
+    /// True from asking the view to go to the bottom until it is there, so the steps of
+    /// that move do not read as the user scrolling.
+    private var movingToBottom = false
 
     /// The scroll view's geometry changed: its offset from the top, the height of the
-    /// content and of the visible part.
-    mutating func update(offset newOffset: Double, contentHeight: Double, viewportHeight: Double) {
-        defer { offset = newOffset }
-        guard let offset, abs(newOffset - offset) > 0.5 else { return }
-        let distance = contentHeight - viewportHeight - newOffset
-        isFollowing = distance <= Self.tolerance
+    /// content and of the visible part. `userScrolls` is true while the scroll view says
+    /// the user is scrolling. Returns true when the view should move to the bottom, which
+    /// is when it follows and new or longer sentences, or a smaller window, left the
+    /// bottom out of view.
+    @discardableResult
+    mutating func update(offset: Double, contentHeight: Double, viewportHeight: Double, userScrolls: Bool = false) -> Bool {
+        let geometry = Geometry(offset: offset, contentHeight: contentHeight, viewportHeight: viewportHeight)
+        defer { last = geometry }
+        let distance = contentHeight - viewportHeight - offset
+        let atBottom = distance <= Self.tolerance
+        if atBottom { movingToBottom = false }
+        // Only the offset moved: a scroll, by the user unless it is our own move down.
+        let onlyScrolled = last.map {
+            abs(offset - $0.offset) > 0.5 && abs(contentHeight - $0.contentHeight) < 0.5
+                && abs(viewportHeight - $0.viewportHeight) < 0.5
+        } ?? false
+        if userScrolls || (onlyScrolled && !movingToBottom) {
+            movingToBottom = false
+            isFollowing = atBottom
+            return false
+        }
+        // A step of our own move down: it is under way already.
+        if onlyScrolled { return false }
+        guard isFollowing, distance > 0.5 else { return false }
+        movingToBottom = true
+        return true
     }
 
     /// The user asked to go to the latest sentence.
     mutating func jumpToLatest() {
         isFollowing = true
+        movingToBottom = true
     }
 }
 
