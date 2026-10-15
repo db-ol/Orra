@@ -81,8 +81,8 @@ nonisolated enum SpeechLanguage: String, Sendable {
 }
 
 extension Transcription {
-    static func qwen3() -> Transcription {
-        let engine = Qwen3Engine()
+    /// The app's speech model. The caption measurement passes an engine of its own.
+    static func qwen3(_ engine: Qwen3Engine = Qwen3Engine()) -> Transcription {
         return Transcription(
             load: { try await engine.load() },
             transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) }

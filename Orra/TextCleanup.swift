@@ -44,6 +44,11 @@ final class TextCleanup {
     /// `idleUnloadDelay`. The state stays ready, and the next press of the talk key loads
     /// the model again.
     private(set) var isUnloadedWhileIdle = false
+    /// True while meeting captions run, which translate with the model. The model is then
+    /// loaded when it is in place and stays loaded, see `captionsStarted()`.
+    private(set) var captionsNeedModel = false
+    /// True while the caption window asks whether to download the model.
+    var isConfirmingCaptionDownload = false
     let models: ModelInstaller
 
     @ObservationIgnored private let engine: CleanupEngine
@@ -252,7 +257,7 @@ final class TextCleanup {
     private func scheduleIdleUnload() {
         idleTimer?.cancel()
         idleTimer = nil
-        guard let idleUnloadDelay, needsModel, !isDictating, isLoaded else { return }
+        guard let idleUnloadDelay, needsModel, !isDictating, !captionsNeedModel, isLoaded else { return }
         idleTimer = Task { [weak self, sleep] in
             guard (try? await sleep(idleUnloadDelay)) != nil, !Task.isCancelled else { return }
             self?.unloadWhileIdle()
@@ -265,7 +270,7 @@ final class TextCleanup {
     /// load fills them again.
     private func unloadWhileIdle() {
         idleTimer = nil
-        guard needsModel, !isDictating, isLoaded else { return }
+        guard needsModel, !isDictating, !captionsNeedModel, isLoaded else { return }
         isUnloadedWhileIdle = true
         Logger.rewrite.notice("Unloading the cleanup model after no dictation for \(self.idleUnloadDelay ?? .zero, privacy: .public)")
         enqueue { [engine] in await engine.unload() }
@@ -281,9 +286,59 @@ final class TextCleanup {
         )
     }
 
-    /// Whether the model is wanted: cleanup or translation is on.
+    /// Whether the model is wanted: cleanup or translation is on, or captions run.
     var needsModel: Bool {
-        isOn || translationIsOn
+        isOn || translationIsOn || captionsNeedModel
+    }
+
+    /// Whether captions can translate now: they run and the model is in memory. Captions
+    /// never wait for a load, they show the transcript alone meanwhile.
+    var isReadyForCaptions: Bool {
+        captionsNeedModel && isLoaded
+    }
+
+    /// Meeting captions started. Loads the model when it is in place, or again when it was
+    /// unloaded while idle, and keeps it loaded until captions stop. Without the model the
+    /// caption window offers the download, see `confirmCaptionDownload()`, and nothing goes
+    /// online before the user agrees. With the model loaded already, the translation
+    /// prompts are read ahead.
+    func captionsStarted() {
+        guard !captionsNeedModel else { return }
+        captionsNeedModel = true
+        idleTimer?.cancel()
+        idleTimer = nil
+        guard case .installed(let folder) = models.state else { return }
+        if isUnloadedWhileIdle {
+            isUnloadedWhileIdle = false
+            engineState = .unloaded
+            Logger.rewrite.notice("Loading the cleanup model again for captions")
+            load(from: folder)
+        } else if isLoaded {
+            prepareTranslation()
+        } else {
+            load(from: folder)
+        }
+    }
+
+    /// Meeting captions stopped. Unloads the model and stops a download unless cleanup or
+    /// translation still need it, and otherwise starts the idle timer.
+    func captionsStopped() {
+        guard captionsNeedModel else { return }
+        captionsNeedModel = false
+        isConfirmingCaptionDownload = false
+        if needsModel {
+            scheduleIdleUnload()
+        } else {
+            releaseModelIfUnneeded()
+        }
+    }
+
+    /// The user agreed in the caption window to download the model. Only for as long as
+    /// captions run, as for cleanup and translation, which stay off.
+    func confirmCaptionDownload() {
+        isConfirmingCaptionDownload = false
+        guard captionsNeedModel else { return }
+        models.download()
     }
 
     /// The switch on the Clean Up Text page was turned on. With the model in place cleanup
@@ -329,7 +384,7 @@ final class TextCleanup {
         guard direction != translationDirection else { return }
         translationDirection = direction
         saveDirection(direction)
-        if translationIsOn, isLoaded {
+        if translationIsOn || captionsNeedModel, isLoaded {
             prepareTranslation()
         }
     }
@@ -445,7 +500,7 @@ final class TextCleanup {
     }
 
     private func fillTranslationPrefixes() async {
-        guard translationIsOn, isLoaded else { return }
+        guard translationIsOn || captionsNeedModel, isLoaded else { return }
         for target in Self.preparedTargets(translationDirection) {
             do {
                 try await engine.prepareTranslation(target)
