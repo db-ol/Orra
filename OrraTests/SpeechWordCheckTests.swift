@@ -138,4 +138,13 @@ struct SpeechWordCheckTests {
         #expect(SpeechWordCheck.passes(text: ten, heard: "xa xb xc delta echo foxtrot golf hotel india juliet"))
         #expect(!SpeechWordCheck.passes(text: ten, heard: "xa xb xc xd echo foxtrot golf hotel india juliet"))
     }
+
+    @Test func errorsGiveTheShareOfWrongUnits() {
+        let errors = SpeechWordCheck.errors(text: "我们明天开会讨论预算。", heard: "我们明天开看看看看看")
+        #expect(errors == SpeechWordCheck.Errors(wrong: 5, length: 10))
+        #expect(errors.share == 0.5)
+        #expect(!errors.passes)
+        #expect(SpeechWordCheck.errors(text: "2026.", heard: "Hello.").share == 0)
+        #expect(SpeechWordCheck.errors(text: "2026.", heard: "Hello.").passes)
+    }
 }

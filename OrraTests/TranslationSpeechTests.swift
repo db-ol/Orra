@@ -465,6 +465,61 @@ struct TranslationSpeechTests {
         #expect(speech.problem == "The voice model failed twice on a sentence, so Orra skipped it.")
     }
 
+    /// Both tries a little off, failing only the word check: the try with fewer wrong units
+    /// plays rather than nothing, and the menu shows no problem.
+    @Test func aPieceALittleOffTwicePlaysTheCloserTry() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        let text = "我们明天开会讨论预算。"
+        let half = SpeechCheckTests.tone(seconds: SpeechCheck.expectedSeconds(for: text) / 2)
+        // The second try of each translation comes in two parts, so the playback shows which
+        // try played. The fake counts the tries of a text across translations.
+        synthesizer.makes.withLock { $0 = { text, attempt in attempt % 2 == 0 ? [Self.reading(text)] : [half, half] } }
+        // 5 and then 4 of 10 characters wrong: both fail, the second is closer.
+        let heard = Mutex<[String]>(["我们明天开看看看看看", "我们明天开会看看看看"])
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _, _ in heard.withLock { $0.removeFirst() } }
+        speech.speak(text, in: .chinese)
+        await speech.waitUntilDone()
+        #expect(spoken.count == 2)
+        #expect(playback.calls == ["start Orra Microphone", "play \(half.samples.count)", "play \(half.samples.count)", "finish", "stop"])
+        #expect(speech.problem == nil)
+
+        // The first try closer: it plays, and a tie goes to the first try too.
+        heard.withLock { $0 = ["我们明天开会看看看看", "我们明天开会看看看看"] }
+        speech.speak(text, in: .chinese)
+        await speech.waitUntilDone()
+        #expect(playback.calls.suffix(3) == ["play \(Self.reading(text).samples.count)", "finish", "stop"])
+    }
+
+    /// The closer try does not play when even it is mostly wrong, nor when a try failed
+    /// the length check, since that one may be cut off or a loop.
+    @Test func aPieceMostlyWrongOrCutOffIsStillSkipped() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        let text = "我们明天开会讨论预算。"
+        let cutOff = Mutex(false)
+        synthesizer.makes.withLock {
+            $0 = { text, attempt in cutOff.withLock { $0 } && attempt % 2 == 0 ? [SpeechCheckTests.tone(seconds: 0.3)] : [Self.reading(text)] }
+        }
+        // 6 and 7 of 10 wrong, above SpeechWordCheck.mostWrongShareToPlay.
+        let heard = Mutex<[String]>(["我们明天看看看看看看", "我们明看看看看看看看"])
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _, _ in heard.withLock { $0.removeFirst() } }
+        speech.speak(text, in: .chinese)
+        await speech.waitUntilDone()
+        #expect(spoken.count == 2)
+        #expect(playback.calls == ["start Orra Microphone", "finish", "stop"])
+        #expect(speech.problem == "The voice model failed twice on a sentence, so Orra skipped it.")
+
+        // Cut off, then a little off: skipped.
+        cutOff.withLock { $0 = true }
+        heard.withLock { $0 = ["我们明天开会看看看看"] }
+        speech.speak(text, in: .chinese)
+        await speech.waitUntilDone()
+        #expect(spoken.count == 4)
+        #expect(heard.withLock { $0.isEmpty })
+        #expect(playback.calls.filter { $0.hasPrefix("play") }.isEmpty)
+    }
+
     /// The speech model is dictation's, so the word check waits while the user dictates,
     /// and gets the whole piece at the voice model's sample rate.
     @Test func theWordCheckWaitsWhileTheUserDictates() async throws {

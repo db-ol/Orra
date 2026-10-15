@@ -400,7 +400,7 @@ final class TranslationSpeech {
         logger.notice("Spoke \(pieces.count, privacy: .public) pieces in \(language.logName, privacy: .public), first sound after \(firstSound.map { "\($0)" } ?? "none", privacy: .public), done after \(started.duration(to: .now), privacy: .public), voice sample: \(self.voice != nil, privacy: .public)")
         if tally.hasNews {
             // Counts and reasons only, never text or audio.
-            logger.notice("Speech check: \(tally.retried, privacy: .public) pieces made again, \(tally.skipped, privacy: .public) skipped, \(tally.cut, privacy: .public) streamed pieces cut, reasons \(tally.reasons, privacy: .public)")
+            logger.notice("Speech check: \(tally.retried, privacy: .public) pieces made again, \(tally.skipped, privacy: .public) skipped, \(tally.closest, privacy: .public) played closer try, \(tally.cut, privacy: .public) streamed pieces cut, reasons \(tally.reasons, privacy: .public)")
         }
         if tally.wordChecks > 0 || tally.unchecked > 0 {
             // Counts and times only, never what was heard.
@@ -414,6 +414,9 @@ final class TranslationSpeech {
         case spoken(firstTry: SpeechCheck.Verdict?)
         /// Failed the check twice and not played.
         case skipped(SpeechCheck.Verdict, SpeechCheck.Verdict)
+        /// Failed only the word check twice, and the try with fewer wrong units played, see
+        /// `SpeechWordCheck.mostWrongShareToPlay`.
+        case closest
         /// Streamed and cut at the longest it may run.
         case cut
         /// Stopped by the user.
@@ -424,6 +427,8 @@ final class TranslationSpeech {
     private struct PieceTally {
         var retried = 0
         var skipped = 0
+        /// Pieces that failed only the word check twice and played the closer try.
+        var closest = 0
         var cut = 0
         /// Pieces the speech model listened to for the word check, and the time it took.
         var wordChecks = 0
@@ -444,6 +449,10 @@ final class TranslationSpeech {
                 retried += 1
                 skipped += 1
                 verdicts += [first, second]
+            case .closest:
+                retried += 1
+                closest += 1
+                verdicts += [.wrongWords, .wrongWords]
             case .cut:
                 cut += 1
                 verdicts.append(.tooLong)
@@ -464,7 +473,10 @@ final class TranslationSpeech {
     /// Speaks one piece. A piece that comes whole is checked before it plays (SpeechCheck,
     /// then SpeechWordCheck when that is on): one that fails is made once more, and skipped
     /// when it fails again, so a cut off sentence, near silence, a loop or other words never
-    /// reach the other side. Both voice models draw their samples from MLX's random state,
+    /// reach the other side. A piece whose two tries both failed only the word check plays
+    /// the try with fewer wrong units, unless even that one is mostly wrong
+    /// (`SpeechWordCheck.mostWrongShareToPlay`), since a sentence that is a little off says
+    /// more than silence. Both voice models draw their samples from MLX's random state,
     /// which moves on with every draw, so the second try is a new draw. A streamed piece plays as it comes, so only its length can
     /// be held to the check: it is cut at the longest its text may run. `heard` is called
     /// when a part of the piece is queued to play.
@@ -493,6 +505,8 @@ final class TranslationSpeech {
             return .spoken(firstTry: nil)
         }
         var verdicts: [SpeechCheck.Verdict] = []
+        // The try that failed only the word check with the fewest wrong units.
+        var closest: (parts: [SpokenAudio], errors: SpeechWordCheck.Errors)?
         for _ in 0..<2 {
             if !verdicts.isEmpty {
                 // The second try is a new piece for the GPU, so dictation goes first again.
@@ -509,7 +523,10 @@ final class TranslationSpeech {
             var verdict = SpeechCheck.verdict(for: whole, text: piece)
             if verdict == .good, checksWords, !SpeechWordCheck.units(of: piece).isEmpty {
                 guard let words = await checkWords(of: whole, against: piece, in: language, generation: generation, tally: &tally) else { return .stopped }
-                verdict = words
+                verdict = words.verdict
+                if verdict == .wrongWords, let errors = words.errors, errors.wrong < (closest?.errors.wrong ?? .max) {
+                    closest = (parts, errors)
+                }
             }
             if verdict == .good {
                 for part in parts {
@@ -520,14 +537,22 @@ final class TranslationSpeech {
             }
             verdicts.append(verdict)
         }
+        if verdicts == [.wrongWords, .wrongWords], let closest, closest.errors.share <= SpeechWordCheck.mostWrongShareToPlay {
+            for part in closest.parts {
+                heard()
+                playback.play(part)
+            }
+            return .closest
+        }
         return .skipped(verdicts[0], verdicts[1])
     }
 
     /// The word check of a whole piece: the speech model writes down what `audio` says, in
     /// `language`, and SpeechWordCheck compares it with `piece`. The speech model is
     /// dictation's, so this waits while the user dictates, as a second try does. A piece the
-    /// speech model could not listen to passes. Nil when the user stopped.
-    private func checkWords(of audio: SpokenAudio, against piece: String, in language: TranslationTarget, generation: Int, tally: inout PieceTally) async -> SpeechCheck.Verdict? {
+    /// speech model could not listen to passes. Nil when the user stopped. The errors are nil
+    /// when the speech model could not listen.
+    private func checkWords(of audio: SpokenAudio, against piece: String, in language: TranslationTarget, generation: Int, tally: inout PieceTally) async -> (verdict: SpeechCheck.Verdict, errors: SpeechWordCheck.Errors?)? {
         await waitWhileDictating(generation)
         guard generation == self.generation else { return nil }
         let started = ContinuousClock.now
@@ -536,12 +561,13 @@ final class TranslationSpeech {
             heard = try await transcribeSpeech(audio, language)
         } catch {
             tally.unchecked += 1
-            return generation == self.generation ? .good : nil
+            return generation == self.generation ? (.good, nil) : nil
         }
         tally.wordChecks += 1
         tally.wordCheckTime += started.duration(to: .now)
         guard generation == self.generation else { return nil }
-        return SpeechWordCheck.passes(text: piece, heard: heard) ? .good : .wrongWords
+        let errors = SpeechWordCheck.errors(text: piece, heard: heard)
+        return (errors.passes ? .good : .wrongWords, errors)
     }
 
     private func loadIfNeeded() async -> Bool {

@@ -48,10 +48,40 @@ nonisolated enum SpeechWordCheck {
         units(of: text, characters: usesCharacters(text))
     }
 
+    /// When both tries of a piece fail only this check, the one with fewer wrong units
+    /// plays, unless more than this share of its units is wrong, since then most of what
+    /// the listener hears would be other words or another language. In the end to end run
+    /// of 2026-10-15 (see above), 20 pieces failed both tries. The closer try had 0.38 to
+    /// 0.46 of its units wrong in 4 of them and 0.57 to 1.4 in the other 16, and the limit
+    /// sits in that gap. Playing the 4 cut the translations that played nothing from 8 to 6
+    /// with Qwen3-TTS and from 5 to 4 with CosyVoice3, with no added wait.
+    static let mostWrongShareToPlay = 0.5
+
+    /// The wrong units of what was heard against the units of the text.
+    struct Errors: Equatable, Sendable {
+        var wrong: Int
+        var length: Int
+
+        /// The share of the text's units that is wrong, 0 for text with nothing to compare.
+        var share: Double {
+            length == 0 ? 0 : Double(wrong) / Double(length)
+        }
+
+        /// Whether what was heard is close enough to the text.
+        var passes: Bool {
+            wrong < SpeechWordCheck.leastWrongUnits || Double(wrong) <= SpeechWordCheck.mostWrongShare * Double(length)
+        }
+    }
+
     /// Whether `heard` is close enough to `text`. Text with nothing to compare passes.
     static func passes(text: String, heard: String) -> Bool {
+        errors(text: text, heard: heard).passes
+    }
+
+    /// How far `heard` is from `text`.
+    static func errors(text: String, heard: String) -> Errors {
         let errors = wrongUnits(text: text, heard: heard)
-        return errors.wrong < leastWrongUnits || Double(errors.wrong) <= mostWrongShare * Double(errors.length)
+        return Errors(wrong: errors.wrong, length: errors.length)
     }
 
     /// The edits that turn the units of `text` into those of `heard`, and how many units
