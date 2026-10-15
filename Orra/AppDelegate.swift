@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         transcription: .qwen3(),
         cleanup: cleanup.model,
         translation: cleanup.translation,
+        voice: speech.voiceForDictation,
         insert: TextInserter.live().insert,
         talkKey: TalkKeyPreference.loadHotkey(),
         saveTalkKey: { TalkKeyPreference.saveHotkey($0) },
@@ -30,6 +31,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         saveRemovesFillerWords: { FillerPreference.save($0) },
         writesNumbersAsDigits: NumberPreference.load(),
         saveWritesNumbersAsDigits: { NumberPreference.save($0) }
+    )
+    /// The voice model's downloads, for Speak Translation.
+    let voiceModels = VoiceModels.live()
+    /// Speak Translation. No voice model in a build without speech-swift's Qwen3TTS.
+    lazy var speech = TranslationSpeech(
+        synthesizer: VoiceEngine.live(),
+        playback: SpeechPlayer(),
+        outputs: { AudioOutput.all() },
+        folders: { [voiceModels] in voiceModels.folders },
+        settings: .load(),
+        save: { $0.save() }
     )
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
@@ -153,6 +165,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.onPasteOriginal = { [learning] cleaned in learning.pastedOriginal(replacing: cleaned) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         learning.onSuggest = { [learnedNotice] suggestion in learnedNotice.suggest(suggestion) }
+        // The voice waits while the user dictates.
+        speech.isDictating = { [pushToTalk] in pushToTalk.state != .idle }
+        voiceModels.model.onInstalled = { [speech] _ in speech.prepare() }
+        voiceModels.codec.onInstalled = { [speech] _ in speech.prepare() }
         // Before the tap is installed, so it watches the translation key from the start.
         followTranslation()
         pushToTalk.start()
@@ -162,7 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
-        Task { [models, pushToTalk, welcome, cleanup] in
+        Task { [models, pushToTalk, welcome, cleanup, speech, voiceModels] in
             await models.prepare()
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()
@@ -170,6 +186,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Loads the cleanup model when cleanup or translation is on and the model is in
             // place.
             await cleanup.start()
+            // Local files only. Loads the voice model when Speak Translation is on.
+            if speech.canSpeak {
+                await voiceModels.prepare()
+            }
         }
     }
 }

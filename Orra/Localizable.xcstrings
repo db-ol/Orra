@@ -129,6 +129,26 @@
         }
       }
     },
+    "%@ is not connected, so the translation was not spoken." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 未连接，所以没有说出译文。"
+          }
+        }
+      }
+    },
+    "%lld seconds, in memory until Orra quits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒，保存在内存中，直到 Orra 退出。"
+          }
+        }
+      }
+    },
     "%lld words" : {
       "localizations" : {
         "zh-Hans" : {
@@ -315,6 +335,16 @@
         }
       }
     },
+    "Also paste the translated text" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时粘贴译文"
+          }
+        }
+      }
+    },
     "Alt" : {
       "comment" : "The label of the Option key on a keyboard with a Windows layout",
       "localizations" : {
@@ -363,6 +393,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自动"
+          }
+        }
+      }
+    },
+    "Automatic (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动（%@）"
+          }
+        }
+      }
+    },
+    "Automatic (Orra Voice is not installed)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动（未安装 Orra Voice）"
           }
         }
       }
@@ -517,6 +567,16 @@
         }
       }
     },
+    "Choose Orra Voice as the microphone in the meeting app. Orra speaks one translation after another, and waits while you dictate." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在会议应用中把 Orra Voice 选为麦克风。Orra 按先后顺序逐条说出译文，你听写时会先等待。"
+          }
+        }
+      }
+    },
     "Choose System Default under Microphone, then pick %@ in Sound settings." : {
       "localizations" : {
         "zh-Hans" : {
@@ -527,12 +587,32 @@
         }
       }
     },
+    "Choose where Orra speaks the translation in Settings." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在设置中选择 Orra 把译文说到哪里。"
+          }
+        }
+      }
+    },
     "Choose your talk key" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择说话键"
+          }
+        }
+      }
+    },
+    "Choose…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择…"
           }
         }
       }
@@ -782,6 +862,16 @@
         }
       }
     },
+    "Download Voice Model (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载语音合成模型（%@）"
+          }
+        }
+      }
+    },
     "Downloading the cleanup model: %lld%% of %@" : {
       "localizations" : {
         "en" : {
@@ -826,6 +916,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载语音模型：%1$lld%%，共 %2$@"
+          }
+        }
+      }
+    },
+    "Downloading the voice model: %lld%% of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Downloading the voice model: %1$lld%% of %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载语音合成模型：%1$lld%%，共 %2$@"
           }
         }
       }
@@ -1412,6 +1518,16 @@
         }
       }
     },
+    "None. The voice model speaks in its own voice." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无。语音合成模型用它自己的声音说话。"
+          }
+        }
+      }
+    },
     "Not done yet" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1564,6 +1680,16 @@
         }
       }
     },
+    "Orra also speaks what the translation key translated, into the device below, so the other side of a call hears it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 还会把翻译键翻译的内容说到下面的设备中，让通话的另一方听到。"
+          }
+        }
+      }
+    },
     "Orra can use the microphone." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1600,6 +1726,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 无法从 Hugging Face 或其镜像下载模型。"
+          }
+        }
+      }
+    },
+    "Orra could not play into %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法向 %@ 播放。"
+          }
+        }
+      }
+    },
+    "Orra could not read this audio file." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法读取这个音频文件。"
           }
         }
       }
@@ -1680,6 +1826,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 不会从翻译后粘贴的文字中学习更正。"
+          }
+        }
+      }
+    },
+    "Orra never speaks into the speakers on its own. Without Orra Voice, pick a device here, such as a loopback device a meeting app can use as its microphone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 不会自行通过扬声器说话。没有 Orra Voice 时，请在这里选择一个设备，例如会议应用可以用作麦克风的环回设备。"
           }
         }
       }
@@ -2323,6 +2479,36 @@
         }
       }
     },
+    "Speak into" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输出到"
+          }
+        }
+      }
+    },
+    "Speak translation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "朗读译文"
+          }
+        }
+      }
+    },
+    "Speak Translation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "朗读译文"
+          }
+        }
+      }
+    },
     "Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the speech model or the cleanup model when you ask it to, and to check for updates when you allow it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2339,6 +2525,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型"
+          }
+        }
+      }
+    },
+    "Stop Speaking" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止朗读"
           }
         }
       }
@@ -2746,12 +2942,72 @@
         }
       }
     },
+    "The voice model could not be downloaded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音合成模型无法下载。"
+          }
+        }
+      }
+    },
+    "The voice model could not be loaded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音合成模型无法载入。"
+          }
+        }
+      }
+    },
+    "The voice model could not speak this translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音合成模型无法说出这条译文。"
+          }
+        }
+      }
+    },
+    "The voice model is not on this Mac yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有语音合成模型。"
+          }
+        }
+      }
+    },
+    "The voice sample must be at least %lld seconds long." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声音样本至少要有 %lld 秒长。"
+          }
+        }
+      }
+    },
     "This build has no microphone usage description" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "此版本缺少麦克风用途说明"
+          }
+        }
+      }
+    },
+    "This build of Orra has no voice model." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个版本的 Orra 没有语音合成模型。"
           }
         }
       }
@@ -2926,6 +3182,16 @@
         }
       }
     },
+    "Turn on Translation to use this." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开翻译后才能使用。"
+          }
+        }
+      }
+    },
     "Turn on Translation under Features to use this key." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2987,6 +3253,16 @@
         }
       }
     },
+    "Use a recording of your own voice only. Orra keeps the voice sample in memory until it quits and never saves it. The other side hears a synthesized voice, so let them know." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只使用你自己声音的录音。Orra 只把声音样本保存在内存中，直到退出，从不存储到磁盘。对方听到的是合成的声音，请告诉他们。"
+          }
+        }
+      }
+    },
     "Use fn, Control, Option or Command on its own, or a combination such as ⌃ ⌥ or ⇧ ⌘ D. Escape cancels." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3023,6 +3299,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "个人词库已满，没有加入“%@”"
+          }
+        }
+      }
+    },
+    "Voice sample" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "声音样本"
           }
         }
       }
