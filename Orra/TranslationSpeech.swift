@@ -467,6 +467,11 @@ final class TranslationSpeech {
         }
         var verdicts: [SpeechCheck.Verdict] = []
         for _ in 0..<2 {
+            if !verdicts.isEmpty {
+                // The second try is a new piece for the GPU, so dictation goes first again.
+                await waitWhileDictating(generation)
+                guard generation == self.generation else { return .stopped }
+            }
             var parts: [SpokenAudio] = []
             for try await audio in synthesizer.speak(piece, in: language, voice: voice) {
                 guard generation == self.generation else { return .stopped }

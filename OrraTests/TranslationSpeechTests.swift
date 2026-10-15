@@ -361,6 +361,33 @@ struct TranslationSpeechTests {
         #expect(speech.problem == nil)
     }
 
+    /// Dictation first also for the second try of a piece: it waits while the user
+    /// dictates, as a new piece does.
+    @Test func theSecondTryWaitsWhileTheUserDictates() async throws {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        let dictating = Mutex(false)
+        synthesizer.makes.withLock {
+            $0 = { text, attempt in
+                if attempt == 0 {
+                    // The user starts to dictate while the first try is made, and it fails.
+                    dictating.withLock { $0 = true }
+                    return [SpeechCheckTests.tone(seconds: 0.3)]
+                }
+                return [Self.reading(text)]
+            }
+        }
+        let speech = makeSpeech()
+        speech.isDictating = { dictating.withLock { $0 } }
+        speech.speak("Could you send the numbers before then?", in: .english)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(spoken.count == 1)
+        dictating.withLock { $0 = false }
+        await speech.waitUntilDone()
+        #expect(spoken.count == 2)
+        let played = Self.reading("Could you send the numbers before then?").samples.count
+        #expect(playback.calls == ["start Orra Microphone", "play \(played)", "finish", "stop"])
+    }
+
     /// A piece that fails twice is skipped, the rest of the translation is spoken, and the
     /// menu says so. The paste does not depend on it: with Also Paste on, the translation
     /// was pasted whole when the key was released.
