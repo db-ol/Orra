@@ -422,7 +422,7 @@ h1 {
 .capsule i:nth-of-type(6) { animation-delay: -0.45s; }
 .capsule i:nth-of-type(7) { animation-delay: -0.2s; }
 
-/* Phases: idle, speak, done. Without data-phase a demo shows its final state. */
+/* Phases: idle, speak, strike, done. Without data-phase a demo shows its final state. */
 .demo[data-phase="idle"] .demo-said {
   opacity: 0;
 }
@@ -442,12 +442,13 @@ h1 {
 }
 
 .demo[data-phase="idle"] .pasted,
-.demo[data-phase="speak"] .pasted {
+.demo[data-phase="speak"] .pasted,
+.demo[data-phase="strike"] .pasted {
   display: none;
 }
 
 .demo[data-phase="done"] .pasted {
-  animation: paste 0.3s var(--ease) 0.5s both;
+  animation: paste 0.3s var(--ease) both;
 }
 
 .demo[data-phase="speak"] .capsule {
@@ -610,7 +611,7 @@ footer p {
 }
 
 /* Three demos need about 300 pixels each. Below that they stack. */
-@media (max-width: 960px) {
+@media (max-width: 980px) {
   .demos {
     grid-template-columns: 1fr;
     max-width: 440px;

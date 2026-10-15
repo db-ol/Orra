@@ -25,7 +25,8 @@
   }
 
   // Demos: dictation, then cleanup, then translation. One plays while the
-  // others wait in their final state. Each goes idle, then speak, then done.
+  // others wait in their final state. Each goes idle, then speak, then strike
+  // (the filler is crossed out), then done (the text is pasted).
   var demos = document.querySelector(".demos");
   if (!demos) return;
 
@@ -60,7 +61,6 @@
       });
     });
     figure.style.setProperty("--step", step + "s");
-    figure.style.setProperty("--speak", (count * step).toFixed(2) + "s");
     speakMs[figure.getAttribute("data-demo")] = Math.round(count * step * 1000) + 400;
   });
 
@@ -71,13 +71,16 @@
   var phases = [
     ["dictate", "idle", 800],
     ["dictate", "speak", speak("dictate")],
-    ["dictate", "done", 3200],
+    ["dictate", "strike", 500],
+    ["dictate", "done", 2700],
     ["cleanup", "idle", 800],
     ["cleanup", "speak", speak("cleanup")],
-    ["cleanup", "done", 3600],
+    ["cleanup", "strike", 500],
+    ["cleanup", "done", 3100],
     ["translate", "idle", 800],
     ["translate", "speak", speak("translate")],
-    ["translate", "done", 3800]
+    ["translate", "strike", 500],
+    ["translate", "done", 3300]
   ];
   var figures = demos.querySelectorAll("[data-demo]");
   var index = 0;
@@ -106,7 +109,7 @@
   }
 
   function start() {
-    if (timer === null && visible && !document.hidden) {
+    if (timer === null && visible && !document.hidden && !reduce.matches) {
       index = 0;
       step();
     }
