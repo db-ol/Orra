@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreAudio
 import os
+import Synchronization
 
 /// Why the sound the Mac plays cannot be captured.
 nonisolated enum SystemAudioProblem: Error, Equatable, Sendable {
@@ -11,12 +12,13 @@ nonisolated enum SystemAudioProblem: Error, Equatable, Sendable {
 }
 
 /// What meeting captions need from the capture of the sound the Mac plays. Closures, so
-/// tests pass a fake.
-struct SystemAudioSource {
+/// tests pass a fake. MeetingCaptions calls both off the main actor, one after the other,
+/// since starting can wait for the permission prompt.
+nonisolated struct SystemAudioSource: Sendable {
     /// Starts the capture. `deliver` gets 16 kHz mono samples on a background queue, in
     /// order, about every 100 ms.
-    var start: (_ deliver: @escaping @Sendable ([Float]) -> Void) throws -> Void
-    var stop: () -> Void
+    var start: @Sendable (_ deliver: @escaping @Sendable ([Float]) -> Void) throws -> Void
+    var stop: @Sendable () -> Void
 
     static func live() -> SystemAudioSource {
         let tap = SystemAudioTap()
@@ -37,6 +39,10 @@ struct SystemAudioSource {
 /// macOS asks for the permission when that device starts. There is no public way to read
 /// the permission, and when it is refused the tap delivers silence, which MeetingCaptions
 /// watches for.
+///
+/// The IO block runs on Core Audio's real time thread and only copies the tap's frames
+/// into an AudioFrameRing. A timer on `queue` takes them out, converts them to 16 kHz
+/// mono and hands on the chunks.
 nonisolated final class SystemAudioTap: @unchecked Sendable {
     /// The key macOS needs in Info.plist before an app may capture system audio.
     static let usageDescriptionKey = "NSAudioCaptureUsageDescription"
@@ -47,13 +53,19 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
         Bundle.main.object(forInfoDictionaryKey: usageDescriptionKey) != nil
     }
 
+    /// How often the frames are taken out of the ring and converted.
+    static let drainInterval = DispatchTimeInterval.milliseconds(20)
+    /// Seconds of the tap's frames the ring holds, far more than one drain needs.
+    static let ringSeconds = 2.0
+
     private let lock = OSAllocatedUnfairLock()
-    /// The Core Audio IO thread waits for each block on this queue, so it runs at the
-    /// highest priority an app queue gets.
+    /// Converts and hands on the chunks. Serial, so they stay in order.
     private let queue = DispatchQueue(label: "io.github.db-ol.Orra.system-audio", qos: .userInteractive)
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
+    private var timer: DispatchSourceTimer?
+    private var writer: TapWriter?
 
     deinit {
         stop()
@@ -80,7 +92,8 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
             var format = try Self.read(tap, kAudioTapPropertyFormat, AudioStreamBasicDescription())
             guard let tapFormat = AVAudioFormat(streamDescription: &format),
                   let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(RecordingLimits.sampleRate), channels: 1, interleaved: false),
-                  let converter = AVAudioConverter(from: tapFormat, to: target) else {
+                  let converter = AVAudioConverter(from: tapFormat, to: target),
+                  format.mBytesPerFrame > 0 else {
                 throw SystemAudioProblem.failed(step: "read the tap format", status: 0)
             }
             // The average of the channels, which is what was played, not the left one.
@@ -100,13 +113,27 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
             try Self.check(AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &device), "create the aggregate device")
             let createdDevice = device
             lock.withLock { aggregateID = createdDevice }
-            let chunker = Chunker(converter: converter, input: tapFormat, output: target, deliver: deliver)
+            let tapBuffers = tapFormat.isInterleaved ? 1 : Int(tapFormat.channelCount)
+            let ring = AudioFrameRing(
+                planes: tapBuffers,
+                bytesPerFrame: Int(format.mBytesPerFrame),
+                capacity: Int(tapFormat.sampleRate * Self.ringSeconds)
+            )
+            let writer = TapWriter(ring: ring)
+            let chunker = Chunker(writer: writer, converter: converter, input: tapFormat, output: target, deliver: deliver)
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.schedule(deadline: .now() + Self.drainInterval, repeating: Self.drainInterval, leeway: .milliseconds(5))
+            timer.setEventHandler { chunker.drain() }
+            lock.withLock {
+                self.timer = timer
+                self.writer = writer
+            }
+            timer.resume()
             var proc: AudioDeviceIOProcID?
-            // The real time IO thread waits for the block on `queue` and the buffers are
-            // valid only until it returns. So the block must be quick: Chunker reuses its
-            // buffers and allocates only when it hands on a chunk, about every 100 ms.
-            try Self.check(AudioDeviceCreateIOProcIDWithBlock(&proc, device, queue) { _, input, _, _, _ in
-                chunker.take(input)
+            // No queue: the block runs on the real time IO thread itself, and the buffers
+            // are valid only until it returns. It only copies them into the ring.
+            try Self.check(AudioDeviceCreateIOProcIDWithBlock(&proc, device, nil) { _, input, _, _, _ in
+                writer.write(input)
             }, "create the IO block")
             let createdProc = proc
             lock.withLock { procID = createdProc }
@@ -121,25 +148,32 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
     /// Stops the capture and removes the device and the tap. Safe to call when nothing
     /// runs.
     func stop() {
-        let (tap, device, proc) = lock.withLock {
-            let ids = (tapID, aggregateID, procID)
+        let (tap, device, proc, timer, writer) = lock.withLock {
+            let ids = (tapID, aggregateID, procID, self.timer, self.writer)
             tapID = AudioObjectID(kAudioObjectUnknown)
             aggregateID = AudioObjectID(kAudioObjectUnknown)
             procID = nil
+            self.timer = nil
+            self.writer = nil
             return ids
         }
         if device != kAudioObjectUnknown {
             if let proc {
                 AudioDeviceStop(device, proc)
+                // Waits for a block under way on the IO thread.
                 AudioDeviceDestroyIOProcID(device, proc)
             }
             AudioHardwareDestroyAggregateDevice(device)
         }
+        timer?.cancel()
         if tap != kAudioObjectUnknown {
             AudioHardwareDestroyProcessTap(tap)
+            if let dropped = writer?.ring.dropped, dropped > 0 {
+                Logger.captions.notice("System audio capture dropped \(dropped, privacy: .public) frames while converting fell behind")
+            }
             Logger.captions.notice("System audio capture stopped")
         }
-        // Waits for a block under way, so no samples come after stop returns.
+        // Waits for a conversion under way, so no samples come after stop returns.
         queue.sync {}
     }
 
@@ -177,69 +211,98 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
     }
 }
 
-/// Converts the tap's buffers to 16 kHz mono and hands them on in chunks of about 100 ms.
-/// Used on the capture queue only.
-nonisolated private final class Chunker: @unchecked Sendable {
+/// The IO block's side: copies the tap's buffers into the ring. Runs on Core Audio's real
+/// time thread, so it allocates nothing, takes no lock and does not log. Internal for
+/// tests.
+nonisolated final class TapWriter: Sendable {
+    let ring: AudioFrameRing
+    /// How many input buffers the device last gave, for Chunker to log once.
+    let seenBuffers = Atomic<Int>(0)
+
+    init(ring: AudioFrameRing) {
+        self.ring = ring
+    }
+
+    /// The aggregate device lists the output device too, and when that device has inputs
+    /// of its own, such as the microphone of a headset, their streams come first and the
+    /// tap's stream last. Only the last `ring.planes` buffers are read.
+    func write(_ list: UnsafePointer<AudioBufferList>) {
+        let all = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list))
+        let count = all.count
+        seenBuffers.store(count, ordering: .relaxed)
+        let planes = ring.planes
+        guard count >= planes else { return }
+        let first = count - planes
+        var frames = Int.max
+        for index in first..<count {
+            frames = min(frames, Int(all[index].mDataByteSize) / ring.bytesPerFrame)
+        }
+        ring.write(frames: frames) { plane in
+            UnsafeRawPointer(all[first + plane].mData)
+        }
+    }
+}
+
+/// Takes the tap's frames out of the ring, converts them to 16 kHz mono and hands them
+/// on in chunks of about 100 ms. Used on the capture queue only. Internal for tests.
+nonisolated final class Chunker: @unchecked Sendable {
+    private let writer: TapWriter
     private let converter: AVAudioConverter
-    private let input: AVAudioFormat
     private let output: AVAudioFormat
     private let deliver: @Sendable ([Float]) -> Void
     private var collected: [Float] = []
     private let chunk = RecordingLimits.sampleRate / 10
-    /// The converted samples of one block, reused, and grown only for a longer block.
-    private var converted: AVAudioPCMBuffer?
-    /// The buffers the tap's stream takes in the device's input list.
-    private let tapBuffers: Int
-    /// A list of only the tap's buffers, for when the device has inputs of its own.
-    private let tapList: UnsafeMutableAudioBufferListPointer
+    /// The frames taken from the ring for one conversion, reused.
+    private let taken: AVAudioPCMBuffer?
+    /// The converted samples of one conversion, reused.
+    private let converted: AVAudioPCMBuffer?
     private var reportedLayout = false
+    private static let framesPerConversion: AVAudioFrameCount = 4_096
 
-    init(converter: AVAudioConverter, input: AVAudioFormat, output: AVAudioFormat, deliver: @escaping @Sendable ([Float]) -> Void) {
+    init(writer: TapWriter, converter: AVAudioConverter, input: AVAudioFormat, output: AVAudioFormat, deliver: @escaping @Sendable ([Float]) -> Void) {
+        self.writer = writer
         self.converter = converter
-        self.input = input
         self.output = output
         self.deliver = deliver
-        tapBuffers = input.isInterleaved ? 1 : Int(input.channelCount)
-        tapList = AudioBufferList.allocate(maximumBuffers: tapBuffers)
+        taken = AVAudioPCMBuffer(pcmFormat: input, frameCapacity: Self.framesPerConversion)
+        let capacity = AVAudioFrameCount((Double(Self.framesPerConversion) * output.sampleRate / input.sampleRate).rounded(.up)) + 64
+        converted = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: capacity)
         collected.reserveCapacity(chunk * 2)
     }
 
-    deinit {
-        tapList.unsafeMutablePointer.deallocate()
+    /// Converts every frame waiting in the ring.
+    func drain() {
+        reportLayout()
+        guard let taken else { return }
+        let planes = UnsafeMutableAudioBufferListPointer(taken.mutableAudioBufferList)
+        while true {
+            let frames = writer.ring.read(maxFrames: Int(taken.frameCapacity)) { plane in
+                // AVAudioPCMBuffer allocates every plane up front.
+                planes[plane].mData!
+            }
+            guard frames > 0 else { return }
+            taken.frameLength = AVAudioFrameCount(frames)
+            convert(taken)
+        }
     }
 
-    /// The tap's buffers. The aggregate device lists the output device too, and when that
-    /// device has inputs of its own, such as the microphone of a headset, their streams
-    /// come first and the tap's stream last. Those are never read.
-    private func tapOnly(_ list: UnsafePointer<AudioBufferList>) -> UnsafePointer<AudioBufferList>? {
-        let all = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list))
-        if all.count == tapBuffers {
-            return list
+    private func reportLayout() {
+        guard !reportedLayout else { return }
+        let seen = writer.seenBuffers.load(ordering: .relaxed)
+        guard seen > 0 else { return }
+        reportedLayout = true
+        if seen != writer.ring.planes {
+            Logger.captions.notice("System audio capture gets \(seen, privacy: .public) input buffers and reads the last \(self.writer.ring.planes, privacy: .public)")
         }
-        if !reportedLayout {
-            reportedLayout = true
-            Logger.captions.notice("System audio capture gets \(all.count, privacy: .public) input buffers and reads the last \(self.tapBuffers, privacy: .public)")
-        }
-        guard all.count > tapBuffers else { return nil }
-        for index in 0..<tapBuffers {
-            tapList[index] = all[all.count - tapBuffers + index]
-        }
-        return UnsafePointer(tapList.unsafePointer)
     }
 
-    func take(_ list: UnsafePointer<AudioBufferList>) {
-        guard let list = tapOnly(list),
-              let buffer = AVAudioPCMBuffer(pcmFormat: input, bufferListNoCopy: list, deallocator: nil), buffer.frameLength > 0 else { return }
-        let capacity = AVAudioFrameCount((Double(buffer.frameLength) * output.sampleRate / input.sampleRate).rounded(.up)) + 64
-        if (converted?.frameCapacity ?? 0) < capacity {
-            converted = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: capacity)
-        }
+    private func convert(_ buffer: AVAudioPCMBuffer) {
         guard let converted else { return }
         var supplied = false
         var error: NSError?
         let status = converter.convert(to: converted, error: &error) { _, inputStatus in
             if supplied {
-                // More comes with the next block, so the converter keeps its state.
+                // More comes with the next frames, so the converter keeps its state.
                 inputStatus.pointee = .noDataNow
                 return nil
             }

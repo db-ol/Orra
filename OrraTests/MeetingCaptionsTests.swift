@@ -1,24 +1,85 @@
 import Foundation
+import os
 import Testing
 @testable import Orra
 
 @MainActor
 struct MeetingCaptionsTests {
-    @MainActor
-    private final class FakeSource {
-        var fails: SystemAudioProblem?
-        var deliver: (@Sendable ([Float]) -> Void)?
-        private(set) var starts = 0
-        private(set) var stops = 0
+    /// Stands in for the capture. MeetingCaptions calls it off the main actor, so its
+    /// state is behind a lock. With `holdsStart`, a start waits until `releaseStart`.
+    private final class FakeSource: Sendable {
+        private struct State {
+            var fails: SystemAudioProblem?
+            var holdsStart = false
+            var deliver: (@Sendable ([Float]) -> Void)?
+            var calls: [String] = []
+            var startedOnMain = false
+        }
+
+        private let state = OSAllocatedUnfairLock(initialState: State())
+        private let gate = DispatchSemaphore(value: 0)
+
+        var fails: SystemAudioProblem? {
+            get { state.withLock { $0.fails } }
+            set { state.withLock { $0.fails = newValue } }
+        }
+
+        var holdsStart: Bool {
+            get { state.withLock { $0.holdsStart } }
+            set { state.withLock { $0.holdsStart = newValue } }
+        }
+
+        /// "start", "started", "failed" and "stop", in the order they happened.
+        var calls: [String] {
+            state.withLock { $0.calls }
+        }
+
+        var starts: Int {
+            calls.filter { $0 == "start" }.count
+        }
+
+        var stops: Int {
+            calls.filter { $0 == "stop" }.count
+        }
+
+        var isCapturing: Bool {
+            state.withLock { $0.deliver != nil }
+        }
+
+        var startedOnMain: Bool {
+            state.withLock { $0.startedOnMain }
+        }
+
+        func releaseStart() {
+            gate.signal()
+        }
 
         var source: SystemAudioSource {
             SystemAudioSource(start: { [self] deliver in
-                starts += 1
-                if let fails { throw fails }
-                self.deliver = deliver
+                let (holds, fails) = state.withLock {
+                    $0.calls.append("start")
+                    if Thread.isMainThread {
+                        $0.startedOnMain = true
+                    }
+                    return ($0.holdsStart, $0.fails)
+                }
+                if holds {
+                    // Like the permission prompt. Bounded, so a broken test cannot hang.
+                    _ = gate.wait(timeout: .now() + 5)
+                }
+                if let fails {
+                    state.withLock { $0.calls.append("failed") }
+                    throw fails
+                }
+                state.withLock {
+                    $0.calls.append("started")
+                    $0.deliver = deliver
+                }
             }, stop: { [self] in
-                stops += 1
-                deliver = nil
+                state.withLock {
+                    $0.calls.append("stop")
+                    $0.deliver = nil
+                }
             })
         }
     }
@@ -47,8 +108,10 @@ struct MeetingCaptionsTests {
         let captions = makeCaptions(FakeCaptionModels(["Hello everyone."]), source: source, events: events)
         captions.setOn(true)
         #expect(captions.isOn)
-        #expect(captions.capture == .listening)
+        #expect(captions.capture == .starting)
+        try await eventually { captions.capture == .listening }
         #expect(source.starts == 1)
+        #expect(!source.startedOnMain)
         #expect(events.items == ["show", "started"])
         captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
         try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
@@ -59,13 +122,15 @@ struct MeetingCaptionsTests {
         let events = Box()
         let captions = makeCaptions(FakeCaptionModels(["Hello.", "Again."]), source: source, events: events)
         captions.setOn(true)
+        try await eventually { captions.capture == .listening }
         let run = captions.currentRun
         captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
         try await eventually { captions.store.sentences.count == 1 }
         captions.setOn(false)
         #expect(captions.store.sentences.isEmpty)
-        #expect(source.stops == 1)
         #expect(captions.capture == .off)
+        try await eventually { source.stops == 1 }
+        #expect(!source.isCapturing)
         #expect(events.items == ["show", "started", "stopped", "close"])
         // Samples still on their way from the capture are ignored.
         captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
@@ -73,16 +138,92 @@ struct MeetingCaptionsTests {
         #expect(captions.store.sentences.isEmpty)
     }
 
-    @Test func aRefusedCaptureSaysSoInTheWindow() {
+    @Test func aRefusedCaptureSaysSoInTheWindow() async throws {
         let source = FakeSource()
         source.fails = .notConfigured
         let events = Box()
         let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events)
         captions.setOn(true)
         #expect(captions.isOn)
-        #expect(captions.capture == .unavailable(.notConfigured))
+        try await eventually { captions.capture == .unavailable(.notConfigured) }
         // The local model is not loaded for captions that cannot hear anything.
         #expect(events.items == ["show"])
+    }
+
+    @Test func aStartThatWaitsDoesNotHoldTheMainActor() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events)
+        captions.setOn(true)
+        // setOn returned while the start still waits, as for the permission prompt.
+        try await eventually { source.calls == ["start"] }
+        #expect(captions.capture == .starting)
+        #expect(events.items == ["show"])
+        source.releaseStart()
+        try await eventually { captions.capture == .listening }
+        #expect(events.items == ["show", "started"])
+        #expect(source.calls == ["start", "started"])
+    }
+
+    @Test func aStopDuringTheStartTearsDownWhatTheStartMade() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events)
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        captions.setOn(false)
+        #expect(!captions.isOn)
+        #expect(captions.capture == .off)
+        // The stop waits for the start, then removes what it made.
+        #expect(source.calls == ["start"])
+        source.releaseStart()
+        try await eventually { source.calls == ["start", "started", "stop"] }
+        #expect(!source.isCapturing)
+        // The late outcome of the start changes nothing, and the local model is not
+        // loaded for captions that are off.
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.capture == .off)
+        #expect(events.items == ["show", "stopped", "close"])
+    }
+
+    @Test func aStopDuringAFailedStartLeavesCaptionsOff() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        source.fails = .failed(step: "start the device", status: -1)
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box())
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        captions.setOn(false)
+        source.releaseStart()
+        try await eventually { source.calls == ["start", "failed", "stop"] }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.capture == .off)
+    }
+
+    @Test func offAndOnAgainDuringTheStartEndsListeningToTheLatestStart() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels(["Hello."]), source: source, events: events)
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        captions.setOn(false)
+        captions.setOn(true)
+        #expect(captions.capture == .starting)
+        source.holdsStart = false
+        source.releaseStart()
+        try await eventually { captions.capture == .listening }
+        #expect(source.calls == ["start", "started", "stop", "start", "started"])
+        #expect(source.isCapturing)
+        #expect(events.items == ["show", "stopped", "close", "show", "started"])
+        // Samples of the first start are ignored, those of the latest are captioned.
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun - 2)
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.count == 1 }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.store.sentences.count == 1)
     }
 
     @Test func onlyZerosSuggestThePermission() {

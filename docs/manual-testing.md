@@ -1784,8 +1784,8 @@ it shows starts, stops, counts and failures, never text.
   captions show what the other person says, never what you say into the headset. The
   log shows at most one notice about the number of input buffers.
 - [ ] While the permission prompt is open, the menu bar icon and its menu still respond.
-  Turning captions on runs the capture setup on the main thread, so a hang here is a
-  known risk to confirm.
+  Turning captions off while the prompt is open and on again after answering it leaves
+  one capture running (the log shows one start after the last stop).
 - [ ] The window keeps the height you give it as sentences pile up, and can be made
   shorter again after it filled up.
 - [ ] Without the Info.plist key, turning captions on does not load the local model

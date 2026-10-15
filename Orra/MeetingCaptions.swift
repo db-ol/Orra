@@ -119,6 +119,9 @@ nonisolated struct CaptionFollow: Equatable, Sendable {
 final class MeetingCaptions {
     nonisolated enum CaptureState: Equatable, Sendable {
         case off
+        /// The capture is being set up off the main actor. The first time, macOS may
+        /// show the permission prompt meanwhile.
+        case starting
         case listening
         case unavailable(SystemAudioProblem)
 
@@ -150,6 +153,9 @@ final class MeetingCaptions {
     @ObservationIgnored private let saveDisplayMode: (CaptionDisplayMode) -> Void
     @ObservationIgnored private let silenceHint: Double
     @ObservationIgnored private var pipeline: CaptionPipeline?
+    /// Starts and stops the capture, one after the other, off the main actor. Since it is
+    /// serial, a stop that comes while a start still runs tears down what the start made.
+    @ObservationIgnored private let captureQueue = DispatchQueue(label: "io.github.db-ol.Orra.caption-capture", qos: .userInitiated)
     /// Counts the starts, so samples of an earlier run are ignored.
     @ObservationIgnored private var run = 0
     @ObservationIgnored private var heardSeconds = 0.0
@@ -210,28 +216,53 @@ final class MeetingCaptions {
         self.pipeline = pipeline
         showWindow()
         let current = run
-        do {
-            try source.start { [weak self] samples in
-                DispatchQueue.main.async {
-                    self?.receive(samples, run: current)
-                }
+        capture = .starting
+        let source = source
+        let deliver: @Sendable ([Float]) -> Void = { [weak self] samples in
+            DispatchQueue.main.async {
+                self?.receive(samples, run: current)
             }
-            // Only once the capture runs: the local model is not loaded, nor its download
-            // offered, for captions that cannot hear anything.
-            started()
-            capture = .listening
-            Logger.captions.notice("Meeting captions started")
-        } catch let problem as SystemAudioProblem {
-            capture = .unavailable(problem)
-        } catch {
-            capture = .unavailable(.failed(step: "start", status: 0))
         }
+        // Creating the tap and the device and starting it can wait for the permission
+        // prompt, so it runs off the main actor and the outcome comes back to it.
+        captureQueue.async { [weak self] in
+            let problem: SystemAudioProblem?
+            do {
+                try source.start(deliver)
+                problem = nil
+            } catch let failure as SystemAudioProblem {
+                problem = failure
+            } catch {
+                problem = .failed(step: "start", status: 0)
+            }
+            DispatchQueue.main.async {
+                self?.captureStarted(run: current, problem: problem)
+            }
+        }
+    }
+
+    /// The outcome of a start, on the main actor. Ignored when captions were turned off
+    /// meanwhile: that stop is queued after the start and tears it down.
+    private func captureStarted(run current: Int, problem: SystemAudioProblem?) {
+        guard isOn, current == run else { return }
+        if let problem {
+            capture = .unavailable(problem)
+            return
+        }
+        // Only once the capture runs: the local model is not loaded, nor its download
+        // offered, for captions that cannot hear anything.
+        started()
+        capture = .listening
+        Logger.captions.notice("Meeting captions started")
     }
 
     private func stop() {
         isOn = false
         run += 1
-        source.stop()
+        let source = source
+        captureQueue.async {
+            source.stop()
+        }
         pipeline?.stop()
         pipeline = nil
         store.clear()

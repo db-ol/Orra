@@ -212,7 +212,7 @@ private struct CaptionNotes: View {
                 note("This build of Orra cannot capture the sound the Mac plays yet.")
             case .unavailable(.failed):
                 note("Orra could not capture the sound the Mac plays. Turn Meeting Captions off and on again to try again.")
-            case .off, .listening:
+            case .off, .starting, .listening:
                 if captions.hearsOnlySilence {
                     note("No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings.")
                 }
