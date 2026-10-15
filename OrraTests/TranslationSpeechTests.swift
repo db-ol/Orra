@@ -3,8 +3,8 @@ import Synchronization
 import Testing
 @testable import Orra
 
-/// A stand in for the voice model. It records what it was asked to speak and gives back
-/// two short pieces of silence for each text.
+/// A stand in for the voice model. It records what it was asked to speak and, unless a
+/// test says otherwise, streams two short pieces of silence for each text.
 final class FakeSynthesizer: SpeechSynthesizer {
     let spoken = Mutex<[String]>([])
     let voices = Mutex<[Double?]>([])
@@ -14,6 +14,15 @@ final class FakeSynthesizer: SpeechSynthesizer {
     let forgets = Mutex(0)
     let failsLoad = Mutex(false)
     let failsSpeaking = Mutex(false)
+    /// Whether it streams, as Qwen3-TTS without a voice sample does.
+    let streamsPieces = Mutex(true)
+    /// What it makes of a text on its nth try (from 0), in place of the two short pieces.
+    let makes = Mutex<(@Sendable (String, Int) -> [SpokenAudio])?>(nil)
+    private let tries = Mutex<[String: Int]>([:])
+
+    func streams(voice: VoiceSample?) -> Bool {
+        streamsPieces.withLock { $0 }
+    }
 
     func load(model: URL, codec: URL) async throws {
         loads.withLock { $0 += 1 }
@@ -33,9 +42,21 @@ final class FakeSynthesizer: SpeechSynthesizer {
         voices.withLock { $0.append(voice?.seconds) }
         transcripts.withLock { $0.append(voice?.transcript) }
         let fails = failsSpeaking.withLock { $0 }
+        let attempt = tries.withLock { tries in
+            defer { tries[text, default: 0] += 1 }
+            return tries[text, default: 0]
+        }
+        let made = makes.withLock { $0 }.map { $0(text, attempt) }
         return AsyncThrowingStream { continuation in
             if fails {
                 continuation.finish(throwing: TestError())
+                return
+            }
+            if let made {
+                for audio in made {
+                    continuation.yield(audio)
+                }
+                continuation.finish()
                 return
             }
             continuation.yield(SpokenAudio(samples: [Float](repeating: 0, count: 240), sampleRate: 24_000))
@@ -312,6 +333,104 @@ struct TranslationSpeechTests {
         #expect(playback.calls.suffix(2) == ["finish", "stop"])
         #expect(failing.state == .idle)
         #expect(spoken.isEmpty == false)
+    }
+
+    /// About the length a voice model gives `text`, as a tone loud enough to count as
+    /// speech.
+    nonisolated static func reading(_ text: String) -> SpokenAudio {
+        SpeechCheckTests.tone(seconds: SpeechCheck.expectedSeconds(for: text))
+    }
+
+    /// A piece that comes whole is checked before it plays. One that fails is made once
+    /// more, and the second try plays.
+    @Test func aFailedPieceIsMadeAgain() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock {
+            $0 = { text, attempt in
+                // Cut off on the first try of the second sentence.
+                text.hasPrefix("Could") && attempt == 0 ? [SpeechCheckTests.tone(seconds: 0.3)] : [Self.reading(text)]
+            }
+        }
+        let speech = makeSpeech()
+        speech.speak("We have a meeting next Tuesday. Could you send the numbers before then?", in: .english)
+        await speech.waitUntilDone()
+        #expect(spoken == ["en We have a meeting next Tuesday.", "en Could you send the numbers before then?", "en Could you send the numbers before then?"])
+        let first = Self.reading("We have a meeting next Tuesday.").samples.count
+        let second = Self.reading("Could you send the numbers before then?").samples.count
+        #expect(playback.calls == ["start Orra Microphone", "play \(first)", "play \(second)", "finish", "stop"])
+        #expect(speech.problem == nil)
+    }
+
+    /// A piece that fails twice is skipped, the rest of the translation is spoken, and the
+    /// menu says so. The paste does not depend on it: with Also Paste on, the translation
+    /// was pasted whole when the key was released.
+    @Test func aPieceThatFailsTwiceIsSkipped() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock {
+            $0 = { text, _ in
+                // A loop: 7.1 s for a short sentence, as CosyVoice3 once made.
+                text.hasPrefix("好的") ? [SpeechCheckTests.tone(seconds: 7.1)] : [Self.reading(text)]
+            }
+        }
+        let speech = makeSpeech()
+        #expect(speech.voiceForDictation.alsoPastes())
+        speech.speak("好的，我们开始吧。今天先看一下上周的进度。", in: .chinese)
+        await speech.waitUntilDone()
+        #expect(spoken == ["zh 好的，我们开始吧。", "zh 好的，我们开始吧。", "zh 今天先看一下上周的进度。"])
+        let played = Self.reading("今天先看一下上周的进度。").samples.count
+        #expect(playback.calls == ["start Orra Microphone", "play \(played)", "finish", "stop"])
+        #expect(speech.problem == "The voice model failed twice on a sentence, so Orra skipped it.")
+        #expect(speech.state == .idle)
+        #expect(speech.voiceForDictation.alsoPastes())
+    }
+
+    /// Near silence is not played either.
+    @Test func silenceIsNotPlayed() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock {
+            $0 = { _, _ in [SpokenAudio(samples: [Float](repeating: 0.001, count: 24_000 * 3), sampleRate: 24_000)] }
+        }
+        let speech = makeSpeech()
+        speech.speak("We have a meeting next Tuesday.", in: .english)
+        await speech.waitUntilDone()
+        #expect(spoken.count == 2)
+        #expect(playback.calls == ["start Orra Microphone", "finish", "stop"])
+        #expect(speech.problem == "The voice model failed twice on a sentence, so Orra skipped it.")
+    }
+
+    /// A streamed piece plays as it comes, so it is not checked for silence, and it is not
+    /// made again. Only its length is held: it is cut at the longest its text may run.
+    @Test func aStreamedPieceIsCutAtItsLongest() async {
+        let text = "Thank you all, see you next week."
+        let longest = SpeechCheck.longestSeconds(for: text)
+        // Parts of one second, without end.
+        synthesizer.makes.withLock {
+            $0 = { _, _ in Array(repeating: SpeechCheckTests.tone(seconds: 1), count: 30) }
+        }
+        let speech = makeSpeech()
+        speech.speak(text, in: .english)
+        await speech.waitUntilDone()
+        #expect(spoken == ["en \(text)"])
+        let whole = Int(longest)
+        let rest = Int((longest - Double(whole)) * 24_000)
+        var expected = ["start Orra Microphone"] + Array(repeating: "play 24000", count: whole)
+        if rest > 0 {
+            expected.append("play \(rest)")
+        }
+        #expect(playback.calls == expected + ["finish", "stop"])
+        #expect(speech.problem == nil)
+    }
+
+    /// A streamed piece of near silence plays as it is.
+    @Test func aStreamedPieceIsNotCheckedForSilence() async {
+        synthesizer.makes.withLock {
+            $0 = { _, _ in [SpokenAudio(samples: [Float](repeating: 0, count: 2_400), sampleRate: 24_000)] }
+        }
+        let speech = makeSpeech()
+        speech.speak("We have a meeting next Tuesday.", in: .english)
+        await speech.waitUntilDone()
+        #expect(spoken.count == 1)
+        #expect(playback.calls == ["start Orra Microphone", "play 2400", "finish", "stop"])
     }
 
     /// Turning it on loads the model ahead of the first translation when the model is in

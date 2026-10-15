@@ -157,6 +157,11 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
         }
     }
 
+    /// Only without a voice sample, see the type's notes.
+    nonisolated func streams(voice: VoiceSample?) -> Bool {
+        voice == nil
+    }
+
     /// The language tags Qwen3-TTS takes.
     nonisolated static func languageName(_ language: TranslationTarget) -> String {
         switch language {

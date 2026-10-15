@@ -3012,6 +3012,16 @@
         }
       }
     },
+    "The voice model failed twice on a sentence, so Orra skipped it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音合成模型两次都没能说好一句话，所以 Orra 跳过了这一句。"
+          }
+        }
+      }
+    },
     "The voice model is not on this Mac yet." : {
       "localizations" : {
         "zh-Hans" : {

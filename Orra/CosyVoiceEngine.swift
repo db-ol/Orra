@@ -153,6 +153,11 @@ actor CosyVoiceEngine: SpeechSynthesizer {
         return made
     }
 
+    /// Never at 1f54e56, see the type's notes.
+    nonisolated func streams(voice: VoiceSample?) -> Bool {
+        false
+    }
+
     nonisolated static func languageName(_ language: TranslationTarget) -> String {
         switch language {
         case .english: "english"

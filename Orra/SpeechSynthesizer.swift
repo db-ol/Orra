@@ -73,6 +73,10 @@ protocol SpeechSynthesizer: Sendable {
     /// order. The stream ends after the last piece, and stops early when the task that
     /// reads it is cancelled.
     func speak(_ text: String, in language: TranslationTarget, voice: VoiceSample?) -> AsyncThrowingStream<SpokenAudio, any Error>
+    /// Whether `speak` streams a piece as it is made, in several parts, rather than whole
+    /// at its end. TranslationSpeech checks a whole piece before it plays, and only caps
+    /// the length of a streamed one, see SpeechCheck.
+    func streams(voice: VoiceSample?) -> Bool
     /// Forgets anything the model derived from a voice sample.
     func forgetVoice() async
 }

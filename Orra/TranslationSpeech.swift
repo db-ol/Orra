@@ -350,17 +350,20 @@ final class TranslationSpeech {
         problem = nil
         let started = ContinuousClock.now
         var firstSound: Duration?
+        var tally = PieceTally()
         let pieces = SpeechChunks.split(text)
         speaking: for piece in pieces {
             await waitWhileDictating(generation)
             guard generation == self.generation else { break }
             do {
-                for try await audio in synthesizer.speak(piece, in: language, voice: voice) {
-                    guard generation == self.generation else { break speaking }
+                let outcome = try await say(piece, in: language, with: synthesizer, generation: generation) {
                     if firstSound == nil {
                         firstSound = started.duration(to: .now)
                     }
-                    playback.play(audio)
+                }
+                tally.count(outcome)
+                if outcome == .stopped {
+                    break speaking
                 }
             } catch {
                 problem = String(localized: "The voice model could not speak this translation.")
@@ -372,9 +375,116 @@ final class TranslationSpeech {
             await playback.finish()
             playback.stop()
             state = .idle
+            if tally.skipped > 0, problem == nil {
+                problem = String(localized: "The voice model failed twice on a sentence, so Orra skipped it.")
+            }
         }
         // Times and counts only, never text.
         logger.notice("Spoke \(pieces.count, privacy: .public) pieces in \(language.logName, privacy: .public), first sound after \(firstSound.map { "\($0)" } ?? "none", privacy: .public), done after \(started.duration(to: .now), privacy: .public), voice sample: \(self.voice != nil, privacy: .public)")
+        if tally.hasNews {
+            // Counts and reasons only, never text or audio.
+            logger.notice("Speech check: \(tally.retried, privacy: .public) pieces made again, \(tally.skipped, privacy: .public) skipped, \(tally.cut, privacy: .public) streamed pieces cut, reasons \(tally.reasons, privacy: .public)")
+        }
+    }
+
+    /// What became of a piece.
+    nonisolated enum PieceOutcome: Equatable, Sendable {
+        /// Played, on the second try when the first failed the check for `firstTry`.
+        case spoken(firstTry: SpeechCheck.Verdict?)
+        /// Failed the check twice and not played.
+        case skipped(SpeechCheck.Verdict, SpeechCheck.Verdict)
+        /// Streamed and cut at the longest it may run.
+        case cut
+        /// Stopped by the user.
+        case stopped
+    }
+
+    /// The counts of one translation for the log.
+    private struct PieceTally {
+        var retried = 0
+        var skipped = 0
+        var cut = 0
+        var verdicts: [SpeechCheck.Verdict] = []
+
+        mutating func count(_ outcome: PieceOutcome) {
+            switch outcome {
+            case .spoken(let firstTry):
+                if let firstTry {
+                    retried += 1
+                    verdicts.append(firstTry)
+                }
+            case .skipped(let first, let second):
+                retried += 1
+                skipped += 1
+                verdicts += [first, second]
+            case .cut:
+                cut += 1
+                verdicts.append(.tooLong)
+            case .stopped:
+                break
+            }
+        }
+
+        var hasNews: Bool {
+            retried > 0 || cut > 0
+        }
+
+        var reasons: String {
+            verdicts.isEmpty ? "none" : verdicts.map(\.rawValue).joined(separator: " ")
+        }
+    }
+
+    /// Speaks one piece. A piece that comes whole is checked before it plays (SpeechCheck):
+    /// one that fails is made once more, and skipped when it fails again, so a cut off
+    /// sentence, near silence or a loop never reaches the other side. Both voice models
+    /// draw their samples from MLX's random state, which moves on with every draw, so the
+    /// second try is a new draw. A streamed piece plays as it comes, so only its length can
+    /// be held to the check: it is cut at the longest its text may run. `heard` is called
+    /// when a part of the piece is queued to play.
+    private func say(_ piece: String, in language: TranslationTarget, with synthesizer: any SpeechSynthesizer, generation: Int, heard: () -> Void) async throws -> PieceOutcome {
+        let voice = voice
+        if synthesizer.streams(voice: voice) {
+            let longest = SpeechCheck.longestSeconds(for: piece)
+            var seconds = 0.0
+            for try await audio in synthesizer.speak(piece, in: language, voice: voice) {
+                guard generation == self.generation else { return .stopped }
+                let rate = Double(max(audio.sampleRate, 1))
+                let length = Double(audio.samples.count) / rate
+                if seconds + length > longest {
+                    let room = Int((longest - seconds) * rate)
+                    if room > 0 {
+                        heard()
+                        playback.play(SpokenAudio(samples: Array(audio.samples.prefix(room)), sampleRate: audio.sampleRate))
+                    }
+                    // Ending the stream here drops the rest of the piece, as a stop does.
+                    return .cut
+                }
+                seconds += length
+                heard()
+                playback.play(audio)
+            }
+            return .spoken(firstTry: nil)
+        }
+        var verdicts: [SpeechCheck.Verdict] = []
+        for _ in 0..<2 {
+            var parts: [SpokenAudio] = []
+            for try await audio in synthesizer.speak(piece, in: language, voice: voice) {
+                guard generation == self.generation else { return .stopped }
+                parts.append(audio)
+            }
+            guard generation == self.generation else { return .stopped }
+            let whole = SpokenAudio(samples: parts.flatMap(\.samples), sampleRate: parts.first?.sampleRate ?? 24_000)
+            let verdict = SpeechCheck.verdict(for: whole, text: piece)
+            if verdict == .good {
+                for part in parts {
+                    heard()
+                    playback.play(part)
+                }
+                return .spoken(firstTry: verdicts.first)
+            }
+            verdicts.append(verdict)
+        }
+        return .skipped(verdicts[0], verdicts[1])
     }
 
     private func loadIfNeeded() async -> Bool {

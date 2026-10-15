@@ -252,6 +252,10 @@ final class GatedSynthesizer: SpeechSynthesizer {
 
     func forgetVoice() async {}
 
+    func streams(voice: VoiceSample?) -> Bool {
+        false
+    }
+
     func speak(_ text: String, in language: TranslationTarget, voice: VoiceSample?) -> AsyncThrowingStream<SpokenAudio, any Error> {
         AsyncThrowingStream { $0.finish() }
     }
