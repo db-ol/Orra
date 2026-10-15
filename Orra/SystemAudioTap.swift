@@ -48,7 +48,9 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
     }
 
     private let lock = OSAllocatedUnfairLock()
-    private let queue = DispatchQueue(label: "io.github.db-ol.Orra.system-audio")
+    /// The Core Audio IO thread waits for each block on this queue, so it runs at the
+    /// highest priority an app queue gets.
+    private let queue = DispatchQueue(label: "io.github.db-ol.Orra.system-audio", qos: .userInteractive)
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
@@ -60,7 +62,12 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
     func start(deliver: @escaping @Sendable ([Float]) -> Void) throws {
         stop()
         guard Self.isConfigured else { throw SystemAudioProblem.notConfigured }
-        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: Self.ownProcess().map { [$0] } ?? [])
+        let own = Self.ownProcess()
+        if own == nil {
+            // Then Orra's own sounds, such as the start and stop sounds, can be captioned.
+            Logger.captions.notice("System audio capture could not find Orra's own process to leave it out")
+        }
+        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: own.map { [$0] } ?? [])
         description.uuid = UUID()
         description.name = "Orra Meeting Captions"
         description.isPrivate = true
@@ -95,8 +102,9 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
             lock.withLock { aggregateID = createdDevice }
             let chunker = Chunker(converter: converter, input: tapFormat, output: target, deliver: deliver)
             var proc: AudioDeviceIOProcID?
-            // The block runs on `queue`, not the real time thread, so converting there is
-            // safe. The buffers are valid until it returns.
+            // The real time IO thread waits for the block on `queue` and the buffers are
+            // valid only until it returns. So the block must be quick: Chunker reuses its
+            // buffers and allocates only when it hands on a chunk, about every 100 ms.
             try Self.check(AudioDeviceCreateIOProcIDWithBlock(&proc, device, queue) { _, input, _, _, _ in
                 chunker.take(input)
             }, "create the IO block")
@@ -178,18 +186,55 @@ nonisolated private final class Chunker: @unchecked Sendable {
     private let deliver: @Sendable ([Float]) -> Void
     private var collected: [Float] = []
     private let chunk = RecordingLimits.sampleRate / 10
+    /// The converted samples of one block, reused, and grown only for a longer block.
+    private var converted: AVAudioPCMBuffer?
+    /// The buffers the tap's stream takes in the device's input list.
+    private let tapBuffers: Int
+    /// A list of only the tap's buffers, for when the device has inputs of its own.
+    private let tapList: UnsafeMutableAudioBufferListPointer
+    private var reportedLayout = false
 
     init(converter: AVAudioConverter, input: AVAudioFormat, output: AVAudioFormat, deliver: @escaping @Sendable ([Float]) -> Void) {
         self.converter = converter
         self.input = input
         self.output = output
         self.deliver = deliver
+        tapBuffers = input.isInterleaved ? 1 : Int(input.channelCount)
+        tapList = AudioBufferList.allocate(maximumBuffers: tapBuffers)
+        collected.reserveCapacity(chunk * 2)
+    }
+
+    deinit {
+        tapList.unsafeMutablePointer.deallocate()
+    }
+
+    /// The tap's buffers. The aggregate device lists the output device too, and when that
+    /// device has inputs of its own, such as the microphone of a headset, their streams
+    /// come first and the tap's stream last. Those are never read.
+    private func tapOnly(_ list: UnsafePointer<AudioBufferList>) -> UnsafePointer<AudioBufferList>? {
+        let all = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list))
+        if all.count == tapBuffers {
+            return list
+        }
+        if !reportedLayout {
+            reportedLayout = true
+            Logger.captions.notice("System audio capture gets \(all.count, privacy: .public) input buffers and reads the last \(self.tapBuffers, privacy: .public)")
+        }
+        guard all.count > tapBuffers else { return nil }
+        for index in 0..<tapBuffers {
+            tapList[index] = all[all.count - tapBuffers + index]
+        }
+        return UnsafePointer(tapList.unsafePointer)
     }
 
     func take(_ list: UnsafePointer<AudioBufferList>) {
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: input, bufferListNoCopy: list, deallocator: nil), buffer.frameLength > 0 else { return }
+        guard let list = tapOnly(list),
+              let buffer = AVAudioPCMBuffer(pcmFormat: input, bufferListNoCopy: list, deallocator: nil), buffer.frameLength > 0 else { return }
         let capacity = AVAudioFrameCount((Double(buffer.frameLength) * output.sampleRate / input.sampleRate).rounded(.up)) + 64
-        guard let converted = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: capacity) else { return }
+        if (converted?.frameCapacity ?? 0) < capacity {
+            converted = AVAudioPCMBuffer(pcmFormat: output, frameCapacity: capacity)
+        }
+        guard let converted else { return }
         var supplied = false
         var error: NSError?
         let status = converter.convert(to: converted, error: &error) { _, inputStatus in
@@ -207,6 +252,7 @@ nonisolated private final class Chunker: @unchecked Sendable {
         if collected.count >= chunk {
             deliver(collected)
             collected = []
+            collected.reserveCapacity(chunk * 2)
         }
     }
 }

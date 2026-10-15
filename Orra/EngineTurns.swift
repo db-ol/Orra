@@ -83,6 +83,20 @@ final class EngineTurns {
     }
 }
 
+extension EngineTurns {
+    /// A caption call on the cleanup model, through `captionTurn`. When its task is
+    /// cancelled, the model stops early but returns what it wrote so far instead of
+    /// throwing, see RewriteEngine.generate. Such a cut off answer is never used here. It
+    /// counts as cancelled, so the call runs again after the dictation.
+    func captionTranslationTurn<T: Sendable>(retries: Int = 3, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await captionTurn(retries: retries) {
+            let value = try await work()
+            try Task.checkCancellation()
+            return value
+        }
+    }
+}
+
 extension CleanupModel {
     /// The same model, telling `turns` when a dictation starts and ends, so captions give
     /// way to it. AppDelegate passes this to PushToTalkController.

@@ -49,7 +49,7 @@ struct MeetingCaptionsTests {
         #expect(captions.isOn)
         #expect(captions.capture == .listening)
         #expect(source.starts == 1)
-        #expect(events.items == ["started", "show"])
+        #expect(events.items == ["show", "started"])
         captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
         try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
     }
@@ -66,7 +66,7 @@ struct MeetingCaptionsTests {
         #expect(captions.store.sentences.isEmpty)
         #expect(source.stops == 1)
         #expect(captions.capture == .off)
-        #expect(events.items == ["started", "show", "stopped", "close"])
+        #expect(events.items == ["show", "started", "stopped", "close"])
         // Samples still on their way from the capture are ignored.
         captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
         try await Task.sleep(for: .milliseconds(30))
@@ -81,7 +81,8 @@ struct MeetingCaptionsTests {
         captions.setOn(true)
         #expect(captions.isOn)
         #expect(captions.capture == .unavailable(.notConfigured))
-        #expect(events.items == ["started", "show"])
+        // The local model is not loaded for captions that cannot hear anything.
+        #expect(events.items == ["show"])
     }
 
     @Test func onlyZerosSuggestThePermission() {

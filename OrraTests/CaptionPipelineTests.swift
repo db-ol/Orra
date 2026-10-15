@@ -49,7 +49,7 @@ final class FakeCaptionModels {
             direction: { [self] in direction },
             translate: { [self] text, target in
                 if let turns {
-                    return try await turns.captionTurn { try await self.translate(text, target) }
+                    return try await turns.captionTranslationTurn { try await self.translate(text, target) }
                 }
                 return try await translate(text, target)
             }
@@ -76,9 +76,13 @@ final class FakeCaptionModels {
         if holdsTranslations {
             await withCheckedContinuation { held.append($0) }
         }
-        try await Task.sleep(for: translationDelay)
-        try Task.checkCancellation()
+        try? await Task.sleep(for: translationDelay)
         let translation = Self.translations[text] ?? text
+        // Like RewriteEngine.generate, a cancelled call does not throw. It returns the
+        // answer cut off where it stopped.
+        if Task.isCancelled {
+            return #"{"cleaned": "\#(text)", "translation": "\#(translation.prefix(1))"#
+        }
         return #"{"cleaned": "\#(text)", "translation": "\#(translation)"}"#
     }
 
@@ -267,11 +271,12 @@ struct EngineTurnsTests {
         let turns = EngineTurns(pollInterval: .milliseconds(2))
         let probe = Probe()
         let call = Task {
-            try await turns.captionTurn { @MainActor () async throws -> Int in
+            try await turns.captionTranslationTurn { @MainActor () async throws -> Int in
                 probe.attempts += 1
                 probe.started = true
-                // A translation, which stops when its task is cancelled.
-                try await Task.sleep(for: probe.attempts == 1 ? .seconds(30) : .milliseconds(1))
+                // A translation, which stops when its task is cancelled and returns what
+                // it has so far, without throwing.
+                try? await Task.sleep(for: probe.attempts == 1 ? .seconds(30) : .milliseconds(1))
                 return probe.attempts
             }
         }
@@ -282,6 +287,26 @@ struct EngineTurnsTests {
         #expect(probe.attempts == 1)
         turns.dictationEnded()
         #expect(try await call.value == 2)
+    }
+
+    @Test func aTranslationCutOffByADictationIsNotShownAndRunsAgain() async throws {
+        let turns = EngineTurns(pollInterval: .milliseconds(2))
+        let models = FakeCaptionModels(["Hello everyone."])
+        models.holdsTranslations = true
+        var reports: [CaptionSentence] = []
+        let pipeline = CaptionPipeline(engines: models.engines(turns: turns)) { reports.append($0) }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        try await eventually { models.isHolding }
+        turns.dictationStarted()
+        // The translation stops early and returns a cut off answer, as the model does.
+        models.letGo()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(models.translated.count == 1)
+        #expect(reports.allSatisfy { $0.translation == .pending })
+        turns.dictationEnded()
+        await pipeline.finish()
+        #expect(models.translated.count == 2)
+        #expect(reports.last?.translation == .done("大家好。"))
     }
 
     @Test func turningCaptionsOffCancelsAWaitingCall() async throws {

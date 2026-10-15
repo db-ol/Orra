@@ -57,6 +57,9 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
         background.state = .active
         let content = NSHostingView(rootView: CaptionView(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup))
         content.translatesAutoresizingMaskIntoConstraints = false
+        // Only the minimum size. With the default, the scroll view's growing content sets
+        // the window's height, and the user could not make it shorter.
+        content.sizingOptions = [.minSize]
         background.addSubview(content)
         NSLayoutConstraint.activate([
             content.leadingAnchor.constraint(equalTo: background.leadingAnchor),
@@ -217,7 +220,10 @@ private struct CaptionNotes: View {
             if pushToTalk.modelState != .ready || captions.speechModelMissing {
                 note("The speech model is not ready. Captions start once it is loaded.")
             }
-            translationNote
+            // No translation notes or download while nothing can be captured.
+            if !captions.capture.isUnavailable {
+                translationNote
+            }
         }
     }
 

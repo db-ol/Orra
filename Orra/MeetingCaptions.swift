@@ -121,6 +121,10 @@ final class MeetingCaptions {
         case off
         case listening
         case unavailable(SystemAudioProblem)
+
+        var isUnavailable: Bool {
+            if case .unavailable = self { true } else { false }
+        }
     }
 
     private(set) var isOn = false
@@ -204,7 +208,6 @@ final class MeetingCaptions {
             self?.store.apply(sentence)
         })
         self.pipeline = pipeline
-        started()
         showWindow()
         let current = run
         do {
@@ -213,6 +216,9 @@ final class MeetingCaptions {
                     self?.receive(samples, run: current)
                 }
             }
+            // Only once the capture runs: the local model is not loaded, nor its download
+            // offered, for captions that cannot hear anything.
+            started()
             capture = .listening
             Logger.captions.notice("Meeting captions started")
         } catch let problem as SystemAudioProblem {

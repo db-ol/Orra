@@ -80,7 +80,7 @@ extension CaptionEngines {
             canTranslate: canTranslate,
             direction: direction,
             translate: { text, target in
-                try await turns.captionTurn { try await complete(text, target) }
+                try await turns.captionTranslationTurn { try await complete(text, target) }
             }
         )
     }

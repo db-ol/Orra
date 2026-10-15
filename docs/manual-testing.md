@@ -1780,6 +1780,16 @@ it shows starts, stops, counts and failures, never text.
 - [ ] Changing the output device during a call, such as plugging in headphones: captions
   go on. If they stop, turning them off and on brings them back. This is a known gap to
   confirm.
+- [ ] A call with AirPods or another headset with a microphone as the output device:
+  captions show what the other person says, never what you say into the headset. The
+  log shows at most one notice about the number of input buffers.
+- [ ] While the permission prompt is open, the menu bar icon and its menu still respond.
+  Turning captions on runs the capture setup on the main thread, so a hang here is a
+  known risk to confirm.
+- [ ] The window keeps the height you give it as sentences pile up, and can be made
+  shorter again after it filled up.
+- [ ] Without the Info.plist key, turning captions on does not load the local model
+  (Activity Monitor shows no rise in memory) and the window offers no download.
 
 Measuring captions on audio files: CaptionPipelineMeasurementTests feeds files through
 the same segmenter, speech model and translation as the live captions, see its comment
