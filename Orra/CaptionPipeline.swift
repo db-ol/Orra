@@ -99,6 +99,10 @@ extension CaptionEngines {
 final class CaptionPipeline {
     /// The sentences waiting, beyond which translation is skipped.
     static let defaultBacklogLimit = 3
+    /// The sentences kept waiting, such as during a long hands free dictation. Older ones
+    /// are dropped past this, since each holds up to 12 s of audio and a caption that
+    /// comes minutes late is worth nothing.
+    static let waitingLimit = 20
 
     /// The measurement on audio files, which feeds faster than real time, passes no limit.
     let backlogLimit: Int
@@ -127,7 +131,7 @@ final class CaptionPipeline {
         self.backlogLimit = backlogLimit
         self.report = report
         self.speechNotReady = speechNotReady
-        (segments, input) = AsyncStream.makeStream(of: CaptionSegment.self)
+        (segments, input) = AsyncStream.makeStream(of: CaptionSegment.self, bufferingPolicy: .bufferingNewest(Self.waitingLimit))
         worker = Task { [weak self, segments] in
             for await segment in segments {
                 guard let self, !Task.isCancelled else { return }
@@ -165,7 +169,10 @@ final class CaptionPipeline {
 
     private func enqueue(_ segment: CaptionSegment) {
         waiting += 1
-        input.yield(segment)
+        if case .dropped = input.yield(segment) {
+            waiting -= 1
+            Logger.captions.notice("A waiting caption sentence was dropped, more than \(Self.waitingLimit, privacy: .public) were waiting")
+        }
     }
 
     private func process(_ segment: CaptionSegment) async {

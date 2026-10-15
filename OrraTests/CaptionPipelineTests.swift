@@ -309,6 +309,27 @@ struct EngineTurnsTests {
         #expect(reports.last?.translation == .done("大家好。"))
     }
 
+    @Test func aLongDictationKeepsOnlyTheLatestWaitingSentences() async throws {
+        let turns = EngineTurns(pollInterval: .milliseconds(2))
+        let models = FakeCaptionModels((1...25).map { "Sentence \($0)." })
+        var reports: [CaptionSentence] = []
+        let pipeline = CaptionPipeline(engines: models.engines(turns: turns)) { reports.append($0) }
+        turns.dictationStarted()
+        // The pipeline is ready for its first sentence.
+        try await Task.sleep(for: .milliseconds(20))
+        pipeline.feed(FakeCaptionModels.audio(sentences: 25))
+        try await Task.sleep(for: .milliseconds(30))
+        turns.dictationEnded()
+        await pipeline.finish()
+        // The first sentence was taken up at once and the latest 20 waited. Sentences 2
+        // to 5 were dropped.
+        #expect(models.transcribed == 1 + CaptionPipeline.waitingLimit)
+        let starts = reports.map(\.start)
+        #expect(starts.first ?? 99 < 1)
+        #expect(!starts.contains { $0 > 2 && $0 < 10 })
+        #expect(starts.last ?? 0 > 48)
+    }
+
     @Test func turningCaptionsOffCancelsAWaitingCall() async throws {
         let turns = EngineTurns(pollInterval: .milliseconds(2))
         turns.dictationStarted()
