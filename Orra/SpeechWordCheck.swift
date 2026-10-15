@@ -10,7 +10,12 @@ import Foundation
 /// by word. Case and punctuation do not count. Numbers do not count either, on both sides,
 /// because a number can be read in many ways ("5551234567" as "five five five" or "fifty
 /// five fifty one"), and the speech model may write any of them in digits, English words or
-/// Chinese numerals. The length check holds a number to its length.
+/// Chinese numerals. The words that go with a number do not count with it, such as
+/// "percent", 百分之 or 点半, since "10%" may be heard as "百分之十" and "2:30" as
+/// "两点半". The length check holds a number to its length. In a review run on
+/// 2026-10-15 (256 tries of contractions, percentages, fractions and times), counting those
+/// words failed 80 tries that pass now, nearly all of them right, such as
+/// "收入增长了百分之十。" and "We are ready.". The few others only read the number wrong.
 ///
 /// The limits come from a scratch benchmark on 2026-10-14 and 2026-10-15: 1,546 clips of
 /// Orra's two voice models that passed SpeechCheck, from four public voices, with what
@@ -56,40 +61,20 @@ nonisolated enum SpeechWordCheck {
     }
 
     /// The units of `text`, lowercased: each Chinese, Japanese or Korean character, and
-    /// each word of letters. Digits and number words are left out. "okay" counts as "ok",
-    /// and single letters in a row as one word, so "O.K." and "A P I" match "OK" and
-    /// "API". With `characters`, words of letters are split into their letters, as Qwen3-ASR
-    /// may write a Chinese word it misheard in letters.
+    /// each word of letters. Traditional Chinese characters count as their simplified
+    /// forms (ChineseText), since the speech model may write either. English contractions
+    /// count as their long forms, so "I'm" matches "I am". Digits and number words are left
+    /// out, and so are the words that go with a number, see `numberParts`. "okay" counts
+    /// as "ok", and single letters in a row as one word, so "O.K." and "A P I" match "OK"
+    /// and "API". With `characters`, words of letters are split into their letters, as
+    /// Qwen3-ASR may write a Chinese word it misheard in letters.
     static func units(of text: String, characters: Bool) -> [String] {
         var words: [String] = []
-        var word = String.UnicodeScalarView()
-        func endWord() {
-            defer { word = String.UnicodeScalarView() }
-            guard !word.isEmpty else { return }
-            let text = String(word)
-            guard !numberWords.contains(text) else { return }
-            words.append(text == "okay" ? "ok" : text)
-        }
-        for scalar in text.lowercased().unicodeScalars {
-            if isCharacterScript(scalar) {
-                endWord()
-                if !chineseNumerals.contains(scalar) {
-                    words.append(String(scalar))
-                }
-            } else if CharacterSet.decimalDigits.contains(scalar) {
-                // A number is left out, and a word with digits in it, such as "v2", keeps
-                // its letters.
-                continue
-            } else if CharacterSet.alphanumerics.contains(scalar) {
-                word.append(scalar)
-            } else if scalar == "'" || scalar == "’" {
-                // It's, don't: one word.
-                continue
-            } else {
-                endWord()
+        for token in numberParts(of: tokens(of: expandingContractions(ChineseText.simplifiedCharacters(text).lowercased()))) {
+            if case .word(let word) = token {
+                words.append(word == "okay" ? "ok" : word)
             }
         }
-        endWord()
         var joined: [String] = []
         var letters = ""
         for word in words {
@@ -112,12 +97,125 @@ nonisolated enum SpeechWordCheck {
         }
     }
 
+    /// A word, a character or a number of a text.
+    enum Token: Equatable {
+        case word(String)
+        case number
+    }
+
+    /// The words, characters and numbers of lowercased `text`. A word with digits in it,
+    /// such as "v2", keeps its letters, and one that is a number with an ordinal ending,
+    /// such as "1st", is a number.
+    static func tokens(of text: String) -> [Token] {
+        var tokens: [Token] = []
+        var word = String.UnicodeScalarView()
+        var hasDigits = false
+        func endWord() {
+            defer {
+                word = String.UnicodeScalarView()
+                hasDigits = false
+            }
+            let text = String(word)
+            if numberWords.contains(text) || (hasDigits && (text.isEmpty || ordinalEndings.contains(text))) {
+                tokens.append(.number)
+            } else if !text.isEmpty {
+                tokens.append(.word(text))
+            }
+        }
+        for scalar in text.unicodeScalars {
+            if isCharacterScript(scalar) {
+                endWord()
+                tokens.append(chineseNumerals.contains(scalar) ? .number : .word(String(scalar)))
+            } else if CharacterSet.decimalDigits.contains(scalar) {
+                hasDigits = true
+            } else if CharacterSet.alphanumerics.contains(scalar) {
+                word.append(scalar)
+            } else if scalar == "'" {
+                // Possessives and the contractions left: one word.
+                continue
+            } else {
+                endWord()
+            }
+        }
+        endWord()
+        return tokens
+    }
+
+    /// `tokens` without the words that go with a number, which one side may write and the
+    /// other not: "percent", "dollars" and "o'clock" after a number, "point" and "and"
+    /// between numbers, "half past" and "quarter to" before one, and 点, 分, 之, 半 and 刻
+    /// after a Chinese number, so "10%" matches "百分之十" and "2:30" matches "两点半" and
+    /// "half past two".
+    static func numberParts(of tokens: [Token]) -> [Token] {
+        var kept: [Token] = []
+        var afterNumber = false
+        var index = 0
+        func isNumber(_ at: Int) -> Bool {
+            at < tokens.count && tokens[at] == .number
+        }
+        while index < tokens.count {
+            let token = tokens[index]
+            index += 1
+            guard case .word(let word) = token else {
+                kept.append(token)
+                afterNumber = true
+                continue
+            }
+            if afterNumber, wordsAfterNumbers.contains(word) || (isNumber(index) && wordsBetweenNumbers.contains(word)) {
+                continue
+            }
+            if ["half", "quarter"].contains(word), index < tokens.count, [.word("past"), .word("to")].contains(tokens[index]), isNumber(index + 1) {
+                index += 1
+                continue
+            }
+            kept.append(token)
+            afterNumber = false
+        }
+        return kept
+    }
+
+    /// Lowercased `text` with English contractions in their long forms, and curly
+    /// apostrophes straight.
+    static func expandingContractions(_ text: String) -> String {
+        var text = text.replacingOccurrences(of: "\u{2019}", with: "'")
+        for (pattern, replacement) in contractions {
+            text = text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+        }
+        return text
+    }
+
+    /// Contractions and their long forms, in order. "'s" only after words where it can
+    /// only mean "is", and "'d" not at all, since it may mean "had" or "would".
+    static let contractions: [(String, String)] = [
+        ("\\bwon't\\b", "will not"),
+        ("\\bcan't\\b", "can not"),
+        ("\\bcannot\\b", "can not"),
+        ("\\bshan't\\b", "shall not"),
+        ("n't\\b", " not"),
+        ("'m\\b", " am"),
+        ("'re\\b", " are"),
+        ("'ve\\b", " have"),
+        ("'ll\\b", " will"),
+        ("\\blet's\\b", "let us"),
+        ("\\b(it|that|what|there|here|he|she|who|where|how)'s\\b", "$1 is"),
+    ]
+
+    /// Ordinal endings of a number written in digits, such as "1st".
+    static let ordinalEndings: Set<String> = ["st", "nd", "rd", "th"]
+
+    /// Words that go with the number before them, see `numberParts`.
+    static let wordsAfterNumbers: Set<String> = ["percent", "dollar", "dollars", "oclock", "点", "分", "之", "半", "刻"]
+
+    /// Words that go between two numbers, see `numberParts`.
+    static let wordsBetweenNumbers: Set<String> = ["point", "and"]
+
     /// English number words, which a number may be read as.
     static let numberWords: Set<String> = [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
         "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
         "hundred", "thousand", "million", "billion",
+        "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
     ]
 
     /// Chinese numerals, which a number may be read as. 幺 is one in a phone number.

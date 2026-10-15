@@ -41,6 +41,53 @@ struct SpeechWordCheckTests {
         #expect(SpeechWordCheck.passes(text: "2026.", heard: "Hello."))
     }
 
+    /// The speech model may write a contraction in full, so a short sentence with one
+    /// does not fail. It wrote "I am not sure" for "I'm not sure" in the benchmark.
+    @Test func contractionsMatchTheirLongForms() {
+        let pairs = [
+            ("I'm not sure.", "I am not sure."),
+            ("It's fine.", "It is fine."),
+            ("We're ready.", "We are ready."),
+            ("I can't make it.", "I cannot make it."),
+            ("I don't know.", "I do not know."),
+            ("Let's go.", "Let us go."),
+            ("We’ll see.", "We will see."),
+        ]
+        for (text, heard) in pairs {
+            #expect(SpeechWordCheck.wrongUnits(text: text, heard: heard).wrong == 0, "\(text)")
+        }
+        // A possessive keeps its one word.
+        #expect(SpeechWordCheck.units(of: "John's plan.") == ["johns", "plan"])
+    }
+
+    /// The words that go with a number count with it, so a percentage, a time or an
+    /// ordinal in digits matches it read out.
+    @Test func wordsThatGoWithANumberDoNotCount() {
+        let pairs = [
+            ("Revenue grew 10% to 20%.", "Revenue grew ten percent to twenty percent."),
+            ("It went up 1.5 points.", "It went up one point five points."),
+            ("Let's meet at 2 o'clock.", "Let's meet at two."),
+            ("Let's meet at 2:30.", "Let's meet at half past two."),
+            ("The demo is on the 3rd.", "The demo is on the third."),
+            ("It costs $5.", "It costs five dollars."),
+            ("收入增长了10%。", "收入增长了百分之十。"),
+            ("下午2:30开会。", "下午两点半开会。"),
+            ("已经完成了1/3。", "已经完成了三分之一。"),
+            ("预算是1.5万。", "预算是一点五万。"),
+        ]
+        for (text, heard) in pairs {
+            #expect(SpeechWordCheck.wrongUnits(text: text, heard: heard).wrong == 0, "\(text)")
+        }
+        // Only after a number: 点 in 重点 and "point" in "a good point" count.
+        #expect(SpeechWordCheck.units(of: "重点。") == ["重", "点"])
+        #expect(SpeechWordCheck.units(of: "A good point.") == ["a", "good", "point"])
+    }
+
+    /// The speech model may write Chinese in traditional characters.
+    @Test func traditionalCharactersMatchSimplifiedOnes() {
+        #expect(SpeechWordCheck.wrongUnits(text: "会后我会把会议纪要发给大家。", heard: "會後我會把會議紀要發給大家。").wrong == 0)
+    }
+
     /// What the speech model gets wrong on good clips passes: a word or a character in
     /// four.
     @Test func smallSlipsPass() {
