@@ -55,10 +55,15 @@ import Qwen3TTS
 /// actor, and the model, which speech-swift says is not thread safe, speaks one piece at
 /// a time.
 ///
-/// Written against speech-swift at commit 1f54e56. At that commit a cloned voice is not
-/// streamed: synthesizeWithVoiceClone returns a whole piece, so TranslationSpeech cuts the
-/// text into sentences first. Without a voice sample the model streams, and the first
-/// sound of a piece comes after a few frames.
+/// Written against speech-swift at commit 1f54e56. A cloned voice uses the in context
+/// call, synthesizeWithVoiceCloneICL, which reads the voice sample as codes of the speech
+/// tokenizer together with what is said in it. A scratch benchmark on 2026-10-14 found
+/// that the other clone call, synthesizeWithVoiceClone, which takes only a speaker vector,
+/// does not reproduce the voice at that commit (similarity 0.27, about that of another
+/// speaker), while the in context call reaches 0.67 to 0.70 in the sample's language. At
+/// that commit a cloned voice is not streamed: the call returns a whole piece, so
+/// TranslationSpeech cuts the text into sentences first. Without a voice sample the model
+/// streams, and the first sound of a piece comes after a few frames.
 ///
 /// The stream is made in a task of speech-swift's own, outside this actor, and ending the
 /// stream early only asks that task to stop. So a piece is always streamed to its end, and
@@ -66,21 +71,36 @@ import Qwen3TTS
 /// drops what is left of the piece, like a cloned piece, which cannot stop midway either.
 actor Qwen3VoiceEngine: SpeechSynthesizer {
     private var model: Qwen3TTSModel?
+    /// The encoder half of the speech tokenizer, which turns the voice sample into codes for
+    /// the in context clone call. Its weights sit in the same file as the decoder's.
+    private var encoder: SpeechTokenizerEncoder?
     /// The stream of the piece being spoken without a voice sample, until it ended.
     private var streaming: Task<Void, Never>?
+
+    nonisolated enum EngineError: Error {
+        /// A voice sample without what is said in it, which the clone call needs.
+        case noTranscript
+    }
 
     func load(model folder: URL, codec: URL) async throws {
         await settle()
         guard model == nil else { return }
-        // From local folders only, so loading never goes online. No change to MLX's wired
-        // memory limit, which the speech model already raised.
-        model = try Qwen3TTSModel.fromLocal(modelDirectory: folder, tokenizerDirectory: codec, wiredMemoryPolicy: .none)
+        // From local folders only, so loading never goes online. speech-swift's
+        // fromPretrainedWithEncoder would do the same as these lines, but it resolves
+        // its folders through a download cache. No change to MLX's wired memory limit,
+        // which the speech model already raised.
+        let loaded = try Qwen3TTSModel.fromLocal(modelDirectory: folder, tokenizerDirectory: codec, wiredMemoryPolicy: .none)
+        let encoder = SpeechTokenizerEncoder(config: loaded.config.speechTokenizerDecoder)
+        try TTSWeightLoader.loadSpeechTokenizerEncoderWeights(into: encoder, from: codec)
+        model = loaded
+        self.encoder = encoder
     }
 
     func unload() async {
         await settle()
         model?.unload()
         model = nil
+        encoder = nil
     }
 
     func forgetVoice() async {
@@ -114,15 +134,18 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
 
     private func run(_ text: String, language: TranslationTarget, voice: VoiceSample?, continuation: AsyncThrowingStream<SpokenAudio, any Error>.Continuation) async throws {
         await settle()
-        guard let model else { throw TranscriptionError.modelMissing }
+        guard let model, let encoder else { throw TranscriptionError.modelMissing }
         let name = Self.languageName(language)
         if let voice {
+            guard !voice.transcript.isEmpty else { throw EngineError.noTranscript }
             try Task.checkCancellation()
-            let samples = model.synthesizeWithVoiceClone(
+            let samples = model.synthesizeWithVoiceCloneICL(
                 text: text,
                 referenceAudio: voice.samples,
                 referenceSampleRate: voice.sampleRate,
-                language: name
+                referenceText: voice.transcript,
+                language: name,
+                codecEncoder: encoder
             )
             continuation.yield(SpokenAudio(samples: samples, sampleRate: model.sampleRate))
         } else {

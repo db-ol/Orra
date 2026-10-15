@@ -1146,6 +1146,19 @@ final class PushToTalkController {
         return (result.text, result.replacements)
     }
 
+    /// Writes down what is said in a voice sample for Speak Translation, with the speech
+    /// model of dictation, which the voice model needs to imitate the voice. No vocabulary,
+    /// no cleanup and no paste. Logs nothing, the caller keeps the words in memory only.
+    /// Throws while the speech model is not loaded.
+    func transcribeVoiceSample(_ sample: VoiceSample) async throws -> String {
+        guard modelState == .ready else { throw TranscriptionError.modelMissing }
+        let recording = AudioRecording(samples: sample.samples, sampleRate: Double(sample.sampleRate))
+        let (samples, silent) = await Self.prepared(recording)
+        guard !samples.isEmpty, !silent else { return "" }
+        let raw = try await transcription.transcribe(samples, nil, nil)
+        return TranscriptGuard.clean(raw, audioSeconds: recording.duration)
+    }
+
     /// Resampling and the silence check run off the main actor, because a long recording
     /// takes a moment.
     @concurrent

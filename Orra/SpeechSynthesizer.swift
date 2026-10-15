@@ -7,16 +7,23 @@ nonisolated struct SpokenAudio: Sendable, Equatable {
     var sampleRate: Int
 }
 
-/// A short recording of a voice for the voice model to imitate. Held in memory only, never
-/// written to disk or the log, and gone when Orra quits or the user removes it.
+/// A short recording of a voice for the voice model to imitate, with what is said in it.
+/// Held in memory only, never written to disk or the log, and gone when Orra quits or the
+/// user removes it.
 nonisolated struct VoiceSample: Sendable, Equatable {
     /// Mono.
     let samples: [Float]
     let sampleRate: Int
+    /// What is said in the recording, written down by Orra's speech model when the user
+    /// picks the sample. Qwen3-TTS reads it along with the audio to imitate the voice.
+    /// Empty until then.
+    var transcript = ""
 
-    /// The longest part of a file Orra keeps. Qwen3-TTS takes its speaker vector from a
-    /// few seconds, and a longer clip only costs memory and time.
-    static let maximumSeconds = 20.0
+    /// The longest part of a file Orra keeps. Qwen3-TTS reads the whole sample again with
+    /// every sentence it speaks, so a longer clip makes each sentence slower. In a scratch
+    /// run on 2026-10-15 a sentence took a median 1.05 s with a 10 s sample and 1.52 s
+    /// with a 21 s one of the same speaker. The benchmark's samples were about 10 s.
+    static let maximumSeconds = 12.0
     /// A shorter clip gives the speaker encoder too little to go on.
     static let minimumSeconds = 2.0
 

@@ -58,6 +58,36 @@ struct TranslationVoiceDictationTests {
         try await waitUntil { controller.state == .idle }
     }
 
+    /// A voice sample for Speak Translation is written down by the speech model at 16 kHz,
+    /// without the vocabulary and without a paste, and only once the model is loaded. A
+    /// silent sample gives no words.
+    @Test func aVoiceSampleIsWrittenDownByTheSpeechModel() async throws {
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            frontmostApp: { 100 },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero
+        )
+        let sample = VoiceSample(samples: (0..<96_000).map { sin(Float($0) * 0.05) * 0.3 }, sampleRate: 48_000)
+        await #expect(throws: TranscriptionError.modelMissing) {
+            try await controller.transcribeVoiceSample(sample)
+        }
+        await controller.loadModel()
+        speech.reply = " We met at noon. "
+        #expect(try await controller.transcribeVoiceSample(sample) == "We met at noon.")
+        #expect(speech.receivedContexts == [nil])
+        #expect(speech.receivedLanguages == [nil])
+        #expect(abs((speech.receivedSampleCounts.last ?? 0) - 32_000) < 100)
+
+        let silent = VoiceSample(samples: [Float](repeating: 0, count: 48_000), sampleRate: 16_000)
+        #expect(try await controller.transcribeVoiceSample(silent) == "")
+        #expect(speech.receivedContexts.count == 1)
+        #expect(inserter.inserted.isEmpty)
+    }
+
     /// The translation is spoken and pasted, and Copy Last Dictation still has it.
     @Test func theTranslationIsSpokenAndPasted() async throws {
         let voice = Recorder()

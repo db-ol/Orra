@@ -39,6 +39,8 @@ final class TranslationSpeech {
     private(set) var problem: String?
     /// The length of the voice sample in memory, nil without one.
     private(set) var voiceSeconds: Double?
+    /// The speech model is writing down what is said in a voice sample the user picked.
+    private(set) var isListeningToVoice = false
     /// The model is loaded.
     private(set) var isLoaded = false
 
@@ -54,6 +56,10 @@ final class TranslationSpeech {
 
     /// Whether a dictation is under way, which the voice waits for. AppDelegate sets it.
     @ObservationIgnored var isDictating: () -> Bool = { false }
+    /// Writes down what is said in a voice sample, with the speech model of dictation. The
+    /// voice model needs the words to imitate the voice. AppDelegate sets it, tests pass
+    /// fakes.
+    @ObservationIgnored var transcribeVoice: (VoiceSample) async throws -> String = { _ in throw TranscriptionError.modelMissing }
 
     @ObservationIgnored private var voice: VoiceSample?
     @ObservationIgnored private let synthesizer: (any SpeechSynthesizer)?
@@ -62,6 +68,9 @@ final class TranslationSpeech {
     @ObservationIgnored private let folders: () -> VoiceModelFolders?
     @ObservationIgnored private let save: (Settings) -> Void
     @ObservationIgnored private let dictationPoll: Duration
+    /// Counts the voice samples picked and removed, so a sample that is still being
+    /// written down when another is picked or Remove is clicked is dropped.
+    @ObservationIgnored private var voiceRequest = 0
     /// The translations queued and being spoken, one after another.
     @ObservationIgnored private var queue: Task<Void, Never>?
     /// Counts the stops, so queued work of an older generation does nothing.
@@ -162,19 +171,48 @@ final class TranslationSpeech {
         SpeechOutputChoice.resolve(output, outputs: outputs())
     }
 
-    /// Keeps `sample` in memory as the voice to imitate, in place of any before it.
-    func useVoice(_ sample: VoiceSample) {
-        voice = sample
-        voiceSeconds = sample.seconds
+    /// Writes down what is said in `sample` with the speech model, then keeps both in
+    /// memory as the voice to imitate, in place of any before it. The voice model reads the
+    /// words along with the audio. Neither is logged or saved. A sample without speech, or
+    /// one the speech model could not take, is not used and the voice before it stays.
+    func useVoice(_ sample: VoiceSample) async {
+        voiceRequest += 1
+        let request = voiceRequest
+        isListeningToVoice = true
         problem = nil
+        let started = ContinuousClock.now
+        let transcript: String
+        do {
+            transcript = try await transcribeVoice(sample).trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            guard request == voiceRequest else { return }
+            isListeningToVoice = false
+            problem = String(localized: "Orra could not listen to the voice sample. Choose it again once the speech model is ready.")
+            logger.error("The voice sample could not be transcribed: \(String(reflecting: type(of: error)), privacy: .public)")
+            return
+        }
+        guard request == voiceRequest else { return }
+        isListeningToVoice = false
+        guard transcript.contains(where: { $0.isLetter || $0.isNumber }) else {
+            problem = String(localized: "Orra heard no speech in the voice sample.")
+            logger.notice("No speech in a voice sample of \(sample.seconds, format: .fixed(precision: 1), privacy: .public) s")
+            return
+        }
+        var heard = sample
+        heard.transcript = transcript
+        voice = heard
+        voiceSeconds = sample.seconds
         let synthesizer = synthesizer
         Task { await synthesizer?.forgetVoice() }
-        logger.notice("A voice sample of \(sample.seconds, format: .fixed(precision: 1), privacy: .public) s is in memory")
+        // Times only, never the words.
+        logger.notice("A voice sample of \(sample.seconds, format: .fixed(precision: 1), privacy: .public) s is in memory, written down in \(started.duration(to: .now), privacy: .public)")
     }
 
-    /// Drops the voice sample and anything the model derived from it. The model's own voice
-    /// speaks after this.
+    /// Drops the voice sample, what is said in it, and anything the model derived from
+    /// it. The model's own voice speaks after this.
     func forgetVoice() {
+        voiceRequest += 1
+        isListeningToVoice = false
         voice = nil
         voiceSeconds = nil
         let synthesizer = synthesizer

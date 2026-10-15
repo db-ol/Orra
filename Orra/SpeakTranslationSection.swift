@@ -74,7 +74,7 @@ struct SpeakTranslationSection: View {
         } header: {
             Text("Speak Translation")
         } footer: {
-            Text("Use a recording of your own voice only. Orra keeps the voice sample in memory until it quits and never saves it. The other side hears a synthesized voice, so let them know.")
+            Text("Use a recording of your own voice only. Orra writes down what the voice sample says with its speech model, keeps both in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know.")
                 .foregroundStyle(.secondary)
         }
         .onAppear { outputList.start() }
@@ -87,7 +87,8 @@ struct SpeakTranslationSection: View {
                     if scoped { url.stopAccessingSecurityScopedResource() }
                 }
                 do {
-                    speech.useVoice(try await VoiceSample.read(from: url))
+                    let sample = try await VoiceSample.read(from: url)
+                    await speech.useVoice(sample)
                 } catch VoiceSample.ReadError.tooShort {
                     speech.reportVoiceProblem(String(localized: "The voice sample must be at least \(Int(VoiceSample.minimumSeconds)) seconds long."))
                 } catch {
@@ -142,6 +143,7 @@ private struct VoiceSampleRow: View {
                 Button("Choose…") {
                     isChoosing = true
                 }
+                .disabled(speech.isListeningToVoice)
             }
         } label: {
             DescribedLabel(
@@ -153,7 +155,9 @@ private struct VoiceSampleRow: View {
     }
 
     private var detail: LocalizedStringKey {
-        if let seconds = speech.voiceSeconds {
+        if speech.isListeningToVoice {
+            "Listening to the voice sample…"
+        } else if let seconds = speech.voiceSeconds {
             "\(Int(seconds.rounded())) seconds, in memory until Orra quits."
         } else {
             "None. The voice model speaks in its own voice."

@@ -8,6 +8,7 @@ import Testing
 final class FakeSynthesizer: SpeechSynthesizer {
     let spoken = Mutex<[String]>([])
     let voices = Mutex<[Double?]>([])
+    let transcripts = Mutex<[String?]>([])
     let loads = Mutex(0)
     let unloads = Mutex(0)
     let forgets = Mutex(0)
@@ -30,6 +31,7 @@ final class FakeSynthesizer: SpeechSynthesizer {
     func speak(_ text: String, in language: TranslationTarget, voice: VoiceSample?) -> AsyncThrowingStream<SpokenAudio, any Error> {
         spoken.withLock { $0.append("\(language.rawValue) \(text)") }
         voices.withLock { $0.append(voice?.seconds) }
+        transcripts.withLock { $0.append(voice?.transcript) }
         let fails = failsSpeaking.withLock { $0 }
         return AsyncThrowingStream { continuation in
             if fails {
@@ -80,9 +82,10 @@ struct TranslationSpeechTests {
         outputs: [AudioOutput] = [speakers, orraMicrophone],
         folders: VoiceModelFolders? = folders,
         output: SpeechOutputChoice? = nil,
-        withModel: Bool = true
+        withModel: Bool = true,
+        transcribeVoice: @escaping (VoiceSample) async throws -> String = { _ in "We met at noon." }
     ) -> TranslationSpeech {
-        TranslationSpeech(
+        let speech = TranslationSpeech(
             synthesizer: withModel ? synthesizer : nil,
             playback: playback,
             outputs: { outputs },
@@ -90,6 +93,8 @@ struct TranslationSpeechTests {
             settings: TranslationSpeech.Settings(isOn: on, alsoPastes: true, output: output),
             dictationPoll: .milliseconds(1)
         )
+        speech.transcribeVoice = transcribeVoice
+        return speech
     }
 
     private var spoken: [String] {
@@ -205,13 +210,22 @@ struct TranslationSpeechTests {
         #expect(spoken == ["en Thanks a lot, everyone."])
     }
 
-    /// The voice sample goes to the model with every piece, and once removed, the model's
-    /// own voice speaks and the model forgets what it derived from the sample.
+    static let threeSeconds = VoiceSample(samples: [Float](repeating: 0.1, count: 48_000), sampleRate: 16_000)
+
+    /// The voice sample goes to the model with every piece, together with what the speech
+    /// model heard in it, and once removed, the model's own voice speaks and the model
+    /// forgets what it derived from the sample.
     @Test func theVoiceSampleIsUsedUntilRemoved() async throws {
-        let speech = makeSpeech()
+        var heard: [VoiceSample] = []
+        let speech = makeSpeech(transcribeVoice: { sample in
+            heard.append(sample)
+            return "  We met at noon.\n"
+        })
         #expect(speech.voiceSeconds == nil)
-        speech.useVoice(VoiceSample(samples: [Float](repeating: 0.1, count: 48_000), sampleRate: 16_000))
+        await speech.useVoice(Self.threeSeconds)
+        #expect(heard == [Self.threeSeconds])
         #expect(speech.voiceSeconds == 3)
+        #expect(!speech.isListeningToVoice)
         speech.speak("We have a meeting next Tuesday.", in: .english)
         await speech.waitUntilDone()
         speech.forgetVoice()
@@ -219,10 +233,56 @@ struct TranslationSpeechTests {
         speech.speak("We have a meeting next Tuesday.", in: .english)
         await speech.waitUntilDone()
         #expect(synthesizer.voices.withLock { $0 } == [3, nil])
+        #expect(synthesizer.transcripts.withLock { $0 } == ["We met at noon.", nil])
         for _ in 0..<100 where synthesizer.forgets.withLock({ $0 }) < 2 {
             try await Task.sleep(for: .milliseconds(5))
         }
         #expect(synthesizer.forgets.withLock { $0 } == 2)
+    }
+
+    /// A sample in which the speech model hears nothing, or one it cannot take, is not
+    /// used, the voice before it stays, and Settings says why.
+    @Test func aSampleWithoutWordsIsNotUsed() async {
+        var answer: Result<String, any Error> = .success("We met at noon.")
+        let speech = makeSpeech(transcribeVoice: { _ in try answer.get() })
+        await speech.useVoice(Self.threeSeconds)
+        #expect(speech.voiceSeconds == 3)
+
+        answer = .success(" … ")
+        await speech.useVoice(VoiceSample(samples: [Float](repeating: 0, count: 80_000), sampleRate: 16_000))
+        #expect(speech.problem == "Orra heard no speech in the voice sample.")
+        #expect(speech.voiceSeconds == 3)
+
+        answer = .failure(TranscriptionError.modelMissing)
+        await speech.useVoice(VoiceSample(samples: [Float](repeating: 0.1, count: 80_000), sampleRate: 16_000))
+        #expect(speech.problem == "Orra could not listen to the voice sample. Choose it again once the speech model is ready.")
+        #expect(speech.voiceSeconds == 3)
+        #expect(!speech.isListeningToVoice)
+
+        speech.speak("We have a meeting next Tuesday.", in: .english)
+        await speech.waitUntilDone()
+        #expect(synthesizer.transcripts.withLock { $0 } == ["We met at noon."])
+    }
+
+    /// Remove while the speech model still listens to a sample drops that sample when the
+    /// words arrive.
+    @Test func removeWhileListeningDropsTheSample() async {
+        let gate = AsyncStream<Void>.makeStream()
+        let speech = makeSpeech(transcribeVoice: { _ in
+            for await _ in gate.stream { break }
+            return "We met at noon."
+        })
+        let listening = Task { await speech.useVoice(Self.threeSeconds) }
+        for _ in 0..<100 where !speech.isListeningToVoice {
+            await Task.yield()
+        }
+        #expect(speech.isListeningToVoice)
+        speech.forgetVoice()
+        #expect(!speech.isListeningToVoice)
+        gate.continuation.yield()
+        await listening.value
+        #expect(speech.voiceSeconds == nil)
+        #expect(speech.problem == nil)
     }
 
     @Test func problemsWithTheModelOrTheDeviceAreShown() async {

@@ -1378,6 +1378,16 @@
         }
       }
     },
+    "Listening to the voice sample…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在听取声音样本…"
+          }
+        }
+      }
+    },
     "Loading the cleanup model…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1730,6 +1740,16 @@
         }
       }
     },
+    "Orra could not listen to the voice sample. Choose it again once the speech model is ready." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法听取声音样本。请在语音模型就绪后重新选择。"
+          }
+        }
+      }
+    },
     "Orra could not play into %@." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1776,6 +1796,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 不会粘贴到密码栏。请使用“拷贝上次听写”。"
+          }
+        }
+      }
+    },
+    "Orra heard no speech in the voice sample." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 在声音样本中没有听到语音。"
           }
         }
       }
@@ -3253,12 +3283,12 @@
         }
       }
     },
-    "Use a recording of your own voice only. Orra keeps the voice sample in memory until it quits and never saves it. The other side hears a synthesized voice, so let them know." : {
+    "Use a recording of your own voice only. Orra writes down what the voice sample says with its speech model, keeps both in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只使用你自己声音的录音。Orra 只把声音样本保存在内存中，直到退出，从不存储到磁盘。对方听到的是合成的声音，请告诉他们。"
+            "value" : "只使用你自己声音的录音。Orra 会用语音模型写下声音样本里说的话，并把两者只保存在内存中，直到退出，从不存储到磁盘。对方听到的是合成的声音，请告诉他们。"
           }
         }
       }

@@ -167,6 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         learning.onSuggest = { [learnedNotice] suggestion in learnedNotice.suggest(suggestion) }
         // The voice waits while the user dictates.
         speech.isDictating = { [pushToTalk] in pushToTalk.state != .idle }
+        speech.transcribeVoice = { [pushToTalk] sample in try await pushToTalk.transcribeVoiceSample(sample) }
         voiceModels.model.onInstalled = { [speech] _ in speech.prepare() }
         voiceModels.codec.onInstalled = { [speech] _ in speech.prepare() }
         // Before the tap is installed, so it watches the translation key from the start.
