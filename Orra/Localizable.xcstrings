@@ -2133,6 +2133,16 @@
         }
       }
     },
+    "Qwen3-TTS starts speaking sooner. CosyVoice3 sounds more like the voice sample and needs a larger download." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qwen3-TTS 开口更快。CosyVoice3 更像声音样本，但下载更大。"
+          }
+        }
+      }
+    },
     "Reads the field you dictated into for 3 minutes after a paste and adds a misheard word you fix to your vocabulary." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3329,6 +3339,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "个人词库已满，没有加入“%@”"
+          }
+        }
+      }
+    },
+    "Voice model" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音合成模型"
           }
         }
       }

@@ -1,8 +1,9 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Speak Translation in Settings, under Features: the switch, where the voice goes,
-/// whether the text is pasted too, the voice sample and the voice model's download.
+/// Speak Translation in Settings, under Features: the switch, the voice model when the
+/// build has two, where the voice goes, whether the text is pasted too, the voice sample
+/// and the voice model's download.
 struct SpeakTranslationSection: View {
     let speech: TranslationSpeech
     let models: VoiceModels
@@ -30,6 +31,23 @@ struct SpeakTranslationSection: View {
                 note(Text("This build of Orra has no voice model."))
             } else if !translationIsOn {
                 note(Text("Turn on Translation to use this."))
+            }
+            if !speech.engineChoices.isEmpty {
+                Picker(selection: Binding(
+                    get: { speech.engine ?? VoiceEngineChoice.preferred },
+                    set: { speech.setEngine($0) }
+                )) {
+                    ForEach(speech.engineChoices) { kind in
+                        Text(verbatim: kind.name).tag(kind)
+                    }
+                } label: {
+                    DescribedLabel(
+                        title: "Voice model",
+                        detail: "Qwen3-TTS starts speaking sooner. CosyVoice3 sounds more like the voice sample and needs a larger download.",
+                        systemImage: "waveform"
+                    )
+                }
+                .disabled(!speech.isOn)
             }
             Picker(selection: Binding(
                 get: { speech.output?.uid ?? "" },
