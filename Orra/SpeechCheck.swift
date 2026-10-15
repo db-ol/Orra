@@ -31,8 +31,12 @@ nonisolated enum SpeechCheck {
     /// ran longer, the longest reached 0.95 of it, and no streamed clip passed 0.63 of it.
     static let longestFactor = 2.0
     static let extraSeconds = 2.0
-    /// Less sound than this in a whole piece is silence.
+    /// Less sound than this in a whole piece is silence, or less than `leastSpeechShare`
+    /// of the expected length when that is shorter. A quiet cloned voice can say "好。" or
+    /// "OK." with only one to four frames above `soundLevel`, while every silent clip of
+    /// the probes had none.
     static let leastSpeechSeconds = 0.1
+    static let leastSpeechShare = 0.05
     /// The stretch from the first to the last frame with sound must reach this share of
     /// the expected length, less `shortSlackSeconds`, which leaves short texts such as
     /// "Thank you." alone. Good clips of the bench sentences reached at least 0.49 of it.
@@ -144,7 +148,7 @@ nonisolated enum SpeechCheck {
         if measurement.seconds > longestSeconds(for: text) {
             return .tooLong
         }
-        if measurement.soundSeconds < leastSpeechSeconds {
+        if measurement.soundSeconds < min(leastSpeechSeconds, expected * leastSpeechShare) {
             return .silent
         }
         if measurement.soundSpanSeconds < expected * shortestFactor - shortSlackSeconds {

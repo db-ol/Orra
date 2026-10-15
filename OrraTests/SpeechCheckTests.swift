@@ -91,6 +91,18 @@ struct SpeechCheckTests {
         #expect(SpeechCheck.verdict(for: audio, text: Self.english) == .silent)
     }
 
+    /// A one syllable reply of a quiet voice has only a few loud frames, and it is not
+    /// silence. A piece with no loud frame at all still is.
+    @Test func aQuietShortReplyIsNotSilent() {
+        for text in ["好。", "OK.", "Yes."] {
+            let reply = Self.joined(Self.silence(seconds: 0.3, level: 0.002), Self.tone(seconds: 0.04, amplitude: 0.02), Self.silence(seconds: 0.6, level: 0.002))
+            #expect(SpeechCheck.verdict(for: reply, text: text) == .good, "\(text)")
+            #expect(SpeechCheck.verdict(for: Self.silence(seconds: 0.9, level: 0.002), text: text) == .silent, "\(text)")
+        }
+        // A longer text still needs 0.1 s of sound.
+        #expect(SpeechCheck.verdict(for: Self.joined(Self.tone(seconds: 0.06), Self.silence(seconds: 3.5)), text: Self.english) == .silent)
+    }
+
     /// Some cloned voices are quiet. Speech at about -37 dBFS still counts.
     @Test func aQuietVoicePasses() {
         let expected = SpeechCheck.expectedSeconds(for: Self.english)
