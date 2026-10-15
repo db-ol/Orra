@@ -220,8 +220,10 @@ private struct CaptionNotes: View {
             if pushToTalk.modelState != .ready || captions.speechModelMissing {
                 note("The speech model is not ready. Captions start once it is loaded.")
             }
-            // No translation notes or download while nothing can be captured.
-            if !captions.capture.isUnavailable {
+            // No translation notes or download until the capture runs. While it starts,
+            // captions do not need the model yet, and a download agreed to then would be
+            // ignored.
+            if captions.capture == .listening {
                 translationNote
             }
         }
