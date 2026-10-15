@@ -29,18 +29,26 @@ nonisolated struct CaptionSegment: Equatable, Sendable {
 /// `cutWindow`, so the cut falls between words where it can, and the rest starts the next
 /// sentence. `preroll` of audio before the start goes with each sentence, since the energy
 /// rises a little after the first sound of a word.
+///
+/// The numbers were tuned on 2026-10-14 on the speech corpus (#40), its clips joined into
+/// streams with pauses of 0.4 to 1.5 s between them, like turns in a call, 5,538 s in all,
+/// with the speech model, see CaptionPipelineMeasurementTests. Levels of 0.012 and 0.006
+/// missed most of the quiet FLEURS clips, whose speech is often below an RMS of 0.006, and
+/// the Chinese error rate over the joined streams was 11.5% against 4.7% for whole clips.
+/// With 0.003 and 0.002 it was 6.5%, English 2.2% against 2.1%, and the ASCEND clips of
+/// mixed speech 7.7% against 8.2%. A pause of 0.5 s or more preroll and tail changed little.
 nonisolated struct CaptionSegmenter: Sendable {
     nonisolated struct Settings: Equatable, Sendable {
         /// Frames shorter than this are not judged.
         var frameSeconds = 0.02
         /// The RMS a frame needs to count as speech when nothing is heard yet, unless the
         /// noise floor asks for more.
-        var startLevel: Float = 0.012
+        var startLevel: Float = 0.003
         /// The RMS that keeps speech going once it started. Lower than `startLevel`, so a
         /// soft syllable inside a sentence does not end it.
-        var continueLevel: Float = 0.006
+        var continueLevel: Float = 0.002
         /// How far above the noise floor a frame must be, as a factor of it, to count.
-        var startOverFloor: Float = 3
+        var startOverFloor: Float = 4
         var continueOverFloor: Float = 2
         /// How many frames in a row above the start level begin speech.
         var startFrames = 3

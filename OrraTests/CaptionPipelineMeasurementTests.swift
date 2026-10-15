@@ -31,9 +31,9 @@ import Testing
 /// The output file gets one JSON object per sentence: the file, the sentence's start and
 /// end in seconds, the transcript, the translation or null, the model times, and with
 /// ORRA_CAPTION_REALTIME the latency from the end of the sentence in the audio to its
-/// caption and to its translation. The test output holds counts and times only, never
-/// text. The output holds the text of the audio, so point it at public audio only, and
-/// outside the repository.
+/// caption and to its translation. A summary of counts and times, never text, goes to a
+/// file next to it, with the extension summary.txt. The output holds the text of the
+/// audio, so point it at public audio only, and outside the repository.
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["ORRA_CAPTION_EVAL"] != nil && RealModel.folder != nil))
 @MainActor
 struct CaptionPipelineMeasurementTests {
@@ -162,14 +162,18 @@ struct CaptionPipelineMeasurementTests {
             }
         }
 
-        print("""
+        let summary = """
         Caption measurement: \(files.count) files, \(String(format: "%.1f", audioSeconds)) s of audio, \(sentences) sentences, \(translated) translated, \
         took \(started.duration(to: .now)), realtime: \(realtime), settings: \(settings)
         Recognition per sentence: \(Self.summary(recognition))
         Translation per sentence: \(Self.summary(translation))
         Caption latency: \(Self.summary(captionLatency))
         Translation latency: \(Self.summary(translationLatency))
-        """)
+
+        """
+        print(summary)
+        // Next to the output, since xcodebuild does not show what a test prints.
+        try summary.write(to: output.deletingPathExtension().appendingPathExtension("summary.txt"), atomically: true, encoding: .utf8)
         await rewrite.unload()
     }
 
@@ -200,7 +204,7 @@ struct CaptionPipelineMeasurementTests {
     /// The segmenter settings with what ORRA_CAPTION_SETTINGS changes.
     private static func settings() throws -> CaptionSegmenter.Settings {
         var settings = CaptionSegmenter.Settings()
-        guard let json = environment["ORRA_CAPTION_SETTINGS"] else { return settings }
+        guard let json = environment["ORRA_CAPTION_SETTINGS"], !json.isEmpty else { return settings }
         let object = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Double])
         for (key, value) in object {
             switch key {

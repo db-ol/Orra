@@ -1764,7 +1764,7 @@ it shows starts, stops, counts and failures, never text.
   screen Meet or Chrome window, can be dragged by its background and resized, and opens
   where it was left. It does not take the focus from the app in front when it opens.
 - [ ] Turning Meeting Captions off in the menu, or closing the window, stops the
-  capture (the purple recording indicator in the menu bar goes away), closes the window
+  capture (the recording indicator macOS shows in the menu bar goes away), closes the window
   and drops every sentence: turning it on again shows an empty window.
 - [ ] Without the local model: the window says "The local model is not on this Mac yet.
   Until it is, captions show what was said without translation." with a Download
@@ -1794,8 +1794,8 @@ for the variables. A run on a folder of public audio, from the repository root:
 
 Add `TEST_RUNNER_ORRA_CAPTION_REALTIME=1` to feed the audio at the pace it plays and
 measure the delay of each caption, and `TEST_RUNNER_ORRA_CAPTION_SETTINGS='{"pause": 0.5}'`
-to try other segmenter settings. The output holds the text of the audio, so it goes
-outside the repository.
+to try other segmenter settings. A summary of counts and times goes to out.summary.txt.
+The output holds the text of the audio, so it goes outside the repository.
 
 ## Not implemented
 

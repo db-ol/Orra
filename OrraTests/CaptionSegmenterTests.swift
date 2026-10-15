@@ -56,8 +56,8 @@ struct CaptionSegmenterTests {
     }
 
     @Test func aSoftSoundKeepsSpeechGoingButDoesNotStartIt() {
-        // An RMS of about 0.0085, between the continue level and the start level.
-        let soft = CaptionAudio.tone(0.8, amplitude: 0.012)
+        // An RMS of about 0.0025, between the continue level and the start level.
+        let soft = CaptionAudio.tone(0.8, amplitude: 0.0036)
         #expect(segments(CaptionAudio.silence(0.5) + soft + CaptionAudio.silence(1)).isEmpty)
         let found = segments(CaptionAudio.tone(1) + soft + CaptionAudio.tone(1) + CaptionAudio.silence(1))
         #expect(found.count == 1)
@@ -109,10 +109,10 @@ struct CaptionSegmenterTests {
         // Soft noise between sentences lifts the floor, so a sound just above the start
         // level but not above the noise by enough does not start a sentence.
         var segmenter = CaptionSegmenter()
-        _ = segmenter.append(CaptionAudio.tone(5, amplitude: 0.01))
+        _ = segmenter.append(CaptionAudio.tone(5, amplitude: 0.0036))
         #expect(!segmenter.isInSpeech)
-        #expect(segmenter.noiseFloor > 0.005)
-        let found = segmenter.append(CaptionAudio.tone(0.5, amplitude: 0.02) + CaptionAudio.silence(1))
+        #expect(segmenter.noiseFloor > 0.002)
+        let found = segmenter.append(CaptionAudio.tone(0.5, amplitude: 0.01) + CaptionAudio.silence(1))
         #expect(found.isEmpty)
     }
 }
