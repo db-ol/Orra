@@ -85,8 +85,14 @@ Check that the device is there:
 
 Then in Google Meet: Settings, Audio, Microphone, Orra Microphone. For a quick test
 without Orra, start a recording in QuickTime Player (File, New Audio Recording) with Orra
-Microphone as the input, and speak to the output side with `say -a "Orra Microphone" Hello`.
-The recording should hold the spoken word.
+Microphone as the input, and play a word to the output side:
+
+    say -o /tmp/hello.aiff "Hello from Orra"
+    swift Tests/play_to_device.swift "Orra Microphone" /tmp/hello.aiff
+
+The recording should hold the spoken word. `say -a "Orra Microphone"` does not work: say
+lists only devices that can be the default output, and the output side of Orra Microphone
+never can.
 
 A local ad hoc signed build is what other open source HAL plug ins use for testing, but it
 has not been tried here. If coreaudiod does not list the device, `log stream --predicate
