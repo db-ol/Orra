@@ -400,6 +400,8 @@ final class TranslationSpeech {
             logger.notice("The voice model \(self.engine?.name ?? "none", privacy: .public) loaded in \(started.duration(to: .now), privacy: .public)")
             return true
         } catch {
+            // A load of the model the user switched away from says nothing about the new one.
+            guard revision == synthesizerRevision else { return false }
             problem = String(localized: "The voice model could not be loaded.")
             logger.error("The voice model failed to load: \(String(describing: error), privacy: .public)")
             return false

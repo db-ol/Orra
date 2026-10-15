@@ -168,6 +168,24 @@ struct VoiceEngineSwitchTests {
         #expect(single.engine == .qwen3)
     }
 
+    /// A load of the old model that fails after the pick shows no problem for the new one,
+    /// which loads after it.
+    @Test func aFailedLoadOfTheOldModelIsNotShown() async {
+        let gated = GatedSynthesizer()
+        let engines = VoiceEngines(available: [.qwen3, .cosyVoice]) { [cosy] kind in
+            kind == .qwen3 ? gated as any SpeechSynthesizer : cosy
+        }
+        let speech = makeSpeech(engines: engines)
+        speech.prepare()
+        await gated.started()
+        speech.setEngine(.cosyVoice)
+        gated.release()
+        await speech.waitUntilDone()
+        #expect(speech.problem == nil)
+        #expect(cosy.loads.withLock { $0 } == 1)
+        #expect(speech.isLoaded)
+    }
+
     /// A pick while a translation is queued stops it, so the old model does not speak it
     /// after the pick.
     @Test func aPickStopsWhatIsQueued() async {
@@ -203,5 +221,38 @@ struct VoiceModelsSelectTests {
         #expect(models.codec.manifest == .cosyVoiceSpeaker)
         #expect(models.folders == nil)
         #expect(models.totalBytes == ModelManifest.cosyVoice.totalBytes + ModelManifest.cosyVoiceSpeaker.totalBytes)
+    }
+}
+
+/// A voice model whose load waits until the test releases it, then fails.
+final class GatedSynthesizer: SpeechSynthesizer {
+    private let gate = AsyncStream<Void>.makeStream()
+    private let start = AsyncStream<Void>.makeStream()
+
+    func load(model: URL, codec: URL) async throws {
+        start.continuation.yield()
+        for await _ in gate.stream {
+            break
+        }
+        throw TestError()
+    }
+
+    /// Returns once a load has begun.
+    func started() async {
+        for await _ in start.stream {
+            return
+        }
+    }
+
+    func release() {
+        gate.continuation.yield()
+    }
+
+    func unload() async {}
+
+    func forgetVoice() async {}
+
+    func speak(_ text: String, in language: TranslationTarget, voice: VoiceSample?) -> AsyncThrowingStream<SpokenAudio, any Error> {
+        AsyncThrowingStream { $0.finish() }
     }
 }
