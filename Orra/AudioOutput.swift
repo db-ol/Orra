@@ -170,6 +170,11 @@ nonisolated enum SpeechPreference {
     static let outputUIDKey = "speakTranslationOutputUID"
     static let outputNameKey = "speakTranslationOutputName"
     static let voiceModelKey = "speakTranslationVoiceModel"
+    static let checksWordsKey = "speakTranslationChecksWords"
+    /// Whether the word check is on until the user turns it on or off, see SpeechWordCheck.
+    /// On: in the benchmark it failed no good sentence, caught sentences that said other
+    /// words, and added about 0.15 s per sentence.
+    static let checksWordsByDefault = true
 
     static func isOn(in defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: isOnKey)
@@ -201,6 +206,15 @@ nonisolated enum SpeechPreference {
             defaults.removeObject(forKey: outputUIDKey)
             defaults.removeObject(forKey: outputNameKey)
         }
+    }
+
+    /// Whether the speech model checks the words of each sentence before it plays.
+    static func checksWords(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: checksWordsKey) == nil ? checksWordsByDefault : defaults.bool(forKey: checksWordsKey)
+    }
+
+    static func saveChecksWords(_ on: Bool, to defaults: UserDefaults = .standard) {
+        defaults.set(on, forKey: checksWordsKey)
     }
 
     /// The voice model the user picked, nil until they pick one or when the value is not

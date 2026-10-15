@@ -20,6 +20,8 @@ nonisolated enum SpeechCheck {
         /// Sound over a much shorter stretch than the text needs, such as a sentence cut
         /// off and followed by silence.
         case tooShort
+        /// The speech model heard other words than the text, see SpeechWordCheck.
+        case wrongWords
     }
 
     /// Seconds a Chinese character takes, the median of the benchmark's good clips.
@@ -157,7 +159,8 @@ nonisolated enum SpeechCheck {
         return .good
     }
 
-    private static func isCharacterScript(_ scalar: Unicode.Scalar) -> Bool {
+    /// Chinese, Japanese and Korean characters, which are counted and compared one by one.
+    static func isCharacterScript(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x3040...0x30FF, // Hiragana, Katakana
              0x3400...0x4DBF, // CJK Extension A

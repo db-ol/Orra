@@ -1159,6 +1159,19 @@ final class PushToTalkController {
         return TranscriptGuard.clean(raw, audioSeconds: recording.duration)
     }
 
+    /// Writes down what the voice model said in a sentence of a spoken translation, for the
+    /// word check of Speak Translation (SpeechWordCheck), with the speech model of
+    /// dictation. No vocabulary, no language hint and no guard, as in the benchmark that set
+    /// the check's limits. Logs nothing, and the caller keeps the words in memory only.
+    /// Throws while the speech model is not loaded.
+    func transcribeSpeech(_ audio: SpokenAudio) async throws -> String {
+        guard modelState == .ready else { throw TranscriptionError.modelMissing }
+        let recording = AudioRecording(samples: audio.samples, sampleRate: Double(audio.sampleRate))
+        let (samples, _) = await Self.prepared(recording)
+        guard !samples.isEmpty else { return "" }
+        return try await transcription.transcribe(samples, nil, nil)
+    }
+
     /// Resampling and the silence check run off the main actor, because a long recording
     /// takes a moment.
     @concurrent

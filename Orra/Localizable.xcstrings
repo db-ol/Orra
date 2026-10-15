@@ -527,6 +527,16 @@
         }
       }
     },
+    "Check the words before speaking" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "播放前核对字词"
+          }
+        }
+      }
+    },
     "Checking the downloaded files…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1916,6 +1926,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 重新启动后才会显示新的语言。"
+          }
+        }
+      }
+    },
+    "Orra's speech model listens to each sentence before it plays, and makes it again when it hears other words. Each sentence starts a moment later." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每句话播放前，Orra 会先用语音模型听一遍，听到的字词不对就重新合成。每句话会稍晚一点开始。"
           }
         }
       }

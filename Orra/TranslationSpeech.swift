@@ -31,6 +31,9 @@ final class TranslationSpeech {
 
     private(set) var isOn: Bool
     private(set) var alsoPastes: Bool
+    /// Whether the speech model checks the words of each whole sentence before it plays,
+    /// see SpeechWordCheck.
+    private(set) var checksWords: Bool
     /// The output the user chose, nil for Orra's own microphone device when it is there.
     private(set) var output: SpeechOutputChoice?
     private(set) var state = State.idle
@@ -67,6 +70,10 @@ final class TranslationSpeech {
     /// voice model needs the words to imitate the voice. AppDelegate sets it, tests pass
     /// fakes.
     @ObservationIgnored var transcribeVoice: (VoiceSample) async throws -> String = { _ in throw TranscriptionError.modelMissing }
+    /// Writes down what the voice model said in a sentence, with the speech model of
+    /// dictation, for the word check. AppDelegate sets it, tests pass fakes. A sentence it
+    /// throws for plays unchecked.
+    @ObservationIgnored var transcribeSpeech: (SpokenAudio) async throws -> String = { _ in throw TranscriptionError.modelMissing }
     /// Called after the user picked another voice model, so its downloads take the place of
     /// the old one's. AppDelegate sets it.
     @ObservationIgnored var onEngineChange: (VoiceEngineKind) -> Void = { _ in }
@@ -101,13 +108,15 @@ final class TranslationSpeech {
         var output: SpeechOutputChoice?
         /// The voice model the user picked, nil until they pick one.
         var voiceModel: VoiceEngineKind?
+        var checksWords = SpeechPreference.checksWordsByDefault
 
         static func load(from defaults: UserDefaults = .standard) -> Settings {
             Settings(
                 isOn: SpeechPreference.isOn(in: defaults),
                 alsoPastes: SpeechPreference.alsoPastes(in: defaults),
                 output: SpeechPreference.output(in: defaults),
-                voiceModel: SpeechPreference.voiceModel(in: defaults)
+                voiceModel: SpeechPreference.voiceModel(in: defaults),
+                checksWords: SpeechPreference.checksWords(in: defaults)
             )
         }
 
@@ -116,6 +125,7 @@ final class TranslationSpeech {
             SpeechPreference.saveAlsoPastes(alsoPastes, to: defaults)
             SpeechPreference.saveOutput(output, to: defaults)
             SpeechPreference.saveVoiceModel(voiceModel, to: defaults)
+            SpeechPreference.saveChecksWords(checksWords, to: defaults)
         }
     }
 
@@ -146,6 +156,7 @@ final class TranslationSpeech {
         self.folders = folders
         self.isOn = settings.isOn
         self.alsoPastes = settings.alsoPastes
+        self.checksWords = settings.checksWords
         self.output = settings.output
         self.save = save
         self.dictationPoll = dictationPoll
@@ -166,7 +177,7 @@ final class TranslationSpeech {
     }
 
     private var settings: Settings {
-        Settings(isOn: isOn, alsoPastes: alsoPastes, output: output, voiceModel: chosenEngine)
+        Settings(isOn: isOn, alsoPastes: alsoPastes, output: output, voiceModel: chosenEngine, checksWords: checksWords)
     }
 
     func setOn(_ on: Bool) {
@@ -185,6 +196,12 @@ final class TranslationSpeech {
     func setAlsoPastes(_ on: Bool) {
         guard on != alsoPastes else { return }
         alsoPastes = on
+        save(settings)
+    }
+
+    func setChecksWords(_ on: Bool) {
+        guard on != checksWords else { return }
+        checksWords = on
         save(settings)
     }
 
@@ -356,7 +373,7 @@ final class TranslationSpeech {
             await waitWhileDictating(generation)
             guard generation == self.generation else { break }
             do {
-                let outcome = try await say(piece, in: language, with: synthesizer, generation: generation) {
+                let outcome = try await say(piece, in: language, with: synthesizer, generation: generation, tally: &tally) {
                     if firstSound == nil {
                         firstSound = started.duration(to: .now)
                     }
@@ -385,6 +402,10 @@ final class TranslationSpeech {
             // Counts and reasons only, never text or audio.
             logger.notice("Speech check: \(tally.retried, privacy: .public) pieces made again, \(tally.skipped, privacy: .public) skipped, \(tally.cut, privacy: .public) streamed pieces cut, reasons \(tally.reasons, privacy: .public)")
         }
+        if tally.wordChecks > 0 || tally.unchecked > 0 {
+            // Counts and times only, never what was heard.
+            logger.notice("Word check: \(tally.wordChecks, privacy: .public) pieces in \(tally.wordCheckTime, privacy: .public), \(tally.unchecked, privacy: .public) unchecked")
+        }
     }
 
     /// What became of a piece.
@@ -404,6 +425,12 @@ final class TranslationSpeech {
         var retried = 0
         var skipped = 0
         var cut = 0
+        /// Pieces the speech model listened to for the word check, and the time it took.
+        var wordChecks = 0
+        var wordCheckTime = Duration.zero
+        /// Pieces the word check could not run on, such as while the speech model is not
+        /// loaded.
+        var unchecked = 0
         var verdicts: [SpeechCheck.Verdict] = []
 
         mutating func count(_ outcome: PieceOutcome) {
@@ -434,14 +461,14 @@ final class TranslationSpeech {
         }
     }
 
-    /// Speaks one piece. A piece that comes whole is checked before it plays (SpeechCheck):
-    /// one that fails is made once more, and skipped when it fails again, so a cut off
-    /// sentence, near silence or a loop never reaches the other side. Both voice models
-    /// draw their samples from MLX's random state, which moves on with every draw, so the
-    /// second try is a new draw. A streamed piece plays as it comes, so only its length can
+    /// Speaks one piece. A piece that comes whole is checked before it plays (SpeechCheck,
+    /// then SpeechWordCheck when that is on): one that fails is made once more, and skipped
+    /// when it fails again, so a cut off sentence, near silence, a loop or other words never
+    /// reach the other side. Both voice models draw their samples from MLX's random state,
+    /// which moves on with every draw, so the second try is a new draw. A streamed piece plays as it comes, so only its length can
     /// be held to the check: it is cut at the longest its text may run. `heard` is called
     /// when a part of the piece is queued to play.
-    private func say(_ piece: String, in language: TranslationTarget, with synthesizer: any SpeechSynthesizer, generation: Int, heard: () -> Void) async throws -> PieceOutcome {
+    private func say(_ piece: String, in language: TranslationTarget, with synthesizer: any SpeechSynthesizer, generation: Int, tally: inout PieceTally, heard: () -> Void) async throws -> PieceOutcome {
         let voice = voice
         if synthesizer.streams(voice: voice) {
             let longest = SpeechCheck.longestSeconds(for: piece)
@@ -479,7 +506,11 @@ final class TranslationSpeech {
             }
             guard generation == self.generation else { return .stopped }
             let whole = SpokenAudio(samples: parts.flatMap(\.samples), sampleRate: parts.first?.sampleRate ?? 24_000)
-            let verdict = SpeechCheck.verdict(for: whole, text: piece)
+            var verdict = SpeechCheck.verdict(for: whole, text: piece)
+            if verdict == .good, checksWords, !SpeechWordCheck.units(of: piece).isEmpty {
+                guard let words = await checkWords(of: whole, against: piece, generation: generation, tally: &tally) else { return .stopped }
+                verdict = words
+            }
             if verdict == .good {
                 for part in parts {
                     heard()
@@ -490,6 +521,27 @@ final class TranslationSpeech {
             verdicts.append(verdict)
         }
         return .skipped(verdicts[0], verdicts[1])
+    }
+
+    /// The word check of a whole piece: the speech model writes down what `audio` says,
+    /// and SpeechWordCheck compares it with `piece`. The speech model is dictation's, so this
+    /// waits while the user dictates, as a second try does. A piece the speech model could
+    /// not listen to passes. Nil when the user stopped.
+    private func checkWords(of audio: SpokenAudio, against piece: String, generation: Int, tally: inout PieceTally) async -> SpeechCheck.Verdict? {
+        await waitWhileDictating(generation)
+        guard generation == self.generation else { return nil }
+        let started = ContinuousClock.now
+        let heard: String
+        do {
+            heard = try await transcribeSpeech(audio)
+        } catch {
+            tally.unchecked += 1
+            return generation == self.generation ? .good : nil
+        }
+        tally.wordChecks += 1
+        tally.wordCheckTime += started.duration(to: .now)
+        guard generation == self.generation else { return nil }
+        return SpeechWordCheck.passes(text: piece, heard: heard) ? .good : .wrongWords
     }
 
     private func loadIfNeeded() async -> Bool {

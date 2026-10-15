@@ -2,8 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Speak Translation in Settings, under Features: the switch, the voice model when the
-/// build has two, where the voice goes, whether the text is pasted too, the voice sample
-/// and the voice model's download.
+/// build has two, where the voice goes, whether the text is pasted too, whether the words
+/// are checked, the voice sample and the voice model's download.
 struct SpeakTranslationSection: View {
     let speech: TranslationSpeech
     let models: VoiceModels
@@ -70,6 +70,17 @@ struct SpeakTranslationSection: View {
                 set: { speech.setAlsoPastes($0) }
             )) {
                 Label("Also paste the translated text", systemImage: "doc.on.clipboard")
+            }
+            .disabled(!speech.isOn)
+            Toggle(isOn: Binding(
+                get: { speech.checksWords },
+                set: { speech.setChecksWords($0) }
+            )) {
+                DescribedLabel(
+                    title: "Check the words before speaking",
+                    detail: "Orra's speech model listens to each sentence before it plays, and makes it again when it hears other words. Each sentence starts a moment later.",
+                    systemImage: "text.badge.checkmark"
+                )
             }
             .disabled(!speech.isOn)
             VoiceSampleRow(speech: speech, isChoosing: $isChoosingVoice)

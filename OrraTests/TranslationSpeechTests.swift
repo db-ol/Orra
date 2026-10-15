@@ -411,6 +411,163 @@ struct TranslationSpeechTests {
         #expect(speech.voiceForDictation.alsoPastes())
     }
 
+    /// The word check: a whole piece whose length passes is written down by the speech
+    /// model, and one heard as other words is made again. Only the second try plays.
+    @Test func aPieceHeardAsOtherWordsIsMadeAgain() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
+        let heard = Mutex<[String]>(["Watony.", "我同意。"])
+        let calls = Mutex(0)
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _ in
+            calls.withLock { $0 += 1 }
+            return heard.withLock { $0.removeFirst() }
+        }
+        speech.speak("我同意。", in: .chinese)
+        await speech.waitUntilDone()
+        #expect(spoken == ["zh 我同意。", "zh 我同意。"])
+        #expect(calls.withLock { $0 } == 2)
+        let played = Self.reading("我同意。").samples.count
+        #expect(playback.calls == ["start Orra Microphone", "play \(played)", "finish", "stop"])
+        #expect(speech.problem == nil)
+    }
+
+    /// Heard as other words twice: skipped, as a piece that fails the length check twice.
+    @Test func aPieceHeardAsOtherWordsTwiceIsSkipped() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _ in "How the woman came here." }
+        speech.speak("好的，我们开始吧。", in: .chinese)
+        await speech.waitUntilDone()
+        #expect(spoken.count == 2)
+        #expect(playback.calls == ["start Orra Microphone", "finish", "stop"])
+        #expect(speech.problem == "The voice model failed twice on a sentence, so Orra skipped it.")
+    }
+
+    /// The speech model is dictation's, so the word check waits while the user dictates,
+    /// and gets the whole piece at the voice model's sample rate.
+    @Test func theWordCheckWaitsWhileTheUserDictates() async throws {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        let dictating = Mutex(false)
+        synthesizer.makes.withLock {
+            $0 = { text, _ in
+                // The user starts to dictate while the piece is made.
+                dictating.withLock { $0 = true }
+                return [Self.reading(text)]
+            }
+        }
+        let checked = Mutex<[(dictating: Bool, count: Int, rate: Int)]>([])
+        let speech = makeSpeech()
+        speech.isDictating = { dictating.withLock { $0 } }
+        speech.transcribeSpeech = { audio in
+            checked.withLock { $0.append((dictating.withLock { $0 }, audio.samples.count, audio.sampleRate)) }
+            return "We have a meeting next Tuesday."
+        }
+        speech.speak("We have a meeting next Tuesday.", in: .english)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(spoken.count == 1)
+        #expect(checked.withLock { $0.isEmpty })
+        dictating.withLock { $0 = false }
+        await speech.waitUntilDone()
+        let length = Self.reading("We have a meeting next Tuesday.").samples.count
+        #expect(checked.withLock { $0.map(\.dictating) } == [false])
+        #expect(checked.withLock { $0.map(\.count) } == [length])
+        #expect(checked.withLock { $0.map(\.rate) } == [24_000])
+        #expect(playback.calls == ["start Orra Microphone", "play \(length)", "finish", "stop"])
+    }
+
+    /// The speech model listens only to pieces whose length passed, and not to text with
+    /// nothing to compare, such as a number alone.
+    @Test func theWordCheckRunsOnlyWhenItCanTellSomething() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock {
+            $0 = { text, attempt in
+                text.hasPrefix("Could") && attempt == 0 ? [SpeechCheckTests.tone(seconds: 0.3)] : [Self.reading(text)]
+            }
+        }
+        let calls = Mutex(0)
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _ in
+            calls.withLock { $0 += 1 }
+            return "Could you send the numbers before then?"
+        }
+        speech.speak("Could you send the numbers before then?", in: .english)
+        speech.speak("13812345678。", in: .chinese)
+        await speech.waitUntilDone()
+        // The cut off first try is not listened to, the second is.
+        #expect(spoken.count == 3)
+        #expect(calls.withLock { $0 } == 1)
+    }
+
+    /// Off in Settings, or with the speech model not ready, a piece plays unchecked.
+    @Test func withoutTheWordCheckAPiecePlays() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
+        let calls = Mutex(0)
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _ in
+            calls.withLock { $0 += 1 }
+            return "Watony."
+        }
+        speech.setChecksWords(false)
+        speech.speak("我同意。", in: .chinese)
+        await speech.waitUntilDone()
+        #expect(calls.withLock { $0 } == 0)
+        #expect(spoken.count == 1)
+
+        speech.setChecksWords(true)
+        speech.transcribeSpeech = { _ in
+            calls.withLock { $0 += 1 }
+            throw TranscriptionError.modelMissing
+        }
+        speech.speak("我同意。", in: .chinese)
+        await speech.waitUntilDone()
+        #expect(calls.withLock { $0 } == 1)
+        #expect(spoken.count == 2)
+        let played = Self.reading("我同意。").samples.count
+        #expect(playback.calls.filter { $0.hasPrefix("play") } == ["play \(played)", "play \(played)"])
+        #expect(speech.problem == nil)
+    }
+
+    /// A streamed piece plays as it comes, so the speech model does not listen to it.
+    @Test func aStreamedPieceIsNotCheckedForWords() async {
+        let calls = Mutex(0)
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _ in
+            calls.withLock { $0 += 1 }
+            return "Watony."
+        }
+        speech.speak("我同意。", in: .chinese)
+        await speech.waitUntilDone()
+        #expect(calls.withLock { $0 } == 0)
+        #expect(playback.calls == ["start Orra Microphone", "play 240", "play 480", "finish", "stop"])
+    }
+
+    /// The switch is saved, on by default.
+    @Test func theWordCheckSwitchIsSaved() throws {
+        var saved: [TranslationSpeech.Settings] = []
+        let speech = TranslationSpeech(
+            engines: .only(synthesizer),
+            playback: playback,
+            outputs: { [Self.orraMicrophone] },
+            folders: { nil },
+            save: { saved.append($0) }
+        )
+        #expect(speech.checksWords == SpeechPreference.checksWordsByDefault)
+        speech.setChecksWords(!SpeechPreference.checksWordsByDefault)
+        #expect(saved.map(\.checksWords) == [!SpeechPreference.checksWordsByDefault])
+
+        let name = "TranslationSpeechTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(SpeechPreference.checksWords(in: defaults) == SpeechPreference.checksWordsByDefault)
+        var settings = TranslationSpeech.Settings()
+        settings.checksWords = false
+        settings.save(to: defaults)
+        #expect(TranslationSpeech.Settings.load(from: defaults).checksWords == false)
+    }
+
     /// Near silence is not played either.
     @Test func silenceIsNotPlayed() async {
         synthesizer.streamsPieces.withLock { $0 = false }
@@ -507,8 +664,8 @@ struct TranslationSpeechTests {
         TranslationSpeech.Settings(isOn: true, alsoPastes: true, output: nil).save(to: defaults)
         #expect(TranslationSpeech.Settings.load(from: defaults).output == nil)
         #expect(defaults.string(forKey: SpeechPreference.outputNameKey) == nil)
-        // Only these five keys, so no sample or text can be in the settings.
+        // Only these six keys, so no sample or text can be in the settings.
         let keys = Set(defaults.persistentDomain(forName: name)?.keys.map { $0 } ?? [])
-        #expect(keys.isSubset(of: [SpeechPreference.isOnKey, SpeechPreference.alsoPastesKey, SpeechPreference.outputUIDKey, SpeechPreference.outputNameKey, SpeechPreference.voiceModelKey]))
+        #expect(keys.isSubset(of: [SpeechPreference.isOnKey, SpeechPreference.alsoPastesKey, SpeechPreference.outputUIDKey, SpeechPreference.outputNameKey, SpeechPreference.voiceModelKey, SpeechPreference.checksWordsKey]))
     }
 }
