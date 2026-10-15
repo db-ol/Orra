@@ -64,8 +64,10 @@ struct MeetingCaptionsTests {
                     return ($0.holdsStart, $0.fails)
                 }
                 if holds {
-                    // Like the permission prompt. Bounded, so a broken test cannot hang.
-                    _ = gate.wait(timeout: .now() + 5)
+                    // Like the permission prompt. Bounded, so a broken test cannot hang,
+                    // but long, since a busy runner can keep the main actor away from a
+                    // test for many seconds.
+                    _ = gate.wait(timeout: .now() + 120)
                 }
                 if let fails {
                     state.withLock { $0.calls.append("failed") }
