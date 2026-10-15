@@ -252,6 +252,10 @@ got worse than the baseline, see docs/release-gate.md.
     is chosen only when it comes before English in the preferred languages and never for
     Traditional Chinese alone, the Chinese talk key hint, the Chinese form of a key name
     with its other label, and the Chinese hint that finishes a hands free dictation.
+  - SetupDownloadTests covers the welcome window's cleanup proposal (on from 16 GB of
+    memory for a new user only, never over a saved choice), the order of the one download
+    (speech model first, cleanup model after it), the bar's bytes of both models, the
+    step's lines and buttons in English and Chinese, and the step the guide talks about.
   - WelcomeLanguageTests covers the language picked in the welcome window: the
     localization of each choice, Same as the Mac for English, Chinese, Traditional
     Chinese and French first, Chinese text built in code while Orra runs in English, that
@@ -1170,6 +1174,45 @@ remove Orra's Accessibility access while it runs. Undo all of it afterwards:
   relaunch.
 - [ ] Launched as a login item with steps left, the welcome window still comes to the
   front.
+
+Guide, cleanup step and one download in the welcome window, added on 2026-10-15, not
+verified yet. Prepare a first launch as above. Also move the cleanup model's folder
+(Qwen3.5-4B-4bit-0e7ffd5c under the same Models folder) out of the way, and run
+`defaults delete io.github.db-ol.Orra cleansUpWithLocalModel` so cleanup has no saved
+choice. Put both back afterwards:
+
+- [ ] The guide, a round violet character with the icon's ring as its face, stands under
+  the title. It blinks every few seconds, bobs gently and points down at the steps. Its
+  bubble says one line for the step that has the tint, and the line changes as steps get
+  done, in English and in 简体中文.
+- [ ] With Reduce Motion on (System Settings > Accessibility > Display), the guide and the
+  System Settings picture stand still.
+- [ ] Step 1, Clean up your text, shows what cleanup does, a before and after example,
+  "It needs a 3.05 GB download and about 4 GB of memory while it runs." and its switch.
+  On a Mac with 16 GB of memory or more the switch is on. On a Mac with less it is off,
+  with "Off at first, because this Mac has 8 GB of memory." (or its size).
+- [ ] Nothing goes online before a click: with the switch on, the step's button reads
+  Download Both Models (5.52 GB).
+- [ ] Download Both Models fetches the speech model first, with one bar and "Downloading
+  the speech model, then the cleanup model". Cancel Download stops it, and the button then
+  offers Resume Download with what is left of both.
+- [ ] Once the speech model is in place, the bar goes on with the cleanup model, the step
+  says the user can dictate, and a dictation in TextEdit pastes, without cleanup until
+  the cleanup model is loaded. After that, a dictation with a filler is cleaned up.
+- [ ] Turn the switch off before the download: Download Speech Model (2.47 GB) fetches the
+  speech model only. Quit and launch: the switch is still off, and Settings shows Clean Up
+  Text off.
+- [ ] An existing user: with the speech model in place and no saved choice, open Setup
+  Guide… from the menu. The switch is off. Turning it on starts the cleanup model's
+  download in the download step, and Settings shows Clean Up Text on.
+- [ ] Close the window with a language picked in it while the cleanup model downloads:
+  Orra does not restart until the download is over.
+- [ ] While the guide talks about Allow Accessibility, a small picture of System Settings
+  shows Orra's switch being turned on in the Accessibility list. With microphone access
+  off, the microphone step shows the same picture for the Microphone list. Neither
+  changes a permission.
+- [ ] On a short screen, such as a 13 inch MacBook Air at its default resolution, the
+  steps scroll and the guide and the buttons stay in view.
 
 Chinese interface, added on 2026-10-07, not verified yet. Give Orra its own language under
 System Settings > General > Language & Region > Applications: add Orra with Chinese,

@@ -21,8 +21,11 @@ Keep it simple. Do not add a protocol, layer, or abstraction without a concrete 
 
 ## v0.1 non-goals
 No backend, no accounts, no analytics, no database, no cloud transcription, and no platforms
-other than macOS. No cloud LLM rewriting. Optional rewriting on this Mac with a local model,
-off by default and with the dictated text always recoverable, is allowed.
+other than macOS. No cloud LLM rewriting. Optional rewriting on this Mac with a local model, with the dictated
+text always recoverable, is allowed. It is off by default, except that the welcome window
+proposes it to a new user on a Mac with 16 GB of memory or more, with its switch on and its
+download size shown, and the user can turn it off there. The maintainer approved this on
+2026-10-15.
 
 ## Build discipline
 Build (run in the repository root):
@@ -68,7 +71,8 @@ trusted once in Xcode. docs/dependencies.md has the details.
   turns it on: the field it pasted into, for 3 minutes and only while that field has the focus, never a password field or an app
   holding secure input. It stores the word pairs only, never the text, and never logs either.
 - Orra goes online only for the speech model download the user starts from the menu or the
-  welcome window, the cleanup model download the user agrees to in Settings, and for
+  welcome window, the cleanup model download the user agrees to in Settings or starts in
+  the welcome window (with the speech model, or with cleanup's switch there), and for
   update checks through Sparkle that the user allowed or started.
   Launching must never touch the network before the user allowed update checks. Any other
   network use needs the maintainer's approval. docs/model-download.md describes the

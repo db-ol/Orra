@@ -207,7 +207,11 @@ When Orra goes online for it:
 
 - Only after the user turns cleanup or translation on and agrees to the download in the
   dialog that names its size, 3.05 GB, or chooses Download, Resume Download or Try Again
-  under a switch that is on. Turning on the other switch while a download was agreed to
+  under a switch that is on. In the welcome window, the cleanup step names the size too.
+  With cleanup on there, Download Both Models starts the speech model and then this one,
+  one after the other and never at once. Turning cleanup on there once the speech model is
+  in place starts this download. The switch starts on for a new user on a Mac with 16 GB
+  of memory or more, but nothing goes online before one of these buttons or the switch. Turning on the other switch while a download was agreed to
   for one asks nothing more. Cancel Download keeps the bytes on disk and turns both
   switches off again.
 - Never at launch, and never while cleanup and translation are both off. Launch only
