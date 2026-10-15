@@ -245,6 +245,16 @@
         }
       }
     },
+    "Accessibility" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "辅助功能"
+          }
+        }
+      }
+    },
     "Add" : {
       "localizations" : {
         "zh-Hans" : {
@@ -291,6 +301,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你添加的"
+          }
+        }
+      }
+    },
+    "After" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理后"
+          }
+        }
+      }
+    },
+    "All set! Hold the talk key and say hello." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备好了！按住说话键，打个招呼吧。"
           }
         }
       }
@@ -423,6 +453,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "屏幕底部随你的声音跳动的音量条。"
+          }
+        }
+      }
+    },
+    "Before" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理前"
           }
         }
       }
@@ -657,6 +697,16 @@
         }
       }
     },
+    "Clean up your text" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理你说的文字"
+          }
+        }
+      }
+    },
     "Clear" : {
       "comment" : "A key name",
       "localizations" : {
@@ -842,6 +892,26 @@
         }
       }
     },
+    "Download Both Models (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载两个模型（%@）"
+          }
+        }
+      }
+    },
+    "Download Cleanup Model (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载整理模型（%@）"
+          }
+        }
+      }
+    },
     "Download Speech Model (%@)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -868,6 +938,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要下载翻译用的模型吗？"
+          }
+        }
+      }
+    },
+    "Download the models" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载模型"
           }
         }
       }
@@ -920,6 +1000,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载本地模型：%1$lld%%，共 %2$@"
+          }
+        }
+      }
+    },
+    "Downloading the speech model, then the cleanup model: %lld%% of %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载语音模型，之后是整理模型：%1$lld%%，共 %2$@"
           }
         }
       }
@@ -1024,6 +1114,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "功能"
+          }
+        }
+      }
+    },
+    "First, my speech model. It downloads once." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先下载我的语音模型，只需一次。"
           }
         }
       }
@@ -1138,6 +1238,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Help"
+          }
+        }
+      }
+    },
+    "Hi, I’m Orra. Want me to tidy up what you say too?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你好，我是 Orra。要不要顺便帮你整理说出的文字？"
           }
         }
       }
@@ -1260,6 +1370,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其中有 Orra 的版本、设置、权限和最近一小时的日志，你的 Mac 的信息，以及最近的崩溃报告。其中没有听写的文字，也没有录音。你的名字和 Mac 的名称会被去掉。"
+          }
+        }
+      }
+    },
+    "It needs a %@ download and about 4 GB of memory while it runs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要下载 %@，运行时约占 4 GB 内存。"
           }
         }
       }
@@ -1395,6 +1515,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "左侧 Option 键"
+          }
+        }
+      }
+    },
+    "Let me hear you. Allow the microphone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让我听见你的声音，请允许使用麦克风。"
+          }
+        }
+      }
+    },
+    "Let’s meet at four." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们四点见。"
+          }
+        }
+      }
+    },
+    "Let’s meet at three, no wait, four." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我们三点，哦不对，四点见。"
           }
         }
       }
@@ -1620,6 +1770,16 @@
         }
       }
     },
+    "Now let me type for you. Allow Accessibility." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再让我帮你打字，请允许辅助功能。"
+          }
+        }
+      }
+    },
     "Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1637,6 +1797,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不显示"
+          }
+        }
+      }
+    },
+    "Off at first, because this Mac has %lld GB of memory." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 只有 %lld GB 内存，所以默认关闭。"
           }
         }
       }
@@ -1759,6 +1929,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 还会把翻译键翻译的内容说到下面的设备中，让通话的另一方听到。"
+          }
+        }
+      }
+    },
+    "Orra can also tidy up what you said with a second model on this Mac. It removes fillers and applies the corrections you make while speaking." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 还能用这台 Mac 上的第二个模型整理你说的话。它会去掉语气词，并按你说出口的更正改好内容。"
           }
         }
       }
@@ -2065,6 +2245,16 @@
         }
       }
     },
+    "Pick the key you hold to talk." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选一个说话时按住的键。"
+          }
+        }
+      }
+    },
     "Play sounds when recording starts and stops" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2202,6 +2392,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按一下开始，再按一下结束"
+          }
+        }
+      }
+    },
+    "Privacy & Security" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐私与安全性"
           }
         }
       }
@@ -2663,6 +2863,16 @@
         }
       }
     },
+    "Still downloading. It goes on if you close this window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还在下载。关掉这个窗口也会继续。"
+          }
+        }
+      }
+    },
     "Stop Speaking" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2790,6 +3000,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法载入整理模型"
+          }
+        }
+      }
+    },
+    "The cleanup model follows right after it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理模型会紧接着下载。"
           }
         }
       }
@@ -3016,6 +3236,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型尚未就绪。Orra 菜单里会显示缺少什么。"
+          }
+        }
+      }
+    },
+    "The speech model is ready, so you can dictate while the cleanup model downloads." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音模型已就绪，整理模型下载时也可以听写。"
           }
         }
       }

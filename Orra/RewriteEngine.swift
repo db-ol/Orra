@@ -387,12 +387,18 @@ nonisolated enum CleanupStep {
     }
 }
 
-/// Whether the user turned cleanup on. Off until they do.
+/// Whether the user turned cleanup on. Off until they do, in Settings or in the welcome
+/// window, which proposes it to a new user, see CleanupDefault.
 nonisolated enum CleanupPreference {
     static let defaultsKey = "cleansUpWithLocalModel"
 
     static func load(from defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: defaultsKey) as? Bool ?? false
+        saved(from: defaults) ?? false
+    }
+
+    /// The choice as saved, nil when the user never made one.
+    static func saved(from defaults: UserDefaults = .standard) -> Bool? {
+        defaults.object(forKey: defaultsKey) as? Bool
     }
 
     static func save(_ on: Bool, to defaults: UserDefaults = .standard) {

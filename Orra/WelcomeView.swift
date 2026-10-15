@@ -1,9 +1,11 @@
 import Combine
 import SwiftUI
 
-/// The welcome window's content: the language, the three steps that make Orra ready, in
-/// any order, the choice of the talk key, then how to dictate. The download comes first
-/// because it takes longest, and it goes on while the user grants the permissions.
+/// The welcome window's content: the guide with its line for the step the user is on, the
+/// language, the choice of cleanup, the three steps that make Orra ready, in any order,
+/// the choice of the talk key, then how to dictate. Cleanup comes first because the one
+/// download that follows includes its model when it is on. The download comes before the
+/// permissions because it takes longest, and it goes on while the user grants them.
 ///
 /// The window shows the language picked in it right away, without a restart: SwiftUI looks
 /// up text literals in the `locale` of the environment, and text built in code is looked
@@ -11,7 +13,7 @@ import SwiftUI
 /// WelcomeWindow for the restart.
 struct WelcomeView: View {
     let pushToTalk: PushToTalkController
-    let models: ModelInstaller
+    let setup: SetupDownload
     let close: () -> Void
     /// Tells the window the localization shown, so its title follows.
     let localizationChanged: (String) -> Void
@@ -22,10 +24,17 @@ struct WelcomeView: View {
     /// The localization the window shows, such as "zh-Hans". Kept, so a redraw for the
     /// download's progress does not read the Mac's languages again.
     @State private var localization: String
+    /// The height of the steps, measured, so they scroll only when the screen is too short
+    /// for them. The tallest at first, so the window opens on the screen and shrinks to fit.
+    @State private var stepsHeight: CGFloat
+    /// Whether the steps scroll on a short screen. Off only to draw the whole window.
+    let limitsHeight: Bool
 
-    init(pushToTalk: PushToTalkController, models: ModelInstaller, language: AppLanguage, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void) {
+    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void) {
+        self.limitsHeight = limitsHeight
+        _stepsHeight = State(initialValue: Self.tallestSteps)
         self.pushToTalk = pushToTalk
-        self.models = models
+        self.setup = setup
         self.close = close
         self.localizationChanged = localizationChanged
         self.languagePicked = languagePicked
@@ -56,38 +65,89 @@ struct WelcomeView: View {
     }
 
     @ViewBuilder private var content: some View {
-        let checklist = SetupChecklist(pushToTalk, models)
-        VStack(alignment: .leading, spacing: 22) {
-            HStack(alignment: .top, spacing: 16) {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable()
-                    .frame(width: 64, height: 64)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Welcome to Orra")
-                        .font(.title2.bold())
-                    Text("Hold a key, speak, and let go. Orra types what you said into the app you are using. Your voice is turned into text on this Mac.")
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        let checklist = SetupChecklist(pushToTalk, setup.speech)
+        let summary = setup.summary(locale: Locale(identifier: localization))
+        let downloadingCleanup = summary.active == .cleanup && setup.cleanup.models.state.isBusy
+        let step = GuideStep.current(
+            cleanupDecided: setup.cleanupDecided,
+            checklist: checklist,
+            talkKeyChosen: pushToTalk.hasChosenTalkKey,
+            downloadingCleanup: downloadingCleanup
+        )
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Welcome to Orra")
+                    .font(.title2.bold())
+                Text("Hold a key, speak, and let go. Orra types what you said into the app you are using. Your voice is turned into text on this Mac.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 22)
+            HStack(alignment: .center, spacing: 10) {
+                OrraGuide(waves: step == .ready)
+                    .frame(width: 76, height: 76)
+                GuideBubble(line: step.line(locale: Locale(identifier: localization)))
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 12)
+            .padding(.bottom, 6)
+            .padding(.horizontal, 28)
+            if limitsHeight {
+                ScrollView {
+                    steps(checklist: checklist, summary: summary, step: step, downloadingCleanup: downloadingCleanup)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stepsHeight = $0 }
+                }
+                .frame(height: min(stepsHeight, Self.tallestSteps))
+            } else {
+                steps(checklist: checklist, summary: summary, step: step, downloadingCleanup: downloadingCleanup)
+            }
+            HStack {
+                Spacer()
+                if checklist.isComplete {
+                    Button("Done", action: close)
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Not Now", action: close)
+                        .keyboardShortcut(.cancelAction)
                 }
             }
+            .padding(.horizontal, 28)
+            .padding(.top, 10)
+            .padding(.bottom, 20)
+        }
+        .frame(width: 560)
+    }
+
+    /// The most the steps take before they scroll: the screen's height less the title bar,
+    /// the header with the guide and the buttons.
+    private static var tallestSteps: CGFloat {
+        max((NSScreen.main?.visibleFrame.height ?? 900) - 300, 320)
+    }
+
+    private func steps(checklist: SetupChecklist, summary: DownloadSummary, step: GuideStep, downloadingCleanup: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
             LanguageRow(language: Binding {
                 language
             } set: { picked in
                 language = picked
                 languagePicked(picked)
             })
-            SetupStepRow(number: 1, status: checklist.model, title: "Download the speech model") {
-                ModelStepDetail(models: models, pushToTalk: pushToTalk)
+            // Not part of the checklist: dictation works without it.
+            SetupStepRow(number: 1, status: setup.cleanupDecided || checklist.model != .todo ? .done : .todo, title: "Clean up your text", isCurrent: step == .cleanup) {
+                CleanupStepDetail(setup: setup)
             }
-            SetupStepRow(number: 2, status: checklist.microphone, title: "Allow the microphone") {
-                MicrophoneStepDetail(pushToTalk: pushToTalk)
+            SetupStepRow(number: 2, status: downloadingCleanup ? .inProgress : checklist.model, title: setup.wantsCleanup ? "Download the models" : "Download the speech model", isCurrent: step == .download || step == .downloading) {
+                ModelStepDetail(setup: setup, summary: summary, pushToTalk: pushToTalk)
             }
-            SetupStepRow(number: 3, status: checklist.accessibility, title: "Allow Accessibility") {
-                AccessibilityStepDetail(pushToTalk: pushToTalk)
+            SetupStepRow(number: 3, status: checklist.microphone, title: "Allow the microphone", isCurrent: step == .microphone) {
+                MicrophoneStepDetail(pushToTalk: pushToTalk, showsDemo: step == .microphone)
+            }
+            SetupStepRow(number: 4, status: checklist.accessibility, title: "Allow Accessibility", isCurrent: step == .accessibility) {
+                AccessibilityStepDetail(pushToTalk: pushToTalk, showsDemo: step == .accessibility)
             }
             // Not part of the checklist: right Control works when the user skips it.
-            SetupStepRow(number: 4, status: pushToTalk.hasChosenTalkKey ? .done : .todo, title: "Choose your talk key") {
+            SetupStepRow(number: 5, status: pushToTalk.hasChosenTalkKey ? .done : .todo, title: "Choose your talk key", isCurrent: step == .talkKey) {
                 TalkKeyStepDetail(pushToTalk: pushToTalk)
             }
             if checklist.isComplete {
@@ -105,19 +165,10 @@ struct WelcomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
-            HStack {
-                Spacer()
-                if checklist.isComplete {
-                    Button("Done", action: close)
-                        .keyboardShortcut(.defaultAction)
-                } else {
-                    Button("Not Now", action: close)
-                        .keyboardShortcut(.cancelAction)
-                }
-            }
         }
-        .padding(28)
-        .frame(width: 520)
+        // Room for the tint of the current step, which reaches past the steps.
+        .padding(.horizontal, 28)
+        .padding(.vertical, 12)
     }
 }
 
@@ -153,6 +204,8 @@ private struct SetupStepRow<Detail: View>: View {
     let number: Int
     let status: SetupChecklist.Status
     let title: LocalizedStringKey
+    /// The step the guide talks about, shown with a tint.
+    var isCurrent = false
     @ViewBuilder let detail: Detail
 
     var body: some View {
@@ -165,6 +218,13 @@ private struct SetupStepRow<Detail: View>: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(8)
+        .background(
+            Color.accentColor.opacity(isCurrent ? 0.08 : 0),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .padding(-8)
+        .animation(.easeInOut(duration: 0.25), value: isCurrent)
     }
 }
 
@@ -196,17 +256,17 @@ private struct StepBadge: View {
     }
 }
 
-/// The download, with the menu's own lines and button, or how the installed model stands.
+/// The one download of the speech model and, with cleanup on, the cleanup model: one bar
+/// for the bytes of both, the lines and the button, then how the speech model stands.
 private struct ModelStepDetail: View {
-    let models: ModelInstaller
+    let setup: SetupDownload
+    let summary: DownloadSummary
     let pushToTalk: PushToTalkController
     @Environment(\.interfaceLocale) private var interfaceLocale
 
     var body: some View {
-        let total = models.manifest.totalBytes
         VStack(alignment: .leading, spacing: 8) {
-            switch models.state {
-            case .installed:
+            if case .installed = setup.speech.state {
                 switch pushToTalk.modelState {
                 case .ready:
                     Text("The speech model is ready.")
@@ -219,32 +279,77 @@ private struct ModelStepDetail: View {
                         .foregroundStyle(.secondary)
                     Button("Try Again") {
                         // As in the menu: checks the files again, hashes included.
-                        Task { await models.prepare(checkingHashes: true) }
+                        Task { await setup.speech.prepare(checkingHashes: true) }
                     }
                 }
-            case .downloading(let bytes, _):
-                ProgressView(value: Double(min(bytes, total)), total: Double(max(total, 1)))
-                    .frame(maxWidth: 360)
-                lines(models.state.menuLines(total: total, locale: interfaceLocale))
-            default:
-                lines(models.state.menuLines(total: total, locale: interfaceLocale))
             }
-            if let title = models.state.buttonTitle(total: total, locale: interfaceLocale) {
+            if let progress = summary.progress {
+                ProgressView(value: progress.fraction)
+                    .frame(maxWidth: 360)
+            }
+            ForEach(summary.lines, id: \.self) { line in
+                // Already in the window's language, so shown as it is.
+                Text(verbatim: line)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let title = summary.button {
                 Button(title) {
-                    if case .downloading = models.state {
-                        models.cancel()
+                    if summary.cancels {
+                        setup.cancel()
                     } else {
-                        models.download()
+                        setup.start()
                     }
                 }
             }
         }
     }
+}
 
-    private func lines(_ lines: [String]) -> some View {
-        ForEach(lines, id: \.self) { line in
-            // Already in the window's language, so shown as it is.
-            Text(verbatim: line)
+/// What cleanup does, with an example, its cost, and its switch. Before the download, so
+/// the download includes the cleanup model when the switch is on.
+private struct CleanupStepDetail: View {
+    let setup: SetupDownload
+
+    var body: some View {
+        let size = ModelInstaller.State.size(setup.cleanup.models.manifest.totalBytes)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Orra can also tidy up what you said with a second model on this Mac. It removes fillers and applies the corrections you make while speaking.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+                GridRow {
+                    Text("Before")
+                        .foregroundStyle(.secondary)
+                    Text("Let’s meet at three, no wait, four.")
+                }
+                GridRow {
+                    Text("After")
+                        .foregroundStyle(.secondary)
+                    Text("Let’s meet at four.")
+                }
+            }
+            .font(.callout)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Toggle("Clean up with a local model", isOn: Binding(
+                get: { setup.wantsCleanup },
+                set: { setup.setCleanup($0) }
+            ))
+            .toggleStyle(.switch)
+            Text("It needs a \(size) download and about 4 GB of memory while it runs.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !setup.hasEnoughMemory {
+                Text("Off at first, because this Mac has \(setup.memoryGigabytes) GB of memory.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("You can change this later in Settings, under General.")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -253,6 +358,8 @@ private struct ModelStepDetail: View {
 
 private struct MicrophoneStepDetail: View {
     let pushToTalk: PushToTalkController
+    /// Whether the picture of System Settings shows, while the guide talks about this step.
+    let showsDemo: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -270,6 +377,9 @@ private struct MicrophoneStepDetail: View {
                 Text("Microphone access is off. Turn on Orra under Microphone in System Settings.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if showsDemo {
+                    PermissionDemo(kind: .microphone)
+                }
                 Button("Open Microphone Settings…") {
                     pushToTalk.requestMicrophoneAccess()
                 }
@@ -331,6 +441,8 @@ private struct TalkKeyStepDetail: View {
 
 private struct AccessibilityStepDetail: View {
     let pushToTalk: PushToTalkController
+    /// Whether the picture of System Settings shows, while the guide talks about this step.
+    let showsDemo: Bool
     @Environment(\.interfaceLocale) private var interfaceLocale
 
     var body: some View {
@@ -342,6 +454,9 @@ private struct AccessibilityStepDetail: View {
                 Text("Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if showsDemo {
+                    PermissionDemo(kind: .accessibility)
+                }
                 Button("Grant Accessibility Access…") {
                     pushToTalk.promptForAccessibility()
                 }

@@ -79,7 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inputLevel: { [pushToTalk] in pushToTalk.inputLevel() },
         holdHint: { [pushToTalk] in pushToTalk.talkHint() }
     )
-    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
+    /// The welcome window's one download of the speech model and the cleanup model.
+    lazy var setup = SetupDownload(speech: models, cleanup: cleanup)
+    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup)
     lazy var clipboard = ClipboardWord(
         isDictating: { [pushToTalk] in pushToTalk.state != .idle },
         vocabulary: { [pushToTalk] in pushToTalk.vocabulary.map(\.text) }
@@ -172,8 +174,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updater.start()
         // The installer is what loads the speech model: at launch when the model is in
         // place, and again after a download or Try Again.
-        models.onInstalled = { [pushToTalk] _ in
+        // The cleanup model's download from the welcome window follows the speech model's.
+        models.onInstalled = { [pushToTalk, setup] _ in
             Task { await pushToTalk.loadModel() }
+            setup.speechInstalled()
         }
         // Cues can come from inside the keyboard tap's callback, which every key press on
         // the Mac waits for. The indicator and the sounds follow right after it returns,
@@ -210,14 +214,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
-        Task { [models, pushToTalk, welcome, cleanup, speech, voiceModels] in
+        Task { [models, pushToTalk, welcome, cleanup, setup, speech, voiceModels] in
             await models.prepare()
+            // Loads the cleanup model when cleanup or translation is on and the model is in
+            // place. Before the welcome window, so its cleanup step knows what is on disk.
+            await cleanup.start()
+            // Whether the welcome window proposes cleanup to a new user.
+            setup.lookAtLaunch()
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()
             }
-            // Loads the cleanup model when cleanup or translation is on and the model is in
-            // place.
-            await cleanup.start()
             // Local files only. Loads the voice model when Speak Translation is on.
             if speech.canSpeak {
                 await voiceModels.prepare()
