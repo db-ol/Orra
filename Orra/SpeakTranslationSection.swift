@@ -7,7 +7,8 @@ struct SpeakTranslationSection: View {
     let speech: TranslationSpeech
     let models: VoiceModels
     let translationIsOn: Bool
-    @State private var outputs: [AudioOutput] = []
+    /// Watches the devices only while Settings shows this section.
+    @State private var outputList = AudioOutputList.live()
     @State private var isChoosingVoice = false
 
     var body: some View {
@@ -76,7 +77,8 @@ struct SpeakTranslationSection: View {
             Text("Use a recording of your own voice only. Orra keeps the voice sample in memory until it quits and never saves it. The other side hears a synthesized voice, so let them know.")
                 .foregroundStyle(.secondary)
         }
-        .onAppear { outputs = AudioOutput.all() }
+        .onAppear { outputList.start() }
+        .onDisappear { outputList.stop() }
         .fileImporter(isPresented: $isChoosingVoice, allowedContentTypes: [.audio]) { result in
             guard case .success(let url) = result else { return }
             Task {
@@ -96,6 +98,10 @@ struct SpeakTranslationSection: View {
     }
 
     /// The first choice: Orra Microphone when it is installed, nothing otherwise.
+    private var outputs: [AudioOutput] {
+        outputList.outputs
+    }
+
     private var automaticLabel: String {
         if let device = AudioOutput.orraMicrophone(in: outputs) {
             return String(localized: "Automatic (\(device.name))")

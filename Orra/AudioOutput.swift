@@ -1,5 +1,6 @@
 import CoreAudio
 import Foundation
+import Observation
 
 /// An output device, read through Core Audio, that the spoken translation can play into.
 /// Reading needs no permission.
@@ -59,6 +60,88 @@ nonisolated struct AudioOutput: Equatable, Sendable {
         guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, raw) == noErr else { return 0 }
         let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
         return list.reduce(0) { $0 + Int($1.mNumberChannels) }
+    }
+}
+
+/// The output devices for the Speak into list in Settings. Read when Settings shows the
+/// list, and again each time Core Audio adds or removes a device while it does, so a
+/// device plugged in later shows up without reopening Settings. The reading and the
+/// watching are closures, so tests never depend on this Mac's devices.
+@Observable
+final class AudioOutputList {
+    private(set) var outputs: [AudioOutput] = []
+
+    @ObservationIgnored private let read: () -> [AudioOutput]
+    @ObservationIgnored private let watch: (@escaping @MainActor () -> Void) -> AnyObject?
+    /// Keeps the watch alive while the list is shown. Releasing it stops the watch.
+    @ObservationIgnored private var watching: AnyObject?
+
+    /// - Parameters:
+    ///   - read: The outputs connected now.
+    ///   - watch: Starts calling its argument on the main actor whenever the devices
+    ///     change, until the object it returns is released.
+    init(read: @escaping () -> [AudioOutput], watch: @escaping (@escaping @MainActor () -> Void) -> AnyObject?) {
+        self.read = read
+        self.watch = watch
+    }
+
+    static func live() -> AudioOutputList {
+        AudioOutputList(read: { AudioOutput.all() }, watch: { DeviceListWatch(onChange: $0) })
+    }
+
+    /// Whether the devices are being watched. Internal for tests.
+    var isWatching: Bool {
+        watching != nil
+    }
+
+    /// Reads the outputs and keeps them current until `stop`.
+    func start() {
+        refresh()
+        guard watching == nil else { return }
+        watching = watch { [weak self] in
+            self?.refresh()
+        }
+    }
+
+    func stop() {
+        watching = nil
+    }
+
+    func refresh() {
+        let now = read()
+        if now != outputs {
+            outputs = now
+        }
+    }
+}
+
+/// Calls back on the main queue whenever Core Audio's list of devices changes, until it is
+/// released. Registered and removed through the same C function references as DeviceWatch,
+/// so the removal matches the block that was added.
+nonisolated final class DeviceListWatch {
+    typealias Listener = @convention(block) (UInt32, UnsafePointer<AudioObjectPropertyAddress>) -> Void
+    private typealias Registration = @convention(c) (AudioObjectID, UnsafePointer<AudioObjectPropertyAddress>, DispatchQueue?, @escaping Listener) -> OSStatus
+    private static let addListener: Registration = AudioObjectAddPropertyListenerBlock
+    private static let removeListener: Registration = AudioObjectRemovePropertyListenerBlock
+
+    private let listener: Listener
+
+    /// Nil when Core Audio refuses the listener.
+    init?(onChange: @escaping @MainActor () -> Void) {
+        listener = { _, _ in
+            MainActor.assumeIsolated {
+                onChange()
+            }
+        }
+        var address = AudioInput.address(kAudioHardwarePropertyDevices)
+        guard Self.addListener(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener) == noErr else {
+            return nil
+        }
+    }
+
+    deinit {
+        var address = AudioInput.address(kAudioHardwarePropertyDevices)
+        _ = Self.removeListener(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener)
     }
 }
 

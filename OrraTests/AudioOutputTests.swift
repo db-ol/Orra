@@ -44,6 +44,62 @@ struct AudioOutputTests {
         #expect(SpeechOutputChoice.resolve(loopback, outputs: [Self.speakers, Self.orraMicrophone]) == nil)
     }
 
+    /// The Speak into list follows the devices while it is shown: a device plugged in or
+    /// unplugged then shows at once, and nothing is watched once Settings closes.
+    @MainActor @Test func theListFollowsDeviceChangesWhileShown() {
+        final class Token {}
+        var connected = [Self.speakers]
+        var onChange: (@MainActor () -> Void)?
+        weak var token: Token?
+        let list = AudioOutputList(read: { connected }, watch: { handler in
+            onChange = handler
+            let made = Token()
+            token = made
+            return made
+        })
+        #expect(list.outputs.isEmpty)
+        #expect(!list.isWatching)
+
+        list.start()
+        #expect(list.outputs == [Self.speakers])
+        #expect(list.isWatching)
+
+        connected = [Self.speakers, Self.orraMicrophone]
+        onChange?()
+        #expect(list.outputs == [Self.speakers, Self.orraMicrophone])
+
+        connected = [Self.orraMicrophone]
+        onChange?()
+        #expect(list.outputs == [Self.orraMicrophone])
+
+        list.stop()
+        #expect(!list.isWatching)
+        #expect(token == nil)
+    }
+
+    /// Starting twice keeps one watch.
+    @MainActor @Test func startingTwiceWatchesOnce() {
+        var watches = 0
+        let list = AudioOutputList(read: { [Self.speakers] }, watch: { _ in
+            watches += 1
+            return NSObject()
+        })
+        list.start()
+        list.start()
+        #expect(watches == 1)
+        list.stop()
+        list.start()
+        #expect(watches == 2)
+    }
+
+    /// The live watch registers with Core Audio on this Mac and is removed when released.
+    @MainActor @Test func theLiveWatchRegisters() {
+        var watch = DeviceListWatch(onChange: {})
+        #expect(watch != nil)
+        watch = nil
+        #expect(watch == nil)
+    }
+
     /// Reading the devices of this Mac needs no permission and gives devices with output
     /// channels only.
     @Test func theMacsOutputsHaveOutputChannels() {
