@@ -56,6 +56,18 @@ struct SpeechCheckTests {
         #expect(SpeechCheck.verdict(for: Self.tone(seconds: longest - 0.1), text: Self.english) == .good)
     }
 
+    /// A number may be read digit by digit, or as many words, so its digits give it room.
+    /// "Call 5551234567." takes about 4 s read out, past twice two words plus 2 s.
+    @Test func numbersMayRunLonger() {
+        let phone = "Call 5551234567."
+        #expect(abs(SpeechCheck.longestSeconds(for: phone) - ((2 + 9) * SpeechCheck.secondsPerWord * SpeechCheck.longestFactor + SpeechCheck.extraSeconds)) < 1e-9)
+        #expect(SpeechCheck.verdict(for: Self.tone(seconds: 4.2), text: phone) == .good)
+        #expect(SpeechCheck.verdict(for: Self.tone(seconds: 3.6), text: "电话是13812345678。") == .good)
+        // The expected length, and with it the cut check, still counts a number as a word.
+        #expect(SpeechCheck.expectedSeconds(for: phone) == 2 * SpeechCheck.secondsPerWord)
+        #expect(SpeechCheck.longestSeconds(for: Self.english) == SpeechCheck.expectedSeconds(for: Self.english) * SpeechCheck.longestFactor + SpeechCheck.extraSeconds)
+    }
+
     /// A sentence that stops after its first words, with or without silence after it, as
     /// CosyVoice3's "我们还在等。" for "我们还在等法务部门审核这份协议。" in 8 s of audio.
     @Test func aCutOffSentenceIsTooShort() {

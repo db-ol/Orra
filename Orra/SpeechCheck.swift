@@ -70,9 +70,24 @@ nonisolated enum SpeechCheck {
         return Double(characters) * secondsPerCharacter + Double(words) * secondsPerWord
     }
 
-    /// The longest a piece of `text` may run. A voice that streams is cut there.
+    /// The longest a piece of `text` may run. A voice that streams is cut there. A number
+    /// counts as one word in the expected length, but it may be read digit by digit, such
+    /// as a phone number, or take many words, such as "1234567". So here each digit after
+    /// a number's first counts as a word too.
     static func longestSeconds(for text: String) -> Double {
-        expectedSeconds(for: text) * longestFactor + extraSeconds
+        var digits = 0
+        var inNumber = false
+        for scalar in text.unicodeScalars {
+            if CharacterSet.decimalDigits.contains(scalar) {
+                if inNumber {
+                    digits += 1
+                }
+                inNumber = true
+            } else {
+                inNumber = false
+            }
+        }
+        return (expectedSeconds(for: text) + Double(digits) * secondsPerWord) * longestFactor + extraSeconds
     }
 
     /// How much of a piece has sound in it.
@@ -126,7 +141,7 @@ nonisolated enum SpeechCheck {
         let expected = expectedSeconds(for: text)
         // Nothing to judge the length by.
         guard expected > 0 else { return .good }
-        if measurement.seconds > expected * longestFactor + extraSeconds {
+        if measurement.seconds > longestSeconds(for: text) {
             return .tooLong
         }
         if measurement.soundSeconds < leastSpeechSeconds {
