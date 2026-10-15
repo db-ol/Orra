@@ -33,6 +33,22 @@ struct SpeechChunksTests {
         #expect(SpeechChunks.split("She said \"see you tomorrow.\" Then she left.") == ["She said \"see you tomorrow.\"", "Then she left."])
     }
 
+    /// The period of an abbreviation or a title does not end the sentence.
+    @Test func abbreviationsDoNotEndASentence() {
+        #expect(SpeechChunks.split("The meeting is at 3:30 p.m. on Tuesday. Bring the slides.") == [
+            "The meeting is at 3:30 p.m. on Tuesday.",
+            "Bring the slides.",
+        ])
+        #expect(SpeechChunks.split("Please ask Dr. Smith about the numbers, e.g. the budget for next year.") == [
+            "Please ask Dr. Smith about the numbers, e.g. the budget for next year.",
+        ])
+        #expect(SpeechChunks.split("He said \"Mr. Wang is here.\" Then he left the room.") == [
+            "He said \"Mr. Wang is here.\"",
+            "Then he left the room.",
+        ])
+        #expect(SpeechChunks.split("We shipped version 2.0. Then we waited.") == ["We shipped version 2.0.", "Then we waited."])
+    }
+
     /// A short sentence joins the next one, and a short end the one before it.
     @Test func shortPiecesJoinTheirNeighbours() {
         #expect(SpeechChunks.split("OK. We can start the meeting now.") == ["OK. We can start the meeting now."])

@@ -24,7 +24,8 @@ nonisolated enum SpeechChunks {
     }
 
     /// Ends of a sentence in Chinese and English text. A period counts only before white
-    /// space, a closing quote or the end, so 3.5 stays whole.
+    /// space, a closing quote or the end, so 3.5 stays whole, and not after an abbreviation
+    /// such as Dr. or e.g.
     private static let strongEnds: Set<Character> = ["。", "！", "？", "!", "?", "；", ";", "\n", "…"]
     private static let weakEnds: Set<Character> = ["，", ",", "、", "：", ":"]
     /// Closing quotes and brackets, which stay with the sentence they end.
@@ -41,7 +42,8 @@ nonisolated enum SpeechChunks {
             index += 1
             let next = index < characters.count ? characters[index] : nil
             let isEnd = strongEnds.contains(character)
-                || (character == "." && (next.map { $0.isWhitespace || closings.contains($0) } ?? true))
+                || (character == "." && (next.map { $0.isWhitespace || closings.contains($0) } ?? true)
+                    && !isAbbreviation(characters[..<(index - 1)]))
             guard isEnd else { continue }
             while index < characters.count, strongEnds.contains(characters[index]) || closings.contains(characters[index]) {
                 current.append(characters[index])
@@ -52,6 +54,22 @@ nonisolated enum SpeechChunks {
         }
         append(current, to: &result)
         return result
+    }
+
+    /// Titles that come before a name and end with a period.
+    private static let titles: Set<String> = ["Mr", "Mrs", "Ms", "Dr", "Prof", "St", "vs"]
+
+    /// Whether the word at the end of `text`, just before a period, is an abbreviation:
+    /// a title such as Dr, or letters with periods between them such as e.g, U.S or p.m.
+    private static func isAbbreviation(_ text: ArraySlice<Character>) -> Bool {
+        let start = text.lastIndex(where: { $0.isWhitespace || closings.contains($0) || "“‘(\"".contains($0) })
+            .map { $0 + 1 } ?? text.startIndex
+        let word = text[start...]
+        if titles.contains(String(word)) {
+            return true
+        }
+        let letters = word.split(separator: ".", omittingEmptySubsequences: false)
+        return letters.count > 1 && letters.allSatisfy { $0.count == 1 && $0.allSatisfy(\.isLetter) }
     }
 
     /// Cuts a sentence that is too long at its commas, then at spaces, then anywhere. A
