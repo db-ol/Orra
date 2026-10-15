@@ -70,5 +70,15 @@ struct SpeechChunksTests {
             "and the team now expects 4,000 by the meeting at 3:30 next Tuesday afternoon.",
         ])
         #expect(pieces.joined(separator: " ") == english)
+
+        // Chinese written with Latin commas is still cut at them.
+        let chinese = "团队现在预计到下周二下午开会的时候会达到四千左右,然后我们会讨论下一步的计划,包括新的设置页面和语音功能的发布时间,以及网站的更新和下一个版本的测试安排,还有用户反馈的整理工作。"
+        #expect(SpeechChunks.split(chinese) == [
+            "团队现在预计到下周二下午开会的时候会达到四千左右,",
+            "然后我们会讨论下一步的计划,",
+            "包括新的设置页面和语音功能的发布时间,",
+            "以及网站的更新和下一个版本的测试安排,",
+            "还有用户反馈的整理工作。",
+        ])
     }
 }
