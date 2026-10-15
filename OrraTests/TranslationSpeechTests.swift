@@ -157,6 +157,21 @@ struct TranslationSpeechTests {
         #expect(on.voiceForDictation.speaks())
     }
 
+    /// With Also Paste off, the translation is still pasted while it could not be spoken:
+    /// no voice model on this Mac, or no device to speak into.
+    @Test func aTranslationThatCannotBeSpokenIsStillPasted() {
+        let ready = makeSpeech()
+        ready.setAlsoPastes(false)
+        #expect(!ready.voiceForDictation.alsoPastes())
+        let noModel = makeSpeech(folders: nil)
+        noModel.setAlsoPastes(false)
+        #expect(noModel.voiceForDictation.alsoPastes())
+        let noDevice = makeSpeech(outputs: [Self.speakers])
+        noDevice.setAlsoPastes(false)
+        #expect(noDevice.voiceForDictation.alsoPastes())
+        #expect(makeSpeech().voiceForDictation.alsoPastes())
+    }
+
     /// Dictation first: nothing is synthesized while the user dictates.
     @Test func theVoiceWaitsWhileTheUserDictates() async throws {
         let speech = makeSpeech()

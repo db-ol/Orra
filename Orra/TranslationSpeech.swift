@@ -113,11 +113,16 @@ final class TranslationSpeech {
         self.dictationPoll = dictationPoll
     }
 
-    /// For PushToTalkController.
+    /// For PushToTalkController. A translation is pasted even with Also Paste off while
+    /// the voice model is not on this Mac or no device would take the voice, so it is not
+    /// lost to a translation that cannot be spoken.
     var voiceForDictation: TranslationVoice {
         TranslationVoice(
             speaks: { [weak self] in self?.speaks == true },
-            alsoPastes: { [weak self] in self?.alsoPastes ?? true },
+            alsoPastes: { [weak self] in
+                guard let self else { return true }
+                return self.alsoPastes || self.folders() == nil || self.currentDevice() == nil
+            },
             speak: { [weak self] text, language in self?.speak(text, in: language) }
         )
     }
