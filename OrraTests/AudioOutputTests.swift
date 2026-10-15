@@ -5,20 +5,32 @@ import Testing
 /// Where the spoken translation goes, and its saved settings.
 struct AudioOutputTests {
     static let speakers = AudioOutput(id: 1, uid: "BuiltInSpeakerDevice", name: "MacBook Pro Speakers")
-    static let orraVoice = AudioOutput(id: 2, uid: "OrraVoice_UID", name: "Orra Voice")
+    static let orraMicrophone = AudioOutput(id: 2, uid: "io.github.db-ol.Orra.Microphone", name: "Orra Microphone")
     static let loopback = AudioOutput(id: 3, uid: "loopback-uid", name: "Loopback Audio")
 
-    @Test func orraVoiceIsFoundByNameOrUID() {
-        #expect(Self.orraVoice.isOrraVoice)
-        #expect(AudioOutput(id: 4, uid: "io.github.db-ol.OrraVoice.device", name: "Something").isOrraVoice)
-        #expect(!Self.speakers.isOrraVoice)
-        #expect(!Self.loopback.isOrraVoice)
+    /// Orra Microphone is found by the UID and the name its driver publishes, the UID first.
+    @Test func orraMicrophoneIsFoundByUIDThenName() {
+        let renamed = AudioOutput(id: 4, uid: "io.github.db-ol.Orra.Microphone", name: "Renamed by the user")
+        let sameName = AudioOutput(id: 5, uid: "other-uid", name: "Orra Microphone")
+        #expect(AudioOutput.orraMicrophone(in: [Self.speakers, Self.orraMicrophone]) == Self.orraMicrophone)
+        #expect(AudioOutput.orraMicrophone(in: [sameName, renamed]) == renamed)
+        #expect(AudioOutput.orraMicrophone(in: [Self.speakers, sameName]) == sameName)
+        #expect(AudioOutput.orraMicrophone(in: [Self.speakers, Self.loopback]) == nil)
+        // The names of an earlier draft of the driver are not Orra's device.
+        #expect(AudioOutput.orraMicrophone(in: [AudioOutput(id: 6, uid: "OrraVoice_UID", name: "Orra Voice")]) == nil)
     }
 
-    /// Without a choice the voice goes to Orra Voice, and without Orra Voice nowhere: never
+    /// The app looks for exactly what the driver publishes, see kOrraDeviceUID and
+    /// kOrraDeviceName in Drivers/OrraMicrophone/OrraMicrophone.c.
+    @Test func theNamesMatchTheDriver() {
+        #expect(AudioOutput.orraMicrophoneUID == "io.github.db-ol.Orra.Microphone")
+        #expect(AudioOutput.orraMicrophoneName == "Orra Microphone")
+    }
+
+    /// Without a choice the voice goes to Orra Microphone, and without it nowhere: never
     /// to the speakers by surprise.
-    @Test func withoutAChoiceOnlyOrraVoiceIsUsed() {
-        #expect(SpeechOutputChoice.resolve(nil, outputs: [Self.speakers, Self.orraVoice, Self.loopback]) == Self.orraVoice)
+    @Test func withoutAChoiceOnlyOrraMicrophoneIsUsed() {
+        #expect(SpeechOutputChoice.resolve(nil, outputs: [Self.speakers, Self.orraMicrophone, Self.loopback]) == Self.orraMicrophone)
         #expect(SpeechOutputChoice.resolve(nil, outputs: [Self.speakers, Self.loopback]) == nil)
         #expect(SpeechOutputChoice.resolve(nil, outputs: []) == nil)
     }
@@ -28,8 +40,8 @@ struct AudioOutputTests {
     @Test func aChosenDeviceIsUsedOnlyWhileConnected() {
         let loopback = SpeechOutputChoice(uid: "loopback-uid", name: "Loopback Audio")
         let moved = AudioOutput(id: 9, uid: "loopback-uid", name: "Loopback Audio")
-        #expect(SpeechOutputChoice.resolve(loopback, outputs: [Self.speakers, Self.orraVoice, moved]) == moved)
-        #expect(SpeechOutputChoice.resolve(loopback, outputs: [Self.speakers, Self.orraVoice]) == nil)
+        #expect(SpeechOutputChoice.resolve(loopback, outputs: [Self.speakers, Self.orraMicrophone, moved]) == moved)
+        #expect(SpeechOutputChoice.resolve(loopback, outputs: [Self.speakers, Self.orraMicrophone]) == nil)
     }
 
     /// Reading the devices of this Mac needs no permission and gives devices with output

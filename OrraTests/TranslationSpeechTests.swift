@@ -72,12 +72,12 @@ struct TranslationSpeechTests {
     let synthesizer = FakeSynthesizer()
     let playback = FakePlayback()
     static let speakers = AudioOutput(id: 1, uid: "BuiltInSpeakerDevice", name: "MacBook Pro Speakers")
-    static let orraVoice = AudioOutput(id: 2, uid: "OrraVoice_UID", name: "Orra Voice")
+    static let orraMicrophone = AudioOutput(id: 2, uid: "io.github.db-ol.Orra.Microphone", name: "Orra Microphone")
     static let folders = VoiceModelFolders(model: URL(fileURLWithPath: "/tmp/model"), codec: URL(fileURLWithPath: "/tmp/codec"))
 
     private func makeSpeech(
         on: Bool = true,
-        outputs: [AudioOutput] = [speakers, orraVoice],
+        outputs: [AudioOutput] = [speakers, orraMicrophone],
         folders: VoiceModelFolders? = folders,
         output: SpeechOutputChoice? = nil,
         withModel: Bool = true
@@ -96,17 +96,17 @@ struct TranslationSpeechTests {
         synthesizer.spoken.withLock { $0 }
     }
 
-    /// Each sentence is synthesized and played in order into Orra Voice, and the device is
+    /// Each sentence is synthesized and played in order into Orra Microphone, and the device is
     /// let go once everything played. The model loads once.
-    @Test func sentencesAreSpokenInOrderIntoOrraVoice() async {
+    @Test func sentencesAreSpokenInOrderIntoOrraMicrophone() async {
         let speech = makeSpeech()
         speech.speak("We have a meeting next Tuesday. Could you send the numbers before then?", in: .english)
         speech.speak("好的，没问题。", in: .chinese)
         await speech.waitUntilDone()
         #expect(spoken == ["en We have a meeting next Tuesday.", "en Could you send the numbers before then?", "zh 好的，没问题。"])
         #expect(playback.calls == [
-            "start Orra Voice", "play 240", "play 480", "play 240", "play 480", "finish", "stop",
-            "start Orra Voice", "play 240", "play 480", "finish", "stop",
+            "start Orra Microphone", "play 240", "play 480", "play 240", "play 480", "finish", "stop",
+            "start Orra Microphone", "play 240", "play 480", "finish", "stop",
         ])
         #expect(synthesizer.loads.withLock { $0 } == 1)
         #expect(speech.state == .idle)
@@ -114,7 +114,7 @@ struct TranslationSpeechTests {
         #expect(speech.isLoaded)
     }
 
-    /// Without Orra Voice and without a choice, nothing plays: never the speakers by
+    /// Without Orra Microphone and without a choice, nothing plays: never the speakers by
     /// surprise. A chosen device that is gone is named.
     @Test func withoutADeviceNothingIsSpoken() async {
         let speech = makeSpeech(outputs: [Self.speakers])
@@ -242,7 +242,7 @@ struct TranslationSpeechTests {
         playback.refuses = true
         failing.speak("Hello there, everyone.", in: .english)
         await failing.waitUntilDone()
-        #expect(failing.problem == "Orra could not play into Orra Voice.")
+        #expect(failing.problem == "Orra could not play into Orra Microphone.")
         playback.refuses = false
 
         synthesizer.failsSpeaking.withLock { $0 = true }
@@ -261,7 +261,7 @@ struct TranslationSpeechTests {
         let speech = TranslationSpeech(
             synthesizer: synthesizer,
             playback: playback,
-            outputs: { [Self.orraVoice] },
+            outputs: { [Self.orraMicrophone] },
             folders: { Self.folders },
             save: { saved.append($0) },
             dictationPoll: .milliseconds(1)
@@ -275,9 +275,9 @@ struct TranslationSpeechTests {
         #expect(synthesizer.unloads.withLock { $0 } == 1)
         #expect(!speech.isLoaded)
         speech.setAlsoPastes(false)
-        speech.setOutput(SpeechOutputChoice(uid: "OrraVoice_UID", name: "Orra Voice"))
+        speech.setOutput(SpeechOutputChoice(uid: "io.github.db-ol.Orra.Microphone", name: "Orra Microphone"))
         #expect(saved.map(\.isOn) == [true, false, false, false])
-        #expect(saved.last == TranslationSpeech.Settings(isOn: false, alsoPastes: false, output: SpeechOutputChoice(uid: "OrraVoice_UID", name: "Orra Voice")))
+        #expect(saved.last == TranslationSpeech.Settings(isOn: false, alsoPastes: false, output: SpeechOutputChoice(uid: "io.github.db-ol.Orra.Microphone", name: "Orra Microphone")))
     }
 
     /// Without the model's files, turning it on does not report a problem yet.

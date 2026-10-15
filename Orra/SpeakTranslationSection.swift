@@ -24,7 +24,7 @@ struct SpeakTranslationSection: View {
             }
             // Stays usable while on, so it can be turned off after Translation was.
             .disabled(!speech.canSpeak || (!translationIsOn && !speech.isOn))
-            .help(Text("Choose Orra Voice as the microphone in the meeting app. Orra speaks one translation after another, and waits while you dictate."))
+            .help(Text("Choose Orra Microphone as the microphone in the meeting app. Orra speaks one translation after another, and waits while you dictate."))
             if !speech.canSpeak {
                 note(Text("This build of Orra has no voice model."))
             } else if !translationIsOn {
@@ -45,7 +45,7 @@ struct SpeakTranslationSection: View {
                 Label("Speak into", systemImage: "hifispeaker")
             }
             .disabled(!speech.isOn)
-            .help(Text("Orra never speaks into the speakers on its own. Without Orra Voice, pick a device here, such as a loopback device a meeting app can use as its microphone."))
+            .help(Text("Orra never speaks into the speakers on its own. Without Orra Microphone, pick a device here, such as a loopback device a meeting app can use as its microphone."))
             Toggle(isOn: Binding(
                 get: { speech.alsoPastes },
                 set: { speech.setAlsoPastes($0) }
@@ -95,11 +95,12 @@ struct SpeakTranslationSection: View {
         }
     }
 
-    /// The first choice: Orra Voice when it is installed, nothing otherwise.
+    /// The first choice: Orra Microphone when it is installed, nothing otherwise.
     private var automaticLabel: String {
-        outputs.contains(where: \.isOrraVoice)
-            ? String(localized: "Automatic (\(AudioOutput.orraVoiceName))")
-            : String(localized: "Automatic (Orra Voice is not installed)")
+        if let device = AudioOutput.orraMicrophone(in: outputs) {
+            return String(localized: "Automatic (\(device.name))")
+        }
+        return String(localized: "Automatic (Orra Microphone is not installed)")
     }
 
     private func choice(forUID uid: String) -> SpeechOutputChoice? {

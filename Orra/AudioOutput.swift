@@ -10,14 +10,18 @@ nonisolated struct AudioOutput: Equatable, Sendable {
     var uid: String
     var name: String
 
-    /// The name of Orra's own microphone device, an Audio Server plug in with an output
+    /// The UID of Orra's own microphone device, an Audio Server plug in with an output
     /// side Orra plays into and an input side a meeting app records from. Built and
-    /// installed separately, see docs/meeting-interpretation.md.
-    static let orraVoiceName = "Orra Voice"
+    /// installed separately, see Drivers/OrraMicrophone. Must stay the same as
+    /// kOrraDeviceUID in OrraMicrophone.c.
+    static let orraMicrophoneUID = "io.github.db-ol.Orra.Microphone"
+    /// The name the driver gives that device, kOrraDeviceName in OrraMicrophone.c.
+    static let orraMicrophoneName = "Orra Microphone"
 
-    /// Whether this is Orra's own microphone device, by its name or its UID.
-    var isOrraVoice: Bool {
-        name == Self.orraVoiceName || uid.localizedCaseInsensitiveContains("OrraVoice")
+    /// Orra's own microphone device among `outputs`: the one with its UID, else the one
+    /// with its name, nil when it is not installed.
+    static func orraMicrophone(in outputs: [AudioOutput]) -> AudioOutput? {
+        outputs.first { $0.uid == orraMicrophoneUID } ?? outputs.first { $0.name == orraMicrophoneName }
     }
 
     /// Every output Orra offers, in the order Core Audio lists them.
@@ -72,7 +76,7 @@ nonisolated struct SpeechOutputChoice: Equatable, Sendable {
         if let choice {
             return outputs.first { $0.uid == choice.uid }
         }
-        return outputs.first(where: \.isOrraVoice)
+        return AudioOutput.orraMicrophone(in: outputs)
     }
 }
 

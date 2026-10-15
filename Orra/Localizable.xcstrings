@@ -407,12 +407,12 @@
         }
       }
     },
-    "Automatic (Orra Voice is not installed)" : {
+    "Automatic (Orra Microphone is not installed)" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动（未安装 Orra Voice）"
+            "value" : "自动（未安装 Orra Microphone）"
           }
         }
       }
@@ -567,12 +567,12 @@
         }
       }
     },
-    "Choose Orra Voice as the microphone in the meeting app. Orra speaks one translation after another, and waits while you dictate." : {
+    "Choose Orra Microphone as the microphone in the meeting app. Orra speaks one translation after another, and waits while you dictate." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在会议应用中把 Orra Voice 选为麦克风。Orra 按先后顺序逐条说出译文，你听写时会先等待。"
+            "value" : "在会议应用中把 Orra Microphone 选为麦克风。Orra 按先后顺序逐条说出译文，你听写时会先等待。"
           }
         }
       }
@@ -1830,12 +1830,12 @@
         }
       }
     },
-    "Orra never speaks into the speakers on its own. Without Orra Voice, pick a device here, such as a loopback device a meeting app can use as its microphone." : {
+    "Orra never speaks into the speakers on its own. Without Orra Microphone, pick a device here, such as a loopback device a meeting app can use as its microphone." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 不会自行通过扬声器说话。没有 Orra Voice 时，请在这里选择一个设备，例如会议应用可以用作麦克风的环回设备。"
+            "value" : "Orra 不会自行通过扬声器说话。没有 Orra Microphone 时，请在这里选择一个设备，例如会议应用可以用作麦克风的环回设备。"
           }
         }
       }
