@@ -417,6 +417,16 @@
         }
       }
     },
+    "Captions appear here when someone speaks." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有人说话时，字幕会显示在这里。"
+          }
+        }
+      }
+    },
     "Change Talk Key…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1138,6 +1148,17 @@
         }
       }
     },
+    "Jump to Latest" : {
+      "comment" : "A button in the caption window after the user scrolled up",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳到最新"
+          }
+        }
+      }
+    },
     "Keys" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1322,6 +1343,17 @@
         }
       }
     },
+    "Meeting Captions" : {
+      "comment" : "The menu item and window that show live captions of the sound the Mac plays",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会议字幕"
+          }
+        }
+      }
+    },
     "Microphone" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1388,6 +1420,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风没有传来声音"
+          }
+        }
+      }
+    },
+    "No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没有收到 Mac 播放的声音。如果正在播放，请在“隐私与安全性”设置的“录屏与系统录音”中允许 Orra。"
           }
         }
       }
@@ -1554,6 +1596,17 @@
         }
       }
     },
+    "Original and translation" : {
+      "comment" : "A display mode of the caption window, each sentence with its translation",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原文和译文逐句对照"
+          }
+        }
+      }
+    },
     "Orra" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1590,6 +1643,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 无法将自己添加到登录项"
+          }
+        }
+      }
+    },
+    "Orra could not capture the sound the Mac plays. Turn Meeting Captions off and on again to try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法捕获 Mac 播放的声音。请关闭“会议字幕”后再打开，重试一次。"
           }
         }
       }
@@ -2252,6 +2315,17 @@
         }
       }
     },
+    "Show" : {
+      "comment" : "The label of the caption window's display mode picker",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示"
+          }
+        }
+      }
+    },
     "Show Orra in the Dock" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2530,6 +2604,16 @@
         }
       }
     },
+    "The local model is not on this Mac yet. Until it is, captions show what was said without translation." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有本地模型。下载好之前，字幕只显示原话，不翻译。"
+          }
+        }
+      }
+    },
     "The local model is not on this Mac yet. Until it is, Orra pastes the text without translation." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2660,6 +2744,16 @@
         }
       }
     },
+    "The speech model is not ready. Captions start once it is loaded." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音模型尚未就绪。载入后字幕就会开始。"
+          }
+        }
+      }
+    },
     "The speech model is not ready. The Orra menu shows what is missing." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2752,6 +2846,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此版本缺少麦克风用途说明"
+          }
+        }
+      }
+    },
+    "This build of Orra cannot capture the sound the Mac plays yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此版本的 Orra 还不能捕获 Mac 播放的声音。"
           }
         }
       }
@@ -2892,6 +2996,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "翻译键：%@"
+          }
+        }
+      }
+    },
+    "Translation only" : {
+      "comment" : "A display mode of the caption window",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只显示译文"
           }
         }
       }

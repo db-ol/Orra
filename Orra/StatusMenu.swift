@@ -4,6 +4,7 @@ import SwiftUI
 struct StatusMenu: View {
     let pushToTalk: PushToTalkController
     let models: ModelInstaller
+    let captions: MeetingCaptions
     let openAtLogin: OpenAtLogin
     let inputs: AudioInputList
     let clipboard: ClipboardWord
@@ -110,6 +111,11 @@ struct StatusMenu: View {
             ))
             .disabled(!pushToTalk.handsFreeApplies)
         }
+        // The sound the Mac plays, transcribed and translated in a floating window.
+        Toggle("Meeting Captions", isOn: Binding(
+            get: { captions.isOn },
+            set: { captions.setOn($0) }
+        ))
         Menu("Microphone") {
             MicrophoneToggles(inputs: inputs, chosen: pushToTalk.microphone, choose: pushToTalk.setMicrophone)
         }

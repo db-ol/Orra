@@ -45,7 +45,7 @@ trusted once in Xcode. docs/dependencies.md has the details.
 
 ## Localization
 - The interface is in English and Simplified Chinese. Orra/Localizable.xcstrings holds the
-  strings, and Orra/InfoPlist.xcstrings the microphone prompt.
+  strings, and Orra/InfoPlist.xcstrings the microphone and system audio prompts.
 - SwiftUI text literals are localized on their own. Text built in code uses
   `String(localized:)`, and SwiftUI shows text that is already localized with
   `Text(verbatim:)`.
