@@ -5,6 +5,17 @@ import Testing
 /// The word check of a piece the voice model made, on what the speech model heard. The
 /// pairs are from the voice benchmark of 2026-10-15 (public sentences and voices).
 struct SpeechWordCheckTests {
+    /// An English piece with Chinese, Japanese or Korean characters is compared by
+    /// character, so the speech model gets no English hint for it. A Chinese piece keeps
+    /// its hint.
+    @Test func anEnglishPieceWithCharactersGetsNoHint() {
+        #expect(SpeechWordCheck.hint(for: "We agree.", in: .english) == .english)
+        #expect(SpeechWordCheck.hint(for: "Ask 王伟 about it.", in: .english) == nil)
+        #expect(SpeechWordCheck.hint(for: "Meet at 東京 station.", in: .english) == nil)
+        #expect(SpeechWordCheck.hint(for: "我同意。", in: .chinese) == .chinese)
+        #expect(SpeechWordCheck.hint(for: "用 API 做。", in: .chinese) == .chinese)
+    }
+
     @Test func chineseIsComparedByCharacterAndEnglishByWord() {
         #expect(SpeechWordCheck.units(of: "我同意。") == ["我", "同", "意"])
         #expect(SpeechWordCheck.units(of: "Sorry, I was on mute.") == ["sorry", "i", "was", "on", "mute"])

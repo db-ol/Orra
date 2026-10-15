@@ -437,7 +437,7 @@ struct TranslationSpeechTests {
     @Test func theWordCheckListensInTheTargetLanguage() async {
         synthesizer.streamsPieces.withLock { $0 = false }
         synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
-        let languages = Mutex<[TranslationTarget]>([])
+        let languages = Mutex<[TranslationTarget?]>([])
         let speech = makeSpeech()
         speech.transcribeSpeech = { _, language in
             languages.withLock { $0.append(language) }
@@ -450,6 +450,26 @@ struct TranslationSpeechTests {
         #expect(spoken == ["zh 我同意。", "en We agree."])
         #expect(SpeechLanguage(.chinese) == .chinese)
         #expect(SpeechLanguage(.english) == .english)
+    }
+
+    /// An English piece that keeps Chinese characters, such as a name, is compared by
+    /// character, so the speech model gets no hint for it rather than an English one.
+    @Test func anEnglishPieceWithChineseCharactersIsHeardWithoutAHint() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
+        let languages = Mutex<[TranslationTarget?]>([])
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _, language in
+            languages.withLock { $0.append(language) }
+            return language == nil ? "Ask 王伟 about it." : "Ask Wang Wei about it."
+        }
+        speech.speak("Ask 王伟 about it.", in: .english)
+        await speech.waitUntilDone()
+        #expect(languages.withLock { $0 } == [nil])
+        #expect(spoken == ["en Ask 王伟 about it."])
+        let played = Self.reading("Ask 王伟 about it.").samples.count
+        #expect(playback.calls == ["start Orra Microphone", "play \(played)", "finish", "stop"])
+        #expect(speech.problem == nil)
     }
 
     /// Heard as other words twice: skipped, as a piece that fails the length check twice.

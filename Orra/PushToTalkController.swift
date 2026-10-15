@@ -1163,15 +1163,16 @@ final class PushToTalkController {
     /// word check of Speak Translation (SpeechWordCheck), with the speech model of
     /// dictation. The speech model is told to write `language`, the language the voice
     /// model was asked to speak, so short Chinese said in an English voice is less often
-    /// written as English words (see SpeechWordCheck). No vocabulary and no guard. Logs
+    /// written as English words (see SpeechWordCheck). With no `language` it gets no hint.
+    /// No vocabulary and no guard. Logs
     /// nothing, and the caller keeps the words in memory only. Throws while the speech model
     /// is not loaded.
-    func transcribeSpeech(_ audio: SpokenAudio, in language: TranslationTarget) async throws -> String {
+    func transcribeSpeech(_ audio: SpokenAudio, in language: TranslationTarget?) async throws -> String {
         guard modelState == .ready else { throw TranscriptionError.modelMissing }
         let recording = AudioRecording(samples: audio.samples, sampleRate: Double(audio.sampleRate))
         let (samples, _) = await Self.prepared(recording)
         guard !samples.isEmpty else { return "" }
-        return try await transcription.transcribe(samples, nil, SpeechLanguage(language))
+        return try await transcription.transcribe(samples, nil, language.map(SpeechLanguage.init))
     }
 
     /// Resampling and the silence check run off the main actor, because a long recording

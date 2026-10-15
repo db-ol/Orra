@@ -93,6 +93,16 @@ nonisolated enum SpeechWordCheck {
         return (editDistance(expected, units(of: heard, characters: characters)), expected.count)
     }
 
+    /// The language the speech model is told to write for a piece in `language`, nil for
+    /// no hint. An English piece that keeps Chinese, Japanese or Korean characters, such as
+    /// a name or a term, gets no hint: it is compared by character, and told to write
+    /// English, the speech model would likely write those characters in pinyin or English
+    /// words. Without a hint it listens as it did before the hint, which the limits were
+    /// measured with. A Chinese piece keeps its hint.
+    static func hint(for piece: String, in language: TranslationTarget) -> TranslationTarget? {
+        language == .english && usesCharacters(piece) ? nil : language
+    }
+
     /// Whether `text` is compared character by character: when it has any Chinese,
     /// Japanese or Korean character.
     static func usesCharacters(_ text: String) -> Bool {

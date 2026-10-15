@@ -72,8 +72,9 @@ final class TranslationSpeech {
     @ObservationIgnored var transcribeVoice: (VoiceSample) async throws -> String = { _ in throw TranscriptionError.modelMissing }
     /// Writes down what the voice model said in a sentence, in the language it was asked to
     /// speak, with the speech model of dictation, for the word check. AppDelegate sets it,
-    /// tests pass fakes. A sentence it throws for plays unchecked.
-    @ObservationIgnored var transcribeSpeech: (SpokenAudio, TranslationTarget) async throws -> String = { _, _ in throw TranscriptionError.modelMissing }
+    /// tests pass fakes. A sentence it throws for plays unchecked. The language is nil for
+    /// no hint, see SpeechWordCheck.hint(for:in:).
+    @ObservationIgnored var transcribeSpeech: (SpokenAudio, TranslationTarget?) async throws -> String = { _, _ in throw TranscriptionError.modelMissing }
     /// Called after the user picked another voice model, so its downloads take the place of
     /// the old one's. AppDelegate sets it.
     @ObservationIgnored var onEngineChange: (VoiceEngineKind) -> Void = { _ in }
@@ -548,7 +549,7 @@ final class TranslationSpeech {
     }
 
     /// The word check of a whole piece: the speech model writes down what `audio` says, in
-    /// `language`, and SpeechWordCheck compares it with `piece`. The speech model is
+    /// `language` unless SpeechWordCheck.hint(for:in:) leaves the hint out, and SpeechWordCheck compares it with `piece`. The speech model is
     /// dictation's, so this waits while the user dictates, as a second try does. A piece the
     /// speech model could not listen to passes. Nil when the user stopped. The errors are nil
     /// when the speech model could not listen.
@@ -558,7 +559,7 @@ final class TranslationSpeech {
         let started = ContinuousClock.now
         let heard: String
         do {
-            heard = try await transcribeSpeech(audio, language)
+            heard = try await transcribeSpeech(audio, SpeechWordCheck.hint(for: piece, in: language))
         } catch {
             tally.unchecked += 1
             return generation == self.generation ? (.good, nil) : nil
