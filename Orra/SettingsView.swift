@@ -75,7 +75,7 @@ struct SettingsTabLabel: View {
 
 /// A setting's name with what it does in smaller text right under it, as System Settings
 /// shows them, so the explanation sits next to its switch.
-private struct DescribedLabel: View {
+struct DescribedLabel: View {
     let title: LocalizedStringKey
     let detail: LocalizedStringKey
     let systemImage: String
@@ -108,6 +108,9 @@ struct SettingsView: View {
     let learning: CorrectionLearning
     let dockIcon: DockIcon
     let updater: AppUpdater
+    /// Speak Translation, nil where a page is shown without it.
+    var speech: TranslationSpeech? = nil
+    var voiceModels: VoiceModels? = nil
     @State private var tab = SettingsTab.general
     @State private var sheet: SettingsSheet?
     /// The sidebar always shows, like the one of System Settings. Without it a user who drags
@@ -160,7 +163,7 @@ struct SettingsView: View {
     func page(for tab: SettingsTab) -> some View {
         switch tab {
         case .general:
-            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback, openAtLogin: openAtLogin, cleanup: cleanup, learning: learning, dockIcon: dockIcon) { sheet = $0 }
+            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback, openAtLogin: openAtLogin, cleanup: cleanup, learning: learning, dockIcon: dockIcon, speech: speech, voiceModels: voiceModels) { sheet = $0 }
         case .vocabulary:
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .about:
@@ -191,6 +194,8 @@ private struct GeneralSettings: View {
     let cleanup: TextCleanup
     @Bindable var learning: CorrectionLearning
     @Bindable var dockIcon: DockIcon
+    let speech: TranslationSpeech?
+    let voiceModels: VoiceModels?
     let open: (SettingsSheet) -> Void
 
     var body: some View {
@@ -251,6 +256,9 @@ private struct GeneralSettings: View {
             } footer: {
                 Text("Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it.")
                     .foregroundStyle(.secondary)
+            }
+            if let speech, let voiceModels {
+                SpeakTranslationSection(speech: speech, models: voiceModels, translationIsOn: cleanup.translationIsOn)
             }
             Section {
                 Toggle(isOn: Binding(

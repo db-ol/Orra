@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         transcription: transcription,
         cleanup: cleanup.model.sharing(turns),
         translation: cleanup.translation,
+        voice: speech.voiceForDictation,
         insert: TextInserter.live().insert,
         talkKey: TalkKeyPreference.loadHotkey(),
         saveTalkKey: { TalkKeyPreference.saveHotkey($0) },
@@ -34,6 +35,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         saveRemovesFillerWords: { FillerPreference.save($0) },
         writesNumbersAsDigits: NumberPreference.load(),
         saveWritesNumbersAsDigits: { NumberPreference.save($0) }
+    )
+    /// The voice models this build links, see VoiceEngines.
+    let voiceEngines = VoiceEngines.live
+    /// The downloads of the voice model that speaks, for Speak Translation.
+    lazy var voiceModels = VoiceModels.live(
+        kind: VoiceEngineChoice.resolve(saved: SpeechPreference.voiceModel(), available: voiceEngines.available) ?? VoiceEngineChoice.preferred
+    )
+    /// Speak Translation. No voice model in a build without speech-swift's Qwen3TTS or
+    /// CosyVoiceTTS.
+    lazy var speech = TranslationSpeech(
+        engines: voiceEngines,
+        playback: SpeechPlayer(),
+        outputs: { AudioOutput.all() },
+        folders: { [voiceModels] in voiceModels.folders },
+        settings: .load(),
+        save: { $0.save() }
     )
     /// Meeting captions, off at every launch. Lazy, because they read the controller's
     /// speech model state.
@@ -173,6 +190,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.onPasteOriginal = { [learning] cleaned in learning.pastedOriginal(replacing: cleaned) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         learning.onSuggest = { [learnedNotice] suggestion in learnedNotice.suggest(suggestion) }
+        // The voice waits while the user dictates.
+        speech.isDictating = { [pushToTalk] in pushToTalk.state != .idle }
+        speech.transcribeVoice = { [pushToTalk] sample in try await pushToTalk.transcribeVoiceSample(sample) }
+        speech.transcribeSpeech = { [pushToTalk] audio, language in try await pushToTalk.transcribeSpeech(audio, in: language) }
+        voiceModels.onInstalled = { [speech] in speech.prepare() }
+        speech.onEngineChange = { [voiceModels] kind in
+            voiceModels.select(kind)
+            Task { await voiceModels.prepare() }
+        }
         captions.showWindow = { [captionWindow] in captionWindow.show() }
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
         // Before the tap is installed, so it watches the translation key from the start.
@@ -184,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
-        Task { [models, pushToTalk, welcome, cleanup] in
+        Task { [models, pushToTalk, welcome, cleanup, speech, voiceModels] in
             await models.prepare()
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()
@@ -192,6 +218,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Loads the cleanup model when cleanup or translation is on and the model is in
             // place.
             await cleanup.start()
+            // Local files only. Loads the voice model when Speak Translation is on.
+            if speech.canSpeak {
+                await voiceModels.prepare()
+            }
         }
     }
 }

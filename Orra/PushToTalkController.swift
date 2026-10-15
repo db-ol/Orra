@@ -165,6 +165,7 @@ final class PushToTalkController {
     @ObservationIgnored private let transcription: Transcription
     @ObservationIgnored private let cleanup: CleanupModel
     @ObservationIgnored private let translation: TranslationModel
+    @ObservationIgnored private let voice: TranslationVoice
     /// The direction of the dictation under way when the translation key started it, read
     /// at its start. Nil for a dictation of the talk key.
     @ObservationIgnored private var holdTranslation: TranslationDirection?
@@ -231,6 +232,7 @@ final class PushToTalkController {
     ///     Tests pass fakes.
     ///   - translation: The model's translations, for dictations of the translation key.
     ///     Tests pass fakes.
+    ///   - voice: Speaks a translation when Speak Translation is on. Tests pass fakes.
     ///   - insert: Puts text into the frontmost app. Tests pass fakes.
     ///   - frontmostApp: The process ID of the frontmost app. Tests pass fakes.
     ///   - lidIsClosed: Whether the MacBook's lid is closed, read when a recording holds
@@ -273,6 +275,7 @@ final class PushToTalkController {
         transcription: Transcription,
         cleanup: CleanupModel = .off,
         translation: TranslationModel = .off,
+        voice: TranslationVoice = .off,
         insert: @escaping @MainActor (String) async -> InsertionResult,
         frontmostApp: @escaping @MainActor () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier },
         lidIsClosed: @escaping @MainActor () -> Bool = { Lid.isClosed() },
@@ -307,6 +310,7 @@ final class PushToTalkController {
         self.transcription = transcription
         self.cleanup = cleanup
         self.translation = translation
+        self.voice = voice
         self.insert = insert
         self.frontmostApp = frontmostApp
         self.lidIsClosed = lidIsClosed
@@ -1017,7 +1021,9 @@ final class PushToTalkController {
             // with the model leaves exactly that text. A model that the press of the key
             // started to load is waited for, a bounded time.
             let ruled = text
-            let translated = await translate(text, translating)
+            let step = await translate(text, translating)
+            let translated = step?.result
+            let language = step?.target
             timings.lap(.translation)
             if let translated {
                 // In place of the cleanup step, since the translation prompt cleans up too.
@@ -1044,6 +1050,18 @@ final class PushToTalkController {
                 originalText = text == ruled ? nil : ruled
             }
             lastTranscript = text
+            // Speak Translation hands a translation to the voice, which speaks it after the
+            // translations before it, into the device the user chose. Only a translation:
+            // one that failed is not spoken in the wrong language.
+            if isTranslation, let language, voice.speaks() {
+                voice.speak(text, language)
+                if !voice.alsoPastes() {
+                    markVocabularyUsed(in: originalText ?? text)
+                    let total = timings.total
+                    logger.notice("Release to speak took \(total, privacy: .public) for \(recording.duration, privacy: .public) s of audio, the translation was not pasted")
+                    return
+                }
+            }
             // Paste only into the app that was in front when the key was released.
             if let target, let current = frontmostApp(), current != target {
                 notice = String(localized: "Another app came to the front, so the text was not pasted. Use Copy Last Dictation.")
@@ -1091,14 +1109,14 @@ final class PushToTalkController {
         }
     }
 
-    /// The translation of a dictation of the translation key, or nil when the translation
-    /// step did not run: not a dictation of the translation key, the model not ready, also
-    /// after a bounded wait for a load the press of the key started, the text too long, or
-    /// nothing in it to translate, such as digits only. The step's result
-    /// holds the text without translation whenever the translation cannot be used. Every
-    /// case that pastes the text untranslated, other than one with nothing to translate or
-    /// already in the target language, leaves a notice that says so.
-    private func translate(_ text: String, _ direction: TranslationDirection?) async -> TranslationStep.Result? {
+    /// The translation of a dictation of the translation key and its target language, or
+    /// nil when the translation step did not run: not a dictation of the translation key,
+    /// the model not ready, also after a bounded wait for a load the press of the key
+    /// started, the text too long, or nothing in it to translate, such as digits only. The
+    /// step's result holds the text without translation whenever the translation cannot be
+    /// used. Every case that pastes the text untranslated, other than one with nothing to
+    /// translate or already in the target language, leaves a notice that says so.
+    private func translate(_ text: String, _ direction: TranslationDirection?) async -> (result: TranslationStep.Result, target: TranslationTarget)? {
         guard let direction else { return nil }
         guard await translation.waitUntilLoaded() else {
             notice = String(localized: "The local model is not ready, so the text was pasted without translation.")
@@ -1118,7 +1136,7 @@ final class PushToTalkController {
         case .unreadable, .heldBack, .timedOut, .failed:
             notice = String(localized: "This dictation was pasted without translation.")
         }
-        return result
+        return (result, target)
     }
 
     /// Off the main actor, since the first use reads the word lists, see OrdinaryWords.
@@ -1126,6 +1144,35 @@ final class PushToTalkController {
     nonisolated private static func replacingWords(in text: String, pairs: [Correction], vocabulary: [String]) async -> (String, [Replacement]) {
         let result = WordReplacement.apply(to: text, pairs: pairs, vocabulary: vocabulary, ordinary: .system)
         return (result.text, result.replacements)
+    }
+
+    /// Writes down what is said in a voice sample for Speak Translation, with the speech
+    /// model of dictation, which the voice model needs to imitate the voice. No vocabulary,
+    /// no cleanup and no paste. Logs nothing, the caller keeps the words in memory only.
+    /// Throws while the speech model is not loaded.
+    func transcribeVoiceSample(_ sample: VoiceSample) async throws -> String {
+        guard modelState == .ready else { throw TranscriptionError.modelMissing }
+        let recording = AudioRecording(samples: sample.samples, sampleRate: Double(sample.sampleRate))
+        let (samples, silent) = await Self.prepared(recording)
+        guard !samples.isEmpty, !silent else { return "" }
+        let raw = try await transcription.transcribe(samples, nil, nil)
+        return TranscriptGuard.clean(raw, audioSeconds: recording.duration)
+    }
+
+    /// Writes down what the voice model said in a sentence of a spoken translation, for the
+    /// word check of Speak Translation (SpeechWordCheck), with the speech model of
+    /// dictation. The speech model is told to write `language`, the language the voice
+    /// model was asked to speak, so short Chinese said in an English voice is less often
+    /// written as English words (see SpeechWordCheck). With no `language` it gets no hint.
+    /// No vocabulary and no guard. Logs
+    /// nothing, and the caller keeps the words in memory only. Throws while the speech model
+    /// is not loaded.
+    func transcribeSpeech(_ audio: SpokenAudio, in language: TranslationTarget?) async throws -> String {
+        guard modelState == .ready else { throw TranscriptionError.modelMissing }
+        let recording = AudioRecording(samples: audio.samples, sampleRate: Double(audio.sampleRate))
+        let (samples, _) = await Self.prepared(recording)
+        guard !samples.isEmpty else { return "" }
+        return try await transcription.transcribe(samples, nil, language.map(SpeechLanguage.init))
     }
 
     /// Resampling and the silence check run off the main actor, because a long recording

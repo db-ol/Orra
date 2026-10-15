@@ -497,4 +497,31 @@ struct ModelDownloadTests {
         #expect(!RangeReceiver.rangeIsUsable("100-7187/7188", offset: 100, size: 7_188))
         #expect(!RangeReceiver.rangeIsUsable(nil, offset: 100, size: 7_188))
     }
+
+    /// A model whose files sit in folders, as a compiled Core ML model's do, downloads
+    /// into the same folders and installs.
+    @Test func filesInFoldersInstall() async throws {
+        let temporary = TemporaryModelFolders()
+        defer { temporary.remove() }
+        let contents: [String: Data] = [
+            "config.json": Data("{}".utf8),
+            "Speaker.mlmodelc/coremldata.bin": Data(repeating: 7, count: 381),
+            "Speaker.mlmodelc/weights/weight.bin": Data(repeating: 9, count: 4_096),
+        ]
+        let manifest = ModelManifest(
+            id: "owner/Speaker",
+            huggingFaceRevision: TestModel.manifest.huggingFaceRevision,
+            modelScopeRevision: TestModel.manifest.modelScopeRevision,
+            files: contents.keys.sorted().map { ModelFile(name: $0, size: Int64(contents[$0]!.count), sha256: TestModel.hex(contents[$0]!)) }
+        )
+        let fetch = FileFetch { url, destination, _, _, _, _ in
+            let name = url.pathComponents.drop { $0 != "resolve" }.dropFirst(2).joined(separator: "/")
+            try contents[name]!.write(to: destination)
+        }
+        let environment = ModelDownload.Environment(fetch: fetch, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
+        let installed = try await ModelDownload.run(manifest, temporary.folders, sources: [.huggingFace], environment: environment) { _ in }
+        for (name, data) in contents {
+            #expect(try Data(contentsOf: installed.appendingPathComponent(name)) == data)
+        }
+    }
 }

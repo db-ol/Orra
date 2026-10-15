@@ -5,7 +5,7 @@ import SwiftUI
 
     var body: some Scene {
         MenuBarExtra {
-            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, captions: appDelegate.captions, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, clipboard: appDelegate.clipboard, updater: appDelegate.updater) {
+            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, captions: appDelegate.captions, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, clipboard: appDelegate.clipboard, updater: appDelegate.updater, speech: appDelegate.speech) {
                 appDelegate.welcome.show()
             } reportProblem: {
                 appDelegate.report.show()
@@ -17,7 +17,7 @@ import SwiftUI
         // A plain window rather than SwiftUI's Settings scene, whose window cannot be
         // resized. It opens only when asked for, never at launch.
         Window("Orra Settings", id: SettingsWindow.id) {
-            SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater)
+            SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater, speech: appDelegate.speech, voiceModels: appDelegate.voiceModels)
         }
         .windowResizability(.contentMinSize)
         .defaultSize(SettingsWindow.defaultSize)

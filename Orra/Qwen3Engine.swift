@@ -78,6 +78,14 @@ actor Qwen3Engine {
 nonisolated enum SpeechLanguage: String, Sendable {
     case chinese = "Chinese"
     case english = "English"
+
+    /// The language a translation into `target` is written in.
+    init(_ target: TranslationTarget) {
+        switch target {
+        case .chinese: self = .chinese
+        case .english: self = .english
+        }
+    }
 }
 
 extension Transcription {

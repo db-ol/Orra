@@ -9,6 +9,7 @@ struct StatusMenu: View {
     let inputs: AudioInputList
     let clipboard: ClipboardWord
     let updater: AppUpdater
+    let speech: TranslationSpeech
     let showWelcome: () -> Void
     let reportProblem: () -> Void
     @Environment(\.openWindow) private var openWindow
@@ -20,6 +21,14 @@ struct StatusMenu: View {
             Text(pushToTalk.talkHint())
             if pushToTalk.translationKeyIsOn {
                 Text(pushToTalk.translateHint())
+            }
+            if speech.state == .speaking {
+                Button("Stop Speaking") {
+                    speech.stop()
+                }
+            }
+            if speech.isOn, let problem = speech.problem {
+                Text(problem)
             }
             if let warning = MicrophoneLabels.lidWarning(
                 choice: pushToTalk.microphone,
@@ -110,6 +119,12 @@ struct StatusMenu: View {
                 set: { pushToTalk.setHandsFreeOn($0) }
             ))
             .disabled(!pushToTalk.handsFreeApplies)
+        }
+        if pushToTalk.translationKeyIsOn, speech.canSpeak {
+            Toggle("Speak Translation", isOn: Binding(
+                get: { speech.isOn },
+                set: { speech.setOn($0) }
+            ))
         }
         // The sound the Mac plays, transcribed and translated in a floating window.
         Toggle("Meeting Captions", isOn: Binding(

@@ -140,11 +140,11 @@ nonisolated struct AudioInput: Equatable, Sendable {
         return (composition?[kAudioAggregateDeviceIsPrivateKey] as? NSNumber)?.boolValue ?? false
     }
 
-    private static func address(_ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> AudioObjectPropertyAddress {
+    static func address(_ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> AudioObjectPropertyAddress {
         AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
     }
 
-    private static func deviceIDs() -> [AudioDeviceID] {
+    static func deviceIDs() -> [AudioDeviceID] {
         let system = AudioObjectID(kAudioObjectSystemObject)
         var address = address(kAudioHardwarePropertyDevices)
         var size: UInt32 = 0
@@ -156,7 +156,7 @@ nonisolated struct AudioInput: Equatable, Sendable {
         return status == noErr ? Array(ids.prefix(Int(size) / MemoryLayout<AudioDeviceID>.size)) : []
     }
 
-    private static func readUInt32(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> UInt32? {
+    static func readUInt32(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> UInt32? {
         var address = address(selector, scope: scope)
         var value: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
@@ -164,7 +164,7 @@ nonisolated struct AudioInput: Equatable, Sendable {
     }
 
     /// Core Audio hands over a retained CFString, which this releases.
-    private static func readString(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {
+    static func readString(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {
         var address = address(selector)
         var string: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
