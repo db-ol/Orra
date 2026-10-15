@@ -173,7 +173,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The voice waits while the user dictates.
         speech.isDictating = { [pushToTalk] in pushToTalk.state != .idle }
         speech.transcribeVoice = { [pushToTalk] sample in try await pushToTalk.transcribeVoiceSample(sample) }
-        speech.transcribeSpeech = { [pushToTalk] audio in try await pushToTalk.transcribeSpeech(audio) }
+        speech.transcribeSpeech = { [pushToTalk] audio, language in try await pushToTalk.transcribeSpeech(audio, in: language) }
         voiceModels.onInstalled = { [speech] in speech.prepare() }
         speech.onEngineChange = { [voiceModels] kind in
             voiceModels.select(kind)

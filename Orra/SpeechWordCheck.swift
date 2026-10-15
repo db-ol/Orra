@@ -26,6 +26,15 @@ import Foundation
 /// failed 3 of 323 tries of meeting sentences and 19 of 155 tries of short replies, most of
 /// them short Chinese said by an English voice. The speech model took 0.15 s per piece at
 /// the median and 0.26 s at most, against about 1.1 s to make the piece.
+///
+/// The speech model is told the language the voice model was asked to speak. Without it,
+/// short Chinese in an English voice was often written as English words. In an end to end
+/// run on 2026-10-15 (74 English to Chinese translations per voice model, every try heard
+/// both ways), the hint cut the wrong share of checked tries from 0.30 and 0.65 to 0.20 and
+/// 0.35 with Qwen3-TTS (two clip sets), and from 0.16 and 0.40 to 0.08 and 0.14 with
+/// CosyVoice3, at the same time per piece. Fewer tries failed (63 to 56 of 221), and
+/// translations that played nothing went from 9 to 8 and from 6 to 5. Chinese to English
+/// did not change.
 nonisolated enum SpeechWordCheck {
     /// A piece fails with more than this share of the units of its text wrong, when at
     /// least `leastWrongUnits` are wrong.

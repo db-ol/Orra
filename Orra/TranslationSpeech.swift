@@ -70,10 +70,10 @@ final class TranslationSpeech {
     /// voice model needs the words to imitate the voice. AppDelegate sets it, tests pass
     /// fakes.
     @ObservationIgnored var transcribeVoice: (VoiceSample) async throws -> String = { _ in throw TranscriptionError.modelMissing }
-    /// Writes down what the voice model said in a sentence, with the speech model of
-    /// dictation, for the word check. AppDelegate sets it, tests pass fakes. A sentence it
-    /// throws for plays unchecked.
-    @ObservationIgnored var transcribeSpeech: (SpokenAudio) async throws -> String = { _ in throw TranscriptionError.modelMissing }
+    /// Writes down what the voice model said in a sentence, in the language it was asked to
+    /// speak, with the speech model of dictation, for the word check. AppDelegate sets it,
+    /// tests pass fakes. A sentence it throws for plays unchecked.
+    @ObservationIgnored var transcribeSpeech: (SpokenAudio, TranslationTarget) async throws -> String = { _, _ in throw TranscriptionError.modelMissing }
     /// Called after the user picked another voice model, so its downloads take the place of
     /// the old one's. AppDelegate sets it.
     @ObservationIgnored var onEngineChange: (VoiceEngineKind) -> Void = { _ in }
@@ -508,7 +508,7 @@ final class TranslationSpeech {
             let whole = SpokenAudio(samples: parts.flatMap(\.samples), sampleRate: parts.first?.sampleRate ?? 24_000)
             var verdict = SpeechCheck.verdict(for: whole, text: piece)
             if verdict == .good, checksWords, !SpeechWordCheck.units(of: piece).isEmpty {
-                guard let words = await checkWords(of: whole, against: piece, generation: generation, tally: &tally) else { return .stopped }
+                guard let words = await checkWords(of: whole, against: piece, in: language, generation: generation, tally: &tally) else { return .stopped }
                 verdict = words
             }
             if verdict == .good {
@@ -523,17 +523,17 @@ final class TranslationSpeech {
         return .skipped(verdicts[0], verdicts[1])
     }
 
-    /// The word check of a whole piece: the speech model writes down what `audio` says,
-    /// and SpeechWordCheck compares it with `piece`. The speech model is dictation's, so this
-    /// waits while the user dictates, as a second try does. A piece the speech model could
-    /// not listen to passes. Nil when the user stopped.
-    private func checkWords(of audio: SpokenAudio, against piece: String, generation: Int, tally: inout PieceTally) async -> SpeechCheck.Verdict? {
+    /// The word check of a whole piece: the speech model writes down what `audio` says, in
+    /// `language`, and SpeechWordCheck compares it with `piece`. The speech model is
+    /// dictation's, so this waits while the user dictates, as a second try does. A piece the
+    /// speech model could not listen to passes. Nil when the user stopped.
+    private func checkWords(of audio: SpokenAudio, against piece: String, in language: TranslationTarget, generation: Int, tally: inout PieceTally) async -> SpeechCheck.Verdict? {
         await waitWhileDictating(generation)
         guard generation == self.generation else { return nil }
         let started = ContinuousClock.now
         let heard: String
         do {
-            heard = try await transcribeSpeech(audio)
+            heard = try await transcribeSpeech(audio, language)
         } catch {
             tally.unchecked += 1
             return generation == self.generation ? .good : nil

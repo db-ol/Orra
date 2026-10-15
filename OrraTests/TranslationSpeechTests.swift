@@ -419,7 +419,7 @@ struct TranslationSpeechTests {
         let heard = Mutex<[String]>(["Watony.", "我同意。"])
         let calls = Mutex(0)
         let speech = makeSpeech()
-        speech.transcribeSpeech = { _ in
+        speech.transcribeSpeech = { _, _ in
             calls.withLock { $0 += 1 }
             return heard.withLock { $0.removeFirst() }
         }
@@ -432,12 +432,32 @@ struct TranslationSpeechTests {
         #expect(speech.problem == nil)
     }
 
+    /// The speech model is told the language the voice model was asked to speak, so short
+    /// Chinese in an English voice is less often written as English words.
+    @Test func theWordCheckListensInTheTargetLanguage() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
+        let languages = Mutex<[TranslationTarget]>([])
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { _, language in
+            languages.withLock { $0.append(language) }
+            return language == .chinese ? "我同意。" : "We agree."
+        }
+        speech.speak("我同意。", in: .chinese)
+        speech.speak("We agree.", in: .english)
+        await speech.waitUntilDone()
+        #expect(languages.withLock { $0 } == [.chinese, .english])
+        #expect(spoken == ["zh 我同意。", "en We agree."])
+        #expect(SpeechLanguage(.chinese) == .chinese)
+        #expect(SpeechLanguage(.english) == .english)
+    }
+
     /// Heard as other words twice: skipped, as a piece that fails the length check twice.
     @Test func aPieceHeardAsOtherWordsTwiceIsSkipped() async {
         synthesizer.streamsPieces.withLock { $0 = false }
         synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
         let speech = makeSpeech()
-        speech.transcribeSpeech = { _ in "How the woman came here." }
+        speech.transcribeSpeech = { _, _ in "How the woman came here." }
         speech.speak("好的，我们开始吧。", in: .chinese)
         await speech.waitUntilDone()
         #expect(spoken.count == 2)
@@ -460,7 +480,7 @@ struct TranslationSpeechTests {
         let checked = Mutex<[(dictating: Bool, count: Int, rate: Int)]>([])
         let speech = makeSpeech()
         speech.isDictating = { dictating.withLock { $0 } }
-        speech.transcribeSpeech = { audio in
+        speech.transcribeSpeech = { audio, _ in
             checked.withLock { $0.append((dictating.withLock { $0 }, audio.samples.count, audio.sampleRate)) }
             return "We have a meeting next Tuesday."
         }
@@ -488,7 +508,7 @@ struct TranslationSpeechTests {
         }
         let calls = Mutex(0)
         let speech = makeSpeech()
-        speech.transcribeSpeech = { _ in
+        speech.transcribeSpeech = { _, _ in
             calls.withLock { $0 += 1 }
             return "Could you send the numbers before then?"
         }
@@ -507,7 +527,7 @@ struct TranslationSpeechTests {
         synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
         let calls = Mutex(0)
         let speech = makeSpeech()
-        speech.transcribeSpeech = { [speech] _ in
+        speech.transcribeSpeech = { [speech] _, _ in
             calls.withLock { $0 += 1 }
             speech.stop()
             return "We have a meeting next Tuesday."
@@ -518,7 +538,7 @@ struct TranslationSpeechTests {
         #expect(calls.withLock { $0 } == 1)
         #expect(playback.calls == ["start Orra Microphone", "stop"])
 
-        speech.transcribeSpeech = { _ in
+        speech.transcribeSpeech = { _, _ in
             calls.withLock { $0 += 1 }
             return "Thanks a lot, everyone."
         }
@@ -534,7 +554,7 @@ struct TranslationSpeechTests {
         synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
         let calls = Mutex(0)
         let speech = makeSpeech()
-        speech.transcribeSpeech = { _ in
+        speech.transcribeSpeech = { _, _ in
             calls.withLock { $0 += 1 }
             return "Watony."
         }
@@ -545,7 +565,7 @@ struct TranslationSpeechTests {
         #expect(spoken.count == 1)
 
         speech.setChecksWords(true)
-        speech.transcribeSpeech = { _ in
+        speech.transcribeSpeech = { _, _ in
             calls.withLock { $0 += 1 }
             throw TranscriptionError.modelMissing
         }
@@ -562,7 +582,7 @@ struct TranslationSpeechTests {
     @Test func aStreamedPieceIsNotCheckedForWords() async {
         let calls = Mutex(0)
         let speech = makeSpeech()
-        speech.transcribeSpeech = { _ in
+        speech.transcribeSpeech = { _, _ in
             calls.withLock { $0 += 1 }
             return "Watony."
         }
