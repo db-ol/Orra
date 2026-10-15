@@ -1,7 +1,6 @@
 # Orra Microphone
 
-A virtual microphone for phase 3 of meeting interpretation (docs/meeting-interpretation.md
-on the meeting-interpretation-plan branch). Orra plays the translated speech to the output
+A virtual microphone for speaking translations into a call. Orra plays the translated speech to the output
 side of this device, and a call app such as Google Meet picks the device as its microphone.
 The other people in the call then hear the translation.
 
