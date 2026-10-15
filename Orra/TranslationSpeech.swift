@@ -43,10 +43,17 @@ final class TranslationSpeech {
     private(set) var isListeningToVoice = false
     /// The model is loaded.
     private(set) var isLoaded = false
+    /// The voice model that speaks, nil in a build without one.
+    private(set) var engine: VoiceEngineKind?
 
-    /// True when this build has a voice model, see VoiceEngine.
+    /// True when this build has a voice model, see VoiceEngines.
     var canSpeak: Bool {
-        synthesizer != nil
+        engine != nil && synthesizer != nil
+    }
+
+    /// The voice models Settings offers, empty unless the build has more than one.
+    var engineChoices: [VoiceEngineKind] {
+        engines.offersChoice ? engines.available : []
     }
 
     /// Whether PushToTalkController hands translations over.
@@ -60,9 +67,19 @@ final class TranslationSpeech {
     /// voice model needs the words to imitate the voice. AppDelegate sets it, tests pass
     /// fakes.
     @ObservationIgnored var transcribeVoice: (VoiceSample) async throws -> String = { _ in throw TranscriptionError.modelMissing }
+    /// Called after the user picked another voice model, so its downloads take the place of
+    /// the old one's. AppDelegate sets it.
+    @ObservationIgnored var onEngineChange: (VoiceEngineKind) -> Void = { _ in }
 
     @ObservationIgnored private var voice: VoiceSample?
-    @ObservationIgnored private let synthesizer: (any SpeechSynthesizer)?
+    @ObservationIgnored private let engines: VoiceEngines
+    /// The model the user picked, nil until they pick one, so a build that has both
+    /// starts with VoiceEngineChoice.preferred.
+    @ObservationIgnored private var chosenEngine: VoiceEngineKind?
+    @ObservationIgnored private var synthesizer: (any SpeechSynthesizer)?
+    /// Counts the changes of voice model, so a load of the old model that ends after a
+    /// change does not count as a load of the new one.
+    @ObservationIgnored private var synthesizerRevision = 0
     @ObservationIgnored private let playback: any SpeechPlayback
     @ObservationIgnored private let outputs: () -> [AudioOutput]
     @ObservationIgnored private let folders: () -> VoiceModelFolders?
@@ -82,20 +99,28 @@ final class TranslationSpeech {
         var isOn = false
         var alsoPastes = true
         var output: SpeechOutputChoice?
+        /// The voice model the user picked, nil until they pick one.
+        var voiceModel: VoiceEngineKind?
 
         static func load(from defaults: UserDefaults = .standard) -> Settings {
-            Settings(isOn: SpeechPreference.isOn(in: defaults), alsoPastes: SpeechPreference.alsoPastes(in: defaults), output: SpeechPreference.output(in: defaults))
+            Settings(
+                isOn: SpeechPreference.isOn(in: defaults),
+                alsoPastes: SpeechPreference.alsoPastes(in: defaults),
+                output: SpeechPreference.output(in: defaults),
+                voiceModel: SpeechPreference.voiceModel(in: defaults)
+            )
         }
 
         func save(to defaults: UserDefaults = .standard) {
             SpeechPreference.saveIsOn(isOn, to: defaults)
             SpeechPreference.saveAlsoPastes(alsoPastes, to: defaults)
             SpeechPreference.saveOutput(output, to: defaults)
+            SpeechPreference.saveVoiceModel(voiceModel, to: defaults)
         }
     }
 
     /// - Parameters:
-    ///   - synthesizer: The voice model, nil in a build without one.
+    ///   - engines: The voice models of this build. Tests pass fakes.
     ///   - playback: Plays into the output. Tests pass fakes.
     ///   - outputs: The output devices connected now. Tests pass fakes.
     ///   - folders: The voice model's folders once both are installed, nil before.
@@ -103,7 +128,7 @@ final class TranslationSpeech {
     ///   - save: Saves the settings after they change.
     ///   - dictationPoll: How often a waiting piece checks whether the dictation ended.
     init(
-        synthesizer: (any SpeechSynthesizer)?,
+        engines: VoiceEngines,
         playback: any SpeechPlayback,
         outputs: @escaping () -> [AudioOutput],
         folders: @escaping () -> VoiceModelFolders?,
@@ -111,7 +136,11 @@ final class TranslationSpeech {
         save: @escaping (Settings) -> Void = { _ in },
         dictationPoll: Duration = .milliseconds(50)
     ) {
-        self.synthesizer = synthesizer
+        self.engines = engines
+        let engine = VoiceEngineChoice.resolve(saved: settings.voiceModel, available: engines.available)
+        self.engine = engine
+        self.chosenEngine = settings.voiceModel
+        self.synthesizer = engine.flatMap(engines.make)
         self.playback = playback
         self.outputs = outputs
         self.folders = folders
@@ -137,7 +166,7 @@ final class TranslationSpeech {
     }
 
     private var settings: Settings {
-        Settings(isOn: isOn, alsoPastes: alsoPastes, output: output)
+        Settings(isOn: isOn, alsoPastes: alsoPastes, output: output, voiceModel: chosenEngine)
     }
 
     func setOn(_ on: Bool) {
@@ -164,6 +193,27 @@ final class TranslationSpeech {
         output = choice
         problem = nil
         save(settings)
+    }
+
+    /// Voice model in Settings. Stops what is playing, unloads the old model after the piece
+    /// it may still be making, and keeps the voice sample and what is said in it, which the
+    /// new model reads too. The new model loads once its downloads are in place.
+    func setEngine(_ kind: VoiceEngineKind) {
+        guard kind != engine, engines.available.contains(kind) else { return }
+        stop()
+        let old = synthesizer
+        enqueue {
+            await old?.unload()
+        }
+        synthesizerRevision += 1
+        isLoaded = false
+        engine = kind
+        chosenEngine = kind
+        synthesizer = engines.make(kind)
+        problem = nil
+        save(settings)
+        onEngineChange(kind)
+        prepare()
     }
 
     /// The device a translation would go to now, for Settings.
@@ -341,10 +391,13 @@ final class TranslationSpeech {
             }
         }
         let started = ContinuousClock.now
+        let revision = synthesizerRevision
         do {
             try await synthesizer.load(model: folders.model, codec: folders.codec)
+            // The user picked another model while this one loaded. Its unload is queued.
+            guard revision == synthesizerRevision else { return false }
             isLoaded = true
-            logger.notice("The voice model loaded in \(started.duration(to: .now), privacy: .public)")
+            logger.notice("The voice model \(self.engine?.name ?? "none", privacy: .public) loaded in \(started.duration(to: .now), privacy: .public)")
             return true
         } catch {
             problem = String(localized: "The voice model could not be loaded.")

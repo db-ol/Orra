@@ -32,11 +32,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         writesNumbersAsDigits: NumberPreference.load(),
         saveWritesNumbersAsDigits: { NumberPreference.save($0) }
     )
-    /// The voice model's downloads, for Speak Translation.
-    let voiceModels = VoiceModels.live()
-    /// Speak Translation. No voice model in a build without speech-swift's Qwen3TTS.
+    /// The voice models this build links, see VoiceEngines.
+    let voiceEngines = VoiceEngines.live
+    /// The downloads of the voice model that speaks, for Speak Translation.
+    lazy var voiceModels = VoiceModels.live(
+        kind: VoiceEngineChoice.resolve(saved: SpeechPreference.voiceModel(), available: voiceEngines.available) ?? VoiceEngineChoice.preferred
+    )
+    /// Speak Translation. No voice model in a build without speech-swift's Qwen3TTS or
+    /// CosyVoiceTTS.
     lazy var speech = TranslationSpeech(
-        synthesizer: VoiceEngine.live(),
+        engines: voiceEngines,
         playback: SpeechPlayer(),
         outputs: { AudioOutput.all() },
         folders: { [voiceModels] in voiceModels.folders },
@@ -168,8 +173,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The voice waits while the user dictates.
         speech.isDictating = { [pushToTalk] in pushToTalk.state != .idle }
         speech.transcribeVoice = { [pushToTalk] sample in try await pushToTalk.transcribeVoiceSample(sample) }
-        voiceModels.model.onInstalled = { [speech] _ in speech.prepare() }
-        voiceModels.codec.onInstalled = { [speech] _ in speech.prepare() }
+        voiceModels.onInstalled = { [speech] in speech.prepare() }
+        speech.onEngineChange = { [voiceModels] kind in
+            voiceModels.select(kind)
+            Task { await voiceModels.prepare() }
+        }
         // Before the tap is installed, so it watches the translation key from the start.
         followTranslation()
         pushToTalk.start()

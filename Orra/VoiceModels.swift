@@ -1,33 +1,65 @@
 import Foundation
 import Observation
 
-/// The two folders the voice model loads from.
+/// The two folders the voice model loads from: the model, and Qwen3-TTS's speech
+/// tokenizer or CosyVoice3's speaker encoder.
 nonisolated struct VoiceModelFolders: Equatable, Sendable {
     var model: URL
     var codec: URL
 }
 
-/// The voice model's two downloads, the model and its speech tokenizer, as one thing for
-/// Settings. Each goes through a ModelInstaller of its own, pinned and checked like the
-/// speech and cleanup models. Nothing goes online until the user starts the download.
+/// The voice model's two downloads, the model and its speech tokenizer or speaker encoder,
+/// as one thing for Settings. Each goes through a ModelInstaller of its own, pinned and
+/// checked like the speech and cleanup models. Nothing goes online until the user starts
+/// the download. Holds the downloads of the voice model Settings shows, see `select`.
 @Observable
 final class VoiceModels {
-    let model: ModelInstaller
-    let codec: ModelInstaller
+    private(set) var kind: VoiceEngineKind
+    private(set) var model: ModelInstaller
+    private(set) var codec: ModelInstaller
+    /// Called each time one of the two is in place, so the voice model loads once both
+    /// are. AppDelegate sets it.
+    @ObservationIgnored var onInstalled: () -> Void = {}
+    @ObservationIgnored private let makeInstaller: (ModelManifest) -> ModelInstaller
 
-    /// Only Hugging Face and hf-mirror.com carry both repositories at these commits.
+    /// Only Hugging Face and hf-mirror.com carry the repositories at these commits.
     nonisolated static let sources: [ModelSource] = [.huggingFace, .hfMirror]
 
-    init(model: ModelInstaller, codec: ModelInstaller) {
-        self.model = model
-        self.codec = codec
+    /// - Parameters:
+    ///   - kind: The voice model whose downloads these are.
+    ///   - makeInstaller: Makes the installer of one download. Tests pass stand ins.
+    init(kind: VoiceEngineKind, makeInstaller: @escaping (ModelManifest) -> ModelInstaller) {
+        self.kind = kind
+        self.makeInstaller = makeInstaller
+        let manifests = kind.manifests
+        model = makeInstaller(manifests.model)
+        codec = makeInstaller(manifests.codec)
+        watchInstalls()
     }
 
-    static func live() -> VoiceModels {
-        VoiceModels(
-            model: ModelInstaller(manifest: .qwen3Voice, folders: .liveCleanup, sources: sources, environment: .live),
-            codec: ModelInstaller(manifest: .qwen3VoiceCodec, folders: .liveCleanup, sources: sources, environment: .live)
-        )
+    static func live(kind: VoiceEngineKind) -> VoiceModels {
+        VoiceModels(kind: kind) { manifest in
+            ModelInstaller(manifest: manifest, folders: .liveCleanup, sources: sources, environment: .live)
+        }
+    }
+
+    /// Switches to the downloads of another voice model, at once, so `folders` never
+    /// gives the old model's folders to the new model. A download of the old one stops,
+    /// and its bytes stay on disk for a later Download. Both models' folders stay, so
+    /// switching back needs no download. Call `prepare` next.
+    func select(_ kind: VoiceEngineKind) {
+        guard kind != self.kind else { return }
+        cancel()
+        self.kind = kind
+        let manifests = kind.manifests
+        model = makeInstaller(manifests.model)
+        codec = makeInstaller(manifests.codec)
+        watchInstalls()
+    }
+
+    private func watchInstalls() {
+        model.onInstalled = { [weak self] _ in self?.onInstalled() }
+        codec.onInstalled = { [weak self] _ in self?.onInstalled() }
     }
 
     /// Both folders once both are installed.

@@ -86,7 +86,7 @@ struct TranslationSpeechTests {
         transcribeVoice: @escaping (VoiceSample) async throws -> String = { _ in "We met at noon." }
     ) -> TranslationSpeech {
         let speech = TranslationSpeech(
-            synthesizer: withModel ? synthesizer : nil,
+            engines: withModel ? .only(synthesizer) : .none,
             playback: playback,
             outputs: { outputs },
             folders: { folders },
@@ -319,7 +319,7 @@ struct TranslationSpeechTests {
     @Test func theSwitchLoadsAndUnloadsAndIsSaved() async {
         var saved: [TranslationSpeech.Settings] = []
         let speech = TranslationSpeech(
-            synthesizer: synthesizer,
+            engines: .only(synthesizer),
             playback: playback,
             outputs: { [Self.orraMicrophone] },
             folders: { Self.folders },
@@ -361,8 +361,8 @@ struct TranslationSpeechTests {
         TranslationSpeech.Settings(isOn: true, alsoPastes: true, output: nil).save(to: defaults)
         #expect(TranslationSpeech.Settings.load(from: defaults).output == nil)
         #expect(defaults.string(forKey: SpeechPreference.outputNameKey) == nil)
-        // Only these four keys, so no sample or text can be in the settings.
+        // Only these five keys, so no sample or text can be in the settings.
         let keys = Set(defaults.persistentDomain(forName: name)?.keys.map { $0 } ?? [])
-        #expect(keys.isSubset(of: [SpeechPreference.isOnKey, SpeechPreference.alsoPastesKey, SpeechPreference.outputUIDKey, SpeechPreference.outputNameKey]))
+        #expect(keys.isSubset(of: [SpeechPreference.isOnKey, SpeechPreference.alsoPastesKey, SpeechPreference.outputUIDKey, SpeechPreference.outputNameKey, SpeechPreference.voiceModelKey]))
     }
 }

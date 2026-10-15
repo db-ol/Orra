@@ -169,6 +169,7 @@ nonisolated enum SpeechPreference {
     static let alsoPastesKey = "speakTranslationAlsoPastes"
     static let outputUIDKey = "speakTranslationOutputUID"
     static let outputNameKey = "speakTranslationOutputName"
+    static let voiceModelKey = "speakTranslationVoiceModel"
 
     static func isOn(in defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: isOnKey)
@@ -199,6 +200,20 @@ nonisolated enum SpeechPreference {
         } else {
             defaults.removeObject(forKey: outputUIDKey)
             defaults.removeObject(forKey: outputNameKey)
+        }
+    }
+
+    /// The voice model the user picked, nil until they pick one or when the value is not
+    /// one Orra knows.
+    static func voiceModel(in defaults: UserDefaults = .standard) -> VoiceEngineKind? {
+        defaults.string(forKey: voiceModelKey).flatMap(VoiceEngineKind.init(rawValue:))
+    }
+
+    static func saveVoiceModel(_ kind: VoiceEngineKind?, to defaults: UserDefaults = .standard) {
+        if let kind {
+            defaults.set(kind.rawValue, forKey: voiceModelKey)
+        } else {
+            defaults.removeObject(forKey: voiceModelKey)
         }
     }
 }

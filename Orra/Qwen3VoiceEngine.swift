@@ -35,18 +35,6 @@ nonisolated extension ModelManifest {
     )
 }
 
-/// The voice model of this build, or nil when the build does not link speech-swift's
-/// Qwen3TTS product. Without it Settings says that this build cannot speak.
-enum VoiceEngine {
-    static func live() -> (any SpeechSynthesizer)? {
-        #if canImport(Qwen3TTS)
-        Qwen3VoiceEngine()
-        #else
-        nil
-        #endif
-    }
-}
-
 #if canImport(Qwen3TTS)
 import AudioCommon
 import Qwen3TTS
