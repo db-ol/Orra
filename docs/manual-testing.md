@@ -1721,6 +1721,82 @@ modifiers with a regular key, such as ⇧ ⌘ D:
   again, then running Orra 0.3.1, keeps that single key.
 - [ ] The problem report names a combination by its symbols and key code only.
 
+Meeting captions, added on 2026-10-14, not verified yet. Meeting Captions in the menu
+captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
+pauses, transcribes each with the speech model and translates it with the local model,
+in a floating window. The microphone is never used for it. Before these checks, the
+maintainer adds NSAudioCaptureUsageDescription to Orra/Info.plist and its Chinese text to
+InfoPlist.xcstrings. Without the key the window says "This build of Orra cannot capture
+the sound the Mac plays yet." and nothing is captured. Watch the log with
+`log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`:
+it shows starts, stops, counts and failures, never text.
+
+- [ ] Without the Info.plist key: turning Meeting Captions on opens the window with the
+  note above, no permission prompt comes, and turning it off closes the window.
+- [ ] With the key, the first time Meeting Captions is turned on, macOS asks whether Orra
+  may record system audio, with the text from Info.plist, in English and in Chinese.
+  Allowing it starts captions. Orra then shows under Privacy & Security, Screen & System
+  Audio Recording, in the System Audio Recording Only list.
+- [ ] Refusing the prompt, or turning Orra off in that list: while something plays, the
+  window shows "No sound from the Mac yet. If something is playing, allow Orra under
+  Screen & System Audio Recording in Privacy & Security settings." after about 8 s, and
+  the note goes away once sound comes in after the permission is given and captions are
+  turned off and on.
+- [ ] A Google Meet call in English, with another person or a second device speaking:
+  each sentence shows within about two seconds of its end, first as the original in
+  small grey type, then replaced by the Chinese translation.
+- [ ] The same call in Chinese: the translations are in English.
+- [ ] A YouTube video with continuous speech: sentences are cut at pauses, none is
+  longer than about 12 s, and music alone gives few or no captions.
+- [ ] Orra's own sounds, the start and stop sounds of a dictation, never show up as a
+  caption.
+- [ ] Dictation while captions run: the talk key and the translation key paste as
+  quickly as without captions. Sentences said during the dictation show after it, in
+  order. Hands free dictation works the same way.
+- [ ] The display mode: "Translation only" shows the translation large, and the
+  original small only until its translation comes. "Original and translation" shows
+  each original small with its translation large below it. The choice stays after
+  turning captions off and on and after a restart.
+- [ ] Scrolling: new sentences push older ones up. Scrolling up stops the window from
+  moving, and "Jump to Latest" shows. New sentences meanwhile leave the view where it
+  is. Scrolling back to the bottom, or Jump to Latest, makes it follow again.
+- [ ] The window floats over other windows, follows to every Space, shows over a full
+  screen Meet or Chrome window, can be dragged by its background and resized, and opens
+  where it was left. It does not take the focus from the app in front when it opens.
+- [ ] Turning Meeting Captions off in the menu, or closing the window, stops the
+  capture (the purple recording indicator in the menu bar goes away), closes the window
+  and drops every sentence: turning it on again shows an empty window.
+- [ ] Without the local model: the window says "The local model is not on this Mac yet.
+  Until it is, captions show what was said without translation." with a Download
+  button. The button asks "Download the model for translation?" first, and the download
+  shows its progress in the window. Once it is in place and loaded, new sentences are
+  translated. Turning captions off stops the download.
+- [ ] While the speech model is still loading at launch, the window says "The speech
+  model is not ready. Captions start once it is loaded."
+- [ ] With cleanup and translation off, the local model loads when captions start and
+  is unloaded when they stop (Activity Monitor shows the memory fall).
+- [ ] With the interface in Chinese: the menu item reads 会议字幕, the picker reads 只显示译文
+  and 原文和译文逐句对照, and every note in the window is in Chinese.
+- [ ] Changing the output device during a call, such as plugging in headphones: captions
+  go on. If they stop, turning them off and on brings them back. This is a known gap to
+  confirm.
+
+Measuring captions on audio files: CaptionPipelineMeasurementTests feeds files through
+the same segmenter, speech model and translation as the live captions, see its comment
+for the variables. A run on a folder of public audio, from the repository root:
+
+    TEST_RUNNER_ORRA_CAPTION_EVAL=1 \
+    TEST_RUNNER_ORRA_CAPTION_AUDIO=../bench/captions/audio \
+    TEST_RUNNER_ORRA_CAPTION_OUT=../bench/captions/out.jsonl \
+    xcodebuild test -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' \
+        -configuration Release ENABLE_TESTABILITY=YES -derivedDataPath build/DerivedData \
+        -testLanguage en -testRegion US -only-testing:OrraTests/CaptionPipelineMeasurementTests
+
+Add `TEST_RUNNER_ORRA_CAPTION_REALTIME=1` to feed the audio at the pace it plays and
+measure the delay of each caption, and `TEST_RUNNER_ORRA_CAPTION_SETTINGS='{"pause": 0.5}'`
+to try other segmenter settings. The output holds the text of the audio, so it goes
+outside the repository.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is

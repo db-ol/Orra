@@ -6,10 +6,14 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cleanup and translation with the local text model, off until the user turns them on.
     let cleanup = TextCleanup.live()
+    /// The speech model, one for dictation and meeting captions.
+    let transcription = Transcription.qwen3()
+    /// How captions give way to dictation on the shared models, see EngineTurns.
+    let turns = EngineTurns()
     lazy var pushToTalk = PushToTalkController(
         capture: .live(),
-        transcription: .qwen3(),
-        cleanup: cleanup.model,
+        transcription: transcription,
+        cleanup: cleanup.model.sharing(turns),
         translation: cleanup.translation,
         insert: TextInserter.live().insert,
         talkKey: TalkKeyPreference.loadHotkey(),
@@ -31,6 +35,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         writesNumbersAsDigits: NumberPreference.load(),
         saveWritesNumbersAsDigits: { NumberPreference.save($0) }
     )
+    /// Meeting captions, off at every launch. Lazy, because they read the controller's
+    /// speech model state.
+    lazy var captions = MeetingCaptions(
+        source: .live(),
+        engines: .live(
+            transcription: transcription,
+            isSpeechReady: { [pushToTalk] in pushToTalk.modelState == .ready },
+            cleanup: cleanup,
+            turns: turns
+        ),
+        started: { [cleanup] in cleanup.captionsStarted() },
+        stopped: { [cleanup] in cleanup.captionsStopped() },
+        displayMode: CaptionDisplayMode.load(),
+        saveDisplayMode: { $0.save() }
+    )
+    lazy var captionWindow = CaptionWindow(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
     let dockIcon = DockIcon.live()
@@ -153,6 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.onPasteOriginal = { [learning] cleaned in learning.pastedOriginal(replacing: cleaned) }
         learning.onLearned = { [learnedNotice] learned in learnedNotice.show(learned) }
         learning.onSuggest = { [learnedNotice] suggestion in learnedNotice.suggest(suggestion) }
+        captions.showWindow = { [captionWindow] in captionWindow.show() }
+        captions.closeWindow = { [captionWindow] in captionWindow.close() }
         // Before the tap is installed, so it watches the translation key from the start.
         followTranslation()
         pushToTalk.start()
