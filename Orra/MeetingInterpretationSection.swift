@@ -1,25 +1,114 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Speak Translation in Settings, under Features: the switch, the voice model when the
-/// build has two, where the voice goes, whether the text is pasted too, whether the words
-/// are checked, the voice sample and the voice model's download.
-struct SpeakTranslationSection: View {
-    let speech: TranslationSpeech
-    let models: VoiceModels
+/// Meeting Interpretation in Settings, after Features: a meeting where each side speaks
+/// another language. Live captions show what the other side says, translated. Speak
+/// translations to others speaks what the translation key translated, so the other side
+/// hears it. Each part shows only where the page has it.
+struct MeetingInterpretationSection: View {
+    let captions: MeetingCaptions?
+    let speech: TranslationSpeech?
+    let voiceModels: VoiceModels?
     let translationIsOn: Bool
-    /// Watches the devices only while Settings shows this section.
+    /// Watches the devices only while Settings shows the speak rows.
     @State private var outputList = AudioOutputList.live()
     @State private var isChoosingVoice = false
 
     var body: some View {
         Section {
+            if let captions {
+                LiveCaptionRows(captions: captions)
+            }
+            if let speech, let voiceModels {
+                SpeakTranslationRows(speech: speech, models: voiceModels, translationIsOn: translationIsOn, outputs: outputList.outputs, isChoosingVoice: $isChoosingVoice)
+            }
+        } header: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Meeting Interpretation")
+                Text("For a meeting in two languages. Live captions show what the other side says in your language, and Orra can speak your translated words to them.")
+                    .font(.subheadline)
+                    .fontWeight(.regular)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } footer: {
+            if speech != nil, voiceModels != nil {
+                Text("Use a recording of your own voice only. Orra writes down what the voice sample says with its speech model, keeps both in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear {
+            if speech != nil { outputList.start() }
+        }
+        .onDisappear { outputList.stop() }
+        .fileImporter(isPresented: $isChoosingVoice, allowedContentTypes: [.audio]) { result in
+            guard case .success(let url) = result, let speech else { return }
+            Task {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer {
+                    if scoped { url.stopAccessingSecurityScopedResource() }
+                }
+                do {
+                    let sample = try await VoiceSample.read(from: url)
+                    await speech.useVoice(sample)
+                } catch VoiceSample.ReadError.tooShort {
+                    speech.reportVoiceProblem(String(localized: "The voice sample must be at least \(Int(VoiceSample.minimumSeconds)) seconds long."))
+                } catch {
+                    speech.reportVoiceProblem(String(localized: "Orra could not read this audio file."))
+                }
+            }
+        }
+    }
+}
+
+/// Live captions: the switch and what the caption window shows. The window has the same
+/// picker.
+private struct LiveCaptionRows: View {
+    let captions: MeetingCaptions
+
+    var body: some View {
+        Toggle(isOn: Binding(
+            get: { captions.isOn },
+            set: { captions.setOn($0) }
+        )) {
+            DescribedLabel(
+                title: "Live captions",
+                detail: "Listen to the other side. Orra transcribes and translates the sound the Mac plays, in a floating window.",
+                systemImage: "captions.bubble"
+            )
+        }
+        .help(Text("Live captions are off each time Orra starts. Closing the caption window turns them off."))
+        Picker(selection: Binding(
+            get: { captions.displayMode },
+            set: { captions.setDisplayMode($0) }
+        )) {
+            ForEach(CaptionDisplayMode.allCases, id: \.self) { mode in
+                Text(mode.title).tag(mode)
+            }
+        } label: {
+            Label("Captions show", systemImage: "text.bubble")
+        }
+    }
+}
+
+/// Speak translations to others: the switch, the voice model when the build has two,
+/// where the voice goes, whether the text is pasted too, whether the words are checked,
+/// the voice sample and the voice model's download.
+private struct SpeakTranslationRows: View {
+    let speech: TranslationSpeech
+    let models: VoiceModels
+    let translationIsOn: Bool
+    let outputs: [AudioOutput]
+    @Binding var isChoosingVoice: Bool
+
+    var body: some View {
+        Group {
             Toggle(isOn: Binding(
                 get: { speech.isOn },
                 set: { speech.setOn($0) }
             )) {
                 DescribedLabel(
-                    title: "Speak translation",
+                    title: "Speak translations to others",
                     detail: "Orra also speaks what the translation key translated, into the device below, so the other side of a call hears it.",
                     systemImage: "speaker.wave.2.bubble"
                 )
@@ -100,36 +189,7 @@ struct SpeakTranslationSection: View {
             if speech.isOn, let problem = speech.problem {
                 note(Text(verbatim: problem))
             }
-        } header: {
-            Text("Speak Translation")
-        } footer: {
-            Text("Use a recording of your own voice only. Orra writes down what the voice sample says with its speech model, keeps both in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know.")
-                .foregroundStyle(.secondary)
         }
-        .onAppear { outputList.start() }
-        .onDisappear { outputList.stop() }
-        .fileImporter(isPresented: $isChoosingVoice, allowedContentTypes: [.audio]) { result in
-            guard case .success(let url) = result else { return }
-            Task {
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer {
-                    if scoped { url.stopAccessingSecurityScopedResource() }
-                }
-                do {
-                    let sample = try await VoiceSample.read(from: url)
-                    await speech.useVoice(sample)
-                } catch VoiceSample.ReadError.tooShort {
-                    speech.reportVoiceProblem(String(localized: "The voice sample must be at least \(Int(VoiceSample.minimumSeconds)) seconds long."))
-                } catch {
-                    speech.reportVoiceProblem(String(localized: "Orra could not read this audio file."))
-                }
-            }
-        }
-    }
-
-    /// The first choice: Orra Microphone when it is installed, nothing otherwise.
-    private var outputs: [AudioOutput] {
-        outputList.outputs
     }
 
     private var automaticLabel: String {

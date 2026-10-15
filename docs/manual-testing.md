@@ -1721,9 +1721,9 @@ modifiers with a regular key, such as ⇧ ⌘ D:
   again, then running Orra 0.3.1, keeps that single key.
 - [ ] The problem report names a combination by its symbols and key code only.
 
-Meeting captions, added on 2026-10-14. On 2026-10-15 the maintainer checked captions and
-the scroll follow with a local build. Meeting Captions in the menu
-captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
+Live captions, added on 2026-10-14 as Meeting Captions. On 2026-10-15 the maintainer
+checked captions and the scroll follow with a local build. Live Captions, under Meeting
+Interpretation in the menu and in Settings, captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
 pauses, transcribes each with the speech model and translates it with the local model,
 in a floating window. The microphone is never used for it. Orra/Info.plist holds
 NSAudioCaptureUsageDescription, with its Chinese text in InfoPlist.xcstrings. A build
@@ -1732,10 +1732,10 @@ captures nothing. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`:
 it shows starts, stops, counts and failures, never text.
 
-- [ ] With the Info.plist key removed for a test build: turning Meeting Captions on opens
+- [ ] With the Info.plist key removed for a test build: turning Live Captions on opens
   the window with the note above, no permission prompt comes, and turning it off closes
   the window.
-- [ ] With the key, the first time Meeting Captions is turned on, macOS asks whether Orra
+- [ ] With the key, the first time Live Captions is turned on, macOS asks whether Orra
   may record system audio, with the text from Info.plist, in English and in Chinese.
   Allowing it starts captions. Orra then shows under Privacy & Security, Screen & System
   Audio Recording, in the System Audio Recording Only list.
@@ -1765,7 +1765,7 @@ it shows starts, stops, counts and failures, never text.
 - [ ] The window floats over other windows, follows to every Space, shows over a full
   screen Meet or Chrome window, can be dragged by its background and resized, and opens
   where it was left. It does not take the focus from the app in front when it opens.
-- [ ] Turning Meeting Captions off in the menu, or closing the window, stops the
+- [ ] Turning Live Captions off in the menu or in Settings, or closing the window, stops the
   capture (the recording indicator macOS shows in the menu bar goes away), closes the window
   and drops every sentence: turning it on again shows an empty window.
 - [ ] Without the local model: the window says "The local model is not on this Mac yet.
@@ -1777,8 +1777,18 @@ it shows starts, stops, counts and failures, never text.
   model is not ready. Captions start once it is loaded."
 - [ ] With cleanup and translation off, the local model loads when captions start and
   is unloaded when they stop (Activity Monitor shows the memory fall).
-- [ ] With the interface in Chinese: the menu item reads 会议字幕, the picker reads 只显示译文
-  and 原文和译文逐句对照, and every note in the window is in Chinese.
+- [ ] With the interface in Chinese: the submenu reads 会议同传 with 实时字幕 in it, the
+  window's title reads 实时字幕, the picker reads 只显示译文 and 原文和译文逐句对照, and
+  every note in the window is in Chinese.
+- [ ] Meeting Interpretation groups both parts, since 2026-10-15. The menu has a Meeting
+  Interpretation submenu with Live Captions, and Speak Translations to Others while
+  translation is on and the build has a voice model. Settings, General, has a Meeting
+  Interpretation section (会议同传) after Features with a short intro, Live captions (实时字幕)
+  and Captions show, then Speak translations to others (为对方朗读译文) with all its earlier
+  options. The Live captions switch in Settings and the menu item turn the same captions
+  on and off and show the same state. Captions show in Settings and the picker in the
+  window change together, and the choice stays after a restart. Settings saved by an
+  earlier version, Speak translations on and the chosen device and display mode, are kept.
 - [ ] Changing the output device during a call, such as plugging in headphones: captions
   go on. If they stop, turning them off and on brings them back. This is a known gap to
   confirm.

@@ -477,6 +477,16 @@
         }
       }
     },
+    "Captions show" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕显示"
+          }
+        }
+      }
+    },
     "Change Talk Key…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1049,6 +1059,16 @@
         }
       }
     },
+    "For a meeting in two languages. Live captions show what the other side says in your language, and Orra can speak your translated words to them." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于两种语言的会议。实时字幕用你的语言显示对方说的话，Orra 也可以把你说的话译好后朗读给对方。"
+          }
+        }
+      }
+    },
     "Forget Learned Corrections" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1399,6 +1419,16 @@
         }
       }
     },
+    "Listen to the other side. Orra transcribes and translates the sound the Mac plays, in a floating window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收听对方。Orra 在浮动窗口中转写并翻译 Mac 播放的声音。"
+          }
+        }
+      }
+    },
     "Listening" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1415,6 +1445,37 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在听取声音样本…"
+          }
+        }
+      }
+    },
+    "Live captions" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕"
+          }
+        }
+      }
+    },
+    "Live Captions" : {
+      "comment" : "The menu item and window that show live captions of the sound the Mac plays",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕"
+          }
+        }
+      }
+    },
+    "Live captions are off each time Orra starts. Closing the caption window turns them off." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次启动 Orra 时，实时字幕都是关闭的。关闭字幕窗口也会关闭实时字幕。"
           }
         }
       }
@@ -1469,13 +1530,12 @@
         }
       }
     },
-    "Meeting Captions" : {
-      "comment" : "The menu item and window that show live captions of the sound the Mac plays",
+    "Meeting Interpretation" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "会议字幕"
+            "value" : "会议同传"
           }
         }
       }
@@ -1793,12 +1853,12 @@
         }
       }
     },
-    "Orra could not capture the sound the Mac plays. Turn Meeting Captions off and on again to try again." : {
+    "Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 无法捕获 Mac 播放的声音。请关闭“会议字幕”后再打开，重试一次。"
+            "value" : "Orra 无法捕获 Mac 播放的声音。请关闭“实时字幕”后再打开，重试一次。"
           }
         }
       }
@@ -2623,22 +2683,22 @@
         }
       }
     },
-    "Speak translation" : {
+    "Speak translations to others" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "朗读译文"
+            "value" : "为对方朗读译文"
           }
         }
       }
     },
-    "Speak Translation" : {
+    "Speak Translations to Others" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "朗读译文"
+            "value" : "为对方朗读译文"
           }
         }
       }
