@@ -354,6 +354,8 @@ nonisolated enum ModelDownload {
             if length == file.size { return }
             guard let source = servers.current else { throw Failure.unreachable }
             if length == nil {
+                // A file inside a folder of the model, such as the parts of a Core ML model.
+                try? FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
                     log.error("Could not create \(file.name, privacy: .public)")
                     throw Failure.couldNotSave

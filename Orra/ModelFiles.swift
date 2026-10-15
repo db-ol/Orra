@@ -11,6 +11,8 @@ extension Logger {
 
 /// One file of the speech model, pinned by its size and SHA-256.
 nonisolated struct ModelFile: Sendable, Equatable {
+    /// The path in the repository. It can name a file inside a folder, such as
+    /// CamPlusPlus.mlmodelc/weights/weight.bin, and the folder is made when the file is.
     let name: String
     let size: Int64
     /// Lowercase hex.
@@ -286,6 +288,7 @@ nonisolated enum ModelDisk {
             let target = staging.appendingPathComponent(file.name)
             guard size(source) != nil, size(target) != file.size else { continue }
             try? FileManager.default.removeItem(at: target)
+            try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             try FileManager.default.moveItem(at: source, to: target)
         }
         try FileManager.default.removeItem(at: installed)
@@ -384,6 +387,7 @@ nonisolated enum ModelPreparation {
         for (file, old) in reusable {
             let target = staging.appendingPathComponent(file.name)
             try? FileManager.default.removeItem(at: target)
+            try? FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             let room = (freeSpace(staging) ?? 0) >= file.size + ModelDisk.spaceMargin
             if ModelDisk.cloneOrCopy(old, to: target, copyAllowed: room) {
                 Logger.modelDownload.notice("Reused \(file.name, privacy: .public) from the old cache")
