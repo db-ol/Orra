@@ -26,12 +26,16 @@ import Testing
 /// - ORRA_CAPTION_TRANSLATE=0: transcripts only, without loading the cleanup model.
 /// - ORRA_CAPTION_REALTIME=1: feeds the audio at the pace it plays, so the latency of each
 ///   caption is measured as the live captions would see it.
+/// - ORRA_CAPTION_INTERIM: seconds between interim texts of a sentence still being heard,
+///   see CaptionPipeline.interimInterval. Off when unset or 0. Only useful in real time.
 /// - ORRA_REWRITE_MODEL_DIR: the cleanup model, see RewriteTestModel.
 ///
 /// The output file gets one JSON object per sentence: the file, the sentence's start and
 /// end in seconds, the transcript, the translation or null, the model times, and with
 /// ORRA_CAPTION_REALTIME the latency from the end of the sentence in the audio to its
-/// caption and to its translation. A summary of counts and times, never text, goes to a
+/// caption and to its translation, and when the first text of it showed, interim or
+/// final, in seconds from the start of the file, with the number of interim texts. A
+/// summary of counts and times, never text, goes to a
 /// file next to it, with the extension summary.txt. The output holds the text of the
 /// audio, so point it at public audio only, and outside the repository.
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["ORRA_CAPTION_EVAL"] != nil && RealModel.folder != nil))
@@ -50,6 +54,7 @@ struct CaptionPipelineMeasurementTests {
         let direction = Self.environment["ORRA_CAPTION_DIRECTION"].flatMap(TranslationDirection.init(rawValue:)) ?? .automatic
         let realtime = Self.environment["ORRA_CAPTION_REALTIME"] == "1"
         let translates = Self.environment["ORRA_CAPTION_TRANSLATE"] != "0"
+        let interimInterval = Self.environment["ORRA_CAPTION_INTERIM"].flatMap(Double.init).flatMap { $0 > 0 ? $0 : nil }
 
         let speech = RealModel.engine()
         try await speech.load()
@@ -61,7 +66,7 @@ struct CaptionPipelineMeasurementTests {
                 try await rewrite.prepareTranslation(into: target)
             }
         }
-        let engines = CaptionEngines.shared(
+        var engines = CaptionEngines.shared(
             transcription: .qwen3(speech),
             isSpeechReady: { true },
             canTranslate: { translates },
@@ -69,6 +74,23 @@ struct CaptionPipelineMeasurementTests {
             complete: { try await rewrite.translate($0, into: $1).answer },
             turns: EngineTurns()
         )
+        // Counts the model calls, for the cost.
+        var calls = (final: 0, interim: 0, translation: 0)
+        let transcribe = engines.transcribe
+        let transcribeInterim = engines.transcribeInterim ?? transcribe
+        let translate = engines.translate
+        engines.transcribe = { samples in
+            calls.final += 1
+            return try await transcribe(samples)
+        }
+        engines.transcribeInterim = { samples in
+            calls.interim += 1
+            return try await transcribeInterim(samples)
+        }
+        engines.translate = { text, target in
+            calls.translation += 1
+            return try await translate(text, target)
+        }
 
         let output = URL(fileURLWithPath: outputPath)
         FileManager.default.createFile(atPath: output.path, contents: nil)
@@ -80,6 +102,7 @@ struct CaptionPipelineMeasurementTests {
         var translation: [Double] = []
         var captionLatency: [Double] = []
         var translationLatency: [Double] = []
+        var firstTextLatency: [Double] = []
         var audioSeconds = 0.0
         let started = ContinuousClock.now
 
@@ -90,20 +113,31 @@ struct CaptionPipelineMeasurementTests {
             var lines: [Int: [String: Any]] = [:]
             var order: [Int] = []
             // Faster than real time every sentence waits, so none may skip its translation.
-            let pipeline = CaptionPipeline(engines: engines, settings: settings, backlogLimit: realtime ? CaptionPipeline.defaultBacklogLimit : .max) { sentence in
-                // Seconds since the end of the sentence was fed, as the live captions would
-                // see it, in real time only.
-                let sinceEnd = Self.seconds(fedAt.duration(to: .now)) - sentence.end
-                var line = lines[sentence.id] ?? [
-                    "file": file.lastPathComponent,
-                    "id": sentence.id,
-                    "start": sentence.start,
-                    "end": sentence.end,
-                    "original": sentence.original,
-                    "recognition_s": sentence.recognitionSeconds,
-                ]
+            let pipeline = CaptionPipeline(engines: engines, settings: settings, backlogLimit: realtime ? CaptionPipeline.defaultBacklogLimit : .max, interimInterval: interimInterval, withdraw: { id in
+                lines[id] = nil
+                order.removeAll { $0 == id }
+            }) { sentence in
+                // Seconds since the start of the file and since the end of the sentence was
+                // fed, as the live captions would see it, in real time only.
+                let now = Self.seconds(fedAt.duration(to: .now))
+                let sinceEnd = now - sentence.end
+                var line = lines[sentence.id] ?? ["file": file.lastPathComponent, "id": sentence.id, "interim_count": 0]
                 if lines[sentence.id] == nil {
                     order.append(sentence.id)
+                    if realtime {
+                        line["first_text_at_s"] = now
+                    }
+                }
+                if sentence.isInterim {
+                    line["interim_count"] = (line["interim_count"] as? Int ?? 0) + 1
+                    lines[sentence.id] = line
+                    return
+                }
+                if line["original"] == nil {
+                    line["start"] = sentence.start
+                    line["end"] = sentence.end
+                    line["original"] = sentence.original
+                    line["recognition_s"] = sentence.recognitionSeconds
                     if realtime {
                         line["caption_latency_s"] = sinceEnd
                     }
@@ -135,13 +169,16 @@ struct CaptionPipelineMeasurementTests {
                 if realtime {
                     try await Task.sleep(until: fedAt + .seconds(Double(index) / Double(RecordingLimits.sampleRate)))
                 } else {
-                    // Lets the pipeline run between chunks, as it does between captures.
-                    await Task.yield()
+                    // Waits for the sentences cut so far, so none is dropped from a full
+                    // queue, see CaptionPipeline.waitingLimit.
+                    while pipeline.waitingSentences > 0 {
+                        try await Task.sleep(for: .milliseconds(1))
+                    }
                 }
             }
             await pipeline.finish()
             for id in order {
-                guard let line = lines[id] else { continue }
+                guard let line = lines[id], line["original"] != nil else { continue }
                 sentences += 1
                 if line["translation"] is String {
                     translated += 1
@@ -156,6 +193,9 @@ struct CaptionPipelineMeasurementTests {
                 if let seconds = line["translation_latency_s"] as? Double {
                     translationLatency.append(seconds)
                 }
+                if let at = line["first_text_at_s"] as? Double, let start = line["start"] as? Double {
+                    firstTextLatency.append(at - start)
+                }
                 var data = try JSONSerialization.data(withJSONObject: line, options: [.sortedKeys, .withoutEscapingSlashes])
                 data.append(0x0A)
                 try handle.write(contentsOf: data)
@@ -169,6 +209,8 @@ struct CaptionPipelineMeasurementTests {
         Translation per sentence: \(Self.summary(translation))
         Caption latency: \(Self.summary(captionLatency))
         Translation latency: \(Self.summary(translationLatency))
+        First text from the sentence start: \(Self.summary(firstTextLatency)), interim interval: \(interimInterval.map { "\($0) s" } ?? "off")
+        Model calls: \(calls.final) final, \(calls.interim) interim, \(calls.translation) translations,         \(String(format: "%.1f", Double(calls.final + calls.interim) / audioSeconds * 60)) speech model calls per minute of audio
 
         """
         print(summary)

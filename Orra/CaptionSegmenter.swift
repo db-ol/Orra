@@ -110,6 +110,26 @@ nonisolated struct CaptionSegmenter: Sendable {
         current != nil
     }
 
+    /// Seconds of audio in the sentence being heard, its preroll included, 0 between
+    /// sentences.
+    var openSeconds: Double {
+        Double(current?.samples.count ?? 0) / Double(sampleRate)
+    }
+
+    /// Seconds since the last voiced frame of the sentence being heard, 0 between
+    /// sentences. A sentence ends once this reaches `pause`.
+    var openSilenceSeconds: Double {
+        Double(current?.silentFrames ?? 0) * settings.frameSeconds
+    }
+
+    /// The sentence being heard so far, up to its last voiced frame and a tail, for an
+    /// interim caption. Nil between sentences and while it holds less than
+    /// `minimumSpeech`.
+    var openSentence: CaptionSegment? {
+        guard let sentence = current else { return nil }
+        return segment(of: sentence, keepingFrames: sentence.voicedFrames + tailFrames)
+    }
+
     /// Takes the next samples of the stream and returns the sentences they finished, in
     /// order.
     mutating func append(_ samples: [Float]) -> [CaptionSegment] {
