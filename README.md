@@ -97,7 +97,7 @@ Orra checks for a new version only after you allow it, and installs one only whe
 
 Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg), the newest version, open it, and drag Orra to Applications. Older versions and the release notes are on [the releases page](https://github.com/db-ol/Orra/releases).
 
-- Needs a Mac with Apple Silicon and macOS 15.6 or later, and about 3 GB of free disk space, plus 2.8 GB for the optional local model, which cleans up and translates.
+- Needs a Mac with Apple Silicon and macOS 15.6 or later, and about 3 GB of free disk space, plus 2.8 GB for the optional local model, which cleans up and translates, and about 2 GB for the optional voice model of Speak Translations to Others.
 - Signed with a Developer ID and notarized by Apple, so it opens without a warning.
 - Not in the Mac App Store, because the App Store's sandbox does not let an app notice a key in other apps or paste into them.
 
@@ -107,7 +107,7 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
    - **Download the speech model**, 2.47 GB, once.
    - **Allow the microphone.**
    - **Allow Accessibility**, which Orra needs to notice the talk key and to paste the text.
-   - **Choose your talk key** by pressing it. On a Mac's own keyboard, fn (Globe) is comfortable while your right hand is on the mouse. On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn.
+   - **Choose your talk key** by pressing it. On a Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn.
 2. Hold the talk key, right Control unless you pick another, and speak. Let go, and the text appears where your cursor is. While you speak, white bars in a small dark capsule at the bottom of the screen move with your voice (unless you turn this off in Settings), and macOS shows its orange microphone indicator in the menu bar.
 3. Orra lives in the menu bar and the Dock. Its menu and Settings hold everything else.
 
