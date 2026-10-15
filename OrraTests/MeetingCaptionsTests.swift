@@ -1,0 +1,391 @@
+import Foundation
+import os
+import Testing
+@testable import Orra
+
+@MainActor
+struct MeetingCaptionsTests {
+    /// Stands in for the capture. MeetingCaptions calls it off the main actor, so its
+    /// state is behind a lock. With `holdsStart`, a start waits until `releaseStart`.
+    private final class FakeSource: Sendable {
+        private struct State {
+            var fails: SystemAudioProblem?
+            var holdsStart = false
+            var deliver: (@Sendable ([Float]) -> Void)?
+            var calls: [String] = []
+            var startedOnMain = false
+        }
+
+        private let state = OSAllocatedUnfairLock(initialState: State())
+        private let gate = DispatchSemaphore(value: 0)
+
+        var fails: SystemAudioProblem? {
+            get { state.withLock { $0.fails } }
+            set { state.withLock { $0.fails = newValue } }
+        }
+
+        var holdsStart: Bool {
+            get { state.withLock { $0.holdsStart } }
+            set { state.withLock { $0.holdsStart = newValue } }
+        }
+
+        /// "start", "started", "failed" and "stop", in the order they happened.
+        var calls: [String] {
+            state.withLock { $0.calls }
+        }
+
+        var starts: Int {
+            calls.filter { $0 == "start" }.count
+        }
+
+        var stops: Int {
+            calls.filter { $0 == "stop" }.count
+        }
+
+        var isCapturing: Bool {
+            state.withLock { $0.deliver != nil }
+        }
+
+        var startedOnMain: Bool {
+            state.withLock { $0.startedOnMain }
+        }
+
+        func releaseStart() {
+            gate.signal()
+        }
+
+        var source: SystemAudioSource {
+            SystemAudioSource(start: { [self] deliver in
+                let (holds, fails) = state.withLock {
+                    $0.calls.append("start")
+                    if Thread.isMainThread {
+                        $0.startedOnMain = true
+                    }
+                    return ($0.holdsStart, $0.fails)
+                }
+                if holds {
+                    // Like the permission prompt. Bounded, so a broken test cannot hang,
+                    // but long, since a busy runner can keep the main actor away from a
+                    // test for many seconds.
+                    _ = gate.wait(timeout: .now() + 120)
+                }
+                if let fails {
+                    state.withLock { $0.calls.append("failed") }
+                    throw fails
+                }
+                state.withLock {
+                    $0.calls.append("started")
+                    $0.deliver = deliver
+                }
+            }, stop: { [self] in
+                state.withLock {
+                    $0.calls.append("stop")
+                    $0.deliver = nil
+                }
+            })
+        }
+    }
+
+    private func makeCaptions(_ models: FakeCaptionModels, source: FakeSource, events: Box) -> MeetingCaptions {
+        let captions = MeetingCaptions(
+            source: source.source,
+            engines: models.engines(),
+            started: { events.items.append("started") },
+            stopped: { events.items.append("stopped") },
+            silenceHint: 2
+        )
+        captions.showWindow = { events.items.append("show") }
+        captions.closeWindow = { events.items.append("close") }
+        return captions
+    }
+
+    @MainActor
+    private final class Box {
+        var items: [String] = []
+    }
+
+    @Test func turningOnStartsTheCaptureAndShowsTheWindow() async throws {
+        let source = FakeSource()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone."]), source: source, events: events)
+        captions.setOn(true)
+        #expect(captions.isOn)
+        #expect(captions.capture == .starting)
+        try await eventually { captions.capture == .listening }
+        #expect(source.starts == 1)
+        #expect(!source.startedOnMain)
+        #expect(events.items == ["show", "started"])
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
+    }
+
+    @Test func turningOffDropsEveryCaptionAndClosesTheWindow() async throws {
+        let source = FakeSource()
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels(["Hello.", "Again."]), source: source, events: events)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        let run = captions.currentRun
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
+        try await eventually { captions.store.sentences.count == 1 }
+        captions.setOn(false)
+        #expect(captions.store.sentences.isEmpty)
+        #expect(captions.capture == .off)
+        try await eventually { source.stops == 1 }
+        #expect(!source.isCapturing)
+        #expect(events.items == ["show", "started", "stopped", "close"])
+        // Samples still on their way from the capture are ignored.
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.store.sentences.isEmpty)
+    }
+
+    @Test func aRefusedCaptureSaysSoInTheWindow() async throws {
+        let source = FakeSource()
+        source.fails = .notConfigured
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events)
+        captions.setOn(true)
+        #expect(captions.isOn)
+        try await eventually { captions.capture == .unavailable(.notConfigured) }
+        // The local model is not loaded for captions that cannot hear anything.
+        #expect(events.items == ["show"])
+    }
+
+    @Test func aStartThatWaitsDoesNotHoldTheMainActor() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events)
+        captions.setOn(true)
+        // setOn returned while the start still waits, as for the permission prompt.
+        try await eventually { source.calls == ["start"] }
+        #expect(captions.capture == .starting)
+        #expect(events.items == ["show"])
+        source.releaseStart()
+        try await eventually { captions.capture == .listening }
+        #expect(events.items == ["show", "started"])
+        #expect(source.calls == ["start", "started"])
+    }
+
+    @Test func aStopDuringTheStartTearsDownWhatTheStartMade() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events)
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        captions.setOn(false)
+        #expect(!captions.isOn)
+        #expect(captions.capture == .off)
+        // The stop waits for the start, then removes what it made.
+        #expect(source.calls == ["start"])
+        source.releaseStart()
+        try await eventually { source.calls == ["start", "started", "stop"] }
+        #expect(!source.isCapturing)
+        // The late outcome of the start changes nothing, and the local model is not
+        // loaded for captions that are off.
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.capture == .off)
+        #expect(events.items == ["show", "stopped", "close"])
+    }
+
+    @Test func aStopDuringAFailedStartLeavesCaptionsOff() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        source.fails = .failed(step: "start the device", status: -1)
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box())
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        captions.setOn(false)
+        source.releaseStart()
+        try await eventually { source.calls == ["start", "failed", "stop"] }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.capture == .off)
+    }
+
+    @Test func offAndOnAgainDuringTheStartEndsListeningToTheLatestStart() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels(["Hello."]), source: source, events: events)
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        captions.setOn(false)
+        captions.setOn(true)
+        #expect(captions.capture == .starting)
+        source.holdsStart = false
+        source.releaseStart()
+        try await eventually { captions.capture == .listening }
+        #expect(source.calls == ["start", "started", "stop", "start", "started"])
+        #expect(source.isCapturing)
+        #expect(events.items == ["show", "stopped", "close", "show", "started"])
+        // Samples of the first start are ignored, those of the latest are captioned.
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun - 2)
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.count == 1 }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.store.sentences.count == 1)
+    }
+
+    @Test func onlyZerosSuggestThePermission() {
+        let source = FakeSource()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box())
+        captions.setOn(true)
+        captions.receive(CaptionAudio.silence(1.5))
+        #expect(!captions.hearsOnlySilence)
+        captions.receive(CaptionAudio.silence(1))
+        #expect(captions.hearsOnlySilence)
+        captions.receive(CaptionAudio.tone(0.1))
+        #expect(!captions.hearsOnlySilence)
+        captions.receive(CaptionAudio.silence(5))
+        #expect(!captions.hearsOnlySilence)
+    }
+
+    @Test func theDisplayModeIsSaved() {
+        var saved: [CaptionDisplayMode] = []
+        let captions = MeetingCaptions(source: FakeSource().source, engines: FakeCaptionModels([]).engines(), saveDisplayMode: { saved.append($0) })
+        #expect(captions.displayMode == .translationOnly)
+        captions.setDisplayMode(.originalAndTranslation)
+        captions.setDisplayMode(.originalAndTranslation)
+        #expect(saved == [.originalAndTranslation])
+    }
+
+    @Test func theDisplayModeIsReadBack() throws {
+        let defaults = try #require(UserDefaults(suiteName: "orra-caption-test-\(UUID().uuidString)"))
+        #expect(CaptionDisplayMode.load(from: defaults) == .translationOnly)
+        CaptionDisplayMode.originalAndTranslation.save(to: defaults)
+        #expect(CaptionDisplayMode.load(from: defaults) == .originalAndTranslation)
+    }
+}
+
+struct CaptionDisplayTests {
+    private func sentence(_ translation: CaptionSentence.Translation) -> CaptionSentence {
+        CaptionSentence(id: 1, start: 0, end: 1, original: "我们开始吧。", translation: translation)
+    }
+
+    @Test func translationOnlyShowsTheOriginalUntilTheTranslationReplacesIt() {
+        let mode = CaptionDisplayMode.translationOnly
+        #expect(mode.lines(for: sentence(.pending)) == [.init(text: "我们开始吧。", style: .secondary)])
+        #expect(mode.lines(for: sentence(.done("Let's begin."))) == [.init(text: "Let's begin.", style: .main)])
+        #expect(mode.lines(for: sentence(.none)) == [.init(text: "我们开始吧。", style: .main)])
+    }
+
+    @Test func bothShowTheOriginalAndTheTranslationJoinsIt() {
+        let mode = CaptionDisplayMode.originalAndTranslation
+        #expect(mode.lines(for: sentence(.pending)) == [.init(text: "我们开始吧。", style: .secondary)])
+        #expect(mode.lines(for: sentence(.done("Let's begin."))) == [.init(text: "我们开始吧。", style: .secondary), .init(text: "Let's begin.", style: .main)])
+        #expect(mode.lines(for: sentence(.none)) == [.init(text: "我们开始吧。", style: .main)])
+    }
+
+    @Test @MainActor func theStoreKeepsTheLatestSentencesOnly() {
+        let store = CaptionStore(limit: 3)
+        for id in 1...5 {
+            store.apply(CaptionSentence(id: id, start: Double(id), end: Double(id) + 1, original: "\(id)", translation: .pending))
+        }
+        #expect(store.sentences.map(\.id) == [3, 4, 5])
+        store.apply(CaptionSentence(id: 4, start: 4, end: 5, original: "4", translation: .done("four")))
+        #expect(store.sentences.map(\.id) == [3, 4, 5])
+        #expect(store.sentences[1].translatedText == "four")
+        store.clear()
+        #expect(store.sentences.isEmpty)
+    }
+}
+
+/// The window follows the newest sentence until the user scrolls up, and again once they
+/// are back at the bottom.
+struct CaptionFollowTests {
+    @Test func newSentencesDoNotStopTheFollowing() {
+        var follow = CaptionFollow()
+        follow.update(offset: 0, contentHeight: 100, viewportHeight: 200)
+        // Content grows below the view, the offset stays: not a scroll by the user.
+        follow.update(offset: 0, contentHeight: 400, viewportHeight: 200)
+        #expect(follow.isFollowing)
+        // The window scrolls to the bottom.
+        follow.update(offset: 200, contentHeight: 400, viewportHeight: 200)
+        #expect(follow.isFollowing)
+    }
+
+    @Test func scrollingUpStopsItAndBackToTheBottomResumesIt() {
+        var follow = CaptionFollow()
+        follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 200)
+        follow.update(offset: 500, contentHeight: 1_000, viewportHeight: 200)
+        #expect(!follow.isFollowing)
+        // New sentences while the user reads: the view stays where it is.
+        follow.update(offset: 500, contentHeight: 1_300, viewportHeight: 200)
+        #expect(!follow.isFollowing)
+        // Scrolling down, but not all the way.
+        follow.update(offset: 1_000, contentHeight: 1_300, viewportHeight: 200)
+        #expect(!follow.isFollowing)
+        // Close enough to the bottom.
+        follow.update(offset: 1_090, contentHeight: 1_300, viewportHeight: 200)
+        #expect(follow.isFollowing)
+    }
+
+    @Test func resizingTheWindowKeepsTheChoice() {
+        var follow = CaptionFollow()
+        follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 200)
+        follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 300)
+        #expect(follow.isFollowing)
+        follow.update(offset: 300, contentHeight: 1_000, viewportHeight: 300)
+        #expect(!follow.isFollowing)
+        follow.update(offset: 300, contentHeight: 1_000, viewportHeight: 250)
+        #expect(!follow.isFollowing)
+    }
+
+    @Test func newOrLongerSentencesMoveTheViewDownWhileItFollows() {
+        var follow = CaptionFollow()
+        var moves = follow.update(offset: 0, contentHeight: 150, viewportHeight: 200)
+        #expect(!moves)
+        // A new sentence, or a translation longer than its original, pushes the bottom
+        // out of view. The view should move down.
+        moves = follow.update(offset: 0, contentHeight: 260, viewportHeight: 200)
+        #expect(moves)
+        // The move lands, in one step or several. None of them stops the following.
+        moves = follow.update(offset: 30, contentHeight: 260, viewportHeight: 200)
+        #expect(!moves)
+        #expect(follow.isFollowing)
+        moves = follow.update(offset: 60, contentHeight: 260, viewportHeight: 200)
+        #expect(!moves)
+        #expect(follow.isFollowing)
+        // The next sentence moves it down again.
+        moves = follow.update(offset: 60, contentHeight: 330, viewportHeight: 200)
+        #expect(moves)
+        #expect(follow.isFollowing)
+    }
+
+    @Test func aScrollTheViewReportsStopsTheFollowingEvenAsContentGrows() {
+        var follow = CaptionFollow()
+        follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 200)
+        // A sentence comes in during the same frame as the user's scroll up.
+        var moves = follow.update(offset: 600, contentHeight: 1_100, viewportHeight: 200, userScrolls: true)
+        #expect(!moves)
+        #expect(!follow.isFollowing)
+        // More sentences while the user reads: no move down.
+        moves = follow.update(offset: 600, contentHeight: 1_200, viewportHeight: 200)
+        #expect(!moves)
+        // The user scrolls back to the bottom and it follows again.
+        moves = follow.update(offset: 990, contentHeight: 1_200, viewportHeight: 200, userScrolls: true)
+        #expect(!moves)
+        #expect(follow.isFollowing)
+        moves = follow.update(offset: 990, contentHeight: 1_300, viewportHeight: 200)
+        #expect(moves)
+    }
+
+    @Test func aSmallerWindowKeepsTheLatestInView() {
+        var follow = CaptionFollow()
+        follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 200)
+        let moves = follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 120)
+        #expect(moves)
+        #expect(follow.isFollowing)
+    }
+
+    @Test func jumpingToTheLatestFollowsAgain() {
+        var follow = CaptionFollow()
+        follow.update(offset: 800, contentHeight: 1_000, viewportHeight: 200)
+        follow.update(offset: 100, contentHeight: 1_000, viewportHeight: 200)
+        #expect(!follow.isFollowing)
+        follow.jumpToLatest()
+        #expect(follow.isFollowing)
+    }
+}

@@ -19,6 +19,24 @@
         }
       }
     },
+    "NSAudioCaptureUsageDescription" : {
+      "comment" : "Privacy - Audio Capture Usage Description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Orra listens to the sound your Mac plays, such as a call, to show live captions and translations. The audio stays on this Mac."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 会收听 Mac 播放的声音（例如通话），以显示实时字幕和翻译。音频只留在这台 Mac 上。"
+          }
+        }
+      }
+    },
     "NSMicrophoneUsageDescription" : {
       "comment" : "Privacy - Microphone Usage Description",
       "extractionState" : "extracted_with_value",
