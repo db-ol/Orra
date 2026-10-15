@@ -17,16 +17,21 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 if [ -e "$driver" ]; then
-    rm -rf "$driver"
+    if ! rm -rf "$driver"; then
+        echo "uninstall.sh: could not remove $driver" >&2
+        exit 1
+    fi
     echo "Removed $driver"
 else
     echo "$driver is not installed"
 fi
 
-if ! /bin/launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null; then
-    /usr/bin/killall coreaudiod 2>/dev/null || true
+if /bin/launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null \
+    || /usr/bin/killall coreaudiod 2>/dev/null; then
+    echo "Restarted coreaudiod"
+else
+    echo "Could not restart coreaudiod. Restart the Mac to unload the driver."
 fi
-echo "Restarted coreaudiod"
 
 if /usr/sbin/pkgutil --pkg-info "$receipt" >/dev/null 2>&1; then
     /usr/sbin/pkgutil --forget "$receipt"

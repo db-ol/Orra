@@ -5,8 +5,8 @@
 #
 #     make pkg        (or ./pkg.sh)
 #
-# Without any of the variables below, the package and the driver in it are signed ad hoc
-# only, for a local test. This script needs no sudo, installs nothing and never reads a
+# Without any of the variables below, the driver is signed ad hoc and the package is not
+# signed, for a local test. This script needs no sudo, installs nothing and never reads a
 # keychain on its own. Signing and notarizing happen only when the maintainer sets these:
 #
 #   DRIVER_IDENTITY    a "Developer ID Application" identity of team X77KW5VYFJ. Signs the
@@ -119,6 +119,9 @@ if [[ -n "$installer_identity" ]]; then
     signed="signed"
 else
     signed="unsigned"
+fi
+if [[ -n "$driver_identity" ]]; then
+    signed="$signed, driver signed with Developer ID"
 fi
 if [[ -n "$notary_profile" ]]; then
     signed="$signed, notarized and stapled"
