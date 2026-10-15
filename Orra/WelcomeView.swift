@@ -96,7 +96,7 @@ struct WelcomeView: View {
                         .font(.headline)
                     Text("Try it in any app: hold the talk key, say something, and let go. The text appears where you are typing.")
                         .fixedSize(horizontal: false, vertical: true)
-                    if pushToTalk.handsFreeOn {
+                    if pushToTalk.handsFreeOn, pushToTalk.talkMode == .hold {
                         Text("For a longer text, press the talk key twice quickly and talk hands free. Press it once more to paste.")
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -320,9 +320,9 @@ private struct TalkKeyStepDetail: View {
             .fixedSize(horizontal: false, vertical: true)
             // Also shown while the recommended key is only the default, so keeping it
             // completes the step.
-            if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKey != recommended || !pushToTalk.hasChosenTalkKey {
+            if !pushToTalk.isChoosingTalkKey, pushToTalk.talkKey != .key(recommended) || !pushToTalk.hasChosenTalkKey {
                 Button("Use \(recommended.sentenceName(in: interfaceLocale))") {
-                    pushToTalk.chooseTalkKey(recommended)
+                    pushToTalk.chooseTalkKey(.key(recommended))
                 }
             }
         }
@@ -336,7 +336,7 @@ private struct AccessibilityStepDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if pushToTalk.isHotkeyActive {
-                Text(verbatim: pushToTalk.talkKey.holdHint(in: interfaceLocale))
+                Text(verbatim: pushToTalk.talkKey.talkHint(mode: pushToTalk.talkMode, in: interfaceLocale))
                     .foregroundStyle(.secondary)
             } else {
                 Text("Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here.")

@@ -16,9 +16,9 @@ struct StatusMenu: View {
         // Above the talk key, so the download can start before Accessibility is granted.
         ModelMenuSection(models: models, pushToTalk: pushToTalk)
         if pushToTalk.isHotkeyActive {
-            Text(pushToTalk.talkKey.holdHint())
+            Text(pushToTalk.talkHint())
             if pushToTalk.translationKeyIsOn {
-                Text(pushToTalk.translationKey.translateHint())
+                Text(pushToTalk.translateHint())
             }
             if let warning = MicrophoneLabels.lidWarning(
                 choice: pushToTalk.microphone,
@@ -108,6 +108,7 @@ struct StatusMenu: View {
                 get: { pushToTalk.handsFreeOn },
                 set: { pushToTalk.setHandsFreeOn($0) }
             ))
+            .disabled(!pushToTalk.handsFreeApplies)
         }
         Menu("Microphone") {
             MicrophoneToggles(inputs: inputs, chosen: pushToTalk.microphone, choose: pushToTalk.setMicrophone)

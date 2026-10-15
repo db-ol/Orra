@@ -265,8 +265,8 @@ nonisolated enum KeySlot: Equatable, Sendable {
 /// What the user sees after picking for one slot the key of the other: the two keys
 /// swapped, and this is where each one went.
 nonisolated struct KeySwap: Equatable, Sendable {
-    let talkKey: TalkKey
-    let translationKey: TalkKey
+    let talkKey: Hotkey
+    let translationKey: Hotkey
 
     /// Such as "The two keys swapped. The talk key is now right Option and the translation
     /// key right Control."
@@ -279,16 +279,17 @@ nonisolated struct KeySwap: Equatable, Sendable {
 
 /// Records the talk key the user presses, like the shortcut recorders of Mac apps. A key
 /// that can be a talk key counts when it goes down on its own and comes up again with
-/// nothing else pressed in between, so a shortcut such as Command+C is never taken for
-/// Command. Anything else is turned down with the reason, and the recorder keeps
-/// listening. Escape cancels.
+/// nothing else pressed in between. Two or more modifiers held together, such as Control
+/// and Option, count as a combination at the first release. Modifiers with a regular key,
+/// such as Command and Shift with D, count when the regular key goes down. Anything else
+/// is turned down with the reason, and the recorder keeps listening. Escape cancels.
 ///
 /// Pure logic. `HotkeyTap`, or a local event monitor while Orra has no tap, feeds it the
 /// key down and flags changed events.
 nonisolated struct KeyRecorder: Equatable, Sendable {
     nonisolated enum Outcome: Equatable, Sendable {
-        /// The key went down and up on its own. It becomes the talk key.
-        case chosen(TalkKey)
+        /// The key or the combination becomes the key.
+        case chosen(Hotkey)
         /// The press cannot be the talk key. The recorder keeps listening.
         case rejected(Rejection)
         /// Escape: the recorder stops without a change.
@@ -302,12 +303,16 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
         case shift
         /// Caps Lock is a lock, not a key that is held, and switches input methods too.
         case capsLock
-        /// Two keys together, such as Command+C or right Control with Shift held. The
-        /// symbols of the modifiers held, such as "⌘", and the key code of the other key
-        /// when it is not a modifier, so the note can show "⌘ C".
+        /// Keys together that cannot be a combination, such as fn with an arrow key, or
+        /// right and left Control. The symbols of the modifiers held, such as "fn", and the
+        /// key code of the other key when it is not a modifier, so the note can show
+        /// "fn Up Arrow".
         case combination(modifiers: String, keyCode: Int64?)
         /// A key that types or acts on its own, such as a letter, Return or an arrow key.
         case key(keyCode: Int64)
+        /// A shortcut of macOS or of nearly every app, such as ⌘ C, see
+        /// `KeyCombination.isSystemShortcut`. The symbols of the modifiers and the key code.
+        case shortcut(modifiers: String, keyCode: Int64)
     }
 
     static let shiftKeyCodes: Set<Int64> = [0x38, 0x3C]
@@ -315,36 +320,77 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
 
     /// A key that can be a talk key, down on its own with nothing pressed since.
     private(set) var candidate: TalkKey?
+    /// Every modifier held since all were up, without left and right.
+    private(set) var peak: ModifierSet = []
+    /// The modifiers down now.
+    private var held: ModifierSet = []
+    /// True once a regular key was turned down during this press, so its modifiers are no
+    /// combination when they come up.
+    private var spoiled = false
+
+    /// Whether a key or a combination that can be chosen is down, so a note about an
+    /// earlier press no longer applies.
+    var isPending: Bool {
+        candidate != nil || (peak.count >= 2 && !spoiled)
+    }
 
     /// What one key down or flags changed event means, or nil for one that decides nothing
     /// yet, such as a talk key going down.
     mutating func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags) -> Outcome? {
         switch type {
         case .flagsChanged:
+            let now = ModifierSet(flags: flags, includingFn: true)
+            let previous = held
+            held = now
+            if keyCode == Self.capsLockKeyCode {
+                candidate = nil
+                return .rejected(.capsLock)
+            }
+            defer {
+                if held.isEmpty {
+                    peak = []
+                    spoiled = false
+                }
+            }
+            // The first release of a combination of modifiers chooses it.
+            if !previous.isSubset(of: now), peak.count >= 2, !spoiled {
+                let combination = KeyCombination(modifiers: peak)
+                candidate = nil
+                spoiled = true
+                return .chosen(.combination(combination))
+            }
             if let key = TalkKey.allCases.first(where: { $0.keyCode == keyCode }) {
                 if key.isDown(in: flags, wasDown: candidate == key) {
+                    peak.formUnion(now)
                     // A second modifier, or one pressed while another is held.
                     guard candidate == nil, flags.isDisjoint(with: key.otherModifiers) else {
+                        if peak.count >= 2, !spoiled {
+                            // A combination, chosen at its first release.
+                            candidate = nil
+                            return nil
+                        }
                         let rejection = combination(flags: flags, fnPressed: key == .fn, keyCode: nil)
                         candidate = nil
                         return .rejected(rejection)
                     }
                     candidate = key
+                    peak = now
                     return nil
                 }
                 guard candidate == key else { return nil }
                 candidate = nil
-                return .chosen(key)
+                return .chosen(.key(key))
             }
             if Self.shiftKeyCodes.contains(keyCode) {
                 guard flags.contains(.maskShift) else { return nil }
+                peak.formUnion(now)
+                if peak.count >= 2, !spoiled {
+                    candidate = nil
+                    return nil
+                }
                 let rejection: Rejection = candidate != nil ? combination(flags: flags, fnPressed: false, keyCode: nil) : .shift
                 candidate = nil
                 return .rejected(rejection)
-            }
-            if keyCode == Self.capsLockKeyCode {
-                candidate = nil
-                return .rejected(.capsLock)
             }
             return nil
         case .keyDown:
@@ -356,9 +402,22 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
             if keyCode == TalkKeyDetector.globeKeyCode {
                 return nil
             }
+            let modifiers = ModifierSet(flags: flags, includingFn: false)
+            let combination = KeyCombination(modifiers: modifiers, keyCode: keyCode)
+            if candidate != .fn, combination.isSystemShortcut {
+                candidate = nil
+                spoiled = true
+                return .rejected(.shortcut(modifiers: symbols(flags: flags, fnPressed: false), keyCode: keyCode))
+            }
+            if candidate != .fn, combination.isValid {
+                candidate = nil
+                spoiled = true
+                return .chosen(.combination(combination))
+            }
             let combined = candidate != nil || !flags.isDisjoint(with: [.maskControl, .maskAlternate, .maskCommand])
-            let rejection: Rejection = combined ? combination(flags: flags, fnPressed: false, keyCode: keyCode) : .key(keyCode: keyCode)
+            let rejection: Rejection = combined ? self.combination(flags: flags, fnPressed: false, keyCode: keyCode) : .key(keyCode: keyCode)
             candidate = nil
+            spoiled = true
             return .rejected(rejection)
         default:
             return nil
@@ -369,6 +428,11 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
     /// them. fn counts only when it was pressed for the recording, because arrow and
     /// function keys carry the Fn flag on their own. Call it before clearing `candidate`.
     private func combination(flags: CGEventFlags, fnPressed: Bool, keyCode: Int64?) -> Rejection {
+        .combination(modifiers: symbols(flags: flags, fnPressed: fnPressed), keyCode: keyCode)
+    }
+
+    /// The symbols of the modifiers held, such as "⇧ ⌘", in the order Mac menus show them.
+    private func symbols(flags: CGEventFlags, fnPressed: Bool) -> String {
         var symbols: [String] = []
         if fnPressed || candidate == .fn {
             symbols.append("fn")
@@ -379,7 +443,7 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
         for (flag, symbol) in modifiers where flags.contains(flag) {
             symbols.append(symbol)
         }
-        return .combination(modifiers: symbols.joined(separator: " "), keyCode: keyCode)
+        return symbols.joined(separator: " ")
     }
 }
 
@@ -407,6 +471,12 @@ extension KeyRecorder.Rejection {
             } else {
                 String(localized: LocalizedStringResource("This key can't be the talk key. Holding it would type or do something in the app in front.", locale: locale))
             }
+        case .shortcut(let modifiers, let keyCode):
+            if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode, locale: locale) {
+                String(localized: LocalizedStringResource("\(keys) is a shortcut of macOS or most apps and can't be the talk key. It would stop working everywhere while Orra runs.", locale: locale))
+            } else {
+                String(localized: LocalizedStringResource("A shortcut of macOS or most apps can't be the talk key. It would stop working everywhere while Orra runs.", locale: locale))
+            }
         }
     }
 
@@ -428,6 +498,12 @@ extension KeyRecorder.Rejection {
                 String(localized: LocalizedStringResource("The \(name) key can't be the translation key. Holding it would type or do something in the app in front.", locale: locale))
             } else {
                 String(localized: LocalizedStringResource("This key can't be the translation key. Holding it would type or do something in the app in front.", locale: locale))
+            }
+        case .shortcut(let modifiers, let keyCode):
+            if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode, locale: locale) {
+                String(localized: LocalizedStringResource("\(keys) is a shortcut of macOS or most apps and can't be the translation key. It would stop working everywhere while Orra runs.", locale: locale))
+            } else {
+                String(localized: LocalizedStringResource("A shortcut of macOS or most apps can't be the translation key. It would stop working everywhere while Orra runs.", locale: locale))
             }
         }
     }
@@ -523,7 +599,30 @@ nonisolated enum TalkKeyPreference {
     /// Whether the user has chosen a key before, so the welcome window can mark its step as
     /// done.
     static func isSaved(in defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: defaultsKey) != nil
+        defaults.object(forKey: defaultsKey) != nil || defaults.object(forKey: combinationKey) != nil
+    }
+
+    /// Where a combination is saved, see `KeyCombination.savedValue`. A single key removes
+    /// it. The list under `defaultsKey` stays as it was, so an older Orra keeps the last
+    /// single key.
+    static let combinationKey = "talkKeyCombination"
+
+    /// The saved key or combination, or the default when nothing usable is saved.
+    static func loadHotkey(from defaults: UserDefaults = .standard) -> Hotkey {
+        if let combination = defaults.string(forKey: combinationKey).flatMap(KeyCombination.init(saved:)) {
+            return .combination(combination)
+        }
+        return .key(load(from: defaults))
+    }
+
+    static func saveHotkey(_ hotkey: Hotkey, to defaults: UserDefaults = .standard) {
+        switch hotkey {
+        case .key(let key):
+            save(key, to: defaults)
+            defaults.removeObject(forKey: combinationKey)
+        case .combination(let combination):
+            defaults.set(combination.savedValue, forKey: combinationKey)
+        }
     }
 }
 
@@ -544,5 +643,31 @@ nonisolated enum TranslationKeyPreference {
 
     static func save(_ key: TalkKey, to defaults: UserDefaults = .standard) {
         defaults.set(key.rawValue, forKey: defaultsKey)
+    }
+
+    /// Where a combination is saved, as for the talk key.
+    static let combinationKey = "translationKeyCombination"
+
+    /// The saved key or combination, or the default for this talk key when nothing usable
+    /// is saved or the saved one is the talk key.
+    static func loadHotkey(talkKey: Hotkey, from defaults: UserDefaults = .standard) -> Hotkey {
+        if let combination = defaults.string(forKey: combinationKey).flatMap(KeyCombination.init(saved:)),
+           Hotkey.combination(combination) != talkKey {
+            return .combination(combination)
+        }
+        if let saved = defaults.string(forKey: defaultsKey).flatMap(TalkKey.init(rawValue:)), Hotkey.key(saved) != talkKey {
+            return .key(saved)
+        }
+        return Hotkey.defaultTranslationKey(talkKey: talkKey)
+    }
+
+    static func saveHotkey(_ hotkey: Hotkey, to defaults: UserDefaults = .standard) {
+        switch hotkey {
+        case .key(let key):
+            save(key, to: defaults)
+            defaults.removeObject(forKey: combinationKey)
+        case .combination(let combination):
+            defaults.set(combination.savedValue, forKey: combinationKey)
+        }
     }
 }

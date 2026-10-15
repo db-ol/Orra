@@ -218,7 +218,7 @@ struct PushToTalkControllerTests {
     }
 
     @Test func theTalkKeyChangesAndIsSaved() {
-        var saved: [TalkKey] = []
+        var saved: [Hotkey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -1450,9 +1450,9 @@ struct PushToTalkControllerTests {
     /// A hold of `key` that records and is released.
     private func dictate(_ controller: PushToTalkController, with key: TalkKey) async throws {
         let starts = mic.calls.filter { $0 == "start" }.count
-        controller.handle(.pressed(isRepeat: false), key: key)
+        controller.handle(.pressed(isRepeat: false), key: .key(key))
         try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
-        controller.handle(.released, key: key)
+        controller.handle(.released, key: .key(key))
         try await waitUntil { controller.state == .idle }
     }
 
@@ -1815,7 +1815,7 @@ struct PushToTalkControllerTests {
         controller.handle(.released)
         #expect(controller.state == .processing)
         let key = TalkKey.fn
-        controller.chooseTalkKey(key)
+        controller.chooseTalkKey(.key(key))
         var now = ContinuousClock.now
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: .maskSecondaryFn, at: now)
         now = now.advanced(by: .milliseconds(50))
@@ -1846,7 +1846,7 @@ struct PushToTalkControllerTests {
     // MARK: Choosing the talk key by pressing it
 
     @Test func pressingAKeyMakesItTheTalkKey() {
-        var saved: [TalkKey] = []
+        var saved: [Hotkey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -1864,12 +1864,12 @@ struct PushToTalkControllerTests {
         #expect(controller.keyChoiceNote == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
         controller.keyChoice(type: .flagsChanged, keyCode: 0x39, flags: .maskAlphaShift)
         #expect(controller.keyChoiceNote == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
-        // Command+Return is a shortcut, not Command. Return has the same name on every
-        // keyboard layout, unlike a letter.
-        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
-        controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
-        #expect(controller.keyChoiceNote == "⌘ Return is a key combination and can't be the talk key.")
-        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [])
+        // fn with an arrow is a key of its own, such as Page Up, not fn. Up Arrow has the
+        // same name on every keyboard layout, unlike a letter.
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        controller.keyChoice(type: .keyDown, keyCode: 0x7E, flags: .maskSecondaryFn)
+        #expect(controller.keyChoiceNote == "fn Up Arrow is a key combination and can't be the talk key.")
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey)
         #expect(controller.talkKey == .rightOption)
         // Left Option pressed and released on its own.
@@ -1956,8 +1956,8 @@ struct PushToTalkControllerTests {
     }
 
     @Test func pickingTheTranslationKeyAsTheTalkKeySwapsThem() {
-        var savedTalk: [TalkKey] = []
-        var savedTranslation: [TalkKey] = []
+        var savedTalk: [Hotkey] = []
+        var savedTranslation: [Hotkey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -1981,8 +1981,8 @@ struct PushToTalkControllerTests {
     }
 
     @Test func pickingTheTalkKeyAsTheTranslationKeySwapsThem() {
-        var savedTalk: [TalkKey] = []
-        var savedTranslation: [TalkKey] = []
+        var savedTalk: [Hotkey] = []
+        var savedTranslation: [Hotkey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -2052,7 +2052,7 @@ struct PushToTalkControllerTests {
     }
 
     @Test func keepingTheDefaultKeySavesIt() {
-        var saved: [TalkKey] = []
+        var saved: [Hotkey] = []
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -2064,5 +2064,69 @@ struct PushToTalkControllerTests {
         controller.chooseTalkKey(.rightControl)
         #expect(controller.hasChosenTalkKey)
         #expect(saved == [.rightControl])
+    }
+
+    /// Press to start and stop: the first press records on after its release, and the
+    /// next press pastes. The mode is saved.
+    @Test func theTalkKeyCanStartAndStopWithAPress() async throws {
+        let controller = try await startedController()
+        var savedModes: [TriggerMode] = []
+        let saving = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, saveTriggerMode: { mode, _ in savedModes.append(mode) })
+        saving.setTriggerMode(.toggle, for: .talk)
+        saving.setTriggerMode(.toggle, for: .talk)
+        #expect(savedModes == [.toggle])
+        #expect(saving.talkHint() == "Press right Control to talk, and again to finish")
+        controller.setTriggerMode(.toggle, for: .talk)
+        let tap = try #require(tapSystem.installed)
+        let controlDown = TalkKey.rightControl.downFlag.union(.maskControl)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: controlDown)
+        #expect(controller.state == .listening)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [])
+        #expect(controller.state == .handsFree)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: controlDown)
+        #expect(controller.state == .handsFree)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [])
+        #expect(controller.state != .handsFree)
+        try await waitUntil { mic.calls.contains("stop") }
+    }
+
+    /// A translation key of Control and Option: right Control, the talk key, waits so the
+    /// combination can take over, and the dictation is the translation key's.
+    @Test func aCombinationTranslationKeyTakesOverFromTheTalkKey() async throws {
+        let controller = try await startedController()
+        controller.setTranslationKeyOn(true)
+        let combination = Hotkey.combination(KeyCombination(modifiers: [.control, .option]))
+        controller.chooseTranslationKey(combination)
+        #expect(controller.translateHint() == "Hold ⌃ ⌥ to translate")
+        let tap = try #require(tapSystem.installed)
+        let controlDown = TalkKey.rightControl.downFlag.union(.maskControl)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: controlDown)
+        #expect(tap.activeKey == .rightControl)
+        #expect(controller.state == .idle)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: controlDown.union(TalkKey.rightOption.downFlag).union(.maskAlternate))
+        #expect(tap.activeKey == combination)
+        tap.fireTimer()
+        #expect(controller.state == .listening)
+        // Picking the combination for the talk key swaps the keys.
+        controller.chooseTalkKey(combination)
+        #expect(controller.talkKey == combination)
+        #expect(controller.translationKey == .rightControl)
+    }
+
+    @Test func aRecordedShortcutBecomesTheKey() {
+        var saved: [Hotkey] = []
+        let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, saveTalkKey: { saved.append($0) })
+        controller.startChoosingTalkKey()
+        let flags = CGEventFlags.maskCommand.union(CGEventFlags(rawValue: 0x08)).union(.maskShift)
+        controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: .maskShift)
+        #expect(controller.keyChoiceRejection == .shift)
+        controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: flags)
+        // The combination under way replaces the note about Shift.
+        #expect(controller.keyChoiceRejection == nil)
+        controller.keyChoice(type: .keyDown, keyCode: 0x02, flags: flags)
+        #expect(controller.choosingKeySlot == nil)
+        #expect(controller.talkKey == .combination(KeyCombination(modifiers: [.shift, .command], keyCode: 0x02)))
+        #expect(controller.talkKey.combination?.character != nil)
+        #expect(saved == [controller.talkKey])
     }
 }

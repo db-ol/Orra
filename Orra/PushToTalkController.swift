@@ -66,16 +66,21 @@ final class PushToTalkController {
 
     /// The current push to talk state.
     private(set) var state: PushToTalkStateMachine.State = .idle
-    /// The key that starts a dictation when held on its own. Saved through `saveTalkKey`
+    /// The key or combination that starts a dictation. Saved through `saveTalkKey`
     /// whenever it changes.
-    private(set) var talkKey: TalkKey
+    private(set) var talkKey: Hotkey
+    /// How the talk key starts a dictation. Saved through `saveTriggerMode` whenever it
+    /// changes.
+    private(set) var talkMode: TriggerMode
     /// Whether the user has chosen the talk key, here or in an earlier launch. The welcome
     /// window marks its talk key step as done then.
     private(set) var hasChosenTalkKey: Bool
     /// The key that starts a dictation that is pasted translated, while translation is
     /// on, see `translationKeyIsOn`. Never the talk key. Saved through
     /// `saveTranslationKey` when the user picks it, or when picking the talk key moved it.
-    private(set) var translationKey: TalkKey
+    private(set) var translationKey: Hotkey
+    /// How the translation key starts a dictation, saved as for the talk key.
+    private(set) var translationMode: TriggerMode
     /// Whether the translation key is watched: translation is on. AppDelegate keeps it in
     /// step with the Translation switch in Settings.
     private(set) var translationKeyIsOn = false
@@ -198,8 +203,9 @@ final class PushToTalkController {
     @ObservationIgnored private var userActivity: (any NSObjectProtocol)?
     @ObservationIgnored private var machine = PushToTalkStateMachine()
     @ObservationIgnored private var tap: HotkeyTap?
-    @ObservationIgnored private let saveTalkKey: (TalkKey) -> Void
-    @ObservationIgnored private let saveTranslationKey: (TalkKey) -> Void
+    @ObservationIgnored private let saveTalkKey: (Hotkey) -> Void
+    @ObservationIgnored private let saveTranslationKey: (Hotkey) -> Void
+    @ObservationIgnored private let saveTriggerMode: (TriggerMode, KeySlot) -> Void
     @ObservationIgnored private let saveHandsFree: (Bool) -> Void
     /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
     /// installed, which needs no permission.
@@ -248,6 +254,9 @@ final class PushToTalkController {
     ///   - translationKey: The translation key, as saved, or nil for the default next to
     ///     the talk key, see `TalkKey.defaultTranslationKey(talkKey:)`.
     ///   - saveTranslationKey: Saves the translation key after it changes.
+    ///   - talkMode: How the talk key starts a dictation, as saved.
+    ///   - translationMode: How the translation key starts a dictation, as saved.
+    ///   - saveTriggerMode: Saves the mode of a key after the user changes it.
     ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
     ///   - saveHandsFree: Saves the choice after the user changes it.
     ///   - microphone: The microphone the user chose, or nil for the system default.
@@ -274,11 +283,14 @@ final class PushToTalkController {
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
         listeningCueDelay: Duration = .milliseconds(150),
-        talkKey: TalkKey = TalkKey.defaultKey,
-        saveTalkKey: @escaping (TalkKey) -> Void = { _ in },
+        talkKey: Hotkey = Hotkey.defaultKey,
+        saveTalkKey: @escaping (Hotkey) -> Void = { _ in },
         talkKeyChosen: Bool = false,
-        translationKey: TalkKey? = nil,
-        saveTranslationKey: @escaping (TalkKey) -> Void = { _ in },
+        translationKey: Hotkey? = nil,
+        saveTranslationKey: @escaping (Hotkey) -> Void = { _ in },
+        talkMode: TriggerMode = .defaultMode,
+        translationMode: TriggerMode = .defaultMode,
+        saveTriggerMode: @escaping (TriggerMode, KeySlot) -> Void = { _, _ in },
         handsFree: Bool = true,
         saveHandsFree: @escaping (Bool) -> Void = { _ in },
         microphone: MicrophoneChoice? = nil,
@@ -308,8 +320,11 @@ final class PushToTalkController {
         self.talkKey = talkKey
         self.saveTalkKey = saveTalkKey
         self.hasChosenTalkKey = talkKeyChosen
-        self.translationKey = translationKey.flatMap { $0 == talkKey ? nil : $0 } ?? TalkKey.defaultTranslationKey(talkKey: talkKey)
+        self.translationKey = translationKey.flatMap { $0 == talkKey ? nil : $0 } ?? Hotkey.defaultTranslationKey(talkKey: talkKey)
         self.saveTranslationKey = saveTranslationKey
+        self.talkMode = talkMode
+        self.translationMode = translationMode
+        self.saveTriggerMode = saveTriggerMode
         self.handsFreeOn = handsFree
         self.saveHandsFree = saveHandsFree
         self.microphone = microphone
@@ -330,7 +345,7 @@ final class PushToTalkController {
     func start() {
         guard tap == nil else { return }
         microphoneAccess = capture.access()
-        tap = HotkeyTap(keys: watchedKeys, delayedKeys: delayedKeys, handsFree: handsFreeOn, install: installTap) { [weak self] event in
+        tap = HotkeyTap(keys: watchedKeys, delayedKeys: delayedKeys, modes: modes, handsFree: handsFreeOn, install: installTap) { [weak self] event in
             self?.handle(event, key: self?.tap?.activeKey)
         } onSwitchedOff: { [weak self] reason in
             self?.tapWasSwitchedOff(reason)
@@ -429,7 +444,7 @@ final class PushToTalkController {
     /// already, such as the default, so the welcome window counts the step as done on the
     /// next launch too. When `key` is the translation key, the translation key becomes the
     /// old talk key and `keySwap` says so.
-    func chooseTalkKey(_ key: TalkKey) {
+    func chooseTalkKey(_ key: Hotkey) {
         hasChosenTalkKey = true
         keySwap = nil
         if key == translationKey, key != talkKey {
@@ -444,7 +459,7 @@ final class PushToTalkController {
 
     /// Makes `key` the translation key and saves the choice. When `key` is the talk key,
     /// the talk key becomes the old translation key and `keySwap` says so.
-    func chooseTranslationKey(_ key: TalkKey) {
+    func chooseTranslationKey(_ key: Hotkey) {
         keySwap = nil
         if key == talkKey, key != translationKey {
             talkKey = translationKey
@@ -466,21 +481,65 @@ final class PushToTalkController {
         updateTapKeys()
     }
 
+    /// Sets how the key of `slot` starts a dictation and saves the choice.
+    func setTriggerMode(_ mode: TriggerMode, for slot: KeySlot) {
+        switch slot {
+        case .talk:
+            guard mode != talkMode else { return }
+            talkMode = mode
+        case .translation:
+            guard mode != translationMode else { return }
+            translationMode = mode
+        }
+        saveTriggerMode(mode, slot)
+        updateTapKeys()
+    }
+
+    /// The hint for the talk key in its mode, such as "Hold right Control to talk".
+    func talkHint(in locale: Locale = .interface) -> String {
+        talkKey.talkHint(mode: talkMode, in: locale)
+    }
+
+    /// The hint for the translation key in its mode, such as "Hold right Option to
+    /// translate".
+    func translateHint(in locale: Locale = .interface) -> String {
+        translationKey.translateHint(mode: translationMode, in: locale)
+    }
+
+    /// Whether double press for hands free does anything: a watched key is in hold mode.
+    var handsFreeApplies: Bool {
+        talkMode == .hold || (translationKeyIsOn && translationMode == .hold)
+    }
+
     /// The keys the tap watches: the talk key, and the translation key while translation
     /// is on.
-    private var watchedKeys: Set<TalkKey> {
+    private var watchedKeys: Set<Hotkey> {
         translationKeyIsOn ? [talkKey, translationKey] : [talkKey]
     }
 
     /// The translation key waits before it records, as a left hand key does, so Option
-    /// shortcuts and the characters right Option types keep working. The talk key does
-    /// not.
-    private var delayedKeys: Set<TalkKey> {
-        translationKeyIsOn ? [translationKey] : []
+    /// shortcuts and the characters right Option types keep working. A combination with a
+    /// regular key is hidden from apps and needs no wait. The talk key does not wait,
+    /// unless it is one of the modifiers of a translation combination such as Control and
+    /// Option, or the other way round, so the combination can take over within the wait.
+    private var delayedKeys: Set<Hotkey> {
+        guard translationKeyIsOn else { return [] }
+        var keys: Set<Hotkey> = translationKey.hasRegularKey ? [] : [translationKey]
+        for (key, other) in [(talkKey, translationKey), (translationKey, talkKey)] {
+            if key.single != nil, let combination = other.combination, combination.keyCode == nil,
+               combination.modifiers.isSuperset(of: key.modifiers) {
+                keys.insert(key)
+            }
+        }
+        return keys
+    }
+
+    private var modes: [Hotkey: TriggerMode] {
+        translationKeyIsOn ? [talkKey: talkMode, translationKey: translationMode] : [talkKey: talkMode]
     }
 
     private func updateTapKeys() {
-        tap?.setKeys(watchedKeys, delayedKeys: delayedKeys)
+        tap?.setKeys(watchedKeys, delayedKeys: delayedKeys, modes: modes)
     }
 
     /// Turns double press for hands free on or off and saves the choice.
@@ -562,14 +621,19 @@ final class PushToTalkController {
         guard let outcome = keyRecorder.handle(type: type, keyCode: keyCode, flags: flags) else {
             // A key that can be the talk key is down, so the note about an earlier press
             // no longer applies.
-            if keyRecorder.candidate != nil {
+            if keyRecorder.isPending {
                 keyChoiceRejection = nil
             }
             return
         }
         switch outcome {
-        case .chosen(let key):
+        case .chosen(var key):
             stopChoosingKey()
+            // The name of a regular key depends on the keyboard layout, so it is kept as it
+            // looks now.
+            if let combination = key.combination, let code = combination.keyCode, KeyName.namedKey(code) == nil {
+                key = .combination(KeyCombination(modifiers: combination.modifiers, keyCode: code, character: KeyName.character(forKeyCode: code)))
+            }
             switch slot {
             case .talk: chooseTalkKey(key)
             case .translation: chooseTranslationKey(key)
@@ -583,7 +647,7 @@ final class PushToTalkController {
 
     /// The key that finishes the hands free dictation in progress, for the indicator: the
     /// key that started it, or the talk key.
-    private var handsFreeKey: TalkKey {
+    private var handsFreeKey: Hotkey {
         tap?.activeKey ?? talkKey
     }
 
@@ -617,7 +681,7 @@ final class PushToTalkController {
     /// Applies one push to talk event. `key` is the key the event is about, which tells a
     /// dictation of the translation key from one of the talk key. Internal so tests can
     /// drive it.
-    func handle(_ event: PushToTalkStateMachine.Event, key: TalkKey? = nil) {
+    func handle(_ event: PushToTalkStateMachine.Event, key: Hotkey? = nil) {
         // The tap keeps Escape and the next press for a hands free dictation only while one
         // runs. It may have ended here some other way, or never started.
         defer {

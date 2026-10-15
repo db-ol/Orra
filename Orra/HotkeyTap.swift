@@ -5,8 +5,9 @@ import CoreGraphics
 ///
 /// This is an active tap at the session level, so it can
 /// swallow fn's own events. The system only creates it once Orra has
-/// Accessibility access. The tap sees key down and flags changed events and
-/// never stores or logs which key was pressed.
+/// Accessibility access. The tap sees key down, key up and flags changed events and
+/// never stores or logs which key was pressed. Key ups matter for a combination with a
+/// regular key, such as Command, Shift and D.
 ///
 /// The tap runs on the main run loop, so every key press on the Mac waits for
 /// the main thread. Never block the main thread while the tap is installed.
@@ -61,6 +62,7 @@ final class HotkeyTap {
     ///   - keys: The keys that start a dictation.
     ///   - delayedKeys: The keys among them that wait before they record, as the left hand
     ///     keys do, see `TalkKeyDetector.delayedKeys`.
+    ///   - modes: How each key starts a dictation. A key missing here holds.
     ///   - install: Creates the tap, see `Install`.
     ///   - onEvent: Receives the push to talk events.
     ///   - onSwitchedOff: Called after the system switched the tap off and the tap removed
@@ -70,8 +72,9 @@ final class HotkeyTap {
     ///   - isAppActive: Whether Orra is the active app, so a key the user presses to
     ///     choose a talk key is meant for Orra.
     init(
-        keys: Set<TalkKey>,
-        delayedKeys: Set<TalkKey> = [],
+        keys: Set<Hotkey>,
+        delayedKeys: Set<Hotkey> = [],
+        modes: [Hotkey: TriggerMode] = [:],
         handsFree: Bool = true,
         install: @escaping Install,
         wait: @escaping Wait = { try? await Task.sleep(for: $0) },
@@ -79,7 +82,7 @@ final class HotkeyTap {
         onEvent: @escaping (PushToTalkStateMachine.Event) -> Void,
         onSwitchedOff: @escaping (CGEventType) -> Void = { _ in }
     ) {
-        detector = TalkKeyDetector(keys: keys, delayedKeys: delayedKeys, handsFreeEnabled: handsFree)
+        detector = TalkKeyDetector(keys: keys, delayedKeys: delayedKeys, modes: modes, handsFreeEnabled: handsFree)
         self.install = install
         self.wait = wait
         self.isAppActive = isAppActive
@@ -87,11 +90,11 @@ final class HotkeyTap {
         self.onSwitchedOff = onSwitchedOff
     }
 
-    /// Switches to other talk keys at once, and to the keys among them that wait before
-    /// they record, see `TalkKeyDetector.delayedKeys`. Ends a hold or a hands free
-    /// dictation of a key that is no longer one.
-    func setKeys(_ keys: Set<TalkKey>, delayedKeys: Set<TalkKey> = []) {
-        let event = detector.setKeys(keys, delayedKeys: delayedKeys)
+    /// Switches to other talk keys at once, to the keys among them that wait before they
+    /// record, see `TalkKeyDetector.delayedKeys`, and to their modes. Ends a hold or a
+    /// hands free dictation of a key that is no longer one.
+    func setKeys(_ keys: Set<Hotkey>, delayedKeys: Set<Hotkey> = [], modes: [Hotkey: TriggerMode] = [:]) {
+        let event = detector.setKeys(keys, delayedKeys: delayedKeys, modes: modes)
         afterDetectorChange(event)
     }
 
@@ -109,7 +112,7 @@ final class HotkeyTap {
     }
 
     /// The talk key the current press or dictation is about, if any.
-    var activeKey: TalkKey? {
+    var activeKey: Hotkey? {
         detector.phase.key
     }
 
@@ -217,10 +220,11 @@ final class HotkeyTap {
         }
     }
 
-    /// The real tap: an active tap at the session level for key down and flags changed
-    /// events on the main run loop, and the click monitor.
+    /// The real tap: an active tap at the session level for key down, key up and flags
+    /// changed events on the main run loop, and the click monitor.
     static func installLive(_ tap: HotkeyTap) -> Remove? {
         let mask = CGEventMask(1) << CGEventType.keyDown.rawValue
+            | CGEventMask(1) << CGEventType.keyUp.rawValue
             | CGEventMask(1) << CGEventType.flagsChanged.rawValue
         guard let port = CGEvent.tapCreate(
             tap: .cgSessionEventTap,

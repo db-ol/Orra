@@ -235,7 +235,7 @@ final class ProblemReporter {
                 // Reads the permission only, never asks for it.
                 accessibilityTrusted: AXIsProcessTrusted(),
                 talkKeyActive: pushToTalk.isHotkeyActive,
-                talkKey: pushToTalk.talkKey.rawValue,
+                talkKey: pushToTalk.talkKey.reportName,
                 microphone: microphone,
                 settings: [
                     .init(name: "Recording indicator", on: feedback.showsIndicator),

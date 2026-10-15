@@ -146,7 +146,7 @@ struct KeyRecorderTests {
     func everyTalkKeyIsChosenAtItsReleaseOnItsOwn(_ key: TalkKey) {
         var recorder = KeyRecorder()
         #expect(recorder.handle(type: .flagsChanged, keyCode: key.keyCode, flags: Self.down(key)) == nil)
-        #expect(recorder.handle(type: .flagsChanged, keyCode: key.keyCode, flags: []) == .chosen(key))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: key.keyCode, flags: []) == .chosen(.key(key)))
         // A release without its press means nothing.
         #expect(recorder.handle(type: .flagsChanged, keyCode: key.keyCode, flags: []) == nil)
     }
@@ -159,25 +159,79 @@ struct KeyRecorderTests {
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightCommand.keyCode, flags: .maskCommand) == .chosen(.rightCommand))
     }
 
-    @Test func shortcutsAreCombinations() {
+    @Test func shortcutsAreChosenAsCombinations() {
         var recorder = KeyRecorder()
-        // Command+C.
-        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: Self.down(.leftCommand))
-        #expect(recorder.handle(type: .keyDown, keyCode: 0x08, flags: Self.down(.leftCommand)) == .rejected(.combination(modifiers: "⌘", keyCode: 0x08)))
+        // Option, Command and C is chosen when C goes down.
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: Self.down(.leftCommand).union(.maskAlternate))
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x08, flags: Self.down(.leftCommand).union(.maskAlternate)) == .chosen(.combination(KeyCombination(modifiers: [.option, .command], keyCode: 0x08))))
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: []) == nil)
-        // Right Option pressed while Command is held.
-        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: Self.down(.rightOption).union(.maskCommand)) == .rejected(.combination(modifiers: "⌥ ⌘", keyCode: nil)))
-        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: .maskCommand) == nil)
-        // Right Control, then left Control.
+        // Right Option pressed while Command is held is chosen at the first release.
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: Self.down(.rightOption).union(.maskCommand)) == nil)
+        #expect(recorder.isPending)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: .maskCommand) == .chosen(.combination(KeyCombination(modifiers: [.option, .command]))))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: []) == nil)
+        // Right Control, then left Control, is one modifier twice and no combination.
         _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.down(.rightControl))
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftControl.keyCode, flags: Self.down(.rightControl).union(TalkKey.leftControl.downFlag)) == .rejected(.combination(modifiers: "⌃", keyCode: nil)))
         #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.down(.leftControl)) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftControl.keyCode, flags: []) == nil)
         // fn, then Shift.
         _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
-        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: [.maskSecondaryFn, .maskShift]) == .rejected(.combination(modifiers: "fn ⇧", keyCode: nil)))
-        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskShift) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: [.maskSecondaryFn, .maskShift]) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskShift) == .chosen(.combination(KeyCombination(modifiers: [.fn, .shift]))))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: []) == nil)
         // A letter with Control held, where Control went down before the recording.
-        #expect(recorder.handle(type: .keyDown, keyCode: 0x00, flags: .maskControl) == .rejected(.combination(modifiers: "⌃", keyCode: 0x00)))
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x00, flags: .maskControl) == .chosen(.combination(KeyCombination(modifiers: .control, keyCode: 0x00))))
+    }
+
+    @Test func systemShortcutsAreTurnedDown() {
+        var recorder = KeyRecorder()
+        // Command and C would stop copy in every app.
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: Self.down(.leftCommand))
+        #expect(recorder.handle(type: .keyDown, keyCode: Int64(kVK_ANSI_C), flags: Self.down(.leftCommand)) == .rejected(.shortcut(modifiers: "⌘", keyCode: Int64(kVK_ANSI_C))))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: []) == nil)
+        for keyCode in [kVK_ANSI_V, kVK_ANSI_1, kVK_Tab, kVK_Space, kVK_LeftArrow, kVK_Return] {
+            #expect(recorder.handle(type: .keyDown, keyCode: Int64(keyCode), flags: .maskCommand) == .rejected(.shortcut(modifiers: "⌘", keyCode: Int64(keyCode))))
+        }
+        // Control and Space switches input sources.
+        #expect(recorder.handle(type: .keyDown, keyCode: Int64(kVK_Space), flags: .maskControl) == .rejected(.shortcut(modifiers: "⌃", keyCode: Int64(kVK_Space))))
+        // Command with a function key, and Command with another modifier, can be keys.
+        #expect(recorder.handle(type: .keyDown, keyCode: Int64(kVK_F5), flags: .maskCommand) == .chosen(.combination(KeyCombination(modifiers: .command, keyCode: Int64(kVK_F5)))))
+        #expect(recorder.handle(type: .keyDown, keyCode: Int64(kVK_Space), flags: [.maskControl, .maskAlternate]) == .chosen(.combination(KeyCombination(modifiers: [.control, .option], keyCode: Int64(kVK_Space)))))
+    }
+
+    @Test func savedSystemShortcutsAreNotRead() {
+        #expect(KeyCombination(saved: "command|8|C") == nil)
+        #expect(KeyCombination(saved: "control|49|") == nil)
+        #expect(KeyCombination(saved: "shift+command|2|D") != nil)
+        #expect(KeyCombination(saved: "command|96|") != nil)
+    }
+
+    @Test func shiftFirstThenCommandAndDIsAChoice() {
+        var recorder = KeyRecorder()
+        // Shift alone shows its note, which the combination then replaces.
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: .maskShift) == .rejected(.shift))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: Self.down(.leftCommand).union(.maskShift)) == nil)
+        #expect(recorder.isPending)
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x02, flags: Self.down(.leftCommand).union(.maskShift)) == .chosen(.combination(KeyCombination(modifiers: [.shift, .command], keyCode: 0x02))))
+        // Letting go afterwards chooses nothing more.
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: Self.down(.leftCommand)) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: []) == nil)
+    }
+
+    @Test func aTurnedDownKeyMakesTheModifiersNoCombination() {
+        var recorder = KeyRecorder()
+        // fn and Shift with an arrow: the arrow is turned down, and so the release of fn
+        // and Shift chooses nothing.
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
+        _ = recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: [.maskSecondaryFn, .maskShift])
+        #expect(recorder.handle(type: .keyDown, keyCode: 0x7E, flags: [.maskSecondaryFn, .maskShift]) == .rejected(.key(keyCode: 0x7E)))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: 0x38, flags: .maskSecondaryFn) == nil)
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: []) == nil)
+        // Once all are up, a new combination counts again.
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.down(.rightControl))
+        _ = recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: Self.down(.rightControl).union(Self.down(.rightOption)))
+        #expect(recorder.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: Self.down(.rightOption)) == .chosen(.combination(KeyCombination(modifiers: [.control, .option]))))
     }
 
     @Test func shiftCapsLockAndOtherKeysAreTurnedDown() {
@@ -214,6 +268,8 @@ struct KeyRecorderTests {
         #expect(KeyRecorder.Rejection.combination(modifiers: "⌃", keyCode: nil).message() == "A key combination can't be the talk key.")
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_Space)).message() == "The Space key can't be the talk key. Holding it would type or do something in the app in front.")
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_F5)).message() == "The F5 key can't be the talk key. Holding it would type or do something in the app in front.")
+        #expect(KeyRecorder.Rejection.shortcut(modifiers: "⌘", keyCode: Int64(kVK_Tab)).message() == "⌘ Tab is a shortcut of macOS or most apps and can't be the talk key. It would stop working everywhere while Orra runs.")
+        #expect(KeyRecorder.Rejection.shortcut(modifiers: "⌃", keyCode: Int64(kVK_Space)).message(for: .translation) == "⌃ Space is a shortcut of macOS or most apps and can't be the translation key. It would stop working everywhere while Orra runs.")
     }
 
     @Test @MainActor func rejectionsNameTheTranslationKeyWhileItIsRecorded() {
