@@ -520,6 +520,28 @@ struct TranslationSpeechTests {
         #expect(playback.calls.filter { $0.hasPrefix("play") }.isEmpty)
     }
 
+    /// A stop while the speech model listens to the second try: the closer first try does
+    /// not play either, and what is left of the translation is dropped.
+    @Test func aStopDuringTheSecondWordCheckPlaysNoCloserTry() async {
+        synthesizer.streamsPieces.withLock { $0 = false }
+        synthesizer.makes.withLock { $0 = { text, _ in [Self.reading(text)] } }
+        let calls = Mutex(0)
+        let speech = makeSpeech()
+        speech.transcribeSpeech = { [speech] _, _ in
+            let call = calls.withLock { $0 += 1; return $0 }
+            if call == 2 {
+                speech.stop()
+            }
+            return "我们明天开会看看看看"
+        }
+        speech.speak("我们明天开会讨论预算。好的，谢谢大家。", in: .chinese)
+        await speech.waitUntilDone()
+        #expect(calls.withLock { $0 } == 2)
+        #expect(spoken == ["zh 我们明天开会讨论预算。", "zh 我们明天开会讨论预算。"])
+        #expect(playback.calls == ["start Orra Microphone", "stop"])
+        #expect(speech.problem == nil)
+    }
+
     /// The speech model is dictation's, so the word check waits while the user dictates,
     /// and gets the whole piece at the voice model's sample rate.
     @Test func theWordCheckWaitsWhileTheUserDictates() async throws {
