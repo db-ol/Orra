@@ -1721,18 +1721,20 @@ modifiers with a regular key, such as ⇧ ⌘ D:
   again, then running Orra 0.3.1, keeps that single key.
 - [ ] The problem report names a combination by its symbols and key code only.
 
-Meeting captions, added on 2026-10-14, not verified yet. Meeting Captions in the menu
+Meeting captions, added on 2026-10-14. On 2026-10-15 the maintainer checked captions and
+the scroll follow with a local build. Meeting Captions in the menu
 captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
 pauses, transcribes each with the speech model and translates it with the local model,
-in a floating window. The microphone is never used for it. Before these checks, the
-maintainer adds NSAudioCaptureUsageDescription to Orra/Info.plist and its Chinese text to
-InfoPlist.xcstrings. Without the key the window says "This build of Orra cannot capture
-the sound the Mac plays yet." and nothing is captured. Watch the log with
+in a floating window. The microphone is never used for it. Orra/Info.plist holds
+NSAudioCaptureUsageDescription, with its Chinese text in InfoPlist.xcstrings. A build
+without the key says "This build of Orra cannot capture the sound the Mac plays yet." and
+captures nothing. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`:
 it shows starts, stops, counts and failures, never text.
 
-- [ ] Without the Info.plist key: turning Meeting Captions on opens the window with the
-  note above, no permission prompt comes, and turning it off closes the window.
+- [ ] With the Info.plist key removed for a test build: turning Meeting Captions on opens
+  the window with the note above, no permission prompt comes, and turning it off closes
+  the window.
 - [ ] With the key, the first time Meeting Captions is turned on, macOS asks whether Orra
   may record system audio, with the text from Info.plist, in English and in Chinese.
   Allowing it starts captions. Orra then shows under Privacy & Security, Screen & System
@@ -1788,7 +1790,7 @@ it shows starts, stops, counts and failures, never text.
   one capture running (the log shows one start after the last stop).
 - [ ] The window keeps the height you give it as sentences pile up, and can be made
   shorter again after it filled up.
-- [ ] Without the Info.plist key, turning captions on does not load the local model
+- [ ] With the key removed for a test build, turning captions on does not load the local model
   (Activity Monitor shows no rise in memory) and the window offers no download.
 
 Measuring captions on audio files: CaptionPipelineMeasurementTests feeds files through
