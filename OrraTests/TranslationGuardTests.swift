@@ -128,6 +128,10 @@ struct TranslationGuardTests {
         #expect(TranslationGuard.check(source: "二零零二十个。", output: "200 of them.", target: .english) == .newNumber(["200"]))
         #expect(TranslationGuard.check(source: "十二三四个。", output: "34 of them.", target: .english) == .newNumber(["34"]))
         #expect(TranslationGuard.check(source: "一二年。", output: "In 2012.", target: .english) == .newNumber(["2012"]))
+        // The decimals of 三点一四一五九 are 3.14159, not a number 14159 of their own.
+        #expect(Self.check(.english, "圆周率是三点一四一五九。", "Pi is 3.14159.") == "")
+        #expect(Self.check(.english, "开会地点二零三室。", "The meeting is in room 203.") == "")
+        #expect(TranslationGuard.check(source: "圆周率是三点一四一五九。", output: "Pi is 14159.", target: .english) == .newNumber(["14159"]))
     }
 
     @Test func lengthIsBoundedUnlessTheSpeakerCorrectedThemselves() {

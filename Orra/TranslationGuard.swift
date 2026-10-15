@@ -228,9 +228,9 @@ nonisolated enum TranslationGuard {
     /// guards2.py accepts a number within a millionth of a source value, which lets a
     /// changed last digit of a phone number through. Here a number of `exactDigits` or more
     /// digits before any point has to match a source value exactly, unless the source has
-    /// a correction cue (13812345678，不对，最后一位是9). This is the one place where the port
-    /// deliberately differs from guards2.py. No output of the benchmark gets another verdict
-    /// from it.
+    /// a correction cue (13812345678，不对，最后一位是9). This differs from guards2.py on
+    /// purpose, as the reading of Chinese digits in `digitReadings` and `chineseValue` does.
+    /// No output of the benchmark gets another verdict from either.
     static func newNumbers(source: String, output: String) -> [String] {
         let have = sourceValues(source)
         let exact = !matches(correctionCue, source)
@@ -477,8 +477,9 @@ nonisolated enum TranslationGuard {
     private static let thousandsSeparator = regex(#"(?<=\d),(?=\d{3})"#)
     private static let digitsWithMultiplier = regex(#"(\d+(?:\.\d+)?)\s*(百万|千万|万|亿|千|[kKmMbB]n?\b|thousand|million|billion|hundred|dozen)?"#)
     private static let chineseNumeral = regex("[零〇一二两三四五六七八九十百千万亿幺]+")
-    /// A run of Chinese numerals with no unit inside or around it.
-    private static let chineseDigitRun = regex("(?<![零〇一二两三四五六七八九幺十百千万亿])[零〇一二两三四五六七八九幺]++(?![十百千万亿])")
+    /// A run of Chinese numerals with no unit inside or around it, and not the decimals of
+    /// a number such as 三点一四一五九, which `chineseDecimal` reads.
+    private static let chineseDigitRun = regex("(?<![零〇一二两三四五六七八九幺十百千万亿])(?<![零〇一二两三四五六七八九十百千万亿]点)[零〇一二两三四五六七八九幺]++(?![十百千万亿])")
     private static let chineseDecimal = regex("([零一二两三四五六七八九十]+)点([零一二三四五六七八九]+)(万|亿)?")
     private static let tenThousandsAndThousands = regex(#"(\d+)\s*万\s*(\d)\s*千"#)
     private static let tenThousandsAndDigit = regex(#"(\d+)\s*万\s*(\d)(?![\d.])"#)
