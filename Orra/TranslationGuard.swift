@@ -9,8 +9,10 @@ import Foundation
 /// through unchanged in English, after the model once turned GMV into QoM. Over every
 /// output of the benchmark's prompt variants it held back none that was right, and it
 /// caught every adversarial output that answered. TranslationGuardTests runs those outputs
-/// and expects the verdicts of the Python version. One difference is deliberate: a number
-/// of 7 or more digits has to come through exactly, see `newNumbers`.
+/// and expects the verdicts of the Python version. Two differences are deliberate: a number
+/// of 7 or more digits has to come through exactly, see `newNumbers`, and Chinese numerals
+/// said digit by digit or with 零 are read as written, see `digitReadings` and
+/// `chineseValue`.
 nonisolated enum TranslationGuard {
     /// Why a translation was held back. `logName` names the check without any of the text.
     enum Failure: Equatable, Sendable, CustomStringConvertible {
@@ -226,9 +228,9 @@ nonisolated enum TranslationGuard {
     /// guards2.py accepts a number within a millionth of a source value, which lets a
     /// changed last digit of a phone number through. Here a number of `exactDigits` or more
     /// digits before any point has to match a source value exactly, unless the source has
-    /// a correction cue (13812345678，不对，最后一位是9). This is the one place where the port
-    /// deliberately differs from guards2.py. No output of the benchmark gets another verdict
-    /// from it.
+    /// a correction cue (13812345678，不对，最后一位是9). This differs from guards2.py on
+    /// purpose, as the reading of Chinese digits in `digitReadings` and `chineseValue` does.
+    /// No output of the benchmark gets another verdict from either.
     static func newNumbers(source: String, output: String) -> [String] {
         let have = sourceValues(source)
         let exact = !matches(correctionCue, source)
@@ -272,6 +274,7 @@ nonisolated enum TranslationGuard {
                 }
             }
         }
+        values.formUnion(digitReadings(text))
         // 三点五 is 3.5 and 一点五万 15000.
         let nsText = text as NSString
         for match in chineseDecimal.matches(in: text, range: NSRange(location: 0, length: nsText.length)) {
@@ -371,35 +374,70 @@ nonisolated enum TranslationGuard {
     }
 
     /// The value of a run of Chinese numerals, as guards2.py reads it: 三万五 is 35000 and
-    /// 三百五 350.
+    /// 三百五 350. Unlike guards2.py, a 零 after the last unit keeps the last digit in the
+    /// ones, so 两千零二 is 2002 and 三万零五 30005, not 2200 and 35000.
     static func chineseValue(_ run: String) -> Double {
         var total = 0.0
         var section = 0.0
         var digit: Double?
         var lastUnit: Double?
+        var zeroAfterUnit = false
         for scalar in run.unicodeScalars {
             if let value = chineseDigits[scalar] {
                 digit = value
+                if value == 0 {
+                    zeroAfterUnit = true
+                }
             } else if let unit = chineseUnits[scalar] {
                 section += (digit ?? 1) * unit
                 lastUnit = unit
                 digit = nil
+                zeroAfterUnit = false
             } else if scalar == "万" || scalar == "亿" {
                 let unit: Double = scalar == "万" ? 10_000 : 100_000_000
                 total += (section + (digit ?? 0)) * unit
                 section = 0
                 digit = nil
                 lastUnit = unit
+                zeroAfterUnit = false
             }
         }
         if let digit {
-            if let lastUnit, lastUnit >= 100 {
+            if let lastUnit, lastUnit >= 100, !zeroAfterUnit {
                 section += digit * (lastUnit / 10).rounded(.down)
             } else {
                 section += digit
             }
         }
         return total + section
+    }
+
+    /// The values of Chinese numerals said digit by digit, as years and phone numbers are:
+    /// 二零零二 is 2002, 二〇二四 2024 and 幺三八 138. A run of three or more digits, without
+    /// 十, 百, 千, 万 or 亿, is its string of digits. Two digits count only before 年, as
+    /// 九八年 is 98 and also 1998 and 2098, and not when they are a rough count such as
+    /// 三四年 (two digits in a row going up) or hold 两, as 两三个 does.
+    static func digitReadings(_ text: String) -> Set<Double> {
+        var values: Set<Double> = []
+        let ns = text as NSString
+        for match in chineseDigitRun.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let run = ns.substring(with: match.range)
+            if run.contains("两") {
+                continue
+            }
+            let digits = run.unicodeScalars.compactMap { chineseDigits[$0].map(Int.init) }
+            guard let value = Double(digits.map(String.init).joined()) else { continue }
+            if digits.count >= 3 {
+                values.insert(value)
+            } else if digits.count == 2 {
+                let end = match.range.location + match.range.length
+                let beforeYear = end < ns.length && ns.substring(with: NSRange(location: end, length: 1)) == "年"
+                if beforeYear, digits[1] != digits[0] + 1 {
+                    values.formUnion([value, 1900 + value, 2000 + value])
+                }
+            }
+        }
+        return values
     }
 
     /// Numbers this long, phone numbers and IDs, have to come through exactly.
@@ -439,6 +477,9 @@ nonisolated enum TranslationGuard {
     private static let thousandsSeparator = regex(#"(?<=\d),(?=\d{3})"#)
     private static let digitsWithMultiplier = regex(#"(\d+(?:\.\d+)?)\s*(百万|千万|万|亿|千|[kKmMbB]n?\b|thousand|million|billion|hundred|dozen)?"#)
     private static let chineseNumeral = regex("[零〇一二两三四五六七八九十百千万亿幺]+")
+    /// A run of Chinese numerals with no unit inside or around it, and not the decimals of
+    /// a number such as 三点一四一五九, which `chineseDecimal` reads.
+    private static let chineseDigitRun = regex("(?<![零〇一二两三四五六七八九幺十百千万亿])(?<![零〇一二两三四五六七八九十百千万亿]点)[零〇一二两三四五六七八九幺]++(?![十百千万亿])")
     private static let chineseDecimal = regex("([零一二两三四五六七八九十]+)点([零一二三四五六七八九]+)(万|亿)?")
     private static let tenThousandsAndThousands = regex(#"(\d+)\s*万\s*(\d)\s*千"#)
     private static let tenThousandsAndDigit = regex(#"(\d+)\s*万\s*(\d)(?![\d.])"#)

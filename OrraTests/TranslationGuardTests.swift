@@ -90,6 +90,50 @@ struct TranslationGuardTests {
         #expect(TranslationGuard.newNumbers(source: "电话是１３８", output: "138 and 7") == ["7"])
     }
 
+    /// A year or a phone number said digit by digit, 二零零二 or 幺三八, is that string of
+    /// digits, not its last digit. Found when captions of a talk dropped "in 2002".
+    @Test func digitByDigitReadingsAreTheirDigits() {
+        #expect(Self.check(.english, "我是二零零二年毕业的。", "I graduated in 2002.") == "")
+        #expect(Self.check(.english, "他一九九八年来的上海。", "He came to Shanghai in 1998.") == "")
+        #expect(Self.check(.english, "二〇二四年的计划。", "The plan for 2024.") == "")
+        #expect(Self.check(.english, "九八年那会儿。", "Back in '98.") == "")
+        #expect(Self.check(.english, "零五年的事。", "Something from 2005.") == "")
+        #expect(Self.check(.english, "从一九九八年到二零零二年。", "From 1998 to 2002.") == "")
+        #expect(Self.check(.english, "电话是幺三八幺二三四五六七八。", "The phone number is 13812345678.") == "")
+        #expect(Self.check(.english, "分机号是零幺零。", "The extension is 010.") == "")
+        #expect(Self.check(.english, "两千零二年。", "In 2002.") == "")
+        #expect(Self.check(.english, "2002年。", "In 2002.") == "")
+        #expect(Self.check(.english, "三万零五。", "30,005.") == "")
+        #expect(Self.check(.english, "一千零五十。", "1,050.") == "")
+        #expect(TranslationGuard.chineseValue("两千零二") == 2002)
+        #expect(TranslationGuard.chineseValue("三万零五") == 30_005)
+        #expect(TranslationGuard.sourceValues("二零零二年").contains(2002))
+        #expect(TranslationGuard.sourceValues("二〇二四").contains(2024))
+    }
+
+    /// Reading digits as a string adds no room for an invented number.
+    @Test func digitByDigitReadingsStillHoldBackOtherNumbers() {
+        #expect(TranslationGuard.check(source: "我是二零零二年毕业的。", output: "I graduated in 2003.", target: .english) == .newNumber(["2003"]))
+        #expect(TranslationGuard.check(source: "我是二零零二年毕业的。", output: "I graduated in 2020.", target: .english) == .newNumber(["2020"]))
+        #expect(TranslationGuard.check(source: "二〇二四年的计划。", output: "The plan for 2042.", target: .english) == .newNumber(["2042"]))
+        #expect(TranslationGuard.check(source: "电话是幺三八幺二三四五六七八。", output: "The phone number is 13812345679.", target: .english) == .newNumber(["13812345679"]))
+        #expect(TranslationGuard.check(source: "两千零二年。", output: "In 2200.", target: .english) == .newNumber(["2200"]))
+        // 两三个 and 三四天 are rough counts, not 23 or 34.
+        #expect(TranslationGuard.check(source: "我需要两三个人。", output: "I need 23 people.", target: .english) == .newNumber(["23"]))
+        #expect(TranslationGuard.check(source: "大概三四天吧。", output: "About 34 days.", target: .english) == .newNumber(["34"]))
+        #expect(TranslationGuard.check(source: "大概三四年吧。", output: "About 34 years.", target: .english) == .newNumber(["34"]))
+        #expect(TranslationGuard.check(source: "他五六十岁。", output: "He is 56 years old.", target: .english) == .newNumber(["56"]))
+        // Units keep their meaning: 二十二 is 22, never 2102.
+        #expect(TranslationGuard.check(source: "二十二个人。", output: "2102 people.", target: .english) == .newNumber(["2102"]))
+        #expect(TranslationGuard.check(source: "二零零二十个。", output: "200 of them.", target: .english) == .newNumber(["200"]))
+        #expect(TranslationGuard.check(source: "十二三四个。", output: "34 of them.", target: .english) == .newNumber(["34"]))
+        #expect(TranslationGuard.check(source: "一二年。", output: "In 2012.", target: .english) == .newNumber(["2012"]))
+        // The decimals of 三点一四一五九 are 3.14159, not a number 14159 of their own.
+        #expect(Self.check(.english, "圆周率是三点一四一五九。", "Pi is 3.14159.") == "")
+        #expect(Self.check(.english, "开会地点二零三室。", "The meeting is in room 203.") == "")
+        #expect(TranslationGuard.check(source: "圆周率是三点一四一五九。", output: "Pi is 14159.", target: .english) == .newNumber(["14159"]))
+    }
+
     @Test func lengthIsBoundedUnlessTheSpeakerCorrectedThemselves() {
         #expect(Self.check(.english, "好的。", "Okay, I will write the full report with every detail you asked for and send it to the whole team before the end of today.") == "too long (40 vs 2)")
         #expect(Self.check(.english, "这个方案我觉得还可以再改改然后发给大家看看，明天上午开会讨论一下细节。", "This plan.") == "too short (3 vs 33)")
