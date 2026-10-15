@@ -54,14 +54,19 @@ nonisolated enum SpeechChunks {
         return result
     }
 
-    /// Cuts a sentence that is too long at its commas, then at spaces, then anywhere.
+    /// Cuts a sentence that is too long at its commas, then at spaces, then anywhere. A
+    /// Latin comma or colon counts only before white space or the end, so 1,000 and 2:30
+    /// stay whole.
     private static func cut(_ sentence: String) -> [String] {
         guard sentence.count > maximumLength else { return [sentence] }
         var pieces: [String] = []
         var current = ""
-        for character in sentence {
+        let characters = Array(sentence)
+        for (index, character) in characters.enumerated() {
             current.append(character)
-            if weakEnds.contains(character), current.count >= minimumLength {
+            let next = index + 1 < characters.count ? characters[index + 1] : nil
+            let isEnd = weakEnds.contains(character) && (!character.isASCII || next.map(\.isWhitespace) ?? true)
+            if isEnd, current.count >= minimumLength {
                 append(current, to: &pieces)
                 current = ""
             }

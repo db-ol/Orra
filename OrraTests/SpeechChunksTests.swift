@@ -60,4 +60,15 @@ struct SpeechChunksTests {
         #expect(han.allSatisfy { $0.count <= SpeechChunks.maximumLength })
         #expect(han.joined() == chinese)
     }
+
+    /// A long sentence is not cut at the comma of a number or the colon of a time.
+    @Test func longSentencesKeepNumbersWhole() {
+        let english = "The budget grew from 1,000 to 2,500 dollars in the first quarter, and the team now expects 4,000 by the meeting at 3:30 next Tuesday afternoon."
+        let pieces = SpeechChunks.split(english)
+        #expect(pieces == [
+            "The budget grew from 1,000 to 2,500 dollars in the first quarter,",
+            "and the team now expects 4,000 by the meeting at 3:30 next Tuesday afternoon.",
+        ])
+        #expect(pieces.joined(separator: " ") == english)
+    }
 }
