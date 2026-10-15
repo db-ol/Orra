@@ -37,18 +37,31 @@
         <p class="lede">Dictate and translate in any app. Everything runs on your Mac.</p>
         <div class="cta">
           <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Download for Mac</a>
-          <p class="version">Version 0.3.1 <span class="needs">Needs a Mac with Apple silicon, macOS 15.6 or later and about 3 GB of free space.</span></p>
+          <p class="version">Version 0.3.2 <span class="needs">Needs a Mac with Apple silicon, macOS 15.6 or later and about 3 GB of free space.</span></p>
         </div>
 
         <div class="demos">
           <figure class="demo" data-demo="dictate">
             <figcaption class="demo-name">Dictation</figcaption>
-            <div class="demo-stage" role="img" aria-label="Animation: someone says “Um, I’ll send the notes after lunch.” Orra’s capsule of bars moves with the voice, and the words appear in a note without the filler um.">
-              <p class="demo-said" aria-hidden="true">“<span class="filler">Um, </span><span class="said-words">I’ll send the notes after lunch.</span>”</p>
+            <div class="demo-stage" role="img" aria-label="Animation: someone says “Um, I’ll post Wednesday’s meeting notes this afternoon.” Orra’s capsule of bars moves with the voice, and the words appear in a note without the filler um.">
+              <p class="demo-said" aria-hidden="true">“<span class="filler">Um, </span><span class="said-words">I’ll post Wednesday’s meeting notes this afternoon.</span>”</p>
               <div class="demo-window" aria-hidden="true">
                 <div class="demo-chrome"><i></i><i></i><i></i></div>
                 <p class="doc-title">Project update</p>
-                <p class="demo-target"><span class="pasted">I’ll send the notes after lunch.</span><span class="caret"></span></p>
+                <p class="demo-target"><span class="pasted">I’ll post Wednesday’s meeting notes this afternoon.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+
+          <figure class="demo" data-demo="cleanup">
+            <figcaption class="demo-name">Clean up (optional)</figcaption>
+            <div class="demo-stage" role="img" aria-label="Animation: someone says “Let’s go over the quote at three, oh wait, four tomorrow.” Orra’s capsule of bars moves with the voice. With cleanup turned on, Orra applies the spoken correction, and “Let’s go over the quote at four tomorrow.” appears in an email.">
+              <p class="demo-said" aria-hidden="true">“<span class="said-words">Let’s go over the quote at </span><span class="filler">three, oh wait, </span><span class="said-words">four tomorrow.</span>”</p>
+              <div class="demo-window" aria-hidden="true">
+                <div class="demo-chrome"><i></i><i></i><i></i></div>
+                <p class="mail-subject"><span>Subject</span>Quote</p>
+                <p class="demo-target"><span class="pasted">Let’s go over the quote at four tomorrow.</span><span class="caret"></span></p>
               </div>
               <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
@@ -56,12 +69,12 @@
 
           <figure class="demo" data-demo="translate">
             <figcaption class="demo-name">Translation</figcaption>
-            <div class="demo-stage" role="img" aria-label="Animation: in a chat, a friend asks “When do we meet?” Someone says the Chinese sentence 明天下午三点开会. Orra’s capsule shows a small 译 badge, and the English translation, Meeting tomorrow at 3 p.m., appears in the message field.">
-              <p class="demo-said" aria-hidden="true" lang="zh-Hans">“<span class="said-words">明天下午三点开会。</span>”</p>
+            <div class="demo-stage" role="img" aria-label="Animation: in a chat, a friend asks “When can I see the designs?” Someone says the Chinese sentence 我这边周五之前能把设计稿发给你. Orra’s capsule shows a small 译 badge, and the English translation, I can send you the designs before Friday, appears in the message field.">
+              <p class="demo-said" aria-hidden="true" lang="zh-Hans">“<span class="said-words">我这边周五之前能把设计稿发给你。</span>”</p>
               <div class="demo-window chat" aria-hidden="true">
                 <div class="chat-head"><span class="avatar">S</span>Sam</div>
-                <p class="bubble">When do we meet?</p>
-                <p class="demo-target composer"><span class="pasted">Meeting tomorrow at 3 p.m.</span><span class="caret"></span></p>
+                <p class="bubble">When can I see the designs?</p>
+                <p class="demo-target composer"><span class="pasted">I can send you the designs before Friday.</span><span class="caret"></span></p>
               </div>
               <span class="capsule" aria-hidden="true"><span class="badge" lang="zh-Hans">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
@@ -80,7 +93,7 @@
           </div>
           <div class="tile reveal">
             <h3>Learns from your corrections</h3>
-            <p>Fix a misheard word after a dictation, and Orra adds it to your vocabulary. Off until you turn it on.</p>
+            <p>Correct a misheard word after a dictation, and Orra remembers what it wrote and how you fixed it. Next time it writes the word your way. Off by default. It never keeps whole sentences.</p>
           </div>
           <div class="tile reveal">
             <h3>Chinese and English, mixed</h3>
@@ -99,8 +112,7 @@
         <h2 class="reveal">Privacy</h2>
         <p class="statement reveal">What you say stays on your Mac.</p>
         <div class="prose reveal">
-          <p>You need the internet only to download Orra and its models. Apart from that, Orra goes online only to check for updates, and only if you allow it. Everything else runs on your Mac, and Orra never saves your recordings or what you said.</p>
-          <p>If you turn on learning from your corrections, Orra keeps only word pairs. The <a href="https://github.com/db-ol/Orra#privacy">README</a> has the details.</p>
+          <p>You need the internet only to download Orra and its models. Apart from that, Orra goes online only to check for updates, and only if you allow it. Everything else runs on your Mac, and Orra never saves your recordings or what you said. The <a href="https://github.com/db-ol/Orra#privacy">README</a> has the details.</p>
         </div>
       </div>
     </section>

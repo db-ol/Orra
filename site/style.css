@@ -40,7 +40,7 @@
     --window: #1d1d1f;
     --window-line: #333336;
     --capsule: #000000;
-        --shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px #333336;
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px #333336;
   }
 }
 
@@ -227,13 +227,14 @@ h1 {
   margin-top: 2px;
 }
 
-/* Demos of dictation and translation. The markup shows the final state, so
-   they read right without script and with reduced motion. site.js plays one
-   demo at a time by setting data-active on .demos and data-phase on it. */
+/* Demos of dictation, cleanup and translation. The markup shows the final
+   state, so they read right without script and with reduced motion. site.js
+   plays one demo at a time by setting data-active on .demos and data-phase
+   on it. */
 .demos {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
   margin: 56px auto 0;
 }
 
@@ -242,8 +243,7 @@ h1 {
   transition: opacity 0.5s var(--ease);
 }
 
-.demos[data-active="dictate"] [data-demo="translate"],
-.demos[data-active="translate"] [data-demo="dictate"] {
+.demos[data-active] .demo:not([data-phase]) {
   opacity: 0.45;
 }
 
@@ -259,13 +259,13 @@ h1 {
   border-radius: var(--radius);
   background: var(--bg-soft);
   overflow: hidden;
-  padding: 24px 20px 0;
+  padding: 22px 18px 0;
 }
 
 .demo-said {
-  height: 56px;
+  height: 60px;
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   color: var(--muted);
   font-style: italic;
   transition: opacity 0.4s var(--ease);
@@ -282,10 +282,6 @@ h1 {
   transition: opacity 0.4s var(--ease) 0.3s;
 }
 
-.said-words {
-  display: inline-block;
-  clip-path: inset(0 0 0 0);
-}
 
 .demo-window {
   text-align: left;
@@ -296,7 +292,7 @@ h1 {
   margin: 0 auto;
   padding: 0 18px 16px;
   min-height: 150px;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .demo-window p {
@@ -323,6 +319,19 @@ h1 {
 
 .demo-target {
   min-height: 1.6em;
+}
+
+.mail-subject {
+  font-weight: 600;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--window-line);
+  margin-bottom: 10px;
+}
+
+.mail-subject span {
+  font-weight: 400;
+  color: var(--muted);
+  margin-right: 8px;
 }
 
 .chat-head {
@@ -425,8 +434,11 @@ h1 {
   transition: none;
 }
 
-.demo[data-phase="speak"] .said-words {
-  animation: speak 2.2s linear both;
+/* site.js splits the spoken line into spans, each with its index in --i,
+   and sets --step, the time between two of them. */
+.demo[data-phase="speak"] .demo-said .unit {
+  animation: speak 0.2s linear both;
+  animation-delay: calc(var(--i) * var(--step));
 }
 
 .demo[data-phase="idle"] .pasted,
@@ -448,8 +460,8 @@ h1 {
 }
 
 @keyframes speak {
-  from { clip-path: inset(0 100% 0 0); }
-  to { clip-path: inset(0 0 0 0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes level {
@@ -597,6 +609,15 @@ footer p {
   }
 }
 
+/* Three demos need about 300 pixels each. Below that they stack. */
+@media (max-width: 960px) {
+  .demos {
+    grid-template-columns: 1fr;
+    max-width: 440px;
+    gap: 28px;
+  }
+}
+
 @media (max-width: 640px) {
   body {
     font-size: 16px;
@@ -628,8 +649,7 @@ footer p {
   }
 
   .tiles,
-  .split,
-  .demos {
+  .split {
     grid-template-columns: 1fr;
   }
 

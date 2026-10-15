@@ -37,18 +37,31 @@
         <p class="lede">在任何 App 里听写和翻译，全部在你的 Mac 上完成。</p>
         <div class="cta">
           <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">下载 Mac 版</a>
-          <p class="version">版本 0.3.1 <span class="needs">需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。</span></p>
+          <p class="version">版本 0.3.2 <span class="needs">需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。</span></p>
         </div>
 
         <div class="demos">
           <figure class="demo" data-demo="dictate">
             <figcaption class="demo-name">听写</figcaption>
-            <div class="demo-stage" role="img" aria-label="动画：有人说“呃，午饭后我把会议记录发给你。”Orra 的胶囊里，音量条随声音跳动，随后这句话出现在一篇笔记里，语气词“呃”已经去掉。">
-              <p class="demo-said" aria-hidden="true">“<span class="filler">呃，</span><span class="said-words">午饭后我把会议记录发给你。</span>”</p>
+            <div class="demo-stage" role="img" aria-label="动画：有人说“呃，我把周三的会议纪要整理好了，下午发到群里。”Orra 的胶囊里，音量条随声音跳动，随后这句话出现在一篇笔记里，语气词“呃”已经去掉。">
+              <p class="demo-said" aria-hidden="true">“<span class="filler">呃，</span><span class="said-words">我把周三的会议纪要整理好了，下午发到群里。</span>”</p>
               <div class="demo-window" aria-hidden="true">
                 <div class="demo-chrome"><i></i><i></i><i></i></div>
                 <p class="doc-title">项目进展</p>
-                <p class="demo-target"><span class="pasted">午饭后我把会议记录发给你。</span><span class="caret"></span></p>
+                <p class="demo-target"><span class="pasted">我把周三的会议纪要整理好了，下午发到群里。</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+
+          <figure class="demo" data-demo="cleanup">
+            <figcaption class="demo-name">整理（可选）</figcaption>
+            <div class="demo-stage" role="img" aria-label="动画：有人说“明天下午三点，哦不对，四点，跟客户过一下报价。”Orra 的胶囊里，音量条随声音跳动。打开整理后，Orra 按说出口的更正改好内容，邮件里出现“明天下午四点跟客户过一下报价。”">
+              <p class="demo-said" aria-hidden="true">“<span class="said-words">明天下午</span><span class="filler">三点，哦不对，</span><span class="said-words">四点，跟客户过一下报价。</span>”</p>
+              <div class="demo-window" aria-hidden="true">
+                <div class="demo-chrome"><i></i><i></i><i></i></div>
+                <p class="mail-subject"><span>主题</span>报价</p>
+                <p class="demo-target"><span class="pasted">明天下午四点跟客户过一下报价。</span><span class="caret"></span></p>
               </div>
               <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
@@ -56,12 +69,12 @@
 
           <figure class="demo" data-demo="translate">
             <figcaption class="demo-name">翻译</figcaption>
-            <div class="demo-stage" role="img" aria-label="动画：在一个聊天窗口里，朋友用英文问“When do we meet?”。有人用中文说“明天下午三点开会”，Orra 的胶囊里显示一个小小的“译”字标记，随后英文译文“Meeting tomorrow at 3 p.m.”出现在输入框里。">
-              <p class="demo-said" aria-hidden="true">“<span class="said-words">明天下午三点开会。</span>”</p>
+            <div class="demo-stage" role="img" aria-label="动画：在一个聊天窗口里，朋友用英文问“When can I see the designs?”。有人用中文说“我这边周五之前能把设计稿发给你”，Orra 的胶囊里显示一个小小的“译”字标记，随后英文译文“I can send you the designs before Friday.”出现在输入框里。">
+              <p class="demo-said" aria-hidden="true">“<span class="said-words">我这边周五之前能把设计稿发给你。</span>”</p>
               <div class="demo-window chat" aria-hidden="true" lang="en">
                 <div class="chat-head"><span class="avatar">S</span>Sam</div>
-                <p class="bubble">When do we meet?</p>
-                <p class="demo-target composer"><span class="pasted">Meeting tomorrow at 3 p.m.</span><span class="caret"></span></p>
+                <p class="bubble">When can I see the designs?</p>
+                <p class="demo-target composer"><span class="pasted">I can send you the designs before Friday.</span><span class="caret"></span></p>
               </div>
               <span class="capsule" aria-hidden="true"><span class="badge">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
@@ -80,7 +93,7 @@
           </div>
           <div class="tile reveal">
             <h3>自我学习</h3>
-            <p>听写后改正一个听错的词，Orra 会把它加入个人词库。默认关闭，打开后才会学习。</p>
+            <p>听写后改正一个听错的词，Orra 会记下改前和改后的写法，下次照你的写法输出。默认关闭，不保存整句话。</p>
           </div>
           <div class="tile reveal">
             <h3>中英混合</h3>
@@ -99,8 +112,7 @@
         <h2 class="reveal">隐私</h2>
         <p class="statement reveal">你说的话，留在你的 Mac 上。</p>
         <div class="prose reveal">
-          <p>只有下载 Orra 和模型时需要联网。除此之外，只有在你允许检查更新时，Orra 才会联网。其他一切都在你的 Mac 上完成，Orra 从不保存你的录音和说过的话。</p>
-          <p>打开“自我学习”后，Orra 也只保存词对。详情见 <a href="https://github.com/db-ol/Orra/blob/main/README.zh-CN.md#隐私">README</a>。</p>
+          <p>只有下载 Orra 和模型时需要联网。除此之外，只有在你允许检查更新时，Orra 才会联网。其他一切都在你的 Mac 上完成，Orra 从不保存你的录音和说过的话。详情见 <a href="https://github.com/db-ol/Orra/blob/main/README.zh-CN.md#隐私">README</a>。</p>
         </div>
       </div>
     </section>
