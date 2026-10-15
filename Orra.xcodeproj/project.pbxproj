@@ -12,6 +12,7 @@
 		93F0E0E1307B2F6A00A80D8D /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 93F0E0E0307B2F6A00A80D8D /* MLXLLM */; };
 		93F0E0E3307B2F6A00A80D8D /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 93F0E0E2307B2F6A00A80D8D /* MLXLMCommon */; };
 		93F0E28C307B767800A80D8D /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = 93F0E28B307B767800A80D8D /* Tokenizers */; };
+		93F0E4F43081873600A80D8D /* Qwen3TTS in Frameworks */ = {isa = PBXBuildFile; productRef = 93F0E4F33081873600A80D8D /* Qwen3TTS */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +63,7 @@
 				93F0E0E1307B2F6A00A80D8D /* MLXLLM in Frameworks */,
 				937FD6AB307413F400086B6B /* Qwen3ASR in Frameworks */,
 				93F0E0E3307B2F6A00A80D8D /* MLXLMCommon in Frameworks */,
+				93F0E4F43081873600A80D8D /* Qwen3TTS in Frameworks */,
 				93F0DFA6307A196E00A80D8D /* Sparkle in Frameworks */,
 				93F0E28C307B767800A80D8D /* Tokenizers in Frameworks */,
 			);
@@ -123,6 +125,7 @@
 				93F0E0E0307B2F6A00A80D8D /* MLXLLM */,
 				93F0E0E2307B2F6A00A80D8D /* MLXLMCommon */,
 				93F0E28B307B767800A80D8D /* Tokenizers */,
+				93F0E4F33081873600A80D8D /* Qwen3TTS */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* Orra.app */;
@@ -602,6 +605,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 93F0E28A307B767800A80D8D /* XCRemoteSwiftPackageReference "swift-transformers" */;
 			productName = Tokenizers;
+		};
+		93F0E4F33081873600A80D8D /* Qwen3TTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 937FD6A9307413F400086B6B /* XCRemoteSwiftPackageReference "speech-swift" */;
+			productName = Qwen3TTS;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
