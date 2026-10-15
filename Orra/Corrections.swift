@@ -99,7 +99,7 @@ nonisolated enum CorrectionFinder {
     /// The separate edits between the two texts. Characters kept by the longest common
     /// subsequence split the changed span into edits. Edits closer than two characters
     /// without a space or punctuation between them are one edit, and a Latin word is taken
-    /// whole, with its digits and joining marks, so SGLang-Omni and Qwen3 stay one word,
+    /// whole, with its digits and joining marks, so KVLite-Nova and Qwen3 stay one word,
     /// and a letter typed into Ora or taken out of it changes the whole word. When less
     /// than half of the pasted text is kept, the text was rewritten, and the whole changed
     /// span is one edit.
@@ -320,7 +320,7 @@ nonisolated enum CorrectionFinder {
         character.isASCII && character.isLetter
     }
 
-    /// Letters, digits and the marks that join a name, as in SGLang-Omni, Node.js, GPT-4o.
+    /// Letters, digits and the marks that join a name, as in KVLite-Nova, Node.js, GPT-4o.
     /// Between words, not after a sentence's period, so done. Then to done.Then is no name.
     private static func isLatinLetterOrDigit(_ character: Character) -> Bool {
         character.isASCII && (character.isLetter || character.isNumber)
@@ -331,7 +331,7 @@ nonisolated enum CorrectionFinder {
     }
 
     /// apple and Apple: the start of a sentence, not a name. A name's own capitals, such as
-    /// sglang and SGLang, count.
+    /// kvlite and KVLite, count.
     private static func differsOnlyInFirstLetterCase(_ first: String, _ second: String) -> Bool {
         guard first != second, first.lowercased() == second.lowercased() else { return first == second }
         return first.dropFirst() == second.dropFirst()

@@ -1326,8 +1326,8 @@ corrections under Dictation in Settings, General first:
 - [ ] Fix a misheard name so it is learned, then remove it with the minus button under
   Vocabulary in Settings. Fix the same name again: it is added again and the notice with
   Undo shows.
-- [ ] When a dictation comes out as 陈阳写的那些文档一样嘛, fix it to 晨阳写的那些文档一样吗:
-  only the name 晨阳 is offered, never the whole sentence. Fix 通一千万 to
+- [ ] When a dictation comes out as 林悦写的那些文档一样嘛, fix it to 霖悦写的那些文档一样吗:
+  only the name 霖悦 is offered, never the whole sentence. Fix 通一千万 to
   通义千问: 通义千问 is learned, not 义千问.
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the

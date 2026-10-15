@@ -30,16 +30,16 @@ struct CorrectionFinderTests {
     }
 
     @Test func separateFixesInOneSentenceAreJudgedApart() {
-        // Real case: the whole sentence was learned. 陈 to 晨 offers the name, and 嘛 to 吗
+        // Real case: the whole sentence was learned. 林 to 霖 offers the name, and 嘛 to 吗
         // is grammar.
-        let found = findings("陈阳写的那些文档一样嘛", "晨阳写的那些文档一样吗")
+        let found = findings("林悦写的那些文档一样嘛", "霖悦写的那些文档一样吗")
         #expect(found.count == 1)
         guard case .suggestion(let suggestion) = found.first else {
             Issue.record("expected the name to be offered: \(found)")
             return
         }
-        #expect(suggestion.change == Correction(heard: "陈", corrected: "晨"))
-        #expect(suggestion.pair == Correction(heard: "陈阳", corrected: "晨阳"))
+        #expect(suggestion.change == Correction(heard: "林", corrected: "霖"))
+        #expect(suggestion.pair == Correction(heard: "林悦", corrected: "霖悦"))
     }
 
     @Test func aLatinNameAndAChineseFixApartAreJudgedApart() {
@@ -63,7 +63,7 @@ struct CorrectionFinderTests {
         #expect(findings("他说得对吗", "他说的对嘛").isEmpty)
         #expect(findings("你在干嘛呢", "你在干吗哪").isEmpty)
         // A grammar swap next to a name stays out of it.
-        #expect(findings("陈阳得书", "晨阳的书").map(\.correction) == [Correction(heard: "陈阳", corrected: "晨阳")])
+        #expect(findings("林悦得书", "霖悦的书").map(\.correction) == [Correction(heard: "林悦", corrected: "霖悦")])
     }
 
     @Test func aWordTheTokenizerKnowsDoesNotTakeInTheVerbAfterIt() {
@@ -137,8 +137,8 @@ struct CorrectionFinderTests {
     }
 
     @Test func aNameWithJoiningMarksAndSpelledLettersIsTakenWhole() {
-        #expect(find("S J L Omni的听写能力怎么样？", "S J L Omni的听写能力怎么样？", "SGLang-Omni的听写能力怎么样？") == Correction(heard: "S J L Omni", corrected: "SGLang-Omni"))
-        #expect(find("SGlang-omni的语言能力", "SGlang-omni的语言能力", "SGLang-Omni的语言能力") == Correction(heard: "SGlang-omni", corrected: "SGLang-Omni"))
+        #expect(find("K B L Nova的听写能力怎么样？", "K B L Nova的听写能力怎么样？", "KVLite-Nova的听写能力怎么样？") == Correction(heard: "K B L Nova", corrected: "KVLite-Nova"))
+        #expect(find("KVlite-nova的语言能力", "KVlite-nova的语言能力", "KVLite-Nova的语言能力") == Correction(heard: "KVlite-nova", corrected: "KVLite-Nova"))
         #expect(find("I use quen 3 now", "I use quen 3 now", "I use Qwen3 now") == Correction(heard: "quen 3", corrected: "Qwen3"))
     }
 
