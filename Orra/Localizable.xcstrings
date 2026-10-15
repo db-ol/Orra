@@ -73,6 +73,26 @@
         }
       }
     },
+    "%@ is a shortcut of macOS or most apps and can't be the talk key. It would stop working everywhere while Orra runs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是 macOS 或大多数 app 的快捷键，不能作为说话键。否则 Orra 运行时它在哪里都不起作用。"
+          }
+        }
+      }
+    },
+    "%@ is a shortcut of macOS or most apps and can't be the translation key. It would stop working everywhere while Orra runs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是 macOS 或大多数 app 的快捷键，不能作为翻译键。否则 Orra 运行时它在哪里都不起作用。"
+          }
+        }
+      }
+    },
     "%@ is chosen under Microphone. Choose another microphone or System Default there." : {
       "localizations" : {
         "zh-Hans" : {
@@ -161,6 +181,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "组合键不能作为翻译键。"
+          }
+        }
+      }
+    },
+    "A shortcut of macOS or most apps can't be the talk key. It would stop working everywhere while Orra runs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 或大多数 app 的快捷键不能作为说话键。否则 Orra 运行时它在哪里都不起作用。"
+          }
+        }
+      }
+    },
+    "A shortcut of macOS or most apps can't be the translation key. It would stop working everywhere while Orra runs." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 或大多数 app 的快捷键不能作为翻译键。否则 Orra 运行时它在哪里都不起作用。"
           }
         }
       }

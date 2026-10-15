@@ -105,10 +105,23 @@ nonisolated struct KeyCombination: Hashable, Sendable {
     }
 
     /// Whether this can be a key: two modifiers or more, or a regular key with Control,
-    /// Option or Command. Escape stays the key that cancels.
+    /// Option or Command that is no shortcut of the system. Escape stays the key that
+    /// cancels.
     var isValid: Bool {
         guard let keyCode else { return modifiers.count >= 2 }
-        return !modifiers.isDisjoint(with: ModifierSet.commandLike) && keyCode != TalkKeyDetector.escapeKeyCode
+        return !modifiers.isDisjoint(with: ModifierSet.commandLike) && keyCode != TalkKeyDetector.escapeKeyCode && !isSystemShortcut
+    }
+
+    /// Whether this is a shortcut of macOS or of nearly every app: Command with any key but
+    /// F1 to F20, such as ⌘ C, ⌘ V, ⌘ Tab or ⌘ Space, and Control with Space, which
+    /// switches input sources. Orra swallows its key, so as a key it would stop working in
+    /// every app while Orra runs.
+    var isSystemShortcut: Bool {
+        guard let keyCode else { return false }
+        if modifiers == .command {
+            return !KeyName.isFunctionKey(keyCode)
+        }
+        return modifiers == .control && keyCode == KeyName.spaceKeyCode
     }
 
     /// The keys as Mac menus show them, such as "⌃ ⌥" or "⇧ ⌘ D".

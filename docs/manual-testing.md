@@ -539,8 +539,10 @@ got worse than the baseline, see docs/release-gate.md.
     modifier let go first ends it and hides the later key up, toggle mode, Option
     joining cancels), the saved form of a combination, the titles and hints, and that a
     saved single key loads as before and stays saved beside a combination for an older
-    Orra. KeyRecorderTests checks that combinations are chosen, Command C at the key
-    down and modifiers at the first release, that Shift first then Command and D works,
+    Orra. KeyRecorderTests checks that combinations are chosen, Option Command C at the
+    key down and modifiers at the first release, that shortcuts of the system (Command
+    with any key but F1 to F20, and Control Space) are turned down and not read back from
+    a saved value, that Shift first then Command and D works,
     and that a turned down key spoils the modifiers until all are up.
     PushToTalkControllerTests checks through the tap press to start and stop, a
     translation combination taking over from right Control, the swap with a combination,
@@ -1704,6 +1706,11 @@ modifiers with a regular key, such as ⇧ ⌘ D:
   joins. fn with an arrow shows "fn Up Arrow is a key combination and can't be the talk
   key." Return alone shows its note. The help under the field names combinations in
   both languages.
+- [ ] Shortcuts of the system are turned down: ⌘ C, ⌘ V, ⌘ Tab, ⌘ Space and ⌃ Space each
+  show "… is a shortcut of macOS or most apps and can't be the talk key." (in Chinese
+  "… 是 macOS 或大多数 app 的快捷键，不能作为说话键。"), the key stays as it was, and
+  copy, paste, the app switcher, Spotlight and the input source switch keep working.
+  ⌥ ⌘ C and ⌘ F5 can still be chosen.
 - [ ] With the talk key right Control and the translation key ⌃ ⌥: right Control alone
   records after about 0.3 s, right Control then Option within that time translates, and
   Option then right Control translates too. Note that right Control then waits like a

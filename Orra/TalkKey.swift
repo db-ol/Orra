@@ -310,6 +310,9 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
         case combination(modifiers: String, keyCode: Int64?)
         /// A key that types or acts on its own, such as a letter, Return or an arrow key.
         case key(keyCode: Int64)
+        /// A shortcut of macOS or of nearly every app, such as ⌘ C, see
+        /// `KeyCombination.isSystemShortcut`. The symbols of the modifiers and the key code.
+        case shortcut(modifiers: String, keyCode: Int64)
     }
 
     static let shiftKeyCodes: Set<Int64> = [0x38, 0x3C]
@@ -401,6 +404,11 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
             }
             let modifiers = ModifierSet(flags: flags, includingFn: false)
             let combination = KeyCombination(modifiers: modifiers, keyCode: keyCode)
+            if candidate != .fn, combination.isSystemShortcut {
+                candidate = nil
+                spoiled = true
+                return .rejected(.shortcut(modifiers: symbols(flags: flags, fnPressed: false), keyCode: keyCode))
+            }
             if candidate != .fn, combination.isValid {
                 candidate = nil
                 spoiled = true
@@ -420,6 +428,11 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
     /// them. fn counts only when it was pressed for the recording, because arrow and
     /// function keys carry the Fn flag on their own. Call it before clearing `candidate`.
     private func combination(flags: CGEventFlags, fnPressed: Bool, keyCode: Int64?) -> Rejection {
+        .combination(modifiers: symbols(flags: flags, fnPressed: fnPressed), keyCode: keyCode)
+    }
+
+    /// The symbols of the modifiers held, such as "⇧ ⌘", in the order Mac menus show them.
+    private func symbols(flags: CGEventFlags, fnPressed: Bool) -> String {
         var symbols: [String] = []
         if fnPressed || candidate == .fn {
             symbols.append("fn")
@@ -430,7 +443,7 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
         for (flag, symbol) in modifiers where flags.contains(flag) {
             symbols.append(symbol)
         }
-        return .combination(modifiers: symbols.joined(separator: " "), keyCode: keyCode)
+        return symbols.joined(separator: " ")
     }
 }
 
@@ -458,6 +471,12 @@ extension KeyRecorder.Rejection {
             } else {
                 String(localized: LocalizedStringResource("This key can't be the talk key. Holding it would type or do something in the app in front.", locale: locale))
             }
+        case .shortcut(let modifiers, let keyCode):
+            if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode, locale: locale) {
+                String(localized: LocalizedStringResource("\(keys) is a shortcut of macOS or most apps and can't be the talk key. It would stop working everywhere while Orra runs.", locale: locale))
+            } else {
+                String(localized: LocalizedStringResource("A shortcut of macOS or most apps can't be the talk key. It would stop working everywhere while Orra runs.", locale: locale))
+            }
         }
     }
 
@@ -479,6 +498,12 @@ extension KeyRecorder.Rejection {
                 String(localized: LocalizedStringResource("The \(name) key can't be the translation key. Holding it would type or do something in the app in front.", locale: locale))
             } else {
                 String(localized: LocalizedStringResource("This key can't be the translation key. Holding it would type or do something in the app in front.", locale: locale))
+            }
+        case .shortcut(let modifiers, let keyCode):
+            if let keys = Self.keys(modifiers: modifiers, keyCode: keyCode, locale: locale) {
+                String(localized: LocalizedStringResource("\(keys) is a shortcut of macOS or most apps and can't be the translation key. It would stop working everywhere while Orra runs.", locale: locale))
+            } else {
+                String(localized: LocalizedStringResource("A shortcut of macOS or most apps can't be the translation key. It would stop working everywhere while Orra runs.", locale: locale))
             }
         }
     }

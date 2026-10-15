@@ -38,6 +38,13 @@ enum KeyName {
         }
     }
 
+    /// Whether the key is one of F1 to F20.
+    nonisolated static func isFunctionKey(_ keyCode: Int64) -> Bool {
+        functionKeys[Int(keyCode)] != nil
+    }
+
+    nonisolated static let spaceKeyCode = Int64(kVK_Space)
+
     /// F1 to F20 by key code.
     nonisolated private static let functionKeys: [Int: Int] = [
         kVK_F1: 1, kVK_F2: 2, kVK_F3: 3, kVK_F4: 4, kVK_F5: 5, kVK_F6: 6, kVK_F7: 7,
