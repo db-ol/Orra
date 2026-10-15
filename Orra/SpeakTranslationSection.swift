@@ -22,7 +22,8 @@ struct SpeakTranslationSection: View {
                     systemImage: "speaker.wave.2.bubble"
                 )
             }
-            .disabled(!speech.canSpeak || !translationIsOn)
+            // Stays usable while on, so it can be turned off after Translation was.
+            .disabled(!speech.canSpeak || (!translationIsOn && !speech.isOn))
             .help(Text("Choose Orra Voice as the microphone in the meeting app. Orra speaks one translation after another, and waits while you dictate."))
             if !speech.canSpeak {
                 note(Text("This build of Orra has no voice model."))
