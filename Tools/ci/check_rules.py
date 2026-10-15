@@ -208,6 +208,8 @@ INFO_PLIST = {
     "SUEnableSystemProfiling": False,
     # Every install waits for the user's choice: Sparkle offers no automatic installs.
     "SUAllowsAutomaticUpdates": False,
+    # The system audio recording prompt for meeting captions, approved on 2026-10-15.
+    "NSAudioCaptureUsageDescription": "Orra listens to the sound your Mac plays, such as a call, to show live captions and translations. The audio stays on this Mac.",
 }
 RESOLVED_FILE = "Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 DEPENDENCIES_DOC = "docs/dependencies.md"
