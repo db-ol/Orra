@@ -59,23 +59,43 @@ import Qwen3TTS
 /// streamed: synthesizeWithVoiceClone returns a whole piece, so TranslationSpeech cuts the
 /// text into sentences first. Without a voice sample the model streams, and the first
 /// sound of a piece comes after a few frames.
+///
+/// The stream is made in a task of speech-swift's own, outside this actor, and ending the
+/// stream early only asks that task to stop. So a piece is always streamed to its end, and
+/// everything else that uses the model waits for that end first, see `settle`. A stop
+/// drops what is left of the piece, like a cloned piece, which cannot stop midway either.
 actor Qwen3VoiceEngine: SpeechSynthesizer {
     private var model: Qwen3TTSModel?
+    /// The stream of the piece being spoken without a voice sample, until it ended.
+    private var streaming: Task<Void, Never>?
 
     func load(model folder: URL, codec: URL) async throws {
+        await settle()
         guard model == nil else { return }
         // From local folders only, so loading never goes online. No change to MLX's wired
         // memory limit, which the speech model already raised.
         model = try Qwen3TTSModel.fromLocal(modelDirectory: folder, tokenizerDirectory: codec, wiredMemoryPolicy: .none)
     }
 
-    func unload() {
+    func unload() async {
+        await settle()
         model?.unload()
         model = nil
     }
 
-    func forgetVoice() {
+    func forgetVoice() async {
+        await settle()
         model?.clearReferenceAudioCache()
+    }
+
+    /// Waits until no stream uses the model, also one that began while this waited.
+    private func settle() async {
+        while let current = streaming {
+            await current.value
+            if streaming == current {
+                streaming = nil
+            }
+        }
     }
 
     nonisolated func speak(_ text: String, in language: TranslationTarget, voice: VoiceSample?) -> AsyncThrowingStream<SpokenAudio, any Error> {
@@ -93,6 +113,7 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
     }
 
     private func run(_ text: String, language: TranslationTarget, voice: VoiceSample?, continuation: AsyncThrowingStream<SpokenAudio, any Error>.Continuation) async throws {
+        await settle()
         guard let model else { throw TranscriptionError.modelMissing }
         let name = Self.languageName(language)
         if let voice {
@@ -105,9 +126,20 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
             )
             continuation.yield(SpokenAudio(samples: samples, sampleRate: model.sampleRate))
         } else {
-            for try await chunk in model.synthesizeStream(text: text, language: name, streaming: .lowLatency, languageExplicit: true) {
-                continuation.yield(SpokenAudio(samples: chunk.samples, sampleRate: chunk.sampleRate))
+            let stream = model.synthesizeStream(text: text, language: name, streaming: .lowLatency, languageExplicit: true)
+            // Not a child task, so a stop does not end the stream before the model is done
+            // with it. After a stop the continuation drops what comes.
+            let reading = Task<Void, Never> {
+                do {
+                    for try await chunk in stream {
+                        continuation.yield(SpokenAudio(samples: chunk.samples, sampleRate: chunk.sampleRate))
+                    }
+                } catch {
+                    continuation.finish(throwing: error)
+                }
             }
+            streaming = reading
+            await reading.value
         }
     }
 
