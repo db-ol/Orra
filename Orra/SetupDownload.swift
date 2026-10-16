@@ -1,13 +1,13 @@
 import Foundation
 import Observation
 
-/// Whether the welcome window proposes cleanup to a new user, with its switch on before
-/// the user touches it.
+/// Whether the welcome window's download includes the cleanup model for a new user, who
+/// is not asked: the button names the size of both models, and starting it turns cleanup on.
 ///
-/// Only a new user gets the proposal: one whose speech model is not on this Mac yet and who
-/// never saved a choice for cleanup. A saved choice, on or off, always wins, so an existing
-/// user's setting never flips. On a Mac with less memory than `minimumMemory` the switch
-/// starts off, and the welcome window says why.
+/// Only a new user gets it: one whose speech model is not on this Mac yet and who never
+/// saved a choice for cleanup. A saved choice, on or off, always wins, so an existing
+/// user's setting never flips. On a Mac with less memory than `minimumMemory` cleanup stays
+/// off, and the welcome window says why.
 nonisolated enum CleanupDefault {
     /// 16 GB. The cleanup model holds about 4 GB while it is loaded, next to the speech
     /// model's 3 to 5 GB, see README.md and docs/asr-baseline.md. That leaves too little to
@@ -33,9 +33,8 @@ nonisolated enum CleanupDefault {
 /// speech model is in place, while the cleanup model goes on downloading.
 ///
 /// It drives the two installers and starts nothing on its own: only Download, Resume
-/// Download and Try Again in the welcome window, or turning on cleanup there once the speech
-/// model is in place, go online. Its button names the size first. AppDelegate tells it when
-/// the speech model is in place, see `speechInstalled()`.
+/// Download and Try Again in the welcome window go online. Its button names the size first.
+/// AppDelegate tells it when the speech model is in place, see `speechInstalled()`.
 @Observable
 final class SetupDownload {
     nonisolated enum Part: Equatable, Sendable {
@@ -45,19 +44,15 @@ final class SetupDownload {
 
     let speech: ModelInstaller
     let cleanup: TextCleanup
-    /// True while the welcome window proposes cleanup to a new user who has not decided
-    /// yet, see CleanupDefault. The switch shows on, and nothing is saved until the user
-    /// turns it off or starts the download.
+    /// True while the welcome window's download includes the cleanup model for a new user,
+    /// see CleanupDefault. Nothing is saved until the user starts the download.
     private(set) var proposesCleanup = false
     /// True from a download started with cleanup on until the speech model is in place,
     /// when the cleanup model's download starts.
     private(set) var queuesCleanup = false
     /// Whether the speech model's bytes count in the progress bar. False when it was in
-    /// place at launch, so turning on cleanup later shows the cleanup model alone.
+    /// place at launch, so a cleanup model download after that shows the cleanup model alone.
     private(set) var includesSpeech = true
-    /// True after the user turned the cleanup switch off in the welcome window, so the
-    /// window says what is lost. A choice saved before is not one made here.
-    private(set) var turnedCleanupOff = false
 
     @ObservationIgnored private let physicalMemory: UInt64
     @ObservationIgnored private let savedChoice: () -> Bool?
@@ -77,55 +72,36 @@ final class SetupDownload {
         self.savedChoice = savedChoice
     }
 
-    /// Whether this Mac has the memory for cleanup to be on at first.
-    var hasEnoughMemory: Bool {
-        CleanupDefault.hasEnoughMemory(physicalMemory)
+    /// This Mac's memory in whole gigabytes while cleanup stays off only because of it: no
+    /// saved choice and less than `CleanupDefault.minimumMemory`. Nil otherwise, also once
+    /// the user turned cleanup on in Settings.
+    var memoryKeepsCleanupOff: Int64? {
+        guard !cleanup.isOn, savedChoice() == nil, !CleanupDefault.hasEnoughMemory(physicalMemory) else { return nil }
+        return CleanupDefault.gigabytes(physicalMemory)
     }
 
-    var memoryGigabytes: Int64 {
-        CleanupDefault.gigabytes(physicalMemory)
-    }
-
-    /// At launch, once the installers looked at the files on disk: whether to propose
-    /// cleanup, and whether the bar counts the speech model.
+    /// At launch, once the installers looked at the files on disk: whether the download
+    /// includes the cleanup model, and whether the bar counts the speech model.
     func lookAtLaunch() {
         let installed = speech.state.isInstalled
         includesSpeech = !installed
         proposesCleanup = CleanupDefault.proposes(savedChoice: savedChoice(), speechModelInstalled: installed, physicalMemory: physicalMemory)
     }
 
-    /// What the cleanup switch in the welcome window shows. A proposal shows only while a
-    /// start in the window can still act on it. During a speech model download started
-    /// from the menu, the switch shows off, as the cleanup model would not follow.
+    /// Whether the welcome window's download includes the cleanup model: cleanup is on, or
+    /// it is a new user's download, see CleanupDefault. The new user's case counts only
+    /// while a start in the window can still act on it. During a speech model download
+    /// started from the menu, it does not, as the cleanup model would not follow.
     var wantsCleanup: Bool {
         cleanup.isOn || (proposesCleanup && !speech.state.isBusy)
     }
 
-    /// The cleanup switch in the welcome window. Off is saved at once and stays off. On is
-    /// saved at once too. With the speech model in place the cleanup model's download
-    /// starts right away, since the step names its size. Otherwise it follows the speech
-    /// model's download.
-    func setCleanup(_ on: Bool) {
-        turnedCleanupOff = !on
-        proposesCleanup = false
-        if on {
-            let speechInPlace = speech.state.isInstalled
-            cleanup.agreeToDownload(startingNow: speechInPlace)
-            if !speechInPlace, speech.state.isBusy {
-                queuesCleanup = true
-            }
-        } else {
-            queuesCleanup = false
-            cleanup.decline()
-        }
-    }
-
-    /// Download, Resume Download or Try Again in the welcome window. A proposed cleanup is
-    /// agreed to here, since the button names the size with the cleanup model.
+    /// Download, Resume Download or Try Again in the welcome window. A new user's download
+    /// turns cleanup on here, since the button names the size with the cleanup model.
     func start() {
         if proposesCleanup {
             proposesCleanup = false
-            cleanup.agreeToDownload(startingNow: false)
+            cleanup.agreeToDownload()
         }
         switch Self.next(speech: speech.state, wantsCleanup: cleanup.isOn, cleanup: cleanup.models.state) {
         case .speech:
@@ -155,8 +131,9 @@ final class SetupDownload {
     }
 
     /// The speech model is in place: at launch, after a download, or after Try Again.
-    /// Starts the cleanup model's download when one was queued. A proposal the user never
-    /// answered ends here, as the speech model came from the menu instead.
+    /// Starts the cleanup model's download when one was queued. A new user's download that
+    /// was never started ends here, as the speech model came from the menu instead, and
+    /// cleanup stays off.
     func speechInstalled() {
         proposesCleanup = false
         guard queuesCleanup else { return }
@@ -199,6 +176,7 @@ final class SetupDownload {
             wantsCleanup: wantsCleanup,
             queuesCleanup: queuesCleanup,
             includesSpeech: includesSpeech,
+            memoryKeepsCleanupOff: memoryKeepsCleanupOff,
             locale: locale
         )
     }
@@ -270,10 +248,13 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
     /// Whether the button cancels.
     var cancels = false
 
-    /// - Parameter queuesCleanup: Whether the cleanup model follows the speech model's
-    ///   download under way. A speech model download started from the menu leaves it out,
-    ///   also while the welcome window proposes cleanup.
-    init(speech: ModelInstaller.State, speechTotal: Int64, cleanup: ModelInstaller.State, cleanupTotal: Int64, wantsCleanup: Bool, queuesCleanup: Bool, includesSpeech: Bool, locale: Locale = .interface) {
+    /// - Parameters:
+    ///   - queuesCleanup: Whether the cleanup model follows the speech model's download
+    ///     under way. A speech model download started from the menu leaves it out, also
+    ///     for a new user whose download would include it.
+    ///   - memoryKeepsCleanupOff: This Mac's memory in gigabytes when cleanup stays off
+    ///     only because of it, see `SetupDownload.memoryKeepsCleanupOff`.
+    init(speech: ModelInstaller.State, speechTotal: Int64, cleanup: ModelInstaller.State, cleanupTotal: Int64, wantsCleanup: Bool, queuesCleanup: Bool, includesSpeech: Bool, memoryKeepsCleanupOff: Int64? = nil, locale: Locale = .interface) {
         let active = SetupDownload.active(speech: speech, wantsCleanup: wantsCleanup, cleanup: cleanup)
         self.active = active
         // While the speech model downloads, the cleanup model counts only when it follows.
@@ -310,16 +291,19 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
                 progress = combined
                 lines = speech.menuLines(total: speechTotal, locale: locale)
             case .missing where wantsCleanup:
-                lines = speech.menuLines(total: speechTotal, locale: locale)
+                lines = [text("The speech model, and a second model that tidies up what you say, such as fillers and corrections you make while speaking.")]
                 if combined.completed > 0 {
                     button = text("Resume Download (\(ModelInstaller.State.size(combined.total - combined.completed)) left)")
                 } else {
                     button = text("Download Models (\(size))")
                 }
-            case .missing(0):
-                // Next to the cleanup switch, so the button says the cleanup model is left out.
-                lines = speech.menuLines(total: speechTotal, locale: locale)
-                button = text("Download Speech Model Only (\(ModelInstaller.State.size(speechTotal)))")
+            case .missing:
+                if let gigabytes = memoryKeepsCleanupOff {
+                    lines = [text("Cleanup stays off on this Mac because it has \(gigabytes) GB of memory. You can turn it on later in Settings, General.")]
+                } else {
+                    lines = Array(speech.menuLines(total: speechTotal, locale: locale).prefix(1))
+                }
+                button = speech.buttonTitle(total: speechTotal, locale: locale)
             default:
                 lines = speech.menuLines(total: speechTotal, locale: locale)
                 button = speech.buttonTitle(total: speechTotal, locale: locale)

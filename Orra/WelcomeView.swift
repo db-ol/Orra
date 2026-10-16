@@ -3,9 +3,10 @@ import SwiftUI
 
 /// The welcome window's content: the guide with its line for the step the user is on, the
 /// language, the three steps that make Orra ready, in any order, the choice of the talk
-/// key, then how to dictate. The download step holds the choice of cleanup, since its one
-/// download includes the cleanup model when cleanup is on. The download comes before the
-/// permissions because it takes longest, and it goes on while the user grants them.
+/// key, then how to dictate. The download step asks nothing: on a Mac with enough memory
+/// a new user's one download includes the cleanup model, see CleanupDefault. The download
+/// comes before the permissions because it takes longest, and it goes on while the user
+/// grants them.
 ///
 /// The window shows the language picked in it right away, without a restart: SwiftUI looks
 /// up text literals in the `locale` of the environment, and text built in code is looked
@@ -255,8 +256,8 @@ private struct StepBadge: View {
 }
 
 /// The one download of the speech model and, with cleanup on, the cleanup model: how the
-/// speech model stands, one bar for the bytes of both, the lines, the cleanup switch, and
-/// the button, which follows the switch.
+/// speech model stands, one bar for the bytes of both, the lines, and the button. Cleanup
+/// is turned on or off in Settings, not here.
 private struct ModelStepDetail: View {
     let setup: SetupDownload
     let summary: DownloadSummary
@@ -295,7 +296,6 @@ private struct ModelStepDetail: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            CleanupOption(setup: setup)
             if let title = summary.button {
                 Button(title) {
                     if summary.cancels {
@@ -306,83 +306,6 @@ private struct ModelStepDetail: View {
                 }
             }
         }
-    }
-}
-
-/// The cleanup switch in the download step, with an example, its cost, and a line on what
-/// is lost when the user turns it off on a Mac with the memory for it. Not part of the
-/// checklist: dictation works without it.
-private struct CleanupOption: View {
-    let setup: SetupDownload
-
-    var body: some View {
-        let size = ModelInstaller.State.size(setup.cleanup.models.manifest.totalBytes)
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle(isOn: Binding(
-                get: { setup.wantsCleanup },
-                set: { setup.setCleanup($0) }
-            )) {
-                HStack(spacing: 6) {
-                    Text("Also clean up what you say")
-                    if setup.hasEnoughMemory {
-                        RecommendedBadge()
-                    }
-                }
-            }
-            .toggleStyle(.switch)
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 2) {
-                GridRow {
-                    Text("Before")
-                        .foregroundStyle(.secondary)
-                    Text("Let’s meet at three, no wait, four.")
-                }
-                GridRow {
-                    Text("After")
-                        .foregroundStyle(.secondary)
-                    Text("Let’s meet at four.")
-                }
-            }
-            .font(.subheadline)
-            Text("It needs a \(size) download and about 4 GB of memory while it runs.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            if !setup.hasEnoughMemory, !setup.wantsCleanup {
-                Text("Off at first, because this Mac has \(setup.memoryGigabytes) GB of memory.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if setup.turnedCleanupOff, !setup.wantsCleanup {
-                // Orange on the icon only, as in Settings: orange text that small is too faint
-                // on a light background. Not red, which means something went wrong.
-                Label {
-                    Text("Without cleanup, Orra types exactly what it hears, fillers and corrections included.")
-                } icon: {
-                    Image(systemName: "exclamationmark.circle")
-                        .foregroundStyle(.orange)
-                }
-                .font(.subheadline)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            Text("You can change this later in Settings, under General.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(10)
-        .frame(maxWidth: 400, alignment: .leading)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-}
-
-private struct RecommendedBadge: View {
-    var body: some View {
-        Text("Recommended")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(Color.accentColor)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
-            .background(Color.accentColor.opacity(0.14), in: Capsule())
     }
 }
 

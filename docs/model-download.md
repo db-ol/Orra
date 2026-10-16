@@ -11,8 +11,10 @@ differences are in [The cleanup model](#the-cleanup-model) at the end.
 ## When Orra goes online
 
 - Only after the user chooses Download Speech Model, Resume Download or Try Again in the
-  menu or in the welcome window. Before that, both name the size, 2.47 GB, and say that
-  speech stays on the Mac. During the download they name the server in use.
+  menu or in the welcome window, or Download Models there, which also fetches the cleanup
+  model (see [The cleanup model](#the-cleanup-model)). Before that, the button names the
+  size, 2.47 GB, or 5.52 GB for both models, and the menu says that speech stays on the
+  Mac. During the download they name the server in use.
 - Launching never connects. At launch Orra looks at local files only: it checks the
   installed folder by file sizes, finishes an install that a quit interrupted, or reuses
   the copy speech-swift left in ~/Library/Caches/qwen3-speech.
@@ -207,12 +209,14 @@ When Orra goes online for it:
 
 - Only after the user turns cleanup or translation on and agrees to the download in the
   dialog that names its size, 3.05 GB, or chooses Download, Resume Download or Try Again
-  under a switch that is on. In the welcome window, the cleanup switch in the download step names
-  the size too. With the switch on there, Download Models starts the speech model and then this one,
-  one after the other and never at once. Turning cleanup on there once the speech model is
-  in place starts this download. The switch starts on for a new user on a Mac with 16 GB
-  of memory or more, but nothing goes online before one of these buttons or the switch. Turning on the other switch while a download was agreed to
-  for one asks nothing more. Cancel Download keeps the bytes on disk and turns both
+  under a switch that is on. In the welcome window, a new user on a Mac with 16 GB of
+  memory or more who never saved a choice for cleanup is not asked: the download step's
+  button, Download Models (5.52 GB), names the size of both models, and clicking it turns
+  cleanup on and starts the speech model and then this one, one after the other and never
+  at once. The same button includes this model when cleanup was saved on. Under 16 GB, or
+  with cleanup saved off, the welcome window downloads the speech model only and cleanup
+  is turned on in Settings. Nothing goes online before one of these buttons. Turning on
+  the other switch while a download was agreed to for one asks nothing more. Cancel Download keeps the bytes on disk and turns both
   switches off again.
 - Never at launch, and never while cleanup and translation are both off. Launch only
   looks at the installed folder's file sizes. Loading uses local files only.

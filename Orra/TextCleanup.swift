@@ -402,33 +402,14 @@ final class TextCleanup {
         models.download()
     }
 
-    /// The user turned cleanup on in the welcome window, or started its download there
-    /// with cleanup proposed, see SetupDownload. Its step names the download size, so
-    /// nothing more is asked. With the model in place it loads at once. Otherwise the
-    /// download starts now, or later when `startingNow` is false, since the speech model
-    /// comes first.
-    func agreeToDownload(startingNow: Bool) {
+    /// A new user started the welcome window's download, which includes the cleanup model,
+    /// see SetupDownload. Its button names the download size, so nothing more is asked.
+    /// With the model in place it loads at once. Otherwise its download follows the speech
+    /// model's, which SetupDownload starts.
+    func agreeToDownload() {
         setOn(true)
-        switch models.state {
-        case .installed(let folder):
+        if case .installed(let folder) = models.state {
             load(from: folder)
-        case .missing, .failed:
-            if startingNow {
-                models.download()
-            }
-        case .checking, .downloading, .verifying:
-            break
-        }
-    }
-
-    /// The user turned the cleanup switch off in the welcome window. Saved even while it
-    /// was off already, so a new user's choice is kept and the welcome window never
-    /// proposes cleanup again.
-    func decline() {
-        if isOn {
-            turnOff()
-        } else {
-            save(false)
         }
     }
 

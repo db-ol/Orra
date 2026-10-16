@@ -305,16 +305,6 @@
         }
       }
     },
-    "After" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "整理后"
-          }
-        }
-      }
-    },
     "All set! Hold the talk key and say hello." : {
       "localizations" : {
         "zh-Hans" : {
@@ -361,16 +351,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允许使用麦克风"
-          }
-        }
-      }
-    },
-    "Also clean up what you say" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同时整理你说的文字"
           }
         }
       }
@@ -463,16 +443,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "屏幕底部随你的声音跳动的音量条。"
-          }
-        }
-      }
-    },
-    "Before" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "整理前"
           }
         }
       }
@@ -707,6 +677,16 @@
         }
       }
     },
+    "Cleanup stays off on this Mac because it has %lld GB of memory. You can turn it on later in Settings, General." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 只有 %lld GB 内存，所以整理功能先关着。之后可以在“设置 → 通用”里打开。"
+          }
+        }
+      }
+    },
     "Clear" : {
       "comment" : "A key name",
       "localizations" : {
@@ -918,16 +898,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载语音模型（%@）"
-          }
-        }
-      }
-    },
-    "Download Speech Model Only (%@)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅下载语音模型（%@）"
           }
         }
       }
@@ -1384,16 +1354,6 @@
         }
       }
     },
-    "It needs a %@ download and about 4 GB of memory while it runs." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要下载 %@，运行时约占 4 GB 内存。"
-          }
-        }
-      }
-    },
     "Jump to Latest" : {
       "comment" : "A button in the caption window after the user scrolled up",
       "localizations" : {
@@ -1535,26 +1495,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "让我听见你的声音，请允许使用麦克风。"
-          }
-        }
-      }
-    },
-    "Let’s meet at four." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "我们四点见。"
-          }
-        }
-      }
-    },
-    "Let’s meet at three, no wait, four." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "我们三点，哦不对，四点见。"
           }
         }
       }
@@ -1807,16 +1747,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不显示"
-          }
-        }
-      }
-    },
-    "Off at first, because this Mac has %lld GB of memory." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这台 Mac 只有 %lld GB 内存，所以默认关闭。"
           }
         }
       }
@@ -2452,16 +2382,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近使用"
-          }
-        }
-      }
-    },
-    "Recommended" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "推荐"
           }
         }
       }
@@ -3270,6 +3190,16 @@
         }
       }
     },
+    "The speech model, and a second model that tidies up what you say, such as fillers and corrections you make while speaking." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包括语音模型，以及整理文字的第二个模型，它会去掉语气词，并按你说出口的更正改好内容。"
+          }
+        }
+      }
+    },
     "The talk key can be fn, Control, Option or Command on the left or right, or a combination." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3805,16 +3735,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Windows 键"
-          }
-        }
-      }
-    },
-    "Without cleanup, Orra types exactly what it hears, fillers and corrections included." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不整理的话，Orra 会照原样输出，语气词和改口都会保留。"
           }
         }
       }

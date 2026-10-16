@@ -217,9 +217,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { [models, pushToTalk, welcome, cleanup, setup, speech, voiceModels] in
             await models.prepare()
             // Loads the cleanup model when cleanup or translation is on and the model is in
-            // place. Before the welcome window, so its cleanup step knows what is on disk.
+            // place. Before the welcome window, so its download step knows what is on disk.
             await cleanup.start()
-            // Whether the welcome window proposes cleanup to a new user.
+            // Whether the welcome window's download includes the cleanup model.
             setup.lookAtLaunch()
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()

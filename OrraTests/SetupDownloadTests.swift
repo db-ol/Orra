@@ -3,17 +3,17 @@ import Synchronization
 import Testing
 @testable import Orra
 
-/// The welcome window's cleanup proposal, its one download of both models, the button that
-/// follows the cleanup switch, and the step its guide talks about.
+/// The welcome window's one download, which includes the cleanup model for a new user on a
+/// Mac with enough memory, its bar and text, and the step its guide talks about.
 @MainActor
 struct SetupDownloadTests {
     private let folder = URL(fileURLWithPath: "/nonexistent/Models/qwen3")
     private let speechTotal = ModelManifest.qwen3.totalBytes
     private let cleanupTotal = ModelManifest.qwen35Cleanup.totalBytes
 
-    // MARK: The proposal
+    // MARK: Who gets the cleanup model
 
-    @Test func cleanupIsProposedToANewUserWithSixteenGigabytesOrMore() {
+    @Test func aNewUserWithSixteenGigabytesOrMoreGetsTheCleanupModel() {
         for gigabytes: UInt64 in [16, 18, 24, 36, 48, 64, 128] {
             #expect(CleanupDefault.proposes(savedChoice: nil, speechModelInstalled: false, physicalMemory: gigabytes << 30))
         }
@@ -114,26 +114,38 @@ struct SetupDownloadTests {
 
     // MARK: The step's text
 
-    @Test func theButtonFollowsTheCleanupSwitch() {
+    @Test func aNewUsersButtonNamesBothModels() {
         let missing = ModelInstaller.State.missing(bytesPresent: 0)
         var summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.active == .speech)
         #expect(summary.button == "Download Models (5.52 GB)")
-        #expect(summary.lines == ModelInstaller.State.missing(bytesPresent: 0).menuLines(total: speechTotal, locale: Locale(identifier: "en")))
+        #expect(summary.lines == ["The speech model, and a second model that tidies up what you say, such as fillers and corrections you make while speaking."])
         #expect(!summary.cancels)
         #expect(summary.progress == nil)
-        // Without cleanup, the button says the cleanup model is left out.
-        summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
-        #expect(summary.button == "Download Speech Model Only (2.47 GB)")
         // Bytes on disk from before: what is left of both.
         summary = DownloadSummary(speech: .missing(bytesPresent: 470_000_000), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 50_000_000), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.button == "Resume Download (5 GB left)")
-        // Without cleanup, what is left of the speech model alone.
-        summary = DownloadSummary(speech: .missing(bytesPresent: 470_000_000), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 50_000_000), cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
-        #expect(summary.button == "Resume Download (2 GB left)")
-        // A failed download is tried again either way.
-        summary = DownloadSummary(speech: .failed(.offline), speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        // A failed download is tried again.
+        summary = DownloadSummary(speech: .failed(.offline), speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.button == "Try Again")
+    }
+
+    /// Under 16 GB with no saved choice, the step says why cleanup stays off. With cleanup
+    /// off by a saved choice, it says nothing about memory.
+    @Test func withoutCleanupOnlyTheSpeechModelIsNamed() {
+        let missing = ModelInstaller.State.missing(bytesPresent: 0)
+        var summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, memoryKeepsCleanupOff: 8, locale: Locale(identifier: "en"))
+        #expect(summary.button == "Download Speech Model (2.47 GB)")
+        #expect(summary.lines == ["Cleanup stays off on this Mac because it has 8 GB of memory. You can turn it on later in Settings, General."])
+        summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        #expect(summary.button == "Download Speech Model (2.47 GB)")
+        #expect(summary.lines == ["Orra needs its speech model to transcribe."])
+        // What is left of the speech model alone.
+        summary = DownloadSummary(speech: .missing(bytesPresent: 470_000_000), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 50_000_000), cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, memoryKeepsCleanupOff: 8, locale: Locale(identifier: "en"))
+        #expect(summary.button == "Resume Download (2 GB left)")
+        summary = DownloadSummary(speech: .failed(.offline), speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, memoryKeepsCleanupOff: 8, locale: Locale(identifier: "en"))
+        #expect(summary.button == "Try Again")
+        #expect(summary.lines == ["This Mac is offline. Connect to the internet, then try again."])
     }
 
     @Test func whileTheSpeechModelDownloadsTheBarCoversBoth() {
@@ -142,7 +154,7 @@ struct SetupDownloadTests {
         #expect(summary.lines == ["Downloading the speech model, then the cleanup model: 44% of 5.52 GB", "From huggingface.co"])
         #expect(summary.button == "Cancel Download")
         #expect(summary.cancels)
-        // Started from the menu while cleanup was only proposed: the speech model alone.
+        // Started from the menu before the window's download: the speech model alone.
         let fromMenu = DownloadSummary(speech: .downloading(bytes: 0, source: nil), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(fromMenu.progress?.total == speechTotal)
         #expect(!fromMenu.lines.contains { $0.contains("cleanup model") })
@@ -154,7 +166,8 @@ struct SetupDownloadTests {
         #expect(summary.lines.first == "The speech model is ready, so you can dictate while the cleanup model downloads.")
         #expect(summary.progress?.completed == speechTotal)
         #expect(summary.cancels)
-        // Turned on later, with the speech model in place at launch: the cleanup model alone.
+        // Turned on in Settings, with the speech model in place at launch: the cleanup model
+        // alone.
         let later = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .downloading(bytes: 0, source: nil), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: false, locale: Locale(identifier: "en"))
         #expect(later.progress?.total == cleanupTotal)
         #expect(later.lines.contains("Downloading the cleanup model: 0% of 3.05 GB"))
@@ -173,8 +186,10 @@ struct SetupDownloadTests {
         let missing = ModelInstaller.State.missing(bytesPresent: 0)
         let summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: chinese)
         #expect(summary.button == "下载模型（5.52 GB）")
-        let speechOnly = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: chinese)
-        #expect(speechOnly.button == "仅下载语音模型（2.47 GB）")
+        #expect(summary.lines == ["包括语音模型，以及整理文字的第二个模型，它会去掉语气词，并按你说出口的更正改好内容。"])
+        let speechOnly = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, memoryKeepsCleanupOff: 8, locale: chinese)
+        #expect(speechOnly.button == "下载语音模型（2.47 GB）")
+        #expect(speechOnly.lines == ["这台 Mac 只有 8 GB 内存，所以整理功能先关着。之后可以在“设置 → 通用”里打开。"])
         #expect(GuideStep.download.line(locale: chinese) == "你好，我是 Orra。先下载我需要的模型，只需一次。")
         #expect(GuideStep.ready.line(locale: Locale(identifier: "en")) == "All set! Hold the talk key and say hello.")
     }
@@ -241,7 +256,7 @@ struct SetupDownloadTests {
         return (SetupDownload(speech: speech, cleanup: cleanup, physicalMemory: memory, savedChoice: { saved }), speechCalls, cleanupCalls)
     }
 
-    @Test func aNewUserSeesCleanupOnAndNothingIsSavedOrDownloadedYet() async {
+    @Test func aNewUserGetsBothModelsAndNothingIsSavedOrDownloadedYet() async {
         var saves: [Bool] = []
         let (setup, speechCalls, cleanupCalls) = makeSetup(savedNow: { saves.append($0) })
         await setup.speech.prepare()
@@ -249,56 +264,69 @@ struct SetupDownloadTests {
         setup.lookAtLaunch()
         #expect(setup.proposesCleanup)
         #expect(setup.wantsCleanup)
+        #expect(setup.memoryKeepsCleanupOff == nil)
         #expect(!setup.cleanup.isOn)
+        #expect(setup.summary(locale: Locale(identifier: "en")).button?.hasPrefix("Download Models (") == true)
         #expect(saves.isEmpty)
         #expect(speechCalls.value == 0)
         #expect(cleanupCalls.value == 0)
     }
 
-    @Test func aSmallMacOrASavedChoiceGetsNoProposal() async {
-        let (small, _, _) = makeSetup(memory: 8 << 30)
+    /// Under 16 GB the download is the speech model alone, nothing is saved, and the step
+    /// says why. Turning cleanup on in Settings ends the line.
+    @Test func aSmallMacGetsTheSpeechModelAlone() async {
+        var saves: [Bool] = []
+        let (small, _, cleanupCalls) = makeSetup(memory: 8 << 30, savedNow: { saves.append($0) })
         await small.speech.prepare()
+        await small.cleanup.start()
         small.lookAtLaunch()
         #expect(!small.wantsCleanup)
-        #expect(!small.hasEnoughMemory)
-        let (declined, _, _) = makeSetup(saved: false)
-        await declined.speech.prepare()
-        declined.lookAtLaunch()
-        #expect(!declined.wantsCleanup)
-        // Off from before, not turned off in the window: no line on what is lost.
-        #expect(!declined.turnedCleanupOff)
-    }
-
-    /// Turning the switch on again ends the line on what is lost.
-    @Test func turningTheSwitchBackOnEndsTheWarning() async {
-        let (setup, _, _) = makeSetup()
-        await setup.speech.prepare()
-        await setup.cleanup.start()
-        setup.lookAtLaunch()
-        setup.setCleanup(false)
-        #expect(setup.turnedCleanupOff)
-        setup.setCleanup(true)
-        #expect(!setup.turnedCleanupOff)
-        #expect(setup.wantsCleanup)
-    }
-
-    @Test func turningTheProposalOffIsSavedAndStaysOff() async {
-        var saves: [Bool] = []
-        let (setup, _, cleanupCalls) = makeSetup(savedNow: { saves.append($0) })
-        await setup.speech.prepare()
-        await setup.cleanup.start()
-        setup.lookAtLaunch()
-        #expect(!setup.turnedCleanupOff)
-        setup.setCleanup(false)
-        #expect(saves == [false])
-        #expect(!setup.wantsCleanup)
-        // The window says what is lost, until the switch is on again.
-        #expect(setup.turnedCleanupOff)
-        setup.start()
-        await setup.speech.waitForDownload()
-        #expect(!setup.cleanup.isOn)
-        setup.speechInstalled()
+        #expect(small.memoryKeepsCleanupOff == 8)
+        #expect(small.summary(locale: Locale(identifier: "en")).lines.first?.contains("8 GB") == true)
+        small.start()
+        await small.speech.waitForDownload()
+        small.speechInstalled()
+        #expect(saves.isEmpty)
+        #expect(!small.cleanup.isOn)
         #expect(cleanupCalls.value == 0)
+        // Turned on in Settings.
+        small.cleanup.confirmDownload()
+        #expect(small.memoryKeepsCleanupOff == nil)
+        await small.cleanup.models.waitForDownload()
+    }
+
+    /// A saved choice is never flipped. Off: the speech model alone, with no line on memory.
+    @Test func aSavedChoiceOffKeepsCleanupOff() async {
+        var saves: [Bool] = []
+        for memory: UInt64 in [8 << 30, 48 << 30] {
+            let (declined, _, cleanupCalls) = makeSetup(memory: memory, saved: false, savedNow: { saves.append($0) })
+            await declined.speech.prepare()
+            await declined.cleanup.start()
+            declined.lookAtLaunch()
+            #expect(!declined.wantsCleanup)
+            #expect(declined.memoryKeepsCleanupOff == nil)
+            let summary = declined.summary(locale: Locale(identifier: "en"))
+            #expect(summary.button?.hasPrefix("Download Speech Model (") == true)
+            #expect(!summary.lines.contains { $0.contains("memory") })
+            declined.start()
+            await declined.speech.waitForDownload()
+            declined.speechInstalled()
+            #expect(!declined.cleanup.isOn)
+            #expect(cleanupCalls.value == 0)
+        }
+        #expect(saves.isEmpty)
+    }
+
+    /// Saved on, also on a small Mac: both models.
+    @Test func aSavedChoiceOnGetsBothModels() async {
+        let (setup, _, _) = makeSetup(memory: 8 << 30, saved: true)
+        await setup.speech.prepare()
+        await setup.cleanup.start()
+        setup.lookAtLaunch()
+        #expect(!setup.proposesCleanup)
+        #expect(setup.wantsCleanup)
+        #expect(setup.memoryKeepsCleanupOff == nil)
+        #expect(setup.summary(locale: Locale(identifier: "en")).button?.hasPrefix("Download Models (") == true)
     }
 
     /// Download turns cleanup on and fetches the speech model only. The cleanup model
@@ -337,10 +365,11 @@ struct SetupDownloadTests {
         #expect(cleanupCalls.value == 0)
     }
 
-    /// During a speech model download started from the menu, the switch shows off, since
-    /// the cleanup model would not follow. Turning it on queues the cleanup model.
-    @Test func aMenuDownloadHidesTheProposal() async {
-        let (setup, _, _) = makeSetup()
+    /// During a speech model download started from the menu, the step names the speech
+    /// model alone, since the cleanup model would not follow, and nothing is saved.
+    @Test func aMenuDownloadLeavesTheCleanupModelOut() async {
+        var saves: [Bool] = []
+        let (setup, _, _) = makeSetup(savedNow: { saves.append($0) })
         await setup.speech.prepare()
         await setup.cleanup.start()
         setup.lookAtLaunch()
@@ -349,14 +378,13 @@ struct SetupDownloadTests {
         #expect(setup.speech.state.isBusy)
         #expect(!setup.wantsCleanup)
         #expect(!setup.queuesCleanup)
-        setup.setCleanup(true)
-        #expect(setup.wantsCleanup)
-        #expect(setup.queuesCleanup)
         await setup.speech.waitForDownload()
+        #expect(saves.isEmpty)
     }
 
-    /// A speech model that came from the menu ends a proposal the user never answered.
-    @Test func aProposalEndsWhenTheSpeechModelComesFromTheMenu() async {
+    /// A speech model that came from the menu ends a new user's download that was never
+    /// started, and cleanup stays off.
+    @Test func aNewUsersDownloadEndsWhenTheSpeechModelComesFromTheMenu() async {
         var saves: [Bool] = []
         let (setup, _, cleanupCalls) = makeSetup(savedNow: { saves.append($0) })
         await setup.speech.prepare()

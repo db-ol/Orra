@@ -387,8 +387,9 @@ nonisolated enum CleanupStep {
     }
 }
 
-/// Whether the user turned cleanup on. Off until they do, in Settings or in the welcome
-/// window, which proposes it to a new user, see CleanupDefault.
+/// Whether the user turned cleanup on. Off until they do, in Settings, or until a new
+/// user on a Mac with enough memory starts the welcome window's download, see
+/// CleanupDefault.
 nonisolated enum CleanupPreference {
     static let defaultsKey = "cleansUpWithLocalModel"
 
