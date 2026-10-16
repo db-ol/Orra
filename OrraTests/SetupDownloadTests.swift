@@ -165,29 +165,32 @@ struct SetupDownloadTests {
         #expect(summary.lines == ["This Mac is offline. Connect to the internet, then try again."])
     }
 
+    /// One line with the percent and the size of both, and not where the files come from.
     @Test func whileTheSpeechModelDownloadsTheBarCoversBoth() {
         let summary = DownloadSummary(speech: .downloading(bytes: speechTotal, source: .huggingFace), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.progress?.total == speechTotal + cleanupTotal)
-        #expect(summary.lines == ["Downloading the speech model, then the cleanup model: 44% of 5.52 GB", "From huggingface.co"])
+        #expect(summary.lines == ["Downloading the models: 44% of 5.52 GB"])
         #expect(summary.button == "Cancel Download")
         #expect(summary.cancels)
         // Started from the menu before the window's download: the speech model alone.
-        let fromMenu = DownloadSummary(speech: .downloading(bytes: 0, source: nil), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        let fromMenu = DownloadSummary(speech: .downloading(bytes: 0, source: .modelScope), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(fromMenu.progress?.total == speechTotal)
-        #expect(!fromMenu.lines.contains { $0.contains("cleanup model") })
+        #expect(fromMenu.lines == ["Downloading the speech model: 0% of 2.47 GB"])
     }
 
-    @Test func dictationIsReadyWhileTheCleanupModelDownloads() {
-        let summary = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .downloading(bytes: 0, source: nil), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
+    /// The line goes on as it was once the speech model is in place, and says nothing about
+    /// which model is downloading now.
+    @Test func theLineGoesOnWhileTheCleanupModelDownloads() {
+        let summary = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .downloading(bytes: 0, source: .huggingFace), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.active == .cleanup)
-        #expect(summary.lines.first == "The speech model is ready, so you can dictate while the cleanup model downloads.")
+        #expect(summary.lines == ["Downloading the models: 44% of 5.52 GB"])
         #expect(summary.progress?.completed == speechTotal)
         #expect(summary.cancels)
         // Turned on in Settings, with the speech model in place at launch: the cleanup model
         // alone.
         let later = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .downloading(bytes: 0, source: nil), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: false, locale: Locale(identifier: "en"))
         #expect(later.progress?.total == cleanupTotal)
-        #expect(later.lines.contains("Downloading the cleanup model: 0% of 3.05 GB"))
+        #expect(later.lines == ["Downloading the cleanup model: 0% of 3.05 GB"])
     }
 
     @Test func nothingIsLeftOnceTheWantedModelsAreInPlace() {
@@ -204,6 +207,8 @@ struct SetupDownloadTests {
         let summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: chinese)
         #expect(summary.button == "下载模型（5.52 GB）")
         #expect(summary.lines == ["下载后完全在这台 Mac 上运行，你说的话不会发送到任何地方。"])
+        let downloading = DownloadSummary(speech: .downloading(bytes: speechTotal, source: .modelScope), speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: chinese)
+        #expect(downloading.lines == ["正在下载模型：44%，共 5.52 GB"])
         let speechOnly = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, memoryKeepsCleanupOff: 8, locale: chinese)
         #expect(speechOnly.button == "下载语音模型（2.47 GB）")
         #expect(speechOnly.lines == ["这台 Mac 只有 8 GB 内存，所以整理功能先关着。之后可以在“设置 → 通用”里打开。"])

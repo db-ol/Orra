@@ -1215,12 +1215,13 @@ choice. Put all of it back afterwards:
   speech model only, and Settings shows Clean Up Text off.
 - [ ] Nothing goes online before a click.
 - [ ] Download Models turns on Clean Up Text in Settings and fetches the speech model
-  first, with one bar and "Downloading the speech model, then the cleanup model". Cancel
-  Download stops it, and the button then offers Resume Download with what is left of
-  both.
-- [ ] Once the speech model is in place, the bar goes on with the cleanup model, the step
-  says the user can dictate, and a dictation in TextEdit pastes, without cleanup until
-  the cleanup model is loaded. After that, a dictation with a filler is cleaned up.
+  first, with one bar and one line, "Downloading the models: 3% of 5.52 GB", that names
+  no model and no server. Cancel Download stops it, and the button then offers Resume
+  Download with what is left of both.
+- [ ] Once the speech model is in place, the bar and the line go on with the cleanup
+  model, with nothing else in the step but a short "Checking the downloaded files…" in
+  between. A dictation in TextEdit pastes, without cleanup until the cleanup model is
+  loaded. After that, a dictation with a filler is cleaned up.
 - [ ] A saved choice wins. Run `defaults write io.github.db-ol.Orra cleansUpWithLocalModel
   -bool false` before the first launch: on any Mac, step 1 is Download the speech model,
   with "Orra needs its speech model to transcribe." and no line on memory, and cleanup

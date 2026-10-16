@@ -340,15 +340,17 @@ private struct ModelStepDetail: View {
         VStack(alignment: .leading, spacing: 8) {
             if case .installed = setup.speech.state {
                 switch pushToTalk.modelState {
+                // While the cleanup model downloads, the step shows only the download.
                 case .ready:
-                    // While the cleanup model downloads, its own line says so already.
                     if summary.active != .cleanup {
                         Text("The speech model is ready.")
                             .foregroundStyle(.secondary)
                     }
                 case .notLoaded, .loading:
-                    Text("Loading the speech model…")
-                        .foregroundStyle(.secondary)
+                    if summary.active != .cleanup {
+                        Text("Loading the speech model…")
+                            .foregroundStyle(.secondary)
+                    }
                 case .unavailable(let problem):
                     Text(verbatim: problem.message(in: interfaceLocale))
                         .foregroundStyle(.secondary)

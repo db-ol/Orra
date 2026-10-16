@@ -241,7 +241,10 @@ nonisolated struct CombinedProgress: Equatable, Sendable {
     }
 }
 
-/// What the welcome window's download step shows, kept apart so tests can read it.
+/// What the welcome window's download step shows, kept apart so tests can read it. While
+/// a download runs, the step shows one line with its percent and size. For both models it
+/// does not say which one is downloading, and where the files come from is left to the
+/// menu and Settings.
 nonisolated struct DownloadSummary: Equatable, Sendable {
     /// The part the step is about, nil once every wanted model is in place.
     var active: SetupDownload.Part?
@@ -277,21 +280,20 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
             resource.locale = locale
             return String(localized: resource)
         }
-        func from(_ source: ModelSource?) -> [String] {
-            source.map { [text("From \($0.rawValue)")] } ?? []
-        }
+        // Both models, in one bar.
+        let downloadingBoth = text("Downloading the models: \(combined.percent)% of \(size)")
         switch active {
         case nil:
             break
         case .speech:
             switch speech {
-            case .downloading(_, let source) where queuesCleanup:
+            case .downloading where queuesCleanup:
                 progress = combined
-                lines = [text("Downloading the speech model, then the cleanup model: \(combined.percent)% of \(size)")] + from(source)
+                lines = [downloadingBoth]
                 button = speech.buttonTitle(total: speechTotal, locale: locale)
             case .downloading:
                 progress = combined
-                lines = speech.menuLines(total: speechTotal, locale: locale)
+                lines = Array(speech.menuLines(total: speechTotal, locale: locale).prefix(1))
                 button = speech.buttonTitle(total: speechTotal, locale: locale)
             case .verifying:
                 progress = combined
@@ -323,11 +325,12 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
                 cancels = true
             }
         case .cleanup:
-            let ready = text("The speech model is ready, so you can dictate while the cleanup model downloads.")
             switch cleanup {
-            case .downloading(_, let source):
+            case .downloading:
                 progress = combined
-                lines = [ready, text("Downloading the cleanup model: \(combined.percent)% of \(size)")] + from(source)
+                // The line stays as it was while the speech model downloaded. With the
+                // speech model in place at launch, the cleanup model is all there is.
+                lines = [includesSpeech ? downloadingBoth : text("Downloading the cleanup model: \(combined.percent)% of \(size)")]
                 button = text("Cancel Download")
                 cancels = true
             case .verifying:
