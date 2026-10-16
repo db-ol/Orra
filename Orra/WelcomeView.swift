@@ -175,7 +175,7 @@ struct WelcomeView: View {
             }
             if WelcomeSuggestion.shows(checklist: checklist) {
                 SuggestionsBlock(
-                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, translationOn: setup.cleanup.translationIsOn, locale: Locale(identifier: localization)),
+                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, locale: Locale(identifier: localization)),
                     locale: Locale(identifier: localization),
                     open: { openSettings(.general) }
                 )
@@ -189,7 +189,8 @@ struct WelcomeView: View {
 
 /// What to try next, under "Orra is ready": one compact row for each feature, with its symbol,
 /// its name and one line, and a button that opens Settings, or On when it is on already.
-/// Settings opens on General, where all three are set up. It cannot scroll to a section.
+/// Settings opens on General, where cleanup, translation and speak translation are. It
+/// cannot scroll to a section. Meeting Captions is only in the Orra menu, so its row says so.
 private struct SuggestionsBlock: View {
     let suggestions: [WelcomeSuggestion]
     let locale: Locale
@@ -215,12 +216,18 @@ private struct SuggestionsBlock: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
+                        if let note = suggestion.note {
+                            Text(verbatim: note)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     Spacer(minLength: 8)
                     if let button = suggestion.button {
                         Button(button, action: open)
                             .controlSize(.small)
-                    } else {
+                    } else if suggestion.isOn {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)

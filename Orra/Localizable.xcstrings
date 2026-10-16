@@ -3617,6 +3617,16 @@
         }
       }
     },
+    "Turn on Meeting Captions in the Orra menu. Speak translation is in Settings, under General, once Translation is on." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会议字幕在 Orra 菜单中打开。朗读译文在设置的“通用”中，打开翻译后才能使用。"
+          }
+        }
+      }
+    },
     "Turn on Translation to use this." : {
       "localizations" : {
         "zh-Hans" : {
