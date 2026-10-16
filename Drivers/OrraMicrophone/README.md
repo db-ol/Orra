@@ -17,8 +17,22 @@ QuickTime Player held the full phrase played to its output side. In Google Meet 
 Microphone as the microphone, the level meter moved and a second participant heard the
 phrase. It has not been tried with Orra yet.
 
-pkg.sh builds an installer package. The package has not been installed on a Mac yet, so
-Installer, its postinstall script and uninstall.sh have not been tried with it.
+pkg.sh builds an installer package. The one in the 0.4.0 release is signed and notarized,
+and `spctl --assess --type install` accepts it as Notarized Developer ID. On 2026-10-16 it
+was installed with Installer on the same Mac, over the build installed by hand. It left a
+receipt for version 0.1.0 and the driver as root:wheel with its Developer ID signature, and
+its postinstall script restarted coreaudiod, which listed the device again. uninstall.sh
+has not been tried with the package.
+
+## Install
+
+Download [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg) from the
+[Orra 0.4.0 release](https://github.com/db-ol/Orra/releases/tag/v0.4.0) and open it. It is
+signed with the Developer ID of team X77KW5VYFJ and notarized. Installer asks for an
+administrator password and installs the driver in /Library/Audio/Plug-Ins/HAL. Installing
+restarts coreaudiod, which stops every app's audio for a moment. Then pick Orra Microphone
+under Speak into in Orra's Meeting Interpretation settings, and as the microphone in the call
+app. [Uninstall](#uninstall) removes it.
 
 ## The device
 
