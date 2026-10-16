@@ -1164,8 +1164,9 @@ remove Orra's Accessibility access while it runs. Undo all of it afterwards:
   own.
 - [ ] Before doing any step, click Not Now: the menu shows Setup Guide…, which opens the
   window again. Quit Orra and launch it: the window opens again.
-- [ ] Download Models, or Download Speech Model on a Mac under 16 GB, starts the download, shows a progress bar, the percentage and the server, and Cancel Download
-  stops it. The menu shows the same progress.
+- [ ] Download Models, or Download Speech Model on a Mac under 16 GB, starts the download,
+  shows a progress bar, the percentage and the server, and Cancel Download stops it. The
+  menu shows the same progress.
 - [ ] While the model downloads, Allow Microphone Access… shows the macOS prompt, and the
   step gets its check mark after Allow.
 - [ ] Grant Accessibility Access… shows the macOS prompt. After turning Orra on in the

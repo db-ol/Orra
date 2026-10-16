@@ -136,7 +136,7 @@ struct WelcomeView: View {
                 language = picked
                 languagePicked(picked)
             })
-            SetupStepRow(number: 1, status: downloadingCleanup ? .inProgress : checklist.model, title: setup.wantsCleanup ? "Download the models" : "Download the speech model", isCurrent: step == .download || step == .downloading) {
+            SetupStepRow(number: 1, status: downloadingCleanup ? .inProgress : checklist.model, title: setup.namesBothModels ? "Download the models" : "Download the speech model", isCurrent: step == .download || step == .downloading) {
                 ModelStepDetail(setup: setup, summary: summary, pushToTalk: pushToTalk)
             }
             SetupStepRow(number: 2, status: checklist.microphone, title: "Allow the microphone", isCurrent: step == .microphone) {

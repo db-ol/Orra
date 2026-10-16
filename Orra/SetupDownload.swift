@@ -96,6 +96,12 @@ final class SetupDownload {
         cleanup.isOn || (proposesCleanup && !speech.state.isBusy)
     }
 
+    /// Whether step 1 names both models: the download includes the cleanup model, unless
+    /// only the speech model is left to download as the cleanup model is already in place.
+    var namesBothModels: Bool {
+        wantsCleanup && (speech.state.isInstalled || !cleanup.models.state.isInstalled)
+    }
+
     /// Download, Resume Download or Try Again in the welcome window. A new user's download
     /// turns cleanup on here, since the button names the size with the cleanup model.
     func start() {
@@ -290,7 +296,7 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
             case .verifying:
                 progress = combined
                 lines = speech.menuLines(total: speechTotal, locale: locale)
-            case .missing where wantsCleanup:
+            case .missing where wantsCleanup && !cleanup.isInstalled:
                 lines = [text("The speech model, and a second model that tidies up what you say, such as fillers and corrections you make while speaking.")]
                 if combined.completed > 0 {
                     button = text("Resume Download (\(ModelInstaller.State.size(combined.total - combined.completed)) left)")
@@ -304,6 +310,11 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
                     lines = Array(speech.menuLines(total: speechTotal, locale: locale).prefix(1))
                 }
                 button = speech.buttonTitle(total: speechTotal, locale: locale)
+            case .failed where wantsCleanup && !queuesCleanup && !cleanup.isInstalled:
+                // A speech model download from the menu failed, so a start here would also
+                // queue the cleanup model. The button names the size of both.
+                lines = speech.menuLines(total: speechTotal, locale: locale)
+                button = text("Download Models (\(size))")
             default:
                 lines = speech.menuLines(total: speechTotal, locale: locale)
                 button = speech.buttonTitle(total: speechTotal, locale: locale)

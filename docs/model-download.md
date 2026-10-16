@@ -216,8 +216,8 @@ When Orra goes online for it:
   at once. The same button includes this model when cleanup was saved on. Under 16 GB, or
   with cleanup saved off, the welcome window downloads the speech model only and cleanup
   is turned on in Settings. Nothing goes online before one of these buttons. Turning on
-  the other switch while a download was agreed to for one asks nothing more. Cancel Download keeps the bytes on disk and turns both
-  switches off again.
+  the other switch while a download was agreed to for one asks nothing more. Cancel
+  Download keeps the bytes on disk and turns both switches off again.
 - Never at launch, and never while cleanup and translation are both off. Launch only
   looks at the installed folder's file sizes. Loading uses local files only.
 

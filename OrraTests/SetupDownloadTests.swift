@@ -128,6 +128,23 @@ struct SetupDownloadTests {
         // A failed download is tried again.
         summary = DownloadSummary(speech: .failed(.offline), speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.button == "Try Again")
+        // A speech model download from the menu failed: a start here also queues the
+        // cleanup model, so the button names both.
+        summary = DownloadSummary(speech: .failed(.offline), speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        #expect(summary.button == "Download Models (5.52 GB)")
+        #expect(summary.lines == ["This Mac is offline. Connect to the internet, then try again."])
+    }
+
+    /// With the cleanup model already in place, only the speech model is left to download,
+    /// so the step names it alone and its size.
+    @Test func withTheCleanupModelInPlaceOnlyTheSpeechModelIsNamed() {
+        let installed = ModelInstaller.State.installed(folder)
+        var summary = DownloadSummary(speech: .missing(bytesPresent: 0), speechTotal: speechTotal, cleanup: installed, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        #expect(summary.active == .speech)
+        #expect(summary.button == "Download Speech Model (2.47 GB)")
+        #expect(summary.lines == ["Orra needs its speech model to transcribe."])
+        summary = DownloadSummary(speech: .failed(.offline), speechTotal: speechTotal, cleanup: installed, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        #expect(summary.button == "Try Again")
     }
 
     /// Under 16 GB with no saved choice, the step says why cleanup stays off. With cleanup
