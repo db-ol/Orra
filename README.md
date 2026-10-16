@@ -103,9 +103,8 @@ Download [Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.
 
 ## Getting started
 
-1. Open Orra. A welcome window, with a small guide that says what to do next, walks you through five steps. At the top, pick Orra's language, English or 简体中文, or keep the Mac's. The window switches to it right away, and you can change it later in Settings, General. Steps two to four make Orra ready, and the others are up to you:
-   - **Clean up your text.** Choose whether Orra also tidies up what you say with a second local model, 3.05 GB, which needs about 4 GB of memory while it runs. On a Mac with 16 GB of memory or more the switch starts on, and on a smaller Mac it starts off.
-   - **Download the speech model**, 2.47 GB, once. With cleanup on, the cleanup model downloads right after it behind the same progress bar, and you can dictate as soon as the speech model is in place.
+1. Open Orra. A welcome window, with a small guide that says what to do next, walks you through four steps. At the top, pick Orra's language, English or 简体中文, or keep the Mac's. The window switches to it right away, and you can change it later in Settings, General. The first three steps make Orra ready, and the last one is up to you:
+   - **Download the models**, once. The speech model is 2.47 GB. A switch in this step also cleans up what you say with a second local model, 3.05 GB, which needs about 4 GB of memory while it runs. On a Mac with 16 GB of memory or more the switch starts on and is recommended, and on a smaller Mac it starts off. With it on, the cleanup model downloads right after the speech model behind the same progress bar, and you can dictate as soon as the speech model is in place.
    - **Allow the microphone.**
    - **Allow Accessibility**, which Orra needs to notice the talk key and to paste the text. A small animation shows where to turn Orra on in System Settings.
    - **Choose your talk key** by pressing it. On a Mac's own keyboard, fn (Globe) at the bottom left is comfortable while your right hand is on the mouse. On an external keyboard, right Control works best, because some, such as the Logitech MX Keys, never send fn.
