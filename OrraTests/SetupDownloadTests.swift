@@ -116,42 +116,46 @@ struct SetupDownloadTests {
 
     @Test func theButtonNamesTheSizeOfBothModels() {
         let missing = ModelInstaller.State.missing(bytesPresent: 0)
-        var summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
+        var summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.active == .speech)
         #expect(summary.button == "Download Both Models (5.52 GB)")
         #expect(summary.lines.last == "The cleanup model follows right after it.")
         #expect(!summary.cancels)
         #expect(summary.progress == nil)
         // Without cleanup, the menu's own button.
-        summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.button == "Download Speech Model (2.47 GB)")
         // Bytes on disk from before: what is left of both.
-        summary = DownloadSummary(speech: .missing(bytesPresent: 470_000_000), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 50_000_000), cleanupTotal: cleanupTotal, wantsCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
+        summary = DownloadSummary(speech: .missing(bytesPresent: 470_000_000), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 50_000_000), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.button == "Resume Download (5 GB left)")
     }
 
     @Test func whileTheSpeechModelDownloadsTheBarCoversBoth() {
-        let summary = DownloadSummary(speech: .downloading(bytes: speechTotal, source: .huggingFace), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
+        let summary = DownloadSummary(speech: .downloading(bytes: speechTotal, source: .huggingFace), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.progress?.total == speechTotal + cleanupTotal)
         #expect(summary.lines == ["Downloading the speech model, then the cleanup model: 44% of 5.52 GB", "From huggingface.co"])
         #expect(summary.button == "Cancel Download")
         #expect(summary.cancels)
+        // Started from the menu while cleanup was only proposed: the speech model alone.
+        let fromMenu = DownloadSummary(speech: .downloading(bytes: 0, source: nil), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        #expect(fromMenu.progress?.total == speechTotal)
+        #expect(!fromMenu.lines.contains { $0.contains("cleanup model") })
     }
 
     @Test func dictationIsReadyWhileTheCleanupModelDownloads() {
-        let summary = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .downloading(bytes: 0, source: nil), cleanupTotal: cleanupTotal, wantsCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
+        let summary = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .downloading(bytes: 0, source: nil), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.active == .cleanup)
         #expect(summary.lines.first == "The speech model is ready, so you can dictate while the cleanup model downloads.")
         #expect(summary.progress?.completed == speechTotal)
         #expect(summary.cancels)
         // Turned on later, with the speech model in place at launch: the cleanup model alone.
-        let later = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .downloading(bytes: 0, source: nil), cleanupTotal: cleanupTotal, wantsCleanup: true, includesSpeech: false, locale: Locale(identifier: "en"))
+        let later = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .downloading(bytes: 0, source: nil), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: false, locale: Locale(identifier: "en"))
         #expect(later.progress?.total == cleanupTotal)
         #expect(later.lines.contains("Downloading the cleanup model: 0% of 3.05 GB"))
     }
 
     @Test func nothingIsLeftOnceTheWantedModelsAreInPlace() {
-        let summary = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: false, includesSpeech: true)
+        let summary = DownloadSummary(speech: .installed(folder), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 0), cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true)
         #expect(summary.active == nil)
         #expect(summary.lines.isEmpty)
         #expect(summary.button == nil)
@@ -161,7 +165,7 @@ struct SetupDownloadTests {
     @Test func theStepFollowsThePickedLanguage() {
         let chinese = Locale(identifier: "zh-Hans")
         let missing = ModelInstaller.State.missing(bytesPresent: 0)
-        let summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, includesSpeech: true, locale: chinese)
+        let summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: chinese)
         #expect(summary.button == "下载两个模型（5.52 GB）")
         #expect(GuideStep.cleanup.line(locale: chinese) == "你好，我是 Orra。要不要顺便帮你整理说出的文字？")
         #expect(GuideStep.ready.line(locale: Locale(identifier: "en")) == "All set! Hold the talk key and say hello.")

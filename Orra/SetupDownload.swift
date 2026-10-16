@@ -196,6 +196,7 @@ final class SetupDownload {
             cleanup: cleanup.models.state,
             cleanupTotal: cleanup.models.manifest.totalBytes,
             wantsCleanup: wantsCleanup,
+            queuesCleanup: queuesCleanup,
             includesSpeech: includesSpeech,
             locale: locale
         )
@@ -268,13 +269,18 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
     /// Whether the button cancels.
     var cancels = false
 
-    init(speech: ModelInstaller.State, speechTotal: Int64, cleanup: ModelInstaller.State, cleanupTotal: Int64, wantsCleanup: Bool, includesSpeech: Bool, locale: Locale = .interface) {
+    /// - Parameter queuesCleanup: Whether the cleanup model follows the speech model's
+    ///   download under way. A speech model download started from the menu leaves it out,
+    ///   also while the welcome window proposes cleanup.
+    init(speech: ModelInstaller.State, speechTotal: Int64, cleanup: ModelInstaller.State, cleanupTotal: Int64, wantsCleanup: Bool, queuesCleanup: Bool, includesSpeech: Bool, locale: Locale = .interface) {
         let active = SetupDownload.active(speech: speech, wantsCleanup: wantsCleanup, cleanup: cleanup)
         self.active = active
+        // While the speech model downloads, the cleanup model counts only when it follows.
+        let countsCleanup = speech.isBusy ? queuesCleanup : wantsCleanup
         let combined = CombinedProgress(
             speech: includesSpeech || !speech.isInstalled ? speech : nil,
             speechTotal: speechTotal,
-            cleanup: wantsCleanup ? cleanup : nil,
+            cleanup: countsCleanup ? cleanup : nil,
             cleanupTotal: cleanupTotal
         )
         let size = ModelInstaller.State.size(combined.total)
@@ -291,7 +297,7 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
             break
         case .speech:
             switch speech {
-            case .downloading(_, let source) where wantsCleanup:
+            case .downloading(_, let source) where queuesCleanup:
                 progress = combined
                 lines = [text("Downloading the speech model, then the cleanup model: \(combined.percent)% of \(size)")] + from(source)
                 button = speech.buttonTitle(total: speechTotal, locale: locale)
