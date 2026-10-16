@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 
 /// A small card beside the System Settings window, with the picture of the switch to turn
-/// on, after a button in the welcome window opened System Settings. WelcomeWindow owns it
-/// and closes it with the window.
+/// on, after a button in the welcome window opened System Settings. It has no close
+/// button: it goes away once the permission is given or System Settings closes.
+/// WelcomeWindow owns it and also closes it with the window.
 ///
 /// System Settings is found by its windows' owner, layer and bounds only, which need no
 /// permission. Window titles would need Screen Recording, so they are never read.
@@ -20,8 +21,8 @@ final class SettingsGuidePanel {
         dismiss()
         let panel = makePanel()
         let locale = Locale(identifier: localization)
-        let view = FirstClickHostingView(rootView: AnyView(
-            SettingsGuideCard(kind: kind) { [weak self] in self?.dismiss() }
+        let view = NSHostingView(rootView: AnyView(
+            SettingsGuideCard(kind: kind)
                 .environment(\.locale, locale)
                 .environment(\.interfaceLocale, locale)
         ))
@@ -136,18 +137,17 @@ nonisolated struct SettingsGuideTracker: Sendable {
     static let waitForWindow = 60.0
     /// How long the window may be gone once it was there.
     static let goneLimit = 3.0
-    /// The longest the card stays.
-    static let lifetime = 180.0
     /// Smaller windows of System Settings, such as a sheet's, are not the settings window.
     static let smallestWindow = CGSize(width: 300, height: 200)
 
     private(set) var appeared = false
     private var goneSince: Double?
 
-    /// What to do at `time` seconds after the click. The card shows only while System
-    /// Settings is the active app, so it never floats over another one.
+    /// What to do at `time` seconds after the click. The card goes away once access is
+    /// given or System Settings closes, and shows only while System Settings is the active
+    /// app, so it never floats over another one.
     mutating func next(at time: Double, granted: Bool, running: Bool, window: Window, active: Bool) -> Action {
-        if granted || time >= Self.lifetime { return .dismiss }
+        if granted { return .dismiss }
         if appeared, !running { return .dismiss }
         switch window {
         case .onScreen(let bounds):
@@ -249,31 +249,19 @@ nonisolated enum SettingsGuidePlacement {
     }
 }
 
-/// The card: the guide, one line, the picture of the list with Orra's switch, and a close
-/// button.
+/// The card: the guide and one line above the picture of the list with Orra's switch.
 struct SettingsGuideCard: View {
     let kind: PermissionDemo.Kind
-    let close: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
                 OrraGuide()
                     .frame(width: 40, height: 40)
                 Text("Find Orra in this list and turn on its switch.")
                     .font(.callout.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 2)
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18, height: 18)
-                        .background(.quaternary, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Close"))
             }
             PermissionDemo(kind: kind)
         }

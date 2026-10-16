@@ -406,9 +406,6 @@ private struct MicrophoneStepDetail: View {
                 Text("Microphone access is off. Turn on Orra under Microphone in System Settings.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if PermissionDemo.isShown(for: .microphone, microphone: pushToTalk.microphoneAccess, hotkeyActive: pushToTalk.isHotkeyActive) {
-                    PermissionDemo(kind: .microphone)
-                }
                 Button("Open Microphone Settings…") {
                     pushToTalk.requestMicrophoneAccess()
                     guideSettings(.microphone)
@@ -483,9 +480,6 @@ private struct AccessibilityStepDetail: View {
                 Text("Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if PermissionDemo.isShown(for: .accessibility, microphone: pushToTalk.microphoneAccess, hotkeyActive: pushToTalk.isHotkeyActive) {
-                    PermissionDemo(kind: .accessibility)
-                }
                 Button("Grant Accessibility Access…") {
                     pushToTalk.promptForAccessibility()
                     guideSettings(.accessibility)

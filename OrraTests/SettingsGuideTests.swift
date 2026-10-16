@@ -2,19 +2,9 @@ import AppKit
 import Testing
 @testable import Orra
 
-/// The picture of System Settings in the welcome window, and the card beside System
-/// Settings: where it goes, when it shows, hides and goes away, and its panel.
+/// The card beside System Settings: where it goes, when it shows, hides and goes away, and
+/// its panel.
 struct SettingsGuideTests {
-    @Test func thePictureShowsWhilePermissionStillNeedsTheUser() {
-        #expect(PermissionDemo.isShown(for: .accessibility, microphone: .authorized, hotkeyActive: false))
-        #expect(!PermissionDemo.isShown(for: .accessibility, microphone: .denied, hotkeyActive: true))
-        #expect(PermissionDemo.isShown(for: .microphone, microphone: .denied, hotkeyActive: true))
-        // Before the first request macOS asks with its own prompt.
-        for access in [MicrophoneAccess.notDetermined, .authorized, .notConfigured] {
-            #expect(!PermissionDemo.isShown(for: .microphone, microphone: access, hotkeyActive: false))
-        }
-    }
-
     // MARK: Placement
 
     private let size = CGSize(width: 274, height: 200)
@@ -217,10 +207,13 @@ struct SettingsGuideTests {
         #expect(back.next(at: 6, granted: false, running: true, window: .none, active: true) == .hide)
     }
 
-    @Test func theCardGoesAwayAfterThreeMinutes() {
+    @Test func theCardStaysWhileSystemSettingsIsOpen() {
+        // No time limit: only access or closing System Settings ends the card.
         var tracker = SettingsGuideTracker()
-        #expect(tracker.next(at: 179, granted: false, running: true, window: .onScreen(bounds), active: true) == .show(bounds))
-        #expect(tracker.next(at: 180, granted: false, running: true, window: .onScreen(bounds), active: true) == .dismiss)
+        #expect(tracker.next(at: 1, granted: false, running: true, window: .onScreen(bounds), active: true) == .show(bounds))
+        #expect(tracker.next(at: 600, granted: false, running: true, window: .onScreen(bounds), active: true) == .show(bounds))
+        #expect(tracker.next(at: 3600, granted: false, running: true, window: .offScreen, active: false) == .hide)
+        #expect(tracker.next(at: 3601, granted: false, running: true, window: .onScreen(bounds), active: true) == .show(bounds))
     }
 
     // MARK: Panel

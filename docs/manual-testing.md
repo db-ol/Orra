@@ -195,8 +195,7 @@ got worse than the baseline, see docs/release-gate.md.
     become key or main, lets clicks through, and shows on every Space and over full
     screen apps. It uses fakes for the panel and the sounds otherwise, so no window opens
     and no sound plays. LevelMeterTests checks the peak the audio thread stores.
-  - SettingsGuideTests covers when the welcome window shows the picture of System
-    Settings, where the card beside System Settings goes (right, left, over the corner,
+  - SettingsGuideTests covers where the card beside System Settings goes (right, left, over the corner,
     inside the visible frame, on a second screen, from CG to Cocoa coordinates), how it
     finds the System Settings window in the window list, when it shows, hides and goes
     away, and that its panel floats without taking the focus.
@@ -1198,8 +1197,8 @@ choice. Put all of it back afterwards:
   the title. It blinks every few seconds, bobs gently and points down at the steps. Its
   bubble says one line for the step that has the tint, and the line changes as steps get
   done, in English and in 简体中文.
-- [ ] With Reduce Motion on (System Settings > Accessibility > Display), the guide and the
-  System Settings picture stand still.
+- [ ] With Reduce Motion on (System Settings > Accessibility > Display), the guide stands
+  still.
 - [ ] The steps are 1 Download the models, 2 Allow the microphone, 3 Allow Accessibility,
   4 Choose your talk key. Step 1 holds the cleanup switch, Also clean up what you say,
   under the speech model's lines and above the button, with a before and after example,
@@ -1229,12 +1228,8 @@ choice. Put all of it back afterwards:
   Clean Up Text on.
 - [ ] Close the window with a language picked in it while the cleanup model downloads:
   Orra does not restart until the download is over.
-- [ ] While Accessibility is off, the Accessibility step shows a small picture of System
-  Settings with Orra's switch being turned on in the Accessibility list, also before the
-  download. With microphone access off (denied, not just never asked), the microphone
-  step shows the same picture for the Microphone list. Before the first request there is
-  no microphone picture, since macOS asks with its own prompt. Neither changes a
-  permission.
+- [ ] The window itself shows no picture of System Settings, in the Accessibility step or
+  the microphone step. The picture is only in the card beside System Settings below.
 - [ ] On a short screen, such as a 13 inch MacBook Air at its default resolution, the
   steps scroll and the guide and the buttons stay in view.
 
@@ -1248,7 +1243,7 @@ Settings…:
 
 - [ ] Grant Accessibility Access… shows the macOS prompt. Once System Settings opens, a
   small card with the guide, "Find Orra in this list and turn on its switch." and the
-  moving picture appears beside its window, on the right when the screen has room, else on
+  moving picture, and no close button, appears beside its window, on the right when the screen has room, else on
   the left, else over the window's lower right corner, near the window's top and never
   off the screen. It never takes the focus from System Settings.
 - [ ] Open Microphone Settings… shows the same card with the Microphone picture.
@@ -1256,14 +1251,15 @@ Settings…:
   within half a second. Minimizing it, moving to another Space or switching to another
   app hides the card, and it comes back with the window.
 - [ ] The card goes away once Orra's switch is on (Accessibility within a few seconds,
-  the microphone within a second), when System Settings quits or its window is closed,
-  with its close button, when the welcome window closes, and after 3 minutes. Clicking a
-  button again replaces the card, and there is never more than one.
+  the microphone within a second), and when System Settings quits or its window is closed
+  (within about 3 seconds). It also goes when the welcome window closes. Left open, it
+  stays as long as System Settings does, with no time limit. Clicking a button again
+  replaces the card, and there is never more than one.
 - [ ] If System Settings does not open within 60 seconds of the click (for example, the macOS
   prompt is left alone), no card appears.
 - [ ] In 简体中文 the card says "在这个列表里找到 Orra，打开它的开关。" With Reduce Motion
   on, the picture and the guide stand still. The card reads well in light and dark.
-- [ ] VoiceOver reads the card's line and its close button as Close.
+- [ ] VoiceOver reads the card's line.
 
 Chinese interface, added on 2026-10-07, not verified yet. Give Orra its own language under
 System Settings > General > Language & Region > Applications: add Orra with Chinese,
