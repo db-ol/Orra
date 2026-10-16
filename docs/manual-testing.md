@@ -839,6 +839,16 @@ got worse than the baseline, see docs/release-gate.md.
   terminal, not part of the test suite.
 - Orra/ and OrraTests/ are synchronized folder groups, so the new Swift files were
   picked up with no project file edits.
+- SecondTalkKeyTests cover the second talk key: it is saved under `secondTalkKey` and
+  leaves `talkKeys` alone, a saved key that clashes loads as none, the picker leaves out
+  the talk key and the translation key, picking the second key as the talk key swaps the
+  two and as the translation key removes it, either key starts a dictation through a fake
+  tap, the second key follows the talk key's mode, waits inside a talk combination such as
+  ⌃ ⌥, and the hints name both keys in English and Chinese. ExternalKeyboardTests cover
+  the registry properties of USB and Bluetooth keyboards, a MacBook's own keyboard on FIFO
+  and SPI, an Intel MacBook's own keyboard on USB, a mouse that also lists a keyboard
+  usage, a headset and a virtual keyboard, the conditions of the keyboard tip, that it
+  shows once ever, its text in both languages, and how it waits in the notice queue.
 
 ## Needs manual verification
 
@@ -1843,6 +1853,39 @@ modifiers with a regular key, such as ⇧ ⌘ D:
 - [ ] After a restart, both combinations and both modes are kept. Picking a single key
   again, then running Orra 0.3.1, keeps that single key.
 - [ ] The problem report names a combination by its symbols and key code only.
+
+Second talk key, added on 2026-10-15, not verified yet. Not tested with a real external
+keyboard. The tip was not seen in the running app:
+
+- [ ] After updating from 0.3.2, the talk key, its mode and the translation key are
+  unchanged, Second key in Settings says None, and the menu and the idle bar say "Hold fn
+  to talk" or the hint of the saved key as before.
+- [ ] Settings, General, Keys: a "Second key" (第二个键) picker right under the talk key,
+  with "Handy when you switch to an external keyboard that never sends fn."
+  (换用 fn 键传不到 Mac 的外接键盘时很方便。) under it. The list offers None and every single
+  key except the talk key and the translation key.
+- [ ] With fn as the talk key and right Control as the second key, holding either one
+  records and pastes. Double pressing either one starts hands free, the indicator names
+  the key that started it, and that key finishes. Right Control C still copies.
+- [ ] The menu says "Hold fn or right Control to talk" (按住地球仪（fn）键或右侧 Control 键说话),
+  the Talk Key submenu shows "Second Key: ⌃ Right Control", and the idle bar says the
+  same hint. In Press to start and stop mode the hint names both keys too.
+- [ ] Picking right Control as the talk key while it is the second key makes fn the second
+  key. Picking it as the translation key sets Second key to None.
+- [ ] With fn as the talk key, no second key and setup complete, connecting a USB or
+  Bluetooth keyboard shows a notice above the indicator: "Some external keyboards never
+  send fn to the Mac. Talk with right Control too?" (有些外接键盘的 fn 键传不到 Mac。要同时用右侧
+  Control 键说话吗？) with Add (添加) and No Thanks (不用了). Add sets right Control as the
+  second key. After Add, No Thanks, closing it or letting it run out, it never shows again,
+  also after a restart and after connecting the keyboard again.
+- [ ] With an external keyboard already connected at launch, the tip shows once the model
+  has loaded. It does not show while the welcome window is open, and shows after it
+  closes with setup complete.
+- [ ] A MacBook with its own keyboard only, and a Mac with only a mouse or a headset
+  connected, never shows the tip.
+- [ ] To see the tip again, quit Orra and run
+  `defaults delete io.github.db-ol.Orra externalKeyboardTipShown` and
+  `defaults delete io.github.db-ol.Orra secondTalkKey`.
 
 Live captions, added on 2026-10-14 as Meeting Captions. On 2026-10-15 the maintainer
 checked captions and the scroll follow with a local build. Live Captions, under Meeting

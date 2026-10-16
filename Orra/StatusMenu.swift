@@ -100,6 +100,9 @@ struct StatusMenu: View {
             // A menu shows text as a line that cannot be clicked. The key is chosen by
             // pressing it, which a menu cannot do, so Settings does that.
             Text("Talk Key: \(pushToTalk.talkKey.fullName())")
+            if let second = pushToTalk.secondTalkKey {
+                Text("Second Key: \(second.fullName())")
+            }
             Button("Change Talk Key…") {
                 NSApplication.shared.activate()
                 SettingsWindow.show(.general)

@@ -79,6 +79,13 @@ final class WelcomeWindow {
     /// The card beside System Settings after a button here opened it. Closed with the
     /// window.
     private let settingsGuide = SettingsGuidePanel()
+    /// Called after the window closed.
+    var onClose: () -> Void = {}
+
+    /// Whether the window is on screen.
+    var isVisible: Bool {
+        window?.isVisible ?? false
+    }
 
     init(pushToTalk: PushToTalkController, setup: SetupDownload) {
         self.pushToTalk = pushToTalk
@@ -122,6 +129,10 @@ final class WelcomeWindow {
                 self?.refresh = nil
                 self?.settingsGuide.dismiss()
                 self?.restartForLanguage()
+                // After the close has finished, so the window no longer counts as visible.
+                DispatchQueue.main.async {
+                    self?.onClose()
+                }
             }
         }
         return window

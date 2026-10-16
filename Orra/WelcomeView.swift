@@ -471,7 +471,7 @@ private struct AccessibilityStepDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if pushToTalk.isHotkeyActive {
-                Text(verbatim: pushToTalk.talkKey.talkHint(mode: pushToTalk.talkMode, in: interfaceLocale))
+                Text(verbatim: pushToTalk.talkHint(in: interfaceLocale))
                     .foregroundStyle(.secondary)
             } else {
                 Text("Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here.")

@@ -274,6 +274,34 @@ Not verified on hardware yet: whether 0.3 seconds feels right on a right hand ke
 right Option behaves with input methods that use it, and whether a double press of right
 Command or right Option fires a Siri or Dictation shortcut set to that key.
 
+On 2026-10-15 the maintainer asked for a second talk key, because some external
+keyboards, such as the Logitech MX Keys, never send fn to the Mac. Implemented in
+`Orra/TalkKey.swift`, `Orra/PushToTalkController.swift`, `Orra/ExternalKeyboard.swift`,
+`Orra/LearnedNotice.swift`, `Orra/AppDelegate.swift` and `Orra/SettingsView.swift`:
+
+- The talk key stays as it was, a single key or a combination, saved under `talkKeys` and
+  `talkKeyCombination`. The second key is a single key saved under `secondTalkKey`, never
+  in the `talkKeys` list, where an older Orra would keep one key by its own order. An
+  older Orra ignores it and keeps the talk key. None is the default.
+- The second key is never the talk key or the translation key. Picking it as the talk key
+  swaps the two talk keys, or removes the second key when the old talk key was a
+  combination. Picking it as the translation key removes it.
+- The tap watches it beside the talk key, in the talk key's mode. Hands free, cancelling
+  and the translation key work as for the talk key. A hands free dictation ends with the
+  key that started it. When the second key is one of the modifiers of a combination of
+  another key, such as right Control beside ⌃ ⌥, it waits 0.3 seconds, so the combination
+  can take over, as the talk key already did beside a translation combination.
+- The menu, the idle bar and the welcome window say "Hold fn or right Control to talk".
+  The Talk Key submenu adds "Second Key: ⌃ Right Control".
+- Once, when the talk key uses fn, no second key is set, setup is complete, the welcome
+  window is closed and an external keyboard is connected, at launch or later, a notice
+  offers right Control as the second key, or right Option or right Command when right
+  Control is taken. Orra tells an external keyboard from the built in one by registry
+  properties alone: a HID device whose primary usage is Keyboard, not marked Built-In,
+  on USB or Bluetooth, and not named Apple Internal. It follows connections with
+  IOServiceAddMatchingNotification and never opens a device, so it needs no permission
+  and never sees a key. Which keyboard a key press came from is not asked.
+
 ## What Orra needs
 
 - Press and release, not just press. `PushToTalkStateMachine` is driven by both.

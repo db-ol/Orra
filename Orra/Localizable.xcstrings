@@ -139,6 +139,17 @@
         }
       }
     },
+    "%@ or %@" : {
+      "comment" : "The talk key and the second talk key inside a sentence, such as fn or right Control",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@或%@"
+          }
+        }
+      }
+    },
     "%lld seconds, in memory until Orra quits." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1231,6 +1242,16 @@
         }
       }
     },
+    "Handy when you switch to an external keyboard that never sends fn." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "换用 fn 键传不到 Mac 的外接键盘时很方便。"
+          }
+        }
+      }
+    },
     "Heard as" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1790,12 +1811,32 @@
         }
       }
     },
+    "No Thanks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不用了"
+          }
+        }
+      }
+    },
     "No words yet" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "还没有词"
+          }
+        }
+      }
+    },
+    "None" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无"
           }
         }
       }
@@ -2971,6 +3012,26 @@
         }
       }
     },
+    "Second key" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第二个键"
+          }
+        }
+      }
+    },
+    "Second Key: %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第二个键：%@"
+          }
+        }
+      }
+    },
     "Select words, then choose Remove or press Delete. Right-click a word to remove it." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3068,6 +3129,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看报告"
+          }
+        }
+      }
+    },
+    "Some external keyboards never send fn to the Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有些外接键盘的 fn 键传不到 Mac。"
           }
         }
       }
@@ -3280,6 +3351,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "说话键：%@"
+          }
+        }
+      }
+    },
+    "Talk with %@ too?" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要同时用%@说话吗？"
           }
         }
       }
