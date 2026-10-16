@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orra: voice input for your Mac</title>
-  <meta name="description" content="Orra is an open source voice input app for macOS. Dictate in any app, and translate between Chinese and English as you speak. Speech becomes text on your Mac, never on a server.">
+  <meta name="description" content="Orra is an open source voice input app for macOS. Dictate in any app, and translate between Chinese and English as you speak, in calls too. Speech becomes text on your Mac, never on a server.">
   <meta name="color-scheme" content="light dark">
   <link rel="canonical" href="https://db-ol.github.io/Orra/">
   <link rel="alternate" hreflang="en" href="https://db-ol.github.io/Orra/">
@@ -21,6 +21,7 @@
       <a class="brand" href="./"><img src="favicon.png" alt="" width="24" height="24">Orra</a>
       <nav aria-label="Main">
         <a class="optional" href="#features">Features</a>
+        <a class="optional" href="#meetings">Meetings</a>
         <a class="optional" href="#privacy">Privacy</a>
         <a href="https://github.com/db-ol/Orra">GitHub</a>
         <a href="zh/" hreflang="zh-Hans" lang="zh-Hans">中文</a>
@@ -34,7 +35,7 @@
         <img class="app-icon" src="icon.png" alt="Orra app icon" width="96" height="96">
         <p class="eyebrow">Orra</p>
         <h1 id="hero-title">Speak,<br>and it’s written.</h1>
-        <p class="lede">Dictate and translate in any app. Everything runs on your Mac.</p>
+        <p class="lede">Dictate and translate in any app, and in your calls. Everything runs on your Mac.</p>
         <div class="cta">
           <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Download for Mac</a>
           <p class="version">Version 0.4.0 <span class="needs">Needs a Mac with Apple silicon, macOS 15.6 or later and about 6 GB of free space.</span></p>
@@ -101,23 +102,67 @@
           </div>
           <div class="tile reveal">
             <h3>Translation</h3>
-            <p>Speak Chinese and get English, or speak English and get Chinese. It runs on your Mac.</p>
+            <p>Hold the translation key, speak Chinese and get English, or speak English and get Chinese. It runs on your Mac.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="privacy" class="band">
+    <section id="meetings" class="band">
       <div class="wrap">
-        <h2 class="reveal">Privacy</h2>
-        <p class="statement reveal">What you say stays on your Mac.</p>
-        <div class="prose reveal">
-          <p>You need the internet only to download Orra and its models. Apart from that, Orra goes online only to check for updates, and only if you allow it. Everything else runs on your Mac, and Orra never saves your recordings or what you said. The <a href="https://github.com/db-ol/Orra#privacy">README</a> has the details.</p>
+        <h2 class="reveal">Meeting Interpretation</h2>
+        <p class="statement reveal">Read what others say in your language, and let them hear you in theirs, even in your own voice.</p>
+        <div class="meet">
+          <div class="meet-part reveal">
+            <div class="meet-stage" role="img" aria-label="Animation: the Live Captions window shows two English sentences from a call, “Can we move the launch to next Thursday?” and “The test report isn’t ready yet.”, each with its Chinese translation below it, 我们能把发布挪到下周四吗？ and 测试报告还没准备好。">
+              <div class="captions" aria-hidden="true">
+                <p class="captions-title">Live Captions</p>
+                <p class="captions-modes"><span>Translation only</span><span class="on">Original and translation</span></p>
+                <div class="caption">
+                  <p class="caption-original">Can we move the launch to next Thursday?</p>
+                  <p class="caption-translation" lang="zh-Hans">我们能把发布挪到下周四吗？</p>
+                </div>
+                <div class="caption">
+                  <p class="caption-original">The test report isn’t ready yet.</p>
+                  <p class="caption-translation" lang="zh-Hans">测试报告还没准备好。</p>
+                </div>
+              </div>
+            </div>
+            <h3>Live Captions</h3>
+            <p>Orra shows what your Mac plays, such as a call, as translated captions in a floating window. It translates with the same model on your Mac as the translation key. It never uses the microphone, and captions stay in memory only.</p>
+          </div>
+          <div class="meet-part reveal">
+            <div class="meet-stage" role="img" aria-label="Animation: holding the translation key, someone says the Chinese sentence 可以，我周三之前把测试做完. The call app uses Orra Microphone as its microphone, and Alex, on the other side of the call, hears the English translation, “Sure, I’ll finish testing by Wednesday.”">
+              <p class="meet-said" aria-hidden="true" lang="zh-Hans">“可以，我周三之前把测试做完。”</p>
+              <div class="demo-window call" aria-hidden="true">
+                <div class="chat-head"><span class="avatar">A</span>Alex</div>
+                <p class="call-label">Alex hears</p>
+                <p class="call-heard"><span class="level"><i></i><i></i><i></i><i></i><i></i></span>“Sure, I’ll finish testing by Wednesday.”</p>
+                <p class="call-mic"><span>Microphone</span> Orra Microphone</p>
+              </div>
+            </div>
+            <h3>Speak Translations to Others</h3>
+            <p>With Translation and Speak Translations to Others on in Settings, hold the translation key and speak. A voice model on your Mac speaks the translation into Orra Microphone. Choose Orra Microphone as the microphone in your call app, and the other side hears your words in their language. Record a short voice sample, and it speaks in your own voice. Use only your own voice, and tell others they hear a synthesized voice.</p>
+            <p>The voice model is a download of about 2 GB. Orra Microphone is a separate download.</p>
+            <ul class="links">
+              <li><a href="https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg">Download Orra Microphone</a></li>
+            </ul>
+          </div>
         </div>
       </div>
     </section>
 
-    <section id="open-source" class="band soft">
+    <section id="privacy" class="band soft">
+      <div class="wrap">
+        <h2 class="reveal">Privacy</h2>
+        <p class="statement reveal">What you say stays on your Mac.</p>
+        <div class="prose reveal">
+          <p>You need the internet only to download Orra and its models. Apart from that, Orra goes online only to check for updates, and only if you allow it. Everything else runs on your Mac, and Orra never saves your recordings or what you said. The one exception is the audio of your voice sample, if you turn on Remember my voice. Orra never saves its words. The <a href="https://github.com/db-ol/Orra#privacy">README</a> has the details.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="open-source" class="band">
       <div class="wrap split">
         <div class="reveal">
           <h2>Open source</h2>
@@ -138,7 +183,7 @@
       </div>
     </section>
 
-    <section class="band closing" aria-labelledby="closing-title">
+    <section class="band soft closing" aria-labelledby="closing-title">
       <div class="wrap reveal">
         <h2 id="closing-title">Try Orra.</h2>
         <p class="lede">Free and open source. Notarized by Apple.</p>

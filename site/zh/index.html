@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orra：Mac 上的语音输入</title>
-  <meta name="description" content="Orra 是一款开源的 Mac 语音输入 App。在任何 App 里听写，也能边说边在中英文之间翻译。语音在你自己的 Mac 上转成文字，从不经过服务器。">
+  <meta name="description" content="Orra 是一款开源的 Mac 语音输入 App。在任何 App 里听写，也能边说边在中英文之间翻译，通话时也可以。语音在你自己的 Mac 上转成文字，从不经过服务器。">
   <meta name="color-scheme" content="light dark">
   <link rel="canonical" href="https://db-ol.github.io/Orra/zh/">
   <link rel="alternate" hreflang="en" href="https://db-ol.github.io/Orra/">
@@ -21,6 +21,7 @@
       <a class="brand" href="./"><img src="../favicon.png" alt="" width="24" height="24">Orra</a>
       <nav aria-label="主导航">
         <a class="optional" href="#features">功能</a>
+        <a class="optional" href="#meetings">会议同传</a>
         <a class="optional" href="#privacy">隐私</a>
         <a href="https://github.com/db-ol/Orra">GitHub</a>
         <a href="../" hreflang="en" lang="en">English</a>
@@ -34,7 +35,7 @@
         <img class="app-icon" src="../icon.png" alt="Orra 的 App 图标" width="96" height="96">
         <p class="eyebrow">Orra</p>
         <h1 id="hero-title">说出来，<br>就写好了。</h1>
-        <p class="lede">在任何 App 里听写和翻译，全部在你的 Mac 上完成。</p>
+        <p class="lede">在任何 App 里听写和翻译，通话时也能用，全部在你的 Mac 上完成。</p>
         <div class="cta">
           <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">下载 Mac 版</a>
           <p class="version">版本 0.4.0 <span class="needs">需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 6 GB 的可用空间。</span></p>
@@ -101,23 +102,67 @@
           </div>
           <div class="tile reveal">
             <h3>中英翻译</h3>
-            <p>说中文得到英文，说英文得到中文，都在你的 Mac 上完成。</p>
+            <p>按住翻译键，说中文得到英文，说英文得到中文，都在你的 Mac 上完成。</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="privacy" class="band">
+    <section id="meetings" class="band">
       <div class="wrap">
-        <h2 class="reveal">隐私</h2>
-        <p class="statement reveal">你说的话，留在你的 Mac 上。</p>
-        <div class="prose reveal">
-          <p>只有下载 Orra 和模型时需要联网。除此之外，只有在你允许检查更新时，Orra 才会联网。其他一切都在你的 Mac 上完成，Orra 从不保存你的录音和说过的话。详情见 <a href="https://github.com/db-ol/Orra/blob/main/README.zh-CN.md#隐私">README</a>。</p>
+        <h2 class="reveal">会议同传</h2>
+        <p class="statement reveal">对方说的话，你看到自己语言的字幕。你说自己的语言，对方听到的是他们的语言，还可以是你的音色。</p>
+        <div class="meet">
+          <div class="meet-part reveal">
+            <div class="meet-stage" role="img" aria-label="动画：“实时字幕”窗口显示通话里的两句英文“Can we move the launch to next Thursday?”和“The test report isn’t ready yet.”，每句下面是它的中文译文“我们能把发布挪到下周四吗？”和“测试报告还没准备好。”">
+              <div class="captions" aria-hidden="true">
+                <p class="captions-title">实时字幕</p>
+                <p class="captions-modes"><span>只显示译文</span><span class="on">原文和译文逐句对照</span></p>
+                <div class="caption">
+                  <p class="caption-original" lang="en">Can we move the launch to next Thursday?</p>
+                  <p class="caption-translation">我们能把发布挪到下周四吗？</p>
+                </div>
+                <div class="caption">
+                  <p class="caption-original" lang="en">The test report isn’t ready yet.</p>
+                  <p class="caption-translation">测试报告还没准备好。</p>
+                </div>
+              </div>
+            </div>
+            <h3>实时字幕</h3>
+            <p>Orra 把 Mac 播放的声音（比如通话）翻译成字幕，显示在一个浮动窗口里。它和翻译键用的是你 Mac 上的同一个模型。它从不使用麦克风，字幕只保存在内存中。</p>
+          </div>
+          <div class="meet-part reveal">
+            <div class="meet-stage" role="img" aria-label="动画：有人按住翻译键，用中文说“可以，我周三之前把测试做完。”通话 App 的麦克风选的是 Orra Microphone，通话另一方的 Alex 听到英文译文“Sure, I’ll finish testing by Wednesday.”">
+              <p class="meet-said" aria-hidden="true">“可以，我周三之前把测试做完。”</p>
+              <div class="demo-window call" aria-hidden="true">
+                <div class="chat-head"><span class="avatar">A</span>Alex</div>
+                <p class="call-label">Alex 听到</p>
+                <p class="call-heard" lang="en"><span class="level"><i></i><i></i><i></i><i></i><i></i></span>“Sure, I’ll finish testing by Wednesday.”</p>
+                <p class="call-mic"><span>麦克风</span> Orra Microphone</p>
+              </div>
+            </div>
+            <h3>为对方朗读译文</h3>
+            <p>在设置里打开“翻译”和“为对方朗读译文”后，按住翻译键说话，你 Mac 上的语音合成模型会把译文读出来，送进 Orra Microphone。在通话 App 里把 Orra Microphone 选作麦克风，对方就能听到你说的话的译文。录一段简短的声音样本，它还能用你的音色说话。请只用你自己的声音，并告诉对方他们听到的是合成的声音。</p>
+            <p>语音合成模型需要下载，约 2 GB。Orra Microphone 需要单独下载。</p>
+            <ul class="links">
+              <li><a href="https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg">下载 Orra Microphone</a></li>
+            </ul>
+          </div>
         </div>
       </div>
     </section>
 
-    <section id="open-source" class="band soft">
+    <section id="privacy" class="band soft">
+      <div class="wrap">
+        <h2 class="reveal">隐私</h2>
+        <p class="statement reveal">你说的话，留在你的 Mac 上。</p>
+        <div class="prose reveal">
+          <p>只有下载 Orra 和模型时需要联网。除此之外，只有在你允许检查更新时，Orra 才会联网。其他一切都在你的 Mac 上完成，Orra 从不保存你的录音和说过的话。唯一的例外是声音样本的音频：打开“记住我的音色”后，Orra 会保存它，但从不保存样本里说的话。详情见 <a href="https://github.com/db-ol/Orra/blob/main/README.zh-CN.md#隐私">README</a>。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="open-source" class="band">
       <div class="wrap split">
         <div class="reveal">
           <h2>开源</h2>
@@ -138,7 +183,7 @@
       </div>
     </section>
 
-    <section class="band closing" aria-labelledby="closing-title">
+    <section class="band soft closing" aria-labelledby="closing-title">
       <div class="wrap reveal">
         <h2 id="closing-title">试试 Orra。</h2>
         <p class="lede">免费开源，经过苹果公证。</p>
