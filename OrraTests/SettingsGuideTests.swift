@@ -92,6 +92,17 @@ struct SettingsGuideTests {
         let low = CGRect(x: -1700, y: -290, width: 800, height: 300)
         let clamped = SettingsGuidePlacement.frame(size: size, beside: low, screens: screens)
         #expect(clamped.minY == second.visible.minY)
+        // Across both screens, with 500 points on the primary one and 300 on the second:
+        // the primary screen has more of it, so the card goes on its right.
+        let across = CGRect(x: -300, y: 100, width: 800, height: 600)
+        let straddling = SettingsGuidePlacement.frame(size: size, beside: across, screens: screens)
+        #expect(straddling.minX == 512)
+        #expect(straddling.maxY == 648)
+        // On no screen: the nearest one, the primary, keeps the card inside.
+        let away = CGRect(x: 3000, y: 100, width: 800, height: 600)
+        let nearest = SettingsGuidePlacement.frame(size: size, beside: away, screens: screens)
+        #expect(nearest.maxX == primary.visible.maxX)
+        #expect(primary.visible.contains(nearest))
     }
 
     @Test func theCardFindsTheWindowFromCGCoordinatesOnAnotherScreen() {
@@ -106,6 +117,19 @@ struct SettingsGuideTests {
         #expect(above.visible.contains(frame))
         #expect(frame.minX == 812)
         #expect(frame.maxY == window.maxY - SettingsGuidePlacement.topInset)
+    }
+
+    @Test func theCardFindsTheWindowOnATallerScreenBelowAndToTheRight() {
+        let below = SettingsGuidePlacement.Screen(
+            frame: CGRect(x: 1440, y: -1000, width: 2560, height: 1440),
+            visible: CGRect(x: 1440, y: -1000, width: 2560, height: 1415)
+        )
+        let cg = CGRect(x: 1500, y: 1000, width: 700, height: 600)
+        let window = SettingsGuidePlacement.cocoaRect(fromCG: cg, primaryHeight: primary.frame.height)
+        #expect(window == CGRect(x: 1500, y: -700, width: 700, height: 600))
+        let frame = SettingsGuidePlacement.frame(size: size, beside: window, screens: [primary, below])
+        #expect(below.visible.contains(frame))
+        #expect(frame.minX == window.maxX + SettingsGuidePlacement.gap)
     }
 
     // MARK: Window list

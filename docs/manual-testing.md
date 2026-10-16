@@ -1259,7 +1259,8 @@ Settings…:
   the microphone within a second), when System Settings quits or its window is closed,
   with its close button, when the welcome window closes, and after 3 minutes. Clicking a
   button again replaces the card, and there is never more than one.
-- [ ] Without a click in System Settings for 60 seconds after the prompt, no card appears.
+- [ ] If System Settings does not open within 60 seconds of the click (for example, the macOS
+  prompt is left alone), no card appears.
 - [ ] In 简体中文 the card says "在这个列表里找到 Orra，打开它的开关。" With Reduce Motion
   on, the picture and the guide stand still. The card reads well in light and dark.
 - [ ] VoiceOver reads the card's line and its close button as Close.
