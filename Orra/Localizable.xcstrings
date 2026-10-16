@@ -1128,6 +1128,16 @@
         }
       }
     },
+    "Find Orra in this list and turn on its switch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这个列表里找到 Orra，打开它的开关。"
+          }
+        }
+      }
+    },
     "fn" : {
       "comment" : "A talk key inside a sentence",
       "localizations" : {

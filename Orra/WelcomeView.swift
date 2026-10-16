@@ -20,6 +20,8 @@ struct WelcomeView: View {
     /// Tells the window the language the user picked in it, not one that came from
     /// Settings, so only a choice made here can restart Orra when the window closes.
     let languagePicked: (AppLanguage) -> Void
+    /// Shows the guide beside System Settings after a button here opened it.
+    let guideSettings: (PermissionDemo.Kind) -> Void
     @State private var language: AppLanguage
     /// The localization the window shows, such as "zh-Hans". Kept, so a redraw for the
     /// download's progress does not read the Mac's languages again.
@@ -30,7 +32,7 @@ struct WelcomeView: View {
     /// Whether the steps scroll on a short screen. Off only to draw the whole window.
     let limitsHeight: Bool
 
-    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void) {
+    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void, guideSettings: @escaping (PermissionDemo.Kind) -> Void = { _ in }) {
         self.limitsHeight = limitsHeight
         _stepsHeight = State(initialValue: Self.tallestSteps)
         self.pushToTalk = pushToTalk
@@ -38,6 +40,7 @@ struct WelcomeView: View {
         self.close = close
         self.localizationChanged = localizationChanged
         self.languagePicked = languagePicked
+        self.guideSettings = guideSettings
         _language = State(initialValue: language)
         _localization = State(initialValue: language.localization())
     }
@@ -136,10 +139,10 @@ struct WelcomeView: View {
                 ModelStepDetail(setup: setup, summary: summary, pushToTalk: pushToTalk)
             }
             SetupStepRow(number: 2, status: checklist.microphone, title: "Allow the microphone", isCurrent: step == .microphone) {
-                MicrophoneStepDetail(pushToTalk: pushToTalk, showsDemo: step == .microphone)
+                MicrophoneStepDetail(pushToTalk: pushToTalk, guideSettings: guideSettings)
             }
             SetupStepRow(number: 3, status: checklist.accessibility, title: "Allow Accessibility", isCurrent: step == .accessibility) {
-                AccessibilityStepDetail(pushToTalk: pushToTalk, showsDemo: step == .accessibility)
+                AccessibilityStepDetail(pushToTalk: pushToTalk, guideSettings: guideSettings)
             }
             // Not part of the checklist: right Control works when the user skips it.
             SetupStepRow(number: 4, status: pushToTalk.hasChosenTalkKey ? .done : .todo, title: "Choose your talk key", isCurrent: step == .talkKey) {
@@ -385,8 +388,7 @@ private struct RecommendedBadge: View {
 
 private struct MicrophoneStepDetail: View {
     let pushToTalk: PushToTalkController
-    /// Whether the picture of System Settings shows, while the guide talks about this step.
-    let showsDemo: Bool
+    let guideSettings: (PermissionDemo.Kind) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -404,11 +406,12 @@ private struct MicrophoneStepDetail: View {
                 Text("Microphone access is off. Turn on Orra under Microphone in System Settings.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if showsDemo {
+                if PermissionDemo.isShown(for: .microphone, microphone: pushToTalk.microphoneAccess, hotkeyActive: pushToTalk.isHotkeyActive) {
                     PermissionDemo(kind: .microphone)
                 }
                 Button("Open Microphone Settings…") {
                     pushToTalk.requestMicrophoneAccess()
+                    guideSettings(.microphone)
                 }
             case .notConfigured:
                 Text("This build has no microphone usage description")
@@ -468,8 +471,7 @@ private struct TalkKeyStepDetail: View {
 
 private struct AccessibilityStepDetail: View {
     let pushToTalk: PushToTalkController
-    /// Whether the picture of System Settings shows, while the guide talks about this step.
-    let showsDemo: Bool
+    let guideSettings: (PermissionDemo.Kind) -> Void
     @Environment(\.interfaceLocale) private var interfaceLocale
 
     var body: some View {
@@ -481,11 +483,12 @@ private struct AccessibilityStepDetail: View {
                 Text("Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if showsDemo {
+                if PermissionDemo.isShown(for: .accessibility, microphone: pushToTalk.microphoneAccess, hotkeyActive: pushToTalk.isHotkeyActive) {
                     PermissionDemo(kind: .accessibility)
                 }
                 Button("Grant Accessibility Access…") {
                     pushToTalk.promptForAccessibility()
+                    guideSettings(.accessibility)
                 }
             }
         }

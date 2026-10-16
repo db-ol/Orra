@@ -12,6 +12,17 @@ struct PermissionDemo: View {
     let kind: Kind
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Whether the welcome window shows the picture for a permission: Accessibility while
+    /// the talk key is not active for want of it, and the microphone once access was
+    /// turned off. Before the first request macOS asks with its own prompt, so the
+    /// microphone has no picture then.
+    nonisolated static func isShown(for kind: Kind, microphone: MicrophoneAccess, hotkeyActive: Bool) -> Bool {
+        switch kind {
+        case .microphone: microphone == .denied
+        case .accessibility: !hotkeyActive
+        }
+    }
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
             PermissionDemoFrame(kind: kind, time: reduceMotion ? nil : context.date.timeIntervalSinceReferenceDate)

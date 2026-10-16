@@ -348,7 +348,7 @@ final class LearnedNoticePanel {
 
 /// Takes the first click, so a button in a panel that is never key works with one click.
 /// Also tells when the pointer enters and leaves, also while another app is active.
-private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
     var onHover: (Bool) -> Void = { _ in }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

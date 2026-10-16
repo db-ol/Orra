@@ -195,6 +195,11 @@ got worse than the baseline, see docs/release-gate.md.
     become key or main, lets clicks through, and shows on every Space and over full
     screen apps. It uses fakes for the panel and the sounds otherwise, so no window opens
     and no sound plays. LevelMeterTests checks the peak the audio thread stores.
+  - SettingsGuideTests covers when the welcome window shows the picture of System
+    Settings, where the card beside System Settings goes (right, left, over the corner,
+    inside the visible frame, on a second screen, from CG to Cocoa coordinates), how it
+    finds the System Settings window in the window list, when it shows, hides and goes
+    away, and that its panel floats without taking the focus.
   - SetupChecklistTests covers the welcome window's three steps: the model step for every
     installer state and for an installed model that is loading or failed to load, the
     microphone step for every permission state, and the Accessibility step. It checks that
@@ -1224,12 +1229,40 @@ choice. Put all of it back afterwards:
   Clean Up Text on.
 - [ ] Close the window with a language picked in it while the cleanup model downloads:
   Orra does not restart until the download is over.
-- [ ] While the guide talks about Allow Accessibility, a small picture of System Settings
-  shows Orra's switch being turned on in the Accessibility list. With microphone access
-  off, the microphone step shows the same picture for the Microphone list. Neither
-  changes a permission.
+- [ ] While Accessibility is off, the Accessibility step shows a small picture of System
+  Settings with Orra's switch being turned on in the Accessibility list, also before the
+  download. With microphone access off (denied, not just never asked), the microphone
+  step shows the same picture for the Microphone list. Before the first request there is
+  no microphone picture, since macOS asks with its own prompt. Neither changes a
+  permission.
 - [ ] On a short screen, such as a 13 inch MacBook Air at its default resolution, the
   steps scroll and the guide and the buttons stay in view.
+
+Card beside System Settings, added on 2026-10-15, not verified yet. Orra never resets a
+permission itself. To see both pictures, quit Orra and run
+`tccutil reset Accessibility io.github.db-ol.Orra` and
+`tccutil reset Microphone io.github.db-ol.Orra` yourself. Both reset the installed
+release too, since it has the same bundle ID, so turn its access on again afterwards. For
+the microphone card, deny the first microphone prompt, so the step offers Open Microphone
+Settings…:
+
+- [ ] Grant Accessibility Access… shows the macOS prompt. Once System Settings opens, a
+  small card with the guide, "Find Orra in this list and turn on its switch." and the
+  moving picture appears beside its window, on the right when the screen has room, else on
+  the left, else over the window's lower right corner, near the window's top and never
+  off the screen. It never takes the focus from System Settings.
+- [ ] Open Microphone Settings… shows the same card with the Microphone picture.
+- [ ] Moving the System Settings window, also to another display, moves the card with it
+  within half a second. Minimizing it, moving to another Space or switching to another
+  app hides the card, and it comes back with the window.
+- [ ] The card goes away once Orra's switch is on (Accessibility within a few seconds,
+  the microphone within a second), when System Settings quits or its window is closed,
+  with its close button, when the welcome window closes, and after 3 minutes. Clicking a
+  button again replaces the card, and there is never more than one.
+- [ ] Without a click in System Settings for 60 seconds after the prompt, no card appears.
+- [ ] In 简体中文 the card says "在这个列表里找到 Orra，打开它的开关。" With Reduce Motion
+  on, the picture and the guide stand still. The card reads well in light and dark.
+- [ ] VoiceOver reads the card's line and its close button as Close.
 
 Chinese interface, added on 2026-10-07, not verified yet. Give Orra its own language under
 System Settings > General > Language & Region > Applications: add Orra with Chinese,

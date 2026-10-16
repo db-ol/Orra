@@ -76,6 +76,9 @@ final class WelcomeWindow {
     private var closeObserver: (any NSObjectProtocol)?
     /// The language last picked in this window, nil until the user picks one here.
     private var pickedHere: AppLanguage?
+    /// The card beside System Settings after a button here opened it. Closed with the
+    /// window.
+    private let settingsGuide = SettingsGuidePanel()
 
     init(pushToTalk: PushToTalkController, setup: SetupDownload) {
         self.pushToTalk = pushToTalk
@@ -102,6 +105,8 @@ final class WelcomeWindow {
             self?.window?.title = Self.title(in: localization)
         } languagePicked: { [weak self] language in
             self?.pickedHere = language
+        } guideSettings: { [weak self] kind in
+            self?.guideSettings(kind)
         }
         let controller = NSHostingController(rootView: view)
         // The window grows when a step shows more, such as the download's progress.
@@ -115,10 +120,23 @@ final class WelcomeWindow {
             MainActor.assumeIsolated {
                 self?.refresh?.cancel()
                 self?.refresh = nil
+                self?.settingsGuide.dismiss()
                 self?.restartForLanguage()
             }
         }
         return window
+    }
+
+    /// Shows the card beside System Settings, in the window's language, until the
+    /// permission is given. Microphone access is read every second while the window is
+    /// open, and the controller follows Accessibility, see `watchMicrophoneAccess()`.
+    private func guideSettings(_ kind: PermissionDemo.Kind) {
+        settingsGuide.show(kind, localization: AppLanguage.load().localization()) { [pushToTalk] in
+            switch kind {
+            case .microphone: pushToTalk.microphoneAccess == .authorized
+            case .accessibility: pushToTalk.isHotkeyActive
+            }
+        }
     }
 
     static func title(in localization: String) -> String {
