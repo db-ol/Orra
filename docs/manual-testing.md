@@ -1243,9 +1243,9 @@ Settings…:
 
 - [ ] Grant Accessibility Access… shows the macOS prompt. Once System Settings opens, a
   small card with the guide, "Find Orra in this list and turn on its switch." and the
-  moving picture, and no close button, appears beside its window, on the right when the screen has room, else on
-  the left, else over the window's lower right corner, near the window's top and never
-  off the screen. It never takes the focus from System Settings.
+  moving picture, and no close button, appears beside its window, on the right when the
+  screen has room, else on the left, else over the window's lower right corner, near the
+  window's top and never off the screen. It never takes the focus from System Settings.
 - [ ] Open Microphone Settings… shows the same card with the Microphone picture.
 - [ ] Moving the System Settings window, also to another display, moves the card with it
   within half a second. Minimizing it, moving to another Space or switching to another
