@@ -10,9 +10,15 @@ does not see it, and the app neither builds nor installs it. Nothing in this fol
 on its own.
 
 Status: the source builds, and an in process test loads the bundle the way coreaudiod finds
-it and checks the properties and the loopback. pkg.sh builds an installer package. Neither
-the driver nor the package has been installed on a Mac yet, so they have not been tried
-with coreaudiod, Installer, Google Meet or Orra.
+it and checks the properties and the loopback. On 2026-10-15 an ad hoc signed build was
+installed by hand (see Install by hand) on a Mac with Apple Silicon. coreaudiod loads it,
+and Orra Microphone shows up as a virtual input in System Settings. A recording from it in
+QuickTime Player held the full phrase played to its output side. In Google Meet with Orra
+Microphone as the microphone, the level meter moved and a second participant heard the
+phrase. It has not been tried with Orra yet.
+
+pkg.sh builds an installer package. The package has not been installed on a Mac yet, so
+Installer, its postinstall script and uninstall.sh have not been tried with it.
 
 ## The device
 
@@ -137,10 +143,10 @@ The recording should hold the spoken word. `say -a "Orra Microphone"` does not w
 lists only devices that can be the default output, and the output side of Orra Microphone
 never can.
 
-A local ad hoc signed build is what other open source HAL plug ins use for testing, but it
-has not been tried here. If coreaudiod does not list the device, `log stream --predicate
-'process == "coreaudiod" OR process CONTAINS "Core-Audio-Driver-Service"'` shows why while
-it restarts.
+A local ad hoc signed build is what other open source HAL plug ins use for testing, and
+coreaudiod loads one installed this way on a Mac with Apple Silicon (see Status). If
+coreaudiod does not list the device, `log stream --predicate 'process == "coreaudiod" OR
+process CONTAINS "Core-Audio-Driver-Service"'` shows why while it restarts.
 
 ## Uninstall
 
