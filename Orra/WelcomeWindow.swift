@@ -76,6 +76,13 @@ final class WelcomeWindow {
     private var closeObserver: (any NSObjectProtocol)?
     /// The language last picked in this window, nil until the user picks one here.
     private var pickedHere: AppLanguage?
+    /// Called after the window closed.
+    var onClose: () -> Void = {}
+
+    /// Whether the window is on screen.
+    var isVisible: Bool {
+        window?.isVisible ?? false
+    }
 
     init(pushToTalk: PushToTalkController, models: ModelInstaller) {
         self.pushToTalk = pushToTalk
@@ -116,6 +123,10 @@ final class WelcomeWindow {
                 self?.refresh?.cancel()
                 self?.refresh = nil
                 self?.restartForLanguage()
+                // After the close has finished, so the window no longer counts as visible.
+                DispatchQueue.main.async {
+                    self?.onClose()
+                }
             }
         }
         return window

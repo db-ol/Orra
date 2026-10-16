@@ -204,6 +204,7 @@ private struct GeneralSettings: View {
                 // The note about swapped keys shows once, under the translation key.
                 TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false)
                     .help(Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.") + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
+                SecondTalkKeyPicker(pushToTalk: pushToTalk)
                 TriggerModePicker(pushToTalk: pushToTalk, slot: .talk)
                 VStack(alignment: .leading, spacing: 6) {
                     TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
@@ -928,6 +929,30 @@ struct MicrophoneToggles: View {
         if let chosen, !inputs.inputs.contains(where: { $0.uid == chosen.uid }) {
             Toggle(MicrophoneLabels.missing(chosen), isOn: .constant(true))
                 .disabled(true)
+        }
+    }
+}
+
+/// The optional second talk key: None, or a single key that is neither the talk key nor the
+/// translation key. It works just as the talk key does, in the talk key's mode.
+private struct SecondTalkKeyPicker: View {
+    let pushToTalk: PushToTalkController
+
+    var body: some View {
+        Picker(selection: Binding(
+            get: { pushToTalk.secondTalkKey },
+            set: { pushToTalk.setSecondTalkKey($0) }
+        )) {
+            Text("None").tag(TalkKey?.none)
+            ForEach(pushToTalk.secondTalkKeyChoices) { key in
+                Text(verbatim: key.fullName()).tag(TalkKey?.some(key))
+            }
+        } label: {
+            DescribedLabel(
+                title: "Second key",
+                detail: "Handy when you switch to an external keyboard that never sends fn.",
+                systemImage: "plus.rectangle.on.rectangle"
+            )
         }
     }
 }

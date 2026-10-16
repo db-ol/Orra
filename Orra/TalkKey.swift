@@ -626,6 +626,62 @@ nonisolated enum TalkKeyPreference {
     }
 }
 
+/// The optional second talk key: a single key that starts a dictation just as the talk key
+/// does, in the talk key's mode. Handy for someone who switches between a Mac's built in
+/// keyboard and an external one whose fn never reaches the Mac, such as the Logitech MX
+/// Keys: fn on the one, right Control on the other, with nothing to switch.
+///
+/// It is never the talk key and never the translation key, so a press always belongs to
+/// one slot. A combination as the talk key may share a modifier with it, such as ⌃ ⌥ and
+/// right Control. Then right Control waits a moment before it records, so the combination
+/// can take over, as with the translation key.
+nonisolated enum SecondTalkKey {
+    /// Whether `key` can be the second key beside these two keys.
+    static func isAllowed(_ key: TalkKey, talkKey: Hotkey, translationKey: Hotkey) -> Bool {
+        Hotkey.key(key) != talkKey && Hotkey.key(key) != translationKey
+    }
+
+    /// The keys the picker offers, in the order of `TalkKey.allCases`.
+    static func choices(talkKey: Hotkey, translationKey: Hotkey) -> [TalkKey] {
+        TalkKey.allCases.filter { isAllowed($0, talkKey: talkKey, translationKey: translationKey) }
+    }
+
+    /// The second key that suits an external keyboard whose fn never reaches the Mac: right
+    /// Control, or right Option or right Command when right Control is taken or is one of
+    /// the modifiers of either key. Nil when none of them is free.
+    static func suggested(talkKey: Hotkey, translationKey: Hotkey) -> TalkKey? {
+        [TalkKey.rightControl, .rightOption, .rightCommand].first { key in
+            isAllowed(key, talkKey: talkKey, translationKey: translationKey)
+                && [talkKey, translationKey].allSatisfy { $0.combination?.modifiers.isDisjoint(with: Hotkey.key(key).modifiers) ?? true }
+        }
+    }
+}
+
+/// Keeps the second talk key in UserDefaults under its own key. It is not added to the list
+/// under `TalkKeyPreference.defaultsKey`, because an older Orra keeps one key of a list by
+/// its own order, see `TalkKey.kept(from:)`, and could lose the talk key. An older Orra
+/// ignores this key and keeps the talk key alone.
+nonisolated enum SecondTalkKeyPreference {
+    static let defaultsKey = "secondTalkKey"
+
+    /// The saved key, or nil when none is saved or the saved one is no longer allowed beside
+    /// these keys, which Orra never saves itself.
+    static func load(talkKey: Hotkey, translationKey: Hotkey, from defaults: UserDefaults = .standard) -> TalkKey? {
+        guard let key = defaults.string(forKey: defaultsKey).flatMap(TalkKey.init(rawValue:)),
+              SecondTalkKey.isAllowed(key, talkKey: talkKey, translationKey: translationKey) else { return nil }
+        return key
+    }
+
+    /// Saves the key, or removes it for none.
+    static func save(_ key: TalkKey?, to defaults: UserDefaults = .standard) {
+        if let key {
+            defaults.set(key.rawValue, forKey: defaultsKey)
+        } else {
+            defaults.removeObject(forKey: defaultsKey)
+        }
+    }
+}
+
 /// Keeps the user's translation key in UserDefaults. Until the user picks one, or picks
 /// the talk key's key for it and the keys swap, nothing is saved and the key follows the
 /// talk key, see `TalkKey.defaultTranslationKey(talkKey:)`.
