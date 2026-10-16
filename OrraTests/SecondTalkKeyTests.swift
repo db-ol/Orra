@@ -231,6 +231,12 @@ struct ExternalKeyboardTests {
         #expect(!ExternalKeyboard.isExternalKeyboard([:]))
     }
 
+    private let learned = CorrectionLearning.Learned(
+        correction: Correction(heard: "S G Line Omni", corrected: "SGLang-Omni"),
+        pairs: [Correction(heard: "S G Line Omni", corrected: "SGLang-Omni")],
+        outcome: .added
+    )
+
     private let ready = ExternalKeyboardTip.Situation(
         talkKey: .fn,
         translationKey: .rightOption,
@@ -286,6 +292,64 @@ struct ExternalKeyboardTests {
         #expect(next.answered)
     }
 
+    @Test func theTipIsCheckedAgainBeforeItAdds() throws {
+        let suite = "io.github.db-ol.OrraTests.keyboard-tip-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tip = ExternalKeyboardTip(defaults: defaults) { _ in }
+        #expect(tip.stillOffers(.rightControl, in: ready))
+        // The user picked a second key, or changed the talk key, while the tip waited.
+        var situation = ready
+        situation.secondTalkKey = .leftOption
+        #expect(!tip.stillOffers(.rightControl, in: situation))
+        situation = ready
+        situation.talkKey = .rightCommand
+        #expect(!tip.stillOffers(.rightControl, in: situation))
+        situation = ready
+        situation.externalKeyboard = false
+        #expect(!tip.stillOffers(.rightControl, in: situation))
+        // Right Control became the translation key, so the tip would now offer another key.
+        situation = ready
+        situation.translationKey = .rightControl
+        #expect(!tip.stillOffers(.rightControl, in: situation))
+        tip.answer()
+        #expect(!tip.stillOffers(.rightControl, in: ready))
+    }
+
+    @Test func aWaitingTipThatNoLongerFitsIsDropped() {
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
+        var applies = true
+        notice.keyboardTipApplies = { _ in applies }
+        notice.show(learned)
+        notice.offerKeyboardTip(.rightControl)
+        #expect(notice.waiting == [.keyboardTip(.rightControl)])
+        applies = false
+        notice.close()
+        #expect(notice.content == nil)
+        #expect(notice.waiting.isEmpty)
+        // One that still fits shows.
+        applies = true
+        notice.show(learned)
+        notice.offerKeyboardTip(.rightControl)
+        notice.close()
+        #expect(notice.keyboardTip == .rightControl)
+    }
+
+    @Test func aFullQueueNeverPushesOutTheTip() {
+        let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
+        let first = WordSuggestion(change: Correction(heard: "一", corrected: "义"), pair: Correction(heard: "通一千问", corrected: "通义千问"))
+        notice.suggest(first)
+        notice.offerKeyboardTip(.rightControl)
+        for index in 0..<LearnedNotice.maximumWaiting + 2 {
+            let heard = "词\(index)"
+            notice.suggest(WordSuggestion(change: Correction(heard: heard, corrected: "字"), pair: Correction(heard: heard, corrected: "字")))
+        }
+        #expect(notice.waiting.count == LearnedNotice.maximumWaiting)
+        #expect(notice.waiting.first == .keyboardTip(.rightControl))
+        notice.close()
+        #expect(notice.keyboardTip == .rightControl)
+    }
+
     @Test func theTipTextNamesTheKey() {
         let english = ExternalKeyboardTip.lines(for: .rightControl, in: Locale(identifier: "en"))
         #expect(english.reason == "Some external keyboards never send fn to the Mac.")
@@ -314,11 +378,6 @@ struct ExternalKeyboardTests {
 
     @Test func aLearnedWordWaitsForTheTip() {
         let notice = LearnedNotice(sleep: { _ in try await Task.sleep(for: .seconds(60)) })
-        let learned = CorrectionLearning.Learned(
-            correction: Correction(heard: "S G Line Omni", corrected: "SGLang-Omni"),
-            pairs: [Correction(heard: "S G Line Omni", corrected: "SGLang-Omni")],
-            outcome: .added
-        )
         notice.offerKeyboardTip(.rightControl)
         notice.show(learned)
         #expect(notice.keyboardTip == .rightControl)

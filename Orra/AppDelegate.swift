@@ -110,11 +110,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         undo: { [learning] learned in learning.undo(learned) },
         add: { [learning] suggestion, word in learning.add(suggestion, as: word) },
         decline: { [learning] suggestion in learning.decline(suggestion) },
-        addSecondKey: { [pushToTalk, keyboardTip] key in
-            pushToTalk.setSecondTalkKey(key)
-            keyboardTip.answer()
+        // Add sets the key only when the tip still fits, since the user may have set a
+        // second key or changed the talk key while it showed. Either way it is answered.
+        addSecondKey: { [weak self] key in
+            guard let self else { return }
+            if keyboardTip.stillOffers(key, in: keyboardTipSituation()) {
+                pushToTalk.setSecondTalkKey(key)
+            }
+            answerKeyboardTip()
         },
-        dismissTip: { [keyboardTip] _ in keyboardTip.answer() }
+        dismissTip: { [weak self] _ in self?.answerKeyboardTip() },
+        tipApplies: { [weak self] key in
+            guard let self else { return false }
+            return keyboardTip.stillOffers(key, in: keyboardTipSituation())
+        }
     )
     /// Whether an external keyboard is connected, for the keyboard tip.
     let externalKeyboards = ExternalKeyboardMonitor()
@@ -142,16 +151,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Offers the keyboard tip when the situation calls for it, see ExternalKeyboardTip.
-    private func checkKeyboardTip() {
-        keyboardTip.check(ExternalKeyboardTip.Situation(
+    /// What decides whether the keyboard tip shows now.
+    private func keyboardTipSituation() -> ExternalKeyboardTip.Situation {
+        ExternalKeyboardTip.Situation(
             talkKey: pushToTalk.talkKey,
             translationKey: pushToTalk.translationKey,
             secondTalkKey: pushToTalk.secondTalkKey,
             externalKeyboard: externalKeyboards.isConnected,
             setupComplete: SetupChecklist(pushToTalk, models).isComplete,
             welcomeOpen: welcome.isVisible
-        ))
+        )
+    }
+
+    /// Offers the keyboard tip when the situation calls for it, see ExternalKeyboardTip.
+    private func checkKeyboardTip() {
+        keyboardTip.check(keyboardTipSituation())
+    }
+
+    /// The tip was answered and never shows again, so the keyboards need no watching.
+    private func answerKeyboardTip() {
+        keyboardTip.answer()
+        externalKeyboards.stop()
     }
 
     /// Checks the keyboard tip now and whenever setup or the talk keys change, until it was

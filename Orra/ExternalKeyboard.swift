@@ -54,7 +54,8 @@ final class ExternalKeyboardMonitor {
     var onChange: () -> Void = {}
     /// The registry entry IDs of the external keyboards connected now.
     private var keyboards: Set<UInt64> = []
-    private var port: IONotificationPortRef?
+    /// Unsafe only so deinit can release it. It is used on the main thread alone.
+    nonisolated(unsafe) private var port: IONotificationPortRef?
     private var iterators: [io_iterator_t] = []
 
     /// Starts following the keyboards and reads the ones connected now. Calling it again
@@ -104,6 +105,29 @@ final class ExternalKeyboardMonitor {
             }
         }
         update()
+    }
+
+    /// Stops following the keyboards, once the tip is answered and nothing needs them any
+    /// more. `isConnected` keeps its last value. Calling it again does nothing.
+    func stop() {
+        Self.release(port: port, iterators: iterators)
+        port = nil
+        iterators = []
+    }
+
+    deinit {
+        Self.release(port: port, iterators: iterators)
+    }
+
+    /// Removes the notifications, so the callbacks never reach a monitor that is gone.
+    /// Destroying the port also removes its run loop source.
+    nonisolated private static func release(port: IONotificationPortRef?, iterators: [io_iterator_t]) {
+        for iterator in iterators {
+            IOObjectRelease(iterator)
+        }
+        if let port {
+            IONotificationPortDestroy(port)
+        }
     }
 
     private func update() {
@@ -192,6 +216,14 @@ final class ExternalKeyboardTip {
         guard !offered, !answered, let key = Self.key(for: situation) else { return }
         offered = true
         offer(key)
+    }
+
+    /// Whether the tip that offers `key` still fits the situation, checked again when a tip
+    /// that waited is about to show and when the user clicks Add. Meanwhile the user may
+    /// have set a second key, changed the talk key or removed the keyboard. A tip that no
+    /// longer fits is dropped unanswered, so it may come back at a later launch.
+    func stillOffers(_ key: TalkKey, in situation: Situation) -> Bool {
+        !answered && Self.key(for: situation) == key
     }
 
     /// The user added the key, said No Thanks, closed the tip or let it run out. It never

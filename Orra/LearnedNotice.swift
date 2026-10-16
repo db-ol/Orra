@@ -67,6 +67,9 @@ final class LearnedNotice {
     @ObservationIgnored var onAddSecondKey: ((TalkKey) -> Void)?
     /// Called when the keyboard tip is closed, declined or runs out without Add.
     @ObservationIgnored var onDismissTip: ((TalkKey) -> Void)?
+    /// Whether a keyboard tip that waited still fits when its turn comes. One that no longer
+    /// fits is dropped without showing.
+    @ObservationIgnored var keyboardTipApplies: ((TalkKey) -> Bool)?
     @ObservationIgnored private let sleep: (Duration) async throws -> Void
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var hide: Task<Void, Never>?
@@ -115,10 +118,13 @@ final class LearnedNotice {
         }
     }
 
+    /// Adds a notice to the waiting ones. When too many wait, the oldest goes, but never the
+    /// keyboard tip, which is offered only once.
     private func enqueue(_ content: Content) {
         waiting.append(content)
-        if waiting.count > Self.maximumWaiting {
-            waiting.removeFirst()
+        if waiting.count > Self.maximumWaiting,
+           let oldest = waiting.firstIndex(where: { if case .keyboardTip = $0 { false } else { true } }) {
+            waiting.remove(at: oldest)
         }
     }
 
@@ -136,10 +142,16 @@ final class LearnedNotice {
         }
     }
 
-    /// Shows the next waiting notice, when none is shown.
+    /// Shows the next waiting notice, when none is shown. Skips a keyboard tip that no
+    /// longer fits.
     private func showNext() {
-        guard content == nil, !waiting.isEmpty else { return }
-        present(waiting.removeFirst())
+        guard content == nil else { return }
+        while !waiting.isEmpty {
+            let next = waiting.removeFirst()
+            if case .keyboardTip(let key) = next, keyboardTipApplies?(key) == false { continue }
+            present(next)
+            return
+        }
     }
 
     /// Keeps the notice while the pointer is over it.
@@ -276,7 +288,8 @@ final class LearnedNoticePanel {
         add: @escaping (WordSuggestion, String) -> Void = { _, _ in },
         decline: @escaping (WordSuggestion) -> Void = { _ in },
         addSecondKey: @escaping (TalkKey) -> Void = { _ in },
-        dismissTip: @escaping (TalkKey) -> Void = { _ in }
+        dismissTip: @escaping (TalkKey) -> Void = { _ in },
+        tipApplies: @escaping (TalkKey) -> Bool = { _ in true }
     ) {
         self.notice = notice
         notice.onChange = { [weak self] content in
@@ -287,6 +300,7 @@ final class LearnedNoticePanel {
         notice.onDecline = decline
         notice.onAddSecondKey = addSecondKey
         notice.onDismissTip = dismissTip
+        notice.keyboardTipApplies = tipApplies
     }
 
     func show(_ learned: CorrectionLearning.Learned) {
