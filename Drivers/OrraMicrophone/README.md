@@ -32,11 +32,12 @@ Installer, its postinstall script and uninstall.sh have not been tried with it.
 | Transport type | virtual |
 | Controls | none (no volume, no mute) |
 
-- Audio written to the output side comes back on the input side about two IO buffers later.
+- Audio written to the output side comes back on the input side one to two IO buffers later.
+  This has not been measured yet.
   Several apps may read the input side at once.
 - The input side may be the default microphone. The output side never becomes the default
   speaker, so system sounds and music never go into a call by accident. Orra picks the
-  device by its UID.
+  device by its UID, or by its name when no device has that UID.
 - When nothing plays, the input side is silent. After a pause the input side never repeats
   old audio.
 
@@ -207,15 +208,18 @@ To sign only the driver, without a package:
         SIGN_FLAGS="--options runtime --timestamp"
     codesign --verify --strict --verbose=2 build/OrraMicrophone.driver
 
-## How Orra would use it
+## How Orra uses it
 
-Phase 3 work in the app, not part of this folder:
+Speak Translations to Others in the app (Orra/AudioOutput.swift and Orra/SpeechPlayer.swift):
 
-- Find the device with kAudioHardwarePropertyTranslateUIDToDevice and the UID above, and
-  show an install hint when it is missing.
-- Point an AVAudioEngine (or an output audio unit through kAudioOutputUnitProperty_CurrentDevice)
-  at the device, and play the synthesized speech converted to 48 kHz stereo.
-- Never set the device as the system default output.
+- Finds the device among the outputs by the UID above, or by its name when no device has
+  that UID.
+- Points an AVAudioEngine output unit at the device through
+  kAudioOutputUnitProperty_CurrentDevice and plays the synthesized speech into it.
+- Never sets the device as the system default output.
+
+Not built yet: an install hint in the app. When the device is missing, Settings shows
+"Automatic (Orra Microphone is not installed)".
 
 ## License
 
