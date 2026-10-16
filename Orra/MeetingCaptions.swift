@@ -28,6 +28,11 @@ final class CaptionStore {
         }
     }
 
+    /// Removes a sentence, such as an interim line whose sentence got no final text.
+    func remove(id: Int) {
+        sentences.removeAll { $0.id == id }
+    }
+
     func clear() {
         sentences = []
     }
@@ -62,11 +67,15 @@ nonisolated enum CaptionDisplayMode: String, CaseIterable, Sendable {
         let style: Style
     }
 
-    /// The lines of a sentence in this mode. While the translation is pending, the
-    /// original shows on its own in the secondary style, and the translation replaces or
-    /// joins it once it is there. Without a translation the original is the main line.
+    /// The lines of a sentence in this mode. While the sentence is still being heard and
+    /// while its translation is pending, the original shows on its own in the secondary
+    /// style, and the translation replaces or joins it once it is there. Without a
+    /// translation the original is the main line.
     func lines(for sentence: CaptionSentence) -> [Line] {
-        switch (self, sentence.translation) {
+        if sentence.isInterim {
+            return [Line(text: sentence.original, style: .secondary)]
+        }
+        return switch (self, sentence.translation) {
         case (_, .none):
             [Line(text: sentence.original, style: .main)]
         case (_, .pending):
@@ -237,8 +246,10 @@ final class MeetingCaptions {
         speechModelMissing = false
         heardSeconds = 0
         heardSound = false
-        let pipeline = CaptionPipeline(engines: engines, speechNotReady: { [weak self] in
+        let pipeline = CaptionPipeline(engines: engines, interimInterval: CaptionPipeline.defaultInterimInterval, speechNotReady: { [weak self] in
             self?.speechModelMissing = true
+        }, withdraw: { [weak self] id in
+            self?.store.remove(id: id)
         }, report: { [weak self] sentence in
             self?.speechModelMissing = false
             self?.store.apply(sentence)

@@ -55,7 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         outputs: { AudioOutput.all() },
         folders: { [voiceModels] in voiceModels.folders },
         settings: .load(),
-        save: { $0.save() }
+        save: { $0.save() },
+        voiceFile: .live
     )
     /// Meeting captions, off at every launch. Lazy, because they read the controller's
     /// speech model state.
@@ -84,7 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inputLevel: { [pushToTalk] in pushToTalk.inputLevel() },
         holdHint: { [pushToTalk] in pushToTalk.talkHint() }
     )
-    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
+    /// The welcome window's one download of the speech model and the cleanup model.
+    lazy var setup = SetupDownload(speech: models, cleanup: cleanup)
+    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup)
     lazy var clipboard = ClipboardWord(
         isDictating: { [pushToTalk] in pushToTalk.state != .idle },
         vocabulary: { [pushToTalk] in pushToTalk.vocabulary.map(\.text) }
@@ -223,6 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // The vocabulary saves on a background queue. The last save must be written.
         VocabularyPreference.flush()
+        guard !Self.isHostedByXcode else { return }
+        // Remove or Remember my voice turned off just before Quit: the voice sample's file
+        // is deleted now, not by a task that may not run.
+        speech.removeVoiceFileBeforeQuit()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -233,8 +240,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updater.start()
         // The installer is what loads the speech model: at launch when the model is in
         // place, and again after a download or Try Again.
-        models.onInstalled = { [pushToTalk] _ in
+        // The cleanup model's download from the welcome window follows the speech model's.
+        models.onInstalled = { [pushToTalk, setup] _ in
             Task { await pushToTalk.loadModel() }
+            setup.speechInstalled()
         }
         // Cues can come from inside the keyboard tap's callback, which every key press on
         // the Mac waits for. The indicator and the sounds follow right after it returns,
@@ -255,6 +264,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         speech.isDictating = { [pushToTalk] in pushToTalk.state != .idle }
         speech.transcribeVoice = { [pushToTalk] sample in try await pushToTalk.transcribeVoiceSample(sample) }
         speech.transcribeSpeech = { [pushToTalk] audio, language in try await pushToTalk.transcribeSpeech(audio, in: language) }
+        speech.waitForSpeechModel = { [pushToTalk] in
+            while pushToTalk.modelState != .ready {
+                await withCheckedContinuation { continuation in
+                    withObservationTracking {
+                        _ = pushToTalk.modelState
+                    } onChange: {
+                        continuation.resume()
+                    }
+                }
+            }
+        }
+        // Remember my voice: the voice sample saved on this Mac, once the speech model is
+        // loaded and while Speak translations is on. Local files only.
+        speech.restoreVoice()
         voiceModels.onInstalled = { [speech] in speech.prepare() }
         speech.onEngineChange = { [voiceModels] kind in
             voiceModels.select(kind)
@@ -271,14 +294,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
-        Task { [models, pushToTalk, welcome, cleanup, speech, voiceModels] in
+        Task { [models, pushToTalk, welcome, cleanup, setup, speech, voiceModels] in
             await models.prepare()
+            // Loads the cleanup model when cleanup or translation is on and the model is in
+            // place. Before the welcome window, so its download step knows what is on disk.
+            await cleanup.start()
+            // Whether the welcome window's download includes the cleanup model.
+            setup.lookAtLaunch()
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()
             }
-            // Loads the cleanup model when cleanup or translation is on and the model is in
-            // place.
-            await cleanup.start()
             // Local files only. Loads the voice model when Speak Translation is on.
             if speech.canSpeak {
                 await voiceModels.prepare()

@@ -67,16 +67,18 @@ struct WelcomeLanguageTests {
     }
 
     @Test func closingRestartsOnlyWhenSetupIsCompleteAndTheLanguageWasPickedInTheWindow() {
-        #expect(WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
-        #expect(WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, pickedHere: true, otherWindowOpen: false, picked: "en", launched: "zh-Hans"))
+        #expect(WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
+        #expect(WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "en", launched: "zh-Hans"))
         // Same as the Mac on a Mac in English, after Orra started in English.
-        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, pickedHere: true, otherWindowOpen: false, picked: "en", launched: "en"))
+        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "en", launched: "en"))
         // Not Now, maybe during the download: the next launch shows the language.
-        #expect(!WelcomeWindow.restartsOnClose(setupComplete: false, dictating: false, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
-        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: true, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
+        #expect(!WelcomeWindow.restartsOnClose(setupComplete: false, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
+        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: true, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
         // Picked in Settings, which has its own Restart Orra button.
-        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, pickedHere: false, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
+        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: false, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
+        // The cleanup model is still downloading after the speech model.
+        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: true, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
         // Settings or Report a Problem is open and may hold something unfinished.
-        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, pickedHere: true, otherWindowOpen: true, picked: "zh-Hans", launched: "en"))
+        #expect(!WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: true, picked: "zh-Hans", launched: "en"))
     }
 }

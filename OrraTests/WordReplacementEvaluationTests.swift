@@ -11,19 +11,19 @@ struct WordReplacementEvaluationTests {
         Correction(heard: "通一千问", corrected: "通义千问"),
         Correction(heard: "同意千万", corrected: "通义千问"),
         Correction(heard: "力热吧", corrected: "丽热巴"),
-        Correction(heard: "陈阳", corrected: "晨阳"),
+        Correction(heard: "林悦", corrected: "霖悦"),
         Correction(heard: "生根", corrected: "申根"),
         Correction(heard: "时候在", corrected: "是在"),
         Correction(heard: "Ora", corrected: "Orra"),
         Correction(heard: "Kwen", corrected: "Qwen"),
-        Correction(heard: "sglang", corrected: "SGLang"),
+        Correction(heard: "kvlite", corrected: "KVLite"),
         Correction(heard: "Kubernetis", corrected: "Kubernetes"),
         Correction(heard: "cloud code", corrected: "Claude Code"),
         Correction(heard: "there", corrected: "their"),
         Correction(heard: "a pie", corrected: "API"),
         Correction(heard: "form", corrected: "from"),
     ]
-    static let vocabulary = Array(Set(pairs.map(\.corrected))) + ["Orra", "Qwen3-ASR", "SGLang-Omni", "迪丽热巴"]
+    static let vocabulary = Array(Set(pairs.map(\.corrected))) + ["Orra", "Qwen3-ASR", "KVLite-Nova", "迪丽热巴"]
 
     /// Every text of the evaluation sets in Tools/rewrite-eval: dictations, their cleaned
     /// and translated forms, and the number cases.
@@ -52,7 +52,7 @@ struct WordReplacementEvaluationTests {
     /// Only the pairs that are no ordinary words are used. Ora is one in the system's list.
     @Test func onlyThePairsOfNamesAreUsed() {
         let usable = WordReplacement.usablePairs(Self.pairs, vocabulary: Self.vocabulary, ordinary: .system)
-        #expect(Set(usable.map(\.heard)) == ["克劳德", "通一千问", "力热吧", "陈阳", "Kwen", "sglang", "Kubernetis"])
+        #expect(Set(usable.map(\.heard)) == ["克劳德", "通一千问", "力热吧", "林悦", "Kwen", "kvlite", "Kubernetis"])
     }
 }
 
