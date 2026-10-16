@@ -214,8 +214,8 @@ struct CorrectionWatcherTests {
     }
 
     @Test func twoFixesInOnePasteAreReportedApartWithTheLearnedWordLast() async {
-        let pasted = "克劳德觉得陈阳很好"
-        let field = ScriptedField([pasted, pasted, "Claude觉得陈阳很好", "Claude觉得陈阳很好", "Claude觉得晨阳很好"])
+        let pasted = "克劳德觉得林悦很好"
+        let field = ScriptedField([pasted, pasted, "Claude觉得林悦很好", "Claude觉得林悦很好", "Claude觉得霖悦很好"])
         let watcher = CorrectionWatcher(environment: field.environment)
         var reports: [(Finding, Finding?)] = []
         watcher.watch(pasted: pasted, in: 42) { reports.append(($0, $1)) }
@@ -229,14 +229,14 @@ struct CorrectionWatcherTests {
         // The word first, once the field was quiet, then the offered name on its own.
         #expect(reports.map(\.0.correction) == [
             Correction(heard: "克劳德", corrected: "Claude"),
-            Correction(heard: "陈阳", corrected: "晨阳"),
+            Correction(heard: "林悦", corrected: "霖悦"),
         ])
         #expect(reports.allSatisfy { $0.1 == nil })
     }
 
     @Test func twoFixesFoundTogetherReportTheOfferBeforeTheWord() async {
-        let pasted = "克劳德觉得陈阳很好"
-        let field = ScriptedField([pasted, pasted, "Claude觉得晨阳很好"])
+        let pasted = "克劳德觉得林悦很好"
+        let field = ScriptedField([pasted, pasted, "Claude觉得霖悦很好"])
         let watcher = CorrectionWatcher(environment: field.environment)
         var reports: [Finding] = []
         watcher.watch(pasted: pasted, in: 42) { reports.append($0); _ = $1 }

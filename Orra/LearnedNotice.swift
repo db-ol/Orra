@@ -8,7 +8,9 @@ import SwiftUI
 /// offered word that is closed or runs out is declined. A notice that comes while a word is
 /// offered, or an offer that comes while any notice is shown, waits and shows once the one
 /// shown closes, so an offer is never lost unseen. A learned word replaces a learned word
-/// shown or waiting, so only the latest Undo is kept.
+/// shown or waiting, so only the latest Undo is kept. The tip that offers a second talk key
+/// for an external keyboard, see ExternalKeyboardTip, waits and shows the same way as an
+/// offered word.
 @Observable
 final class LearnedNotice {
     static let duration: Duration = .seconds(10)
@@ -20,6 +22,8 @@ final class LearnedNotice {
     enum Content: Equatable {
         case learned(CorrectionLearning.Learned)
         case suggestion(WordSuggestion)
+        /// Offers this key as the second talk key.
+        case keyboardTip(TalkKey)
     }
 
     /// When the notice goes and how long that countdown is in all, for the ring. Nil while
@@ -47,6 +51,11 @@ final class LearnedNotice {
         if case .suggestion(let suggestion) = content { suggestion } else { nil }
     }
 
+    /// The key the keyboard tip shown offers, if it is shown.
+    var keyboardTip: TalkKey? {
+        if case .keyboardTip(let key) = content { key } else { nil }
+    }
+
     @ObservationIgnored var onChange: ((Content?) -> Void)?
     /// Called when the user undoes a word learned on its own, after the notice closed.
     @ObservationIgnored var onUndo: ((CorrectionLearning.Learned) -> Void)?
@@ -54,6 +63,13 @@ final class LearnedNotice {
     @ObservationIgnored var onAdd: ((WordSuggestion, String) -> Void)?
     /// Called when an offered word is closed or runs out without being added.
     @ObservationIgnored var onDecline: ((WordSuggestion) -> Void)?
+    /// Called when the user adds the key of the keyboard tip, after the notice closed.
+    @ObservationIgnored var onAddSecondKey: ((TalkKey) -> Void)?
+    /// Called when the keyboard tip is closed, declined or runs out without Add.
+    @ObservationIgnored var onDismissTip: ((TalkKey) -> Void)?
+    /// Whether a keyboard tip that waited still fits when its turn comes. One that no longer
+    /// fits is dropped without showing.
+    @ObservationIgnored var keyboardTipApplies: ((TalkKey) -> Bool)?
     @ObservationIgnored private let sleep: (Duration) async throws -> Void
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var hide: Task<Void, Never>?
@@ -72,7 +88,7 @@ final class LearnedNotice {
     /// `duration`. Waits while a word is offered.
     func show(_ learned: CorrectionLearning.Learned) {
         let content = Content.learned(learned)
-        if suggestion != nil {
+        if suggestion != nil || keyboardTip != nil {
             waiting.removeAll { if case .learned = $0 { true } else { false } }
             enqueue(content)
         } else {
@@ -91,10 +107,24 @@ final class LearnedNotice {
         }
     }
 
+    /// Offers `key` as the second talk key. Waits while another notice is shown.
+    func offerKeyboardTip(_ key: TalkKey) {
+        let content = Content.keyboardTip(key)
+        guard content != self.content, !waiting.contains(content) else { return }
+        if self.content != nil {
+            enqueue(content)
+        } else {
+            present(content)
+        }
+    }
+
+    /// Adds a notice to the waiting ones. When too many wait, the oldest goes, but never the
+    /// keyboard tip, which is offered only once.
     private func enqueue(_ content: Content) {
         waiting.append(content)
-        if waiting.count > Self.maximumWaiting {
-            waiting.removeFirst()
+        if waiting.count > Self.maximumWaiting,
+           let oldest = waiting.firstIndex(where: { if case .keyboardTip = $0 { false } else { true } }) {
+            waiting.remove(at: oldest)
         }
     }
 
@@ -108,14 +138,20 @@ final class LearnedNotice {
         onChange?(content)
         switch content {
         case .learned: hide(after: Self.duration)
-        case .suggestion: hide(after: Self.suggestionDuration)
+        case .suggestion, .keyboardTip: hide(after: Self.suggestionDuration)
         }
     }
 
-    /// Shows the next waiting notice, when none is shown.
+    /// Shows the next waiting notice, when none is shown. Skips a keyboard tip that no
+    /// longer fits.
     private func showNext() {
-        guard content == nil, !waiting.isEmpty else { return }
-        present(waiting.removeFirst())
+        guard content == nil else { return }
+        while !waiting.isEmpty {
+            let next = waiting.removeFirst()
+            if case .keyboardTip(let key) = next, keyboardTipApplies?(key) == false { continue }
+            present(next)
+            return
+        }
     }
 
     /// Keeps the notice while the pointer is over it.
@@ -166,13 +202,26 @@ final class LearnedNotice {
         }
     }
 
-    /// Closes the notice. An offered word that was not added is declined.
+    /// Closes the notice. An offered word that was not added is declined, and so is the
+    /// keyboard tip.
     func close() {
         let declined = suggestion
+        let tip = keyboardTip
         clear()
         if let declined {
             onDecline?(declined)
         }
+        if let tip {
+            onDismissTip?(tip)
+        }
+        showNext()
+    }
+
+    /// Adds the key of the keyboard tip as the second talk key. The notice closes first.
+    func addSecondKey() {
+        guard let key = keyboardTip else { return }
+        clear()
+        onAddSecondKey?(key)
         showNext()
     }
 
@@ -237,7 +286,10 @@ final class LearnedNoticePanel {
         notice: LearnedNotice,
         undo: @escaping (CorrectionLearning.Learned) -> Void,
         add: @escaping (WordSuggestion, String) -> Void = { _, _ in },
-        decline: @escaping (WordSuggestion) -> Void = { _ in }
+        decline: @escaping (WordSuggestion) -> Void = { _ in },
+        addSecondKey: @escaping (TalkKey) -> Void = { _ in },
+        dismissTip: @escaping (TalkKey) -> Void = { _ in },
+        tipApplies: @escaping (TalkKey) -> Bool = { _ in true }
     ) {
         self.notice = notice
         notice.onChange = { [weak self] content in
@@ -246,6 +298,9 @@ final class LearnedNoticePanel {
         notice.onUndo = undo
         notice.onAdd = add
         notice.onDecline = decline
+        notice.onAddSecondKey = addSecondKey
+        notice.onDismissTip = dismissTip
+        notice.keyboardTipApplies = tipApplies
     }
 
     func show(_ learned: CorrectionLearning.Learned) {
@@ -254,6 +309,10 @@ final class LearnedNoticePanel {
 
     func suggest(_ suggestion: WordSuggestion) {
         notice.suggest(suggestion)
+    }
+
+    func offerKeyboardTip(_ key: TalkKey) {
+        notice.offerKeyboardTip(key)
     }
 
     private func present(_ content: LearnedNotice.Content?) {
@@ -383,6 +442,8 @@ struct LearnedNoticeView: View {
                     learnedView(learned)
                 case .suggestion(let suggestion):
                     suggestionView(suggestion)
+                case .keyboardTip(let key):
+                    keyboardTipView(key)
                 }
             }
             .indicatorStyle()
@@ -440,6 +501,29 @@ struct LearnedNoticeView: View {
                 notice.add()
             }
                 .disabled(notice.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            CountdownRing(countdown: notice.countdown)
+            closeButton
+        }
+    }
+
+    private func keyboardTipView(_ key: TalkKey) -> some View {
+        let lines = ExternalKeyboardTip.lines(for: key)
+        return HStack(spacing: 12) {
+            Image(systemName: "keyboard")
+                .foregroundStyle(.blue)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 2) {
+                // Already localized, so shown as they are.
+                Text(verbatim: lines.reason)
+                Text(verbatim: lines.question)
+            }
+            .lineLimit(1)
+            Button("Add") {
+                notice.addSecondKey()
+            }
+            Button("No Thanks") {
+                notice.close()
+            }
             CountdownRing(countdown: notice.countdown)
             closeButton
         }

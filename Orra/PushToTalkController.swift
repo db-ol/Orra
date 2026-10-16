@@ -72,6 +72,10 @@ final class PushToTalkController {
     /// How the talk key starts a dictation. Saved through `saveTriggerMode` whenever it
     /// changes.
     private(set) var talkMode: TriggerMode
+    /// A second key that starts a dictation just as the talk key does, in the talk key's
+    /// mode, or nil. Never the talk key or the translation key, see SecondTalkKey. Saved
+    /// through `saveSecondTalkKey` whenever it changes.
+    private(set) var secondTalkKey: TalkKey?
     /// Whether the user has chosen the talk key, here or in an earlier launch. The welcome
     /// window marks its talk key step as done then.
     private(set) var hasChosenTalkKey: Bool
@@ -118,6 +122,9 @@ final class PushToTalkController {
     private(set) var writesNumbersAsDigits: Bool
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
+    /// True while Settings records a voice sample with the microphone. A press of the talk
+    /// key or the translation key records nothing meanwhile.
+    private(set) var isRecordingVoiceSample = false
     /// Microphone permission as last seen. Refreshed at start, on every hold, and after
     /// a request.
     private(set) var microphoneAccess: MicrophoneAccess = .notDetermined
@@ -206,6 +213,7 @@ final class PushToTalkController {
     @ObservationIgnored private var tap: HotkeyTap?
     @ObservationIgnored private let saveTalkKey: (Hotkey) -> Void
     @ObservationIgnored private let saveTranslationKey: (Hotkey) -> Void
+    @ObservationIgnored private let saveSecondTalkKey: (TalkKey?) -> Void
     @ObservationIgnored private let saveTriggerMode: (TriggerMode, KeySlot) -> Void
     @ObservationIgnored private let saveHandsFree: (Bool) -> Void
     /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
@@ -256,6 +264,9 @@ final class PushToTalkController {
     ///   - translationKey: The translation key, as saved, or nil for the default next to
     ///     the talk key, see `TalkKey.defaultTranslationKey(talkKey:)`.
     ///   - saveTranslationKey: Saves the translation key after it changes.
+    ///   - secondTalkKey: The second talk key, as saved, or nil. One that is the talk key or
+    ///     the translation key is dropped.
+    ///   - saveSecondTalkKey: Saves the second talk key after it changes.
     ///   - talkMode: How the talk key starts a dictation, as saved.
     ///   - translationMode: How the translation key starts a dictation, as saved.
     ///   - saveTriggerMode: Saves the mode of a key after the user changes it.
@@ -291,6 +302,8 @@ final class PushToTalkController {
         talkKeyChosen: Bool = false,
         translationKey: Hotkey? = nil,
         saveTranslationKey: @escaping (Hotkey) -> Void = { _ in },
+        secondTalkKey: TalkKey? = nil,
+        saveSecondTalkKey: @escaping (TalkKey?) -> Void = { _ in },
         talkMode: TriggerMode = .defaultMode,
         translationMode: TriggerMode = .defaultMode,
         saveTriggerMode: @escaping (TriggerMode, KeySlot) -> Void = { _, _ in },
@@ -324,8 +337,13 @@ final class PushToTalkController {
         self.talkKey = talkKey
         self.saveTalkKey = saveTalkKey
         self.hasChosenTalkKey = talkKeyChosen
-        self.translationKey = translationKey.flatMap { $0 == talkKey ? nil : $0 } ?? Hotkey.defaultTranslationKey(talkKey: talkKey)
+        let translationKey = translationKey.flatMap { $0 == talkKey ? nil : $0 } ?? Hotkey.defaultTranslationKey(talkKey: talkKey)
+        self.translationKey = translationKey
         self.saveTranslationKey = saveTranslationKey
+        self.secondTalkKey = secondTalkKey.flatMap {
+            SecondTalkKey.isAllowed($0, talkKey: talkKey, translationKey: translationKey) ? $0 : nil
+        }
+        self.saveSecondTalkKey = saveSecondTalkKey
         self.talkMode = talkMode
         self.translationMode = translationMode
         self.saveTriggerMode = saveTriggerMode
@@ -447,10 +465,12 @@ final class PushToTalkController {
     /// Makes `key` the talk key and saves the choice. Saved even when it is the key in use
     /// already, such as the default, so the welcome window counts the step as done on the
     /// next launch too. When `key` is the translation key, the translation key becomes the
-    /// old talk key and `keySwap` says so.
+    /// old talk key and `keySwap` says so. When `key` is the second talk key, the two talk
+    /// keys swap, or the second key goes when the old talk key is a combination.
     func chooseTalkKey(_ key: Hotkey) {
         hasChosenTalkKey = true
         keySwap = nil
+        let oldTalkKey = talkKey
         if key == translationKey, key != talkKey {
             translationKey = talkKey
             saveTranslationKey(talkKey)
@@ -458,6 +478,9 @@ final class PushToTalkController {
         }
         talkKey = key
         saveTalkKey(key)
+        if let secondTalkKey, !SecondTalkKey.isAllowed(secondTalkKey, talkKey: talkKey, translationKey: translationKey) {
+            setSecondTalkKey(oldTalkKey.single.flatMap { SecondTalkKey.isAllowed($0, talkKey: talkKey, translationKey: translationKey) ? $0 : nil })
+        }
         updateTapKeys()
     }
 
@@ -473,6 +496,25 @@ final class PushToTalkController {
         }
         translationKey = key
         saveTranslationKey(key)
+        // The translation key takes the second talk key's key away from it.
+        if let secondTalkKey, !SecondTalkKey.isAllowed(secondTalkKey, talkKey: talkKey, translationKey: translationKey) {
+            setSecondTalkKey(nil)
+        }
+        updateTapKeys()
+    }
+
+    /// The keys the second talk key can be now, see SecondTalkKey.
+    var secondTalkKeyChoices: [TalkKey] {
+        SecondTalkKey.choices(talkKey: talkKey, translationKey: translationKey)
+    }
+
+    /// Makes `key` the second talk key, or removes it for nil, and saves the choice. A key
+    /// that is the talk key or the translation key changes nothing.
+    func setSecondTalkKey(_ key: TalkKey?) {
+        guard key != secondTalkKey else { return }
+        if let key, !SecondTalkKey.isAllowed(key, talkKey: talkKey, translationKey: translationKey) { return }
+        secondTalkKey = key
+        saveSecondTalkKey(key)
         updateTapKeys()
     }
 
@@ -499,9 +541,10 @@ final class PushToTalkController {
         updateTapKeys()
     }
 
-    /// The hint for the talk key in its mode, such as "Hold right Control to talk".
+    /// The hint for the talk key in its mode, such as "Hold right Control to talk", or
+    /// "Hold fn or right Control to talk" with a second talk key.
     func talkHint(in locale: Locale = .interface) -> String {
-        talkKey.talkHint(mode: talkMode, in: locale)
+        talkKey.talkHint(mode: talkMode, secondKey: secondTalkKey, in: locale)
     }
 
     /// The hint for the translation key in its mode, such as "Hold right Option to
@@ -515,31 +558,54 @@ final class PushToTalkController {
         talkMode == .hold || (translationKeyIsOn && translationMode == .hold)
     }
 
-    /// The keys the tap watches: the talk key, and the translation key while translation
-    /// is on.
+    /// The second talk key as a hotkey, or nil.
+    private var secondTalkHotkey: Hotkey? {
+        secondTalkKey.map(Hotkey.key)
+    }
+
+    /// The keys the tap watches: the talk key, the second talk key when there is one, and the
+    /// translation key while translation is on.
     private var watchedKeys: Set<Hotkey> {
-        translationKeyIsOn ? [talkKey, translationKey] : [talkKey]
+        var keys: Set<Hotkey> = [talkKey]
+        if let secondTalkHotkey {
+            keys.insert(secondTalkHotkey)
+        }
+        if translationKeyIsOn {
+            keys.insert(translationKey)
+        }
+        return keys
     }
 
     /// The translation key waits before it records, as a left hand key does, so Option
     /// shortcuts and the characters right Option types keep working. A combination with a
-    /// regular key is hidden from apps and needs no wait. The talk key does not wait,
-    /// unless it is one of the modifiers of a translation combination such as Control and
-    /// Option, or the other way round, so the combination can take over within the wait.
+    /// regular key is hidden from apps and needs no wait. The talk key and the second talk
+    /// key do not wait, unless one is a modifier of another watched key's combination, such
+    /// as right Control beside Control and Option, so the combination can take over within
+    /// the wait.
     private var delayedKeys: Set<Hotkey> {
-        guard translationKeyIsOn else { return [] }
-        var keys: Set<Hotkey> = translationKey.hasRegularKey ? [] : [translationKey]
-        for (key, other) in [(talkKey, translationKey), (translationKey, talkKey)] {
-            if key.single != nil, let combination = other.combination, combination.keyCode == nil,
-               combination.modifiers.isSuperset(of: key.modifiers) {
-                keys.insert(key)
+        let watched = watchedKeys
+        var keys: Set<Hotkey> = translationKeyIsOn && !translationKey.hasRegularKey ? [translationKey] : []
+        for key in watched where key.single != nil {
+            for other in watched where other != key {
+                if let combination = other.combination, combination.keyCode == nil,
+                   combination.modifiers.isSuperset(of: key.modifiers) {
+                    keys.insert(key)
+                }
             }
         }
         return keys
     }
 
+    /// The second talk key works in the talk key's mode.
     private var modes: [Hotkey: TriggerMode] {
-        translationKeyIsOn ? [talkKey: talkMode, translationKey: translationMode] : [talkKey: talkMode]
+        var modes = [talkKey: talkMode]
+        if let secondTalkHotkey {
+            modes[secondTalkHotkey] = talkMode
+        }
+        if translationKeyIsOn {
+            modes[translationKey] = translationMode
+        }
+        return modes
     }
 
     private func updateTapKeys() {
@@ -713,6 +779,11 @@ final class PushToTalkController {
             indicatorShown = false
             // The previous hold's start belongs to that hold only.
             captureStart = nil
+            guard !isRecordingVoiceSample else {
+                holdMessage = String(localized: "Orra is recording a voice sample in Settings")
+                handle(.cancelled)
+                return
+            }
             guard modelState == .ready else {
                 // The menu bar icon and the menu say why too.
                 holdMessage = Self.notReadyMessage(modelState)
@@ -1144,6 +1215,41 @@ final class PushToTalkController {
     nonisolated private static func replacingWords(in text: String, pairs: [Correction], vocabulary: [String]) async -> (String, [Replacement]) {
         let result = WordReplacement.apply(to: text, pairs: pairs, vocabulary: vocabulary, ordinary: .system)
         return (result.text, result.replacements)
+    }
+
+    /// Starts the microphone chosen in Orra for a voice sample in Settings, the way a hold
+    /// starts it, so the microphone access the user gave covers it. Throws while a
+    /// dictation runs, without microphone access, or when the microphone could not start.
+    func startVoiceSample() async throws {
+        guard state == .idle, !isRecordingVoiceSample, capture.access() == .authorized else {
+            throw VoiceSampleCaptureError.busy
+        }
+        isRecordingVoiceSample = true
+        // A cancelled hold may still be stopping the microphone.
+        await captureCancel?.value
+        do {
+            try await capture.start(microphone?.uid)
+        } catch {
+            isRecordingVoiceSample = false
+            throw error
+        }
+        logger.notice("Recording a voice sample")
+    }
+
+    /// Stops the voice sample's recording and returns it. Logs its length only.
+    func stopVoiceSample() async -> AudioRecording {
+        guard isRecordingVoiceSample else { return AudioRecording(samples: [], sampleRate: 0) }
+        let recording = await capture.stop()
+        isRecordingVoiceSample = false
+        logger.notice("A voice sample of \(recording.duration, format: .fixed(precision: 1), privacy: .public) s was recorded")
+        return recording
+    }
+
+    /// Stops the voice sample's recording and throws it away.
+    func cancelVoiceSample() async {
+        guard isRecordingVoiceSample else { return }
+        await capture.cancel()
+        isRecordingVoiceSample = false
     }
 
     /// Writes down what is said in a voice sample for Speak Translation, with the speech

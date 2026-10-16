@@ -1,0 +1,15 @@
+#!/bin/sh
+# Runs as root after the installer copied OrraMicrophone.driver to
+# /Library/Audio/Plug-Ins/HAL. coreaudiod reads HAL plug ins only when it starts, so it is
+# restarted here. Every app's audio stops for a moment.
+#
+# On some macOS versions launchctl refuses to restart coreaudiod while System Integrity
+# Protection is on. Then killall stops it, and launchd starts it again.
+# The install has succeeded either way, so this script always exits 0. A restart of the Mac
+# also loads the driver.
+
+if ! /bin/launchctl kickstart -k system/com.apple.audio.coreaudiod 2>/dev/null; then
+    /usr/bin/killall coreaudiod 2>/dev/null || true
+fi
+
+exit 0

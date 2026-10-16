@@ -6,8 +6,8 @@ import Testing
 @MainActor
 struct LearnedNoticeTests {
     private let learned = CorrectionLearning.Learned(
-        correction: Correction(heard: "S G Line Omni", corrected: "SGLang-Omni"),
-        pairs: [Correction(heard: "S G Line Omni", corrected: "SGLang-Omni")],
+        correction: Correction(heard: "K V Light Nova", corrected: "KVLite-Nova"),
+        pairs: [Correction(heard: "K V Light Nova", corrected: "KVLite-Nova")],
         outcome: .added
     )
 

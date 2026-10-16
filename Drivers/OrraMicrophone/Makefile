@@ -3,6 +3,8 @@
 #   make            builds build/OrraMicrophone.driver (arm64 and x86_64), signed ad hoc
 #   make test       builds the bundle and runs the loopback test against it, in process
 #   make check      lints Info.plist, checks the factory symbol, runs the test
+#   make pkg        builds the installer build/OrraMicrophone.pkg (pkg.sh, unsigned unless
+#                   the signing variables in pkg.sh are set)
 #   make clean      removes build/
 #
 # Nothing here installs the driver or needs sudo. README.md has the install steps.
@@ -22,7 +24,7 @@ LDFLAGS     := -bundle -framework CoreAudio -framework CoreFoundation
 SIGN_ID     ?= -
 SIGN_FLAGS  ?= --timestamp=none
 
-.PHONY: all test check clean
+.PHONY: all test check pkg clean
 
 all: $(BUNDLE)
 
@@ -43,6 +45,9 @@ test: $(BUNDLE) $(BUILD)/loopback_test
 
 check: $(BUNDLE)
 	./check.sh
+
+pkg:
+	./pkg.sh
 
 clean:
 	rm -rf $(BUILD)
