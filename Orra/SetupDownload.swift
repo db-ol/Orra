@@ -10,8 +10,8 @@ import Observation
 /// off, and the welcome window says why.
 nonisolated enum CleanupDefault {
     /// 16 GB. The cleanup model holds about 4 GB while it is loaded, next to the speech
-    /// model's 3 to 5 GB, see README.md and docs/asr-baseline.md. That leaves too little to
-    /// the user's own apps on an 8 GB Mac.
+    /// model's 3 to 5 GB, see docs/user-guide.md and docs/asr-baseline.md. That leaves too
+    /// little to the user's own apps on an 8 GB Mac.
     static let minimumMemory: UInt64 = 16 << 30
 
     static func proposes(savedChoice: Bool?, speechModelInstalled: Bool, physicalMemory: UInt64) -> Bool {
