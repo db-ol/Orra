@@ -210,7 +210,7 @@ struct CaptionPipelineMeasurementTests {
         Caption latency: \(Self.summary(captionLatency))
         Translation latency: \(Self.summary(translationLatency))
         First text from the sentence start: \(Self.summary(firstTextLatency)), interim interval: \(interimInterval.map { "\($0) s" } ?? "off")
-        Model calls: \(calls.final) final, \(calls.interim) interim, \(calls.translation) translations,         \(String(format: "%.1f", Double(calls.final + calls.interim) / audioSeconds * 60)) speech model calls per minute of audio
+        Model calls: \(calls.final) final, \(calls.interim) interim, \(calls.translation) translations, \(String(format: "%.1f", Double(calls.final + calls.interim) / audioSeconds * 60)) speech model calls per minute of audio
 
         """
         print(summary)
