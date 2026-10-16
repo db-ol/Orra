@@ -46,6 +46,14 @@ final class TranslationSpeech {
     /// Remember my voice: the voice sample's audio is saved on this Mac until the user
     /// removes it, and loaded when Orra starts. Off until the user turns it on.
     private(set) var remembersVoice: Bool
+    /// Whether a voice sample's audio is on this Mac: the sample in memory once its file is
+    /// written, or one saved earlier that is not loaded yet. Settings offers Remove while it
+    /// is true, also without a sample in memory.
+    private(set) var voiceIsSaved = false
+    /// Why the voice sample could not be saved on this Mac or loaded from it. Apart from
+    /// `problem`, so Settings shows it whether Speak translations is on or off. Cleared when
+    /// a sample is picked or removed, or Remember my voice changes.
+    private(set) var voiceFileProblem: String?
     /// The speech model is writing down what is said in a voice sample the user recorded.
     private(set) var isListeningToVoice = false
     /// The model is loaded.
@@ -103,10 +111,22 @@ final class TranslationSpeech {
     /// Counts the voice samples picked and removed, so a sample that is still being
     /// written down when another is picked or Remove is clicked is dropped.
     @ObservationIgnored private var voiceRequest = 0
+    /// Counts the samples used and removed and the times Remember my voice was turned off,
+    /// so a saved sample still waiting to load does not take the place of what the user
+    /// chose. A sample the speech model could not take does not count.
+    @ObservationIgnored private var voiceChoice = 0
     /// Where Remember my voice keeps the voice sample, nil to keep it in memory only.
     @ObservationIgnored private let voiceFile: VoiceSampleFile?
     /// The writes and deletions of the voice sample's file, one after another.
     @ObservationIgnored private var fileWork: Task<Void, Never>?
+    /// Counts the writes and deletions asked for, so only the last one says whether the
+    /// sample is saved.
+    @ObservationIgnored private var fileRevision = 0
+    /// Whether the last change asked for of the file is its deletion, see
+    /// removeVoiceFileBeforeQuit().
+    @ObservationIgnored private var removesVoiceFile = false
+    /// The load of the voice sample saved on this Mac, see restoreVoice().
+    @ObservationIgnored private var restoring: Task<Void, Never>?
     /// The translations queued and being spoken, one after another.
     @ObservationIgnored private var queue: Task<Void, Never>?
     /// Counts the stops, so queued work of an older generation does nothing.
@@ -208,6 +228,9 @@ final class TranslationSpeech {
         save(settings)
         if on {
             prepare()
+            if remembersVoice {
+                restoreVoice()
+            }
         } else {
             stop()
             unload()
@@ -234,12 +257,14 @@ final class TranslationSpeech {
     }
 
     /// Remember my voice. Turning it on saves the voice sample in memory at once, turning
-    /// it off deletes the file at once.
+    /// it off deletes the file at once and ends the load of a saved sample still waiting.
     func setRemembersVoice(_ on: Bool) {
         guard on != remembersVoice else { return }
         remembersVoice = on
+        voiceFileProblem = nil
         save(settings)
         if !on {
+            voiceChoice += 1
             removeVoiceFile()
         } else if let voice {
             saveVoiceFile(voice)
@@ -272,39 +297,53 @@ final class TranslationSpeech {
         SpeechOutputChoice.resolve(output, outputs: outputs())
     }
 
+    /// What became of a voice sample handed to useVoice.
+    nonisolated enum VoiceUse: Equatable, Sendable {
+        case used
+        /// The speech model heard no words in it.
+        case noSpeech
+        /// The speech model could not listen to it.
+        case failed
+        /// Another sample was picked or Remove was clicked meanwhile.
+        case dropped
+    }
+
     /// Writes down what is said in `sample` with the speech model, then keeps both in
     /// memory as the voice to imitate, in place of any before it. The voice model reads the
     /// words along with the audio. Neither is logged. With Remember my voice on, the audio
     /// is saved on this Mac in place of the sample before it, never the words. A sample
     /// without speech, or one the speech model could not take, is not used and the voice
     /// before it stays, on disk too.
-    func useVoice(_ sample: VoiceSample) async {
+    @discardableResult
+    func useVoice(_ sample: VoiceSample) async -> VoiceUse {
         voiceRequest += 1
         let request = voiceRequest
         isListeningToVoice = true
         problem = nil
+        voiceFileProblem = nil
         let started = ContinuousClock.now
         let transcript: String
         do {
             transcript = try await transcribeVoice(sample).trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
-            guard request == voiceRequest else { return }
+            guard request == voiceRequest else { return .dropped }
             isListeningToVoice = false
             problem = String(localized: "Orra could not listen to the voice sample. Record it again once the speech model is ready.")
             logger.error("The voice sample could not be transcribed: \(String(reflecting: type(of: error)), privacy: .public)")
-            return
+            return .failed
         }
-        guard request == voiceRequest else { return }
+        guard request == voiceRequest else { return .dropped }
         isListeningToVoice = false
         guard transcript.contains(where: { $0.isLetter || $0.isNumber }) else {
             problem = String(localized: "Orra heard no speech in the voice sample.")
             logger.notice("No speech in a voice sample of \(sample.seconds, format: .fixed(precision: 1), privacy: .public) s")
-            return
+            return .noSpeech
         }
         var heard = sample
         heard.transcript = transcript
         voice = heard
         voiceSeconds = sample.seconds
+        voiceChoice += 1
         if remembersVoice {
             saveVoiceFile(sample)
         }
@@ -312,54 +351,125 @@ final class TranslationSpeech {
         Task { await synthesizer?.forgetVoice() }
         // Times only, never the words.
         logger.notice("A voice sample of \(sample.seconds, format: .fixed(precision: 1), privacy: .public) s is in memory, written down in \(started.duration(to: .now), privacy: .public)")
+        return .used
+    }
+
+    /// Use This Recording, or a file imported, in the recording sheet: uses `sample` and
+    /// sets Remember my voice as the sheet's checkbox says, nil to leave it. Off applies
+    /// first, so the old file is deleted before anything else. On applies once the sample
+    /// is used, so the new sample is written and not the one before it, unless the speech
+    /// model heard no speech in the new one. A change in Settings meanwhile wins.
+    @discardableResult
+    func useVoice(_ sample: VoiceSample, remember: Bool?) async -> VoiceUse {
+        if remember == false {
+            setRemembersVoice(false)
+        }
+        let before = remembersVoice
+        let use = await useVoice(sample)
+        if remember == true, remembersVoice == before {
+            setRemembersVoice(true)
+        }
+        return use
     }
 
     /// Drops the voice sample, what is said in it, and anything the model derived from
-    /// it, on disk too. The model's own voice speaks after this.
+    /// it, on disk too, also a saved sample not loaded yet. The model's own voice speaks
+    /// after this.
     func forgetVoice() {
         voiceRequest += 1
+        voiceChoice += 1
         isListeningToVoice = false
         voice = nil
         voiceSeconds = nil
+        voiceFileProblem = nil
         removeVoiceFile()
         let synthesizer = synthesizer
         Task { await synthesizer?.forgetVoice() }
     }
 
-    /// At launch: with Remember my voice on, reads the voice sample saved on this Mac and,
-    /// once the speech model is loaded and no dictation runs, uses it as a new recording,
-    /// so the speech model writes down what is said in it again. A file that is not a
-    /// voice sample or is too short is deleted, and Settings says so. With the switch off,
-    /// nothing is read and a file left behind is deleted. A sample the user picks or
-    /// removes meanwhile, or the switch turned off, wins.
-    func restoreVoice() async {
+    /// At launch, and when Speak translations is turned on: with Remember my voice on,
+    /// uses the voice sample saved on this Mac as a new recording, so the speech model
+    /// writes down what is said in it again. It reads the file only once the speech model
+    /// is loaded, so the audio is not held in memory while it waits, and then waits for a
+    /// dictation or a sample the user is recording. While Speak translations is off, or in
+    /// a build without a voice model, the file is not read, and Settings offers to remove
+    /// it. A file that is not a voice sample, is too short or has no speech in it is
+    /// deleted, and Settings says so. With the switch off, a file left behind is deleted. A
+    /// sample the user picks meanwhile, Remove and the switch turned off win. A sample the
+    /// speech model could not take does not.
+    func restoreVoice() {
+        guard restoring == nil else { return }
+        restoring = Task { [weak self] in
+            await self?.loadSavedVoice()
+            self?.restoring = nil
+        }
+    }
+
+    /// Waits for restoreVoice(). Internal for tests.
+    func waitForVoiceRestore() async {
+        while let current = restoring {
+            await current.value
+        }
+    }
+
+    private func loadSavedVoice() async {
         guard let voiceFile else { return }
         guard remembersVoice else {
             removeVoiceFile()
             return
         }
-        guard canSpeak else { return }
-        let request = voiceRequest
+        guard voice == nil else { return }
+        let choice = voiceChoice
+        // What a write cut short by a crash or a forced quit left behind.
+        onVoiceFile {
+            await voiceFile.removeLeftovers()
+        }
         await waitForVoiceFile()
+        guard choice == voiceChoice else { return }
+        voiceIsSaved = voiceFile.exists
+        guard voiceIsSaved, isOn, canSpeak else { return }
+        await waitForSpeechModel()
+        guard choice == voiceChoice, isOn else { return }
         let sample: VoiceSample?
         do {
             sample = try await voiceFile.load()
         } catch {
-            guard request == voiceRequest, remembersVoice else { return }
-            removeVoiceFile()
-            problem = String(localized: "Orra could not read the voice sample saved on this Mac and deleted it. Record it again.")
+            guard choice == voiceChoice else { return }
+            dropSavedVoice()
             // The reason only, never the audio.
             logger.error("The saved voice sample could not be read: \(String(describing: error), privacy: .public)")
             return
         }
-        guard let sample, request == voiceRequest, remembersVoice else { return }
-        await waitForSpeechModel()
-        while isDictating() {
+        guard choice == voiceChoice else { return }
+        guard let sample else {
+            voiceIsSaved = false
+            return
+        }
+        while isDictating() || isListeningToVoice, choice == voiceChoice {
             try? await Task.sleep(for: dictationPoll)
         }
-        guard request == voiceRequest, remembersVoice else { return }
+        guard choice == voiceChoice, isOn else { return }
         logger.notice("Loading the voice sample of \(sample.seconds, format: .fixed(precision: 1), privacy: .public) s saved on this Mac")
-        await useVoice(sample)
+        if await useVoice(sample) == .noSpeech {
+            // One message, about the file.
+            problem = nil
+            dropSavedVoice()
+            logger.notice("No speech in the saved voice sample, so it was deleted")
+        }
+    }
+
+    /// Deletes a saved voice sample Orra could not use, and says so once.
+    private func dropSavedVoice() {
+        removeVoiceFile()
+        voiceFileProblem = String(localized: "Orra could not read the voice sample saved on this Mac and deleted it. Record it again.")
+    }
+
+    /// When Orra quits: deletes the voice sample's file at once when the last change asked
+    /// for that, since the deletion runs in a task that may not have run yet. So Remove or
+    /// the switch turned off right before Quit leaves no audio for the next launch.
+    func removeVoiceFileBeforeQuit() {
+        guard removesVoiceFile, let voiceFile else { return }
+        voiceFile.removeNow()
     }
 
     /// Waits for the writes and deletions of the voice sample's file. Internal for tests.
@@ -372,21 +482,35 @@ final class TranslationSpeech {
         }
     }
 
-    /// Saves the audio of `sample` after the file work before it.
+    /// Saves the audio of `sample` after the file work before it. When the write fails,
+    /// the file before it is deleted too, so no older sample stays on disk.
     private func saveVoiceFile(_ sample: VoiceSample) {
         guard let voiceFile else { return }
+        fileRevision += 1
+        let revision = fileRevision
+        removesVoiceFile = false
         onVoiceFile { [weak self] in
+            var saved = true
             do {
                 try await voiceFile.save(sample)
             } catch {
-                self?.problem = String(localized: "Orra could not save the voice sample on this Mac.")
+                saved = false
+                await voiceFile.remove()
                 self?.logger.error("The voice sample could not be saved: \(String(reflecting: type(of: error)), privacy: .public)")
+            }
+            guard let self, revision == self.fileRevision else { return }
+            self.voiceIsSaved = saved
+            if !saved {
+                self.voiceFileProblem = String(localized: "Orra could not save the voice sample on this Mac.")
             }
         }
     }
 
     private func removeVoiceFile() {
         guard let voiceFile else { return }
+        fileRevision += 1
+        removesVoiceFile = true
+        voiceIsSaved = false
         onVoiceFile {
             await voiceFile.remove()
         }

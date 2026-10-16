@@ -75,11 +75,17 @@ got worse than the baseline, see docs/release-gate.md.
     file is left behind, and that a hold of the talk key records nothing meanwhile.
   - VoiceSampleFileTests covers Remember my voice in a temporary folder: the audio only is
     saved while the switch is on, nothing is written while it is off, turning it on saves
-    the sample in memory and turning it off deletes the file, Remove deletes it, a new
-    sample replaces it, the folder is 0700 and left out of backups and the file 0600, the
-    saved sample loads at launch once the speech model is ready, a file that is not a
-    sample or is too short is deleted with one message, a stray file is deleted while the
-    switch is off, and the code logs neither the audio nor the words.
+    the sample in memory and turning it off deletes the file, Remove deletes it, also while
+    Speak translations is off, a new sample replaces it, a save that fails says so and
+    keeps no older sample, the folder is 0700 and left out of backups and the file 0600,
+    what a cut write left is deleted, Remove or the switch turned off right before Quit
+    deletes the file at once, and the recording sheet's checkbox applies only with the
+    sample. At launch the saved sample loads once the speech model is ready, and only while
+    Speak translations is on, a file that is not a sample, is too short or has no speech
+    is deleted with one message that stays while Speak translations is turned off and on,
+    the switch turned off and on or Remove while it waits ends the load for good, a sample
+    picked meanwhile wins unless the speech model could not take it, a stray file is
+    deleted while the switch is off, and the code logs neither the audio nor the words.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
@@ -1834,13 +1840,28 @@ it shows starts, stops, counts and failures, never text.
   the footer says the recording is saved on this Mac until you remove it, and the Voice
   folder holds voice-sample.dat. `ls -la` shows drwx------ for the folder and -rw-------
   for the file, and `xattr -l` on the folder shows com.apple.metadata:com_apple_backup_excludeItem.
-  Quit and open Orra: once the speech model is ready, the row says Listening to the voice
-  sample… and then the length, and a spoken translation sounds like you. Recording or
-  importing another sample replaces the file. Remove deletes it, and turning the switch off
-  deletes it and keeps the sample in memory until Orra quits. With the switch off, a new
-  launch loads nothing. Replace voice-sample.dat with any other file and relaunch: the file
-  is gone and Settings says Orra could not read the voice sample saved on this Mac. The log
-  of `category == "speech"` shows lengths and reasons only.
+  Quit and open Orra: until the speech model is ready the row says "Saved on this Mac, not
+  loaded yet." with Remove, then Listening to the voice sample… and the length, and a
+  spoken translation sounds like you. Recording or importing another sample replaces the
+  file. Remove deletes it, and turning the switch off deletes it and keeps the sample in
+  memory until Orra quits. With the switch off, a new launch loads nothing. Replace
+  voice-sample.dat with any other file and relaunch: the file is gone and Settings says Orra
+  could not read the voice sample saved on this Mac, also after turning Speak translations
+  off and on. The log of `category == "speech"` shows lengths and reasons only.
+- [ ] Remember my voice with Speak translations off. Save a sample, turn Speak translations
+  off, quit and open Orra: the row says "Saved on this Mac, not loaded yet.", nothing is
+  written down (no Listening line), Record… is disabled, and Remove and turning the switch
+  off both delete the Voice folder. The switch cannot be turned on while Speak translations
+  is off. Turn Speak translations on with a sample saved: it loads once the speech model is
+  ready. Also turn Translation off, so Speak translations is disabled too: Remove and the
+  switch still work.
+- [ ] The recording sheet's Remember my voice checkbox. With the switch off and a sample in
+  use, open Record…, tick the checkbox and click Cancel: the switch in Settings stays off
+  and the Voice folder does not exist. Tick it again, record and click Use This Recording:
+  once the row shows the length, the switch is on and the file holds the new recording.
+  Untick it and use another recording: the folder is gone at once.
+- [ ] Click Remove, or turn the switch off, and quit Orra right away with Command Q: the
+  Voice folder is gone.
 - [ ] Changing the output device during a call, such as plugging in headphones: captions
   go on. If they stop, turning them off and on brings them back. This is a known gap to
   confirm.

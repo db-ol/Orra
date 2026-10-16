@@ -2741,6 +2741,16 @@
         }
       }
     },
+    "Saved on this Mac, not loaded yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存在这台 Mac 上，尚未载入。"
+          }
+        }
+      }
+    },
     "Script language" : {
       "localizations" : {
         "zh-Hans" : {

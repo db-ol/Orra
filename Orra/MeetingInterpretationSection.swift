@@ -55,17 +55,15 @@ struct MeetingInterpretationSection: View {
             VoiceRecordingSheet(
                 recording: recording,
                 blocker: recordingBlocker,
-                remembersVoice: speech.map { speech in
-                    Binding(get: { speech.remembersVoice }, set: { speech.setRemembersVoice($0) })
-                },
-                use: { sample in
+                remembersVoice: speech?.remembersVoice,
+                use: { sample, remember in
                     closeRecording()
                     guard let speech else { return }
-                    Task { await speech.useVoice(sample) }
+                    Task { await speech.useVoice(sample, remember: remember) }
                 },
-                importFile: { url in
+                importFile: { url, remember in
                     closeRecording()
-                    importVoice(from: url)
+                    importVoice(from: url, remember: remember)
                 },
                 close: closeRecording
             )
@@ -109,8 +107,9 @@ struct MeetingInterpretationSection: View {
     }
 
     /// Reads a voice sample from an audio file the user picked, the smaller way next to
-    /// recording one.
-    private func importVoice(from url: URL) {
+    /// recording one. `remember` is the sheet's Remember my voice, which applies only when
+    /// the file holds a sample.
+    private func importVoice(from url: URL, remember: Bool?) {
         guard let speech else { return }
         Task {
             let scoped = url.startAccessingSecurityScopedResource()
@@ -119,7 +118,7 @@ struct MeetingInterpretationSection: View {
             }
             do {
                 let sample = try await VoiceSample.read(from: url)
-                await speech.useVoice(sample)
+                await speech.useVoice(sample, remember: remember)
             } catch VoiceSample.ReadError.tooShort {
                 speech.reportVoiceProblem(String(localized: "The voice sample must be at least \(Int(VoiceSample.minimumSeconds)) seconds long."))
             } catch {
@@ -242,7 +241,10 @@ private struct SpeakTranslationRows: View {
             }
             .disabled(!speech.isOn)
             VoiceSampleRow(speech: speech, record: record)
-                .disabled(!speech.isOn)
+            // Whether Speak translations is on or off, like Remove.
+            if let problem = speech.voiceFileProblem {
+                note(Text(verbatim: problem))
+            }
             if speech.isOn, let line = models.status.line {
                 note(Text(verbatim: line))
             }
@@ -285,7 +287,9 @@ private struct SpeakTranslationRows: View {
 }
 
 /// The voice sample: its length while one is in memory, the buttons to record or remove
-/// one, and Remember my voice.
+/// one, and Remember my voice. While Speak translations is off, only Record… is disabled
+/// and Remember my voice can only be turned off, so a sample, saved or not, can always be
+/// removed.
 private struct VoiceSampleRow: View {
     let speech: TranslationSpeech
     let record: () -> Void
@@ -302,12 +306,13 @@ private struct VoiceSampleRow: View {
                 systemImage: "internaldrive"
             )
         }
+        .disabled(!speech.isOn && !speech.remembersVoice)
     }
 
     private var sample: some View {
         LabeledContent {
             HStack {
-                if speech.voiceSeconds != nil {
+                if speech.voiceSeconds != nil || speech.voiceIsSaved {
                     Button("Remove") {
                         speech.forgetVoice()
                     }
@@ -315,7 +320,7 @@ private struct VoiceSampleRow: View {
                 Button("Record…") {
                     record()
                 }
-                .disabled(speech.isListeningToVoice)
+                .disabled(!speech.isOn || speech.isListeningToVoice)
             }
         } label: {
             DescribedLabel(
@@ -329,10 +334,12 @@ private struct VoiceSampleRow: View {
     private var detail: LocalizedStringKey {
         if speech.isListeningToVoice {
             "Listening to the voice sample…"
-        } else if let seconds = speech.voiceSeconds, speech.remembersVoice {
+        } else if let seconds = speech.voiceSeconds, speech.voiceIsSaved {
             "\(Int(seconds.rounded())) seconds, saved on this Mac."
         } else if let seconds = speech.voiceSeconds {
             "\(Int(seconds.rounded())) seconds, in memory until Orra quits."
+        } else if speech.voiceIsSaved {
+            "Saved on this Mac, not loaded yet."
         } else {
             "None. The voice model speaks in its own voice."
         }

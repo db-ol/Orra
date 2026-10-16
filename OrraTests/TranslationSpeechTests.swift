@@ -301,7 +301,7 @@ struct TranslationSpeechTests {
         speech.forgetVoice()
         #expect(!speech.isListeningToVoice)
         gate.continuation.yield()
-        await listening.value
+        #expect(await listening.value == .dropped)
         #expect(speech.voiceSeconds == nil)
         #expect(speech.problem == nil)
     }

@@ -8,14 +8,40 @@ struct VoiceRecordingSheet: View {
     let recording: VoiceRecording
     /// Why recording cannot start now, nil when it can.
     let blocker: LocalizedStringKey?
-    /// Remember my voice, the same switch as in Settings. Nil hides it.
-    let remembersVoice: Binding<Bool>?
-    /// Takes the recorded sample, then the sheet closes.
-    let use: (VoiceSample) -> Void
-    /// Takes an audio file the user picked, then the sheet closes.
-    let importFile: (URL) -> Void
+    /// Remember my voice as it is in Settings, nil to hide the checkbox. The checkbox
+    /// applies only with Use This Recording or an imported file, so Cancel changes
+    /// nothing.
+    let remembersVoice: Bool?
+    /// Takes the recorded sample and the checkbox, nil while it is hidden, then the sheet
+    /// closes.
+    let use: (VoiceSample, Bool?) -> Void
+    /// Takes an audio file the user picked and the checkbox, then the sheet closes.
+    let importFile: (URL, Bool?) -> Void
     let close: () -> Void
     @State private var isImporting = false
+    @State private var remember: Bool
+
+    init(
+        recording: VoiceRecording,
+        blocker: LocalizedStringKey?,
+        remembersVoice: Bool?,
+        use: @escaping (VoiceSample, Bool?) -> Void,
+        importFile: @escaping (URL, Bool?) -> Void,
+        close: @escaping () -> Void
+    ) {
+        self.recording = recording
+        self.blocker = blocker
+        self.remembersVoice = remembersVoice
+        self.use = use
+        self.importFile = importFile
+        self.close = close
+        _remember = State(initialValue: remembersVoice ?? false)
+    }
+
+    /// The checkbox, nil while it is hidden.
+    private var chosenRemember: Bool? {
+        remembersVoice.map { _ in remember }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -71,11 +97,11 @@ struct VoiceRecordingSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: 32, alignment: .topLeading)
-            if let remembersVoice {
-                Toggle(isOn: remembersVoice) {
+            if remembersVoice != nil {
+                Toggle(isOn: $remember) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Remember my voice")
-                        Text(RememberVoiceText.detail(on: remembersVoice.wrappedValue))
+                        Text(RememberVoiceText.detail(on: remember))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -96,7 +122,7 @@ struct VoiceRecordingSheet: View {
                 .keyboardShortcut(.cancelAction)
                 Button("Use This Recording") {
                     if let sample = recording.take() {
-                        use(sample)
+                        use(sample, chosenRemember)
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -107,7 +133,7 @@ struct VoiceRecordingSheet: View {
         .frame(width: 480)
         .fileImporter(isPresented: $isImporting, allowedContentTypes: [.audio]) { result in
             guard case .success(let url) = result else { return }
-            importFile(url)
+            importFile(url, chosenRemember)
         }
     }
 

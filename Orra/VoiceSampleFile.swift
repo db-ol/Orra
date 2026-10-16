@@ -9,7 +9,8 @@ import Foundation
 /// ~/Library/Application Support/io.github.db-ol.Orra/Voice/voice-sample.dat in the app.
 /// Only the user can open the folder (0700) and read the file (0600). The folder is left
 /// out of Time Machine backups, and the file is written in full under another name and
-/// then renamed, so a crash never leaves half a sample behind.
+/// then renamed, so a crash never leaves half a sample in its place. What such a write
+/// left under the other name is deleted at the next write or launch.
 ///
 /// The format: the 4 bytes "ORVS", then the version, the sample rate and the number of
 /// samples, each a little endian UInt32, then the mono samples as little endian Float32.
@@ -64,7 +65,32 @@ nonisolated struct VoiceSampleFile: Sendable {
     /// Deletes the file, with the folder and anything a write left behind in it.
     @concurrent
     func remove() async {
+        removeNow()
+    }
+
+    /// Deletes the file and the folder on the caller's thread, for the moment Orra quits.
+    func removeNow() {
         try? FileManager.default.removeItem(at: folder)
+    }
+
+    /// Deletes what a write cut short by a crash or a forced quit left in the folder, and
+    /// keeps the file.
+    @concurrent
+    func removeLeftovers() async {
+        removeLeftoversNow()
+    }
+
+    private func removeLeftoversNow() {
+        let fileManager = FileManager.default
+        let names = (try? fileManager.contentsOfDirectory(atPath: folder.path)) ?? []
+        for name in names where name.hasPrefix(Self.temporaryPrefix) {
+            try? fileManager.removeItem(at: folder.appendingPathComponent(name, isDirectory: false))
+        }
+    }
+
+    /// How the name of a file being written starts.
+    static var temporaryPrefix: String {
+        ".\(name)-"
     }
 
     static func encoded(_ sample: VoiceSample) -> Data {
@@ -115,7 +141,8 @@ nonisolated struct VoiceSampleFile: Sendable {
         // The folder may be older than this rule.
         try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path)
         try ModelDisk.excludeFromBackup(folder)
-        let temporary = folder.appendingPathComponent(".\(Self.name)-\(UUID().uuidString)", isDirectory: false)
+        removeLeftoversNow()
+        let temporary = folder.appendingPathComponent(Self.temporaryPrefix + UUID().uuidString, isDirectory: false)
         let descriptor = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
         guard descriptor >= 0 else { throw CocoaError(.fileWriteUnknown) }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)

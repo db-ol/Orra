@@ -163,6 +163,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // The vocabulary saves on a background queue. The last save must be written.
         VocabularyPreference.flush()
+        guard !Self.isHostedByXcode else { return }
+        // Remove or Remember my voice turned off just before Quit: the voice sample's file
+        // is deleted now, not by a task that may not run.
+        speech.removeVoiceFileBeforeQuit()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -207,8 +211,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         // Remember my voice: the voice sample saved on this Mac, once the speech model is
-        // loaded. Local files only.
-        Task { [speech] in await speech.restoreVoice() }
+        // loaded and while Speak translations is on. Local files only.
+        speech.restoreVoice()
         voiceModels.onInstalled = { [speech] in speech.prepare() }
         speech.onEngineChange = { [voiceModels] kind in
             voiceModels.select(kind)
