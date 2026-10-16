@@ -1963,6 +1963,16 @@
         }
       }
     },
+    "Orra is still stopping the last recording." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 正在结束上一次录音。"
+          }
+        }
+      }
+    },
     "Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2063,12 +2073,12 @@
         }
       }
     },
-    "Orra speaks what the translation key translated into the device below." : {
+    "Orra speaks your translations through the device below." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 把翻译键译出的内容说到下面的设备中。"
+            "value" : "Orra 通过下面的设备读出翻译键译好的内容。"
           }
         }
       }
@@ -3116,6 +3126,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风无法启动"
+          }
+        }
+      }
+    },
+    "The microphone is busy. Try again in a moment." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风正忙，请稍后再试。"
           }
         }
       }

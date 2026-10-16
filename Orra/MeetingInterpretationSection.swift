@@ -90,6 +90,10 @@ struct MeetingInterpretationSection: View {
             "Turn off Live captions to record."
         } else if pushToTalk.state != .idle {
             "Wait until the dictation is done."
+        } else if pushToTalk.isRecordingVoiceSample, voiceRecording?.isRecording != true {
+            // A recording cancelled while the microphone was starting stops once it has
+            // started.
+            "Orra is still stopping the last recording."
         } else {
             nil
         }
@@ -165,7 +169,7 @@ private struct SpeakTranslationRows: View {
             )) {
                 DescribedLabel(
                     title: "Speak translations to others",
-                    detail: "Orra speaks what the translation key translated into the device below.",
+                    detail: "Orra speaks your translations through the device below.",
                     systemImage: "speaker.wave.2.bubble"
                 )
             }

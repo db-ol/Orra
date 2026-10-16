@@ -152,6 +152,10 @@ final class VoiceRecording: Identifiable {
         Task {
             do {
                 try await recorder.start()
+            } catch VoiceSampleCaptureError.busy {
+                guard generation == self.generation else { return }
+                phase = .failed(String(localized: "The microphone is busy. Try again in a moment."))
+                return
             } catch {
                 guard generation == self.generation else { return }
                 phase = .failed(String(localized: "The microphone could not start"))

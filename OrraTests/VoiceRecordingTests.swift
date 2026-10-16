@@ -128,6 +128,16 @@ struct VoiceRecordingTests {
         #expect(!recording.isRecording)
     }
 
+    /// A dictation or the last recording still holding the microphone is not a failure of
+    /// the microphone.
+    @Test func aBusyMicrophoneSaysToTryAgain() async throws {
+        mic.startError = VoiceSampleCaptureError.busy
+        let recording = makeRecording()
+        recording.start()
+        try await eventually { recording.phase != .starting }
+        #expect(recording.phase == .failed("The microphone is busy. Try again in a moment."))
+    }
+
     @Test func aFinishedRecordingIsJudged() {
         let long = FakeMicrophone.tone(count: 16_000 * 3)
         #expect(VoiceRecording.judge(AudioRecording(samples: long, sampleRate: 16_000)) == .recorded)

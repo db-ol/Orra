@@ -1792,9 +1792,10 @@ it shows starts, stops, counts and failures, never text.
   languages. Read what others say in your language, and let them hear you in theirs, even
   in your own voice."), Live captions (实时字幕) and Captions show, then Speak translations
   to others (为对方朗读译文) with all its earlier options. The Live captions switch in
-  Settings and the menu item turn the same captions on and off and show the same state. Captions show in Settings and the picker in the
-  window change together, and the choice stays after a restart. Settings saved by an
-  earlier version, Speak translations on and the chosen device and display mode, are kept.
+  Settings and the menu item turn the same captions on and off and show the same state.
+  Captions show in Settings and the picker in the window change together, and the choice
+  stays after a restart. Settings saved by an earlier version, Speak translations on and
+  the chosen device and display mode, are kept.
 - [ ] Voice sample, since 2026-10-15 recorded in Orra rather than picked as a file. Not
   yet tried with a real microphone. Voice sample (声音样本) has Record… (录音…), which opens
   a sheet with a script to read aloud, about 10 seconds. The script is Chinese when
@@ -1810,8 +1811,10 @@ it shows starts, stops, counts and failures, never text.
   Escape or closing Settings while recording stops the microphone (the orange indicator
   goes away) and keeps the voice sample from before.
 - [ ] Record is disabled with a reason while live captions are on, while a dictation
-  runs, and without microphone access. Holding the talk key while the sheet records pastes
-  nothing, and the indicator says Orra is recording a voice sample in Settings.
+  runs, and without microphone access. With a Bluetooth microphone, Cancel right after
+  Record and open the sheet again: Record waits with "Orra is still stopping the last
+  recording." until the microphone is off, and never says it could not start. Holding the
+  talk key while the sheet records pastes nothing, and the indicator says Orra is recording a voice sample in Settings.
 - [ ] Import an Audio File… in the sheet still takes a file, as Choose… did. After any
   of these, nothing new is in ~/Library/Containers, ~/Library/Caches or the temporary
   folder, and the log of `category == "push-to-talk"` and `category == "speech"` shows
