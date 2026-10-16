@@ -189,8 +189,8 @@ struct WelcomeView: View {
 
 /// What to try next, under "Orra is ready": one compact row for each feature, with its symbol,
 /// its name and one line, and a button that opens Settings, or On when it is on already.
-/// Settings opens on General, where cleanup, translation and speak translation are. It
-/// cannot scroll to a section. Meeting Captions is only in the Orra menu, so its row says so.
+/// Settings opens on General, where cleanup, translation and Meeting Interpretation are. It
+/// cannot scroll to a section, so the meeting row says where its parts are.
 private struct SuggestionsBlock: View {
     let suggestions: [WelcomeSuggestion]
     let locale: Locale

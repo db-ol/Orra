@@ -1610,6 +1610,16 @@
         }
       }
     },
+    "Live Captions and Speak Translations to Others are under Meeting Interpretation, in Settings and in the Orra menu. Speaking translations needs Translation on." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕和为对方朗读译文都在“会议同传”里，设置和 Orra 菜单中都有。朗读译文需要先打开翻译。"
+          }
+        }
+      }
+    },
     "Live captions are off each time Orra starts. Closing the caption window turns them off." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3913,16 +3923,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在设置中打开…"
-          }
-        }
-      }
-    },
-    "Turn on Meeting Captions in the Orra menu. Speak translation is in Settings, under General, once Translation is on." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "会议字幕在 Orra 菜单中打开。朗读译文在设置的“通用”中，打开翻译后才能使用。"
           }
         }
       }

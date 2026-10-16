@@ -281,9 +281,9 @@ got worse than the baseline, see docs/release-gate.md.
     and Chinese, and the step the guide talks about.
   - WelcomeSuggestionTests covers the three rows the welcome window suggests once Orra is
     ready: that they show only with setup complete, their lines and buttons in English
-    and Chinese, the meeting row's line on Meeting Captions in the Orra menu, On in place
-    of the button for a feature that is on, and no On and no button while cleanup is on
-    and its model is not on the Mac.
+    and Chinese, the meeting row's line on Meeting Interpretation in Settings and in the
+    Orra menu, On in place of the button for a feature that is on, and no On and no
+    button while cleanup is on and its model is not on the Mac.
   - WelcomeLanguageTests covers the language picked in the welcome window: the
     localization of each choice, Same as the Mac for English, Chinese, Traditional
     Chinese and French first, Chinese text built in code while Orra runs in English, that
@@ -1259,12 +1259,12 @@ choice. Put all of it back afterwards:
   interpretation. With Clean Up Text on and its model on the Mac, its row shows On and no
   button. With Clean Up Text on and its model not on the Mac, the row shows neither On nor
   a button, and step 1 offers the download. The meeting row has a smaller line that says
-  Meeting Captions is in the Orra menu and Speak translation is in Settings, under
-  General, once Translation is on. Turn On in Settings… and Set Up in Settings… open
-  Settings on General in front, also when Settings was open on another tab, and the
-  welcome window stays open. Done still closes the window. Before the last step is done,
-  the rows do not show. In 简体中文 the heading is "还可以试试" and the rows are 整理, 翻译
-  and 会议同传.
+  Live Captions and Speak Translations to Others are under Meeting Interpretation, in
+  Settings and in the Orra menu, and that speaking translations needs Translation on.
+  Turn On in Settings… and Set Up in Settings… open Settings on General in front, also
+  when Settings was open on another tab, and the welcome window stays open. Done still
+  closes the window. Before the last step is done, the rows do not show. In 简体中文 the
+  heading is "还可以试试" and the rows are 整理, 翻译 and 会议同传.
 
 Card beside System Settings, added on 2026-10-15, not verified yet. Orra never resets a
 permission itself. To see both pictures, quit Orra and run

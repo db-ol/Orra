@@ -32,7 +32,7 @@ struct WelcomeSuggestionTests {
             "Read what others say in your language, and let them hear you in theirs, even in your own voice.",
         ])
         #expect(rows.map(\.button) == ["Turn On in Settings…", "Turn On in Settings…", "Set Up in Settings…"])
-        #expect(rows.map(\.note) == [nil, nil, "Turn on Meeting Captions in the Orra menu. Speak translation is in Settings, under General, once Translation is on."])
+        #expect(rows.map(\.note) == [nil, nil, "Live Captions and Speak Translations to Others are under Meeting Interpretation, in Settings and in the Orra menu. Speaking translations needs Translation on."])
         #expect(rows.allSatisfy { !$0.isOn })
         #expect(Set(rows.map(\.symbol)).count == 3)
         #expect(WelcomeSuggestion.heading(locale: english) == "Try next")
@@ -71,7 +71,7 @@ struct WelcomeSuggestionTests {
             "对方说的话，你看到自己语言的字幕。你说自己的语言，对方听到他们的语言，还可以是你的音色。",
         ])
         #expect(rows.map(\.button) == ["在设置中打开…", "在设置中打开…", "前往设置…"])
-        #expect(rows[2].note == "会议字幕在 Orra 菜单中打开。朗读译文在设置的“通用”中，打开翻译后才能使用。")
+        #expect(rows[2].note == "实时字幕和为对方朗读译文都在“会议同传”里，设置和 Orra 菜单中都有。朗读译文需要先打开翻译。")
         let on = WelcomeSuggestion.all(cleanupOn: true, cleanupModelInstalled: true, translationOn: false, locale: chinese)
         #expect(on[0].button == nil)
         #expect(WelcomeSuggestion.onLabel(locale: chinese) == "已打开")

@@ -16,7 +16,7 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
     let isOn: Bool
     let title: String
     let line: String
-    /// A second, smaller line, for where to find what Settings does not have.
+    /// A second, smaller line, for where to find the parts of a feature.
     let note: String?
     /// The button's title. Nil while the feature is on, and while cleanup is on and waits
     /// for its model, since step 1 offers that download.
@@ -73,10 +73,11 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
             title = text("Meeting interpretation")
             line = text("Read what others say in your language, and let them hear you in theirs, even in your own voice.")
         }
-        // Meeting Captions is only in the Orra menu, and Speak translation waits for
-        // Translation, so the row says where each is.
+        // Settings opens on General but cannot scroll down to Meeting Interpretation, which
+        // is after Features. The Orra menu has the same switches. Speaking translations
+        // waits for Translation. So the row says where both parts are and what they need.
         note = kind == .meeting
-            ? text("Turn on Meeting Captions in the Orra menu. Speak translation is in Settings, under General, once Translation is on.")
+            ? text("Live Captions and Speak Translations to Others are under Meeting Interpretation, in Settings and in the Orra menu. Speaking translations needs Translation on.")
             : nil
         if isOn || waitsForModel {
             button = nil
