@@ -1206,10 +1206,9 @@ choice. Put all of it back afterwards:
 - [ ] With Reduce Motion on (System Settings > Accessibility > Display), the guide stands
   still.
 - [ ] On a Mac with 16 GB of memory or more, the steps are 1 Download the models, 2 Allow
-  the microphone, 3 Allow Accessibility, 4 Choose your talk key. Step 1 has one line, "The
-  speech model, and a second model that tidies up what you say, such as fillers and
-  corrections you make while speaking.", and the button Download Models (5.52 GB). There
-  is no switch, no badge and no example.
+  the microphone, 3 Allow Accessibility, 4 Choose your talk key. Step 1 has one line,
+  "Once downloaded, everything runs on this Mac. What you say is never sent anywhere.", and
+  the button Download Models (5.52 GB). There is no switch, no badge and no example.
 - [ ] On a Mac under 16 GB, step 1 is Download the speech model, with "Cleanup stays off on
   this Mac because it has 8 GB of memory. You can turn it on later in Settings, General."
   (or its size) and the button Download Speech Model (2.47 GB). Clicking it fetches the

@@ -1821,6 +1821,16 @@
         }
       }
     },
+    "Once downloaded, everything runs on this Mac. What you say is never sent anywhere." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载后完全在这台 Mac 上运行，你说的话不会发送到任何地方。"
+          }
+        }
+      }
+    },
     "Only while dictating" : {
       "localizations" : {
         "zh-Hans" : {
@@ -3256,16 +3266,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型仍在载入"
-          }
-        }
-      }
-    },
-    "The speech model, and a second model that tidies up what you say, such as fillers and corrections you make while speaking." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "包括语音模型，以及整理文字的第二个模型，它会去掉语气词，并按你说出口的更正改好内容。"
           }
         }
       }

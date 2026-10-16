@@ -297,7 +297,7 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
                 progress = combined
                 lines = speech.menuLines(total: speechTotal, locale: locale)
             case .missing where wantsCleanup && !cleanup.isInstalled:
-                lines = [text("The speech model, and a second model that tidies up what you say, such as fillers and corrections you make while speaking.")]
+                lines = [text("Once downloaded, everything runs on this Mac. What you say is never sent anywhere.")]
                 if combined.completed > 0 {
                     button = text("Resume Download (\(ModelInstaller.State.size(combined.total - combined.completed)) left)")
                 } else {

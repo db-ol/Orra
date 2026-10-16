@@ -119,7 +119,7 @@ struct SetupDownloadTests {
         var summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.active == .speech)
         #expect(summary.button == "Download Models (5.52 GB)")
-        #expect(summary.lines == ["The speech model, and a second model that tidies up what you say, such as fillers and corrections you make while speaking."])
+        #expect(summary.lines == ["Once downloaded, everything runs on this Mac. What you say is never sent anywhere."])
         #expect(!summary.cancels)
         #expect(summary.progress == nil)
         // Bytes on disk from before: what is left of both.
@@ -203,7 +203,7 @@ struct SetupDownloadTests {
         let missing = ModelInstaller.State.missing(bytesPresent: 0)
         let summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: chinese)
         #expect(summary.button == "下载模型（5.52 GB）")
-        #expect(summary.lines == ["包括语音模型，以及整理文字的第二个模型，它会去掉语气词，并按你说出口的更正改好内容。"])
+        #expect(summary.lines == ["下载后完全在这台 Mac 上运行，你说的话不会发送到任何地方。"])
         let speechOnly = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, memoryKeepsCleanupOff: 8, locale: chinese)
         #expect(speechOnly.button == "下载语音模型（2.47 GB）")
         #expect(speechOnly.lines == ["这台 Mac 只有 8 GB 内存，所以整理功能先关着。之后可以在“设置 → 通用”里打开。"])
