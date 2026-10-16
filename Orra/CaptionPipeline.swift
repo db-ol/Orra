@@ -183,8 +183,9 @@ final class CaptionPipeline {
         self.report = report
         self.withdraw = withdraw
         self.speechNotReady = speechNotReady
-        // One more than the sentences, for the interim job.
-        (jobs, input) = AsyncStream.makeStream(of: Job.self, bufferingPolicy: .bufferingNewest(Self.waitingLimit + 1))
+        // An interim job is queued only while no sentence waits, so it takes no place of
+        // one. A full queue drops it first, as the oldest job.
+        (jobs, input) = AsyncStream.makeStream(of: Job.self, bufferingPolicy: .bufferingNewest(Self.waitingLimit))
         worker = Task { [weak self, jobs] in
             for await job in jobs {
                 guard let self, !Task.isCancelled else { return }
