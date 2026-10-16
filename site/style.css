@@ -17,6 +17,7 @@
   --window: #ffffff;
   --window-line: #e8e8ed;
   --capsule: #1d1d1f;
+  --live: #28a745;
   --shadow: 0 20px 50px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
   --max: 980px;
   --radius: 22px;
@@ -40,6 +41,7 @@
     --window: #1d1d1f;
     --window-line: #333336;
     --capsule: #000000;
+    --live: #30d158;
     --shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px #333336;
   }
 }
@@ -566,6 +568,165 @@ h3 {
   content: " ›";
 }
 
+/* Meeting Interpretation: the Live Captions window and a call, drawn in HTML and
+   CSS. The markup shows the final frame. With script and motion, the lines come
+   in once, when their part scrolls into view. */
+.meet {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+}
+
+.meet-part > p {
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+.meet-stage {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 310px;
+  margin-bottom: 28px;
+  padding: 22px 18px;
+  border-radius: var(--radius);
+  background: var(--bg-soft);
+}
+
+.meet-stage p {
+  margin: 0;
+}
+
+/* The caption window is dark in light and in dark mode, as in the app. */
+.captions {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 10px 14px 16px;
+  border-radius: 12px;
+  background: rgba(40, 40, 44, 0.97);
+  box-shadow: var(--shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.meet-stage .captions-title {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.meet-stage .captions-modes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 8px auto 14px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.captions-modes span {
+  white-space: nowrap;
+  padding: 2px 9px;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.captions-modes .on {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+.caption + .caption {
+  margin-top: 10px;
+}
+
+.meet-stage .caption-original {
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.meet-stage .caption-translation {
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.meet-stage .meet-said {
+  margin-bottom: 18px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.call {
+  width: 100%;
+  min-height: 0;
+}
+
+.meet-stage .call-label {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.meet-stage .call-heard {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--window-line);
+}
+
+.level {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 1.5em;
+}
+
+.level i {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--live);
+}
+
+/* Each bar rests at its own height, and the voice animation starts and ends there. */
+.level i { transform: scaleY(var(--h, 1)); }
+.level i:nth-of-type(1) { --h: 0.45; }
+.level i:nth-of-type(2) { --h: 0.9; }
+.level i:nth-of-type(3) { --h: 0.6; }
+.level i:nth-of-type(4) { --h: 1; }
+.level i:nth-of-type(5) { --h: 0.5; }
+
+@keyframes voice {
+  0%, 100% { transform: scaleY(var(--h, 1)); }
+  35% { transform: scaleY(1); }
+  70% { transform: scaleY(0.25); }
+}
+
+.meet-stage .call-mic {
+  font-size: 13px;
+  font-weight: 600;
+  padding-top: 10px;
+  border-top: 1px solid var(--window-line);
+}
+
+.call-mic span {
+  font-weight: 400;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
 .closing {
   text-align: center;
 }
@@ -599,6 +760,33 @@ footer p {
     opacity: 1;
     transform: none;
   }
+
+  /* Meeting Interpretation: each caption, then its translation. Then the spoken
+     line, and what the call hears. */
+  .js .meet-part.in .caption-original,
+  .js .meet-part.in .caption-translation,
+  .js .meet-part.in .meet-said,
+  .js .meet-part.in .call-label,
+  .js .meet-part.in .call-heard {
+    animation: paste 0.4s var(--ease) both;
+  }
+
+  .js .meet-part.in .caption:nth-of-type(1) .caption-original { animation-delay: 0.6s; }
+  .js .meet-part.in .caption:nth-of-type(1) .caption-translation { animation-delay: 1.3s; }
+  .js .meet-part.in .caption:nth-of-type(2) .caption-original { animation-delay: 2.3s; }
+  .js .meet-part.in .caption:nth-of-type(2) .caption-translation { animation-delay: 3s; }
+  .js .meet-part.in .meet-said { animation-delay: 0.6s; }
+  .js .meet-part.in .call-label,
+  .js .meet-part.in .call-heard { animation-delay: 2.2s; }
+
+  .js .meet-part.in .level i {
+    animation: voice 0.9s ease-in-out 2.2s 4;
+  }
+
+  .js .meet-part.in .level i:nth-of-type(2) { animation-delay: 1.9s; }
+  .js .meet-part.in .level i:nth-of-type(3) { animation-delay: 1.6s; }
+  .js .meet-part.in .level i:nth-of-type(4) { animation-delay: 2.05s; }
+  .js .meet-part.in .level i:nth-of-type(5) { animation-delay: 1.75s; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -616,6 +804,14 @@ footer p {
     grid-template-columns: 1fr;
     max-width: 440px;
     gap: 28px;
+  }
+}
+
+/* The caption window needs about 300 pixels. Below that the two parts stack. */
+@media (max-width: 760px) {
+  .meet {
+    grid-template-columns: 1fr;
+    gap: 40px;
   }
 }
 
@@ -665,6 +861,19 @@ footer p {
 
   .demo-said {
     font-size: 15px;
+  }
+
+  .meet-stage {
+    min-height: 0;
+    padding: 20px 12px;
+  }
+
+  .captions {
+    padding: 10px 10px 14px;
+  }
+
+  .captions-modes span {
+    padding: 2px 7px;
   }
 
   .statement {

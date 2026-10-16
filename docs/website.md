@@ -14,6 +14,10 @@ https://db-ol.github.io/Orra/.
   The spoken line of each demo appears at about 8.5 Chinese characters or 3 English words a
   second, so a longer line takes longer. Keep each line and each pasted text to two lines at
   375 pixels wide. The cleanup demo shows an optional feature, so its caption says so.
+- The Meeting Interpretation section draws the Live Captions window and a call in HTML and
+  CSS, with the sentences of the meeting animation in the README. style.css plays it once
+  when each part scrolls into view, through the class that site.js adds. Without site.js,
+  or with reduced motion, it shows its last frame.
 - site/icon.png and site/favicon.png are the app icon at 512 and 64 pixels. They are exported
   from Orra/AppIcon.icon with the ictool that ships inside Icon Composer.
 
@@ -44,6 +48,10 @@ in both pages and merge, so the site never names a version that is not out yet. 
 every place:
 
     grep -rn "0\.4\.0" site
+
+The grep also finds the Download Orra Microphone link in the Meeting Interpretation
+section. It points at OrraMicrophone.pkg in the v0.4.0 release, as README.md does. Change
+it only when a newer release attaches its own OrraMicrophone.pkg.
 
 To export the icon again after the icon changes:
 
