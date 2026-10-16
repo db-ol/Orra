@@ -68,6 +68,24 @@ got worse than the baseline, see docs/release-gate.md.
     TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab and sheet
     to a PNG there, General also with translation on and after a swap of the keys,
     which CI never does.
+  - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
+    for each translation direction and interface language, recording and stopping, too
+    short, the stop at the time limit, a microphone that fails to start, a cancel while
+    it starts, playback, the cut of a long recording at a quiet moment, that no audio
+    file is left behind, and that a hold of the talk key records nothing meanwhile.
+  - VoiceSampleFileTests covers Remember my voice in a temporary folder: the audio only is
+    saved while the switch is on, nothing is written while it is off, turning it on saves
+    the sample in memory and turning it off deletes the file, Remove deletes it, also while
+    Speak translations is off, a new sample replaces it, a save that fails says so and
+    keeps no older sample, the folder is 0700 and left out of backups and the file 0600,
+    what a cut write left is deleted, Remove or the switch turned off right before Quit
+    deletes the file at once, and the recording sheet's checkbox applies only with the
+    sample. At launch the saved sample loads once the speech model is ready, and only while
+    Speak translations is on, a file that is not a sample, is too short or has no speech
+    is deleted with one message that stays while Speak translations is turned off and on,
+    the switch turned off and on or Remove while it waits ends the load for good, a sample
+    picked meanwhile wins unless the speech model could not take it, a stray file is
+    deleted while the switch is off, and the code logs neither the audio nor the words.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
@@ -1721,9 +1739,9 @@ modifiers with a regular key, such as ⇧ ⌘ D:
   again, then running Orra 0.3.1, keeps that single key.
 - [ ] The problem report names a combination by its symbols and key code only.
 
-Meeting captions, added on 2026-10-14. On 2026-10-15 the maintainer checked captions and
-the scroll follow with a local build. Meeting Captions in the menu
-captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
+Live captions, added on 2026-10-14 as Meeting Captions. On 2026-10-15 the maintainer
+checked captions and the scroll follow with a local build. Live Captions, under Meeting
+Interpretation in the menu and in Settings, captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
 pauses, transcribes each with the speech model and translates it with the local model,
 in a floating window. The microphone is never used for it. Orra/Info.plist holds
 NSAudioCaptureUsageDescription, with its Chinese text in InfoPlist.xcstrings. A build
@@ -1732,10 +1750,10 @@ captures nothing. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`:
 it shows starts, stops, counts and failures, never text.
 
-- [ ] With the Info.plist key removed for a test build: turning Meeting Captions on opens
+- [ ] With the Info.plist key removed for a test build: turning Live Captions on opens
   the window with the note above, no permission prompt comes, and turning it off closes
   the window.
-- [ ] With the key, the first time Meeting Captions is turned on, macOS asks whether Orra
+- [ ] With the key, the first time Live Captions is turned on, macOS asks whether Orra
   may record system audio, with the text from Info.plist, in English and in Chinese.
   Allowing it starts captions. Orra then shows under Privacy & Security, Screen & System
   Audio Recording, in the System Audio Recording Only list.
@@ -1765,7 +1783,7 @@ it shows starts, stops, counts and failures, never text.
 - [ ] The window floats over other windows, follows to every Space, shows over a full
   screen Meet or Chrome window, can be dragged by its background and resized, and opens
   where it was left. It does not take the focus from the app in front when it opens.
-- [ ] Turning Meeting Captions off in the menu, or closing the window, stops the
+- [ ] Turning Live Captions off in the menu or in Settings, or closing the window, stops the
   capture (the recording indicator macOS shows in the menu bar goes away), closes the window
   and drops every sentence: turning it on again shows an empty window.
 - [ ] Without the local model: the window says "The local model is not on this Mac yet.
@@ -1777,8 +1795,73 @@ it shows starts, stops, counts and failures, never text.
   model is not ready. Captions start once it is loaded."
 - [ ] With cleanup and translation off, the local model loads when captions start and
   is unloaded when they stop (Activity Monitor shows the memory fall).
-- [ ] With the interface in Chinese: the menu item reads 会议字幕, the picker reads 只显示译文
-  and 原文和译文逐句对照, and every note in the window is in Chinese.
+- [ ] With the interface in Chinese: the submenu reads 会议同传 with 实时字幕 in it, the
+  window's title reads 实时字幕, the picker reads 只显示译文 and 原文和译文逐句对照, and
+  every note in the window is in Chinese.
+- [ ] Meeting Interpretation groups both parts, since 2026-10-15. The menu has a Meeting
+  Interpretation submenu with Live Captions, and Speak Translations to Others while
+  translation is on and the build has a voice model. Settings, General, has a Meeting
+  Interpretation section (会议同传) after Features with a short intro ("For meetings across
+  languages. Read what others say in your language, and let them hear you in theirs, even
+  in your own voice."), Live captions (实时字幕) and Captions show, then Speak translations
+  to others (为对方朗读译文) with all its earlier options. The Live captions switch in
+  Settings and the menu item turn the same captions on and off and show the same state.
+  Captions show in Settings and the picker in the window change together, and the choice
+  stays after a restart. Settings saved by an earlier version, Speak translations on and
+  the chosen device and display mode, are kept.
+- [ ] Voice sample, since 2026-10-15 recorded in Orra rather than picked as a file. Not
+  yet tried with a real microphone. Voice sample (声音样本) has Record… (录音…), which opens
+  a sheet with a script to read aloud, about 10 seconds. The script is Chinese when
+  translation is fixed to English, English when it is fixed to Chinese, and otherwise in
+  the language Orra shows. English and 中文 above it switch it. Record starts the
+  microphone chosen under Microphone (the orange indicator shows), the bars move with your
+  voice and the time counts up. Stop ends it, and Play Back plays it on the Mac's
+  default output. Use This Recording closes the sheet, the row says Listening to the voice
+  sample… and then the length, at most 12 seconds. A spoken translation then sounds like
+  you.
+- [ ] Recording stops by itself after 20 seconds and says so. A recording under 2 seconds
+  says the voice sample must be at least 2 seconds long. Re-record replaces it. Cancel,
+  Escape or closing Settings while recording stops the microphone (the orange indicator
+  goes away) and keeps the voice sample from before.
+- [ ] Record is disabled with a reason while live captions are on, while a dictation
+  runs, and without microphone access. With a Bluetooth microphone, Cancel right after
+  Record and open the sheet again: Record waits with "Orra is still stopping the last
+  recording." until the microphone is off, and never says it could not start. Holding the
+  talk key while the sheet records pastes nothing, and the indicator says Orra is recording a voice sample in Settings.
+- [ ] Import an Audio File… in the sheet still takes a file, as Choose… did. After any
+  of these, nothing new is in ~/Library/Containers, ~/Library/Caches or the temporary
+  folder, and the log of `category == "push-to-talk"` and `category == "speech"` shows
+  lengths only.
+- [ ] Remember my voice (记住我的音色), since 2026-10-15, below Voice sample and as a
+  checkbox in the recording sheet. Off at first, with "Kept in memory until Orra quits."
+  under it, and ~/Library/Application Support/io.github.db-ol.Orra/Voice does not exist.
+  Turn it on with a voice sample in use: the line under it reads "Saved on this Mac until
+  you remove it, and loaded when Orra starts.", the sample's row says "saved on this Mac",
+  the footer says the recording is saved on this Mac until you remove it, and the Voice
+  folder holds voice-sample.dat. `ls -la` shows drwx------ for the folder and -rw-------
+  for the file, and `xattr -l` on the folder shows com.apple.metadata:com_apple_backup_excludeItem.
+  Quit and open Orra: until the speech model is ready the row says "Saved on this Mac, not
+  loaded yet." with Remove, then Listening to the voice sample… and the length, and a
+  spoken translation sounds like you. Recording or importing another sample replaces the
+  file. Remove deletes it, and turning the switch off deletes it and keeps the sample in
+  memory until Orra quits. With the switch off, a new launch loads nothing. Replace
+  voice-sample.dat with any other file and relaunch: the file is gone and Settings says Orra
+  could not read the voice sample saved on this Mac, also after turning Speak translations
+  off and on. The log of `category == "speech"` shows lengths and reasons only.
+- [ ] Remember my voice with Speak translations off. Save a sample, turn Speak translations
+  off, quit and open Orra: the row says "Saved on this Mac, not loaded yet.", nothing is
+  written down (no Listening line), Record… is disabled, and Remove and turning the switch
+  off both delete the Voice folder. The switch cannot be turned on while Speak translations
+  is off. Turn Speak translations on with a sample saved: it loads once the speech model is
+  ready. Also turn Translation off, so Speak translations is disabled too: Remove and the
+  switch still work.
+- [ ] The recording sheet's Remember my voice checkbox. With the switch off and a sample in
+  use, open Record…, tick the checkbox and click Cancel: the switch in Settings stays off
+  and the Voice folder does not exist. Tick it again, record and click Use This Recording:
+  once the row shows the length, the switch is on and the file holds the new recording.
+  Untick it and use another recording: the folder is gone at once.
+- [ ] Click Remove, or turn the switch off, and quit Orra right away with Command Q: the
+  Voice folder is gone.
 - [ ] Changing the output device during a call, such as plugging in headphones: captions
   go on. If they stop, turning them off and on brings them back. This is a known gap to
   confirm.

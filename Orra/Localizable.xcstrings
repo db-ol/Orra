@@ -149,6 +149,16 @@
         }
       }
     },
+    "%lld seconds, saved on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒，保存在这台 Mac 上。"
+          }
+        }
+      }
+    },
     "%lld words" : {
       "localizations" : {
         "zh-Hans" : {
@@ -477,6 +487,16 @@
         }
       }
     },
+    "Captions show" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕显示"
+          }
+        }
+      }
+    },
     "Change Talk Key…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -627,16 +647,6 @@
         }
       }
     },
-    "Choose…" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择…"
-          }
-        }
-      }
-    },
     "Clean Up Text" : {
       "localizations" : {
         "zh-Hans" : {
@@ -664,6 +674,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Clear"
+          }
+        }
+      }
+    },
+    "Click Record, then read the text above." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点按“录音”，然后朗读上面的文字。"
           }
         }
       }
@@ -1049,6 +1069,16 @@
         }
       }
     },
+    "For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跨语言开会时使用。对方说的话，你看到自己语言的字幕。你说自己的语言，对方听到的是他们的语言，还可以是你的音色。"
+          }
+        }
+      }
+    },
     "Forget Learned Corrections" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1224,6 +1254,16 @@
         }
       }
     },
+    "Import an Audio File…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入音频文件…"
+          }
+        }
+      }
+    },
     "Input device" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1271,6 +1311,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳到最新"
+          }
+        }
+      }
+    },
+    "Kept in memory until Orra quits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只留在内存里，退出 Orra 即清除。"
           }
         }
       }
@@ -1419,6 +1469,37 @@
         }
       }
     },
+    "Live captions" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕"
+          }
+        }
+      }
+    },
+    "Live Captions" : {
+      "comment" : "The menu item and window that show live captions of the sound the Mac plays",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕"
+          }
+        }
+      }
+    },
+    "Live captions are off each time Orra starts. Closing the caption window turns them off." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次启动 Orra 时，实时字幕都是关闭的。关闭字幕窗口也会关闭实时字幕。"
+          }
+        }
+      }
+    },
     "Loading the cleanup model…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1469,13 +1550,12 @@
         }
       }
     },
-    "Meeting Captions" : {
-      "comment" : "The menu item and window that show live captions of the sound the Mac plays",
+    "Meeting Interpretation" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "会议字幕"
+            "value" : "会议同传"
           }
         }
       }
@@ -1753,16 +1833,6 @@
         }
       }
     },
-    "Orra also speaks what the translation key translated, into the device below, so the other side of a call hears it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 还会把翻译键翻译的内容说到下面的设备中，让通话的另一方听到。"
-          }
-        }
-      }
-    },
     "Orra can use the microphone." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1793,12 +1863,12 @@
         }
       }
     },
-    "Orra could not capture the sound the Mac plays. Turn Meeting Captions off and on again to try again." : {
+    "Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 无法捕获 Mac 播放的声音。请关闭“会议字幕”后再打开，重试一次。"
+            "value" : "Orra 无法捕获 Mac 播放的声音。请关闭“实时字幕”后再打开，重试一次。"
           }
         }
       }
@@ -1813,12 +1883,12 @@
         }
       }
     },
-    "Orra could not listen to the voice sample. Choose it again once the speech model is ready." : {
+    "Orra could not listen to the voice sample. Record it again once the speech model is ready." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 无法听取声音样本。请在语音模型就绪后重新选择。"
+            "value" : "Orra 无法听取声音样本。请在语音模型就绪后重新录音。"
           }
         }
       }
@@ -1829,6 +1899,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 无法向 %@ 播放。"
+          }
+        }
+      }
+    },
+    "Orra could not read the voice sample saved on this Mac and deleted it. Record it again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法读取保存在这台 Mac 上的声音样本，已将它删除。请重新录音。"
           }
         }
       }
@@ -1859,6 +1939,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 无法存储模型文件。"
+          }
+        }
+      }
+    },
+    "Orra could not save the voice sample on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法在这台 Mac 上保存声音样本。"
           }
         }
       }
@@ -1903,6 +1993,26 @@
         }
       }
     },
+    "Orra is recording a voice sample in Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 正在设置中录制声音样本"
+          }
+        }
+      }
+    },
+    "Orra is still stopping the last recording." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 正在结束上一次录音。"
+          }
+        }
+      }
+    },
     "Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1919,6 +2029,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 需要语音模型才能转写。"
+          }
+        }
+      }
+    },
+    "Orra needs microphone access to record. Setup Guide in the Orra menu can turn it on." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 需要麦克风权限才能录音。可以在 Orra 菜单的“设置向导”中打开。"
           }
         }
       }
@@ -1993,12 +2113,22 @@
         }
       }
     },
-    "Orra's speech model listens to each sentence before it plays, and makes it again when it hears other words. Each sentence starts a moment later." : {
+    "Orra speaks your translations through the device below." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每句话播放前，Orra 会先用语音模型听一遍，听到的字词不对就重新合成。每句话会稍晚一点开始。"
+            "value" : "Orra 通过下面的设备读出翻译键译好的内容。"
+          }
+        }
+      }
+    },
+    "Orra translates the sound the Mac plays into captions, in a floating window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 把 Mac 播放的声音译成字幕，显示在浮动窗口中。"
           }
         }
       }
@@ -2061,6 +2191,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你常用的人名、产品名和术语。Orra 会把它们交给语音模型，让它按你的写法输出。这些词只保存在这台 Mac 上。"
+          }
+        }
+      }
+    },
+    "Play Back" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回放"
+          }
+        }
+      }
+    },
+    "Play it back to check it, then use it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可以先回放检查，再使用。"
           }
         }
       }
@@ -2226,6 +2376,26 @@
         }
       }
     },
+    "Re-record" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新录音"
+          }
+        }
+      }
+    },
+    "Read this aloud in your usual voice, in a quiet place. Orra uses up to %lld seconds." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在安静的地方，用平常的声音朗读下面这段话。Orra 最多使用 %lld 秒。"
+          }
+        }
+      }
+    },
     "Reads the field you dictated into for 3 minutes after a paste and adds a misheard word you fix to your vocabulary." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2262,6 +2432,86 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "推荐：Mac 自带键盘用 fn 键，外接键盘用右侧 Control 键。"
+          }
+        }
+      }
+    },
+    "Record" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音"
+          }
+        }
+      }
+    },
+    "Record a Voice Sample" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录制声音样本"
+          }
+        }
+      }
+    },
+    "Record your own voice only. Orra writes down what you said with its speech model and keeps the recording and the words in memory until it quits. The other side hears a synthesized voice, so let them know." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只录你自己的声音。Orra 会用语音模型写下你说的话，录音和文字只保存在内存中，直到退出。对方听到的是合成的声音，请告诉他们。"
+          }
+        }
+      }
+    },
+    "Record your own voice only. Orra writes down what you said with its speech model and keeps the words in memory until it quits. With Remember my voice on, it saves the recording on this Mac until you remove it. The other side hears a synthesized voice, so let them know." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只录你自己的声音。Orra 会用语音模型写下你说的话，文字只保存在内存中，直到退出。打开“记住我的音色”后，录音会保存在这台 Mac 上，直到你移除。对方听到的是合成的声音，请告诉他们。"
+          }
+        }
+      }
+    },
+    "Record…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音…"
+          }
+        }
+      }
+    },
+    "Recording stopped after %lld seconds. Play it back to check it, then use it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音满 %lld 秒，已自动停止。可以先回放检查，再使用。"
+          }
+        }
+      }
+    },
+    "Recording. Click Stop when you have read it all. Recording stops by itself after %lld seconds." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在录音。读完后点按“停止”。录音满 %lld 秒会自动停止。"
+          }
+        }
+      }
+    },
+    "Remember my voice" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记住我的音色"
           }
         }
       }
@@ -2471,6 +2721,36 @@
         }
       }
     },
+    "Saved on this Mac until you remove it, and loaded when Orra starts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存在这台 Mac 上，直到你移除，打开 Orra 时自动载入。"
+          }
+        }
+      }
+    },
+    "Saved on this Mac, not loaded yet." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存在这台 Mac 上，尚未载入。"
+          }
+        }
+      }
+    },
+    "Script language" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "朗读语言"
+          }
+        }
+      }
+    },
     "Search" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2623,22 +2903,22 @@
         }
       }
     },
-    "Speak translation" : {
+    "Speak translations to others" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "朗读译文"
+            "value" : "为对方朗读译文"
           }
         }
       }
     },
-    "Speak Translation" : {
+    "Speak Translations to Others" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "朗读译文"
+            "value" : "为对方朗读译文"
           }
         }
       }
@@ -2659,6 +2939,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型"
+          }
+        }
+      }
+    },
+    "Stop" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止"
           }
         }
       }
@@ -2906,6 +3196,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "麦克风无法启动"
+          }
+        }
+      }
+    },
+    "The microphone is busy. Try again in a moment." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风正忙，请稍后再试。"
           }
         }
       }
@@ -3367,6 +3667,16 @@
         }
       }
     },
+    "Turn off Live captions to record." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭实时字幕后才能录音。"
+          }
+        }
+      }
+    },
     "Turn on Translation to use this." : {
       "localizations" : {
         "zh-Hans" : {
@@ -3438,22 +3748,22 @@
         }
       }
     },
-    "Use a recording of your own voice only. Orra writes down what the voice sample says with its speech model, keeps both in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只使用你自己声音的录音。Orra 会用语音模型写下声音样本里说的话，并把两者只保存在内存中，直到退出，从不存储到磁盘。对方听到的是合成的声音，请告诉他们。"
-          }
-        }
-      }
-    },
     "Use fn, Control, Option or Command on its own, or a combination such as ⌃ ⌥ or ⇧ ⌘ D. Escape cancels." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "请单独按 fn、Control、Option 或 Command 键，或者按一组组合键，例如 ⌃ ⌥ 或 ⇧ ⌘ D。按 Esc 键取消。"
+          }
+        }
+      }
+    },
+    "Use This Recording" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用这段录音"
           }
         }
       }
@@ -3504,6 +3814,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "声音样本"
+          }
+        }
+      }
+    },
+    "Wait until the dictation is done." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请等听写结束后再录音。"
           }
         }
       }
@@ -3575,6 +3895,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Windows 键"
+          }
+        }
+      }
+    },
+    "With a voice sample, Orra's speech model listens to each sentence before it plays, and makes it again when it hears other words. Each sentence then starts a moment later." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用声音样本时，每句话播放前 Orra 会先用语音模型听一遍，听到的字词不对就重新合成，所以每句话会稍晚一点开始。"
           }
         }
       }

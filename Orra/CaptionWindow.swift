@@ -38,7 +38,7 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: true
         )
-        panel.title = String(localized: "Meeting Captions")
+        panel.title = String(localized: "Live Captions")
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
         panel.level = .floating
@@ -208,7 +208,7 @@ private struct CaptionNotes: View {
             case .unavailable(.notConfigured):
                 note("This build of Orra cannot capture the sound the Mac plays yet.")
             case .unavailable(.failed):
-                note("Orra could not capture the sound the Mac plays. Turn Meeting Captions off and on again to try again.")
+                note("Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again.")
             case .off, .starting, .listening:
                 if captions.hearsOnlySilence {
                     note("No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings.")
