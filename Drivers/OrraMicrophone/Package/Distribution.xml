@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The installer of Orra Microphone. pkg.sh writes the version from Info.plist into the pkg-ref below. -->
+<installer-gui-script minSpecVersion="2">
+    <title>Orra Microphone</title>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="15.6"/>
+        </allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="default">
+            <line choice="io.github.db-ol.Orra.Microphone.pkg"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="io.github.db-ol.Orra.Microphone.pkg" visible="false">
+        <pkg-ref id="io.github.db-ol.Orra.Microphone.pkg"/>
+    </choice>
+    <pkg-ref id="io.github.db-ol.Orra.Microphone.pkg" version="__VERSION__" onConclusion="none">#OrraMicrophone-component.pkg</pkg-ref>
+</installer-gui-script>

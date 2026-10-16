@@ -20,6 +20,9 @@ nonisolated struct CaptionSentence: Identifiable, Equatable, Sendable {
     let end: Double
     let original: String
     var translation: Translation
+    /// True for the text of a sentence still being heard, which the final text of the
+    /// sentence replaces once it ends. Never translated.
+    var isInterim = false
     /// How long the speech model and the cleanup model took for it, for the measurement.
     var recognitionSeconds: Double = 0
     var translationSeconds: Double = 0
@@ -36,6 +39,13 @@ struct CaptionEngines {
     var isSpeechReady: () -> Bool
     /// The speech model's text for 16 kHz mono samples.
     var transcribe: (_ samples: [Float]) async throws -> String
+    /// Whether the models are free for an interim caption, which is when no dictation
+    /// is under way.
+    var isFree: () -> Bool = { true }
+    /// The speech model's text for a sentence still being heard. Unlike `transcribe`, it
+    /// does not run again after a dictation that cancelled it, since the sentence has
+    /// moved on by then. Nil uses `transcribe`.
+    var transcribeInterim: ((_ samples: [Float]) async throws -> String)?
     /// Whether the cleanup model can translate now, without waiting for a load.
     var canTranslate: () -> Bool
     /// Which way to translate, the user's translation setting.
@@ -69,13 +79,18 @@ extension CaptionEngines {
         complete: @escaping @Sendable (String, TranslationTarget) async throws -> String,
         turns: EngineTurns
     ) -> CaptionEngines {
-        CaptionEngines(
+        let transcribe: @Sendable ([Float]) async throws -> String = { samples in
+            let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
+            return try await transcription.transcribe(samples, vocabulary: [], audioSeconds: seconds, takingDigits: false)
+        }
+        return CaptionEngines(
             isSpeechReady: isSpeechReady,
             transcribe: { samples in
-                try await turns.captionTurn {
-                    let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
-                    return try await transcription.transcribe(samples, vocabulary: [], audioSeconds: seconds, takingDigits: false)
-                }
+                try await turns.captionTurn { try await transcribe(samples) }
+            },
+            isFree: { !turns.isDictating },
+            transcribeInterim: { samples in
+                try await turns.captionTurn(retries: 0) { try await transcribe(samples) }
             },
             canTranslate: canTranslate,
             direction: direction,
@@ -96,9 +111,22 @@ extension CaptionEngines {
 /// and again when the translation is done. When more than `backlogLimit` sentences wait,
 /// such as after a long dictation, sentences are shown without translation until captions
 /// catch up, since a caption that comes late is worth little.
+///
+/// With `interimInterval`, the text of a sentence still being heard shows while the
+/// person talks: every `interimInterval` of new audio the speech model transcribes the
+/// sentence so far, and the line is reported as interim under the id its final text gets
+/// later. Only when nothing else waits, the models are free and the sentence is not
+/// pausing, since its end and its final text are near then. Interim text is not
+/// translated, so the cleanup model runs once per sentence as before.
 final class CaptionPipeline {
     /// The sentences waiting, beyond which translation is skipped.
     static let defaultBacklogLimit = 3
+    /// How often the live captions transcribe a sentence still being heard, in seconds
+    /// of its audio.
+    static let defaultInterimInterval = 1.0
+    /// A sentence silent this long at its end gets no interim text, since it is likely
+    /// to end.
+    static let interimPauseLimit = 0.1
     /// The sentences kept waiting, such as during a long hands free dictation. Older ones
     /// are dropped past this, since each holds up to 12 s of audio and a caption that
     /// comes minutes late is worth nothing.
@@ -106,38 +134,75 @@ final class CaptionPipeline {
 
     /// The measurement on audio files, which feeds faster than real time, passes no limit.
     let backlogLimit: Int
+    /// Seconds of new audio between interim texts of a sentence, nil for none.
+    let interimInterval: Double?
+
+    /// What the worker does next: a sentence that ended, with its number in the stream,
+    /// or an interim text of the one being heard.
+    private enum Job {
+        case sentence(CaptionSegment, number: Int)
+        case interim
+    }
 
     private var segmenter: CaptionSegmenter
     private let engines: CaptionEngines
     private let report: (CaptionSentence) -> Void
+    /// Called with the id of an interim line whose sentence got no final text, so it goes.
+    private let withdraw: (Int) -> Void
     /// Called when a sentence is dropped because the speech model is not loaded.
     private let speechNotReady: () -> Void
-    private let segments: AsyncStream<CaptionSegment>
-    private let input: AsyncStream<CaptionSegment>.Continuation
+    private let jobs: AsyncStream<Job>
+    private let input: AsyncStream<Job>.Continuation
     private var worker: Task<Void, Never>?
+    /// Sentences that ended and are not reported yet.
     private var waiting = 0
     private var nextID = 0
     private var isStopped = false
+    /// Sentences the segmenter cut so far, which is the number of the one being heard.
+    private var cutCount = 0
+    /// True while an interim job waits for the worker.
+    private var interimQueued = false
+    /// The sentence the last interim text was for, and its audio then.
+    private var lastInterim: (number: Int, seconds: Double)?
+    /// The interim line on show and its sentence, which the final text replaces.
+    private var interimLine: (number: Int, id: Int)?
 
     init(
         engines: CaptionEngines,
         settings: CaptionSegmenter.Settings = .init(),
         backlogLimit: Int = CaptionPipeline.defaultBacklogLimit,
+        interimInterval: Double? = nil,
         speechNotReady: @escaping () -> Void = {},
+        withdraw: @escaping (Int) -> Void = { _ in },
         report: @escaping (CaptionSentence) -> Void
     ) {
         segmenter = CaptionSegmenter(settings: settings)
         self.engines = engines
         self.backlogLimit = backlogLimit
+        self.interimInterval = interimInterval
         self.report = report
+        self.withdraw = withdraw
         self.speechNotReady = speechNotReady
-        (segments, input) = AsyncStream.makeStream(of: CaptionSegment.self, bufferingPolicy: .bufferingNewest(Self.waitingLimit))
-        worker = Task { [weak self, segments] in
-            for await segment in segments {
+        // An interim job is queued only while no sentence waits, so it takes no place of
+        // one. A full queue drops it first, as the oldest job.
+        (jobs, input) = AsyncStream.makeStream(of: Job.self, bufferingPolicy: .bufferingNewest(Self.waitingLimit))
+        worker = Task { [weak self, jobs] in
+            for await job in jobs {
                 guard let self, !Task.isCancelled else { return }
-                await self.process(segment)
+                switch job {
+                case .sentence(let segment, let number):
+                    await self.process(segment, number: number)
+                case .interim:
+                    await self.interim()
+                }
             }
         }
+    }
+
+    /// Sentences that ended and are not reported yet. For the measurement on audio
+    /// files, which feeds faster than real time.
+    var waitingSentences: Int {
+        waiting
     }
 
     /// Takes the next samples of the stream.
@@ -146,6 +211,20 @@ final class CaptionPipeline {
         for segment in segmenter.append(samples) {
             enqueue(segment)
         }
+        if isInterimDue {
+            interimQueued = true
+            yield(.interim)
+        }
+    }
+
+    /// Whether the sentence being heard should get interim text now: it grew by
+    /// `interimInterval` since its last one, or reached it, nothing else waits or runs,
+    /// the models are free and it is not pausing.
+    private var isInterimDue: Bool {
+        guard let interimInterval, !interimQueued, waiting == 0, segmenter.isInSpeech,
+              segmenter.openSilenceSeconds < Self.interimPauseLimit else { return false }
+        let heard = lastInterim.flatMap { $0.number == cutCount ? $0.seconds : nil } ?? 0
+        return segmenter.openSeconds >= heard + interimInterval && engines.isFree()
     }
 
     /// The end of the stream: the last sentence is cut, and this returns once every
@@ -169,14 +248,80 @@ final class CaptionPipeline {
 
     private func enqueue(_ segment: CaptionSegment) {
         waiting += 1
-        if case .dropped = input.yield(segment) {
+        cutCount += 1
+        yield(.sentence(segment, number: cutCount - 1))
+    }
+
+    private func yield(_ job: Job) {
+        guard case .dropped(let dropped) = input.yield(job) else { return }
+        switch dropped {
+        case .sentence(_, let number):
             waiting -= 1
+            if let line = interimLine, line.number == number {
+                interimLine = nil
+                withdraw(line.id)
+            }
             Logger.captions.notice("A waiting caption sentence was dropped, more than \(Self.waitingLimit, privacy: .public) were waiting")
+        case .interim:
+            interimQueued = false
         }
     }
 
-    private func process(_ segment: CaptionSegment) async {
+    /// Transcribes the sentence being heard and reports its text as interim, when it is
+    /// still due and still being heard once the model is done.
+    private func interim() async {
+        interimQueued = false
+        guard waiting == 0, engines.isSpeechReady(), engines.isFree(), let open = segmenter.openSentence else { return }
+        let number = cutCount
+        lastInterim = (number, segmenter.openSeconds)
+        let recognitionStarted = ContinuousClock.now
+        let raw: String
+        do {
+            raw = try await (engines.transcribeInterim ?? engines.transcribe)(open.samples)
+        } catch {
+            if !(error is CancellationError) {
+                Logger.captions.error("Transcribing an interim caption failed with \(String(reflecting: type(of: error)), privacy: .public)")
+            }
+            return
+        }
+        // A sentence that ended meanwhile gets its final text next.
+        guard !isStopped, !Task.isCancelled, cutCount == number else { return }
+        let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: open.duration))
+        guard !text.isEmpty else { return }
+        let id: Int
+        if let line = interimLine, line.number == number {
+            id = line.id
+        } else {
+            nextID += 1
+            id = nextID
+            interimLine = (number, id)
+        }
+        report(CaptionSentence(
+            id: id,
+            start: open.start,
+            end: open.end,
+            original: text,
+            translation: .none,
+            isInterim: true,
+            recognitionSeconds: Self.seconds(recognitionStarted.duration(to: .now))
+        ))
+    }
+
+    private func process(_ segment: CaptionSegment, number: Int) async {
         defer { waiting -= 1 }
+        // The interim line of this sentence, which the final text replaces, or which goes
+        // when there is none.
+        var interimID: Int?
+        if let line = interimLine, line.number == number {
+            interimID = line.id
+            interimLine = nil
+        }
+        var reported = false
+        defer {
+            if !reported, let interimID, !isStopped {
+                withdraw(interimID)
+            }
+        }
         guard engines.isSpeechReady() else {
             speechNotReady()
             return
@@ -197,9 +342,16 @@ final class CaptionPipeline {
         guard !text.isEmpty else { return }
         let target = engines.direction().target(for: text)
         let translates = target != nil && TranslationStep.isWorthTranslating(text) && waiting <= backlogLimit && engines.canTranslate()
-        nextID += 1
+        let id: Int
+        if let interimID {
+            id = interimID
+        } else {
+            nextID += 1
+            id = nextID
+        }
+        reported = true
         var sentence = CaptionSentence(
-            id: nextID,
+            id: id,
             start: segment.start,
             end: segment.end,
             original: text,

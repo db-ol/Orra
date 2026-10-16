@@ -324,14 +324,24 @@ nonisolated enum Hotkey: Hashable, Sendable {
         single?.sentenceName(in: locale) ?? title(in: locale)
     }
 
-    /// The hint in the menu and the idle bar, such as "Hold right Control to talk".
-    func talkHint(mode: TriggerMode, in locale: Locale = .interface) -> String {
-        let name = sentenceName(in: locale)
+    /// The hint in the menu and the idle bar, such as "Hold right Control to talk", or
+    /// "Hold fn or right Control to talk" with a second talk key.
+    func talkHint(mode: TriggerMode, secondKey: TalkKey? = nil, in locale: Locale = .interface) -> String {
+        let name = sentenceName(orSecond: secondKey, in: locale)
         return switch mode {
         case .hold: String(localized: LocalizedStringResource("Hold \(name) to talk", locale: locale))
         case .toggle: String(localized: LocalizedStringResource("Press \(name) to talk, and again to finish", locale: locale))
         case .doubleTap: String(localized: LocalizedStringResource("Press \(name) twice to talk, and once more to finish", locale: locale))
         }
+    }
+
+    /// The name inside a sentence, followed by the second talk key's when there is one, such
+    /// as "fn or right Control".
+    func sentenceName(orSecond secondKey: TalkKey?, in locale: Locale = .interface) -> String {
+        let name = sentenceName(in: locale)
+        guard let secondKey else { return name }
+        let second = secondKey.sentenceName(in: locale)
+        return String(localized: LocalizedStringResource("\(name) or \(second)", locale: locale, comment: "The talk key and the second talk key inside a sentence, such as fn or right Control"))
     }
 
     /// The hint in the menu while translation is on, such as "Hold right Option to

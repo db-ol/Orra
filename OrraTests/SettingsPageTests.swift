@@ -100,6 +100,7 @@ struct SettingsPageTests {
         try await render(.tab(.general), translationOn: true, name: "\(language)-0-general-translation-on")
         try await render(.tab(.general), translationOn: true, swapped: true, name: "\(language)-0-general-translation-swapped")
         try await render(.tab(.general), cleanupOn: true, translationOn: true, height: 1400, name: "\(language)-0-general-full-height")
+        try await render(.tab(.general), translationOn: true, meeting: true, height: 2000, name: "\(language)-0-general-meeting-interpretation")
         try await render(.tab(.vocabulary), name: "\(language)-1-vocabulary")
         try await render(.tab(.about), name: "\(language)-2-about")
         try await render(.tab(.about), height: 900, name: "\(language)-2-about-full-height")
@@ -119,7 +120,9 @@ struct SettingsPageTests {
     /// A tab in the whole window, at the window's first size or `height`, or a sheet alone
     /// at the size it opens at over that window, since a sheet does not draw outside a
     /// window on screen.
-    private func render(_ shown: Shown, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, height: CGFloat? = nil, name: String) async throws {
+    /// With `meeting`, General has Meeting Interpretation, with captions that hear nothing
+    /// and a voice model that is not downloaded.
+    private func render(_ shown: Shown, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -153,7 +156,15 @@ struct SettingsPageTests {
             cleanup: cleanup,
             learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in .added }, removeFromVocabulary: { _ in }),
             dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
-            updater: AppUpdater()
+            updater: AppUpdater(),
+            captions: meeting ? MeetingCaptions(
+                source: SystemAudioSource(start: { _ in }, stop: {}),
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
+            ) : nil,
+            speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,
+            voiceModels: meeting ? VoiceModels(kind: .qwen3) { [temporary] manifest in
+                ModelInstaller(manifest: manifest, folders: temporary.folders, environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in nil }, sleep: { _ in }))
+            } : nil
         )
         // The window's first size, and each sheet at the size it opens at over that window.
         let window = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)

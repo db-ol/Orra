@@ -108,7 +108,8 @@ struct SettingsView: View {
     let learning: CorrectionLearning
     let dockIcon: DockIcon
     let updater: AppUpdater
-    /// Speak Translation, nil where a page is shown without it.
+    /// The parts of Meeting Interpretation, nil where a page is shown without them.
+    var captions: MeetingCaptions? = nil
     var speech: TranslationSpeech? = nil
     var voiceModels: VoiceModels? = nil
     @State private var tab = SettingsTab.general
@@ -163,7 +164,7 @@ struct SettingsView: View {
     func page(for tab: SettingsTab) -> some View {
         switch tab {
         case .general:
-            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback, openAtLogin: openAtLogin, cleanup: cleanup, learning: learning, dockIcon: dockIcon, speech: speech, voiceModels: voiceModels) { sheet = $0 }
+            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback, openAtLogin: openAtLogin, cleanup: cleanup, learning: learning, dockIcon: dockIcon, captions: captions, speech: speech, voiceModels: voiceModels) { sheet = $0 }
         case .vocabulary:
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .about:
@@ -194,6 +195,7 @@ private struct GeneralSettings: View {
     let cleanup: TextCleanup
     @Bindable var learning: CorrectionLearning
     @Bindable var dockIcon: DockIcon
+    let captions: MeetingCaptions?
     let speech: TranslationSpeech?
     let voiceModels: VoiceModels?
     let open: (SettingsSheet) -> Void
@@ -204,6 +206,7 @@ private struct GeneralSettings: View {
                 // The note about swapped keys shows once, under the translation key.
                 TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false)
                     .help(Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.") + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
+                SecondTalkKeyPicker(pushToTalk: pushToTalk)
                 TriggerModePicker(pushToTalk: pushToTalk, slot: .talk)
                 VStack(alignment: .leading, spacing: 6) {
                     TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
@@ -257,8 +260,8 @@ private struct GeneralSettings: View {
                 Text("Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it.")
                     .foregroundStyle(.secondary)
             }
-            if let speech, let voiceModels {
-                SpeakTranslationSection(speech: speech, models: voiceModels, translationIsOn: cleanup.translationIsOn)
+            if captions != nil || (speech != nil && voiceModels != nil) {
+                MeetingInterpretationSection(pushToTalk: pushToTalk, captions: captions, speech: speech, voiceModels: voiceModels, translationIsOn: cleanup.translationIsOn, translationDirection: cleanup.translationDirection)
             }
             Section {
                 Toggle(isOn: Binding(
@@ -928,6 +931,30 @@ struct MicrophoneToggles: View {
         if let chosen, !inputs.inputs.contains(where: { $0.uid == chosen.uid }) {
             Toggle(MicrophoneLabels.missing(chosen), isOn: .constant(true))
                 .disabled(true)
+        }
+    }
+}
+
+/// The optional second talk key: None, or a single key that is neither the talk key nor the
+/// translation key. It works just as the talk key does, in the talk key's mode.
+private struct SecondTalkKeyPicker: View {
+    let pushToTalk: PushToTalkController
+
+    var body: some View {
+        Picker(selection: Binding(
+            get: { pushToTalk.secondTalkKey },
+            set: { pushToTalk.setSecondTalkKey($0) }
+        )) {
+            Text("None").tag(TalkKey?.none)
+            ForEach(pushToTalk.secondTalkKeyChoices) { key in
+                Text(verbatim: key.fullName()).tag(TalkKey?.some(key))
+            }
+        } label: {
+            DescribedLabel(
+                title: "Second key",
+                detail: "Handy when you switch to an external keyboard that never sends fn.",
+                systemImage: "plus.rectangle.on.rectangle"
+            )
         }
     }
 }

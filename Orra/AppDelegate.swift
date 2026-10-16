@@ -22,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         talkKeyChosen: TalkKeyPreference.isSaved(),
         translationKey: TranslationKeyPreference.loadHotkey(talkKey: TalkKeyPreference.loadHotkey()),
         saveTranslationKey: { TranslationKeyPreference.saveHotkey($0) },
+        secondTalkKey: SecondTalkKeyPreference.load(
+            talkKey: TalkKeyPreference.loadHotkey(),
+            translationKey: TranslationKeyPreference.loadHotkey(talkKey: TalkKeyPreference.loadHotkey())
+        ),
+        saveSecondTalkKey: { SecondTalkKeyPreference.save($0) },
         talkMode: TriggerModePreference.load(for: .talk),
         translationMode: TriggerModePreference.load(for: .translation),
         saveTriggerMode: { TriggerModePreference.save($0, for: $1) },
@@ -50,7 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         outputs: { AudioOutput.all() },
         folders: { [voiceModels] in voiceModels.folders },
         settings: .load(),
-        save: { $0.save() }
+        save: { $0.save() },
+        voiceFile: .live
     )
     /// Meeting captions, off at every launch. Lazy, because they read the controller's
     /// speech model state.
@@ -79,7 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inputLevel: { [pushToTalk] in pushToTalk.inputLevel() },
         holdHint: { [pushToTalk] in pushToTalk.talkHint() }
     )
-    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, models: models)
+    /// The welcome window's one download of the speech model and the cleanup model.
+    lazy var setup = SetupDownload(speech: models, cleanup: cleanup)
+    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup)
     lazy var clipboard = ClipboardWord(
         isDictating: { [pushToTalk] in pushToTalk.state != .idle },
         vocabulary: { [pushToTalk] in pushToTalk.vocabulary.map(\.text) }
@@ -100,12 +108,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cleanup: cleanup,
         updater: updater
     ))
-    lazy var learnedNotice = LearnedNoticePanel(
+    lazy var learnedNotice: LearnedNoticePanel = LearnedNoticePanel(
         notice: LearnedNotice(),
         undo: { [learning] learned in learning.undo(learned) },
         add: { [learning] suggestion, word in learning.add(suggestion, as: word) },
-        decline: { [learning] suggestion in learning.decline(suggestion) }
+        decline: { [learning] suggestion in learning.decline(suggestion) },
+        // Add sets the key only when the tip still fits, since the user may have set a
+        // second key or changed the talk key while it showed. Either way it is answered.
+        addSecondKey: { [weak self] key in
+            guard let self else { return }
+            if keyboardTip.stillOffers(key, in: keyboardTipSituation()) {
+                pushToTalk.setSecondTalkKey(key)
+            }
+            answerKeyboardTip()
+        },
+        dismissTip: { [weak self] _ in self?.answerKeyboardTip() },
+        tipApplies: { [weak self] key in
+            guard let self else { return false }
+            return keyboardTip.stillOffers(key, in: keyboardTipSituation())
+        }
     )
+    /// Whether an external keyboard is connected, for the keyboard tip.
+    let externalKeyboards = ExternalKeyboardMonitor()
+    /// Offers a second talk key once, when an external keyboard meets an fn talk key.
+    lazy var keyboardTip: ExternalKeyboardTip = ExternalKeyboardTip { [weak self] key in
+        self?.learnedNotice.offerKeyboardTip(key)
+    }
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
     nonisolated static var isHostedByXcode: Bool {
@@ -122,6 +150,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 self?.followReadiness()
+            }
+        }
+    }
+
+    /// What decides whether the keyboard tip shows now.
+    private func keyboardTipSituation() -> ExternalKeyboardTip.Situation {
+        ExternalKeyboardTip.Situation(
+            talkKey: pushToTalk.talkKey,
+            translationKey: pushToTalk.translationKey,
+            secondTalkKey: pushToTalk.secondTalkKey,
+            externalKeyboard: externalKeyboards.isConnected,
+            setupComplete: SetupChecklist(pushToTalk, models).isComplete,
+            welcomeOpen: welcome.isVisible
+        )
+    }
+
+    /// Offers the keyboard tip when the situation calls for it, see ExternalKeyboardTip.
+    private func checkKeyboardTip() {
+        keyboardTip.check(keyboardTipSituation())
+    }
+
+    /// The tip was answered and never shows again, so the keyboards need no watching.
+    private func answerKeyboardTip() {
+        keyboardTip.answer()
+        externalKeyboards.stop()
+    }
+
+    /// Checks the keyboard tip now and whenever setup or the talk keys change, until it was
+    /// offered. A keyboard connected and the welcome window closing check it on their own.
+    private func followKeyboardTip() {
+        guard !keyboardTip.offered, !keyboardTip.answered else { return }
+        withObservationTracking {
+            checkKeyboardTip()
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followKeyboardTip()
             }
         }
     }
@@ -162,6 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // The vocabulary saves on a background queue. The last save must be written.
         VocabularyPreference.flush()
+        guard !Self.isHostedByXcode else { return }
+        // Remove or Remember my voice turned off just before Quit: the voice sample's file
+        // is deleted now, not by a task that may not run.
+        speech.removeVoiceFileBeforeQuit()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -172,8 +240,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updater.start()
         // The installer is what loads the speech model: at launch when the model is in
         // place, and again after a download or Try Again.
-        models.onInstalled = { [pushToTalk] _ in
+        // The cleanup model's download from the welcome window follows the speech model's.
+        models.onInstalled = { [pushToTalk, setup] _ in
             Task { await pushToTalk.loadModel() }
+            setup.speechInstalled()
         }
         // Cues can come from inside the keyboard tap's callback, which every key press on
         // the Mac waits for. The indicator and the sounds follow right after it returns,
@@ -194,6 +264,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         speech.isDictating = { [pushToTalk] in pushToTalk.state != .idle }
         speech.transcribeVoice = { [pushToTalk] sample in try await pushToTalk.transcribeVoiceSample(sample) }
         speech.transcribeSpeech = { [pushToTalk] audio, language in try await pushToTalk.transcribeSpeech(audio, in: language) }
+        speech.waitForSpeechModel = { [pushToTalk] in
+            while pushToTalk.modelState != .ready {
+                await withCheckedContinuation { continuation in
+                    withObservationTracking {
+                        _ = pushToTalk.modelState
+                    } onChange: {
+                        continuation.resume()
+                    }
+                }
+            }
+        }
+        // Remember my voice: the voice sample saved on this Mac, once the speech model is
+        // loaded and while Speak translations is on. Local files only.
+        speech.restoreVoice()
         voiceModels.onInstalled = { [speech] in speech.prepare() }
         speech.onEngineChange = { [voiceModels] kind in
             voiceModels.select(kind)
@@ -210,18 +294,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboard.refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
-        Task { [models, pushToTalk, welcome, cleanup, speech, voiceModels] in
+        Task { [models, pushToTalk, welcome, cleanup, setup, speech, voiceModels] in
             await models.prepare()
+            // Loads the cleanup model when cleanup or translation is on and the model is in
+            // place. Before the welcome window, so its download step knows what is on disk.
+            await cleanup.start()
+            // Whether the welcome window's download includes the cleanup model.
+            setup.lookAtLaunch()
             if SetupChecklist(pushToTalk, models).needsUser {
                 welcome.show()
             }
-            // Loads the cleanup model when cleanup or translation is on and the model is in
-            // place.
-            await cleanup.start()
             // Local files only. Loads the voice model when Speak Translation is on.
             if speech.canSpeak {
                 await voiceModels.prepare()
             }
+        }
+        // The tip about a second talk key waits until setup is done and the welcome window
+        // is closed. Reading the registry needs no permission and never opens a device.
+        if !keyboardTip.answered {
+            externalKeyboards.onChange = { [weak self] in self?.checkKeyboardTip() }
+            welcome.onClose = { [weak self] in self?.checkKeyboardTip() }
+            externalKeyboards.start()
+            followKeyboardTip()
         }
     }
 }

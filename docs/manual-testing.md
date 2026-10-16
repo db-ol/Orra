@@ -68,6 +68,24 @@ got worse than the baseline, see docs/release-gate.md.
     TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab and sheet
     to a PNG there, General also with translation on and after a swap of the keys,
     which CI never does.
+  - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
+    for each translation direction and interface language, recording and stopping, too
+    short, the stop at the time limit, a microphone that fails to start, a cancel while
+    it starts, playback, the cut of a long recording at a quiet moment, that no audio
+    file is left behind, and that a hold of the talk key records nothing meanwhile.
+  - VoiceSampleFileTests covers Remember my voice in a temporary folder: the audio only is
+    saved while the switch is on, nothing is written while it is off, turning it on saves
+    the sample in memory and turning it off deletes the file, Remove deletes it, also while
+    Speak translations is off, a new sample replaces it, a save that fails says so and
+    keeps no older sample, the folder is 0700 and left out of backups and the file 0600,
+    what a cut write left is deleted, Remove or the switch turned off right before Quit
+    deletes the file at once, and the recording sheet's checkbox applies only with the
+    sample. At launch the saved sample loads once the speech model is ready, and only while
+    Speak translations is on, a file that is not a sample, is too short or has no speech
+    is deleted with one message that stays while Speak translations is turned off and on,
+    the switch turned off and on or Remove while it waits ends the load for good, a sample
+    picked meanwhile wins unless the speech model could not take it, a stray file is
+    deleted while the switch is off, and the code logs neither the audio nor the words.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
@@ -195,6 +213,10 @@ got worse than the baseline, see docs/release-gate.md.
     become key or main, lets clicks through, and shows on every Space and over full
     screen apps. It uses fakes for the panel and the sounds otherwise, so no window opens
     and no sound plays. LevelMeterTests checks the peak the audio thread stores.
+  - SettingsGuideTests covers where the card beside System Settings goes (right, left,
+    over the corner, inside the visible frame, on a second screen, from CG to Cocoa
+    coordinates), how it finds the System Settings window in the window list, when it
+    shows, hides and goes away, and that its panel floats without taking the focus.
   - SetupChecklistTests covers the welcome window's three steps: the model step for every
     installer state and for an installed model that is loading or failed to load, the
     microphone step for every permission state, and the Accessibility step. It checks that
@@ -252,6 +274,16 @@ got worse than the baseline, see docs/release-gate.md.
     is chosen only when it comes before English in the preferred languages and never for
     Traditional Chinese alone, the Chinese talk key hint, the Chinese form of a key name
     with its other label, and the Chinese hint that finishes a hands free dictation.
+  - SetupDownloadTests covers who gets the cleanup model with the welcome window's one
+    download (a new user from 16 GB of memory, never over a saved choice), the line on
+    memory under 16 GB, the order of the download (speech model first, cleanup model
+    after it), the bar's bytes of both models, the step's lines and buttons in English
+    and Chinese, and the step the guide talks about.
+  - WelcomeSuggestionTests covers the three rows the welcome window suggests once Orra is
+    ready: that they show only with setup complete, their lines and buttons in English
+    and Chinese, the meeting row's line on Meeting Interpretation in Settings and in the
+    Orra menu, On in place of the button for a feature that is on, and no On and no
+    button while cleanup is on and its model is not on the Mac.
   - WelcomeLanguageTests covers the language picked in the welcome window: the
     localization of each choice, Same as the Mac for English, Chinese, Traditional
     Chinese and French first, Chinese text built in code while Orra runs in English, that
@@ -807,6 +839,16 @@ got worse than the baseline, see docs/release-gate.md.
   terminal, not part of the test suite.
 - Orra/ and OrraTests/ are synchronized folder groups, so the new Swift files were
   picked up with no project file edits.
+- SecondTalkKeyTests cover the second talk key: it is saved under `secondTalkKey` and
+  leaves `talkKeys` alone, a saved key that clashes loads as none, the picker leaves out
+  the talk key and the translation key, picking the second key as the talk key swaps the
+  two and as the translation key removes it, either key starts a dictation through a fake
+  tap, the second key follows the talk key's mode, waits inside a talk combination such as
+  ⌃ ⌥, and the hints name both keys in English and Chinese. ExternalKeyboardTests cover
+  the registry properties of USB and Bluetooth keyboards, a MacBook's own keyboard on FIFO
+  and SPI, an Intel MacBook's own keyboard on USB, a mouse that also lists a keyboard
+  usage, a headset and a virtual keyboard, the conditions of the keyboard tip, that it
+  shows once ever, its text in both languages, and how it waits in the notice queue.
 
 ## Needs manual verification
 
@@ -1149,13 +1191,15 @@ the two old cache folders named in README.md out of the way (do not delete them)
 Orra off under System Settings > Privacy & Security > Accessibility. Never turn off or
 remove Orra's Accessibility access while it runs. Undo all of it afterwards:
 
-- [ ] At launch the welcome window opens in front of other apps, with three steps:
-  Download the speech model, Allow the microphone, Allow Accessibility. No system prompt
-  appears on its own.
+- [ ] At launch the welcome window opens in front of other apps, with four steps:
+  Download the models (Download the speech model on a Mac under 16 GB), Allow the
+  microphone, Allow Accessibility, Choose your talk key. No system prompt appears on its
+  own.
 - [ ] Before doing any step, click Not Now: the menu shows Setup Guide…, which opens the
   window again. Quit Orra and launch it: the window opens again.
-- [ ] Download Speech Model starts the download, shows a progress bar, the percentage and
-  the server, and Cancel Download stops it. The menu shows the same progress.
+- [ ] Download Models, or Download Speech Model on a Mac under 16 GB, starts the download,
+  shows a progress bar, the percentage and the server, and Cancel Download stops it. The
+  menu shows the same progress.
 - [ ] While the model downloads, Allow Microphone Access… shows the macOS prompt, and the
   step gets its check mark after Allow.
 - [ ] Grant Accessibility Access… shows the macOS prompt. After turning Orra on in the
@@ -1170,6 +1214,95 @@ remove Orra's Accessibility access while it runs. Undo all of it afterwards:
   relaunch.
 - [ ] Launched as a login item with steps left, the welcome window still comes to the
   front.
+
+Guide and one download in the welcome window, added on 2026-10-15, not verified yet.
+Prepare a first launch as above. Orra counts as set up while any copy of the speech model
+is on this Mac, so also move the old speech-swift copy at
+~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit (and
+~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-8bit if it exists) out of the
+way. Orra reuses it at launch, and the window then shows an existing user. The cleanup
+model's folder,
+~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3.5-4B-4bit-0e7ffd5c, moves
+with the Models folder in the first launch steps above. Run
+`defaults delete io.github.db-ol.Orra cleansUpWithLocalModel` so cleanup has no saved
+choice. Put all of it back afterwards:
+
+- [ ] The guide, a round violet character with the icon's ring as its face, stands under
+  the title. It blinks every few seconds, bobs gently and points down at the steps. Its
+  bubble says one line for the step that has the tint, and the line changes as steps get
+  done, in English and in 简体中文.
+- [ ] With Reduce Motion on (System Settings > Accessibility > Display), the guide stands
+  still.
+- [ ] On a Mac with 16 GB of memory or more, the steps are 1 Download the models, 2 Allow
+  the microphone, 3 Allow Accessibility, 4 Choose your talk key. Step 1 has one line,
+  "Once downloaded, everything runs on this Mac. What you say is never sent anywhere.", and
+  the button Download Models (5.52 GB). There is no switch, no badge and no example.
+- [ ] On a Mac under 16 GB, step 1 is Download the speech model, with "Cleanup stays off on
+  this Mac because it has 8 GB of memory. You can turn it on later in Settings, General."
+  (or its size) and the button Download Speech Model (2.47 GB). Clicking it fetches the
+  speech model only, and Settings shows Clean Up Text off.
+- [ ] Nothing goes online before a click.
+- [ ] Download Models turns on Clean Up Text in Settings and fetches the speech model
+  first, with one bar and one line, "Downloading the models: 3% of 5.52 GB", that names
+  no model and no server. Cancel Download stops it, and the button then offers Resume
+  Download with what is left of both.
+- [ ] Once the speech model is in place, the bar and the line go on with the cleanup
+  model, with nothing else in the step but a short "Checking the downloaded files…" in
+  between. A dictation in TextEdit pastes, without cleanup until the cleanup model is
+  loaded. After that, a dictation with a filler is cleaned up.
+- [ ] A saved choice wins. Run `defaults write io.github.db-ol.Orra cleansUpWithLocalModel
+  -bool false` before the first launch: on any Mac, step 1 is Download the speech model,
+  with "Orra needs its speech model to transcribe." and no line on memory, and cleanup
+  stays off after the download. With `-bool true`, even under 16 GB, step 1 is Download
+  the models with Download Models (5.52 GB).
+- [ ] An existing user: with the speech model in place and cleanup off, open Setup Guide…
+  from the menu. Step 1 has its check mark and nothing about cleanup. Turning on Clean Up
+  Text in Settings shows the cleanup model's download in that step.
+- [ ] Close the window with a language picked in it while the cleanup model downloads:
+  Orra does not restart until the download is over.
+- [ ] The window itself shows no picture of System Settings, in the Accessibility step or
+  the microphone step. The picture is only in the card beside System Settings below.
+- [ ] On a short screen, such as a 13 inch MacBook Air at its default resolution, the
+  steps scroll and the guide and the buttons stay in view.
+- [ ] Once every step is done, under "Orra is ready" the window shows "Try next" with
+  three rows, each with a symbol, one line and a button: Cleanup, Translation and Meeting
+  interpretation. With Clean Up Text on and its model on the Mac, its row shows On and no
+  button. With Clean Up Text on and its model not on the Mac, the row shows neither On nor
+  a button, and step 1 offers the download. The meeting row has a smaller line that says
+  Live Captions and Speak Translations to Others are under Meeting Interpretation, in
+  Settings and in the Orra menu, and that speaking translations needs Translation on.
+  Turn On in Settings… and Set Up in Settings… open Settings on General in front, also
+  when Settings was open on another tab, and the welcome window stays open. Done still
+  closes the window. Before the last step is done, the rows do not show. In 简体中文 the
+  heading is "还可以试试" and the rows are 整理, 翻译 and 会议同传.
+
+Card beside System Settings, added on 2026-10-15, not verified yet. Orra never resets a
+permission itself. To see both pictures, quit Orra and run
+`tccutil reset Accessibility io.github.db-ol.Orra` and
+`tccutil reset Microphone io.github.db-ol.Orra` yourself. Both reset the installed
+release too, since it has the same bundle ID, so turn its access on again afterwards. For
+the microphone card, deny the first microphone prompt, so the step offers Open Microphone
+Settings…:
+
+- [ ] Grant Accessibility Access… shows the macOS prompt. Once System Settings opens, a
+  small card with the guide, "Find Orra in this list and turn on its switch." and the
+  moving picture, and no close button, appears beside its window, on the right when the
+  screen has room, else on the left, else over the window's lower right corner, near the
+  window's top and never off the screen. It never takes the focus from System Settings.
+- [ ] Open Microphone Settings… shows the same card with the Microphone picture.
+- [ ] Moving the System Settings window, also to another display, moves the card with it
+  within half a second. Minimizing it, moving to another Space or switching to another
+  app hides the card, and it comes back with the window.
+- [ ] The card goes away once Orra's switch is on (Accessibility within a few seconds,
+  the microphone within a second), and when System Settings quits or its window is closed
+  (within about 3 seconds). It also goes when the welcome window closes. Left open, it
+  stays as long as System Settings does, with no time limit. Clicking a button again
+  replaces the card, and there is never more than one.
+- [ ] If System Settings does not open within 60 seconds of the click (for example, the macOS
+  prompt is left alone), no card appears.
+- [ ] In 简体中文 the card says "在这个列表里找到 Orra，打开它的开关。" With Reduce Motion
+  on, the picture and the guide stand still. The card reads well in light and dark.
+- [ ] VoiceOver reads the card's line.
 
 Chinese interface, added on 2026-10-07, not verified yet. Give Orra its own language under
 System Settings > General > Language & Region > Applications: add Orra with Chinese,
@@ -1326,8 +1459,8 @@ corrections under Dictation in Settings, General first:
 - [ ] Fix a misheard name so it is learned, then remove it with the minus button under
   Vocabulary in Settings. Fix the same name again: it is added again and the notice with
   Undo shows.
-- [ ] When a dictation comes out as 陈阳写的那些文档一样嘛, fix it to 晨阳写的那些文档一样吗:
-  only the name 晨阳 is offered, never the whole sentence. Fix 通一千万 to
+- [ ] When a dictation comes out as 林悦写的那些文档一样嘛, fix it to 霖悦写的那些文档一样吗:
+  only the name 霖悦 is offered, never the whole sentence. Fix 通一千万 to
   通义千问: 通义千问 is learned, not 义千问.
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the
@@ -1721,9 +1854,42 @@ modifiers with a regular key, such as ⇧ ⌘ D:
   again, then running Orra 0.3.1, keeps that single key.
 - [ ] The problem report names a combination by its symbols and key code only.
 
-Meeting captions, added on 2026-10-14. On 2026-10-15 the maintainer checked captions and
-the scroll follow with a local build. Meeting Captions in the menu
-captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
+Second talk key, added on 2026-10-15, not verified yet. Not tested with a real external
+keyboard. The tip was not seen in the running app:
+
+- [ ] After updating from 0.3.2, the talk key, its mode and the translation key are
+  unchanged, Second key in Settings says None, and the menu and the idle bar say "Hold fn
+  to talk" or the hint of the saved key as before.
+- [ ] Settings, General, Keys: a "Second key" (第二个键) picker right under the talk key,
+  with "Handy when you switch to an external keyboard that never sends fn."
+  (换用 fn 键传不到 Mac 的外接键盘时很方便。) under it. The list offers None and every single
+  key except the talk key and the translation key.
+- [ ] With fn as the talk key and right Control as the second key, holding either one
+  records and pastes. Double pressing either one starts hands free, the indicator names
+  the key that started it, and that key finishes. Right Control C still copies.
+- [ ] The menu says "Hold fn or right Control to talk" (按住地球仪（fn）键或右侧 Control 键说话),
+  the Talk Key submenu shows "Second Key: ⌃ Right Control", and the idle bar says the
+  same hint. In Press to start and stop mode the hint names both keys too.
+- [ ] Picking right Control as the talk key while it is the second key makes fn the second
+  key. Picking it as the translation key sets Second key to None.
+- [ ] With fn as the talk key, no second key and setup complete, connecting a USB or
+  Bluetooth keyboard shows a notice above the indicator: "Some external keyboards never
+  send fn to the Mac. Talk with right Control too?" (有些外接键盘的 fn 键传不到 Mac。要同时用右侧
+  Control 键说话吗？) with Add (添加) and No Thanks (不用了). Add sets right Control as the
+  second key. After Add, No Thanks, closing it or letting it run out, it never shows again,
+  also after a restart and after connecting the keyboard again.
+- [ ] With an external keyboard already connected at launch, the tip shows once the model
+  has loaded. It does not show while the welcome window is open, and shows after it
+  closes with setup complete.
+- [ ] A MacBook with its own keyboard only, and a Mac with only a mouse or a headset
+  connected, never shows the tip.
+- [ ] To see the tip again, quit Orra and run
+  `defaults delete io.github.db-ol.Orra externalKeyboardTipShown` and
+  `defaults delete io.github.db-ol.Orra secondTalkKey`.
+
+Live captions, added on 2026-10-14 as Meeting Captions. On 2026-10-15 the maintainer
+checked captions and the scroll follow with a local build. Live Captions, under Meeting
+Interpretation in the menu and in Settings, captures the sound the Mac plays with a Core Audio process tap, cuts it into sentences at
 pauses, transcribes each with the speech model and translates it with the local model,
 in a floating window. The microphone is never used for it. Orra/Info.plist holds
 NSAudioCaptureUsageDescription, with its Chinese text in InfoPlist.xcstrings. A build
@@ -1732,10 +1898,10 @@ captures nothing. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`:
 it shows starts, stops, counts and failures, never text.
 
-- [ ] With the Info.plist key removed for a test build: turning Meeting Captions on opens
+- [ ] With the Info.plist key removed for a test build: turning Live Captions on opens
   the window with the note above, no permission prompt comes, and turning it off closes
   the window.
-- [ ] With the key, the first time Meeting Captions is turned on, macOS asks whether Orra
+- [ ] With the key, the first time Live Captions is turned on, macOS asks whether Orra
   may record system audio, with the text from Info.plist, in English and in Chinese.
   Allowing it starts captions. Orra then shows under Privacy & Security, Screen & System
   Audio Recording, in the System Audio Recording Only list.
@@ -1750,6 +1916,11 @@ it shows starts, stops, counts and failures, never text.
 - [ ] The same call in Chinese: the translations are in English.
 - [ ] A YouTube video with continuous speech: sentences are cut at pauses, none is
   longer than about 12 s, and music alone gives few or no captions.
+- [ ] Interim text: about a second after someone starts a sentence, its first words show
+  in small grey type and grow every second while they talk. When the sentence ends, its
+  final text replaces that line in place, without a second line, and its translation
+  follows. A cough or a short noise that shows interim text and then no final text
+  leaves no line behind.
 - [ ] Orra's own sounds, the start and stop sounds of a dictation, never show up as a
   caption.
 - [ ] Dictation while captions run: the talk key and the translation key paste as
@@ -1765,7 +1936,7 @@ it shows starts, stops, counts and failures, never text.
 - [ ] The window floats over other windows, follows to every Space, shows over a full
   screen Meet or Chrome window, can be dragged by its background and resized, and opens
   where it was left. It does not take the focus from the app in front when it opens.
-- [ ] Turning Meeting Captions off in the menu, or closing the window, stops the
+- [ ] Turning Live Captions off in the menu or in Settings, or closing the window, stops the
   capture (the recording indicator macOS shows in the menu bar goes away), closes the window
   and drops every sentence: turning it on again shows an empty window.
 - [ ] Without the local model: the window says "The local model is not on this Mac yet.
@@ -1777,8 +1948,73 @@ it shows starts, stops, counts and failures, never text.
   model is not ready. Captions start once it is loaded."
 - [ ] With cleanup and translation off, the local model loads when captions start and
   is unloaded when they stop (Activity Monitor shows the memory fall).
-- [ ] With the interface in Chinese: the menu item reads 会议字幕, the picker reads 只显示译文
-  and 原文和译文逐句对照, and every note in the window is in Chinese.
+- [ ] With the interface in Chinese: the submenu reads 会议同传 with 实时字幕 in it, the
+  window's title reads 实时字幕, the picker reads 只显示译文 and 原文和译文逐句对照, and
+  every note in the window is in Chinese.
+- [ ] Meeting Interpretation groups both parts, since 2026-10-15. The menu has a Meeting
+  Interpretation submenu with Live Captions, and Speak Translations to Others while
+  translation is on and the build has a voice model. Settings, General, has a Meeting
+  Interpretation section (会议同传) after Features with a short intro ("For meetings across
+  languages. Read what others say in your language, and let them hear you in theirs, even
+  in your own voice."), Live captions (实时字幕) and Captions show, then Speak translations
+  to others (为对方朗读译文) with all its earlier options. The Live captions switch in
+  Settings and the menu item turn the same captions on and off and show the same state.
+  Captions show in Settings and the picker in the window change together, and the choice
+  stays after a restart. Settings saved by an earlier version, Speak translations on and
+  the chosen device and display mode, are kept.
+- [ ] Voice sample, since 2026-10-15 recorded in Orra rather than picked as a file. Not
+  yet tried with a real microphone. Voice sample (声音样本) has Record… (录音…), which opens
+  a sheet with a script to read aloud, about 10 seconds. The script is Chinese when
+  translation is fixed to English, English when it is fixed to Chinese, and otherwise in
+  the language Orra shows. English and 中文 above it switch it. Record starts the
+  microphone chosen under Microphone (the orange indicator shows), the bars move with your
+  voice and the time counts up. Stop ends it, and Play Back plays it on the Mac's
+  default output. Use This Recording closes the sheet, the row says Listening to the voice
+  sample… and then the length, at most 12 seconds. A spoken translation then sounds like
+  you.
+- [ ] Recording stops by itself after 20 seconds and says so. A recording under 2 seconds
+  says the voice sample must be at least 2 seconds long. Re-record replaces it. Cancel,
+  Escape or closing Settings while recording stops the microphone (the orange indicator
+  goes away) and keeps the voice sample from before.
+- [ ] Record is disabled with a reason while live captions are on, while a dictation
+  runs, and without microphone access. With a Bluetooth microphone, Cancel right after
+  Record and open the sheet again: Record waits with "Orra is still stopping the last
+  recording." until the microphone is off, and never says it could not start. Holding the
+  talk key while the sheet records pastes nothing, and the indicator says Orra is recording a voice sample in Settings.
+- [ ] Import an Audio File… in the sheet still takes a file, as Choose… did. After any
+  of these, nothing new is in ~/Library/Containers, ~/Library/Caches or the temporary
+  folder, and the log of `category == "push-to-talk"` and `category == "speech"` shows
+  lengths only.
+- [ ] Remember my voice (记住我的音色), since 2026-10-15, below Voice sample and as a
+  checkbox in the recording sheet. Off at first, with "Kept in memory until Orra quits."
+  under it, and ~/Library/Application Support/io.github.db-ol.Orra/Voice does not exist.
+  Turn it on with a voice sample in use: the line under it reads "Saved on this Mac until
+  you remove it, and loaded when Orra starts.", the sample's row says "saved on this Mac",
+  the footer says the recording is saved on this Mac until you remove it, and the Voice
+  folder holds voice-sample.dat. `ls -la` shows drwx------ for the folder and -rw-------
+  for the file, and `xattr -l` on the folder shows com.apple.metadata:com_apple_backup_excludeItem.
+  Quit and open Orra: until the speech model is ready the row says "Saved on this Mac, not
+  loaded yet." with Remove, then Listening to the voice sample… and the length, and a
+  spoken translation sounds like you. Recording or importing another sample replaces the
+  file. Remove deletes it, and turning the switch off deletes it and keeps the sample in
+  memory until Orra quits. With the switch off, a new launch loads nothing. Replace
+  voice-sample.dat with any other file and relaunch: the file is gone and Settings says Orra
+  could not read the voice sample saved on this Mac, also after turning Speak translations
+  off and on. The log of `category == "speech"` shows lengths and reasons only.
+- [ ] Remember my voice with Speak translations off. Save a sample, turn Speak translations
+  off, quit and open Orra: the row says "Saved on this Mac, not loaded yet.", nothing is
+  written down (no Listening line), Record… is disabled, and Remove and turning the switch
+  off both delete the Voice folder. The switch cannot be turned on while Speak translations
+  is off. Turn Speak translations on with a sample saved: it loads once the speech model is
+  ready. Also turn Translation off, so Speak translations is disabled too: Remove and the
+  switch still work.
+- [ ] The recording sheet's Remember my voice checkbox. With the switch off and a sample in
+  use, open Record…, tick the checkbox and click Cancel: the switch in Settings stays off
+  and the Voice folder does not exist. Tick it again, record and click Use This Recording:
+  once the row shows the length, the switch is on and the file holds the new recording.
+  Untick it and use another recording: the folder is gone at once.
+- [ ] Click Remove, or turn the switch off, and quit Orra right away with Command Q: the
+  Voice folder is gone.
 - [ ] Changing the output device during a call, such as plugging in headphones: captions
   go on. If they stop, turning them off and on brings them back. This is a known gap to
   confirm.
@@ -1806,7 +2042,9 @@ for the variables. A run on a folder of public audio, from the repository root:
 
 Add `TEST_RUNNER_ORRA_CAPTION_REALTIME=1` to feed the audio at the pace it plays and
 measure the delay of each caption, and `TEST_RUNNER_ORRA_CAPTION_SETTINGS='{"pause": 0.5}'`
-to try other segmenter settings. A summary of counts and times goes to out.summary.txt.
+to try other segmenter settings. With `TEST_RUNNER_ORRA_CAPTION_INTERIM=1` the real time
+run shows interim text every second, as the app does, and records when the first text of
+each sentence showed. A summary of counts and times goes to out.summary.txt.
 The output holds the text of the audio, so it goes outside the repository.
 
 ## Not implemented
