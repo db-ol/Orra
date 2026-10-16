@@ -1,6 +1,6 @@
 # Developing Orra
 
-This guide is for people who build, test or change Orra. [AGENTS.md](../AGENTS.md) has the rules every change follows, and the README describes Orra for its users.
+This guide is for people who build, test or change Orra. [AGENTS.md](../AGENTS.md) has the rules every change follows, and the README and the [user guide](user-guide.md) describe Orra for its users.
 
 ## Requirements
 
@@ -40,6 +40,7 @@ The interface is in English and Simplified Chinese. AGENTS.md explains how to ad
 - [hotkey-options.md](hotkey-options.md), [microphone-choice.md](microphone-choice.md): design notes.
 - [releasing.md](releasing.md): signing, notarization, updates and publishing.
 - [manual-testing.md](manual-testing.md): what the tests cover and what to check by hand.
+- [Tools/readme-media](../Tools/readme-media/README.md): draws the animations in the README's Features table.
 
 ## Contributing
 

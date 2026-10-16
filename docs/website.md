@@ -24,8 +24,9 @@ from another server. Keep it that way.
 ## Editing
 
 1. Change both pages together, so the English and the Chinese page say the same thing.
-2. Keep every claim in line with README.md. Describe what the latest release does, not what
-   is still in a pull request. Make up no numbers or quotes.
+2. Keep every claim in line with README.md and the user guide in docs/user-guide.md. Describe
+   what the latest release does, not what is still in a pull request. Make up no numbers or
+   quotes.
 3. English text uses no em dash, en dash or semicolon. Chinese text uses full width
    punctuation (，。：？！（）“”) and a space between Chinese and a Latin word or a number.
 4. Check the pages over HTTP, as GitHub Pages serves them. Run
