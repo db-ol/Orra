@@ -213,6 +213,10 @@ got worse than the baseline, see docs/release-gate.md.
     become key or main, lets clicks through, and shows on every Space and over full
     screen apps. It uses fakes for the panel and the sounds otherwise, so no window opens
     and no sound plays. LevelMeterTests checks the peak the audio thread stores.
+  - SettingsGuideTests covers where the card beside System Settings goes (right, left,
+    over the corner, inside the visible frame, on a second screen, from CG to Cocoa
+    coordinates), how it finds the System Settings window in the window list, when it
+    shows, hides and goes away, and that its panel floats without taking the focus.
   - SetupChecklistTests covers the welcome window's three steps: the model step for every
     installer state and for an installed model that is loading or failed to load, the
     microphone step for every permission state, and the Accessibility step. It checks that
@@ -270,6 +274,16 @@ got worse than the baseline, see docs/release-gate.md.
     is chosen only when it comes before English in the preferred languages and never for
     Traditional Chinese alone, the Chinese talk key hint, the Chinese form of a key name
     with its other label, and the Chinese hint that finishes a hands free dictation.
+  - SetupDownloadTests covers who gets the cleanup model with the welcome window's one
+    download (a new user from 16 GB of memory, never over a saved choice), the line on
+    memory under 16 GB, the order of the download (speech model first, cleanup model
+    after it), the bar's bytes of both models, the step's lines and buttons in English
+    and Chinese, and the step the guide talks about.
+  - WelcomeSuggestionTests covers the three rows the welcome window suggests once Orra is
+    ready: that they show only with setup complete, their lines and buttons in English
+    and Chinese, the meeting row's line on Meeting Interpretation in Settings and in the
+    Orra menu, On in place of the button for a feature that is on, and no On and no
+    button while cleanup is on and its model is not on the Mac.
   - WelcomeLanguageTests covers the language picked in the welcome window: the
     localization of each choice, Same as the Mac for English, Chinese, Traditional
     Chinese and French first, Chinese text built in code while Orra runs in English, that
@@ -1167,13 +1181,15 @@ the two old cache folders named in README.md out of the way (do not delete them)
 Orra off under System Settings > Privacy & Security > Accessibility. Never turn off or
 remove Orra's Accessibility access while it runs. Undo all of it afterwards:
 
-- [ ] At launch the welcome window opens in front of other apps, with three steps:
-  Download the speech model, Allow the microphone, Allow Accessibility. No system prompt
-  appears on its own.
+- [ ] At launch the welcome window opens in front of other apps, with four steps:
+  Download the models (Download the speech model on a Mac under 16 GB), Allow the
+  microphone, Allow Accessibility, Choose your talk key. No system prompt appears on its
+  own.
 - [ ] Before doing any step, click Not Now: the menu shows Setup Guide…, which opens the
   window again. Quit Orra and launch it: the window opens again.
-- [ ] Download Speech Model starts the download, shows a progress bar, the percentage and
-  the server, and Cancel Download stops it. The menu shows the same progress.
+- [ ] Download Models, or Download Speech Model on a Mac under 16 GB, starts the download,
+  shows a progress bar, the percentage and the server, and Cancel Download stops it. The
+  menu shows the same progress.
 - [ ] While the model downloads, Allow Microphone Access… shows the macOS prompt, and the
   step gets its check mark after Allow.
 - [ ] Grant Accessibility Access… shows the macOS prompt. After turning Orra on in the
@@ -1188,6 +1204,95 @@ remove Orra's Accessibility access while it runs. Undo all of it afterwards:
   relaunch.
 - [ ] Launched as a login item with steps left, the welcome window still comes to the
   front.
+
+Guide and one download in the welcome window, added on 2026-10-15, not verified yet.
+Prepare a first launch as above. Orra counts as set up while any copy of the speech model
+is on this Mac, so also move the old speech-swift copy at
+~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit (and
+~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-8bit if it exists) out of the
+way. Orra reuses it at launch, and the window then shows an existing user. The cleanup
+model's folder,
+~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3.5-4B-4bit-0e7ffd5c, moves
+with the Models folder in the first launch steps above. Run
+`defaults delete io.github.db-ol.Orra cleansUpWithLocalModel` so cleanup has no saved
+choice. Put all of it back afterwards:
+
+- [ ] The guide, a round violet character with the icon's ring as its face, stands under
+  the title. It blinks every few seconds, bobs gently and points down at the steps. Its
+  bubble says one line for the step that has the tint, and the line changes as steps get
+  done, in English and in 简体中文.
+- [ ] With Reduce Motion on (System Settings > Accessibility > Display), the guide stands
+  still.
+- [ ] On a Mac with 16 GB of memory or more, the steps are 1 Download the models, 2 Allow
+  the microphone, 3 Allow Accessibility, 4 Choose your talk key. Step 1 has one line,
+  "Once downloaded, everything runs on this Mac. What you say is never sent anywhere.", and
+  the button Download Models (5.52 GB). There is no switch, no badge and no example.
+- [ ] On a Mac under 16 GB, step 1 is Download the speech model, with "Cleanup stays off on
+  this Mac because it has 8 GB of memory. You can turn it on later in Settings, General."
+  (or its size) and the button Download Speech Model (2.47 GB). Clicking it fetches the
+  speech model only, and Settings shows Clean Up Text off.
+- [ ] Nothing goes online before a click.
+- [ ] Download Models turns on Clean Up Text in Settings and fetches the speech model
+  first, with one bar and one line, "Downloading the models: 3% of 5.52 GB", that names
+  no model and no server. Cancel Download stops it, and the button then offers Resume
+  Download with what is left of both.
+- [ ] Once the speech model is in place, the bar and the line go on with the cleanup
+  model, with nothing else in the step but a short "Checking the downloaded files…" in
+  between. A dictation in TextEdit pastes, without cleanup until the cleanup model is
+  loaded. After that, a dictation with a filler is cleaned up.
+- [ ] A saved choice wins. Run `defaults write io.github.db-ol.Orra cleansUpWithLocalModel
+  -bool false` before the first launch: on any Mac, step 1 is Download the speech model,
+  with "Orra needs its speech model to transcribe." and no line on memory, and cleanup
+  stays off after the download. With `-bool true`, even under 16 GB, step 1 is Download
+  the models with Download Models (5.52 GB).
+- [ ] An existing user: with the speech model in place and cleanup off, open Setup Guide…
+  from the menu. Step 1 has its check mark and nothing about cleanup. Turning on Clean Up
+  Text in Settings shows the cleanup model's download in that step.
+- [ ] Close the window with a language picked in it while the cleanup model downloads:
+  Orra does not restart until the download is over.
+- [ ] The window itself shows no picture of System Settings, in the Accessibility step or
+  the microphone step. The picture is only in the card beside System Settings below.
+- [ ] On a short screen, such as a 13 inch MacBook Air at its default resolution, the
+  steps scroll and the guide and the buttons stay in view.
+- [ ] Once every step is done, under "Orra is ready" the window shows "Try next" with
+  three rows, each with a symbol, one line and a button: Cleanup, Translation and Meeting
+  interpretation. With Clean Up Text on and its model on the Mac, its row shows On and no
+  button. With Clean Up Text on and its model not on the Mac, the row shows neither On nor
+  a button, and step 1 offers the download. The meeting row has a smaller line that says
+  Live Captions and Speak Translations to Others are under Meeting Interpretation, in
+  Settings and in the Orra menu, and that speaking translations needs Translation on.
+  Turn On in Settings… and Set Up in Settings… open Settings on General in front, also
+  when Settings was open on another tab, and the welcome window stays open. Done still
+  closes the window. Before the last step is done, the rows do not show. In 简体中文 the
+  heading is "还可以试试" and the rows are 整理, 翻译 and 会议同传.
+
+Card beside System Settings, added on 2026-10-15, not verified yet. Orra never resets a
+permission itself. To see both pictures, quit Orra and run
+`tccutil reset Accessibility io.github.db-ol.Orra` and
+`tccutil reset Microphone io.github.db-ol.Orra` yourself. Both reset the installed
+release too, since it has the same bundle ID, so turn its access on again afterwards. For
+the microphone card, deny the first microphone prompt, so the step offers Open Microphone
+Settings…:
+
+- [ ] Grant Accessibility Access… shows the macOS prompt. Once System Settings opens, a
+  small card with the guide, "Find Orra in this list and turn on its switch." and the
+  moving picture, and no close button, appears beside its window, on the right when the
+  screen has room, else on the left, else over the window's lower right corner, near the
+  window's top and never off the screen. It never takes the focus from System Settings.
+- [ ] Open Microphone Settings… shows the same card with the Microphone picture.
+- [ ] Moving the System Settings window, also to another display, moves the card with it
+  within half a second. Minimizing it, moving to another Space or switching to another
+  app hides the card, and it comes back with the window.
+- [ ] The card goes away once Orra's switch is on (Accessibility within a few seconds,
+  the microphone within a second), and when System Settings quits or its window is closed
+  (within about 3 seconds). It also goes when the welcome window closes. Left open, it
+  stays as long as System Settings does, with no time limit. Clicking a button again
+  replaces the card, and there is never more than one.
+- [ ] If System Settings does not open within 60 seconds of the click (for example, the macOS
+  prompt is left alone), no card appears.
+- [ ] In 简体中文 the card says "在这个列表里找到 Orra，打开它的开关。" With Reduce Motion
+  on, the picture and the guide stand still. The card reads well in light and dark.
+- [ ] VoiceOver reads the card's line.
 
 Chinese interface, added on 2026-10-07, not verified yet. Give Orra its own language under
 System Settings > General > Language & Region > Applications: add Orra with Chinese,

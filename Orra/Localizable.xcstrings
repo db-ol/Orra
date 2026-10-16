@@ -255,6 +255,16 @@
         }
       }
     },
+    "Accessibility" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "辅助功能"
+          }
+        }
+      }
+    },
     "Add" : {
       "localizations" : {
         "zh-Hans" : {
@@ -301,6 +311,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你添加的"
+          }
+        }
+      }
+    },
+    "All set! Hold the talk key and say hello." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备好了！按住说话键，打个招呼吧。"
           }
         }
       }
@@ -667,6 +687,26 @@
         }
       }
     },
+    "Cleanup" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理"
+          }
+        }
+      }
+    },
+    "Cleanup stays off on this Mac because it has %lld GB of memory. You can turn it on later in Settings, General." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 只有 %lld GB 内存，所以整理功能先关着。之后可以在“设置 → 通用”里打开。"
+          }
+        }
+      }
+    },
     "Clear" : {
       "comment" : "A key name",
       "localizations" : {
@@ -862,6 +902,26 @@
         }
       }
     },
+    "Download Cleanup Model (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载整理模型（%@）"
+          }
+        }
+      }
+    },
+    "Download Models (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载模型（%@）"
+          }
+        }
+      }
+    },
     "Download Speech Model (%@)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -888,6 +948,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要下载翻译用的模型吗？"
+          }
+        }
+      }
+    },
+    "Download the models" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载模型"
           }
         }
       }
@@ -940,6 +1010,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在下载本地模型：%1$lld%%，共 %2$@"
+          }
+        }
+      }
+    },
+    "Downloading the models: %lld%% of %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在下载模型：%1$lld%%，共 %2$@"
           }
         }
       }
@@ -1044,6 +1124,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "功能"
+          }
+        }
+      }
+    },
+    "Find Orra in this list and turn on its switch." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这个列表里找到 Orra，打开它的开关。"
           }
         }
       }
@@ -1172,6 +1262,16 @@
         }
       }
     },
+    "Hi, I’m Orra. First, let me download what I need. It happens once." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你好，我是 Orra。先下载我需要的模型，只需一次。"
+          }
+        }
+      }
+    },
     "Hold" : {
       "comment" : "A trigger mode: hold the key while speaking",
       "localizations" : {
@@ -1229,6 +1329,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "单独按住说话键，说话，然后松开。左侧 Control、Option 或 Command 键要单独按住片刻才开始录音，所以它们的快捷键照常可用。"
+          }
+        }
+      }
+    },
+    "Hold the translation key and speak. Chinese becomes English, and English becomes Chinese." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住翻译键说话，中文变成英文，英文变成中文。"
           }
         }
       }
@@ -1449,6 +1559,16 @@
         }
       }
     },
+    "Let me hear you. Allow the microphone." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让我听见你的声音，请允许使用麦克风。"
+          }
+        }
+      }
+    },
     "Listening" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1486,6 +1606,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "实时字幕"
+          }
+        }
+      }
+    },
+    "Live Captions and Speak Translations to Others are under Meeting Interpretation, in Settings and in the Orra menu. Speaking translations needs Translation on." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕和为对方朗读译文都在“会议同传”里，设置和 Orra 菜单中都有。朗读译文需要先打开翻译。"
           }
         }
       }
@@ -1546,6 +1676,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地模型"
+          }
+        }
+      }
+    },
+    "Meeting interpretation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会议同传"
           }
         }
       }
@@ -1700,6 +1840,16 @@
         }
       }
     },
+    "Now let me type for you. Allow Accessibility." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再让我帮你打字，请允许辅助功能。"
+          }
+        }
+      }
+    },
     "Numbers spoken in Chinese, such as dates, times, prices and percentages, are written as digits. Small counts, rough numbers and idioms stay in words." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1717,6 +1867,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不显示"
+          }
+        }
+      }
+    },
+    "On" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已打开"
           }
         }
       }
@@ -1747,6 +1907,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在这台 Mac 自带的键盘上，左下角的 fn（地球仪）键在右手用鼠标时很顺手。用外接键盘时请选右侧 Control 键，因为有些外接键盘（比如 Logitech MX Keys）的 fn 键信号根本传不到 Mac。"
+          }
+        }
+      }
+    },
+    "Once downloaded, everything runs on this Mac. What you say is never sent anywhere." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载后完全在这台 Mac 上运行，你说的话不会发送到任何地方。"
           }
         }
       }
@@ -2195,6 +2365,16 @@
         }
       }
     },
+    "Pick the key you hold to talk." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选一个说话时按住的键。"
+          }
+        }
+      }
+    },
     "Play Back" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2356,6 +2536,16 @@
         }
       }
     },
+    "Privacy & Security" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐私与安全性"
+          }
+        }
+      }
+    },
     "Quit Orra" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2392,6 +2582,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在安静的地方，用平常的声音朗读下面这段话。Orra 最多使用 %lld 秒。"
+          }
+        }
+      }
+    },
+    "Read what others say in your language, and let them hear you in theirs, even in your own voice." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对方说的话，你看到自己语言的字幕。你说自己的语言，对方听到他们的语言，还可以是你的音色。"
           }
         }
       }
@@ -2552,6 +2752,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "去掉语气词，并按你说出口的更正改好内容，比如“三点，哦不对，四点”。需要下载 %@，约占 4 GB 内存，短的听写多花不到 1 秒，长的更久，全部在这台 Mac 上运行。Orra 菜单中的“粘贴原文”可以找回整理之前的文字。"
+          }
+        }
+      }
+    },
+    "Removes fillers and fixes what you correct while speaking." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说完自动去掉语气词，并按你的改口改好。"
           }
         }
       }
@@ -2771,6 +2981,16 @@
         }
       }
     },
+    "Set Up in Settings…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前往设置…"
+          }
+        }
+      }
+    },
     "Settings…" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2939,6 +3159,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型"
+          }
+        }
+      }
+    },
+    "Still downloading. It goes on if you close this window." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还在下载。关掉这个窗口也会继续。"
           }
         }
       }
@@ -3667,12 +3897,32 @@
         }
       }
     },
+    "Try next" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还可以试试"
+          }
+        }
+      }
+    },
     "Turn off Live captions to record." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭实时字幕后才能录音。"
+          }
+        }
+      }
+    },
+    "Turn On in Settings…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设置中打开…"
           }
         }
       }

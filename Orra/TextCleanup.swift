@@ -402,6 +402,17 @@ final class TextCleanup {
         models.download()
     }
 
+    /// A new user started the welcome window's download, which includes the cleanup model,
+    /// see SetupDownload. Its button names the download size, so nothing more is asked.
+    /// With the model in place it loads at once. Otherwise its download follows the speech
+    /// model's, which SetupDownload starts.
+    func agreeToDownload() {
+        setOn(true)
+        if case .installed(let folder) = models.state {
+            load(from: folder)
+        }
+    }
+
     /// The user agreed to download the model for translation.
     func confirmTranslationDownload() {
         isConfirmingTranslationDownload = false
