@@ -1873,6 +1873,11 @@ it shows starts, stops, counts and failures, never text.
 - [ ] The same call in Chinese: the translations are in English.
 - [ ] A YouTube video with continuous speech: sentences are cut at pauses, none is
   longer than about 12 s, and music alone gives few or no captions.
+- [ ] Interim text: about a second after someone starts a sentence, its first words show
+  in small grey type and grow every second while they talk. When the sentence ends, its
+  final text replaces that line in place, without a second line, and its translation
+  follows. A cough or a short noise that shows interim text and then no final text
+  leaves no line behind.
 - [ ] Orra's own sounds, the start and stop sounds of a dictation, never show up as a
   caption.
 - [ ] Dictation while captions run: the talk key and the translation key paste as
@@ -1994,7 +1999,9 @@ for the variables. A run on a folder of public audio, from the repository root:
 
 Add `TEST_RUNNER_ORRA_CAPTION_REALTIME=1` to feed the audio at the pace it plays and
 measure the delay of each caption, and `TEST_RUNNER_ORRA_CAPTION_SETTINGS='{"pause": 0.5}'`
-to try other segmenter settings. A summary of counts and times goes to out.summary.txt.
+to try other segmenter settings. With `TEST_RUNNER_ORRA_CAPTION_INTERIM=1` the real time
+run shows interim text every second, as the app does, and records when the first text of
+each sentence showed. A summary of counts and times goes to out.summary.txt.
 The output holds the text of the audio, so it goes outside the repository.
 
 ## Not implemented
