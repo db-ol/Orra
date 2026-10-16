@@ -195,10 +195,10 @@ got worse than the baseline, see docs/release-gate.md.
     become key or main, lets clicks through, and shows on every Space and over full
     screen apps. It uses fakes for the panel and the sounds otherwise, so no window opens
     and no sound plays. LevelMeterTests checks the peak the audio thread stores.
-  - SettingsGuideTests covers where the card beside System Settings goes (right, left, over the corner,
-    inside the visible frame, on a second screen, from CG to Cocoa coordinates), how it
-    finds the System Settings window in the window list, when it shows, hides and goes
-    away, and that its panel floats without taking the focus.
+  - SettingsGuideTests covers where the card beside System Settings goes (right, left,
+    over the corner, inside the visible frame, on a second screen, from CG to Cocoa
+    coordinates), how it finds the System Settings window in the window list, when it
+    shows, hides and goes away, and that its panel floats without taking the focus.
   - SetupChecklistTests covers the welcome window's three steps: the model step for every
     installer state and for an installed model that is loading or failed to load, the
     microphone step for every permission state, and the Accessibility step. It checks that
