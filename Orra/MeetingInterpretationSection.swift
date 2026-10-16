@@ -235,7 +235,7 @@ private struct SpeakTranslationRows: View {
             )) {
                 DescribedLabel(
                     title: "Check the words before speaking",
-                    detail: "Orra's speech model listens to each sentence before it plays, and makes it again when it hears other words. Each sentence starts a moment later.",
+                    detail: "With a voice sample, Orra's speech model listens to each sentence before it plays, and makes it again when it hears other words. Each sentence then starts a moment later.",
                     systemImage: "text.badge.checkmark"
                 )
             }

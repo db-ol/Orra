@@ -2133,16 +2133,6 @@
         }
       }
     },
-    "Orra's speech model listens to each sentence before it plays, and makes it again when it hears other words. Each sentence starts a moment later." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "每句话播放前，Orra 会先用语音模型听一遍，听到的字词不对就重新合成。每句话会稍晚一点开始。"
-          }
-        }
-      }
-    },
     "Page Down" : {
       "comment" : "A key name",
       "localizations" : {
@@ -3905,6 +3895,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Windows 键"
+          }
+        }
+      }
+    },
+    "With a voice sample, Orra's speech model listens to each sentence before it plays, and makes it again when it hears other words. Each sentence then starts a moment later." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用声音样本时，每句话播放前 Orra 会先用语音模型听一遍，听到的字词不对就重新合成，所以每句话会稍晚一点开始。"
           }
         }
       }
