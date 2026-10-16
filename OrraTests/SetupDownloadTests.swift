@@ -3,8 +3,8 @@ import Synchronization
 import Testing
 @testable import Orra
 
-/// The welcome window's cleanup proposal, its one download of both models, and the step
-/// its guide talks about.
+/// The welcome window's cleanup proposal, its one download of both models, the button that
+/// follows the cleanup switch, and the step its guide talks about.
 @MainActor
 struct SetupDownloadTests {
     private let folder = URL(fileURLWithPath: "/nonexistent/Models/qwen3")
@@ -114,20 +114,26 @@ struct SetupDownloadTests {
 
     // MARK: The step's text
 
-    @Test func theButtonNamesTheSizeOfBothModels() {
+    @Test func theButtonFollowsTheCleanupSwitch() {
         let missing = ModelInstaller.State.missing(bytesPresent: 0)
         var summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.active == .speech)
-        #expect(summary.button == "Download Both Models (5.52 GB)")
-        #expect(summary.lines.last == "The cleanup model follows right after it.")
+        #expect(summary.button == "Download Models (5.52 GB)")
+        #expect(summary.lines == ModelInstaller.State.missing(bytesPresent: 0).menuLines(total: speechTotal, locale: Locale(identifier: "en")))
         #expect(!summary.cancels)
         #expect(summary.progress == nil)
-        // Without cleanup, the menu's own button.
+        // Without cleanup, the button says the cleanup model is left out.
         summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
-        #expect(summary.button == "Download Speech Model (2.47 GB)")
+        #expect(summary.button == "Download Speech Model Only (2.47 GB)")
         // Bytes on disk from before: what is left of both.
         summary = DownloadSummary(speech: .missing(bytesPresent: 470_000_000), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 50_000_000), cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: Locale(identifier: "en"))
         #expect(summary.button == "Resume Download (5 GB left)")
+        // Without cleanup, what is left of the speech model alone.
+        summary = DownloadSummary(speech: .missing(bytesPresent: 470_000_000), speechTotal: speechTotal, cleanup: .missing(bytesPresent: 50_000_000), cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        #expect(summary.button == "Resume Download (2 GB left)")
+        // A failed download is tried again either way.
+        summary = DownloadSummary(speech: .failed(.offline), speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: Locale(identifier: "en"))
+        #expect(summary.button == "Try Again")
     }
 
     @Test func whileTheSpeechModelDownloadsTheBarCoversBoth() {
@@ -166,8 +172,10 @@ struct SetupDownloadTests {
         let chinese = Locale(identifier: "zh-Hans")
         let missing = ModelInstaller.State.missing(bytesPresent: 0)
         let summary = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: true, queuesCleanup: true, includesSpeech: true, locale: chinese)
-        #expect(summary.button == "下载两个模型（5.52 GB）")
-        #expect(GuideStep.cleanup.line(locale: chinese) == "你好，我是 Orra。要不要顺便帮你整理说出的文字？")
+        #expect(summary.button == "下载模型（5.52 GB）")
+        let speechOnly = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, locale: chinese)
+        #expect(speechOnly.button == "仅下载语音模型（2.47 GB）")
+        #expect(GuideStep.download.line(locale: chinese) == "你好，我是 Orra。先下载我需要的模型，只需一次。")
         #expect(GuideStep.ready.line(locale: Locale(identifier: "en")) == "All set! Hold the talk key and say hello.")
     }
 
@@ -178,21 +186,18 @@ struct SetupDownloadTests {
     }
 
     @Test func theGuideTalksAboutTheFirstStepLeft() {
-        #expect(GuideStep.current(cleanupDecided: false, checklist: checklist(), talkKeyChosen: false, downloadingCleanup: false) == .cleanup)
-        #expect(GuideStep.current(cleanupDecided: true, checklist: checklist(), talkKeyChosen: false, downloadingCleanup: false) == .download)
+        #expect(GuideStep.current(checklist: checklist(), talkKeyChosen: false, downloadingCleanup: false) == .download)
         // While the speech model downloads, the guide moves on to the permissions.
         let downloading = checklist(model: .downloading(bytes: 1, source: nil))
-        #expect(GuideStep.current(cleanupDecided: true, checklist: downloading, talkKeyChosen: false, downloadingCleanup: false) == .microphone)
+        #expect(GuideStep.current(checklist: downloading, talkKeyChosen: false, downloadingCleanup: false) == .microphone)
         let heard = checklist(model: .downloading(bytes: 1, source: nil), microphone: .authorized)
-        #expect(GuideStep.current(cleanupDecided: true, checklist: heard, talkKeyChosen: false, downloadingCleanup: false) == .accessibility)
+        #expect(GuideStep.current(checklist: heard, talkKeyChosen: false, downloadingCleanup: false) == .accessibility)
         let allowed = checklist(model: .downloading(bytes: 1, source: nil), microphone: .authorized, hotkeyActive: true)
-        #expect(GuideStep.current(cleanupDecided: true, checklist: allowed, talkKeyChosen: false, downloadingCleanup: false) == .talkKey)
-        #expect(GuideStep.current(cleanupDecided: true, checklist: allowed, talkKeyChosen: true, downloadingCleanup: false) == .downloading)
+        #expect(GuideStep.current(checklist: allowed, talkKeyChosen: false, downloadingCleanup: false) == .talkKey)
+        #expect(GuideStep.current(checklist: allowed, talkKeyChosen: true, downloadingCleanup: false) == .downloading)
         let ready = checklist(model: .installed(folder), modelState: .ready, microphone: .authorized, hotkeyActive: true)
-        #expect(GuideStep.current(cleanupDecided: true, checklist: ready, talkKeyChosen: true, downloadingCleanup: true) == .downloading)
-        #expect(GuideStep.current(cleanupDecided: true, checklist: ready, talkKeyChosen: true, downloadingCleanup: false) == .ready)
-        // A download started from the menu skips the cleanup step.
-        #expect(GuideStep.current(cleanupDecided: false, checklist: downloading, talkKeyChosen: true, downloadingCleanup: false) == .microphone)
+        #expect(GuideStep.current(checklist: ready, talkKeyChosen: true, downloadingCleanup: true) == .downloading)
+        #expect(GuideStep.current(checklist: ready, talkKeyChosen: true, downloadingCleanup: false) == .ready)
     }
 
     @Test func everyStepHasALine() {
@@ -255,10 +260,26 @@ struct SetupDownloadTests {
         await small.speech.prepare()
         small.lookAtLaunch()
         #expect(!small.wantsCleanup)
+        #expect(!small.hasEnoughMemory)
         let (declined, _, _) = makeSetup(saved: false)
         await declined.speech.prepare()
         declined.lookAtLaunch()
         #expect(!declined.wantsCleanup)
+        // Off from before, not turned off in the window: no line on what is lost.
+        #expect(!declined.turnedCleanupOff)
+    }
+
+    /// Turning the switch on again ends the line on what is lost.
+    @Test func turningTheSwitchBackOnEndsTheWarning() async {
+        let (setup, _, _) = makeSetup()
+        await setup.speech.prepare()
+        await setup.cleanup.start()
+        setup.lookAtLaunch()
+        setup.setCleanup(false)
+        #expect(setup.turnedCleanupOff)
+        setup.setCleanup(true)
+        #expect(!setup.turnedCleanupOff)
+        #expect(setup.wantsCleanup)
     }
 
     @Test func turningTheProposalOffIsSavedAndStaysOff() async {
@@ -267,9 +288,12 @@ struct SetupDownloadTests {
         await setup.speech.prepare()
         await setup.cleanup.start()
         setup.lookAtLaunch()
+        #expect(!setup.turnedCleanupOff)
         setup.setCleanup(false)
         #expect(saves == [false])
         #expect(!setup.wantsCleanup)
+        // The window says what is lost, until the switch is on again.
+        #expect(setup.turnedCleanupOff)
         setup.start()
         await setup.speech.waitForDownload()
         #expect(!setup.cleanup.isOn)

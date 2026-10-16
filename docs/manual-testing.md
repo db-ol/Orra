@@ -1175,11 +1175,15 @@ remove Orra's Accessibility access while it runs. Undo all of it afterwards:
 - [ ] Launched as a login item with steps left, the welcome window still comes to the
   front.
 
-Guide, cleanup step and one download in the welcome window, added on 2026-10-15, not
-verified yet. Prepare a first launch as above. Also move the cleanup model's folder
-(Qwen3.5-4B-4bit-0e7ffd5c under the same Models folder) out of the way, and run
-`defaults delete io.github.db-ol.Orra cleansUpWithLocalModel` so cleanup has no saved
-choice. Put both back afterwards:
+Guide, cleanup switch and one download in the welcome window, added on 2026-10-15, not
+verified yet. Prepare a first launch as above. Orra counts as set up while any copy of the
+speech model is on this Mac, so also move the old speech-swift copy at
+~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit (and
+~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-8bit if it exists) out of the
+way. Orra reuses it at launch, and the window then shows an existing user. Also move the
+cleanup model's folder (Qwen3.5-4B-4bit-0e7ffd5c under the same Models folder) out of the
+way, and run `defaults delete io.github.db-ol.Orra cleansUpWithLocalModel` so cleanup has
+no saved choice. Put all of it back afterwards:
 
 - [ ] The guide, a round violet character with the icon's ring as its face, stands under
   the title. It blinks every few seconds, bobs gently and points down at the steps. Its
@@ -1187,24 +1191,33 @@ choice. Put both back afterwards:
   done, in English and in 简体中文.
 - [ ] With Reduce Motion on (System Settings > Accessibility > Display), the guide and the
   System Settings picture stand still.
-- [ ] Step 1, Clean up your text, shows what cleanup does, a before and after example,
-  "It needs a 3.05 GB download and about 4 GB of memory while it runs." and its switch.
-  On a Mac with 16 GB of memory or more the switch is on. On a Mac with less it is off,
-  with "Off at first, because this Mac has 8 GB of memory." (or its size).
-- [ ] Nothing goes online before a click: with the switch on, the step's button reads
-  Download Both Models (5.52 GB).
-- [ ] Download Both Models fetches the speech model first, with one bar and "Downloading
-  the speech model, then the cleanup model". Cancel Download stops it, and the button then
+- [ ] The steps are 1 Download the models, 2 Allow the microphone, 3 Allow Accessibility,
+  4 Choose your talk key. Step 1 holds the cleanup switch, Also clean up what you say,
+  under the speech model's lines and above the button, with a before and after example,
+  "It needs a 3.05 GB download and about 4 GB of memory while it runs." and "You can
+  change this later in Settings, under General."
+- [ ] On a Mac with 16 GB of memory or more the switch is on, with a Recommended badge next
+  to its label, and the button reads Download Models (5.52 GB). On a Mac with less it is
+  off, without the badge, with "Off at first, because this Mac has 8 GB of memory." (or
+  its size), and the button reads Download Speech Model Only (2.47 GB).
+- [ ] On a Mac with 16 GB or more, turn the switch off: an orange icon and "Without
+  cleanup, Orra types exactly what it hears, fillers and corrections included." appear,
+  nothing is red, the title becomes Download the speech model, and the button reads
+  Download Speech Model Only (2.47 GB). Turn it on again: the line goes away.
+- [ ] Nothing goes online before a click.
+- [ ] Download Models fetches the speech model first, with one bar and "Downloading the
+  speech model, then the cleanup model". Cancel Download stops it, and the button then
   offers Resume Download with what is left of both.
 - [ ] Once the speech model is in place, the bar goes on with the cleanup model, the step
   says the user can dictate, and a dictation in TextEdit pastes, without cleanup until
   the cleanup model is loaded. After that, a dictation with a filler is cleaned up.
-- [ ] Turn the switch off before the download: Download Speech Model (2.47 GB) fetches the
-  speech model only. Quit and launch: the switch is still off, and Settings shows Clean Up
-  Text off.
+- [ ] Turn the switch off before the download: Download Speech Model Only (2.47 GB) fetches
+  the speech model only. Quit and launch: the switch is still off, and Settings shows
+  Clean Up Text off.
 - [ ] An existing user: with the speech model in place and no saved choice, open Setup
-  Guide… from the menu. The switch is off. Turning it on starts the cleanup model's
-  download in the download step, and Settings shows Clean Up Text on.
+  Guide… from the menu. Step 1 has its check mark and still shows the switch, off.
+  Turning it on starts the cleanup model's download in that step, and Settings shows
+  Clean Up Text on.
 - [ ] Close the window with a language picked in it while the cleanup model downloads:
   Orra does not restart until the download is over.
 - [ ] While the guide talks about Allow Accessibility, a small picture of System Settings

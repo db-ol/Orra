@@ -2,9 +2,9 @@ import Combine
 import SwiftUI
 
 /// The welcome window's content: the guide with its line for the step the user is on, the
-/// language, the choice of cleanup, the three steps that make Orra ready, in any order,
-/// the choice of the talk key, then how to dictate. Cleanup comes first because the one
-/// download that follows includes its model when it is on. The download comes before the
+/// language, the three steps that make Orra ready, in any order, the choice of the talk
+/// key, then how to dictate. The download step holds the choice of cleanup, since its one
+/// download includes the cleanup model when cleanup is on. The download comes before the
 /// permissions because it takes longest, and it goes on while the user grants them.
 ///
 /// The window shows the language picked in it right away, without a restart: SwiftUI looks
@@ -69,7 +69,6 @@ struct WelcomeView: View {
         let summary = setup.summary(locale: Locale(identifier: localization))
         let downloadingCleanup = summary.active == .cleanup && setup.cleanup.models.state.isBusy
         let step = GuideStep.current(
-            cleanupDecided: setup.cleanupDecided,
             checklist: checklist,
             talkKeyChosen: pushToTalk.hasChosenTalkKey,
             downloadingCleanup: downloadingCleanup
@@ -133,21 +132,17 @@ struct WelcomeView: View {
                 language = picked
                 languagePicked(picked)
             })
-            // Not part of the checklist: dictation works without it.
-            SetupStepRow(number: 1, status: setup.cleanupDecided || checklist.model != .todo ? .done : .todo, title: "Clean up your text", isCurrent: step == .cleanup) {
-                CleanupStepDetail(setup: setup)
-            }
-            SetupStepRow(number: 2, status: downloadingCleanup ? .inProgress : checklist.model, title: setup.wantsCleanup ? "Download the models" : "Download the speech model", isCurrent: step == .download || step == .downloading) {
+            SetupStepRow(number: 1, status: downloadingCleanup ? .inProgress : checklist.model, title: setup.wantsCleanup ? "Download the models" : "Download the speech model", isCurrent: step == .download || step == .downloading) {
                 ModelStepDetail(setup: setup, summary: summary, pushToTalk: pushToTalk)
             }
-            SetupStepRow(number: 3, status: checklist.microphone, title: "Allow the microphone", isCurrent: step == .microphone) {
+            SetupStepRow(number: 2, status: checklist.microphone, title: "Allow the microphone", isCurrent: step == .microphone) {
                 MicrophoneStepDetail(pushToTalk: pushToTalk, showsDemo: step == .microphone)
             }
-            SetupStepRow(number: 4, status: checklist.accessibility, title: "Allow Accessibility", isCurrent: step == .accessibility) {
+            SetupStepRow(number: 3, status: checklist.accessibility, title: "Allow Accessibility", isCurrent: step == .accessibility) {
                 AccessibilityStepDetail(pushToTalk: pushToTalk, showsDemo: step == .accessibility)
             }
             // Not part of the checklist: right Control works when the user skips it.
-            SetupStepRow(number: 5, status: pushToTalk.hasChosenTalkKey ? .done : .todo, title: "Choose your talk key", isCurrent: step == .talkKey) {
+            SetupStepRow(number: 4, status: pushToTalk.hasChosenTalkKey ? .done : .todo, title: "Choose your talk key", isCurrent: step == .talkKey) {
                 TalkKeyStepDetail(pushToTalk: pushToTalk)
             }
             if checklist.isComplete {
@@ -256,8 +251,9 @@ private struct StepBadge: View {
     }
 }
 
-/// The one download of the speech model and, with cleanup on, the cleanup model: one bar
-/// for the bytes of both, the lines and the button, then how the speech model stands.
+/// The one download of the speech model and, with cleanup on, the cleanup model: how the
+/// speech model stands, one bar for the bytes of both, the lines, the cleanup switch, and
+/// the button, which follows the switch.
 private struct ModelStepDetail: View {
     let setup: SetupDownload
     let summary: DownloadSummary
@@ -269,8 +265,11 @@ private struct ModelStepDetail: View {
             if case .installed = setup.speech.state {
                 switch pushToTalk.modelState {
                 case .ready:
-                    Text("The speech model is ready.")
-                        .foregroundStyle(.secondary)
+                    // While the cleanup model downloads, its own line says so already.
+                    if summary.active != .cleanup {
+                        Text("The speech model is ready.")
+                            .foregroundStyle(.secondary)
+                    }
                 case .notLoaded, .loading:
                     Text("Loading the speech model…")
                         .foregroundStyle(.secondary)
@@ -293,6 +292,7 @@ private struct ModelStepDetail: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            CleanupOption(setup: setup)
             if let title = summary.button {
                 Button(title) {
                     if summary.cancels {
@@ -306,18 +306,28 @@ private struct ModelStepDetail: View {
     }
 }
 
-/// What cleanup does, with an example, its cost, and its switch. Before the download, so
-/// the download includes the cleanup model when the switch is on.
-private struct CleanupStepDetail: View {
+/// The cleanup switch in the download step, with an example, its cost, and a line on what
+/// is lost when the user turns it off on a Mac with the memory for it. Not part of the
+/// checklist: dictation works without it.
+private struct CleanupOption: View {
     let setup: SetupDownload
 
     var body: some View {
         let size = ModelInstaller.State.size(setup.cleanup.models.manifest.totalBytes)
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Orra can also tidy up what you said with a second model on this Mac. It removes fillers and applies the corrections you make while speaking.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: Binding(
+                get: { setup.wantsCleanup },
+                set: { setup.setCleanup($0) }
+            )) {
+                HStack(spacing: 6) {
+                    Text("Also clean up what you say")
+                    if setup.hasEnoughMemory {
+                        RecommendedBadge()
+                    }
+                }
+            }
+            .toggleStyle(.switch)
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 2) {
                 GridRow {
                     Text("Before")
                         .foregroundStyle(.secondary)
@@ -329,15 +339,7 @@ private struct CleanupStepDetail: View {
                     Text("Let’s meet at four.")
                 }
             }
-            .font(.callout)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            Toggle("Clean up with a local model", isOn: Binding(
-                get: { setup.wantsCleanup },
-                set: { setup.setCleanup($0) }
-            ))
-            .toggleStyle(.switch)
+            .font(.subheadline)
             Text("It needs a \(size) download and about 4 GB of memory while it runs.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -347,12 +349,37 @@ private struct CleanupStepDetail: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            } else if setup.turnedCleanupOff, !setup.wantsCleanup {
+                // Orange on the icon only, as in Settings: orange text that small is too faint
+                // on a light background. Not red, which means something went wrong.
+                Label {
+                    Text("Without cleanup, Orra types exactly what it hears, fillers and corrections included.")
+                } icon: {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundStyle(.orange)
+                }
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
             }
             Text("You can change this later in Settings, under General.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(10)
+        .frame(maxWidth: 400, alignment: .leading)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct RecommendedBadge: View {
+    var body: some View {
+        Text("Recommended")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(Color.accentColor.opacity(0.14), in: Capsule())
     }
 }
 

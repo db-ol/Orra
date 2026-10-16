@@ -34,7 +34,7 @@ nonisolated enum CleanupDefault {
 ///
 /// It drives the two installers and starts nothing on its own: only Download, Resume
 /// Download and Try Again in the welcome window, or turning on cleanup there once the speech
-/// model is in place, go online. Its step names both sizes first. AppDelegate tells it when
+/// model is in place, go online. Its button names the size first. AppDelegate tells it when
 /// the speech model is in place, see `speechInstalled()`.
 @Observable
 final class SetupDownload {
@@ -55,9 +55,9 @@ final class SetupDownload {
     /// Whether the speech model's bytes count in the progress bar. False when it was in
     /// place at launch, so turning on cleanup later shows the cleanup model alone.
     private(set) var includesSpeech = true
-    /// True once the user turned the cleanup switch in the welcome window or started the
-    /// download there, so the guide moves on from the cleanup step.
-    private(set) var cleanupDecided = false
+    /// True after the user turned the cleanup switch off in the welcome window, so the
+    /// window says what is lost. A choice saved before is not one made here.
+    private(set) var turnedCleanupOff = false
 
     @ObservationIgnored private let physicalMemory: UInt64
     @ObservationIgnored private let savedChoice: () -> Bool?
@@ -104,7 +104,7 @@ final class SetupDownload {
     /// starts right away, since the step names its size. Otherwise it follows the speech
     /// model's download.
     func setCleanup(_ on: Bool) {
-        cleanupDecided = true
+        turnedCleanupOff = !on
         proposesCleanup = false
         if on {
             let speechInPlace = speech.state.isInstalled
@@ -119,9 +119,8 @@ final class SetupDownload {
     }
 
     /// Download, Resume Download or Try Again in the welcome window. A proposed cleanup is
-    /// agreed to here, since the button names the size of both models.
+    /// agreed to here, since the button names the size with the cleanup model.
     func start() {
-        cleanupDecided = true
         if proposesCleanup {
             proposesCleanup = false
             cleanup.agreeToDownload(startingNow: false)
@@ -309,12 +308,16 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
                 progress = combined
                 lines = speech.menuLines(total: speechTotal, locale: locale)
             case .missing where wantsCleanup:
-                lines = speech.menuLines(total: speechTotal, locale: locale) + [text("The cleanup model follows right after it.")]
+                lines = speech.menuLines(total: speechTotal, locale: locale)
                 if combined.completed > 0 {
                     button = text("Resume Download (\(ModelInstaller.State.size(combined.total - combined.completed)) left)")
                 } else {
-                    button = text("Download Both Models (\(size))")
+                    button = text("Download Models (\(size))")
                 }
+            case .missing(0):
+                // Next to the cleanup switch, so the button says the cleanup model is left out.
+                lines = speech.menuLines(total: speechTotal, locale: locale)
+                button = text("Download Speech Model Only (\(ModelInstaller.State.size(speechTotal)))")
             default:
                 lines = speech.menuLines(total: speechTotal, locale: locale)
                 button = speech.buttonTitle(total: speechTotal, locale: locale)
@@ -354,7 +357,6 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
 
 /// The step the guide in the welcome window talks about, and the line it says for it.
 nonisolated enum GuideStep: Equatable, Sendable, CaseIterable {
-    case cleanup
     case download
     case microphone
     case accessibility
@@ -362,13 +364,10 @@ nonisolated enum GuideStep: Equatable, Sendable, CaseIterable {
     case downloading
     case ready
 
-    /// The first step left, in the window's order. The cleanup step comes first until the
-    /// user decides or the download starts. While a download runs the guide moves on to the
-    /// permissions and the talk key, and only then waits for the download.
-    static func current(cleanupDecided: Bool, checklist: SetupChecklist, talkKeyChosen: Bool, downloadingCleanup: Bool) -> GuideStep {
-        if checklist.model == .todo {
-            return cleanupDecided ? .download : .cleanup
-        }
+    /// The first step left, in the window's order. While a download runs the guide moves on
+    /// to the permissions and the talk key, and only then waits for the download.
+    static func current(checklist: SetupChecklist, talkKeyChosen: Bool, downloadingCleanup: Bool) -> GuideStep {
+        if checklist.model == .todo { return .download }
         if checklist.microphone != .done { return .microphone }
         if checklist.accessibility != .done { return .accessibility }
         if !talkKeyChosen { return .talkKey }
@@ -378,8 +377,7 @@ nonisolated enum GuideStep: Equatable, Sendable, CaseIterable {
 
     func line(locale: Locale = .interface) -> String {
         var resource: LocalizedStringResource = switch self {
-        case .cleanup: "Hi, I’m Orra. Want me to tidy up what you say too?"
-        case .download: "First, my speech model. It downloads once."
+        case .download: "Hi, I’m Orra. First, let me download what I need. It happens once."
         case .microphone: "Let me hear you. Allow the microphone."
         case .accessibility: "Now let me type for you. Allow Accessibility."
         case .talkKey: "Pick the key you hold to talk."

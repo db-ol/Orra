@@ -365,6 +365,16 @@
         }
       }
     },
+    "Also clean up what you say" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时整理你说的文字"
+          }
+        }
+      }
+    },
     "Also paste the translated text" : {
       "localizations" : {
         "zh-Hans" : {
@@ -697,16 +707,6 @@
         }
       }
     },
-    "Clean up your text" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "整理你说的文字"
-          }
-        }
-      }
-    },
     "Clear" : {
       "comment" : "A key name",
       "localizations" : {
@@ -892,16 +892,6 @@
         }
       }
     },
-    "Download Both Models (%@)" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下载两个模型（%@）"
-          }
-        }
-      }
-    },
     "Download Cleanup Model (%@)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -912,12 +902,32 @@
         }
       }
     },
+    "Download Models (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载模型（%@）"
+          }
+        }
+      }
+    },
     "Download Speech Model (%@)" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载语音模型（%@）"
+          }
+        }
+      }
+    },
+    "Download Speech Model Only (%@)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅下载语音模型（%@）"
           }
         }
       }
@@ -1118,16 +1128,6 @@
         }
       }
     },
-    "First, my speech model. It downloads once." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先下载我的语音模型，只需一次。"
-          }
-        }
-      }
-    },
     "fn" : {
       "comment" : "A talk key inside a sentence",
       "localizations" : {
@@ -1242,12 +1242,12 @@
         }
       }
     },
-    "Hi, I’m Orra. Want me to tidy up what you say too?" : {
+    "Hi, I’m Orra. First, let me download what I need. It happens once." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你好，我是 Orra。要不要顺便帮你整理说出的文字？"
+            "value" : "你好，我是 Orra。先下载我需要的模型，只需一次。"
           }
         }
       }
@@ -1933,16 +1933,6 @@
         }
       }
     },
-    "Orra can also tidy up what you said with a second model on this Mac. It removes fillers and applies the corrections you make while speaking." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 还能用这台 Mac 上的第二个模型整理你说的话。它会去掉语气词，并按你说出口的更正改好内容。"
-          }
-        }
-      }
-    },
     "Orra can use the microphone." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2452,6 +2442,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "最近使用"
+          }
+        }
+      }
+    },
+    "Recommended" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推荐"
           }
         }
       }
@@ -3000,16 +3000,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法载入整理模型"
-          }
-        }
-      }
-    },
-    "The cleanup model follows right after it." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "整理模型会紧接着下载。"
           }
         }
       }
@@ -3805,6 +3795,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Windows 键"
+          }
+        }
+      }
+    },
+    "Without cleanup, Orra types exactly what it hears, fillers and corrections included." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不整理的话，Orra 会照原样输出，语气词和改口都会保留。"
           }
         }
       }
