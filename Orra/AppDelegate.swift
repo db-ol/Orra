@@ -50,7 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         outputs: { AudioOutput.all() },
         folders: { [voiceModels] in voiceModels.folders },
         settings: .load(),
-        save: { $0.save() }
+        save: { $0.save() },
+        voiceFile: .live
     )
     /// Meeting captions, off at every launch. Lazy, because they read the controller's
     /// speech model state.
@@ -194,6 +195,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         speech.isDictating = { [pushToTalk] in pushToTalk.state != .idle }
         speech.transcribeVoice = { [pushToTalk] sample in try await pushToTalk.transcribeVoiceSample(sample) }
         speech.transcribeSpeech = { [pushToTalk] audio, language in try await pushToTalk.transcribeSpeech(audio, in: language) }
+        speech.waitForSpeechModel = { [pushToTalk] in
+            while pushToTalk.modelState != .ready {
+                await withCheckedContinuation { continuation in
+                    withObservationTracking {
+                        _ = pushToTalk.modelState
+                    } onChange: {
+                        continuation.resume()
+                    }
+                }
+            }
+        }
+        // Remember my voice: the voice sample saved on this Mac, once the speech model is
+        // loaded. Local files only.
+        Task { [speech] in await speech.restoreVoice() }
         voiceModels.onInstalled = { [speech] in speech.prepare() }
         speech.onEngineChange = { [voiceModels] kind in
             voiceModels.select(kind)

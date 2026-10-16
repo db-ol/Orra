@@ -67,6 +67,12 @@ trusted once in Xcode. docs/dependencies.md has the details.
 - Orra reads another app's text only to learn from corrections, which is off until the user
   turns it on: the field it pasted into, for 3 minutes and only while that field has the focus, never a password field or an app
   holding secure input. It stores the word pairs only, never the text, and never logs either.
+- Orra never writes audio to disk or to the log. The one exception, approved by the maintainer
+  on 2026-10-15, is Remember my voice in Settings, off until the user turns it on. It keeps
+  the voice sample's audio, never what is said in it, in
+  ~/Library/Application Support/io.github.db-ol.Orra/Voice (folder 0700, file 0600, left out
+  of backups) until the user removes the sample or turns the switch off. VoiceSampleFile is
+  the only code that writes it.
 - Orra goes online only for the speech model download the user starts from the menu or the
   welcome window, the cleanup model download the user agrees to in Settings, and for
   update checks through Sparkle that the user allowed or started.

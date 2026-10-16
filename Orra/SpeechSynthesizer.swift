@@ -9,8 +9,9 @@ nonisolated struct SpokenAudio: Sendable, Equatable {
 }
 
 /// A short recording of a voice for the voice model to imitate, with what is said in it.
-/// Held in memory only, never written to disk or the log, and gone when Orra quits or the
-/// user removes it.
+/// Held in memory and never written to the log. Gone when Orra quits or the user removes
+/// it, unless the user turned on Remember my voice, which keeps its audio on this Mac
+/// until they remove it, see VoiceSampleFile. What is said in it is never saved.
 nonisolated struct VoiceSample: Sendable, Equatable {
     /// Mono.
     let samples: [Float]

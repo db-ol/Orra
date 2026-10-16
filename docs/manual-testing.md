@@ -73,6 +73,13 @@ got worse than the baseline, see docs/release-gate.md.
     short, the stop at the time limit, a microphone that fails to start, a cancel while
     it starts, playback, the cut of a long recording at a quiet moment, that no audio
     file is left behind, and that a hold of the talk key records nothing meanwhile.
+  - VoiceSampleFileTests covers Remember my voice in a temporary folder: the audio only is
+    saved while the switch is on, nothing is written while it is off, turning it on saves
+    the sample in memory and turning it off deletes the file, Remove deletes it, a new
+    sample replaces it, the folder is 0700 and left out of backups and the file 0600, the
+    saved sample loads at launch once the speech model is ready, a file that is not a
+    sample or is too short is deleted with one message, a stray file is deleted while the
+    switch is off, and the code logs neither the audio nor the words.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
@@ -1819,6 +1826,21 @@ it shows starts, stops, counts and failures, never text.
   of these, nothing new is in ~/Library/Containers, ~/Library/Caches or the temporary
   folder, and the log of `category == "push-to-talk"` and `category == "speech"` shows
   lengths only.
+- [ ] Remember my voice (记住我的音色), since 2026-10-15, below Voice sample and as a
+  checkbox in the recording sheet. Off at first, with "Kept in memory until Orra quits."
+  under it, and ~/Library/Application Support/io.github.db-ol.Orra/Voice does not exist.
+  Turn it on with a voice sample in use: the line under it reads "Saved on this Mac until
+  you remove it, and loaded when Orra starts.", the sample's row says "saved on this Mac",
+  the footer says the recording is saved on this Mac until you remove it, and the Voice
+  folder holds voice-sample.dat. `ls -la` shows drwx------ for the folder and -rw-------
+  for the file, and `xattr -l` on the folder shows com.apple.metadata:com_apple_backup_excludeItem.
+  Quit and open Orra: once the speech model is ready, the row says Listening to the voice
+  sample… and then the length, and a spoken translation sounds like you. Recording or
+  importing another sample replaces the file. Remove deletes it, and turning the switch off
+  deletes it and keeps the sample in memory until Orra quits. With the switch off, a new
+  launch loads nothing. Replace voice-sample.dat with any other file and relaunch: the file
+  is gone and Settings says Orra could not read the voice sample saved on this Mac. The log
+  of `category == "speech"` shows lengths and reasons only.
 - [ ] Changing the output device during a call, such as plugging in headphones: captions
   go on. If they stop, turning them off and on brings them back. This is a known gap to
   confirm.

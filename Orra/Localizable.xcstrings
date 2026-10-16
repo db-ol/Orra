@@ -149,6 +149,16 @@
         }
       }
     },
+    "%lld seconds, saved on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒，保存在这台 Mac 上。"
+          }
+        }
+      }
+    },
     "%lld words" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1305,6 +1315,16 @@
         }
       }
     },
+    "Kept in memory until Orra quits." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只留在内存里，退出 Orra 即清除。"
+          }
+        }
+      }
+    },
     "Keys" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1883,6 +1903,16 @@
         }
       }
     },
+    "Orra could not read the voice sample saved on this Mac and deleted it. Record it again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法读取保存在这台 Mac 上的声音样本，已将它删除。请重新录音。"
+          }
+        }
+      }
+    },
     "Orra could not read this audio file." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1909,6 +1939,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 无法存储模型文件。"
+          }
+        }
+      }
+    },
+    "Orra could not save the voice sample on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无法在这台 Mac 上保存声音样本。"
           }
         }
       }
@@ -2426,12 +2466,22 @@
         }
       }
     },
-    "Record your own voice only. Orra writes down what you said with its speech model, keeps the recording and the words in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know." : {
+    "Record your own voice only. Orra writes down what you said with its speech model and keeps the recording and the words in memory until it quits. The other side hears a synthesized voice, so let them know." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只录你自己的声音。Orra 会用语音模型写下你说的话，录音和文字只保存在内存中，直到退出，从不存储到磁盘。对方听到的是合成的声音，请告诉他们。"
+            "value" : "只录你自己的声音。Orra 会用语音模型写下你说的话，录音和文字只保存在内存中，直到退出。对方听到的是合成的声音，请告诉他们。"
+          }
+        }
+      }
+    },
+    "Record your own voice only. Orra writes down what you said with its speech model and keeps the words in memory until it quits. With Remember my voice on, it saves the recording on this Mac until you remove it. The other side hears a synthesized voice, so let them know." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只录你自己的声音。Orra 会用语音模型写下你说的话，文字只保存在内存中，直到退出。打开“记住我的音色”后，录音会保存在这台 Mac 上，直到你移除。对方听到的是合成的声音，请告诉他们。"
           }
         }
       }
@@ -2462,6 +2512,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在录音。读完后点按“停止”。录音满 %lld 秒会自动停止。"
+          }
+        }
+      }
+    },
+    "Remember my voice" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记住我的音色"
           }
         }
       }
@@ -2667,6 +2727,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跟随 Mac 系统"
+          }
+        }
+      }
+    },
+    "Saved on this Mac until you remove it, and loaded when Orra starts." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存在这台 Mac 上，直到你移除，打开 Orra 时自动载入。"
           }
         }
       }

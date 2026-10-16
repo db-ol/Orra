@@ -36,9 +36,15 @@ struct MeetingInterpretationSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         } footer: {
-            if speech != nil, voiceModels != nil {
-                Text("Record your own voice only. Orra writes down what you said with its speech model, keeps the recording and the words in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know.")
-                    .foregroundStyle(.secondary)
+            if let speech, voiceModels != nil {
+                Group {
+                    if speech.remembersVoice {
+                        Text("Record your own voice only. Orra writes down what you said with its speech model and keeps the words in memory until it quits. With Remember my voice on, it saves the recording on this Mac until you remove it. The other side hears a synthesized voice, so let them know.")
+                    } else {
+                        Text("Record your own voice only. Orra writes down what you said with its speech model and keeps the recording and the words in memory until it quits. The other side hears a synthesized voice, so let them know.")
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
         }
         .onAppear {
@@ -49,6 +55,9 @@ struct MeetingInterpretationSection: View {
             VoiceRecordingSheet(
                 recording: recording,
                 blocker: recordingBlocker,
+                remembersVoice: speech.map { speech in
+                    Binding(get: { speech.remembersVoice }, set: { speech.setRemembersVoice($0) })
+                },
                 use: { sample in
                     closeRecording()
                     guard let speech else { return }
@@ -275,13 +284,27 @@ private struct SpeakTranslationRows: View {
     }
 }
 
-/// The voice sample: its length while one is in memory, and the buttons to record or
-/// remove one.
+/// The voice sample: its length while one is in memory, the buttons to record or remove
+/// one, and Remember my voice.
 private struct VoiceSampleRow: View {
     let speech: TranslationSpeech
     let record: () -> Void
 
     var body: some View {
+        sample
+        Toggle(isOn: Binding(
+            get: { speech.remembersVoice },
+            set: { speech.setRemembersVoice($0) }
+        )) {
+            DescribedLabel(
+                title: "Remember my voice",
+                detail: RememberVoiceText.detail(on: speech.remembersVoice),
+                systemImage: "internaldrive"
+            )
+        }
+    }
+
+    private var sample: some View {
         LabeledContent {
             HStack {
                 if speech.voiceSeconds != nil {
@@ -306,10 +329,20 @@ private struct VoiceSampleRow: View {
     private var detail: LocalizedStringKey {
         if speech.isListeningToVoice {
             "Listening to the voice sample…"
+        } else if let seconds = speech.voiceSeconds, speech.remembersVoice {
+            "\(Int(seconds.rounded())) seconds, saved on this Mac."
         } else if let seconds = speech.voiceSeconds {
             "\(Int(seconds.rounded())) seconds, in memory until Orra quits."
         } else {
             "None. The voice model speaks in its own voice."
         }
+    }
+}
+
+/// What Remember my voice does, under the switch in Settings and the checkbox in the
+/// recording sheet.
+enum RememberVoiceText {
+    static func detail(on: Bool) -> LocalizedStringKey {
+        on ? "Saved on this Mac until you remove it, and loaded when Orra starts." : "Kept in memory until Orra quits."
     }
 }

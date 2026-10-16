@@ -17,10 +17,11 @@ struct TranslationVoice {
 /// Speak Translation: speaks what the translation key translated, in a voice model, into
 /// an output device such as Orra's own microphone device, so the other side of a call
 /// hears it. Optionally in the voice of a sample the user recorded, which stays in memory
-/// only. Translations are spoken one after another in the order they came. Dictation
-/// comes first: a piece waits to be synthesized while the user dictates, so the speech
-/// and cleanup models are not kept waiting for the GPU by the voice. No text and no audio
-/// is logged or saved.
+/// only, unless the user turns on Remember my voice, which saves its audio on this Mac
+/// (VoiceSampleFile). Translations are spoken one after another in the order they came.
+/// Dictation comes first: a piece waits to be synthesized while the user dictates, so the
+/// speech and cleanup models are not kept waiting for the GPU by the voice. No text and no
+/// audio is logged, and no text is saved.
 @Observable
 final class TranslationSpeech {
     nonisolated enum State: Equatable, Sendable {
@@ -42,6 +43,9 @@ final class TranslationSpeech {
     private(set) var problem: String?
     /// The length of the voice sample in memory, nil without one.
     private(set) var voiceSeconds: Double?
+    /// Remember my voice: the voice sample's audio is saved on this Mac until the user
+    /// removes it, and loaded when Orra starts. Off until the user turns it on.
+    private(set) var remembersVoice: Bool
     /// The speech model is writing down what is said in a voice sample the user recorded.
     private(set) var isListeningToVoice = false
     /// The model is loaded.
@@ -75,6 +79,9 @@ final class TranslationSpeech {
     /// tests pass fakes. A sentence it throws for plays unchecked. The language is nil for
     /// no hint, see SpeechWordCheck.hint(for:in:).
     @ObservationIgnored var transcribeSpeech: (SpokenAudio, TranslationTarget?) async throws -> String = { _, _ in throw TranscriptionError.modelMissing }
+    /// Returns once the speech model is loaded, so a voice sample saved on this Mac can be
+    /// written down at launch. AppDelegate sets it, tests pass fakes.
+    @ObservationIgnored var waitForSpeechModel: () async -> Void = {}
     /// Called after the user picked another voice model, so its downloads take the place of
     /// the old one's. AppDelegate sets it.
     @ObservationIgnored var onEngineChange: (VoiceEngineKind) -> Void = { _ in }
@@ -96,6 +103,10 @@ final class TranslationSpeech {
     /// Counts the voice samples picked and removed, so a sample that is still being
     /// written down when another is picked or Remove is clicked is dropped.
     @ObservationIgnored private var voiceRequest = 0
+    /// Where Remember my voice keeps the voice sample, nil to keep it in memory only.
+    @ObservationIgnored private let voiceFile: VoiceSampleFile?
+    /// The writes and deletions of the voice sample's file, one after another.
+    @ObservationIgnored private var fileWork: Task<Void, Never>?
     /// The translations queued and being spoken, one after another.
     @ObservationIgnored private var queue: Task<Void, Never>?
     /// Counts the stops, so queued work of an older generation does nothing.
@@ -110,6 +121,8 @@ final class TranslationSpeech {
         /// The voice model the user picked, nil until they pick one.
         var voiceModel: VoiceEngineKind?
         var checksWords = SpeechPreference.checksWordsByDefault
+        /// Remember my voice. Whether the voice sample is on disk, never the sample itself.
+        var remembersVoice = false
 
         static func load(from defaults: UserDefaults = .standard) -> Settings {
             Settings(
@@ -117,7 +130,8 @@ final class TranslationSpeech {
                 alsoPastes: SpeechPreference.alsoPastes(in: defaults),
                 output: SpeechPreference.output(in: defaults),
                 voiceModel: SpeechPreference.voiceModel(in: defaults),
-                checksWords: SpeechPreference.checksWords(in: defaults)
+                checksWords: SpeechPreference.checksWords(in: defaults),
+                remembersVoice: SpeechPreference.remembersVoice(in: defaults)
             )
         }
 
@@ -127,6 +141,7 @@ final class TranslationSpeech {
             SpeechPreference.saveOutput(output, to: defaults)
             SpeechPreference.saveVoiceModel(voiceModel, to: defaults)
             SpeechPreference.saveChecksWords(checksWords, to: defaults)
+            SpeechPreference.saveRemembersVoice(remembersVoice, to: defaults)
         }
     }
 
@@ -137,6 +152,8 @@ final class TranslationSpeech {
     ///   - folders: The voice model's folders once both are installed, nil before.
     ///   - settings: As saved.
     ///   - save: Saves the settings after they change.
+    ///   - voiceFile: Where Remember my voice keeps the voice sample, nil to keep it in
+    ///     memory only. Tests pass a temporary folder.
     ///   - dictationPoll: How often a waiting piece checks whether the dictation ended.
     init(
         engines: VoiceEngines,
@@ -145,6 +162,7 @@ final class TranslationSpeech {
         folders: @escaping () -> VoiceModelFolders?,
         settings: Settings = Settings(),
         save: @escaping (Settings) -> Void = { _ in },
+        voiceFile: VoiceSampleFile? = nil,
         dictationPoll: Duration = .milliseconds(50)
     ) {
         self.engines = engines
@@ -159,7 +177,9 @@ final class TranslationSpeech {
         self.alsoPastes = settings.alsoPastes
         self.checksWords = settings.checksWords
         self.output = settings.output
+        self.remembersVoice = settings.remembersVoice
         self.save = save
+        self.voiceFile = voiceFile
         self.dictationPoll = dictationPoll
     }
 
@@ -178,7 +198,7 @@ final class TranslationSpeech {
     }
 
     private var settings: Settings {
-        Settings(isOn: isOn, alsoPastes: alsoPastes, output: output, voiceModel: chosenEngine, checksWords: checksWords)
+        Settings(isOn: isOn, alsoPastes: alsoPastes, output: output, voiceModel: chosenEngine, checksWords: checksWords, remembersVoice: remembersVoice)
     }
 
     func setOn(_ on: Bool) {
@@ -213,6 +233,19 @@ final class TranslationSpeech {
         save(settings)
     }
 
+    /// Remember my voice. Turning it on saves the voice sample in memory at once, turning
+    /// it off deletes the file at once.
+    func setRemembersVoice(_ on: Bool) {
+        guard on != remembersVoice else { return }
+        remembersVoice = on
+        save(settings)
+        if !on {
+            removeVoiceFile()
+        } else if let voice {
+            saveVoiceFile(voice)
+        }
+    }
+
     /// Voice model in Settings. Stops what is playing, unloads the old model after the piece
     /// it may still be making, and keeps the voice sample and what is said in it, which the
     /// new model reads too. The new model loads once its downloads are in place.
@@ -241,8 +274,10 @@ final class TranslationSpeech {
 
     /// Writes down what is said in `sample` with the speech model, then keeps both in
     /// memory as the voice to imitate, in place of any before it. The voice model reads the
-    /// words along with the audio. Neither is logged or saved. A sample without speech, or
-    /// one the speech model could not take, is not used and the voice before it stays.
+    /// words along with the audio. Neither is logged. With Remember my voice on, the audio
+    /// is saved on this Mac in place of the sample before it, never the words. A sample
+    /// without speech, or one the speech model could not take, is not used and the voice
+    /// before it stays, on disk too.
     func useVoice(_ sample: VoiceSample) async {
         voiceRequest += 1
         let request = voiceRequest
@@ -270,6 +305,9 @@ final class TranslationSpeech {
         heard.transcript = transcript
         voice = heard
         voiceSeconds = sample.seconds
+        if remembersVoice {
+            saveVoiceFile(sample)
+        }
         let synthesizer = synthesizer
         Task { await synthesizer?.forgetVoice() }
         // Times only, never the words.
@@ -277,14 +315,89 @@ final class TranslationSpeech {
     }
 
     /// Drops the voice sample, what is said in it, and anything the model derived from
-    /// it. The model's own voice speaks after this.
+    /// it, on disk too. The model's own voice speaks after this.
     func forgetVoice() {
         voiceRequest += 1
         isListeningToVoice = false
         voice = nil
         voiceSeconds = nil
+        removeVoiceFile()
         let synthesizer = synthesizer
         Task { await synthesizer?.forgetVoice() }
+    }
+
+    /// At launch: with Remember my voice on, reads the voice sample saved on this Mac and,
+    /// once the speech model is loaded and no dictation runs, uses it as a new recording,
+    /// so the speech model writes down what is said in it again. A file that is not a
+    /// voice sample or is too short is deleted, and Settings says so. With the switch off,
+    /// nothing is read and a file left behind is deleted. A sample the user picks or
+    /// removes meanwhile, or the switch turned off, wins.
+    func restoreVoice() async {
+        guard let voiceFile else { return }
+        guard remembersVoice else {
+            removeVoiceFile()
+            return
+        }
+        guard canSpeak else { return }
+        let request = voiceRequest
+        await waitForVoiceFile()
+        let sample: VoiceSample?
+        do {
+            sample = try await voiceFile.load()
+        } catch {
+            guard request == voiceRequest, remembersVoice else { return }
+            removeVoiceFile()
+            problem = String(localized: "Orra could not read the voice sample saved on this Mac and deleted it. Record it again.")
+            // The reason only, never the audio.
+            logger.error("The saved voice sample could not be read: \(String(describing: error), privacy: .public)")
+            return
+        }
+        guard let sample, request == voiceRequest, remembersVoice else { return }
+        await waitForSpeechModel()
+        while isDictating() {
+            try? await Task.sleep(for: dictationPoll)
+        }
+        guard request == voiceRequest, remembersVoice else { return }
+        logger.notice("Loading the voice sample of \(sample.seconds, format: .fixed(precision: 1), privacy: .public) s saved on this Mac")
+        await useVoice(sample)
+    }
+
+    /// Waits for the writes and deletions of the voice sample's file. Internal for tests.
+    func waitForVoiceFile() async {
+        while let current = fileWork {
+            await current.value
+            if fileWork == current {
+                return
+            }
+        }
+    }
+
+    /// Saves the audio of `sample` after the file work before it.
+    private func saveVoiceFile(_ sample: VoiceSample) {
+        guard let voiceFile else { return }
+        onVoiceFile { [weak self] in
+            do {
+                try await voiceFile.save(sample)
+            } catch {
+                self?.problem = String(localized: "Orra could not save the voice sample on this Mac.")
+                self?.logger.error("The voice sample could not be saved: \(String(reflecting: type(of: error)), privacy: .public)")
+            }
+        }
+    }
+
+    private func removeVoiceFile() {
+        guard let voiceFile else { return }
+        onVoiceFile {
+            await voiceFile.remove()
+        }
+    }
+
+    private func onVoiceFile(_ work: @escaping () async -> Void) {
+        let previous = fileWork
+        fileWork = Task {
+            await previous?.value
+            await work()
+        }
     }
 
     func reportVoiceProblem(_ message: String) {

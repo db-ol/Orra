@@ -8,6 +8,8 @@ struct VoiceRecordingSheet: View {
     let recording: VoiceRecording
     /// Why recording cannot start now, nil when it can.
     let blocker: LocalizedStringKey?
+    /// Remember my voice, the same switch as in Settings. Nil hides it.
+    let remembersVoice: Binding<Bool>?
     /// Takes the recorded sample, then the sheet closes.
     let use: (VoiceSample) -> Void
     /// Takes an audio file the user picked, then the sheet closes.
@@ -69,6 +71,18 @@ struct VoiceRecordingSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: 32, alignment: .topLeading)
+            if let remembersVoice {
+                Toggle(isOn: remembersVoice) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Remember my voice")
+                        Text(RememberVoiceText.detail(on: remembersVoice.wrappedValue))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.checkbox)
+            }
             HStack {
                 Button("Import an Audio File…") {
                     isImporting = true

@@ -171,7 +171,8 @@ nonisolated struct SpeechOutputChoice: Equatable, Sendable {
     }
 }
 
-/// Keeps the speak translation settings in UserDefaults. Never the voice sample.
+/// Keeps the speak translation settings in UserDefaults. Never the voice sample, only
+/// whether Remember my voice is on.
 nonisolated enum SpeechPreference {
     static let isOnKey = "speakTranslation"
     static let alsoPastesKey = "speakTranslationAlsoPastes"
@@ -179,6 +180,7 @@ nonisolated enum SpeechPreference {
     static let outputNameKey = "speakTranslationOutputName"
     static let voiceModelKey = "speakTranslationVoiceModel"
     static let checksWordsKey = "speakTranslationChecksWords"
+    static let remembersVoiceKey = "speakTranslationRemembersVoice"
     /// Whether the word check is on until the user turns it on or off, see SpeechWordCheck.
     /// On: in the benchmark it failed no good sentence, caught sentences that said other
     /// words, and added about 0.15 s per sentence.
@@ -223,6 +225,15 @@ nonisolated enum SpeechPreference {
 
     static func saveChecksWords(_ on: Bool, to defaults: UserDefaults = .standard) {
         defaults.set(on, forKey: checksWordsKey)
+    }
+
+    /// Remember my voice, off until the user turns it on.
+    static func remembersVoice(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: remembersVoiceKey)
+    }
+
+    static func saveRemembersVoice(_ on: Bool, to defaults: UserDefaults = .standard) {
+        defaults.set(on, forKey: remembersVoiceKey)
     }
 
     /// The voice model the user picked, nil until they pick one or when the value is not
