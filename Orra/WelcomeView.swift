@@ -23,6 +23,8 @@ struct WelcomeView: View {
     let languagePicked: (AppLanguage) -> Void
     /// Shows the guide beside System Settings after a button here opened it.
     let guideSettings: (PermissionDemo.Kind) -> Void
+    /// Opens Orra's Settings on a tab, for the suggestions once Orra is ready.
+    let openSettings: @MainActor (SettingsTab) -> Void
     @State private var language: AppLanguage
     /// The localization the window shows, such as "zh-Hans". Kept, so a redraw for the
     /// download's progress does not read the Mac's languages again.
@@ -33,7 +35,7 @@ struct WelcomeView: View {
     /// Whether the steps scroll on a short screen. Off only to draw the whole window.
     let limitsHeight: Bool
 
-    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void, guideSettings: @escaping (PermissionDemo.Kind) -> Void = { _ in }) {
+    init(pushToTalk: PushToTalkController, setup: SetupDownload, language: AppLanguage, limitsHeight: Bool = true, close: @escaping () -> Void, localizationChanged: @escaping (String) -> Void, languagePicked: @escaping (AppLanguage) -> Void, guideSettings: @escaping (PermissionDemo.Kind) -> Void = { _ in }, openSettings: @escaping @MainActor (SettingsTab) -> Void = WelcomeView.openSettingsWindow) {
         self.limitsHeight = limitsHeight
         _stepsHeight = State(initialValue: Self.tallestSteps)
         self.pushToTalk = pushToTalk
@@ -42,6 +44,7 @@ struct WelcomeView: View {
         self.localizationChanged = localizationChanged
         self.languagePicked = languagePicked
         self.guideSettings = guideSettings
+        self.openSettings = openSettings
         _language = State(initialValue: language)
         _localization = State(initialValue: language.localization())
     }
@@ -122,6 +125,12 @@ struct WelcomeView: View {
         .frame(width: 560)
     }
 
+    /// Turns Settings to `tab` and opens it in front, as the menu's Settings… does.
+    static func openSettingsWindow(_ tab: SettingsTab) {
+        SettingsWindow.show(tab)
+        DockIcon.openSettings()
+    }
+
     /// The most the steps take before they scroll: the screen's height less the title bar,
     /// the header with the guide and the buttons.
     private static var tallestSteps: CGFloat {
@@ -164,10 +173,66 @@ struct WelcomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
+            if WelcomeSuggestion.shows(checklist: checklist) {
+                SuggestionsBlock(
+                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, translationOn: setup.cleanup.translationIsOn, locale: Locale(identifier: localization)),
+                    locale: Locale(identifier: localization),
+                    open: { openSettings(.general) }
+                )
+            }
         }
         // Room for the tint of the current step, which reaches past the steps.
         .padding(.horizontal, 28)
         .padding(.vertical, 12)
+    }
+}
+
+/// What to try next, under "Orra is ready": one compact row for each feature, with its symbol,
+/// its name and one line, and a button that opens Settings, or On when it is on already.
+/// Settings opens on General, where all three are set up. It cannot scroll to a section.
+private struct SuggestionsBlock: View {
+    let suggestions: [WelcomeSuggestion]
+    let locale: Locale
+    let open: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Already in the window's language, so shown as they are.
+            Text(verbatim: WelcomeSuggestion.heading(locale: locale))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(suggestions) { suggestion in
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: suggestion.symbol)
+                        .font(.body)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 22)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(verbatim: suggestion.title)
+                            .font(.callout.weight(.semibold))
+                        Text(verbatim: suggestion.line)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    if let button = suggestion.button {
+                        Button(button, action: open)
+                            .controlSize(.small)
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text(verbatim: WelcomeSuggestion.onLabel(locale: locale))
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.subheadline)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

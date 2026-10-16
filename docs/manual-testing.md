@@ -261,6 +261,9 @@ got worse than the baseline, see docs/release-gate.md.
     memory under 16 GB, the order of the download (speech model first, cleanup model
     after it), the bar's bytes of both models, the step's lines and buttons in English
     and Chinese, and the step the guide talks about.
+  - WelcomeSuggestionTests covers the three rows the welcome window suggests once Orra is
+    ready: that they show only with setup complete, their lines and buttons in English
+    and Chinese, and On in place of the button for a feature that is on.
   - WelcomeLanguageTests covers the language picked in the welcome window: the
     localization of each choice, Same as the Mac for English, Chinese, Traditional
     Chinese and French first, Chinese text built in code while Orra runs in English, that
@@ -1231,6 +1234,13 @@ choice. Put all of it back afterwards:
   the microphone step. The picture is only in the card beside System Settings below.
 - [ ] On a short screen, such as a 13 inch MacBook Air at its default resolution, the
   steps scroll and the guide and the buttons stay in view.
+- [ ] Once every step is done, under "Orra is ready" the window shows "Try next" with
+  three rows, each with a symbol, one line and a button: Cleanup, Translation and Meeting
+  interpretation. With Clean Up Text on, its row shows On and no button. Turn On in
+  Settings… and Set Up in Settings… open Settings on General in front, also when Settings
+  was open on another tab, and the welcome window stays open. Done still closes the
+  window. Before the last step is done, the rows do not show. In 简体中文 the heading is
+  "还可以试试" and the rows are 整理, 翻译 and 会议同传.
 
 Card beside System Settings, added on 2026-10-15, not verified yet. Orra never resets a
 permission itself. To see both pictures, quit Orra and run

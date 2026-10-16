@@ -677,6 +677,16 @@
         }
       }
     },
+    "Cleanup" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理"
+          }
+        }
+      }
+    },
     "Cleanup stays off on this Mac because it has %lld GB of memory. You can turn it on later in Settings, General." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1293,6 +1303,16 @@
         }
       }
     },
+    "Hold the translation key and speak. Chinese becomes English, and English becomes Chinese." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住翻译键说话，中文变成英文，英文变成中文。"
+          }
+        }
+      }
+    },
     "Hold the translation key, speak, and let go. Orra pastes what you said in another language." : {
       "localizations" : {
         "zh-Hans" : {
@@ -1580,6 +1600,16 @@
         }
       }
     },
+    "Meeting interpretation" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会议同传"
+          }
+        }
+      }
+    },
     "Microphone" : {
       "localizations" : {
         "zh-Hans" : {
@@ -1747,6 +1777,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不显示"
+          }
+        }
+      }
+    },
+    "On" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已打开"
           }
         }
       }
@@ -2356,6 +2396,16 @@
         }
       }
     },
+    "Read what others say in your language, and let them hear you in theirs, even in your own voice." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对方说的话，你看到自己语言的字幕。你说自己的语言，对方听到他们的语言，还可以是你的音色。"
+          }
+        }
+      }
+    },
     "Reads the field you dictated into for 3 minutes after a paste and adds a misheard word you fix to your vocabulary." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2432,6 +2482,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "去掉语气词，并按你说出口的更正改好内容，比如“三点，哦不对，四点”。需要下载 %@，约占 4 GB 内存，短的听写多花不到 1 秒，长的更久，全部在这台 Mac 上运行。Orra 菜单中的“粘贴原文”可以找回整理之前的文字。"
+          }
+        }
+      }
+    },
+    "Removes fillers and fixes what you correct while speaking." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说完自动去掉语气词，并按你的改口改好。"
           }
         }
       }
@@ -2617,6 +2677,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选中词语后，点“移除”或按 Delete 键。也可以右键点一个词来移除。"
+          }
+        }
+      }
+    },
+    "Set Up in Settings…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前往设置…"
           }
         }
       }
@@ -3523,6 +3593,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在任何 App 中试试：按住说话键，说点什么，然后松开。文字会出现在你正在输入的位置。"
+          }
+        }
+      }
+    },
+    "Try next" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还可以试试"
+          }
+        }
+      }
+    },
+    "Turn On in Settings…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设置中打开…"
           }
         }
       }
