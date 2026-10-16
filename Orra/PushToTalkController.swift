@@ -118,6 +118,9 @@ final class PushToTalkController {
     private(set) var writesNumbersAsDigits: Bool
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
+    /// True while Settings records a voice sample with the microphone. A press of the talk
+    /// key or the translation key records nothing meanwhile.
+    private(set) var isRecordingVoiceSample = false
     /// Microphone permission as last seen. Refreshed at start, on every hold, and after
     /// a request.
     private(set) var microphoneAccess: MicrophoneAccess = .notDetermined
@@ -713,6 +716,11 @@ final class PushToTalkController {
             indicatorShown = false
             // The previous hold's start belongs to that hold only.
             captureStart = nil
+            guard !isRecordingVoiceSample else {
+                holdMessage = String(localized: "Orra is recording a voice sample in Settings")
+                handle(.cancelled)
+                return
+            }
             guard modelState == .ready else {
                 // The menu bar icon and the menu say why too.
                 holdMessage = Self.notReadyMessage(modelState)
@@ -1144,6 +1152,41 @@ final class PushToTalkController {
     nonisolated private static func replacingWords(in text: String, pairs: [Correction], vocabulary: [String]) async -> (String, [Replacement]) {
         let result = WordReplacement.apply(to: text, pairs: pairs, vocabulary: vocabulary, ordinary: .system)
         return (result.text, result.replacements)
+    }
+
+    /// Starts the microphone chosen in Orra for a voice sample in Settings, the way a hold
+    /// starts it, so the microphone access the user gave covers it. Throws while a
+    /// dictation runs, without microphone access, or when the microphone could not start.
+    func startVoiceSample() async throws {
+        guard state == .idle, !isRecordingVoiceSample, capture.access() == .authorized else {
+            throw VoiceSampleCaptureError.busy
+        }
+        isRecordingVoiceSample = true
+        // A cancelled hold may still be stopping the microphone.
+        await captureCancel?.value
+        do {
+            try await capture.start(microphone?.uid)
+        } catch {
+            isRecordingVoiceSample = false
+            throw error
+        }
+        logger.notice("Recording a voice sample")
+    }
+
+    /// Stops the voice sample's recording and returns it. Logs its length only.
+    func stopVoiceSample() async -> AudioRecording {
+        guard isRecordingVoiceSample else { return AudioRecording(samples: [], sampleRate: 0) }
+        let recording = await capture.stop()
+        isRecordingVoiceSample = false
+        logger.notice("A voice sample of \(recording.duration, format: .fixed(precision: 1), privacy: .public) s was recorded")
+        return recording
+    }
+
+    /// Stops the voice sample's recording and throws it away.
+    func cancelVoiceSample() async {
+        guard isRecordingVoiceSample else { return }
+        await capture.cancel()
+        isRecordingVoiceSample = false
     }
 
     /// Writes down what is said in a voice sample for Speak Translation, with the speech

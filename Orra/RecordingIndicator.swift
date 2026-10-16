@@ -278,6 +278,8 @@ private struct IdleBar: View {
 /// White bars, highest in the middle, as tall as `heights` says.
 struct IndicatorBars: View {
     let heights: [CGFloat]
+    /// White on the indicator's dark capsule. The voice sample sheet passes its own.
+    var color: Color = .white
 
     nonisolated static let count = 7
     nonisolated static let barWidth: CGFloat = 3
@@ -293,7 +295,7 @@ struct IndicatorBars: View {
         HStack(spacing: Self.spacing) {
             ForEach(heights.indices, id: \.self) { index in
                 Capsule()
-                    .fill(.white)
+                    .fill(color)
                     .frame(width: Self.barWidth, height: heights[index])
             }
         }

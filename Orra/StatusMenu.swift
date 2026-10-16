@@ -120,17 +120,21 @@ struct StatusMenu: View {
             ))
             .disabled(!pushToTalk.handsFreeApplies)
         }
-        if pushToTalk.translationKeyIsOn, speech.canSpeak {
-            Toggle("Speak Translation", isOn: Binding(
-                get: { speech.isOn },
-                set: { speech.setOn($0) }
+        // A meeting where each side speaks another language: captions for what the other
+        // side says, and a voice for what you say.
+        Menu("Meeting Interpretation") {
+            // The sound the Mac plays, transcribed and translated in a floating window.
+            Toggle("Live Captions", isOn: Binding(
+                get: { captions.isOn },
+                set: { captions.setOn($0) }
             ))
+            if pushToTalk.translationKeyIsOn, speech.canSpeak {
+                Toggle("Speak Translations to Others", isOn: Binding(
+                    get: { speech.isOn },
+                    set: { speech.setOn($0) }
+                ))
+            }
         }
-        // The sound the Mac plays, transcribed and translated in a floating window.
-        Toggle("Meeting Captions", isOn: Binding(
-            get: { captions.isOn },
-            set: { captions.setOn($0) }
-        ))
         Menu("Microphone") {
             MicrophoneToggles(inputs: inputs, chosen: pushToTalk.microphone, choose: pushToTalk.setMicrophone)
         }

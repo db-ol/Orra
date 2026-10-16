@@ -129,8 +129,8 @@ struct VocabularyTests {
     }
 
     @Test func aCopiedWordCanBeAddedButNotALongText() {
-        #expect(Vocabulary.candidate(fromClipboard: "  SGLang-Omni \n", in: []) == "SGLang-Omni")
-        #expect(Vocabulary.candidate(fromClipboard: "sglang-omni", in: ["SGLang-Omni"]) == nil)
+        #expect(Vocabulary.candidate(fromClipboard: "  KVLite-Nova \n", in: []) == "KVLite-Nova")
+        #expect(Vocabulary.candidate(fromClipboard: "kvlite-nova", in: ["KVLite-Nova"]) == nil)
         #expect(Vocabulary.candidate(fromClipboard: "two\nlines", in: []) == nil)
         #expect(Vocabulary.candidate(fromClipboard: String(repeating: "a", count: 41), in: []) == nil)
         #expect(Vocabulary.candidate(fromClipboard: nil, in: []) == nil)
@@ -140,14 +140,14 @@ struct VocabularyTests {
     @Test func theClipboardIsNotReadWhileDictating() {
         var reads = 0
         var dictating = true
-        let clipboard = ClipboardWord(read: { reads += 1; return "SGLang-Omni" }, isDictating: { dictating }, vocabulary: { [] })
+        let clipboard = ClipboardWord(read: { reads += 1; return "KVLite-Nova" }, isDictating: { dictating }, vocabulary: { [] })
         clipboard.refresh()
         #expect(reads == 0)
         #expect(clipboard.word == nil)
         dictating = false
         clipboard.refresh()
         #expect(reads == 1)
-        #expect(clipboard.word == "SGLang-Omni")
+        #expect(clipboard.word == "KVLite-Nova")
         clipboard.clear()
         #expect(clipboard.word == nil)
     }

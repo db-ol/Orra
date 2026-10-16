@@ -43,9 +43,9 @@ struct WordReplacementTests {
     /// As learning sees it: the case of the first letter changes at the start of a
     /// sentence, other letters' case is part of the word.
     @Test func latinWordsMatchButForTheCaseOfTheFirstLetter() {
-        let pair = Correction(heard: "sglang", corrected: "SGLang")
-        #expect(replaced("Sglang is fast, sglang too, SGLANG not", [pair], ["SGLang"]) == "SGLang is fast, SGLang too, SGLANG not")
-        #expect(replaced("我用sglang写", [pair], ["SGLang"]) == "我用SGLang写")
+        let pair = Correction(heard: "kvlite", corrected: "KVLite")
+        #expect(replaced("Kvlite is fast, kvlite too, KVLITE not", [pair], ["KVLite"]) == "KVLite is fast, KVLite too, KVLITE not")
+        #expect(replaced("我用kvlite写", [pair], ["KVLite"]) == "我用KVLite写")
     }
 
     @Test func heardSpellingsOfOrdinaryWordsAreNeverReplaced() {
@@ -64,11 +64,11 @@ struct WordReplacementTests {
     }
 
     @Test func nothingIsReplacedInsideTheWordOfAnotherPair() {
-        let whole = Correction(heard: "SG Lang Omni", corrected: "SGLang-Omni")
-        let part = Correction(heard: "Omni", corrected: "Omnia")
-        #expect(replaced("SGLang-Omni and Omni", [whole, part], ["SGLang-Omni", "Omnia"]) == "SGLang-Omni and Omnia")
+        let whole = Correction(heard: "KV Lite Nova", corrected: "KVLite-Nova")
+        let part = Correction(heard: "Nova", corrected: "Novak")
+        #expect(replaced("KVLite-Nova and Nova", [whole, part], ["KVLite-Nova", "Novak"]) == "KVLite-Nova and Novak")
         // Also when that pair's word is no longer in the vocabulary.
-        #expect(replaced("SGLang-Omni and Omni", [whole, part], ["Omnia"]) == "SGLang-Omni and Omnia")
+        #expect(replaced("KVLite-Nova and Nova", [whole, part], ["Novak"]) == "KVLite-Nova and Novak")
     }
 
     /// A Chinese end of a heard spelling must end a word as the system breaks the text.

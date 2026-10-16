@@ -276,7 +276,7 @@ struct TranslationSpeechTests {
 
         answer = .failure(TranscriptionError.modelMissing)
         await speech.useVoice(VoiceSample(samples: [Float](repeating: 0.1, count: 80_000), sampleRate: 16_000))
-        #expect(speech.problem == "Orra could not listen to the voice sample. Choose it again once the speech model is ready.")
+        #expect(speech.problem == "Orra could not listen to the voice sample. Record it again once the speech model is ready.")
         #expect(speech.voiceSeconds == 3)
         #expect(!speech.isListeningToVoice)
 
@@ -301,7 +301,7 @@ struct TranslationSpeechTests {
         speech.forgetVoice()
         #expect(!speech.isListeningToVoice)
         gate.continuation.yield()
-        await listening.value
+        #expect(await listening.value == .dropped)
         #expect(speech.voiceSeconds == nil)
         #expect(speech.problem == nil)
     }
@@ -809,8 +809,8 @@ struct TranslationSpeechTests {
         TranslationSpeech.Settings(isOn: true, alsoPastes: true, output: nil).save(to: defaults)
         #expect(TranslationSpeech.Settings.load(from: defaults).output == nil)
         #expect(defaults.string(forKey: SpeechPreference.outputNameKey) == nil)
-        // Only these six keys, so no sample or text can be in the settings.
+        // Only these seven keys, so no sample or text can be in the settings.
         let keys = Set(defaults.persistentDomain(forName: name)?.keys.map { $0 } ?? [])
-        #expect(keys.isSubset(of: [SpeechPreference.isOnKey, SpeechPreference.alsoPastesKey, SpeechPreference.outputUIDKey, SpeechPreference.outputNameKey, SpeechPreference.voiceModelKey, SpeechPreference.checksWordsKey]))
+        #expect(keys.isSubset(of: [SpeechPreference.isOnKey, SpeechPreference.alsoPastesKey, SpeechPreference.outputUIDKey, SpeechPreference.outputNameKey, SpeechPreference.voiceModelKey, SpeechPreference.checksWordsKey, SpeechPreference.remembersVoiceKey]))
     }
 }
