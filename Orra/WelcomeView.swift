@@ -344,7 +344,7 @@ private struct CleanupOption: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if !setup.hasEnoughMemory {
+            if !setup.hasEnoughMemory, !setup.wantsCleanup {
                 Text("Off at first, because this Mac has \(setup.memoryGigabytes) GB of memory.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

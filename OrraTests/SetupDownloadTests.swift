@@ -337,6 +337,24 @@ struct SetupDownloadTests {
         #expect(cleanupCalls.value == 0)
     }
 
+    /// During a speech model download started from the menu, the switch shows off, since
+    /// the cleanup model would not follow. Turning it on queues the cleanup model.
+    @Test func aMenuDownloadHidesTheProposal() async {
+        let (setup, _, _) = makeSetup()
+        await setup.speech.prepare()
+        await setup.cleanup.start()
+        setup.lookAtLaunch()
+        #expect(setup.wantsCleanup)
+        setup.speech.download()
+        #expect(setup.speech.state.isBusy)
+        #expect(!setup.wantsCleanup)
+        #expect(!setup.queuesCleanup)
+        setup.setCleanup(true)
+        #expect(setup.wantsCleanup)
+        #expect(setup.queuesCleanup)
+        await setup.speech.waitForDownload()
+    }
+
     /// A speech model that came from the menu ends a proposal the user never answered.
     @Test func aProposalEndsWhenTheSpeechModelComesFromTheMenu() async {
         var saves: [Bool] = []

@@ -1153,13 +1153,15 @@ the two old cache folders named in README.md out of the way (do not delete them)
 Orra off under System Settings > Privacy & Security > Accessibility. Never turn off or
 remove Orra's Accessibility access while it runs. Undo all of it afterwards:
 
-- [ ] At launch the welcome window opens in front of other apps, with three steps:
-  Download the speech model, Allow the microphone, Allow Accessibility. No system prompt
-  appears on its own.
+- [ ] At launch the welcome window opens in front of other apps, with four steps:
+  Download the models (Download the speech model on a Mac under 16 GB), Allow the
+  microphone, Allow Accessibility, Choose your talk key. No system prompt appears on its
+  own.
 - [ ] Before doing any step, click Not Now: the menu shows Setup Guide…, which opens the
   window again. Quit Orra and launch it: the window opens again.
-- [ ] Download Speech Model starts the download, shows a progress bar, the percentage and
-  the server, and Cancel Download stops it. The menu shows the same progress.
+- [ ] Download Models, or Download Speech Model Only with the cleanup switch off, starts
+  the download, shows a progress bar, the percentage and the server, and Cancel Download
+  stops it. The menu shows the same progress.
 - [ ] While the model downloads, Allow Microphone Access… shows the macOS prompt, and the
   step gets its check mark after Allow.
 - [ ] Grant Accessibility Access… shows the macOS prompt. After turning Orra on in the
@@ -1180,10 +1182,12 @@ verified yet. Prepare a first launch as above. Orra counts as set up while any c
 speech model is on this Mac, so also move the old speech-swift copy at
 ~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit (and
 ~/Library/Caches/qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-8bit if it exists) out of the
-way. Orra reuses it at launch, and the window then shows an existing user. Also move the
-cleanup model's folder (Qwen3.5-4B-4bit-0e7ffd5c under the same Models folder) out of the
-way, and run `defaults delete io.github.db-ol.Orra cleansUpWithLocalModel` so cleanup has
-no saved choice. Put all of it back afterwards:
+way. Orra reuses it at launch, and the window then shows an existing user. The cleanup
+model's folder,
+~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3.5-4B-4bit-0e7ffd5c, moves
+with the Models folder in the first launch steps above. Run
+`defaults delete io.github.db-ol.Orra cleansUpWithLocalModel` so cleanup has no saved
+choice. Put all of it back afterwards:
 
 - [ ] The guide, a round violet character with the icon's ring as its face, stands under
   the title. It blinks every few seconds, bobs gently and points down at the steps. Its

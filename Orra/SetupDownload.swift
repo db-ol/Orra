@@ -94,9 +94,11 @@ final class SetupDownload {
         proposesCleanup = CleanupDefault.proposes(savedChoice: savedChoice(), speechModelInstalled: installed, physicalMemory: physicalMemory)
     }
 
-    /// What the cleanup switch in the welcome window shows.
+    /// What the cleanup switch in the welcome window shows. A proposal shows only while a
+    /// start in the window can still act on it. During a speech model download started
+    /// from the menu, the switch shows off, as the cleanup model would not follow.
     var wantsCleanup: Bool {
-        cleanup.isOn || proposesCleanup
+        cleanup.isOn || (proposesCleanup && !speech.state.isBusy)
     }
 
     /// The cleanup switch in the welcome window. Off is saved at once and stays off. On is
