@@ -68,6 +68,11 @@ got worse than the baseline, see docs/release-gate.md.
     TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab and sheet
     to a PNG there, General also with translation on and after a swap of the keys,
     which CI never does.
+  - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
+    for each translation direction and interface language, recording and stopping, too
+    short, the stop at the time limit, a microphone that fails to start, a cancel while
+    it starts, playback, the cut of a long recording at a quiet moment, that no audio
+    file is left behind, and that a hold of the talk key records nothing meanwhile.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
@@ -1783,12 +1788,34 @@ it shows starts, stops, counts and failures, never text.
 - [ ] Meeting Interpretation groups both parts, since 2026-10-15. The menu has a Meeting
   Interpretation submenu with Live Captions, and Speak Translations to Others while
   translation is on and the build has a voice model. Settings, General, has a Meeting
-  Interpretation section (会议同传) after Features with a short intro, Live captions (实时字幕)
-  and Captions show, then Speak translations to others (为对方朗读译文) with all its earlier
-  options. The Live captions switch in Settings and the menu item turn the same captions
-  on and off and show the same state. Captions show in Settings and the picker in the
+  Interpretation section (会议同传) after Features with a short intro ("For meetings across
+  languages. Read what others say in your language, and let them hear you in theirs, even
+  in your own voice."), Live captions (实时字幕) and Captions show, then Speak translations
+  to others (为对方朗读译文) with all its earlier options. The Live captions switch in
+  Settings and the menu item turn the same captions on and off and show the same state. Captions show in Settings and the picker in the
   window change together, and the choice stays after a restart. Settings saved by an
   earlier version, Speak translations on and the chosen device and display mode, are kept.
+- [ ] Voice sample, since 2026-10-15 recorded in Orra rather than picked as a file. Not
+  yet tried with a real microphone. Voice sample (声音样本) has Record… (录音…), which opens
+  a sheet with a script to read aloud, about 10 seconds. The script is Chinese when
+  translation is fixed to English, English when it is fixed to Chinese, and otherwise in
+  the language Orra shows. English and 中文 above it switch it. Record starts the
+  microphone chosen under Microphone (the orange indicator shows), the bars move with your
+  voice and the time counts up. Stop ends it, and Play Back plays it on the Mac's
+  default output. Use This Recording closes the sheet, the row says Listening to the voice
+  sample… and then the length, at most 12 seconds. A spoken translation then sounds like
+  you.
+- [ ] Recording stops by itself after 20 seconds and says so. A recording under 2 seconds
+  says the voice sample must be at least 2 seconds long. Re-record replaces it. Cancel,
+  Escape or closing Settings while recording stops the microphone (the orange indicator
+  goes away) and keeps the voice sample from before.
+- [ ] Record is disabled with a reason while live captions are on, while a dictation
+  runs, and without microphone access. Holding the talk key while the sheet records pastes
+  nothing, and the indicator says Orra is recording a voice sample in Settings.
+- [ ] Import an Audio File… in the sheet still takes a file, as Choose… did. After any
+  of these, nothing new is in ~/Library/Containers, ~/Library/Caches or the temporary
+  folder, and the log of `category == "push-to-talk"` and `category == "speech"` shows
+  lengths only.
 - [ ] Changing the output device during a call, such as plugging in headphones: captions
   go on. If they stop, turning them off and on brings them back. This is a known gap to
   confirm.

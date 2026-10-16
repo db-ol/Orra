@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import Foundation
 
@@ -60,6 +61,45 @@ nonisolated struct VoiceSample: Sendable, Equatable {
         let sample = VoiceSample(samples: MicrophoneChannel.samples(from: buffer), sampleRate: Int(rate))
         guard sample.seconds >= minimumSeconds else { throw ReadError.tooShort }
         return sample
+    }
+}
+
+/// Keeps a voice sample within Qwen3-TTS's limit when it comes from the microphone. In an
+/// extension, so VoiceSample keeps its memberwise initializer.
+nonisolated extension VoiceSample {
+    /// A recording of the microphone, made in Settings. A recording longer than
+    /// `maximumSeconds` is cut at the quietest moment of its last `cutWindow` seconds
+    /// before that limit, so the cut seldom falls in the middle of a word. The speech model
+    /// writes down what is said in the part that is kept.
+    init(recorded samples: [Float], sampleRate: Int) {
+        self.samples = Self.keptPart(of: samples, sampleRate: sampleRate)
+        self.sampleRate = sampleRate
+    }
+
+    /// How far before the limit a long recording may be cut.
+    static let cutWindow = 2.0
+
+    static func keptPart(of samples: [Float], sampleRate: Int) -> [Float] {
+        let limit = Int(maximumSeconds * Double(sampleRate))
+        guard sampleRate > 0, samples.count > limit else { return samples }
+        // Steps of 20 ms, each judged by its energy.
+        let step = max(sampleRate / 50, 1)
+        let earliest = max(limit - Int(cutWindow * Double(sampleRate)), 0)
+        var cut = limit
+        var quietest = Float.infinity
+        var start = earliest
+        while start + step <= limit {
+            var energy: Float = 0
+            samples.withUnsafeBufferPointer { buffer in
+                vDSP_svesq(buffer.baseAddress! + start, 1, &energy, vDSP_Length(step))
+            }
+            if energy < quietest {
+                quietest = energy
+                cut = start + step / 2
+            }
+            start += step
+        }
+        return Array(samples.prefix(cut))
     }
 }
 

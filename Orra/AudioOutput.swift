@@ -42,6 +42,14 @@ nonisolated struct AudioOutput: Equatable, Sendable {
         return AudioOutput(id: id, uid: uid, name: AudioInput.readString(id, kAudioObjectPropertyName) ?? uid)
     }
 
+    /// The system's default output, where a recorded voice sample plays back. Nil when
+    /// there is none Orra offers.
+    static func systemDefault() -> AudioOutput? {
+        guard let id = AudioInput.readUInt32(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice),
+              id != kAudioObjectUnknown else { return nil }
+        return device(id: id)
+    }
+
     /// The connected output with this UID, looked up each time Orra speaks, since IDs
     /// change when devices reconnect.
     static func device(uid: String) -> AudioOutput? {

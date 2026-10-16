@@ -260,7 +260,7 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
             if captions != nil || (speech != nil && voiceModels != nil) {
-                MeetingInterpretationSection(captions: captions, speech: speech, voiceModels: voiceModels, translationIsOn: cleanup.translationIsOn)
+                MeetingInterpretationSection(pushToTalk: pushToTalk, captions: captions, speech: speech, voiceModels: voiceModels, translationIsOn: cleanup.translationIsOn, translationDirection: cleanup.translationDirection)
             }
             Section {
                 Toggle(isOn: Binding(

@@ -1,18 +1,22 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Meeting Interpretation in Settings, after Features: a meeting where each side speaks
 /// another language. Live captions show what the other side says, translated. Speak
 /// translations to others speaks what the translation key translated, so the other side
-/// hears it. Each part shows only where the page has it.
+/// hears it, in the voice of a sample the user recorded if they like. Each part shows
+/// only where the page has it.
 struct MeetingInterpretationSection: View {
+    let pushToTalk: PushToTalkController
     let captions: MeetingCaptions?
     let speech: TranslationSpeech?
     let voiceModels: VoiceModels?
     let translationIsOn: Bool
+    /// The language the voice sample's script is in at first, see VoiceScript.
+    let translationDirection: TranslationDirection
     /// Watches the devices only while Settings shows the speak rows.
     @State private var outputList = AudioOutputList.live()
-    @State private var isChoosingVoice = false
+    /// The voice sample sheet's recording while the sheet is open.
+    @State private var voiceRecording: VoiceRecording?
 
     var body: some View {
         Section {
@@ -20,12 +24,12 @@ struct MeetingInterpretationSection: View {
                 LiveCaptionRows(captions: captions)
             }
             if let speech, let voiceModels {
-                SpeakTranslationRows(speech: speech, models: voiceModels, translationIsOn: translationIsOn, outputs: outputList.outputs, isChoosingVoice: $isChoosingVoice)
+                SpeakTranslationRows(speech: speech, models: voiceModels, translationIsOn: translationIsOn, outputs: outputList.outputs, record: openRecording)
             }
         } header: {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Meeting Interpretation")
-                Text("For a meeting in two languages. Live captions show what the other side says in your language, and Orra can speak your translated words to them.")
+                Text("For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice.")
                     .font(.subheadline)
                     .fontWeight(.regular)
                     .foregroundStyle(.secondary)
@@ -33,7 +37,7 @@ struct MeetingInterpretationSection: View {
             }
         } footer: {
             if speech != nil, voiceModels != nil {
-                Text("Use a recording of your own voice only. Orra writes down what the voice sample says with its speech model, keeps both in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know.")
+                Text("Record your own voice only. Orra writes down what you said with its speech model, keeps the recording and the words in memory until it quits and never saves them. The other side hears a synthesized voice, so let them know.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -41,21 +45,72 @@ struct MeetingInterpretationSection: View {
             if speech != nil { outputList.start() }
         }
         .onDisappear { outputList.stop() }
-        .fileImporter(isPresented: $isChoosingVoice, allowedContentTypes: [.audio]) { result in
-            guard case .success(let url) = result, let speech else { return }
-            Task {
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer {
-                    if scoped { url.stopAccessingSecurityScopedResource() }
-                }
-                do {
-                    let sample = try await VoiceSample.read(from: url)
-                    await speech.useVoice(sample)
-                } catch VoiceSample.ReadError.tooShort {
-                    speech.reportVoiceProblem(String(localized: "The voice sample must be at least \(Int(VoiceSample.minimumSeconds)) seconds long."))
-                } catch {
-                    speech.reportVoiceProblem(String(localized: "Orra could not read this audio file."))
-                }
+        .sheet(item: $voiceRecording) { recording in
+            VoiceRecordingSheet(
+                recording: recording,
+                blocker: recordingBlocker,
+                use: { sample in
+                    closeRecording()
+                    guard let speech else { return }
+                    Task { await speech.useVoice(sample) }
+                },
+                importFile: { url in
+                    closeRecording()
+                    importVoice(from: url)
+                },
+                close: closeRecording
+            )
+            .onAppear { pushToTalk.refreshMicrophoneAccess() }
+            // Also when the sheet closes some other way, so the microphone never stays on.
+            .onDisappear { recording.cancel() }
+        }
+    }
+
+    private func openRecording() {
+        voiceRecording = VoiceRecording(
+            recorder: .live(pushToTalk),
+            playback: SpeechPlayer(),
+            output: { AudioOutput.systemDefault() },
+            scriptLanguage: VoiceScript.language(direction: translationDirection)
+        )
+    }
+
+    /// Stops what the sheet records or plays and drops what it recorded.
+    private func closeRecording() {
+        voiceRecording?.cancel()
+        voiceRecording = nil
+    }
+
+    /// Why the sheet cannot record now. A dictation and live captions keep the speech
+    /// model and the microphone busy.
+    private var recordingBlocker: LocalizedStringKey? {
+        if pushToTalk.microphoneAccess != .authorized {
+            "Orra needs microphone access to record. Setup Guide in the Orra menu can turn it on."
+        } else if captions?.isOn == true {
+            "Turn off Live captions to record."
+        } else if pushToTalk.state != .idle {
+            "Wait until the dictation is done."
+        } else {
+            nil
+        }
+    }
+
+    /// Reads a voice sample from an audio file the user picked, the smaller way next to
+    /// recording one.
+    private func importVoice(from url: URL) {
+        guard let speech else { return }
+        Task {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer {
+                if scoped { url.stopAccessingSecurityScopedResource() }
+            }
+            do {
+                let sample = try await VoiceSample.read(from: url)
+                await speech.useVoice(sample)
+            } catch VoiceSample.ReadError.tooShort {
+                speech.reportVoiceProblem(String(localized: "The voice sample must be at least \(Int(VoiceSample.minimumSeconds)) seconds long."))
+            } catch {
+                speech.reportVoiceProblem(String(localized: "Orra could not read this audio file."))
             }
         }
     }
@@ -73,7 +128,7 @@ private struct LiveCaptionRows: View {
         )) {
             DescribedLabel(
                 title: "Live captions",
-                detail: "Listen to the other side. Orra transcribes and translates the sound the Mac plays, in a floating window.",
+                detail: "Orra translates the sound the Mac plays into captions, in a floating window.",
                 systemImage: "captions.bubble"
             )
         }
@@ -99,7 +154,8 @@ private struct SpeakTranslationRows: View {
     let models: VoiceModels
     let translationIsOn: Bool
     let outputs: [AudioOutput]
-    @Binding var isChoosingVoice: Bool
+    /// Opens the sheet that records a voice sample.
+    let record: () -> Void
 
     var body: some View {
         Group {
@@ -109,7 +165,7 @@ private struct SpeakTranslationRows: View {
             )) {
                 DescribedLabel(
                     title: "Speak translations to others",
-                    detail: "Orra also speaks what the translation key translated, into the device below, so the other side of a call hears it.",
+                    detail: "Orra speaks what the translation key translated into the device below.",
                     systemImage: "speaker.wave.2.bubble"
                 )
             }
@@ -172,7 +228,7 @@ private struct SpeakTranslationRows: View {
                 )
             }
             .disabled(!speech.isOn)
-            VoiceSampleRow(speech: speech, isChoosing: $isChoosingVoice)
+            VoiceSampleRow(speech: speech, record: record)
                 .disabled(!speech.isOn)
             if speech.isOn, let line = models.status.line {
                 note(Text(verbatim: line))
@@ -215,11 +271,11 @@ private struct SpeakTranslationRows: View {
     }
 }
 
-/// The voice sample: its length while one is in memory, and the buttons to choose or
+/// The voice sample: its length while one is in memory, and the buttons to record or
 /// remove one.
 private struct VoiceSampleRow: View {
     let speech: TranslationSpeech
-    @Binding var isChoosing: Bool
+    let record: () -> Void
 
     var body: some View {
         LabeledContent {
@@ -229,8 +285,8 @@ private struct VoiceSampleRow: View {
                         speech.forgetVoice()
                     }
                 }
-                Button("Choose…") {
-                    isChoosing = true
+                Button("Record…") {
+                    record()
                 }
                 .disabled(speech.isListeningToVoice)
             }

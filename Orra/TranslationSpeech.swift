@@ -16,7 +16,7 @@ struct TranslationVoice {
 
 /// Speak Translation: speaks what the translation key translated, in a voice model, into
 /// an output device such as Orra's own microphone device, so the other side of a call
-/// hears it. Optionally in the voice of a sample the user chose, which stays in memory
+/// hears it. Optionally in the voice of a sample the user recorded, which stays in memory
 /// only. Translations are spoken one after another in the order they came. Dictation
 /// comes first: a piece waits to be synthesized while the user dictates, so the speech
 /// and cleanup models are not kept waiting for the GPU by the voice. No text and no audio
@@ -42,7 +42,7 @@ final class TranslationSpeech {
     private(set) var problem: String?
     /// The length of the voice sample in memory, nil without one.
     private(set) var voiceSeconds: Double?
-    /// The speech model is writing down what is said in a voice sample the user picked.
+    /// The speech model is writing down what is said in a voice sample the user recorded.
     private(set) var isListeningToVoice = false
     /// The model is loaded.
     private(set) var isLoaded = false
@@ -255,7 +255,7 @@ final class TranslationSpeech {
         } catch {
             guard request == voiceRequest else { return }
             isListeningToVoice = false
-            problem = String(localized: "Orra could not listen to the voice sample. Choose it again once the speech model is ready.")
+            problem = String(localized: "Orra could not listen to the voice sample. Record it again once the speech model is ready.")
             logger.error("The voice sample could not be transcribed: \(String(reflecting: type(of: error)), privacy: .public)")
             return
         }

@@ -276,7 +276,7 @@ struct TranslationSpeechTests {
 
         answer = .failure(TranscriptionError.modelMissing)
         await speech.useVoice(VoiceSample(samples: [Float](repeating: 0.1, count: 80_000), sampleRate: 16_000))
-        #expect(speech.problem == "Orra could not listen to the voice sample. Choose it again once the speech model is ready.")
+        #expect(speech.problem == "Orra could not listen to the voice sample. Record it again once the speech model is ready.")
         #expect(speech.voiceSeconds == 3)
         #expect(!speech.isListeningToVoice)
 
