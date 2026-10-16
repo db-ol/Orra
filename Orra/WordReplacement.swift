@@ -75,7 +75,7 @@ nonisolated enum WordReplacement {
                 && !pair.heard.contains(where: \.isNewline)
                 && words.contains(pair.corrected.lowercased())
                 // A heard spelling that is a vocabulary word is the user's word too, unless
-                // the pair only fixes its case, as sglang to SGLang.
+                // the pair only fixes its case, as kvlite to KVLite.
                 && (!words.contains(pair.heard.lowercased()) || pair.heard.lowercased() == pair.corrected.lowercased())
                 && !ordinary.holdsOnlyOrdinaryWords(pair.heard)
         }
