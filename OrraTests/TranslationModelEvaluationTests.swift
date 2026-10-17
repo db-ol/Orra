@@ -4,7 +4,7 @@ import Synchronization
 import Testing
 @testable import Orra
 
-/// Runs the real model on the translation cases of Tools/rewrite-eval: the 178 regular
+/// Runs the real model on the translation cases of Tools/rewrite-eval: the 182 regular
 /// cases, the 70 adversarial ones, which ask, order or try to steer the model, and the 116
 /// translation probes, 6 of them long. Only when asked for, with
 /// TEST_RUNNER_ORRA_TRANSLATION_EVAL=1, and only when the model is on this Mac, see

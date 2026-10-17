@@ -20,7 +20,7 @@ repository.
 |---|---|---|
 | corpus | SpeechCorpusEvaluationTests | The 392 clips of the speech corpus (#40): errors per clip on the transcript and on the text after the filler and number rules, scored with Tools/speech-eval/score.py, so wer_en, cer_zh and mer_mixed |
 | context | RealModelTests/ContextEvaluationTests | 100 ContextASR clips per language, each without and with its terms and ten distractors as context: terms found, distractors inserted, errors and the time of each pass, plus ascend_mixed with unrelated terms and three clips without speech |
-| cleanup | CleanupModelEvaluationTests/cleanupCases() | The 178 regular, 70 adversarial and 20 meaning cases of Tools/rewrite-eval in three modes: exact match, outcome, time, and whether an adversarial case looks obeyed (pasted text more than 1.6 times as long as expected plus 4, as in the translation evaluation) |
+| cleanup | CleanupModelEvaluationTests/cleanupCases() | The 182 regular, 70 adversarial and 20 meaning cases of Tools/rewrite-eval in three modes: exact match, outcome, time, and whether an adversarial case looks obeyed (pasted text more than 1.6 times as long as expected plus 4, as in the translation evaluation) |
 | latency | LatencyMeasurementTests/dictations() | Release to paste (#51) for the say clips of the latency-say set and 15 corpus clips, cleanup off and on: median and p90 of every step, and each clip's median |
 | sets | GateSetEvaluationTests | Every set under the gate sets folder, through PushToTalkController with the clip's context as the vocabulary and cleanup off: errors against the reference, expect_terms found and forbid_terms present |
 

@@ -97,6 +97,6 @@ struct PromptPrefixTokenizerTests {
                 }
             }
         }
-        #expect(count == 2 * (178 + 70 + 20))
+        #expect(count == 2 * (182 + 70 + 20))
     }
 }
