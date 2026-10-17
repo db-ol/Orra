@@ -98,18 +98,17 @@ final class LearnedNotice {
 
     /// Offers the word, with the guess in the field. Waits while another notice is shown.
     func suggest(_ suggestion: WordSuggestion) {
-        let content = Content.suggestion(suggestion)
-        guard content != self.content, !waiting.contains(content) else { return }
-        if self.content != nil {
-            enqueue(content)
-        } else {
-            present(content)
-        }
+        offer(.suggestion(suggestion))
     }
 
     /// Offers `key` as the second talk key. Waits while another notice is shown.
     func offerKeyboardTip(_ key: TalkKey) {
-        let content = Content.keyboardTip(key)
+        offer(.keyboardTip(key))
+    }
+
+    /// Shows an offer, or adds it to the waiting ones while another notice is shown. An
+    /// offer that is shown or waits already is not added again.
+    private func offer(_ content: Content) {
         guard content != self.content, !waiting.contains(content) else { return }
         if self.content != nil {
             enqueue(content)
@@ -240,13 +239,6 @@ final class LearnedNotice {
         guard let suggestion, !word.isEmpty else { return }
         clear()
         onAdd?(suggestion, word)
-        showNext()
-    }
-
-    /// Closes the notice after the user answered it, with Undo or Add, and shows the next
-    /// one waiting.
-    func finish() {
-        clear()
         showNext()
     }
 

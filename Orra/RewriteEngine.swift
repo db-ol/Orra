@@ -76,10 +76,6 @@ actor RewriteEngine {
     /// first translation into its target, see `translate`. Dropped with the model.
     private var translationPrefixes: [TranslationTarget: Prefix] = [:]
 
-    var isLoaded: Bool {
-        context != nil
-    }
-
     /// The bytes the cleanup prefix cache holds, 0 without one.
     var prefixCacheBytes: Int {
         Self.bytes(prefix)

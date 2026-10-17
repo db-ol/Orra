@@ -230,23 +230,6 @@ nonisolated enum TalkKey: String, CaseIterable, Identifiable, Sendable {
         return flags.isDisjoint(with: downFlag.union(twinFlag)) && flags.contains(sharedFlag)
     }
 
-    /// The hint in the menu, such as "Hold right Control to talk".
-    func holdHint(in locale: Locale = .interface) -> String {
-        String(localized: LocalizedStringResource("Hold \(sentenceName(in: locale)) to talk", locale: locale))
-    }
-
-    /// What the indicator says during a hands free dictation, such as "Press right Control
-    /// to finish".
-    func finishHint(in locale: Locale = .interface) -> String {
-        String(localized: LocalizedStringResource("Press \(sentenceName(in: locale)) to finish", locale: locale))
-    }
-
-    /// The hint in the menu while translation is on, such as "Hold right Option to
-    /// translate".
-    func translateHint(in locale: Locale = .interface) -> String {
-        String(localized: LocalizedStringResource("Hold \(sentenceName(in: locale)) to translate", locale: locale))
-    }
-
     /// The translation key Orra uses until the user picks one: right Option, next to the
     /// default talk key, or right Command when the talk key is right Option. Either key is
     /// a right hand modifier, so the left hand keeps its shortcuts.
@@ -688,15 +671,6 @@ nonisolated enum SecondTalkKeyPreference {
 /// talk key, see `TalkKey.defaultTranslationKey(talkKey:)`.
 nonisolated enum TranslationKeyPreference {
     static let defaultsKey = "translationKey"
-
-    /// The saved key, or the default for this talk key when nothing usable is saved. A
-    /// saved key equal to the talk key, which Orra never saves itself, gives the default.
-    static func load(talkKey: TalkKey, from defaults: UserDefaults = .standard) -> TalkKey {
-        if let saved = defaults.string(forKey: defaultsKey).flatMap(TalkKey.init(rawValue:)), saved != talkKey {
-            return saved
-        }
-        return TalkKey.defaultTranslationKey(talkKey: talkKey)
-    }
 
     static func save(_ key: TalkKey, to defaults: UserDefaults = .standard) {
         defaults.set(key.rawValue, forKey: defaultsKey)

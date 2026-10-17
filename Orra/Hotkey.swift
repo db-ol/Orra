@@ -49,9 +49,6 @@ nonisolated struct ModifierSet: OptionSet, Hashable, Sendable {
         (.shift, "shift", "⇧"), (.command, "command", "⌘"),
     ]
 
-    /// The virtual key codes of the modifier keys, left and right, from HIToolbox Events.h.
-    static let keyCodes: Set<Int64> = [0x3B, 0x3E, 0x3A, 0x3D, 0x38, 0x3C, 0x37, 0x36, 0x3F]
-
     /// The modifiers that are down in `flags`. fn counts only when `includingFn` is true,
     /// because the system also sets the Fn flag on arrow and function key events.
     init(flags: CGEventFlags, includingFn: Bool) {

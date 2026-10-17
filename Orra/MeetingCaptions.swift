@@ -163,10 +163,6 @@ final class MeetingCaptions {
         case starting
         case listening
         case unavailable(SystemAudioProblem)
-
-        var isUnavailable: Bool {
-            if case .unavailable = self { true } else { false }
-        }
     }
 
     private(set) var isOn = false

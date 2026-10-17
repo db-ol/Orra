@@ -546,7 +546,7 @@ private struct LocalModelStatus: View {
             case .unloaded, .loading:
                 Text(CleanupLabels.loading(use))
                     .foregroundStyle(.secondary)
-            case .ready:
+            case .ready, .unloadedWhileIdle:
                 EmptyView()
             case .failed:
                 HStack {
@@ -661,7 +661,7 @@ nonisolated enum CleanupLabels {
         case .installed:
             switch engine {
             case .unloaded, .loading: loading(use)
-            case .ready: nil
+            case .ready, .unloadedWhileIdle: nil
             case .failed: failedToLoad(use)
             }
         case .checking:

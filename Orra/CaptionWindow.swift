@@ -236,7 +236,7 @@ private struct CaptionNotes: View {
                 plainNote(CleanupLabels.loading(.translation))
             case .failed:
                 plainNote(CleanupLabels.failedToLoad(.translation))
-            case .unloaded, .ready:
+            case .unloaded, .ready, .unloadedWhileIdle:
                 EmptyView()
             }
         case .missing:

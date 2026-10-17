@@ -87,7 +87,7 @@ struct LearnedNoticeTests {
         var declined: [WordSuggestion] = []
         notice.onDecline = { declined.append($0) }
         notice.suggest(suggestion)
-        notice.finish()
+        notice.add()
         #expect(declined.isEmpty)
         notice.suggest(suggestion)
         notice.close()

@@ -73,7 +73,7 @@ struct CleanupIdleUnloadMeasurementTests {
                 try await Task.sleep(for: .milliseconds(1))
             }
             clock.advance(by: idle)
-            try await waitUntil { cleanup.isUnloadedWhileIdle }
+            try await waitUntil { cleanup.engineState == .unloadedWhileIdle }
             await cleanup.waitForLoad()
         }
 
@@ -210,7 +210,7 @@ struct CleanupIdleUnloadMeasurementTests {
                 try await Task.sleep(for: .milliseconds(1))
             }
             clock.advance(by: idle)
-            try await waitUntil { cleanup.isUnloadedWhileIdle }
+            try await waitUntil { cleanup.engineState == .unloadedWhileIdle }
             await cleanup.waitForLoad()
             let samples = try EvaluationData.samples(set: "fleurs_zh", name: clip.name)
             mic.recording = AudioRecording(samples: Array(samples.prefix(48_000)), sampleRate: 16_000)

@@ -101,10 +101,6 @@ final class PushToTalkController {
     }
     /// Why the last press while recording a key cannot be one, such as Shift.
     private(set) var keyChoiceRejection: KeyRecorder.Rejection?
-    /// What the recorder says about that press, in the language Orra started with.
-    var keyChoiceNote: String? {
-        keyChoiceRejection?.message(for: choosingKeySlot ?? .talk)
-    }
     /// Set when the latest key the user picked was the other key's, so the two keys
     /// swapped. Cleared when the user records a key again.
     private(set) var keySwap: KeySwap?
@@ -202,7 +198,10 @@ final class PushToTalkController {
     /// late cancel cannot stop the recording of a newer hold, and so does the next cancel.
     @ObservationIgnored private var captureCancel: Task<Void, Never>?
     /// How the microphone started for the current hold, for the timing log. Its `counted`
-    /// time also tells whether the hold counted, see `holdCounted`.
+    /// time also tells whether the hold counted, see `holdCounted`, and `minimumHold` counts
+    /// from it. A press that captured early records from its key down but counts only after
+    /// its wait, as before, so holding a key that waits alone a little longer than the wait
+    /// is still too short to transcribe.
     @ObservationIgnored private var holdTimings: CaptureTimings?
     /// Whether the current hold counted as a dictation. A press that waits counts once its
     /// wait ends, and until then it shows and says nothing.
@@ -212,11 +211,6 @@ final class PushToTalkController {
     /// Counts the holds that started the microphone, so a late failure of an older start
     /// leaves the current hold alone.
     @ObservationIgnored private var holdNumber = 0
-    /// When the current hold counted as a dictation, which `minimumHold` counts from. A
-    /// press that captured early records from its key down but counts only after its wait,
-    /// as before, so holding a key that waits alone a little longer than the wait is still
-    /// too short to transcribe.
-    @ObservationIgnored private var pressedAt: ContinuousClock.Instant?
     /// The microphone chosen when the current hold started.
     @ObservationIgnored private var holdMicrophone: MicrophoneChoice?
     /// Why the current hold ended without a paste, for the indicator, when neither
@@ -657,11 +651,6 @@ final class PushToTalkController {
         tap?.setHandsFree(on)
     }
 
-    /// Starts recording the key the user wants as the talk key, see `startChoosingKey`.
-    func startChoosingTalkKey() {
-        startChoosingKey(for: .talk)
-    }
-
     /// Starts recording the key the user wants for `slot`, see KeyRecorder. A key that can
     /// be a talk key, pressed and released on its own, becomes the key. Anything else
     /// leaves a note and the recording goes on. Escape, a click anywhere in Orra, or
@@ -823,7 +812,6 @@ final class PushToTalkController {
         case .confirmedArming:
             clearHoldNotes()
             let counted = ContinuousClock.now
-            pressedAt = counted
             holdTimings?.counted = counted
             beginUserActivity()
             reserveModelGate()
@@ -874,7 +862,7 @@ final class PushToTalkController {
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
             let released = ContinuousClock.now
-            let heldFor = pressedAt.map { $0.duration(to: released) } ?? .zero
+            let heldFor = holdTimings?.counted.map { $0.duration(to: released) } ?? .zero
             if heldFor >= minimumHold {
                 indicatorShown = true
                 onCue(.transcribing)
@@ -1019,10 +1007,10 @@ final class PushToTalkController {
         microphoneAccess = capture.access()
         switch microphoneAccess {
         case .authorized:
-            pressedAt = .now
+            let counted = ContinuousClock.now
             beginUserActivity()
             startCapture()
-            holdTimings?.counted = pressedAt
+            holdTimings?.counted = counted
             scheduleListeningCue(after: cueDelay, hold: holdNumber)
         case .notDetermined:
             // The system prompt that follows says enough.

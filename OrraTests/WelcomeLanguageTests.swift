@@ -41,7 +41,7 @@ struct WelcomeLanguageTests {
         #expect(WelcomeWindow.title(in: "en") == "Welcome to Orra")
         #expect(TalkKey.rightOption.fullName(in: chinese) == "⌥ 右侧 Option 键（Alt）")
         #expect(TalkKey.rightOption.fullName() == "⌥ Right Option (Alt)")
-        #expect(TalkKey.rightControl.holdHint(in: chinese) == "按住右侧 Control 键说话")
+        #expect(Hotkey.rightControl.talkHint(mode: .hold, in: chinese) == "按住右侧 Control 键说话")
         #expect(KeyName.namedKey(Int64(kVK_Space), locale: chinese) != KeyName.namedKey(Int64(kVK_Space)))
         #expect(KeyRecorder.Rejection.key(keyCode: Int64(kVK_Return)).message(in: chinese) == "“Return”键不能作为说话键。按住它会输入文字或在前台 App 中执行操作。")
         #expect(PushToTalkController.ModelProblem.missing.message(in: chinese) == "这台 Mac 上没有语音模型")

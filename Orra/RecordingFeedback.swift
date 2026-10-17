@@ -44,38 +44,22 @@ final class RecordingFeedback {
     private(set) var translation: TranslationDirection?
     /// The microphone level for the meter, from 0 to 1, falling slowly after a peak.
     private(set) var level = 0.0
-    var showsIndicator: Bool {
+    /// The indicator and the idle bar as the one choice Settings shows. Setting it saves once
+    /// and updates the panel once.
+    var onScreenHint: OnScreenHint {
         didSet {
-            guard showsIndicator != oldValue, !isSettingHint else { return }
+            guard onScreenHint != oldValue else { return }
             savePreferences()
             present(presented)
             updateLevelTask()
         }
+    }
+    var showsIndicator: Bool {
+        onScreenHint.showsIndicator
     }
     var showsIdleBar: Bool {
-        didSet {
-            guard showsIdleBar != oldValue, !isSettingHint else { return }
-            savePreferences()
-            present(presented)
-        }
+        onScreenHint.showsIdleBar
     }
-    /// Both switches above as the one choice Settings shows. Setting it saves once and
-    /// updates the panel once.
-    var onScreenHint: OnScreenHint {
-        get { OnScreenHint(showsIndicator: showsIndicator, showsIdleBar: showsIdleBar) }
-        set {
-            guard newValue != onScreenHint else { return }
-            isSettingHint = true
-            showsIndicator = newValue.showsIndicator
-            showsIdleBar = newValue.showsIdleBar
-            isSettingHint = false
-            savePreferences()
-            present(presented)
-            updateLevelTask()
-        }
-    }
-    /// True while onScreenHint sets both switches, so they do not save one by one.
-    @ObservationIgnored private var isSettingHint = false
     /// True while the pointer is over the idle bar, which then shows how to talk.
     var pointerIsOverIdleBar = false
     /// Whether a hold would dictate: the talk key is watched and the model is loaded.
@@ -133,9 +117,8 @@ final class RecordingFeedback {
         messageDuration: Duration = .seconds(4),
         levelInterval: Duration = .milliseconds(33)
     ) {
-        showsIndicator = preferences.showsIndicator
+        onScreenHint = OnScreenHint(preferences)
         playsSounds = preferences.playsSounds
-        showsIdleBar = preferences.showsIdleBar
         self.inputLevel = inputLevel
         self.holdHint = holdHint
         self.present = present
