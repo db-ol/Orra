@@ -299,6 +299,7 @@ struct TriggerModeTests {
     @Test func savedModeRawValuesNeverChange() {
         #expect(TriggerMode.allCases.map(\.rawValue) == ["hold", "toggle", "doubleTap"])
         #expect(TriggerMode.defaultMode == .hold)
+        #expect(TriggerMode.newTalkKeyMode == .toggle)
     }
 }
 
@@ -346,13 +347,72 @@ struct HotkeyPreferenceTests {
 
     @Test func modesAreSavedPerKey() throws {
         try withTestDefaults("HotkeyPreference.modes") { defaults in
-            #expect(TriggerModePreference.load(for: .talk, from: defaults) == .hold)
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: true, from: defaults) == .hold)
             TriggerModePreference.save(.toggle, for: .talk, to: defaults)
             TriggerModePreference.save(.doubleTap, for: .translation, to: defaults)
-            #expect(TriggerModePreference.load(for: .talk, from: defaults) == .toggle)
-            #expect(TriggerModePreference.load(for: .translation, from: defaults) == .doubleTap)
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: true, from: defaults) == .toggle)
+            #expect(TriggerModePreference.load(for: .translation, setUpBefore: true, from: defaults) == .doubleTap)
             defaults.set("sometimes", forKey: TriggerModePreference.defaultsKey(for: .talk))
-            #expect(TriggerModePreference.load(for: .talk, from: defaults) == .hold)
+            #expect(TriggerModePreference.saved(for: .talk, in: defaults) == nil)
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: true, from: defaults) == .hold)
+        }
+    }
+
+    /// A first launch: nothing saved, no talk key chosen and neither permission given.
+    @Test func aNewUsersTalkKeyStartsInPressToStartAndStop() throws {
+        try withTestDefaults("HotkeyPreference.newUser") { defaults in
+            let setUpBefore = TriggerModePreference.wasSetUpBefore(talkKeySaved: TalkKeyPreference.isSaved(in: defaults), microphone: .notDetermined, accessibilityAllowed: false)
+            #expect(!setUpBefore)
+            let mode = TriggerModePreference.load(for: .talk, setUpBefore: setUpBefore, from: defaults)
+            #expect(mode == .toggle)
+            // The translation key starts in Hold for everyone.
+            #expect(TriggerModePreference.load(for: .translation, setUpBefore: setUpBefore, from: defaults) == .hold)
+            TriggerModePreference.keepTalkMode(mode, in: defaults)
+            #expect(TriggerModePreference.saved(for: .talk, in: defaults) == .toggle)
+            #expect(TriggerModePreference.saved(for: .translation, in: defaults) == nil)
+            // The next launch, once the user has given both permissions.
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: true, from: defaults) == .toggle)
+        }
+    }
+
+    /// An update from an earlier Orra, which saved no mode until the user picked one.
+    @Test func anEarlierUserWithoutASavedModeKeepsHold() throws {
+        try withTestDefaults("HotkeyPreference.earlierUser") { defaults in
+            let setUpBefore = TriggerModePreference.wasSetUpBefore(talkKeySaved: TalkKeyPreference.isSaved(in: defaults), microphone: .authorized, accessibilityAllowed: true)
+            #expect(setUpBefore)
+            let mode = TriggerModePreference.load(for: .talk, setUpBefore: setUpBefore, from: defaults)
+            #expect(mode == .hold)
+            TriggerModePreference.keepTalkMode(mode, in: defaults)
+            #expect(TriggerModePreference.saved(for: .talk, in: defaults) == .hold)
+            // Hold stays even if both permissions are taken back later.
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: false, from: defaults) == .hold)
+        }
+    }
+
+    @Test func anyOneSignOfAnEarlierSetupCounts() throws {
+        #expect(!TriggerModePreference.wasSetUpBefore(talkKeySaved: false, microphone: .notDetermined, accessibilityAllowed: false))
+        #expect(TriggerModePreference.wasSetUpBefore(talkKeySaved: true, microphone: .notDetermined, accessibilityAllowed: false))
+        #expect(TriggerModePreference.wasSetUpBefore(talkKeySaved: false, microphone: .authorized, accessibilityAllowed: false))
+        #expect(TriggerModePreference.wasSetUpBefore(talkKeySaved: false, microphone: .notDetermined, accessibilityAllowed: true))
+        // Only a microphone Orra may use counts. A denied one never recorded a dictation.
+        #expect(!TriggerModePreference.wasSetUpBefore(talkKeySaved: false, microphone: .denied, accessibilityAllowed: false))
+        #expect(!TriggerModePreference.wasSetUpBefore(talkKeySaved: false, microphone: .notConfigured, accessibilityAllowed: false))
+        try withTestDefaults("HotkeyPreference.savedKey") { defaults in
+            // Right Control saved by an earlier Orra.
+            defaults.set(["rightControl"], forKey: TalkKeyPreference.defaultsKey)
+            #expect(TriggerModePreference.wasSetUpBefore(talkKeySaved: TalkKeyPreference.isSaved(in: defaults), microphone: .notDetermined, accessibilityAllowed: false))
+        }
+    }
+
+    @Test func aSavedModeAlwaysWins() throws {
+        try withTestDefaults("HotkeyPreference.savedMode") { defaults in
+            TriggerModePreference.save(.doubleTap, for: .talk, to: defaults)
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: false, from: defaults) == .doubleTap)
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: true, from: defaults) == .doubleTap)
+            TriggerModePreference.keepTalkMode(.toggle, in: defaults)
+            #expect(TriggerModePreference.saved(for: .talk, in: defaults) == .doubleTap)
+            TriggerModePreference.save(.hold, for: .talk, to: defaults)
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: false, from: defaults) == .hold)
         }
     }
 }

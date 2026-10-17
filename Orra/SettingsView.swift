@@ -200,12 +200,22 @@ private struct GeneralSettings: View {
     let voiceModels: VoiceModels?
     let open: (SettingsSheet) -> Void
 
+    /// The talk key's help in its mode. The line under the mode picker says how each mode
+    /// works.
+    private var talkKeyHelp: Text {
+        if pushToTalk.talkMode == .hold {
+            Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.")
+        } else {
+            Text("Use the talk key on its own. A press together with another key is a shortcut and records nothing, so shortcuts with a left Control, Option or Command key keep working.")
+        }
+    }
+
     var body: some View {
         Form {
             Section {
                 // The note about swapped keys shows once, under the translation key.
                 TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false)
-                    .help(Text("Hold the talk key on its own, speak, and let go. A left Control, Option or Command key starts recording only after you hold it alone for a moment, so its shortcuts keep working.") + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
+                    .help(talkKeyHelp + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
                 SecondTalkKeyPicker(pushToTalk: pushToTalk)
                 TriggerModePicker(pushToTalk: pushToTalk, slot: .talk)
                 VStack(alignment: .leading, spacing: 6) {
@@ -270,13 +280,13 @@ private struct GeneralSettings: View {
                 )) {
                     DescribedLabel(
                         title: "Double press for hands free",
-                        detail: "Press the talk key twice quickly to keep recording after you let go.",
+                        detail: "Press a key in Hold mode twice quickly to keep recording after you let go.",
                         systemImage: "hand.raised"
                     )
                 }
                 // Only a key in hold mode has a double press of its own to add.
                 .disabled(!pushToTalk.handsFreeApplies)
-                .help(Text("Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before."))
+                .help(Text("With a key in Hold mode, press it twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before."))
                 Picker(selection: $feedback.onScreenHint) {
                     ForEach(OnScreenHint.choices(current: feedback.onScreenHint)) { hint in
                         Text(hint.title).tag(hint)
@@ -960,13 +970,24 @@ private struct SecondTalkKeyPicker: View {
 }
 
 /// How the key of one slot starts a dictation: hold, press to start and stop, or double
-/// press, with a line that says how it works.
-private struct TriggerModePicker: View {
+/// press, with a line that says how it works. A menu in Settings, and radio buttons in the
+/// welcome window.
+struct TriggerModePicker: View {
     let pushToTalk: PushToTalkController
     let slot: KeySlot
+    /// Whether every mode shows as a radio button, with the line under them, in place of a
+    /// menu.
+    var showsEveryMode = false
+    /// The language of the mode names, which the welcome window sets to the one picked
+    /// there.
+    @Environment(\.interfaceLocale) private var interfaceLocale
 
     private var mode: TriggerMode {
         slot == .talk ? pushToTalk.talkMode : pushToTalk.translationMode
+    }
+
+    private var title: LocalizedStringKey {
+        slot == .talk ? "Talk key mode" : "Translation key mode"
     }
 
     private var detail: LocalizedStringKey {
@@ -978,19 +999,34 @@ private struct TriggerModePicker: View {
     }
 
     var body: some View {
+        if showsEveryMode {
+            VStack(alignment: .leading, spacing: 6) {
+                picker {
+                    Text(title)
+                }
+                .pickerStyle(.radioGroup)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            picker {
+                DescribedLabel(title: title, detail: detail, systemImage: "hand.tap")
+            }
+        }
+    }
+
+    private func picker<PickerLabel: View>(@ViewBuilder label: () -> PickerLabel) -> some View {
         Picker(selection: Binding(
             get: { mode },
             set: { pushToTalk.setTriggerMode($0, for: slot) }
         )) {
             ForEach(TriggerMode.allCases) { mode in
-                Text(verbatim: mode.title()).tag(mode)
+                Text(verbatim: mode.title(in: interfaceLocale)).tag(mode)
             }
         } label: {
-            DescribedLabel(
-                title: slot == .talk ? "Talk key mode" : "Translation key mode",
-                detail: detail,
-                systemImage: "hand.tap"
-            )
+            label()
         }
     }
 }
