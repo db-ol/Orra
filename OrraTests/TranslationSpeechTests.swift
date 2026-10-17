@@ -379,6 +379,8 @@ struct TranslationSpeechTests {
         let speech = makeSpeech()
         speech.isDictating = { dictating.withLock { $0 } }
         speech.speak("Could you send the numbers before then?", in: .english)
+        // The dictation ends only after the first try started it, however slow that try is.
+        try await eventually { dictating.withLock { $0 } }
         try await Task.sleep(for: .milliseconds(50))
         #expect(spoken.count == 1)
         dictating.withLock { $0 = false }
@@ -582,6 +584,8 @@ struct TranslationSpeechTests {
             return "We have a meeting next Tuesday."
         }
         speech.speak("We have a meeting next Tuesday.", in: .english)
+        // The dictation ends only after the piece started it, however slow the piece is.
+        try await eventually { dictating.withLock { $0 } }
         try await Task.sleep(for: .milliseconds(50))
         #expect(spoken.count == 1)
         #expect(checked.withLock { $0.isEmpty })
