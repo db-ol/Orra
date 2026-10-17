@@ -5,7 +5,12 @@ import Foundation
 /// Qwen3-ASR writes nearly every hesitation it hears. These rules remove only the fillers
 /// that are empty wherever they stand, and leave everything that might mean something to
 /// the text as dictated:
-/// - 呃 everywhere, except in the word 呃逆.
+/// - 呃 everywhere, except in the word 呃逆 and where it is the Cantonese verb to cheat, as in
+///   佢呃咗我啲钱 and 唔好俾人呃: a single 呃 right next to another Chinese character, with no
+///   punctuation or space between, in a dictation written in Cantonese. 呃 apart from the
+///   words, as in 呃，我哋听日去, is a filler in Cantonese too. A filler the model writes
+///   right next to a word, as in 跟住呃，我哋去, stays in a Cantonese dictation, and so does
+///   one in a Mandarin dictation that holds a Cantonese word such as 唔该 or 冇问题.
 /// - 额 standing alone, not next to another Chinese character, so 金额, 额度 and names stay.
 /// - 嗯, unless it is the whole dictation, ends a clause or sentence as an answer (我说嗯。),
 ///   comes before a reply such as 嗯，好的, 嗯对 or 嗯，是的, or starts an interjection such
@@ -40,6 +45,9 @@ nonisolated enum FillerRules {
     private static let quotes: Set<Character> = ["\"", "'", "“", "”", "‘", "’", "「", "」", "『", "』"]
     private static let titles = ["Mr.", "Mrs.", "Ms.", "Mx.", "Dr.", "Prof."]
     private static let ellipsis: Set<Character> = [".", "…"]
+    /// Characters of written Cantonese that Mandarin rarely uses. The speech model writes
+    /// them for Cantonese speech, and ChineseText leaves them as they are.
+    private static let cantoneseCharacters: Set<Character> = ["嘅", "咗", "哋", "喺", "冇", "嘢", "佢", "啲", "嚟", "咁", "嗰", "㗎", "啱"]
 
     /// A filler found in the text: where it starts and ends, and whether it is an English
     /// word written with a capital.
@@ -82,6 +90,7 @@ nonisolated enum FillerRules {
         case "呃":
             let end = runEnd(of: character, from: index, in: characters)
             guard end >= characters.count || characters[end] != "逆" else { return nil }
+            if isCantoneseVerb(index, end, characters) { return nil }
             return chineseFiller(index, end, characters)
         case "额":
             let end = runEnd(of: character, from: index, in: characters)
@@ -117,6 +126,27 @@ nonisolated enum FillerRules {
         let next = skippingSpaces(from: end, in: characters)
         if next < characters.count, questionMarks.contains(characters[next]) { return nil }
         return Filler(start: start, end: end, isCapitalizedWord: false)
+    }
+
+    /// Whether the run of 呃 from `start` to `end` is the Cantonese verb: a single 呃 with a
+    /// Chinese character right before or after it, in a Cantonese dictation.
+    private static func isCantoneseVerb(_ start: Int, _ end: Int, _ characters: [Character]) -> Bool {
+        guard end - start == 1 else { return false }
+        let attached = (start > 0 && characters[start - 1].containsHan)
+            || (end < characters.count && characters[end].containsHan)
+        return attached && isCantonese(characters)
+    }
+
+    /// Whether the text holds one of `cantoneseCharacters`, or 唔 right before a Chinese
+    /// character, as the Cantonese 唔 (not) stands in 唔好 and 唔知. In Mandarin 唔 is a sound
+    /// like 嗯 and stands apart, as in 唔，我想想, or runs into another hum, as in 唔唔 and 唔嗯.
+    private static func isCantonese(_ characters: [Character]) -> Bool {
+        characters.indices.contains { index in
+            if cantoneseCharacters.contains(characters[index]) { return true }
+            guard characters[index] == "唔", index + 1 < characters.count else { return false }
+            let next = characters[index + 1]
+            return next.containsHan && next != "唔" && next != "嗯"
+        }
     }
 
     private static func englishFiller(at index: Int, in characters: [Character]) -> Filler? {
