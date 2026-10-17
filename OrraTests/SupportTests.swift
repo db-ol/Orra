@@ -11,6 +11,13 @@ struct SupportTests {
         #expect(TranscriptScoring.errorRate(references: ["好"], hypotheses: [String(repeating: "非常", count: 50)], dropFillers: false) == 100)
     }
 
+    @Test func scoringCountsKanaPerCharacterAndKeepsAccents() {
+        #expect(TranscriptScoring.tokens("人々は「モササウルス・ゲーム」を見た。", dropFillers: false) == ["人", "々", "は", "モ", "サ", "サ", "ウ", "ル", "ス", "ゲ", "ー", "ム", "を", "見", "た"])
+        #expect(TranscriptScoring.tokens("ｶﾞｰﾃﾞﾝ", dropFillers: false) == ["ガ", "ー", "デ", "ン"])
+        #expect(TranscriptScoring.tokens("¿El año pasado?", dropFillers: false) == ["el", "año", "pasado"])
+        #expect(TranscriptScoring.errorRate(references: ["東京へ行きます"], hypotheses: ["東京に行きます"], dropFillers: false) == 100.0 / 7)
+    }
+
     @Test func memoryFootprintIsReadable() {
         #expect(MemoryFootprint.current() > 0)
     }

@@ -109,7 +109,8 @@ def summarize_corpus(raw: dict, manifest: dict[str, dict]) -> dict:
                 if keep(clip):
                     totals[name][0] += errors
                     totals[name][1] += count
-        groups[field] = {name: rate(*values) for name, values in totals.items()}
+        # The Japanese and Spanish groups only for a corpus with such clips.
+        groups[field] = {name: rate(*values) for name, values in totals.items() if values[1] or name not in speech_score.LANGUAGE_GROUPS}
     decode = [row["decode_seconds"] for row in raw["clips"].values() if not row.get("skipped_silent")]
     return {
         "suite": "corpus",
@@ -187,7 +188,7 @@ def load_set_manifest(folder: Path) -> dict[str, dict]:
 
 
 def score_set_clip(clip: dict, text: str) -> dict:
-    lang = "en" if clip.get("language") == "en" else "zh"
+    lang = speech_score.scoring_lang(clip.get("language"))
     reference = speech_score.tokens(clip.get("reference", ""), lang)
     errors = speech_score.edit_distance(reference, speech_score.tokens(text, lang))
     expect = [term for term in clip.get("expect_terms", []) if normalized(term)]

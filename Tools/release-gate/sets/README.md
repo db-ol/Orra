@@ -6,7 +6,8 @@ Only the sentences live in the repository. The clips are made again on any Mac:
     python3 Tools/release-gate/sets/make_sets.py [SET ...]
 
 `make_sets.py` uses `say` (Samantha for English, Tingting for Chinese and mixed sentences,
-or the `voice` of a line) and `afconvert` to 16 kHz mono 16 bit WAVE. Standard library only.
+Kyoko for Japanese, Paulina for Spanish, or the `voice` of a line) and `afconvert` to 16 kHz
+mono 16 bit WAVE. Standard library only.
 It writes to `$ORRA_BENCH/gate-sets`, where the gate reads the sets, unless `--out` names
 another folder.
 
@@ -14,7 +15,7 @@ another folder.
 
 - `sentences.jsonl`: one sentence per line, `{"id", "language", "say", "reference",
   "expect_terms", "forbid_terms"}`. `say` is the text given to the voice, `reference` is the
-  text Orra should paste. `language` is `zh`, `en` or `mixed`. A line may hold its own
+  text Orra should paste. `language` is `zh`, `en`, `mixed`, `ja` or `es`. A line may hold its own
   `voice` and `context`.
 - `set.json`, optional: the context variants. Every sentence becomes one clip per variant, with the
   variant's `suffix` after its id and the variant's `context` (the vocabulary given to the

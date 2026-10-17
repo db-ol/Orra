@@ -6,8 +6,9 @@
 # (https://github.com/sgl-project/sglang-omni, commit aac4b83), Copyright the sglang-omni
 # authors, licensed under the Apache License 2.0
 # (https://www.apache.org/licenses/LICENSE-2.0). The scores per stratum, the timing and
-# the comparison of two runs are Orra's. Standard library only, so CI runs the tests on
-# Linux with any python3.
+# the comparison of two runs are Orra's, and so are the Japanese and Spanish groups for
+# other corpora with the same layout. Standard library only, so CI runs the tests on Linux
+# with any python3.
 #
 # Usage:
 #
@@ -33,23 +34,43 @@ HERE = Path(__file__).resolve().parent
 
 # Voxt's three numbers: WER over English (LibriSpeech, the 10 dB copies included), CER over
 # Chinese (FLEURS and the Chinese only ASCEND clips) and MER over code switched ASCEND.
+# Then CER over Japanese and WER over Spanish, for a corpus such as FLEURS ja_jp and es_419.
 GROUPS = {
     "wer_en": lambda clip: clip["lang"] == "en" and clip["stratum"] not in ("silence", "noise"),
     "cer_zh": lambda clip: clip["lang"] == "zh",
     "mer_mixed": lambda clip: clip["stratum"] == "mixed",
+    "cer_ja": lambda clip: clip["lang"] == "ja",
+    "wer_es": lambda clip: clip["lang"] == "es",
 }
+# Groups that count only when a run has clips in them, so the speech corpus, which has none,
+# scores exactly as before they were added.
+LANGUAGE_GROUPS = {"cer_ja", "wer_es"}
 STRATA = ["en_short", "en_mid", "en_long", "snr10_en", "zh_short", "zh_numbers", "zh_mid", "zh_long", "snr10_zh", "mixed"]
 EMPTY_STRATA = ["silence", "noise"]
+# Shown only when a run has clips in them, like LANGUAGE_GROUPS.
+LANGUAGE_STRATA = ["ja", "es"]
+
+# Han characters, the marks 々 and 〆, and kana, one token each in Japanese and Spanish. The
+# kana blocks also hold the middle dot, the double hyphen and the voicing marks, which stay
+# out like punctuation. Escapes, because an editor that normalizes text turns U+F900 into
+# U+8C48, and the range would then take in Hangul and other scripts.
+HAN_AND_KANA = "\u3005\u3006\u3400-\u9fff\uf900-\ufaff\u3041-\u3096\u309d-\u309f\u30a1-\u30fa\u30fc-\u30ff\u31f0-\u31ff"
 
 
 def tokens(text: str, lang: str) -> list[str]:
-    """English: lower case words of letters, digits and apostrophes. Anything else: one token
-    per CJK character and one per run of letters, digits and apostrophes. NFKC first, so
-    full width digits and letters count as ASCII. Punctuation is never a token."""
+    """English: lower case words of letters, digits and apostrophes. Japanese and Spanish: one
+    token per Han character or kana and one per run of other letters and digits, accents
+    kept, with apostrophes inside a word, so Japanese counts per character and Spanish per
+    word. Anything else: one token per CJK character and one per run of ASCII letters,
+    digits and apostrophes. NFKC first, so full width digits and letters count as ASCII.
+    Punctuation is never a token."""
     text = unicodedata.normalize("NFKC", text).lower()
     if lang == "en":
         text = re.sub(r"[^a-z0-9' ]+", " ", text)
         return [token.strip("'") for token in text.split() if token.strip("'")]
+    if lang in ("ja", "es"):
+        found = re.findall(rf"[{HAN_AND_KANA}]|(?:[^\W_{HAN_AND_KANA}]|')+", text)
+        return [token.strip("'") for token in found if token.strip("'")]
     return re.findall(r"[㐀-鿿豈-﫿]|[a-z0-9']+", text)
 
 
@@ -63,13 +84,15 @@ def edit_distance(reference: list[str], hypothesis: list[str]) -> int:
     return previous[-1]
 
 
-def scoring_lang(clip: dict) -> str:
-    return "en" if clip["lang"] == "en" else "zh"
+def scoring_lang(lang: str | None) -> str:
+    """How a clip in this language is scored. Chinese, the code switched clips and anything
+    unknown go the Chinese way."""
+    return lang if lang in ("en", "ja", "es") else "zh"
 
 
 def clip_errors(clip: dict, text: str) -> tuple[int, int]:
     """Errors and reference tokens of one clip."""
-    lang = scoring_lang(clip)
+    lang = scoring_lang(clip["lang"])
     reference = tokens(clip["reference"], lang)
     return edit_distance(reference, tokens(text, lang)), len(reference)
 
@@ -93,11 +116,15 @@ def load_run(spec: str, field: str = "text") -> tuple[str, dict[str, dict]]:
         clips = data["clips"]
     if field != "text":
         label += f" [{field}]"
-    return label, {clip_id: {**row, "text": row[field]} for clip_id, row in clips.items()}
+    # Timing reads the time of the pass that wrote the field when the run holds one, such as
+    # decode_seconds_japanese for text_japanese, and decode_seconds otherwise.
+    seconds = "decode_seconds" + field[len("text"):] if field.startswith("text_") else "decode_seconds"
+    return label, {clip_id: {**row, "text": row[field], **({"decode_seconds": row[seconds]} if seconds in row else {})} for clip_id, row in clips.items()}
 
 
 def metrics(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, float]:
-    """Voxt's three error rates, rounded as Voxt rounds them."""
+    """Voxt's three error rates, rounded as Voxt rounds them, and the Japanese and Spanish
+    ones when the run has such clips."""
     result = {}
     for name, keep in GROUPS.items():
         errors = total = 0
@@ -107,7 +134,8 @@ def metrics(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, float
                 found, count = clip_errors(clip, text)
                 errors += found
                 total += count
-        result[name] = round(errors / total, 5) if total else 0.0
+        if total or name not in LANGUAGE_GROUPS:
+            result[name] = round(errors / total, 5) if total else 0.0
     return result
 
 
@@ -115,13 +143,14 @@ def strata(manifest: dict[str, dict], texts: dict[str, str]) -> dict[str, tuple[
     """Error rate and clip count per stratum. Silence and noise give the number of clips
     with any output instead, since they have no reference."""
     result = {}
-    for stratum in STRATA:
+    for stratum in STRATA + LANGUAGE_STRATA:
         errors = total = clips = 0
         for clip_id, text in texts.items():
             if manifest[clip_id]["stratum"] == stratum:
                 found, count = clip_errors(manifest[clip_id], text)
                 errors, total, clips = errors + found, total + count, clips + 1
-        result[stratum] = (errors / total if total else 0.0, clips)
+        if clips or stratum not in LANGUAGE_STRATA:
+            result[stratum] = (errors / total if total else 0.0, clips)
     for stratum in EMPTY_STRATA:
         ids = [clip_id for clip_id in texts if manifest[clip_id]["stratum"] == stratum]
         result[stratum] = (sum(1 for clip_id in ids if tokens(texts[clip_id], "zh")), len(ids))
@@ -157,16 +186,23 @@ def table(manifest: dict[str, dict], runs: list[tuple[str, dict[str, dict]]]) ->
         if missing:
             print(f"warning: {label} lacks {len(missing)} clips", file=sys.stderr)
     lines = ["| | " + " | ".join(label for label, _ in runs) + " |", "|---" * (len(runs) + 1) + "|"]
+    # A group or stratum without clips in any run, such as cer_zh for a run of Spanish clips,
+    # is left out, and a run without clips in it shows n/a.
     all_metrics = [metrics(manifest, run) for run in texts]
-    for name in GROUPS:
-        lines.append(f"| {name} | " + " | ".join(f"{m[name]:.2%}" for m in all_metrics) + " |")
+    for name, keep in GROUPS.items():
+        present = [name in m and any(keep(manifest[clip_id]) for clip_id in run) for m, run in zip(all_metrics, texts)]
+        if any(present):
+            lines.append(f"| {name} | " + " | ".join(f"{m[name]:.2%}" if has else "n/a" for m, has in zip(all_metrics, present)) + " |")
     all_strata = [strata(manifest, run) for run in texts]
-    for stratum in STRATA:
-        count = all_strata[0][stratum][1]
-        lines.append(f"| {stratum} ({count}) | " + " | ".join(f"{s[stratum][0]:.2%}" for s in all_strata) + " |")
-    for stratum in EMPTY_STRATA:
-        count = all_strata[0][stratum][1]
-        lines.append(f"| {stratum}, clips with output (of {count}) | " + " | ".join(str(s[stratum][0]) for s in all_strata) + " |")
+    for stratum in STRATA + LANGUAGE_STRATA + EMPTY_STRATA:
+        counts = [s[stratum][1] if stratum in s else 0 for s in all_strata]
+        if not any(counts):
+            continue
+        count = next(filter(None, counts))
+        if stratum in EMPTY_STRATA:
+            lines.append(f"| {stratum}, clips with output (of {count}) | " + " | ".join(str(s[stratum][0]) if clips else "n/a" for s, clips in zip(all_strata, counts)) + " |")
+        else:
+            lines.append(f"| {stratum} ({count}) | " + " | ".join(f"{s[stratum][0]:.2%}" if clips else "n/a" for s, clips in zip(all_strata, counts)) + " |")
     timings = [timing(clips) for _, clips in runs]
     if any(timings):
         for key, title, unit in [

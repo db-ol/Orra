@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import Qwen3ASR
 import Testing
 @testable import Orra
 
@@ -18,9 +19,20 @@ import Testing
 /// The cleanup model is not run. Clips run whole, also the long ones over Orra's 60 s
 /// recording limit.
 ///
-/// LanguageGuard is part of that path: language_passes counts the passes it added to a
-/// clip. With TEST_RUNNER_ORRA_SPEECH_EVAL_HINTS=1 the test also writes text_chinese and
+/// LanguageGuard is part of that path. language_passes counts the passes it added to a
+/// clip, and language_pass names the pass that gave text: chinese or english for one of
+/// those, unhinted for the first pass, also when no added pass helped. text_unhinted is the
+/// first pass after the same post steps, the text without LanguageGuard, and
+/// text_pass_chinese and text_pass_english hold the added passes. With
+/// TEST_RUNNER_ORRA_SPEECH_EVAL_HINTS=1 the test also writes text_chinese and
 /// text_english, the clip transcribed with each language as the hint, and their times.
+///
+/// Another corpus in the same layout runs too, such as FLEURS ja_jp and es_419, where each
+/// manifest line has lang ja or es. Such a clip is also transcribed with its own language
+/// as the hint, into text_japanese or text_spanish with decode_seconds_japanese or
+/// decode_seconds_spanish. SpeechLanguage has no case for these languages, so that no path
+/// of the app can pick one, and this pass runs on a second copy of the model that the test
+/// loads with Orra's decoding options. score.py scores such clips as cer_ja and wer_es.
 ///
 /// Optional: TEST_RUNNER_ORRA_SPEECH_MODEL_DIR picks another model folder, and
 /// TEST_RUNNER_ORRA_SPEECH_MODEL_ID the Hugging Face ID speech-swift reads its size and
@@ -38,29 +50,44 @@ struct SpeechCorpusEvaluationTests {
         let modelFolder = try #require(SpeechCorpus.modelFolder, "no speech model on this Mac, or TEST_RUNNER_ORRA_SPEECH_MODEL_DIR is not a folder")
         let modelID = SpeechCorpus.environment["ORRA_SPEECH_MODEL_ID"] ?? SpeechModel.id
         let clips = try SpeechCorpus.manifest(in: corpus)
-        #expect(clips.count == 392)
+        let hasOtherLanguages = clips.contains { SpeechCorpus.otherLanguages[$0.language] != nil }
+        // The speech corpus. A corpus in other languages has a count of its own.
+        if !hasOtherLanguages {
+            #expect(clips.count == 392)
+        }
 
         let engine = Qwen3Engine(folder: { modelFolder }, modelID: modelID)
-        // Counts the passes LanguageGuard asks for, with Chinese or English as the language.
-        let hintedPasses = PassCounter()
+        // Every pass of one clip. With no vocabulary, the first has no hint and the others
+        // are the ones LanguageGuard asks for, with Chinese or English as the language.
+        let passes = ClipPasses()
         let transcription = Transcription(
             load: { try await engine.load() },
             transcribe: { samples, context, language in
-                if language != nil { hintedPasses.count += 1 }
-                return try await engine.transcribe(samples, context: context, language: language)
+                let text = try await engine.transcribe(samples, context: context, language: language)
+                passes.all.append((language, text))
+                return text
             }
         )
         let loadStarted = ContinuousClock.now
         try await transcription.load()
         let loadSeconds = SpeechCorpus.seconds(loadStarted.duration(to: .now))
+        var otherModel: Qwen3ASRModel?
+        if hasOtherLanguages {
+            let model = try await Qwen3ASRModel.fromPretrained(modelId: modelID, cacheDir: modelFolder, offlineMode: true)
+            // Warms up as Qwen3Engine.load does, so the first clip's time holds no one time costs.
+            _ = model.transcribe(audio: [Float](repeating: 0, count: RecordingLimits.sampleRate), sampleRate: RecordingLimits.sampleRate, options: SpeechCorpus.options(seconds: 1, language: nil))
+            otherModel = model
+        }
 
         var results: [String: Any] = [:]
         var audioTotal = 0.0
         var decodeTotal = 0.0
+        var otherPasses = 0
         for clip in clips {
-            let recording = try SpeechCorpus.recording(corpus.appendingPathComponent("clips/\(clip).wav"))
+            let recording = try SpeechCorpus.recording(corpus.appendingPathComponent("clips/\(clip.id).wav"))
             let samples = AudioResampler.monoAt16kHz(recording)
             let audioSeconds = recording.duration
+            let afterPostSteps = { (text: String) in ChineseText.simplified(TranscriptGuard.clean(text, audioSeconds: audioSeconds)) }
             var row: [String: Any] = ["audio_seconds": audioSeconds]
             if Silence.isSilent(samples) {
                 row["text"] = ""
@@ -69,7 +96,7 @@ struct SpeechCorpusEvaluationTests {
                 row["skipped_silent"] = true
             } else {
                 let started = ContinuousClock.now
-                hintedPasses.count = 0
+                passes.all = []
                 let raw = try await transcription.transcribe(samples, vocabulary: [], audioSeconds: audioSeconds)
                 let decodeSeconds = SpeechCorpus.seconds(started.duration(to: .now))
                 let guarded = TranscriptGuard.clean(raw, audioSeconds: audioSeconds)
@@ -80,7 +107,19 @@ struct SpeechCorpusEvaluationTests {
                 // Which post step changed the model's text, for reading the differences.
                 row["guard_changed"] = raw.trimmingCharacters(in: .whitespacesAndNewlines) != guarded
                 row["simplified_changed"] = guarded != text
-                row["language_passes"] = hintedPasses.count
+                let guardPasses = passes.all.filter { $0.language != nil }
+                row["language_passes"] = guardPasses.count
+                // LanguageGuard stops at the first hinted pass it accepts. So a hinted pass gave
+                // the text when it ran last and its text, not the unhinted one, came back.
+                let unhinted = passes.all.first?.text ?? ""
+                let last = passes.all.last
+                let stood: SpeechLanguage? = last?.text == raw && raw != unhinted ? last?.language : nil
+                row["language_pass"] = stood?.rawValue.lowercased() ?? "unhinted"
+                row["text_unhinted"] = afterPostSteps(unhinted)
+                for case let (language?, text) in guardPasses {
+                    row["text_pass_\(language.rawValue.lowercased())"] = afterPostSteps(text)
+                }
+                if !guardPasses.isEmpty { otherPasses += 1 }
                 decodeTotal += decodeSeconds
                 audioTotal += audioSeconds
                 // Optional: the same clip with each language as the hint, for studying
@@ -91,12 +130,22 @@ struct SpeechCorpusEvaluationTests {
                         let hinted = try await engine.transcribe(samples, language: language)
                         let hintSeconds = SpeechCorpus.seconds(hintStarted.duration(to: .now))
                         let key = language.rawValue.lowercased()
-                        row["text_\(key)"] = ChineseText.simplified(TranscriptGuard.clean(hinted, audioSeconds: audioSeconds))
+                        row["text_\(key)"] = afterPostSteps(hinted)
                         row["decode_seconds_\(key)"] = hintSeconds
                     }
                 }
+                // A clip in Japanese or Spanish with its own language as the hint, also
+                // straight from the model, see otherModel.
+                if let model = otherModel, let language = SpeechCorpus.otherLanguages[clip.language] {
+                    let hintStarted = ContinuousClock.now
+                    let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
+                    let hinted = model.transcribe(audio: samples, sampleRate: RecordingLimits.sampleRate, options: SpeechCorpus.options(seconds: seconds, language: language))
+                    let key = language.lowercased()
+                    row["decode_seconds_\(key)"] = SpeechCorpus.seconds(hintStarted.duration(to: .now))
+                    row["text_\(key)"] = afterPostSteps(hinted)
+                }
             }
-            results[clip] = row
+            results[clip.id] = row
         }
 
         #if DEBUG
@@ -119,15 +168,17 @@ struct SpeechCorpusEvaluationTests {
         try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]).write(to: file)
 
         // Numbers only.
-        let summary = "\(results.count) clips, \(String(format: "%.1f", audioTotal)) s of speech decoded in \(String(format: "%.1f", decodeTotal)) s, load \(String(format: "%.2f", loadSeconds)) s, \(build) build, written to \(file.path)"
+        let summary = "\(results.count) clips, \(String(format: "%.1f", audioTotal)) s of speech decoded in \(String(format: "%.1f", decodeTotal)) s, \(otherPasses) sent to another pass by LanguageGuard, load \(String(format: "%.2f", loadSeconds)) s, \(build) build, written to \(file.path)"
         print(summary)
         Attachment.record(summary, named: "speech-corpus-evaluation.txt")
     }
 }
 
+/// The passes of the speech model for one clip, in order, each with the language it was
+/// told to write, nil for none, and the text it gave.
 @MainActor
-final class PassCounter {
-    var count = 0
+final class ClipPasses {
+    var all: [(language: SpeechLanguage?, text: String)] = []
 }
 
 enum SpeechCorpus {
@@ -153,13 +204,23 @@ enum SpeechCorpus {
         return RealModel.folder
     }
 
-    /// The clip IDs of the manifest, in its order.
-    static func manifest(in corpus: URL) throws -> [String] {
+    /// Languages a corpus may hold that Orra never gives the model as the hint, by the name
+    /// the model's prompt uses.
+    static let otherLanguages = ["ja": "Japanese", "es": "Spanish"]
+
+    /// The clips of the manifest, in its order, each with its ID and its lang.
+    static func manifest(in corpus: URL) throws -> [(id: String, language: String)] {
         let text = try String(contentsOf: corpus.appendingPathComponent("manifest.jsonl"), encoding: .utf8)
         return try text.split(separator: "\n").map { line in
             let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
-            return try #require(object["id"] as? String)
+            let id = try #require(object["id"] as? String)
+            return (id, object["lang"] as? String ?? "")
         }
+    }
+
+    /// Orra's decoding options, see Qwen3Engine, for a pass the test runs on the model itself.
+    static func options(seconds: Double, language: String?) -> Qwen3DecodingOptions {
+        Qwen3DecodingOptions(maxTokens: max(448, Int(seconds * 12)), language: language, longInputThresholdSeconds: .infinity)
     }
 
     /// A clip as the microphone would deliver it: the first channel at the file's rate.
