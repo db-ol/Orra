@@ -1,0 +1,88 @@
+import AppKit
+import Foundation
+import SwiftUI
+import Testing
+@testable import Orra
+
+/// The top level of the menu bar menu, read from the menu SwiftUI makes of StatusMenu:
+/// Live Captions under a Meeting Interpretation heading, and when Speak Translations to
+/// Others shows.
+@MainActor
+struct StatusMenuTests {
+    let mic = FakeMicrophone()
+    let dictation = FakeSpeech()
+    let inserter = FakeInserter()
+    let temporary = TemporaryModelFolders()
+
+    @Test func liveCaptionsIsAtTheTopLevelUnderItsHeading() throws {
+        let lines = lines(translationOn: false, speakingOn: false)
+        let heading = try #require(lines.firstIndex(of: "# Meeting Interpretation"))
+        #expect(lines[heading - 1] == "---")
+        // Off at every launch.
+        #expect(Array(lines[heading...].prefix(3)) == ["# Meeting Interpretation", "Live Captions", "---"])
+        #expect(!lines.contains("Meeting Interpretation >"))
+        // The section brings its own dividers, so no two stand next to each other.
+        #expect(!zip(lines, lines.dropFirst()).contains { $0 == "---" && $1 == "---" })
+    }
+
+    @Test func speakTranslationsShowsWithTranslationOrWhileOn() {
+        #expect(meetingLines(translationOn: true, speakingOn: false) == ["Live Captions", "Speak Translations to Others"])
+        #expect(meetingLines(translationOn: true, speakingOn: true) == ["Live Captions", "Speak Translations to Others (on)"])
+        // After Translation was turned off, so the menu can still turn it off.
+        #expect(meetingLines(translationOn: false, speakingOn: true) == ["Live Captions", "Speak Translations to Others (on)"])
+        #expect(meetingLines(translationOn: false, speakingOn: false) == ["Live Captions"])
+    }
+
+    @Test func aBuildWithoutAVoiceModelHasNoSpeakTranslations() {
+        #expect(meetingLines(translationOn: true, speakingOn: true, voiceModel: false) == ["Live Captions"])
+    }
+
+    /// The lines under the Meeting Interpretation heading, up to the divider after them.
+    private func meetingLines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true) -> [String] {
+        let lines = lines(translationOn: translationOn, speakingOn: speakingOn, voiceModel: voiceModel)
+        guard let heading = lines.firstIndex(of: "# Meeting Interpretation") else { return [] }
+        return Array(lines[(heading + 1)...].prefix { $0 != "---" })
+    }
+
+    /// The menu's top level, one line for each item: "# " starts a section heading, " >"
+    /// ends a submenu, " (on)" ends an item that is on, and "---" is a divider. Without
+    /// Accessibility access and with the speech model not downloaded, as in a test.
+    private func lines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true) -> [String] {
+        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert)
+        pushToTalk.setTranslationKeyOn(translationOn)
+        let speech = TranslationSpeech(
+            engines: voiceModel ? .only(FakeSynthesizer()) : .none,
+            playback: FakePlayback(),
+            outputs: { [] },
+            folders: { nil },
+            settings: TranslationSpeech.Settings(isOn: speakingOn)
+        )
+        let view = StatusMenu(
+            pushToTalk: pushToTalk,
+            models: ModelInstaller(
+                manifest: temporary.manifest,
+                folders: temporary.folders,
+                environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in nil }, sleep: { _ in })
+            ),
+            captions: MeetingCaptions(
+                source: SystemAudioSource(start: { _ in }, stop: {}),
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
+            ),
+            openAtLogin: OpenAtLogin(readStatus: { .off }, register: { _ in }, openLoginItemsSettings: {}),
+            inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) },
+            clipboard: ClipboardWord(read: { nil }, isDictating: { false }, vocabulary: { [] }),
+            updater: AppUpdater(),
+            speech: speech,
+            showWelcome: {},
+            reportProblem: {}
+        )
+        let menu = NSHostingMenu(rootView: view)
+        menu.update()
+        return menu.items.map { item in
+            if item.isSeparatorItem { return "---" }
+            if item.isSectionHeader { return "# " + item.title }
+            if item.submenu != nil { return item.title + " >" }
+            return item.state == .on ? item.title + " (on)" : item.title
+        }
+    }
+}

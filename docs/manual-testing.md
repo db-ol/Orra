@@ -68,6 +68,11 @@ got worse than the baseline, see docs/release-gate.md.
     TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab and sheet
     to a PNG there, General also with translation on and after a swap of the keys,
     which CI never does.
+  - StatusMenuTests reads the top level of the menu SwiftUI makes of the menu bar menu,
+    without showing it: Live Captions, off, right under the Meeting Interpretation
+    heading with a divider above and below and no submenu, no two dividers next to each
+    other, and Speak Translations to Others only in a build with a voice model, while
+    translation is on or while it is on itself.
   - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
     for each translation direction and interface language, recording and stopping, too
     short, the stop at the time limit, a microphone that fails to start, a cancel while
@@ -2010,20 +2015,30 @@ it shows starts, stops, counts and failures, never text.
   model is not ready. Captions start once it is loaded."
 - [ ] With cleanup and translation off, the local model loads when captions start and
   is unloaded when they stop (Activity Monitor shows the memory fall).
-- [ ] With the interface in Chinese: the submenu reads 会议同传 with 实时字幕 in it, the
-  window's title reads 实时字幕, the picker reads 只显示译文 and 原文和译文逐句对照, and
-  every note in the window is in Chinese.
-- [ ] Meeting Interpretation groups both parts, since 2026-10-15. The menu has a Meeting
-  Interpretation submenu with Live Captions, and Speak Translations to Others while
-  translation is on and the build has a voice model. Settings, General, has a Meeting
-  Interpretation section (会议同传) after Features with a short intro ("For meetings across
-  languages. Read what others say in your language, and let them hear you in theirs, even
-  in your own voice."), Live captions (实时字幕) and Captions show, then Speak translations
-  to others (为对方朗读译文) with all its earlier options. The Live captions switch in
-  Settings and the menu item turn the same captions on and off and show the same state.
-  Captions show in Settings and the picker in the window change together, and the choice
-  stays after a restart. Settings saved by an earlier version, Speak translations on and
-  the chosen device and display mode, are kept.
+- [ ] With the interface in Chinese: the menu's heading reads 会议同传 with 实时字幕 under
+  it, the window's title reads 实时字幕, the picker reads 只显示译文 and
+  原文和译文逐句对照, and every note in the window is in Chinese.
+- [ ] Meeting Interpretation groups both parts, since 2026-10-15. In the menu they stand
+  under a Meeting Interpretation heading at the top level since 2026-10-17, in place of
+  the submenu, see below. Settings, General, has a Meeting Interpretation section
+  (会议同传) after Features with a short intro ("For meetings across languages. Read what
+  others say in your language, and let them hear you in theirs, even in your own
+  voice."), Live captions (实时字幕) and Captions show, then Speak translations to others
+  (为对方朗读译文) with all its earlier options. The Live captions switch in Settings and
+  the menu item turn the same captions on and off and show the same state. Captions show
+  in Settings and the picker in the window change together, and the choice stays after a
+  restart. Settings saved by an earlier version, Speak translations on and the chosen
+  device and display mode, are kept.
+- [ ] Live Captions at the top level of the menu, since 2026-10-17, not verified yet in the
+  running app. Below the dictation lines, and below the clipboard item when it shows, a
+  divider, the heading Meeting Interpretation in the small grey type of a section
+  heading, Live Captions right under it, and a divider before Talk Key. There is no
+  Meeting Interpretation submenu, and no two dividers stand next to each other. Clicking
+  Live Captions turns captions on and opens the window, and the item shows a check mark.
+  Speak Translations to Others shows under Live Captions while translation is on and the
+  build has a voice model. With it on, turning Translation off in Settings leaves it in
+  the menu, checked, and clicking it there turns speaking off, after which it leaves
+  the menu.
 - [ ] Voice sample, since 2026-10-15 recorded in Orra rather than picked as a file. Not
   yet tried with a real microphone. Voice sample (声音样本) has Record… (录音…), which opens
   a sheet with a script to read aloud, about 10 seconds. The script is Chinese when

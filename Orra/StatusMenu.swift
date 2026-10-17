@@ -94,7 +94,25 @@ struct StatusMenu: View {
                 clipboard.clear()
             }
         }
-        Divider()
+
+        // A meeting where each side speaks another language: captions for what the other
+        // side says, and a voice for what you say. At the top level, so captions turn on
+        // without a submenu. A section draws its heading and the dividers above and below
+        // it, so no Divider goes next to it.
+        Section("Meeting Interpretation") {
+            // The sound the Mac plays, transcribed and translated in a floating window.
+            Toggle("Live Captions", isOn: Binding(
+                get: { captions.isOn },
+                set: { captions.setOn($0) }
+            ))
+            // Also while on after Translation was turned off, so the menu can turn it off.
+            if speech.canSpeak, pushToTalk.translationKeyIsOn || speech.isOn {
+                Toggle("Speak Translations to Others", isOn: Binding(
+                    get: { speech.isOn },
+                    set: { speech.setOn($0) }
+                ))
+            }
+        }
 
         Menu("Talk Key") {
             // A menu shows text as a line that cannot be clicked. The key is chosen by
@@ -122,21 +140,6 @@ struct StatusMenu: View {
                 set: { pushToTalk.setHandsFreeOn($0) }
             ))
             .disabled(!pushToTalk.handsFreeApplies)
-        }
-        // A meeting where each side speaks another language: captions for what the other
-        // side says, and a voice for what you say.
-        Menu("Meeting Interpretation") {
-            // The sound the Mac plays, transcribed and translated in a floating window.
-            Toggle("Live Captions", isOn: Binding(
-                get: { captions.isOn },
-                set: { captions.setOn($0) }
-            ))
-            if pushToTalk.translationKeyIsOn, speech.canSpeak {
-                Toggle("Speak Translations to Others", isOn: Binding(
-                    get: { speech.isOn },
-                    set: { speech.setOn($0) }
-                ))
-            }
         }
         Menu("Microphone") {
             MicrophoneToggles(inputs: inputs, chosen: pushToTalk.microphone, choose: pushToTalk.setMicrophone)
