@@ -416,17 +416,11 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
 
     /// The symbols of the modifiers held, such as "⇧ ⌘", in the order Mac menus show them.
     private func symbols(flags: CGEventFlags, fnPressed: Bool) -> String {
-        var symbols: [String] = []
+        var modifiers = ModifierSet(flags: flags, includingFn: false)
         if fnPressed || candidate == .fn {
-            symbols.append("fn")
+            modifiers.insert(.fn)
         }
-        let modifiers: [(CGEventFlags, String)] = [
-            (.maskControl, "⌃"), (.maskAlternate, "⌥"), (.maskShift, "⇧"), (.maskCommand, "⌘"),
-        ]
-        for (flag, symbol) in modifiers where flags.contains(flag) {
-            symbols.append(symbol)
-        }
-        return symbols.joined(separator: " ")
+        return modifiers.symbols.joined(separator: " ")
     }
 }
 
@@ -553,7 +547,7 @@ nonisolated enum HandsFreePreference {
     static let defaultsKey = "handsFreeDoublePress"
 
     static func load(from defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: defaultsKey) as? Bool ?? true
+        defaults.bool(forKey: defaultsKey, default: true)
     }
 
     static func save(_ on: Bool, to defaults: UserDefaults = .standard) {

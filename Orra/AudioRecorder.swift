@@ -5,6 +5,11 @@ import CoreAudio
 import os
 import Synchronization
 
+extension Logger {
+    /// The microphone. Devices, formats and states only, never audio.
+    nonisolated static let audio = Logger(subsystem: ProblemReport.subsystem, category: "audio")
+}
+
 /// Microphone permission, as Orra needs it.
 nonisolated enum MicrophoneAccess: Equatable, Sendable {
     case authorized
@@ -347,7 +352,7 @@ actor AudioRecorder {
     /// How the latest recording started, for the timing log.
     private var latestPath: CaptureOnset.Path?
     private var latestTransport: UInt32 = 0
-    private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "audio")
+    private let logger = Logger.audio
 
     /// Starts recording. Call only when microphone access is authorized, because starting
     /// without it would show the system prompt.

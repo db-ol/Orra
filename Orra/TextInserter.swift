@@ -248,14 +248,26 @@ nonisolated enum FocusedField {
     /// Reads off the main actor, because the app in front answers and may be slow.
     @concurrent
     static func kind(inApp pid: pid_t) async -> Kind {
+        guard let field = focusedElement(inApp: pid) else { return .unknown }
+        return kind(of: field)
+    }
+
+    /// The focused element of the app, with `timeout` set on it, or nil when there is none
+    /// or it did not answer in time.
+    static func focusedElement(inApp pid: pid_t) -> AXUIElement? {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, timeout)
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return .unknown }
+              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
         let field = focused as! AXUIElement
         // A timeout applies only to the element it was set on.
         AXUIElementSetMessagingTimeout(field, timeout)
+        return field
+    }
+
+    /// What `field` is, from its role and subrole.
+    static func kind(of field: AXUIElement) -> Kind {
         var values: CFArray?
         let attributes = [kAXRoleAttribute, kAXSubroleAttribute] as CFArray
         guard AXUIElementCopyMultipleAttributeValues(field, attributes, AXCopyMultipleAttributeOptions(), &values) == .success,
@@ -292,9 +304,19 @@ nonisolated enum SecureInput {
     }
 }
 
-/// Reads the current keyboard layout, so Command V uses the key that types "v" there.
-/// Text Input Sources must be used on the main thread, so this stays on the main actor.
+/// Reads the current keyboard layout, so Command V uses the key that types "v" there, and
+/// the talk key recorder names a key, see KeyName. Text Input Sources must be used on the
+/// main thread, so this stays on the main actor.
 enum KeyboardLayout {
+    /// Which layout to read.
+    enum Source {
+        /// The layout in use.
+        case current
+        /// The layout in use that can type Latin letters, such as ABC under a Chinese
+        /// input method.
+        case asciiCapable
+    }
+
     /// The modifier state for Command, as UCKeyTranslate expects it.
     private static let commandModifier = UInt32((cmdKey >> 8) & 0xFF)
 
@@ -303,22 +325,26 @@ enum KeyboardLayout {
     /// Command switch to QWERTY while Command is down.
     static func keyCode(for character: Character, withCommand: Bool = false) -> CGKeyCode? {
         let modifiers = withCommand ? commandModifier : 0
-        return withCurrentLayout { layout in
+        return withLayout(.current) { layout in
             (0..<128).map { CGKeyCode($0) }.first { translate($0, modifiers: modifiers, in: layout) == String(character) }
         } ?? nil
     }
 
-    /// The character that `keyCode` types in the current layout, or nil.
-    static func character(for keyCode: CGKeyCode, withCommand: Bool = false) -> String? {
+    /// The character that `keyCode` types in the layout, or nil.
+    static func character(for keyCode: CGKeyCode, withCommand: Bool = false, in source: Source = .current) -> String? {
         let modifiers = withCommand ? commandModifier : 0
-        return withCurrentLayout { layout in translate(keyCode, modifiers: modifiers, in: layout) } ?? nil
+        return withLayout(source) { layout in translate(keyCode, modifiers: modifiers, in: layout) } ?? nil
     }
 
-    private static func withCurrentLayout<Result>(_ body: (UnsafePointer<UCKeyboardLayout>) -> Result) -> Result? {
-        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+    private static func withLayout<Result>(_ source: Source, _ body: (UnsafePointer<UCKeyboardLayout>) -> Result) -> Result? {
+        let copied = switch source {
+        case .current: TISCopyCurrentKeyboardLayoutInputSource()
+        case .asciiCapable: TISCopyCurrentASCIICapableKeyboardLayoutInputSource()
+        }
+        guard let input = copied?.takeRetainedValue(),
               // The key is the value of kTISPropertyUnicodeKeyLayoutData. Swift 6 rejects
               // reading that C global because it is imported as a mutable variable.
-              let property = TISGetInputSourceProperty(source, "TISPropertyUnicodeKeyLayoutData" as CFString) else {
+              let property = TISGetInputSourceProperty(input, "TISPropertyUnicodeKeyLayoutData" as CFString) else {
             return nil
         }
         let data = Unmanaged<CFData>.fromOpaque(property).takeUnretainedValue() as Data

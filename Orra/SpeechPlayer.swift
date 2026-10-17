@@ -2,6 +2,11 @@ import AVFoundation
 import CoreAudio
 import os
 
+extension Logger {
+    /// Playing the spoken translation. Devices and states only, never text or audio.
+    nonisolated static let speech = Logger(subsystem: ProblemReport.subsystem, category: "speech")
+}
+
 /// Where TranslationSpeech plays the voice. The app's is SpeechPlayer. Tests pass a fake,
 /// so they never touch an audio device.
 protocol SpeechPlayback: AnyObject {
@@ -37,7 +42,7 @@ final class SpeechPlayer: SpeechPlayback {
     private var queuedSeconds = 0.0
     /// Watches for the device going away, see `engineChanged`.
     private var configurationObserver: (any NSObjectProtocol)?
-    private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "speech")
+    private let logger = Logger.speech
     /// Qwen3-TTS speaks at 24 kHz.
     private static let voiceSampleRate = 24_000.0
 

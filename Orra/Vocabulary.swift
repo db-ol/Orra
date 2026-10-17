@@ -2,6 +2,11 @@ import AppKit
 import Observation
 import os
 
+extension Logger {
+    /// The vocabulary. Never a word.
+    nonisolated static let vocabulary = Logger(subsystem: ProblemReport.subsystem, category: "vocabulary")
+}
+
 /// One word or name of the vocabulary, with when it was added, when a pasted transcript
 /// last held it, and how it came. Holds the word, the two dates and the source, never any
 /// other text.
@@ -260,7 +265,7 @@ nonisolated enum VocabularyPreference {
                 hasSaved = true
             } else {
                 // Counts nothing and names no word.
-                Logger(subsystem: "io.github.db-ol.Orra", category: "vocabulary").error("The saved vocabulary could not be read, using the plain list")
+                Logger.vocabulary.error("The saved vocabulary could not be read, using the plain list")
             }
         }
         var ids = Set(words.map(\.id))
@@ -330,7 +335,6 @@ final class ClipboardWord {
     @ObservationIgnored private let read: () -> String?
     @ObservationIgnored private let isDictating: () -> Bool
     @ObservationIgnored private let vocabulary: () -> [String]
-    @ObservationIgnored private var menuObserver: (any NSObjectProtocol)?
 
     init(read: @escaping () -> String? = { NSPasteboard.general.string(forType: .string) },
          isDictating: @escaping () -> Bool,
@@ -352,18 +356,5 @@ final class ClipboardWord {
     /// Forgets the word once it was added.
     func clear() {
         word = nil
-    }
-
-    func refreshWhenMenusOpen() {
-        guard menuObserver == nil else { return }
-        menuObserver = NotificationCenter.default.addObserver(
-            forName: NSMenu.didBeginTrackingNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.refresh()
-            }
-        }
     }
 }

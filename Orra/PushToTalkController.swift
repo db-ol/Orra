@@ -3,6 +3,12 @@ import ApplicationServices
 import Observation
 import os
 
+extension Logger {
+    /// Dictation, from the talk key to the paste. States, timings and counts only, never
+    /// text or audio.
+    nonisolated static let pushToTalk = Logger(subsystem: ProblemReport.subsystem, category: "push-to-talk")
+}
+
 /// What the recording indicator and the sounds follow. A dictation sends listening,
 /// transcribing, recordingStopped and finished, in that order. Listening waits until the
 /// hold has lasted a moment and the microphone has delivered sound, so a shortcut with
@@ -247,7 +253,7 @@ final class PushToTalkController {
     @ObservationIgnored private let saveWritesNumbersAsDigits: (Bool) -> Void
     @ObservationIgnored private var accessCheckTask: Task<Void, Never>?
     @ObservationIgnored private var accessObserver: (any NSObjectProtocol)?
-    @ObservationIgnored private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
+    @ObservationIgnored private let logger = Logger.pushToTalk
 
     /// - Parameters:
     ///   - capture: The microphone. The app passes `.live()`, tests pass fakes.

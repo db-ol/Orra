@@ -58,16 +58,7 @@ nonisolated struct AudioOutput: Equatable, Sendable {
 
     /// The output channels of all the device's output streams together.
     static func outputChannelCount(_ id: AudioDeviceID) -> Int {
-        var address = AudioInput.address(kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeOutput)
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size) == noErr, size > 0 else { return 0 }
-        let byteCount = max(Int(size), MemoryLayout<AudioBufferList>.size)
-        let raw = UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: MemoryLayout<AudioBufferList>.alignment)
-        defer { raw.deallocate() }
-        raw.initializeMemory(as: UInt8.self, repeating: 0, count: byteCount)
-        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, raw) == noErr else { return 0 }
-        let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
-        return list.reduce(0) { $0 + Int($1.mNumberChannels) }
+        AudioInput.channelCount(id, scope: kAudioObjectPropertyScopeOutput)
     }
 }
 
@@ -124,15 +115,10 @@ final class AudioOutputList {
 }
 
 /// Calls back on the main queue whenever Core Audio's list of devices changes, until it is
-/// released. Registered and removed through the same C function references as DeviceWatch,
-/// so the removal matches the block that was added.
+/// released. Registered and removed through DeviceWatch's C function references, so the
+/// removal matches the block that was added.
 nonisolated final class DeviceListWatch {
-    typealias Listener = @convention(block) (UInt32, UnsafePointer<AudioObjectPropertyAddress>) -> Void
-    private typealias Registration = @convention(c) (AudioObjectID, UnsafePointer<AudioObjectPropertyAddress>, DispatchQueue?, @escaping Listener) -> OSStatus
-    private static let addListener: Registration = AudioObjectAddPropertyListenerBlock
-    private static let removeListener: Registration = AudioObjectRemovePropertyListenerBlock
-
-    private let listener: Listener
+    private let listener: DeviceWatch.Listener
 
     /// Nil when Core Audio refuses the listener.
     init?(onChange: @escaping @MainActor () -> Void) {
@@ -142,14 +128,14 @@ nonisolated final class DeviceListWatch {
             }
         }
         var address = AudioInput.address(kAudioHardwarePropertyDevices)
-        guard Self.addListener(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener) == noErr else {
+        guard DeviceWatch.addListener(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener) == noErr else {
             return nil
         }
     }
 
     deinit {
         var address = AudioInput.address(kAudioHardwarePropertyDevices)
-        _ = Self.removeListener(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener)
+        _ = DeviceWatch.removeListener(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener)
     }
 }
 

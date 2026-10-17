@@ -817,7 +817,7 @@ nonisolated enum NumberPreference {
     static let defaultsKey = "writesNumbersAsDigits"
 
     static func load(from defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: defaultsKey) as? Bool ?? true
+        defaults.bool(forKey: defaultsKey, default: true)
     }
 
     static func save(_ on: Bool, to defaults: UserDefaults = .standard) {

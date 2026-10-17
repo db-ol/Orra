@@ -6,6 +6,23 @@ import Foundation
 nonisolated struct SpokenAudio: Sendable, Equatable {
     var samples: [Float]
     var sampleRate: Int
+
+    /// The stream a voice model's `speak` returns. `body` runs in a task and yields the
+    /// audio. The stream ends when `body` returns or throws, and the task is cancelled when
+    /// the reader stops.
+    static func stream(_ body: @escaping @Sendable (AsyncThrowingStream<SpokenAudio, any Error>.Continuation) async throws -> Void) -> AsyncThrowingStream<SpokenAudio, any Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await body(continuation)
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 /// A short recording of a voice for the voice model to imitate, with what is said in it.

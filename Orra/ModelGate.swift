@@ -316,7 +316,7 @@ nonisolated final class ModelGate: Sendable {
 
 extension Logger {
     /// The model gate. Accesses, reservations and times only.
-    nonisolated static let modelGate = Logger(subsystem: "io.github.db-ol.Orra", category: "model-gate")
+    nonisolated static let modelGate = Logger(subsystem: ProblemReport.subsystem, category: "model-gate")
 }
 
 extension Transcription {

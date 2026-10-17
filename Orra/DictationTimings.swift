@@ -63,6 +63,6 @@ nonisolated struct DictationTimings: Equatable, Sendable {
     }
 
     static func milliseconds(_ duration: Duration) -> Int {
-        Int((Double(duration.components.seconds) * 1_000 + Double(duration.components.attoseconds) / 1e15).rounded())
+        Int((duration / .milliseconds(1)).rounded())
     }
 }

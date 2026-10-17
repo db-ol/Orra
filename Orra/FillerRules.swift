@@ -292,7 +292,7 @@ nonisolated enum FillerPreference {
     static let defaultsKey = "removesFillerWords"
 
     static func load(from defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: defaultsKey) as? Bool ?? true
+        defaults.bool(forKey: defaultsKey, default: true)
     }
 
     static func save(_ on: Bool, to defaults: UserDefaults = .standard) {

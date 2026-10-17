@@ -125,5 +125,5 @@ extension Task: CancellableTask {}
 
 extension Logger {
     /// Meeting captions. Counts, timings and states only, never text or audio.
-    nonisolated static let captions = Logger(subsystem: "io.github.db-ol.Orra", category: "captions")
+    nonisolated static let captions = Logger(subsystem: ProblemReport.subsystem, category: "captions")
 }

@@ -3,6 +3,11 @@ import Observation
 import os
 import ServiceManagement
 
+extension Logger {
+    /// Open at Login. Failures only.
+    nonisolated static let loginItem = Logger(subsystem: ProblemReport.subsystem, category: "login-item")
+}
+
 /// Whether Orra opens when the user logs in. The app itself is the login item, through
 /// SMAppService, so no helper app is needed. The system calls are closures, so tests never
 /// touch the real login items.
@@ -27,8 +32,7 @@ final class OpenAtLogin {
     @ObservationIgnored private let register: (Bool) throws -> Void
     @ObservationIgnored private let openLoginItemsSettings: () -> Void
     @ObservationIgnored private var requested: Bool?
-    @ObservationIgnored private var menuObserver: (any NSObjectProtocol)?
-    @ObservationIgnored private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "login-item")
+    @ObservationIgnored private let logger = Logger.loginItem
 
     init(
         readStatus: @escaping () -> Status,
@@ -71,21 +75,6 @@ final class OpenAtLogin {
     /// The menu then offers to open System Settings, where only the user can approve Orra.
     var needsApproval: Bool {
         status == .needsApproval
-    }
-
-    /// Reads the status again each time a menu opens, Orra's menu bar menu included. The
-    /// menu shows the new value while it is open.
-    func refreshWhenMenusOpen() {
-        guard menuObserver == nil else { return }
-        menuObserver = NotificationCenter.default.addObserver(
-            forName: NSMenu.didBeginTrackingNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.refresh()
-            }
-        }
     }
 
     func refresh() {

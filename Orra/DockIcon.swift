@@ -43,7 +43,7 @@ final class DockIcon {
 
     static func live(defaults: UserDefaults = .standard) -> DockIcon {
         DockIcon(
-            showsInDock: defaults.object(forKey: defaultsKey) as? Bool ?? true,
+            showsInDock: defaults.bool(forKey: defaultsKey, default: true),
             save: { defaults.set($0, forKey: defaultsKey) },
             setPolicy: { NSApplication.shared.setActivationPolicy($0) },
             hasOpenWindow: {

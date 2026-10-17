@@ -3,6 +3,11 @@ import ApplicationServices
 import Observation
 import os
 
+extension Logger {
+    /// Learning from corrections. States and counts only, never text.
+    nonisolated static let learning = Logger(subsystem: ProblemReport.subsystem, category: "learning")
+}
+
 /// One text field in another app, as the Accessibility API names it. Accessibility
 /// elements may be used from any thread.
 nonisolated final class FieldHandle: @unchecked Sendable {
@@ -23,7 +28,7 @@ nonisolated enum FieldReader {
     /// The focused element of the app, when it is a plain text field.
     @concurrent
     static func focusedTextField(inApp pid: pid_t) async -> FieldHandle? {
-        guard let field = focusedElement(inApp: pid), kind(of: field) == .plainText else { return nil }
+        guard let field = FocusedField.focusedElement(inApp: pid), FocusedField.kind(of: field) == .plainText else { return nil }
         return FieldHandle(field)
     }
 
@@ -31,8 +36,8 @@ nonisolated enum FieldReader {
     /// field, and no longer than `maximumLength`. Nil otherwise.
     @concurrent
     static func text(of field: FieldHandle, inApp pid: pid_t) async -> String? {
-        guard let focused = focusedElement(inApp: pid), CFEqual(focused, field.element),
-              kind(of: field.element) == .plainText else { return nil }
+        guard let focused = FocusedField.focusedElement(inApp: pid), CFEqual(focused, field.element),
+              FocusedField.kind(of: field.element) == .plainText else { return nil }
         var count: CFTypeRef?
         if AXUIElementCopyAttributeValue(field.element, kAXNumberOfCharactersAttribute as CFString, &count) == .success,
            let number = count as? Int, number > maximumLength {
@@ -42,26 +47,6 @@ nonisolated enum FieldReader {
         guard AXUIElementCopyAttributeValue(field.element, kAXValueAttribute as CFString, &value) == .success,
               let text = value as? String, text.count <= maximumLength else { return nil }
         return text
-    }
-
-    private static func focusedElement(inApp pid: pid_t) -> AXUIElement? {
-        let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, FocusedField.timeout)
-        var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
-        let field = focused as! AXUIElement
-        // A timeout applies only to the element it was set on.
-        AXUIElementSetMessagingTimeout(field, FocusedField.timeout)
-        return field
-    }
-
-    private static func kind(of field: AXUIElement) -> FocusedField.Kind {
-        var values: CFArray?
-        let attributes = [kAXRoleAttribute, kAXSubroleAttribute] as CFArray
-        guard AXUIElementCopyMultipleAttributeValues(field, attributes, AXCopyMultipleAttributeOptions(), &values) == .success,
-              let read = values as? [Any], read.count == 2 else { return .unknown }
-        return FocusedField.kind(role: read[0] as? String, subrole: read[1] as? String)
     }
 }
 
@@ -115,7 +100,7 @@ final class CorrectionWatcher {
     private let environment: Environment
     private var watches: [(id: Int, pasted: String, task: Task<Void, Never>, control: Control)] = []
     private var nextID = 0
-    private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "learning")
+    private let logger = Logger.learning
 
     init(environment: Environment = .live()) {
         self.environment = environment
@@ -346,7 +331,7 @@ final class CorrectionLearning {
                 do {
                     try store.save(to: url)
                 } catch {
-                    Logger(subsystem: "io.github.db-ol.Orra", category: "learning").error("Could not save the learned corrections")
+                    Logger.learning.error("Could not save the learned corrections")
                 }
             },
             addToVocabulary: addToVocabulary,

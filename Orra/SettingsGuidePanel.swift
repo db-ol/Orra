@@ -96,21 +96,11 @@ final class SettingsGuidePanel {
 
     /// Internal so tests can check the panel without showing it.
     func makePanel() -> NoticePanel {
-        let panel = NoticePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 280, height: 200),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: true
-        )
-        panel.isFloatingPanel = true
+        let panel = NoticePanel(overlaySize: NSSize(width: 280, height: 200))
         panel.becomesKeyOnlyIfNeeded = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
         panel.hasShadow = true
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
         return panel
     }
 }
