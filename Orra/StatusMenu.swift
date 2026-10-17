@@ -156,10 +156,10 @@ struct StatusMenu: View {
 
         Divider()
 
-        if SetupChecklist(pushToTalk, models).needsUser {
-            Button("Setup Guide…") {
-                showWelcome()
-            }
+        // Also after setup, so Orra is ready and Try next stay in reach of a user who closed
+        // the window during the download, or who set up Orra before 0.4.0 added Try next.
+        Button(SetupChecklist(pushToTalk, models).menuTitle()) {
+            showWelcome()
         }
         if let version = updater.waitingUpdate {
             Button("Install Orra \(version)…") {

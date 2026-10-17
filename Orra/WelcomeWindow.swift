@@ -55,15 +55,26 @@ nonisolated struct SetupChecklist: Equatable, Sendable {
 
     /// Whether the user still has something to do. An installed model that is still
     /// loading needs nothing from the user, so launch does not open the welcome window for
-    /// it, and the menu shows no Setup Guide.
+    /// it.
     var needsUser: Bool {
         !modelInPlace || microphone != .done || accessibility != .done
+    }
+
+    /// The title of the menu item that opens the welcome window, in the language of
+    /// `locale`. Getting Started once setup is complete, when the window shows Orra is
+    /// ready and Try next. Setup Guide until then, also while the model loads.
+    func menuTitle(locale: Locale = .interface) -> String {
+        if isComplete {
+            String(localized: LocalizedStringResource("Getting Started…", locale: locale))
+        } else {
+            String(localized: LocalizedStringResource("Setup Guide…", locale: locale))
+        }
     }
 }
 
 /// The welcome window. AppDelegate shows it at launch until Orra has its model and both
-/// permissions, and the menu's Setup Guide shows it again. AppKit, because an accessory
-/// app cannot open a SwiftUI window at launch.
+/// permissions, and the menu's Setup Guide, or Getting Started once setup is complete, shows
+/// it again. AppKit, because an accessory app cannot open a SwiftUI window at launch.
 ///
 /// The window switches to a language picked in it at once. The menu, Settings and the
 /// indicator show the language macOS loaded at launch, so Orra restarts when the window

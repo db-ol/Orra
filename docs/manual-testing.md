@@ -267,9 +267,10 @@ got worse than the baseline, see docs/release-gate.md.
   - SetupChecklistTests covers the welcome window's three steps: the model step for every
     installer state and for an installed model that is loading or failed to load, the
     microphone step for every permission state, and the Accessibility step. It checks that
-    setup counts as complete only once the model has loaded, and that a model that is
-    still loading needs nothing from the user, which decides whether launch opens the
-    window and the menu shows Setup Guide….
+    setup counts as complete only once the model has loaded, which decides whether the
+    menu item that opens the window reads Setup Guide… or Getting Started…, in English
+    and in Chinese, and that a model that is still loading needs nothing from the user,
+    which decides whether launch opens the window.
   - VocabularyTests checks how the vocabulary text becomes terms (trimmed, once each
     ignoring case, cut at 40 characters, capped only at 5,000 against runaway data), the
     context string the model gets, and the choice of the 200 words added or used most
@@ -1266,7 +1267,8 @@ remove Orra's Accessibility access while it runs. Undo all of it afterwards:
   few seconds.
 - [ ] After the download, the model step shows a spinner and "Loading the speech model…",
   then its check mark. Only then does the window say "Orra is ready", and Done closes it.
-  The menu has no Setup Guide…, and the next launch shows no window.
+  The menu shows Getting Started… in place of Setup Guide…, and the next launch shows no
+  window.
 - [ ] Later, quit Orra, turn it off under Microphone in System Settings > Privacy &
   Security, and launch it: the microphone step offers Open Microphone Settings…, and
   turning Orra on there gives the step its check mark within a second, without a
@@ -1314,9 +1316,10 @@ choice. Put all of it back afterwards:
   with "Orra needs its speech model to transcribe." and no line on memory, and cleanup
   stays off after the download. With `-bool true`, even under 16 GB, step 1 is Download
   the models with Download Models (5.52 GB).
-- [ ] An existing user: with the speech model in place and cleanup off, open Setup Guide…
-  from the menu. Step 1 has its check mark and nothing about cleanup. Turning on Clean Up
-  Text in Settings shows the cleanup model's download in that step.
+- [ ] An existing user: with the speech model in place and cleanup off, open Getting
+  Started… from the menu, or Setup Guide… before setup is complete. Step 1 has its
+  check mark and nothing about cleanup. Turning on Clean Up Text in Settings shows the
+  cleanup model's download in that step.
 - [ ] Close the window with a language picked in it while the cleanup model downloads:
   Orra does not restart until the download is over.
 - [ ] The window itself shows no picture of System Settings, in the Accessibility step or
@@ -1334,6 +1337,23 @@ choice. Put all of it back afterwards:
   when Settings was open on another tab, and the welcome window stays open. Done still
   closes the window. Before the last step is done, the rows do not show. In 简体中文 the
   heading is "还可以试试" and the rows are 整理, 翻译 and 会议同传.
+
+Getting Started in the menu, added on 2026-10-17, not verified yet. The menu always has
+the item that opens the welcome window, so Orra is ready and Try next stay in reach after
+setup:
+
+- [ ] On a first launch, click Not Now while the model downloads: the menu shows Setup
+  Guide…. Once the model has loaded and both permissions are given, the same item reads
+  Getting Started…, in the same place above Check for Updates…. In 简体中文 the two titles
+  are 设置向导… and 入门指南….
+- [ ] With an existing setup, as after an update from 0.3, Getting Started… opens the
+  welcome window in front with the first three steps checked, "Orra is ready" and Try
+  next. Step 4 has its check mark only if a talk key was ever chosen. Done closes it.
+- [ ] Launching Orra with setup complete still opens no window, and a click on the Dock
+  icon still opens Settings. While the model loads after launch the item reads Setup
+  Guide…, then Getting Started….
+- [ ] Quit Orra, turn it off under Microphone in System Settings > Privacy & Security, and
+  launch it: the welcome window opens, and the menu item reads Setup Guide… again.
 
 Card beside System Settings, added on 2026-10-15, not verified yet. Orra never resets a
 permission itself. To see both pictures, quit Orra and run
