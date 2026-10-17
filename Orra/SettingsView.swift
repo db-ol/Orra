@@ -5,6 +5,7 @@ import SwiftUI
 /// The tabs in the sidebar of the settings window, in their order.
 enum SettingsTab: String, CaseIterable, Identifiable {
     case general
+    case meeting
     case vocabulary
     case about
 
@@ -14,6 +15,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var title: LocalizedStringKey {
         switch self {
         case .general: "General"
+        case .meeting: "Meeting Interpretation"
         case .vocabulary: "Vocabulary"
         case .about: "About"
         }
@@ -22,6 +24,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .general: "gearshape.fill"
+        case .meeting: "captions.bubble.fill"
         case .vocabulary: "character.book.closed.fill"
         case .about: "info.circle.fill"
         }
@@ -31,6 +34,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .general: .gray
+        case .meeting: .orange
         case .vocabulary: .blue
         case .about: .indigo
         }
@@ -95,9 +99,10 @@ struct DescribedLabel: View {
     }
 }
 
-/// The settings window: a sidebar with General, Vocabulary and About, like System
-/// Settings. General holds every setting, in blocks by purpose, and opens a sheet for the
-/// options of cleanup.
+/// The settings window: a sidebar with General, Meeting Interpretation, Vocabulary and
+/// About, like System Settings. General holds the settings of dictation, in blocks by
+/// purpose, and opens a sheet for the options of cleanup. Meeting Interpretation holds
+/// live captions and speaking translations to others.
 struct SettingsView: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
@@ -108,7 +113,7 @@ struct SettingsView: View {
     let learning: CorrectionLearning
     let dockIcon: DockIcon
     let updater: AppUpdater
-    /// The parts of Meeting Interpretation, nil where a page is shown without them.
+    /// The parts of Meeting Interpretation, nil where its page is shown without them.
     var captions: MeetingCaptions? = nil
     var speech: TranslationSpeech? = nil
     var voiceModels: VoiceModels? = nil
@@ -164,7 +169,9 @@ struct SettingsView: View {
     func page(for tab: SettingsTab) -> some View {
         switch tab {
         case .general:
-            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback, openAtLogin: openAtLogin, cleanup: cleanup, learning: learning, dockIcon: dockIcon, captions: captions, speech: speech, voiceModels: voiceModels) { sheet = $0 }
+            GeneralSettings(pushToTalk: pushToTalk, inputs: inputs, feedback: feedback, openAtLogin: openAtLogin, cleanup: cleanup, learning: learning, dockIcon: dockIcon) { sheet = $0 }
+        case .meeting:
+            MeetingInterpretationSettings(pushToTalk: pushToTalk, captions: captions, speech: speech, voiceModels: voiceModels, translationIsOn: cleanup.translationIsOn, translationDirection: cleanup.translationDirection)
         case .vocabulary:
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .about:
@@ -195,9 +202,6 @@ private struct GeneralSettings: View {
     let cleanup: TextCleanup
     @Bindable var learning: CorrectionLearning
     @Bindable var dockIcon: DockIcon
-    let captions: MeetingCaptions?
-    let speech: TranslationSpeech?
-    let voiceModels: VoiceModels?
     let open: (SettingsSheet) -> Void
 
     var body: some View {
@@ -259,9 +263,6 @@ private struct GeneralSettings: View {
             } footer: {
                 Text("Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it.")
                     .foregroundStyle(.secondary)
-            }
-            if captions != nil || (speech != nil && voiceModels != nil) {
-                MeetingInterpretationSection(pushToTalk: pushToTalk, captions: captions, speech: speech, voiceModels: voiceModels, translationIsOn: cleanup.translationIsOn, translationDirection: cleanup.translationDirection)
             }
             Section {
                 Toggle(isOn: Binding(

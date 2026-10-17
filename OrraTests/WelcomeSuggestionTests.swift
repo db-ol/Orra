@@ -51,6 +51,12 @@ struct WelcomeSuggestionTests {
         #expect(both.map(\.button) == [nil, nil, "Set Up in Settings…"])
     }
 
+    /// Cleanup and translation are set up on General, and meeting interpretation on a page
+    /// of its own.
+    @MainActor @Test func eachButtonOpensThePageOfItsFeature() {
+        #expect(WelcomeSuggestion.Kind.allCases.map(\.settingsTab) == [.general, .general, .meeting])
+    }
+
     /// Step 1 offers the cleanup model's download then, so the row neither says On nor
     /// offers Settings.
     @Test func cleanupOnWithoutItsModelShowsNeitherOnNorAButton() {

@@ -60,14 +60,15 @@ got worse than the baseline, see docs/release-gate.md.
   two more skipped ones being the opt in idle unload measurements. With trigger modes and
   key combinations, it ended in TEST SUCCEEDED with 2515 test cases passed and 17 skipped
   on 2026-10-14 in 50 s, the real model tests included.
-  - SettingsPageTests checks the three tabs and the sheet of General, that a tab or sheet
-    asked for, such as Vocabulary, opens once while Settings… afterwards opens General
-    alone, that a sheet opens over General, that Change Talk Key… asks for General alone,
-    that an open window is told, the line under Clean Up Text for each state of the model,
-    and the texts of the model's status for translation. With
+  - SettingsPageTests checks the four tabs, each with its own icon and color, and the
+    sheet of General, that a tab or sheet asked for, such as Vocabulary or Meeting
+    Interpretation, opens once while Settings… afterwards opens General alone, that a
+    sheet opens over General, that Change Talk Key… asks for General alone, that an open
+    window is told, the line under Clean Up Text for each state of the model, and the
+    texts of the model's status for translation. With
     TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab and sheet
-    to a PNG there, General also with translation on and after a swap of the keys,
-    which CI never does.
+    to a PNG there, General also with translation on and after a swap of the keys, and
+    Meeting Interpretation with translation off and on, which CI never does.
   - StatusMenuTests reads the top level of the menu SwiftUI makes of the menu bar menu,
     without showing it: Live Captions, off, right under the Meeting Interpretation
     heading with a divider above and below and no submenu, no two dividers next to each
@@ -335,8 +336,9 @@ got worse than the baseline, see docs/release-gate.md.
   - WelcomeSuggestionTests covers the three rows the welcome window suggests once Orra is
     ready: that they show only with setup complete, their lines and buttons in English
     and Chinese, the meeting row's line on Meeting Interpretation in Settings and in the
-    Orra menu, On in place of the button for a feature that is on, and no On and no
-    button while cleanup is on and its model is not on the Mac.
+    Orra menu, On in place of the button for a feature that is on, no On and no button
+    while cleanup is on and its model is not on the Mac, and the page of Settings each
+    button opens.
   - WelcomeLanguageTests covers the language picked in the welcome window: the
     localization of each choice, Same as the Mac for English, Chinese, Traditional
     Chinese and French first, Chinese text built in code while Orra runs in English, that
@@ -1339,10 +1341,11 @@ choice. Put all of it back afterwards:
   a button, and step 1 offers the download. The meeting row has a smaller line that says
   Live Captions and Speak Translations to Others are under Meeting Interpretation, in
   Settings and in the Orra menu, and that speaking translations needs Translation on.
-  Turn On in Settings… and Set Up in Settings… open Settings on General in front, also
-  when Settings was open on another tab, and the welcome window stays open. Done still
-  closes the window. Before the last step is done, the rows do not show. In 简体中文 the
-  heading is "还可以试试" and the rows are 整理, 翻译 and 会议同传.
+  Turn On in Settings… opens Settings on General and Set Up in Settings… opens it on
+  Meeting Interpretation (since 2026-10-17), in front, also when Settings was open on
+  another tab, and the welcome window stays open. Done still closes the window. Before
+  the last step is done, the rows do not show. In 简体中文 the heading is "还可以试试" and
+  the rows are 整理, 翻译 and 会议同传.
 
 Getting Started in the menu, added on 2026-10-17, not verified yet. The menu always has
 the item that opens the welcome window, so Orra is ready and Try next stay in reach after
@@ -1778,15 +1781,15 @@ Settings with a sidebar, added on 2026-10-12 as pages, changed to one page with 
 the settings of Advanced… moved onto General, not verified yet. Rendered to PNG by the opt
 in test in SettingsPageTests, in English and in Chinese, but not seen in the running app:
 
-- [ ] Settings… opens on General (通用 in Chinese), with General, Vocabulary and About
-  (通用, 个人词库, 关于) in the sidebar and nothing else. General shows five blocks with
-  headers, in this order: Keys with the talk key and the translation key, Features with
-  Clean Up Text, its switch and Options…, then Translation with its switch and Translate
-  into right under it, Dictation (听写) with Double press for hands free, the on screen
-  hint, the sounds and Learn from my corrections with Forget Learned Corrections,
-  Microphone with the input device, and System with Interface language (界面语言), Open
-  at Login and Show Orra in the Dock. There is no Advanced… button. The page scrolls when
-  the window is short.
+- [ ] Settings… opens on General (通用 in Chinese), with General, Meeting Interpretation,
+  Vocabulary and About (通用, 会议同传, 个人词库, 关于) in the sidebar and nothing else.
+  General shows five blocks with headers, in this order: Keys with the talk key and the
+  translation key, Features with Clean Up Text, its switch and Options…, then Translation
+  with its switch and Translate into right under it, Dictation (听写) with Double press
+  for hands free, the on screen hint, the sounds and Learn from my corrections with
+  Forget Learned Corrections, Microphone with the input device, and System with
+  Interface language (界面语言), Open at Login and Show Orra in the Dock. There is no
+  Advanced… button. The page scrolls when the window is short.
 - [ ] The sidebar cannot be hidden. Dragging the divider to the left edge leaves it at its
   narrowest width, there is no sidebar button in the toolbar, and View > Hide Sidebar
   (Control Command S), where it shows, keeps it in place.
@@ -1826,6 +1829,29 @@ in test in SettingsPageTests, in English and in Chinese, but not seen in the run
   the picker, with the idle bar and no indicator. Indicator YES and bar NO show Only while
   dictating, both NO show Off, and both YES (or nothing saved) show Always. After picking
   another choice, Only while ready is no longer offered.
+
+Meeting Interpretation page in Settings, added on 2026-10-17, not verified yet. Rendered to
+PNG by the opt in test in SettingsPageTests, in English and in Chinese, but not seen in the
+running app:
+
+- [ ] The sidebar shows Meeting Interpretation (会议同传) between General and Vocabulary,
+  with a white captions bubble on orange. At the sidebar's first width the English name
+  fits on one line or wraps to two, and is never cut off. Its page is titled Meeting
+  Interpretation and shows the intro, then Live captions and Captions show in one block,
+  then Speak translations to others with all its options in a second block, with the
+  note about recording your own voice under it. General has no Meeting Interpretation
+  section and goes from Features to Dictation.
+- [ ] With Translation off, Speak translations to others is disabled with "Turn on
+  Translation in General to use this." (在“通用”里打开“翻译”后才能使用。) under it. Turning
+  Translation on in General and coming back enables it.
+- [ ] Every control works as it did on General: Live captions and the menu item show the
+  same state, Captions show changes with the picker in the caption window, Speak into
+  lists Orra Microphone and a device connected while the page shows, and Record… opens
+  the voice sample sheet over the window. Going to another page stops watching the
+  output devices, and coming back lists them again.
+- [ ] Set Up in Settings… in the welcome window's Try next opens Settings on Meeting
+  Interpretation, from a closed window and from one open on another page. Settings…
+  afterwards opens General.
 
 Translation key, added on 2026-10-13, not verified yet. The translation rows on General and
 the badge were rendered to PNG by the opt in tests, in English and in Chinese, but not seen
@@ -2041,10 +2067,10 @@ it shows starts, stops, counts and failures, never text.
   原文和译文逐句对照, and every note in the window is in Chinese.
 - [ ] Meeting Interpretation groups both parts, since 2026-10-15. In the menu they stand
   under a Meeting Interpretation heading at the top level since 2026-10-17, in place of
-  the submenu, see below. Settings, General, has a Meeting Interpretation section
-  (会议同传) after Features with a short intro ("For meetings across languages. Read what
-  others say in your language, and let them hear you in theirs, even in your own
-  voice."), Live captions (实时字幕) and Captions show, then Speak translations to others
+  the submenu, see below. Settings has a Meeting Interpretation page (会议同传), a
+  section after Features on General before 2026-10-17, with a short intro ("For
+  meetings across languages. Read what others say in your language, and let them hear
+  you in theirs, even in your own voice."), Live captions (实时字幕) and Captions show, then Speak translations to others
   (为对方朗读译文) with all its earlier options. The Live captions switch in Settings and
   the menu item turn the same captions on and off and show the same state. Captions show
   in Settings and the picker in the window change together, and the choice stays after a

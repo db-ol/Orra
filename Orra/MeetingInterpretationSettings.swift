@@ -1,11 +1,11 @@
 import SwiftUI
 
-/// Meeting Interpretation in Settings, after Features: a meeting where each side speaks
+/// Meeting Interpretation, its own page in Settings: a meeting where each side speaks
 /// another language. Live captions show what the other side says, translated. Speak
 /// translations to others speaks what the translation key translated, so the other side
 /// hears it, in the voice of a sample the user recorded if they like. Each part shows
 /// only where the page has it.
-struct MeetingInterpretationSection: View {
+struct MeetingInterpretationSettings: View {
     let pushToTalk: PushToTalkController
     let captions: MeetingCaptions?
     let speech: TranslationSpeech?
@@ -13,40 +13,41 @@ struct MeetingInterpretationSection: View {
     let translationIsOn: Bool
     /// The language the voice sample's script is in at first, see VoiceScript.
     let translationDirection: TranslationDirection
-    /// Watches the devices only while Settings shows the speak rows.
+    /// Watches the devices only while Settings shows this page.
     @State private var outputList = AudioOutputList.live()
     /// The voice sample sheet's recording while the sheet is open.
     @State private var voiceRecording: VoiceRecording?
 
     var body: some View {
-        Section {
-            if let captions {
-                LiveCaptionRows(captions: captions)
-            }
-            if let speech, let voiceModels {
-                SpeakTranslationRows(speech: speech, models: voiceModels, translationIsOn: translationIsOn, outputs: outputList.outputs, record: openRecording)
-            }
-        } header: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Meeting Interpretation")
+        Form {
+            Section {
+                if let captions {
+                    LiveCaptionRows(captions: captions)
+                }
+            } header: {
                 Text("For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice.")
                     .font(.subheadline)
                     .fontWeight(.regular)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        } footer: {
-            if let speech, voiceModels != nil {
-                Group {
-                    if speech.remembersVoice {
-                        Text("Record your own voice only. Orra writes down what you said with its speech model and keeps the words in memory until it quits. With Remember my voice on, it saves the recording on this Mac until you remove it. The other side hears a synthesized voice, so let them know.")
-                    } else {
-                        Text("Record your own voice only. Orra writes down what you said with its speech model and keeps the recording and the words in memory until it quits. The other side hears a synthesized voice, so let them know.")
+            if let speech, let voiceModels {
+                Section {
+                    SpeakTranslationRows(speech: speech, models: voiceModels, translationIsOn: translationIsOn, outputs: outputList.outputs, record: openRecording)
+                } footer: {
+                    Group {
+                        if speech.remembersVoice {
+                            Text("Record your own voice only. Orra writes down what you said with its speech model and keeps the words in memory until it quits. With Remember my voice on, it saves the recording on this Mac until you remove it. The other side hears a synthesized voice, so let them know.")
+                        } else {
+                            Text("Record your own voice only. Orra writes down what you said with its speech model and keeps the recording and the words in memory until it quits. The other side hears a synthesized voice, so let them know.")
+                        }
                     }
+                    .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(.secondary)
             }
         }
+        .formStyle(.grouped)
+        .navigationTitle("Meeting Interpretation")
         .onAppear {
             if speech != nil { outputList.start() }
         }
@@ -189,7 +190,7 @@ private struct SpeakTranslationRows: View {
             if !speech.canSpeak {
                 note(Text("This build of Orra has no voice model."))
             } else if !translationIsOn {
-                note(Text("Turn on Translation to use this."))
+                note(Text("Turn on Translation in General to use this."))
             }
             if !speech.engineChoices.isEmpty {
                 Picker(selection: Binding(

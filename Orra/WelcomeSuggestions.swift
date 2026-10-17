@@ -73,9 +73,9 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
             title = text("Meeting interpretation")
             line = text("Read what others say in your language, and let them hear you in theirs, even in your own voice.")
         }
-        // Settings opens on General but cannot scroll down to Meeting Interpretation, which
-        // is after Features. The Orra menu has the same switches. Speaking translations
-        // waits for Translation. So the row says where both parts are and what they need.
+        // The button opens the Meeting Interpretation page, and the Orra menu has the same
+        // switches. Speaking translations waits for Translation, which is on General. So
+        // the row says where both parts are and what they need.
         note = kind == .meeting
             ? text("Live Captions and Speak Translations to Others are under Meeting Interpretation, in Settings and in the Orra menu. Speaking translations needs Translation on.")
             : nil
