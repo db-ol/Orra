@@ -147,14 +147,7 @@ nonisolated enum TranslationPrompt {
     /// The cleanup and the translation from the model's answer, which starts with the
     /// prefill, or nil when the answer is not the JSON object the prompt asks for.
     static func parse(_ answer: String) -> Answer? {
-        var text = answer
-        // What RewritePrompt.parse removes too.
-        text = text.replacing(/<think>[\s\S]*?<\/think>/, with: "")
-        text = text.replacingOccurrences(of: "<transcript>", with: "").replacingOccurrences(of: "</transcript>", with: "")
-        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        text = text.replacing(/^```(?:json)?\s*|\s*```$/, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = text.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard let object = RewritePrompt.answerObject(answer),
               let cleaned = object["cleaned"] as? String,
               let translation = object["translation"] as? String else { return nil }
         return Answer(cleaned: cleaned.trimmingCharacters(in: .whitespacesAndNewlines), translation: translation.trimmingCharacters(in: .whitespacesAndNewlines))

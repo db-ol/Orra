@@ -285,6 +285,30 @@ struct CleanupModel {
     static let off = CleanupModel(waitUntilLoaded: { false }, complete: { _ in throw RewriteError.notLoaded })
 }
 
+/// A model call with a time limit, for the cleanup and translation steps.
+nonisolated enum TimedCall {
+    /// What `call` gave back or threw, and whether `limit` passed first, which cancels it.
+    @concurrent
+    static func run<Value: Sendable>(
+        within limit: Duration,
+        _ call: @escaping @Sendable () async throws -> Value
+    ) async -> (result: Result<Value, any Error>, timedOut: Bool) {
+        let work = Task { try await call() }
+        let timer = Task {
+            do {
+                try await Task.sleep(for: limit)
+            } catch {
+                return false
+            }
+            work.cancel()
+            return true
+        }
+        let result = await work.result
+        timer.cancel()
+        return (result, await timer.value)
+    }
+}
+
 /// The cleanup step after the rule steps: runs the model, reads its answer and checks it.
 /// Anything other than a cleanup that passes every check gives back the text it was given,
 /// so the model can only ever remove fillers and apply corrections, never lose a dictation.
@@ -334,23 +358,20 @@ nonisolated enum CleanupStep {
             && text.unicodeScalars.lazy.filter { $0.properties.isAlphabetic || $0.properties.numericType != nil }.prefix(3).count == 3
     }
 
+    /// Why the model's cleanup of `text` is held back, nil when it may be pasted. An empty
+    /// cleanup is held back, so the model never makes Orra paste nothing.
+    static func check(_ cleaned: String, of text: String) -> RewriteGuard.Failure? {
+        if cleaned.isEmpty {
+            return .empty
+        }
+        return RewriteGuard.check(source: text, output: cleaned)
+    }
+
     /// The text to paste and what happened. Logs the outcome and the time, never text.
     @concurrent
     static func run(_ text: String, timeout: Duration? = nil, complete: @escaping @Sendable (String) async throws -> String) async -> (text: String, outcome: Outcome) {
         let started = ContinuousClock.now
-        let work = Task { try await complete(text) }
-        let timer = Task {
-            do {
-                try await Task.sleep(for: timeout ?? Self.timeout(for: text))
-            } catch {
-                return false
-            }
-            work.cancel()
-            return true
-        }
-        let result = await work.result
-        timer.cancel()
-        let timedOut = await timer.value
+        let (result, timedOut) = await TimedCall.run(within: timeout ?? Self.timeout(for: text)) { try await complete(text) }
         let outcome: Outcome
         var cleaned = text
         if timedOut {
@@ -359,10 +380,7 @@ nonisolated enum CleanupStep {
             switch result {
             case .success(let answer):
                 if let parsed = RewritePrompt.parse(answer) {
-                    if parsed.isEmpty {
-                        // Never paste nothing because of the model.
-                        outcome = .heldBack(.empty)
-                    } else if let failure = RewriteGuard.check(source: text, output: parsed) {
+                    if let failure = check(parsed, of: text) {
                         outcome = .heldBack(failure)
                     } else if parsed == text {
                         outcome = .unchanged

@@ -132,7 +132,7 @@ nonisolated enum TranslationGuard {
         let sourceUnits = RewriteGuard.units(source)
         let outputUnits = RewriteGuard.units(output)
         let bareOutput = RewriteGuard.bare(output)
-        if Set(RewriteGuard.shortReplies.map(RewriteGuard.bare)).contains(bareOutput), bareOutput != RewriteGuard.bare(source), sourceUnits >= 4 {
+        if RewriteGuard.bareShortReplies.contains(bareOutput), bareOutput != RewriteGuard.bare(source), sourceUnits >= 4 {
             return .bareShortReply
         }
         if RewriteGuard.newlines(output) > RewriteGuard.newlines(source) + 1 {

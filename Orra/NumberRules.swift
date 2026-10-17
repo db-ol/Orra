@@ -195,7 +195,7 @@ nonisolated enum NumberRules {
         }
         // Digits glued to a Latin word join its name, so iPhone十二点五十分 stays rather than
         // become iPhone12点50分.
-        if start > 0, isASCIILetter(characters[start - 1]) { return nil }
+        if start > 0, characters[start - 1].isASCIILetter { return nil }
         guard let spoken = parse(characters[run]) else { return nil }
         let next = end < characters.count ? characters[end] : nil
         // Both ends of a range stay, except a time after a time of day (下午三点二十到四点) and
@@ -386,8 +386,8 @@ nonisolated enum NumberRules {
         let end = run.upperBound
         guard start > 0 else { return nil }
         let before = characters[start - 1]
-        let joined = isASCIILetter(before) || (before == "-" && start > 1 && isLatinOrDigit(characters[start - 2]))
-        let spaced = before == " " && start > 1 && isASCIILetter(characters[start - 2])
+        let joined = before.isASCIILetter || (before == "-" && start > 1 && characters[start - 2].isASCIILetterOrDigit)
+        let spaced = before == " " && start > 1 && characters[start - 2].isASCIILetter
         guard joined || spaced, let spoken = parse(characters[run]) else { return nil }
         let next = characters[safe: end]
         if next == "点", let major = wholeNumber(spoken) {
@@ -435,7 +435,7 @@ nonisolated enum NumberRules {
                 if case .reading = spoken {} else if unitLength(at: end, in: characters) > 0 || counters.contains(next) {
                     return nil
                 }
-            } else if spaced, next != " ", isLatinOrDigit(next) || next == "%", !latinUnit(at: end, in: characters, single: false) {
+            } else if spaced, next != " ", next.isASCIILetterOrDigit || next == "%", !latinUnit(at: end, in: characters, single: false) {
                 return nil
             }
         }
@@ -754,7 +754,7 @@ nonisolated enum NumberRules {
     /// Whether a Latin unit such as GB or K starts at `index`, and no other letter follows.
     private static func latinUnit(at index: Int, in characters: [Character], single: Bool) -> Bool {
         guard let unit = latinUnits.first(where: { starts($0, at: index, in: characters) }) else { return false }
-        if let after = characters[safe: index + unit.count], isASCIILetter(after) { return false }
+        if let after = characters[safe: index + unit.count], after.isASCIILetter { return false }
         return !single || singleDigitLatinUnits.contains(String(unit))
     }
 
@@ -791,21 +791,13 @@ nonisolated enum NumberRules {
     /// person's name or a common word: one letter (M), all capitals (RX, PPT) or a capital
     /// after the first letter (iPhone, macOS). Tom, Amy and Python do not.
     private static func looksLikeModel(endingAt index: Int, in characters: [Character]) -> Bool {
-        let first = runStart(endingAt: index, in: characters) { isLatinOrDigit($0) }
+        let first = runStart(endingAt: index, in: characters) { $0.isASCIILetterOrDigit }
         let word = characters[first...index]
         return word.count == 1 || word.contains(where: isASCIIDigit) || word.dropFirst().contains(where: { $0.isUppercase })
     }
 
-    private static func isASCIILetter(_ character: Character) -> Bool {
-        character.isASCII && character.isLetter
-    }
-
     private static func isASCIIDigit(_ character: Character) -> Bool {
         character.isASCII && character.isNumber
-    }
-
-    private static func isLatinOrDigit(_ character: Character) -> Bool {
-        character.isASCII && (character.isLetter || character.isNumber)
     }
 
     private static func isHan(_ character: Character) -> Bool {

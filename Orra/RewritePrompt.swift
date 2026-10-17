@@ -109,6 +109,13 @@ nonisolated enum RewritePrompt {
     /// The cleaned text from the model's answer, which starts with the prefill, or nil when
     /// the answer is not the JSON object the prompt asks for.
     static func parse(_ answer: String) -> String? {
+        guard let cleaned = answerObject(answer)?["cleaned"] as? String else { return nil }
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The JSON object in a model's answer, for this prompt and TranslationPrompt, or nil
+    /// when the answer is not a JSON object.
+    static func answerObject(_ answer: String) -> [String: Any]? {
         var text = answer
         // What the benchmark removed before parsing.
         text = text.replacing(/<think>[\s\S]*?<\/think>/, with: "")
@@ -116,9 +123,7 @@ nonisolated enum RewritePrompt {
         text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // A code fence around the object.
         text = text.replacing(/^```(?:json)?\s*|\s*```$/, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let data = text.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let cleaned = object["cleaned"] as? String else { return nil }
-        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = text.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 }

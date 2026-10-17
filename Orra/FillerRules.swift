@@ -85,8 +85,8 @@ nonisolated enum FillerRules {
             return chineseFiller(index, end, characters)
         case "额":
             let end = runEnd(of: character, from: index, in: characters)
-            if index > 0, isHan(characters[index - 1]) { return nil }
-            if end < characters.count, isHan(characters[end]) { return nil }
+            if index > 0, characters[index - 1].containsHan { return nil }
+            if end < characters.count, characters[end].containsHan { return nil }
             return chineseFiller(index, end, characters)
         case "嗯":
             let end = runEnd(of: character, from: index, in: characters)
@@ -120,10 +120,10 @@ nonisolated enum FillerRules {
     }
 
     private static func englishFiller(at index: Int, in characters: [Character]) -> Filler? {
-        guard isASCIILetter(characters[index]) else { return nil }
+        guard characters[index].isASCIILetter else { return nil }
         if index > 0, isWordPart(characters[index - 1]) { return nil }
         var end = index
-        while end < characters.count, isASCIILetter(characters[end]) {
+        while end < characters.count, characters[end].isASCIILetter {
             end += 1
         }
         if end < characters.count, isWordPart(characters[end]) { return nil }
@@ -140,7 +140,7 @@ nonisolated enum FillerRules {
         if next < characters.count, questionMarks.contains(characters[next]) { return nil }
         if next > end {
             var wordEnd = next
-            while wordEnd < characters.count, isASCIILetter(characters[wordEnd]) {
+            while wordEnd < characters.count, characters[wordEnd].isASCIILetter {
                 wordEnd += 1
             }
             if replyWords.contains(String(characters[next..<wordEnd]).lowercased()) { return nil }
@@ -206,7 +206,7 @@ nonisolated enum FillerRules {
 
     /// Capitalizes a word written all in lowercase, so "iPhone" stays as it is.
     private static func capitalizeWord(at index: Int, in characters: inout [Character]) {
-        guard index < characters.count, characters[index].isLowercase, isASCIILetter(characters[index]) else { return }
+        guard index < characters.count, characters[index].isLowercase, characters[index].isASCIILetter else { return }
         var end = index + 1
         while end < characters.count, characters[end].isLetter {
             if characters[end].isUppercase { return }
@@ -222,7 +222,7 @@ nonisolated enum FillerRules {
         if isPunctuation(next) { return false }
         if last.isASCII, isPunctuation(last) { return true }
         if isPunctuation(last) { return false }
-        return isLatinOrDigit(last) || isLatinOrDigit(next)
+        return last.isASCIILetterOrDigit || next.isASCIILetterOrDigit
     }
 
     private static func runEnd(of character: Character, from index: Int, in characters: [Character]) -> Int {
@@ -247,14 +247,10 @@ nonisolated enum FillerRules {
         return clauseEnds.contains(last)
     }
 
-    private static func isASCIILetter(_ character: Character) -> Bool {
-        character.isASCII && character.isLetter
-    }
-
     /// Latin letters, digits, hyphens and apostrophes join a word, so um in "umbrella",
     /// "uh-huh" and "um's" is not a filler. A Chinese character does not, so uh in 我uh觉得 is.
     private static func isWordPart(_ character: Character) -> Bool {
-        isLatinOrDigit(character) || character == "-" || character == "'" || character == "’"
+        character.isASCIILetterOrDigit || character == "-" || character == "'" || character == "’"
     }
 
     /// Whether a reply such as 好的 starts here and stands as a word of its own.
@@ -286,23 +282,8 @@ nonisolated enum FillerRules {
         return end == characters.count || isPunctuation(characters[end])
     }
 
-    private static func isLatinOrDigit(_ character: Character) -> Bool {
-        character.isASCII && (character.isLetter || character.isNumber)
-    }
-
     private static func isPunctuation(_ character: Character) -> Bool {
         character.isPunctuation
-    }
-
-    private static func isHan(_ character: Character) -> Bool {
-        character.unicodeScalars.contains { scalar in
-            switch scalar.value {
-            case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x2FFFF:
-                true
-            default:
-                false
-            }
-        }
     }
 }
 

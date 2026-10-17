@@ -217,11 +217,12 @@ nonisolated enum CorrectionFinder {
 
     /// Whether the edit only takes out or puts in spaces between two name parts, such as
     /// read me to readme. Alone, the space says nothing, so the edit takes in the words on
-    /// both sides.
+    /// both sides. The space is between letters or digits, not after a sentence's period,
+    /// so done. Then to done.Then is no name.
     private static func joinsOrSplitsWords(_ hunk: Hunk, _ paste: [Character], _ edited: [Character]) -> Bool {
         hunk.old.isEmpty != hunk.new.isEmpty
             && hunk.old.lowerBound > 0 && hunk.old.upperBound < paste.count
-            && isLatinLetterOrDigit(paste[hunk.old.lowerBound - 1]) && isLatinLetterOrDigit(paste[hunk.old.upperBound])
+            && paste[hunk.old.lowerBound - 1].isASCIILetterOrDigit && paste[hunk.old.upperBound].isASCIILetterOrDigit
             && paste[hunk.old].allSatisfy(\.isWhitespace) && edited[hunk.new].allSatisfy(\.isWhitespace)
             && !edited[hunk.new].contains(where: \.isNewline)
     }
@@ -281,7 +282,7 @@ nonisolated enum CorrectionFinder {
     /// characters only takes in the single characters around it, as the offered word does,
     /// so 通一千万 to 通义千问 learns the whole name although 通 did not change.
     private static func judge(_ hunk: Hunk, _ paste: [Character], _ edited: [Character], within bounds: Range<Int>) -> Located? {
-        if hunk.old.count == 1, hunk.new.count == 1, isHan(paste[hunk.old.lowerBound]), isHan(edited[hunk.new.lowerBound]) {
+        if hunk.old.count == 1, hunk.new.count == 1, paste[hunk.old.lowerBound].isHan, edited[hunk.new.lowerBound].isHan {
             return OneCharacterFix.located(paste: paste, edited: edited, at: hunk.old.lowerBound, hunk.new.lowerBound, within: bounds)
                 .map { Located(span: $0.span, finding: .suggestion($0.suggestion)) }
         }
@@ -294,7 +295,7 @@ nonisolated enum CorrectionFinder {
               !differsOnlyInEnding(heard, corrected),
               SoundAlike.soundsAlike(heard, corrected) else { return nil }
         let bare = Located(span: hunk.old, finding: .word(Correction(heard: heard, corrected: corrected)))
-        guard paste[hunk.old].allSatisfy(isHan), edited[hunk.new].allSatisfy(isHan) else { return bare }
+        guard paste[hunk.old].allSatisfy(\.isHan), edited[hunk.new].allSatisfy(\.isHan) else { return bare }
         let word = OneCharacterFix.widen(hunk.new, in: edited, within: bounds)
         let old = (hunk.old.lowerBound - (hunk.new.lowerBound - word.lowerBound))..<(hunk.old.upperBound + (word.upperBound - hunk.new.upperBound))
         let wide = Correction(heard: String(paste[old]), corrected: String(edited[word]))
@@ -316,16 +317,7 @@ nonisolated enum CorrectionFinder {
         text.count <= maximumLength && hanCount(text) <= maximumHanCount
     }
 
-    private static func isLatin(_ character: Character) -> Bool {
-        character.isASCII && character.isLetter
-    }
-
     /// Letters, digits and the marks that join a name, as in KVLite-Nova, Node.js, GPT-4o.
-    /// Between words, not after a sentence's period, so done. Then to done.Then is no name.
-    private static func isLatinLetterOrDigit(_ character: Character) -> Bool {
-        character.isASCII && (character.isLetter || character.isNumber)
-    }
-
     private static func isNamePart(_ character: Character) -> Bool {
         character.isASCII && (character.isLetter || character.isNumber || "-_.+".contains(character))
     }
@@ -337,12 +329,8 @@ nonisolated enum CorrectionFinder {
         return first.dropFirst() == second.dropFirst()
     }
 
-    private static func isHan(_ character: Character) -> Bool {
-        character.unicodeScalars.allSatisfy { (0x3400...0x9FFF).contains($0.value) || (0xF900...0xFAFF).contains($0.value) }
-    }
-
     private static func hanCount(_ text: String) -> Int {
-        text.filter(isHan).count
+        text.filter(\.isHan).count
     }
 
     private static func isSeparator(_ character: Character) -> Bool {
@@ -407,11 +395,10 @@ nonisolated extension CorrectionFinder {
         heard += String(pasted[position..<item.span.upperBound])
         heard = heard.trimmingCharacters(in: .whitespaces)
         let corrected = correction.corrected
-        if heard == corrected || (heard.lowercased() == corrected.lowercased() && heard.dropFirst() == corrected.dropFirst()) {
+        if differsOnlyInFirstLetterCase(heard, corrected) {
             return .reverted(touched.map(\.pair))
         }
-        guard isWordLike(heard), fits(heard), hanCount(heard) != 1,
-              !differsOnlyInFirstLetterCase(heard, corrected), !differsOnlyInEnding(heard, corrected),
+        guard isWordLike(heard), fits(heard), hanCount(heard) != 1, !differsOnlyInEnding(heard, corrected),
               SoundAlike.soundsAlike(heard, corrected) else { return .dropped }
         return .finding(.word(Correction(heard: heard, corrected: corrected)))
     }
@@ -491,7 +478,7 @@ nonisolated enum SoundAlike {
         }
         if !crossesScripts, firstA != firstB { return false }
         let limit = Double(max(a.count, b.count)) * (crossesScripts ? 0.6 : 0.4)
-        return Double(distance(a, b)) <= limit
+        return Double(editDistance(a, b)) <= limit
     }
 
     /// A rough English sound key: a first vowel as "a", the other vowels dropped and doubled
@@ -518,20 +505,6 @@ nonisolated enum SoundAlike {
     /// Fixing form to from changes a word, and that is never learned this way.
     private static func looksLikeName(_ text: String) -> Bool {
         text.contains { $0.isUppercase || $0.isNumber }
-    }
-
-    static func distance(_ a: [Character], _ b: [Character]) -> Int {
-        var row = Array(0...b.count)
-        for (i, x) in a.enumerated() {
-            var previous = row[0]
-            row[0] = i + 1
-            for (j, y) in b.enumerated() {
-                let current = row[j + 1]
-                row[j + 1] = min(row[j + 1] + 1, row[j] + 1, previous + (x == y ? 0 : 1))
-                previous = current
-            }
-        }
-        return row[b.count]
     }
 }
 

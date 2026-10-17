@@ -27,9 +27,7 @@ nonisolated enum ChineseText {
     static func simplifiedCharacters(_ text: String) -> String {
         var result = ""
         for character in text {
-            let isTraditional = alwaysConverted.contains(character)
-                || (String(character).data(using: gb2312) == nil && !neverConverted.contains(character))
-            if isHan(character), isTraditional,
+            if character.containsHan, isTraditional(character),
                let converted = String(character).applyingTransform(StringTransform("Traditional-Simplified"), reverse: false) {
                 result += converted
             } else {
@@ -64,11 +62,16 @@ nonisolated enum ChineseText {
         return chinese > 0 && chinese >= words
     }
 
-    private static func isHan(_ character: Character) -> Bool {
-        character.unicodeScalars.contains(where: isHan)
+    /// Whether a character is converted: one that is almost always traditional, or one
+    /// outside GB2312 that is not left alone. Tested after `Character.containsHan`, so the
+    /// GB2312 conversion only runs for Chinese characters.
+    private static func isTraditional(_ character: Character) -> Bool {
+        alwaysConverted.contains(character)
+            || (String(character).data(using: gb2312) == nil && !neverConverted.contains(character))
     }
 
-    private static func isHan(_ scalar: Unicode.Scalar) -> Bool {
+    /// Whether the scalar is a Chinese character, in the supplementary planes too.
+    static func isHan(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x2FFFF:
             true

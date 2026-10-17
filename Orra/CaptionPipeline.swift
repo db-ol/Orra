@@ -380,15 +380,18 @@ final class CaptionPipeline {
             }
             return nil
         }
-        guard let parsed = TranslationPrompt.parse(answer) else {
+        let parsed = TranslationPrompt.parse(answer)
+        switch TranslationStep.verdict(on: parsed, for: text, into: target) {
+        case .translated:
+            return parsed?.translation
+        case .unreadable:
             Logger.captions.notice("A caption translation was not readable")
-            return nil
-        }
-        if let failure = TranslationGuard.check(source: text, output: parsed.translation, target: target) {
+        case .heldBack(let failure):
             Logger.captions.notice("A caption translation was held back by the \(failure.logName, privacy: .public) check")
-            return nil
+        case .unchanged, .timedOut, .failed:
+            break
         }
-        return parsed.translation == text ? nil : parsed.translation
+        return nil
     }
 
     private static func seconds(_ duration: Duration) -> Double {

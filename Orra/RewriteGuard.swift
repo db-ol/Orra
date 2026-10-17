@@ -106,6 +106,9 @@ nonisolated enum RewriteGuard {
 
     static let shortReplies: Set<String> = ["ok", "okay", "yes", "no", "好", "好的", "是", "否", "是的", "不是", "对", "不对", "hello", "你好"]
 
+    /// `shortReplies` as `bare(_:)` leaves them, to compare with a bare output.
+    static let bareShortReplies = Set(shortReplies.map(bare))
+
     /// Nil when the output may be pasted in place of the source.
     static func check(source: String, output: String) -> Failure? {
         if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -134,7 +137,7 @@ nonisolated enum RewriteGuard {
 
         // A bare short reply for a longer source is an answer, not a cleanup.
         let bareOutput = bare(output)
-        if Set(shortReplies.map(bare)).contains(bareOutput), bareOutput != bare(source), sourceUnits >= 4 {
+        if bareShortReplies.contains(bareOutput), bareOutput != bare(source), sourceUnits >= 4 {
             return .bareShortReply
         }
 
@@ -172,7 +175,8 @@ nonisolated enum RewriteGuard {
     // MARK: Openers and phrases
 
     static func checkOpeners(source: String, output: String) -> Failure? {
-        let head = Array(normalized(output).unicodeScalars.prefix(24))
+        let outputText = normalized(output)
+        let head = Array(outputText.unicodeScalars.prefix(24))
         let sourceText = normalized(source)
         for group in openers {
             let hit = group.first { phrase in
@@ -189,11 +193,11 @@ nonisolated enum RewriteGuard {
                 return .assistantOpener(hit)
             }
         }
-        let outputText = normalized(output).replacingOccurrences(of: " ", with: "")
+        let outputCompact = outputText.replacingOccurrences(of: " ", with: "")
         let sourceCompact = sourceText.replacingOccurrences(of: " ", with: "")
         for group in anywhere {
             let compact = group.map { $0.replacingOccurrences(of: " ", with: "") }
-            guard let index = compact.firstIndex(where: { outputText.contains($0) }) else { continue }
+            guard let index = compact.firstIndex(where: { outputCompact.contains($0) }) else { continue }
             if !compact.contains(where: { sourceCompact.contains($0) }) {
                 return .assistantPhrase(group[index])
             }
@@ -220,7 +224,7 @@ nonisolated enum RewriteGuard {
 
     /// English words in lowercase, without apostrophes at either end.
     static func latinWords(_ text: String) -> [String] {
-        text.matches(of: /[A-Za-z][A-Za-z'’]*/).map { match in
+        text.matches(of: latinWord).map { match in
             String(match.output).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "'’"))
         }
     }
@@ -251,6 +255,12 @@ nonisolated enum RewriteGuard {
     private static let thousandsSeparator = try! NSRegularExpression(pattern: #"(?<=\d),(?=\d{3})"#)
     private static let digitRun = try! NSRegularExpression(pattern: #"\d+"#)
 
+    // Built once rather than on every call.
+    nonisolated(unsafe) private static let latinWord = /[A-Za-z][A-Za-z'’]*/
+    nonisolated(unsafe) private static let markup = /(^|\n)\s*(```|#{1,3} |[-*•] |\d+[.)] )/
+    nonisolated(unsafe) private static let whiteSpace = /\s+/
+    nonisolated(unsafe) private static let nonWord = /[\s\W_]+/
+
     static func count(_ text: String, where predicate: (Unicode.Scalar) -> Bool) -> Int {
         text.unicodeScalars.reduce(0) { $0 + (predicate($1) ? 1 : 0) }
     }
@@ -275,17 +285,17 @@ nonisolated enum RewriteGuard {
     }
 
     static func hasMarkup(_ text: String) -> Bool {
-        text.contains(/(^|\n)\s*(```|#{1,3} |[-*•] |\d+[.)] )/)
+        text.contains(markup)
     }
 
     /// Lowercased, runs of white space folded to one space, trimmed.
     static func normalized(_ text: String) -> String {
-        text.lowercased().replacing(/\s+/, with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        text.lowercased().replacing(whiteSpace, with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Lowercased with white space, punctuation and symbols removed.
     static func bare(_ text: String) -> String {
-        text.lowercased().replacing(/[\s\W_]+/, with: "")
+        text.lowercased().replacing(nonWord, with: "")
     }
 
     /// Whether an ASCII phrase occurs in the text between word boundaries.

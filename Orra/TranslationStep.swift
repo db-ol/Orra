@@ -66,6 +66,17 @@ nonisolated enum TranslationStep {
         text.count <= maximumLength && TranslationDirection.sourceLanguage(of: text) != nil
     }
 
+    /// The outcome for the model's answer for `text`, as TranslationPrompt.parse read it:
+    /// unreadable when it could not be read, held back when the translation fails a check,
+    /// unchanged when it is the text itself, and translated otherwise. Captions use it too.
+    static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into target: TranslationTarget) -> Outcome {
+        guard let answer else { return .unreadable }
+        if let failure = TranslationGuard.check(source: text, output: answer.translation, target: target) {
+            return .heldBack(failure)
+        }
+        return answer.translation == text ? .unchanged : .translated
+    }
+
     /// The text to paste and what happened. `cleansUp` says whether cleanup is on, so the
     /// model's cleanup may stand in for the translation. Logs the outcome and the time,
     /// never text.
@@ -78,19 +89,7 @@ nonisolated enum TranslationStep {
         complete: @escaping @Sendable (String, TranslationTarget) async throws -> String
     ) async -> Result {
         let started = ContinuousClock.now
-        let work = Task { try await complete(text, target) }
-        let timer = Task {
-            do {
-                try await Task.sleep(for: timeout ?? Self.timeout(for: text))
-            } catch {
-                return false
-            }
-            work.cancel()
-            return true
-        }
-        let result = await work.result
-        timer.cancel()
-        let timedOut = await timer.value
+        let (result, timedOut) = await TimedCall.run(within: timeout ?? Self.timeout(for: text)) { try await complete(text, target) }
         var outcome = Outcome.failed
         var untranslated = text
         var translation: String?
@@ -100,27 +99,18 @@ nonisolated enum TranslationStep {
         } else {
             switch result {
             case .success(let answer):
-                if let parsed = TranslationPrompt.parse(answer) {
-                    if cleansUp, CleanupStep.isWorthCleaning(text) {
-                        if parsed.cleaned.isEmpty {
-                            cleanup = "held back by the empty check"
-                        } else if let failure = RewriteGuard.check(source: text, output: parsed.cleaned) {
-                            cleanup = "held back by the \(failure.logName) check"
-                        } else {
-                            untranslated = parsed.cleaned
-                            cleanup = "used"
-                        }
-                    }
-                    if let failure = TranslationGuard.check(source: text, output: parsed.translation, target: target) {
-                        outcome = .heldBack(failure)
-                    } else if parsed.translation == text {
-                        outcome = .unchanged
+                let parsed = TranslationPrompt.parse(answer)
+                if let parsed, cleansUp, CleanupStep.isWorthCleaning(text) {
+                    if let failure = CleanupStep.check(parsed.cleaned, of: text) {
+                        cleanup = "held back by the \(failure.logName) check"
                     } else {
-                        outcome = .translated
-                        translation = parsed.translation
+                        untranslated = parsed.cleaned
+                        cleanup = "used"
                     }
-                } else {
-                    outcome = .unreadable
+                }
+                outcome = verdict(on: parsed, for: text, into: target)
+                if outcome == .translated {
+                    translation = parsed?.translation
                 }
             case .failure(let error):
                 outcome = .failed
