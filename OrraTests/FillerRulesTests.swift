@@ -148,6 +148,44 @@ struct FillerRulesTests {
         ("嗯，好的。", "嗯，好的。"),
         // English fillers against Chinese characters.
         ("我uh觉得可以", "我觉得可以"),
+        // Interjections that start with 嗯 keep it.
+        ("嗯哼，你说得对。", "嗯哼，你说得对。"),
+        ("嗯呢，我到了。", "嗯呢，我到了。"),
+        ("嗯哪，我这就过去。", "嗯哪，我这就过去。"),
+        ("嗯呐，马上到。", "嗯呐，马上到。"),
+        ("嗯哼", "嗯哼"),
+        ("嗯呐", "嗯呐"),
+        ("嗯哪！", "嗯哪！"),
+        ("他说嗯哼，然后就走了。", "他说嗯哼，然后就走了。"),
+        ("嗯嗯哼，有意思。", "嗯嗯哼，有意思。"),
+        ("呃，嗯哼，你说得对。", "嗯哼，你说得对。"),
+        // A doubled interjection stays whole.
+        ("嗯哪嗯哪，我知道了。", "嗯哪嗯哪，我知道了。"),
+        ("嗯呐嗯呐，马上就好。", "嗯呐嗯呐，马上就好。"),
+        ("嗯呢嗯呢，到了。", "嗯呢嗯呢，到了。"),
+        ("嗯哼嗯哼，有道理。", "嗯哼嗯哼，有道理。"),
+        ("他说嗯哪嗯哪", "他说嗯哪嗯哪"),
+        // 哼, 呢, 哪 and 呐 also start words, so 嗯 before such a word is a filler.
+        ("嗯哪个方案都行，你定吧。", "哪个方案都行，你定吧。"),
+        ("嗯哪里出了问题？", "哪里出了问题？"),
+        ("我觉得嗯哪个都可以。", "我觉得哪个都可以。"),
+        ("他嗯哼着歌走了。", "他哼着歌走了。"),
+        ("嗯呢子大衣挺好看的。", "呢子大衣挺好看的。"),
+        ("她嗯呢喃了几句。", "她呢喃了几句。"),
+        ("嗯呐喊声太大了。", "呐喊声太大了。"),
+        // A space does not end the word, since the speech model writes one before English.
+        ("嗯哪 PR 还没合并？", "哪 PR 还没合并？"),
+        // A comma parts 嗯 from the next word, so it goes.
+        ("嗯，哼，我才不去。", "哼，我才不去。"),
+        // What goes and what stays around them is as before.
+        ("嗯，我们先开会。", "我们先开会。"),
+        ("嗯嗯，我看一下。", "我看一下。"),
+        ("额，文件发你了。", "文件发你了。"),
+        ("啊，我忘了带钥匙。", "我忘了带钥匙。"),
+        ("哦，周五取消了。", "周五取消了。"),
+        ("啊对，就是这个。", "啊对，就是这个。"),
+        ("额外的费用。", "额外的费用。"),
+        ("呃逆。", "呃逆。"),
     ])
     func edgeCasesFoundInReview(input: String, expected: String) {
         #expect(FillerRules.removingFillers(from: input) == expected)

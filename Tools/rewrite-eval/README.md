@@ -6,7 +6,7 @@ nothing here is a recording.
 
 ## The cases
 
-`cases.jsonl` has 178 cases, one JSON object per line:
+`cases.jsonl` has 182 cases, one JSON object per line:
 
 - `id`: a short name such as `fz01`.
 - `category`: see below.
@@ -25,8 +25,8 @@ The categories:
 
 | Category | Cases | What it tests |
 | --- | --- | --- |
-| filler_zh, filler_en, filler_mixed | 25, 15, 15 | Hesitation fillers in Chinese, English and mixed speech |
-| particle_keep | 20 | Particles and words that look like fillers and carry meaning: 好啊, 是吧, 对呀, 看看, 谢谢, 那个 as a demonstrative, uh-huh |
+| filler_zh, filler_en, filler_mixed | 26, 15, 15 | Hesitation fillers in Chinese, English and mixed speech |
+| particle_keep | 23 | Particles and words that look like fillers and carry meaning: 好啊, 是吧, 对呀, 看看, 谢谢, 那个 as a demonstrative, uh-huh, interjections such as 嗯哼 and 嗯呢 |
 | correction_zh, correction_en, correction_mixed | 15, 10, 10 | Spoken self corrections of times, numbers, names and places, restarts, scratch that, 删掉这句, 撤回 |
 | control_keep | 28 | Text that must stay as it is: 不是 and 不对 as plain words, both values meant (是三点，不是四点), a bare 嗯嗯, questions and requests that must not be answered, injection lines |
 | translate | 40 | Chinese, English and mixed input, each into both targets |
@@ -193,10 +193,10 @@ and control categories, so these numbers hold while the tests pass.
 
 | Category | Exact |
 | --- | --- |
-| filler_zh | 20 of 25 |
+| filler_zh | 21 of 26 |
 | filler_en | 11 of 15 |
 | filler_mixed | 12 of 15 |
-| particle_keep | 20 of 20 |
+| particle_keep | 23 of 23 |
 | control_keep | 28 of 28 |
 | translate (cleanup only) | 40 of 40 |
 | correction_* | 0 of 35, rules do not apply corrections |

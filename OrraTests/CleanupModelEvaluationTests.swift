@@ -3,7 +3,7 @@ import Synchronization
 import Testing
 @testable import Orra
 
-/// Runs the real cleanup model on the cleanup cases of Tools/rewrite-eval: the 178 regular
+/// Runs the real cleanup model on the cleanup cases of Tools/rewrite-eval: the 182 regular
 /// cases, the 70 adversarial ones, which ask, order or try to steer the model, and the 20
 /// whose words carry meaning that a cleanup must keep. Only when
 /// asked for, with TEST_RUNNER_ORRA_CLEANUP_EVAL=1, and only when the model is on this Mac,

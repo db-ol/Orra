@@ -40,6 +40,6 @@ struct TranslationTokenizerTests {
                 }
             }
         }
-        #expect(count == 2 * 2 * (178 + 70 + 116))
+        #expect(count == 2 * 2 * (182 + 70 + 116))
     }
 }

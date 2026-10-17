@@ -299,9 +299,10 @@ got worse than the baseline, see docs/release-gate.md.
     that rules alone should get right (fillers, particles that must stay, and controls),
     checks that the cases that need a model lose only fillers, never a word or a number,
     and covers spacing between Chinese and English, punctuation left behind, capitals at a
-    sentence start, replies such as 嗯，好的 and uh-huh, acronyms such as UM, and words
-    such as 金额 and 呃逆. PushToTalkControllerTests checks that the paste has the fillers
-    removed while the setting is on and not while it is off, and that a change is saved.
+    sentence start, replies such as 嗯，好的 and uh-huh, interjections such as 嗯哼 and
+    嗯呢, acronyms such as UM, and words such as 金额 and 呃逆. PushToTalkControllerTests
+    checks that the paste has the fillers removed while the setting is on and not while it
+    is off, and that a change is saved.
   - NumberRulesTests runs the number rules on every case of
     Tools/rewrite-eval/numbers.jsonl and checks that applying them twice changes nothing
     more. It checks that every cleanup in cases.jsonl without a number stays as it is,
@@ -441,9 +442,9 @@ got worse than the baseline, see docs/release-gate.md.
     idle unload and 0.39, 0.47 and 0.25 s right after. The first two were cleaned up both
     times. The third text was not worth a cleanup either time, and its 0.34 s more after
     the unload is the speech model running slower while the cleanup model loads.
-  - CleanupModelEvaluationTests runs the real model on the 178 cleanup cases, the 70
-    adversarial cases and the 20 meaning cases of Tools/rewrite-eval, only with
-    TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
+  - CleanupModelEvaluationTests runs the real model on the 182 cleanup cases (178 before
+    2026-10-16), the 70 adversarial cases and the 20 meaning cases of Tools/rewrite-eval,
+    only with TEST_RUNNER_ORRA_CLEANUP_EVAL=1.
     Its timings hold for a Release build, since a Debug build runs MLX without
     optimization:
 
@@ -625,10 +626,10 @@ got worse than the baseline, see docs/release-gate.md.
     TranslationTokenizerTests, which needs only the tokenizer files, checks the token IDs
     of both prompts and that every prompt of the translation evaluation starts with its
     target's cached prefix.
-  - TranslationModelEvaluationTests runs the real model on the 178 regular, 70
-    adversarial and 116 translation probe cases of Tools/rewrite-eval, into both targets,
-    only with TEST_RUNNER_ORRA_TRANSLATION_EVAL=1, in a Release build like the cleanup
-    evaluation:
+  - TranslationModelEvaluationTests runs the real model on the 182 regular (178 before
+    2026-10-16), 70 adversarial and 116 translation probe cases of Tools/rewrite-eval,
+    into both targets, only with TEST_RUNNER_ORRA_TRANSLATION_EVAL=1, in a Release build
+    like the cleanup evaluation:
 
         TEST_RUNNER_ORRA_TRANSLATION_EVAL=1 TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<model folder> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/TranslationModelEvaluationTests
 

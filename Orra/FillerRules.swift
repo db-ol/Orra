@@ -8,7 +8,8 @@ import Foundation
 /// - 呃 everywhere, except in the word 呃逆.
 /// - 额 standing alone, not next to another Chinese character, so 金额, 额度 and names stay.
 /// - 嗯, unless it is the whole dictation, ends a clause or sentence as an answer (我说嗯。),
-///   or comes before a reply such as 嗯，好的, 嗯对 or 嗯，是的.
+///   comes before a reply such as 嗯，好的, 嗯对 or 嗯，是的, or starts an interjection such
+///   as 嗯哼, 嗯呢 or 嗯哪 as a word of its own (嗯哼，你说得对).
 /// - um, umm, uh, uhh, uhm and erm as whole words in any case, except in capitals, which is
 ///   an acronym such as UM, and in replies such as uh-huh, uh huh and uh oh.
 /// - 啊 and 哦 only at the start of a clause and before a comma, as in 啊，我忘了, and not
@@ -32,6 +33,8 @@ nonisolated enum FillerRules {
     private static let replyWords: Set<String> = ["huh", "oh", "hm", "hmm"]
     /// Replies after 嗯 that keep it, as whole words before punctuation or the end.
     private static let replies = ["是这样", "对的", "对对", "好的", "好吧", "是的", "没错", "可以", "对", "好", "行", "是"]
+    /// The characters after 嗯 in the interjections 嗯哼, 嗯呢, 嗯哪 and 嗯呐, which keep it.
+    private static let interjectionEnds: Set<Character> = ["哼", "呢", "哪", "呐"]
     /// The first characters of a clause that corrects the one before.
     private static let correctionStarts: Set<Character> = ["不", "没", "错", "别"]
     private static let quotes: Set<Character> = ["\"", "'", "“", "”", "‘", "’", "「", "」", "『", "』"]
@@ -87,6 +90,7 @@ nonisolated enum FillerRules {
             return chineseFiller(index, end, characters)
         case "嗯":
             let end = runEnd(of: character, from: index, in: characters)
+            if startsInterjection(at: end, in: characters) { return nil }
             // An answer: 嗯 at the end of a clause, a sentence or the dictation.
             let after = skippingSpaces(from: end, in: characters)
             if after >= characters.count || sentenceEnds.contains(characters[after]) { return nil }
@@ -264,6 +268,22 @@ nonisolated enum FillerRules {
             }
         }
         return false
+    }
+
+    /// Whether the character right after a run of 嗯 makes it an interjection such as 嗯哼
+    /// that stands as a word of its own: followed by punctuation, the end of the text or the
+    /// same interjection again, as in 嗯哪嗯哪. Each of these characters also starts words
+    /// such as 哼着歌, 呢子 and 哪里, and a 嗯 before those is a filler. A space does not end
+    /// the word, because the speech model writes one between Chinese and English, so the 嗯
+    /// in 嗯哪 PR is a filler too.
+    private static func startsInterjection(at index: Int, in characters: [Character]) -> Bool {
+        guard index < characters.count, interjectionEnds.contains(characters[index]) else { return false }
+        let pair: [Character] = ["嗯", characters[index]]
+        var end = index + 1
+        while end + pair.count <= characters.count, Array(characters[end..<end + pair.count]) == pair {
+            end += pair.count
+        }
+        return end == characters.count || isPunctuation(characters[end])
     }
 
     private static func isLatinOrDigit(_ character: Character) -> Bool {
