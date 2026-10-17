@@ -14,15 +14,22 @@ struct SettingsPageTests {
     let inserter = FakeInserter()
     let temporary = TemporaryModelFolders()
 
-    @Test func theSidebarHasGeneralVocabularyAndAbout() {
-        #expect(SettingsTab.allCases == [.general, .vocabulary, .about])
+    @Test func theSidebarHasGeneralMeetingInterpretationVocabularyAndAbout() {
+        #expect(SettingsTab.allCases == [.general, .meeting, .vocabulary, .about])
         #expect(SettingsSheet.allCases == [.cleanup])
+        // Each page has its own icon in its own color.
+        #expect(Set(SettingsTab.allCases.map(\.symbol)).count == SettingsTab.allCases.count)
+        #expect(Set(SettingsTab.allCases.map(\.tint)).count == SettingsTab.allCases.count)
     }
 
     @Test func aTabAskedForOpensOnceAndSettingsOpensGeneral() {
         SettingsWindow.show(.vocabulary)
         #expect(SettingsWindow.takeRequest() == .init(tab: .vocabulary, sheet: nil))
         // Settings… after that opens on General alone.
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: nil))
+        // As Set Up in Settings… in the welcome window asks for it.
+        SettingsWindow.show(.meeting)
+        #expect(SettingsWindow.takeRequest() == .init(tab: .meeting, sheet: nil))
         #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: nil))
     }
 
@@ -100,12 +107,13 @@ struct SettingsPageTests {
         try await render(.tab(.general), translationOn: true, name: "\(language)-0-general-translation-on")
         try await render(.tab(.general), translationOn: true, swapped: true, name: "\(language)-0-general-translation-swapped")
         try await render(.tab(.general), cleanupOn: true, translationOn: true, height: 1400, name: "\(language)-0-general-full-height")
-        try await render(.tab(.general), translationOn: true, meeting: true, height: 2000, name: "\(language)-0-general-meeting-interpretation")
-        try await render(.tab(.vocabulary), name: "\(language)-1-vocabulary")
-        try await render(.tab(.about), name: "\(language)-2-about")
-        try await render(.tab(.about), height: 900, name: "\(language)-2-about-full-height")
-        try await render(.sheet(.cleanup), name: "\(language)-3-cleanup-options")
-        try await render(.sheet(.cleanup), cleanupOn: true, name: "\(language)-3-cleanup-options-on")
+        try await render(.tab(.meeting), meeting: true, name: "\(language)-1-meeting-interpretation")
+        try await render(.tab(.meeting), translationOn: true, meeting: true, height: 1200, name: "\(language)-1-meeting-interpretation-full-height")
+        try await render(.tab(.vocabulary), name: "\(language)-2-vocabulary")
+        try await render(.tab(.about), name: "\(language)-3-about")
+        try await render(.tab(.about), height: 900, name: "\(language)-3-about-full-height")
+        try await render(.sheet(.cleanup), name: "\(language)-4-cleanup-options")
+        try await render(.sheet(.cleanup), cleanupOn: true, name: "\(language)-4-cleanup-options-on")
     }
 
     private var folder: URL {
@@ -120,8 +128,8 @@ struct SettingsPageTests {
     /// A tab in the whole window, at the window's first size or `height`, or a sheet alone
     /// at the size it opens at over that window, since a sheet does not draw outside a
     /// window on screen.
-    /// With `meeting`, General has Meeting Interpretation, with captions that hear nothing
-    /// and a voice model that is not downloaded.
+    /// With `meeting`, the Meeting Interpretation page has its parts, with captions that hear
+    /// nothing and a voice model that is not downloaded.
     private func render(_ shown: Shown, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
