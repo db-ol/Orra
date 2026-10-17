@@ -6,7 +6,7 @@
   <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Orra.dmg-0A84FF?logo=apple&logoColor=white" alt="下载 Orra.dmg"></a>
   <a href="https://db-ol.github.io/Orra/zh/"><img src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-db--ol.github.io%2FOrra-555555?logo=safari&logoColor=white" alt="Orra 官网"></a>
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=%E7%89%88%E6%9C%AC&color=0A84FF" alt="最新版本"></a>
-  <a href="https://github.com/db-ol/Orra/stargazers"><img src="https://img.shields.io/github/stars/db-ol/Orra?label=Stars&color=0A84FF" alt="GitHub Stars"></a>
+  <a href="https://github.com/db-ol/Orra"><img src="https://img.shields.io/badge/GitHub-Star-0A84FF?logo=github&logoColor=white" alt="在 GitHub 上给 Orra 点 Star"></a>
 </p>
 
 <p align="center"><sub><a href="README.md">English</a> · 简体中文</sub></p>
@@ -100,24 +100,9 @@
 
 ## 隐私
 
-Orra 在你的 Mac 上把语音转成文字，从不把录音或文字发送到任何地方。它没有账号、没有统计，也没有自己的服务器。粘贴的文字只留在这台 Mac 的剪贴板上，所以“通用剪贴板”不会把它同步到你的其他设备。
+Orra 在你的 Mac 上把语音转成文字，从不把录音或文字发送到任何地方。它没有账号、没有统计，也没有自己的服务器。只有下载你要求的模型，以及在你允许后检查更新时，Orra 才会联网。“从我的修改中学习”“记住我的音色”这类会保存内容的功能，默认都是关闭的。
 
-**从你的修改中学习**默认关闭。打开后，每次粘贴后的 3 分钟内，只要你还在那个输入框里，Orra 会通过 macOS 辅助功能每秒读取一次它刚粘贴进去的那个输入框的文字。它最多读取 20,000 个字符，文字只在这几分钟里保存在内存中，从不写到任何地方。它从不读取密码框，也不读取开启了“安全输入”的 App。它只保存词对，比如“奥拉”和“Orra”，以及每对出现的次数和时间，存放在 ~/Library/Application Support/io.github.db-ol.Orra/corrections.json，只出现过一次的词对一周后会被删除。连续三位以上的数字，比如验证码、金额和年份，从不保存。Orra 只在出现已保存词对里听错的写法时修改听写出来的文字。在设置里点“清除学到的修改”会删除所有词对。
-
-**会议同传**的字幕和声音样本里说的话都只保存在内存中。声音样本也只保存在内存中，除非你打开“记住我的音色”，这个开关默认关闭。Orra 从不把文字或音频写进日志。
-
-**Orra 只在下载你要求的模型和检查更新时联网。**
-
-- **语音模型**，只在你选择“下载语音模型”，或在欢迎窗口里点按“下载模型”之后：六个文件，共 2.47 GB，从 Hugging Face（huggingface.co）下载。如果连不上 Hugging Face，比如在中国大陆，Orra 会依次尝试 ModelScope（modelscope.cn）和 hf-mirror.com，它们提供相同的文件。Orra 会用写在源代码里的数值核对每个文件的大小和 SHA-256 校验值，所以镜像站无法篡改模型。文件存放在 ~/Library/Application Support/io.github.db-ol.Orra/Models，不会被时间机器备份。
-- **整理模型**，只在你点按欢迎窗口里的“下载模型”或“下载整理模型”之后（欢迎窗口在内存 16 GB 及以上的 Mac 上为新用户提供，整理文字打开时也会提供），或在设置里打开“整理文字”或“翻译”并同意下载之后：mlx-community/Qwen3.5-4B-4bit 的四个文件，共 3.05 GB，从同样的服务器下载，用同样的方式核对，存放在 Models 里它自己的文件夹中。
-- **语音合成模型**，只在你为“为对方朗读译文”开始下载之后：Qwen3-TTS，约 2 GB，从 Hugging Face 或 hf-mirror.com 下载，用同样的方式核对。
-- **检查更新**，只在你允许之后。Orra 第二次启动时会问你是否自动检查，也可以在“设置 → 关于”里更改。检查时，Orra 大约每天读取一次 https://github.com/db-ol/Orra/releases/latest/download/appcast.xml。每次更新都要你同意后才会安装，而且只安装用本项目更新密钥签名的更新和更新清单。
-
-模型都在你的 Mac 上运行，本身从不联网。在你允许检查更新之前，启动 Orra 从不联网。和所有下载一样，这些服务能看到你的 IP 地址。检查更新时还会看到 Orra 的版本号，以及和所有网页请求一样带上的偏好语言。Orra 不发送账号、令牌或 Cookie，也不发送任何其他关于你的 Mac 的信息。服务器和核对方式的详情见 [docs/model-download.md](docs/model-download.md)（英文）。
-
-**报告问题**会在你的 Mac 上生成一个文本文件，包括 Orra 的版本、设置和权限状态，Mac 的型号、芯片、内存、macOS 版本和语言，麦克风名称，Orra 最近一小时的日志，以及最近 7 天的崩溃报告。它不包含任何听写的文字、录音、剪贴板、个人词库或学到的词。你的个人文件夹路径、账户名、全名和电脑名都会被去掉。Orra 自己不发送任何东西，它只是在浏览器里打开 GitHub 页面，只有你自己附上，这个文件才会到 GitHub。
-
-要删除模型，请先退出 Orra，再删除上面的 Models 文件夹。如果只想删除整理模型，请先关闭整理和翻译，再删除其中的 Qwen3.5-4B-4bit-0e7ffd5c 文件夹。如果 ~/Library/Caches/qwen3-speech 里有其他 App 留下的副本，也请一并删除，否则 Orra 会从那里重新安装模型。
+Orra 保存什么、什么时候联网、怎样删除模型，详见 [docs/privacy.zh-CN.md](docs/privacy.zh-CN.md)。
 
 ## 社区与支持
 

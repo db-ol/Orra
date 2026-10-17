@@ -2,7 +2,7 @@
 
 English · [简体中文](user-guide.zh-CN.md)
 
-The [README](../README.md) has the overview of Orra, the download and the privacy details.
+The [README](../README.md) has the overview of Orra and the download, and [privacy.md](privacy.md) the privacy details.
 
 ## Getting started
 

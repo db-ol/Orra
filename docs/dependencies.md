@@ -12,7 +12,7 @@
   Orra target only. Approved by the maintainer on 2026-10-10 for updates from inside the app,
   and added in Xcode by the maintainer the same day. It is a prebuilt, signed framework that
   Xcode embeds in Orra.app and signs again with the team's Developer ID on export. It reaches
-  the network only for update checks the user allowed, see the README's privacy section.
+  the network only for update checks the user allowed, see docs/privacy.md.
 - ml-explore/mlx-swift-lm (MIT), exact version 3.31.4, products MLXLLM and MLXLMCommon,
   linked to the Orra target only. Approved by the maintainer on 2026-10-10 to run a local
   text model for optional cleanup and translation, and added in Xcode by the maintainer the
