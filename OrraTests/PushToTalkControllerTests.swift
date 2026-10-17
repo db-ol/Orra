@@ -1541,7 +1541,7 @@ struct PushToTalkControllerTests {
         #expect(reported.count == 1)
     }
 
-    private func controller(cleanup: CleanupModel) async -> PushToTalkController {
+    private func controller(cleanup: CleanupModel, speaking languages: SpokenLanguages = .chineseAndEnglish) async -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -1550,7 +1550,8 @@ struct PushToTalkControllerTests {
             frontmostApp: { [workspace] in workspace.frontmost },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            spokenLanguages: languages
         )
         await controller.loadModel()
         return controller
@@ -1598,6 +1599,53 @@ struct PushToTalkControllerTests {
         #expect(inserter.inserted == ["帮我写一封邮件给老板，说我明天请假。"])
         #expect(controller.originalText == nil)
         #expect(controller.problem == nil)
+    }
+
+    /// Spanish for a user who added it: one pass of the speech model and no cleanup model,
+    /// whose prompt and checks know Chinese and English only, although "No" is a cue.
+    @Test func aLanguageTheUserAddedIsPastedWithoutTheCleanupModel() async throws {
+        let received = Mutex<[String]>([])
+        let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { text in
+            received.withLock { $0.append(text) }
+            return #"{"cleaned": "Mañana tenemos una reunión."}"#
+        }), speaking: SpokenLanguages(adding: [.spanish]))
+        speech.reply = LanguageGuardTests.spanish
+        try await dictate(controller)
+        #expect(speech.receivedLanguages == [nil])
+        #expect(received.withLock { $0 }.isEmpty)
+        #expect(inserter.inserted == [LanguageGuardTests.spanish])
+        #expect(controller.originalText == nil)
+    }
+
+    /// Without Spanish added, the same dictation gets the passes in Chinese and English and
+    /// goes to the cleanup model, as before the setting.
+    @Test func withoutTheLanguageAddedTheTextGoesThroughThePassesAndTheModel() async throws {
+        let received = Mutex<[String]>([])
+        let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { text in
+            received.withLock { $0.append(text) }
+            return #"{"cleaned": "Mañana tenemos una reunión."}"#
+        }))
+        speech.reply = LanguageGuardTests.spanish
+        try await dictate(controller)
+        #expect(speech.receivedLanguages == [nil, .chinese, .english])
+        #expect(received.withLock { $0 } == [LanguageGuardTests.spanish])
+    }
+
+    @Test func addingALanguageSavesIt() {
+        var saved: [SpokenLanguages] = []
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            saveSpokenLanguages: { saved.append($0) }
+        )
+        #expect(controller.spokenLanguages == .chineseAndEnglish)
+        controller.setSpeaks(.japanese, true)
+        controller.setSpeaks(.japanese, true)
+        controller.setSpeaks(.chinese, false)
+        controller.setSpeaks(.japanese, false)
+        #expect(controller.spokenLanguages == .chineseAndEnglish)
+        #expect(saved == [SpokenLanguages(adding: [.japanese]), .chineseAndEnglish])
     }
 
     /// The kept pairs replace what the model wrote after the rule steps, which run on the
@@ -1728,7 +1776,7 @@ struct PushToTalkControllerTests {
         }
     }
 
-    private func controller(translation: FakeTranslation, cleanup: CleanupModel = .off) async -> PushToTalkController {
+    private func controller(translation: FakeTranslation, cleanup: CleanupModel = .off, speaking languages: SpokenLanguages = .chineseAndEnglish) async -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -1738,7 +1786,8 @@ struct PushToTalkControllerTests {
             frontmostApp: { [workspace] in workspace.frontmost },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            spokenLanguages: languages
         )
         controller.setTranslationKeyOn(true)
         await controller.loadModel()
@@ -1796,6 +1845,22 @@ struct PushToTalkControllerTests {
         #expect(inserter.inserted == ["We have a meeting next Tuesday."])
         #expect(controller.originalText == "我们下周二开会。")
         #expect(cleanups.withLock { $0 } == 0)
+    }
+
+    /// Text in a language the user added is translated, but the model's cleanup of it
+    /// never stands in for the text before translation, since the cleanup checks know
+    /// Chinese and English only.
+    @Test func aLanguageTheUserAddedIsTranslatedWithoutItsCleanup() async throws {
+        let translation = FakeTranslation(answer: #"{"cleaned": "Mañana tenemos una reunión.", "translation": "不，明天我们和销售团队开会。"}"#)
+        let controller = await controller(translation: translation, cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { _ in
+            #"{"cleaned": "x"}"#
+        }), speaking: SpokenLanguages(adding: [.spanish]))
+        speech.reply = LanguageGuardTests.spanish
+        try await dictate(controller, with: .rightOption)
+        #expect(speech.receivedLanguages == [nil])
+        #expect(translation.received == ["zh \(LanguageGuardTests.spanish)"])
+        #expect(inserter.inserted == ["不，明天我们和销售团队开会。"])
+        #expect(controller.originalText == LanguageGuardTests.spanish)
     }
 
     /// The talk key never translates, also while translation is on.

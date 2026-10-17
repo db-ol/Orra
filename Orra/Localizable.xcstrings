@@ -1445,6 +1445,26 @@
         }
       }
     },
+    "Japanese (Beta)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日语（测试版）"
+          }
+        }
+      }
+    },
+    "Japanese is pasted as you said it, without extra passes that can turn it into Chinese or English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日语按你说的原样粘贴，不再多转写几遍，也不会被变成中文或英文。"
+          }
+        }
+      }
+    },
     "Jump to Latest" : {
       "comment" : "A button in the caption window after the user scrolled up",
       "localizations" : {
@@ -1482,6 +1502,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语言"
+          }
+        }
+      }
+    },
+    "Languages I Speak" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我说的语言"
           }
         }
       }
@@ -2054,6 +2084,16 @@
         }
       }
     },
+    "Orra always takes Chinese and English. Cleanup with the local model works in these two only, so a language added here is pasted without it." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 始终支持中文和英文。本地模型的整理只处理这两种语言，所以在这里加上的语言不会经过整理。"
+          }
+        }
+      }
+    },
     "Orra can use the microphone." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2340,6 +2380,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 通过下面的设备读出翻译键译好的内容。"
+          }
+        }
+      }
+    },
+    "Orra takes text as Spanish only when it reads most like Spanish, so Portuguese, Catalan or Italian is still checked as before." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有读起来最像西班牙语的文字才会当作西班牙语，葡萄牙语、加泰罗尼亚语或意大利语仍按原来的方式检查。"
           }
         }
       }
@@ -3190,6 +3240,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "空格"
+          }
+        }
+      }
+    },
+    "Spanish (Beta)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "西班牙语（测试版）"
+          }
+        }
+      }
+    },
+    "Spanish is pasted as you said it, without extra passes that can turn it into Chinese or English." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "西班牙语按你说的原样粘贴，不再多转写几遍，也不会被变成中文或英文。"
           }
         }
       }
@@ -4246,6 +4316,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用声音样本时，每句话播放前 Orra 会先用语音模型听一遍，听到的字词不对就重新合成，所以每句话会稍晚一点开始。"
+          }
+        }
+      }
+    },
+    "With Japanese on, text with kana is taken as Japanese, and Orra no longer asks the speech model again in Chinese. Turn it on only if you dictate in Japanese." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开日语后，带假名的文字会当作日语，Orra 不再让语音模型用中文重新转写。只在你确实用日语听写时打开。"
           }
         }
       }

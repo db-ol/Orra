@@ -56,12 +56,14 @@ struct CaptionEngines {
 
 extension CaptionEngines {
     /// The app's models, shared with dictation through `turns`. The transcript gets the
-    /// language check dictation has, see Transcription.checkingLanguage, but no vocabulary,
-    /// since a transcript of only vocabulary terms costs extra passes.
-    static func live(transcription: Transcription, isSpeechReady: @escaping () -> Bool, cleanup: TextCleanup, turns: EngineTurns) -> CaptionEngines {
+    /// language check dictation has, with the languages the user speaks, see
+    /// Transcription.checkingLanguage, but no vocabulary, since a transcript of only
+    /// vocabulary terms costs extra passes.
+    static func live(transcription: Transcription, isSpeechReady: @escaping () -> Bool, languages: @escaping () -> SpokenLanguages, cleanup: TextCleanup, turns: EngineTurns) -> CaptionEngines {
         shared(
             transcription: transcription,
             isSpeechReady: isSpeechReady,
+            languages: languages,
             canTranslate: { cleanup.isReadyForCaptions },
             direction: { cleanup.translationDirection },
             complete: cleanup.translation.complete,
@@ -74,23 +76,26 @@ extension CaptionEngines {
     static func shared(
         transcription: Transcription,
         isSpeechReady: @escaping () -> Bool,
+        languages: @escaping () -> SpokenLanguages = { .chineseAndEnglish },
         canTranslate: @escaping () -> Bool,
         direction: @escaping () -> TranslationDirection,
         complete: @escaping @Sendable (String, TranslationTarget) async throws -> String,
         turns: EngineTurns
     ) -> CaptionEngines {
-        let transcribe: @Sendable ([Float]) async throws -> String = { samples in
+        let transcribe: @Sendable ([Float], SpokenLanguages) async throws -> String = { samples, languages in
             let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
-            return try await transcription.transcribe(samples, vocabulary: [], audioSeconds: seconds, takingDigits: false)
+            return try await transcription.transcribe(samples, vocabulary: [], audioSeconds: seconds, takingDigits: false, languages: languages)
         }
         return CaptionEngines(
             isSpeechReady: isSpeechReady,
             transcribe: { samples in
-                try await turns.captionTurn { try await transcribe(samples) }
+                let languages = languages()
+                return try await turns.captionTurn { try await transcribe(samples, languages) }
             },
             isFree: { !turns.isDictating },
             transcribeInterim: { samples in
-                try await turns.captionTurn(retries: 0) { try await transcribe(samples) }
+                let languages = languages()
+                return try await turns.captionTurn(retries: 0) { try await transcribe(samples, languages) }
             },
             canTranslate: canTranslate,
             direction: direction,
