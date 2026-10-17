@@ -219,7 +219,7 @@ private struct GeneralSettings: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .help(Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free."))
+                .help(Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key counts as a dictation only after you hold it alone for a moment, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it. With Double press for hands free on, press it twice quickly to translate hands free."))
                 TriggerModePicker(pushToTalk: pushToTalk, slot: .translation)
                     .disabled(!cleanup.translationIsOn)
             } header: {

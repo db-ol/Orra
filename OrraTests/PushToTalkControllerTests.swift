@@ -16,9 +16,21 @@ final class FakeMicrophone {
     var failOnlyNextStart = false
     var startDelay: Duration = .zero
     var level: Float = 0
+    /// How long after the cue begins to wait for it the first sound arrives, nil for a
+    /// microphone that delivers none.
+    var soundDelay: Duration? = .zero
+    /// What the timing log reads about the start.
+    var onset = CaptureOnset(path: .unit, transport: 0x7573_6220)
+    /// How often the controller read `onset`, once for each hold it logs.
+    private(set) var onsetReads = 0
+    /// Called when the controller reads `onset`.
+    var whenOnsetRead: () -> Void = {}
     private(set) var calls: [String] = []
     /// The microphone UID each start asked for, nil for the system default.
     private(set) var preferredInputs: [String?] = []
+    /// The microphone UID of each new choice the controller passed on, nil for the system
+    /// default.
+    private(set) var chosenInputs: [String?] = []
 
     /// A quiet tone, so a recording is never mistaken for a microphone without sound.
     static func tone(count: Int) -> [Float] {
@@ -36,7 +48,9 @@ final class FakeMicrophone {
             start: { preferredInput in
                 self.preferredInputs.append(preferredInput)
                 if self.startDelay > .zero {
-                    try? await Task.sleep(for: self.startDelay)
+                    // A real start goes on when its task is cancelled, so the delay does too.
+                    let delay = self.startDelay
+                    await Task { try? await Task.sleep(for: delay) }.value
                 }
                 if let error = self.startError {
                     if self.failOnlyNextStart {
@@ -52,7 +66,24 @@ final class FakeMicrophone {
                 return self.recording
             },
             cancel: { self.calls.append("cancel") },
-            level: { self.level }
+            level: { self.level },
+            waitForSound: { deadline in
+                guard let delay = self.soundDelay else {
+                    try? await Task.sleep(until: deadline, clock: .continuous)
+                    return
+                }
+                if delay > .zero {
+                    try? await Task.sleep(until: min(.now + delay, deadline), clock: .continuous)
+                }
+            },
+            onset: {
+                self.onsetReads += 1
+                self.whenOnsetRead()
+                return self.onset
+            },
+            microphoneChosen: { preferredInput in
+                self.chosenInputs.append(preferredInput)
+            }
         )
     }
 }
@@ -148,6 +179,7 @@ struct PushToTalkControllerTests {
         limit: Duration = RecordingLimits.maximumDuration,
         minimumHold: Duration = .zero,
         listeningCueDelay: Duration = .zero,
+        soundWaitLimit: Duration = .seconds(1),
         loadModel: Bool = true
     ) async -> PushToTalkController {
         let controller = PushToTalkController(
@@ -158,7 +190,8 @@ struct PushToTalkControllerTests {
             maximumRecordingDuration: limit,
             minimumHold: minimumHold,
             releaseTail: .zero,
-            listeningCueDelay: listeningCueDelay
+            listeningCueDelay: listeningCueDelay,
+            soundWaitLimit: soundWaitLimit
         )
         if loadModel {
             await controller.loadModel()
@@ -256,6 +289,25 @@ struct PushToTalkControllerTests {
         try await dictate(controller)
         #expect(mic.preferredInputs == ["brio-uid", nil])
         #expect(saved == [brio, nil])
+    }
+
+    /// A new choice reaches the microphone at once, so the unit kept for the microphone
+    /// chosen before lets go of its device then, not at the next press. The same choice
+    /// again does not, and nothing records.
+    @Test func aNewMicrophoneChoiceReachesTheMicrophoneAtOnce() async throws {
+        let brio = MicrophoneChoice(uid: "brio-uid", name: "Brio 500")
+        let airPods = MicrophoneChoice(uid: "airpods-uid", name: "AirPods")
+        let controller = await makeController()
+        controller.setMicrophone(brio)
+        try await waitUntil { mic.chosenInputs.count == 1 }
+        #expect(mic.chosenInputs == ["brio-uid"])
+        controller.setMicrophone(brio)
+        controller.setMicrophone(airPods)
+        controller.setMicrophone(nil)
+        try await waitUntil { mic.chosenInputs.count == 3 }
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(mic.chosenInputs == ["brio-uid", "airpods-uid", nil])
+        #expect(mic.calls.isEmpty)
     }
 
     @Test func silenceIsExplainedForTheMicrophoneThatRecorded() async throws {
@@ -452,6 +504,7 @@ struct PushToTalkControllerTests {
         mic.startDelay = .milliseconds(100)
         let controller = await makeController()
         controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.preferredInputs.count == 1 }
         controller.handle(.cancelled)
         #expect(controller.state == .idle)
         try await waitUntil { mic.calls.count == 2 }
@@ -466,6 +519,7 @@ struct PushToTalkControllerTests {
         mic.startDelay = .milliseconds(100)
         let controller = await makeController()
         controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.preferredInputs.count == 1 }
         controller.handle(.cancelled)
         controller.handle(.pressed(isRepeat: false))
         try await waitUntil { mic.calls.count == 3 }
@@ -482,6 +536,7 @@ struct PushToTalkControllerTests {
         mic.startDelay = .milliseconds(100)
         let controller = await makeController()
         controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.preferredInputs.count == 1 }
         controller.handle(.cancelled)
         controller.handle(.pressed(isRepeat: false))
         try await waitUntil { mic.calls.count == 2 }
@@ -968,6 +1023,252 @@ struct PushToTalkControllerTests {
         #expect(cues.list.isEmpty)
         try await waitUntil { mic.calls.contains("start") && !cues.list.isEmpty }
         #expect(cues.list == [.listening])
+    }
+
+    /// The start sound comes once the microphone delivers sound, not when it has started,
+    /// since a microphone can deliver zeros for a while after its start.
+    @Test func theStartSoundWaitsForSoundFromTheMicrophone() async throws {
+        mic.soundDelay = .milliseconds(300)
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        let pressed = ContinuousClock.now
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.contains("start") }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(cues.list.isEmpty)
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.listening])
+        #expect(pressed.duration(to: .now) >= .milliseconds(250))
+    }
+
+    /// A microphone that sends no sound gets the cue after the limit, so nobody waits for
+    /// it, and its hold ends with the message about the silence as before.
+    @Test func aMicrophoneWithoutSoundGetsTheCueAfterTheLimit() async throws {
+        mic.soundDelay = nil
+        // A USB microphone, so the message does not depend on this Mac's lid.
+        let brio = AudioInput(id: 2, uid: "brio-uid", name: "Brio 500", isInternalMicrophone: false)
+        mic.recording = AudioRecording(samples: Array(repeating: 0, count: 16_000), sampleRate: 16_000, input: brio)
+        let controller = await makeController(soundWaitLimit: .milliseconds(300))
+        let cues = CueRecorder(controller)
+        let pressed = ContinuousClock.now
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.contains("start") }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(cues.list.isEmpty)
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.listening])
+        #expect(pressed.duration(to: .now) >= .milliseconds(250))
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(cues.list == [.listening, .transcribing, .recordingStopped, .finished(message: "No sound came from Brio 500")])
+        #expect(speech.receivedSampleCounts.isEmpty)
+    }
+
+    @Test func theHandsFreeCueWaitsForSoundToo() async throws {
+        mic.soundDelay = .milliseconds(300)
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.doublePressed)
+        try await waitUntil { mic.calls.contains("start") }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(cues.list.isEmpty)
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.handsFree(finishHint: "Press right Control to finish")])
+    }
+
+    // MARK: Early capture
+
+    /// A key that waits starts the microphone at its key down without a cue. When the press
+    /// counts, that recording becomes the dictation, so the microphone starts once.
+    @Test func anEarlyCaptureStartsSilentlyAndBecomesTheDictation() async throws {
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.armed)
+        #expect(controller.state == .arming)
+        try await waitUntil { mic.calls == ["start"] }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(cues.list.isEmpty)
+        #expect(controller.isKeepingDictationAwake == false)
+        controller.handle(.pressed(isRepeat: false))
+        #expect(controller.state == .listening)
+        #expect(controller.isKeepingDictationAwake)
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.listening])
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(mic.calls == ["start", "stop"])
+        #expect(inserter.inserted == ["你好"])
+        #expect(cues.list == [.listening, .transcribing, .recordingStopped, .finished(message: nil)])
+        #expect(mic.onsetReads == 1)
+    }
+
+    /// A press that captured early counts the minimum hold from the moment it counted, as
+    /// before, so holding a key that waits alone a little longer than its wait is still too
+    /// short to transcribe, although the recording started at the key down.
+    @Test func anEarlyCaptureCountsTheMinimumHoldFromThePressCounting() async throws {
+        let controller = await makeController(minimumHold: .milliseconds(200))
+        let cues = CueRecorder(controller)
+        controller.handle(.armed)
+        try await waitUntil { mic.calls == ["start"] }
+        // The wait alone is longer than the minimum hold, and the release comes right
+        // after the press counted.
+        try await Task.sleep(for: .milliseconds(300))
+        controller.handle(.pressed(isRepeat: false))
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(mic.calls == ["start", "stop"])
+        #expect(speech.receivedSampleCounts.isEmpty)
+        #expect(inserter.inserted.isEmpty)
+        #expect(!cues.list.contains(.transcribing))
+        // Held for the minimum after it counted, the next press is transcribed.
+        controller.handle(.armed)
+        try await waitUntil { mic.calls.count == 3 }
+        controller.handle(.pressed(isRepeat: false))
+        try await Task.sleep(for: .milliseconds(300))
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(mic.calls == ["start", "stop", "start", "stop"])
+        #expect(inserter.inserted == ["你好"])
+    }
+
+    /// A shortcut drops the early capture without a cue, a sound or a message, and leaves
+    /// the message of the hold before alone.
+    @Test func aDroppedEarlyCaptureSaysNothing() async throws {
+        mic.startError = TestError()
+        mic.failOnlyNextStart = true
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { controller.state == .idle }
+        #expect(controller.problem == "The microphone could not start")
+        let before = cues.list
+        controller.handle(.armed)
+        try await waitUntil { mic.calls.contains("start") }
+        controller.handle(.cancelled)
+        #expect(controller.state == .idle)
+        try await waitUntil { mic.calls.contains("cancel") }
+        #expect(mic.calls == ["start failed", "start", "cancel"])
+        #expect(cues.list == before)
+        #expect(controller.problem == "The microphone could not start")
+        #expect(mic.onsetReads == 0)
+    }
+
+    /// While the model is not ready, the waiting press starts nothing and says nothing. The
+    /// press says why once it counts.
+    @Test func anEarlyCaptureWaitsSilentlyForTheModel() async throws {
+        let controller = await makeController(loadModel: false)
+        let cues = CueRecorder(controller)
+        controller.handle(.armed)
+        #expect(controller.state == .idle)
+        #expect(cues.list.isEmpty)
+        controller.handle(.pressed(isRepeat: false))
+        #expect(cues.list == [.finished(message: "The speech model is not ready. The Orra menu shows what is missing.")])
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mic.calls.isEmpty)
+    }
+
+    /// A microphone that fails to start during the wait says nothing then. The press tries
+    /// again once it counts, and says what went wrong.
+    @Test func anEarlyCaptureThatCannotStartSaysNothingUntilThePressCounts() async throws {
+        mic.startError = TestError()
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.armed)
+        try await waitUntil { mic.calls == ["start failed"] && controller.state == .idle }
+        #expect(controller.state == .idle)
+        #expect(controller.problem == nil)
+        #expect(cues.list.isEmpty)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { controller.state == .idle && !cues.list.isEmpty }
+        #expect(mic.calls == ["start failed", "start failed"])
+        #expect(controller.problem == "The microphone could not start")
+        #expect(cues.list == [.finished(message: "The microphone could not start")])
+    }
+
+    /// Shortcuts typed quickly while a slow microphone still starts for the first one: its
+    /// cancel lands before the hold that follows starts, so it does not stop that hold, and
+    /// the second shortcut, over before its turn came, never starts the microphone.
+    @Test func quickShortcutsThenAHoldKeepTheMicrophoneInOrder() async throws {
+        mic.startDelay = .milliseconds(100)
+        let controller = await makeController()
+        controller.handle(.armed)
+        try await waitUntil { mic.preferredInputs.count == 1 }
+        controller.handle(.cancelled)
+        controller.handle(.armed)
+        controller.handle(.cancelled)
+        controller.handle(.armed)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.count == 3 }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(mic.calls == ["start", "cancel", "start"])
+        controller.handle(.released)
+        try await waitUntil { controller.state == .idle }
+        #expect(mic.calls == ["start", "cancel", "start", "stop"])
+        #expect(inserter.inserted == ["你好"])
+    }
+
+    /// A press that is over before its start began, such as a shortcut typed at once, never
+    /// starts the microphone, so there is nothing to cancel either.
+    @Test func aPressOverBeforeItsStartBeganNeverStartsTheMicrophone() async throws {
+        mic.startDelay = .milliseconds(50)
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.armed)
+        controller.handle(.cancelled)
+        controller.handle(.pressed(isRepeat: false))
+        controller.handle(.cancelled)
+        #expect(controller.state == .idle)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(mic.preferredInputs.isEmpty)
+        #expect(mic.calls.isEmpty)
+        #expect(mic.onsetReads == 0)
+        #expect(cues.list.isEmpty)
+        try await dictate(controller)
+        #expect(mic.calls == ["start", "stop"])
+        #expect(inserter.inserted == ["你好"])
+    }
+
+    /// A shortcut drops the early capture while the microphone still starts, and the start
+    /// fails afterwards: the press never counted, so nothing says so.
+    @Test func aStartThatFailsAfterAShortcutDroppedItSaysNothing() async throws {
+        mic.startError = TestError()
+        mic.startDelay = .milliseconds(100)
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        controller.handle(.armed)
+        try await waitUntil { mic.preferredInputs.count == 1 }
+        controller.handle(.cancelled)
+        #expect(controller.state == .idle)
+        try await waitUntil { mic.calls == ["start failed"] }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(controller.state == .idle)
+        #expect(controller.problem == nil)
+        #expect(controller.microphoneNotice == nil)
+        #expect(controller.suggestsSoundSettings == false)
+        #expect(cues.list.isEmpty)
+    }
+
+    /// The timing log reads how the microphone started after the paste, so the paste never
+    /// waits for the microphone getting ready for the next hold.
+    @Test func theTimingLogReadsTheStartAfterThePaste() async throws {
+        let controller = await makeController()
+        var pastedBeforeTheRead: [Bool] = []
+        mic.whenOnsetRead = { [inserter] in pastedBeforeTheRead.append(inserter.inserted == ["你好"]) }
+        try await dictate(controller)
+        #expect(pastedBeforeTheRead == [true])
+    }
+
+    /// The timing log reads how the microphone started once for each hold, when its
+    /// recording ends or is cancelled.
+    @Test func theTimingLogReadsTheStartOnceAHoldEnds() async throws {
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(mic.onsetReads == 1)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { mic.calls.contains("start") && mic.calls.count == 3 }
+        controller.handle(.cancelled)
+        try await waitUntil { mic.calls.last == "cancel" && mic.onsetReads == 2 }
+        #expect(mic.onsetReads == 2)
     }
 
     @Test func aSkippedPasswordFieldEndsTheDictationWithTheNotice() async throws {
@@ -1616,7 +1917,7 @@ struct PushToTalkControllerTests {
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now)
         now = now.advanced(by: .milliseconds(80))
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
-        // The tap of a key that waits records nothing.
+        // The tap of a key that waits keeps nothing. Its early capture is dropped.
         #expect(controller.state == .idle)
         now = now.advanced(by: .milliseconds(100))
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: now)
@@ -1630,36 +1931,56 @@ struct PushToTalkControllerTests {
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(inserter.inserted == ["We have a meeting next Tuesday."])
+        // The tap was over before its start began, so it never started the microphone, and
+        // the second press's early capture became the dictation.
         #expect(mic.calls == ["start", "stop"])
     }
 
-    /// An Option shortcut during the translation key's wait records nothing, and a hold
-    /// through the wait records.
-    @Test func anOptionShortcutDuringTheWaitRecordsNothing() async throws {
+    /// An Option shortcut during the translation key's wait drops the capture that the key
+    /// down started, silently, and a hold through the wait keeps its capture from the key
+    /// down.
+    @Test func anOptionShortcutDuringTheWaitIsDroppedSilently() async throws {
         let translation = FakeTranslation()
         let controller = try await startedController(translation: translation.model)
         controller.setTranslationKeyOn(true)
+        let cues = CueRecorder(controller)
         let tap = try #require(tapSystem.installed)
         let key = TalkKey.rightOption
         let down = key.downFlag.union(.maskAlternate)
         #expect(tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down) == false)
+        #expect(controller.state == .arming)
+        // The microphone starts at once, before a person types the next key.
+        try await waitUntil { mic.calls == ["start"] }
         // Option E types an accent and passes through.
         #expect(tap.handle(type: .keyDown, keyCode: 14, flags: down) == false)
         tap.fireTimer()
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [])
         #expect(controller.state == .idle)
-        #expect(mic.calls.isEmpty)
-        // Held through the wait: the timer fires and recording starts. The times are
-        // given, so the release counts as the end of a hold, not as a tap.
+        try await waitUntil { mic.calls == ["start", "cancel"] }
+        #expect(mic.calls == ["start", "cancel"])
+        // No cue, no sound, no message, and the cleanup model was not asked to load.
+        #expect(cues.list.isEmpty)
+        #expect(controller.problem == nil)
+        #expect(controller.notice == nil)
+        #expect(controller.isKeepingDictationAwake == false)
+        // Nothing to log: the press never counted.
+        #expect(mic.onsetReads == 0)
+        // Held through the wait: the timer fires and the capture of the key down goes on.
+        // The times are given, so the release counts as the end of a hold, not as a tap.
         let pressed = ContinuousClock.now
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: down, at: pressed)
-        #expect(controller.state == .idle)
+        #expect(controller.state == .arming)
+        try await waitUntil { mic.calls.count == 3 }
+        #expect(cues.list.isEmpty)
         tap.fireTimer()
         #expect(controller.state == .listening)
-        try await waitUntil { mic.calls.contains("start") }
+        try await waitUntil { !cues.list.isEmpty }
+        #expect(cues.list == [.listening(translation: .automatic)])
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: pressed.advanced(by: .seconds(2)))
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(translation.calls == 1)
+        #expect(mic.calls == ["start", "cancel", "start", "stop"])
+        #expect(mic.onsetReads == 1)
     }
 
     @Test func theLevelComesFromTheMicrophone() async {
@@ -2028,8 +2349,8 @@ struct PushToTalkControllerTests {
         #expect(controller.choosingKeySlot == nil)
     }
 
-    /// The tap watches the translation key only while translation is on, and that key
-    /// waits before it records while the talk key starts at once.
+    /// The tap watches the translation key only while translation is on. That key waits
+    /// before it counts, recording silently meanwhile, while the talk key counts at once.
     @Test func theTapWatchesTheTranslationKeyOnlyWhileTranslationIsOn() async throws {
         let controller = try await startedController()
         let tap = try #require(tapSystem.installed)
@@ -2041,7 +2362,8 @@ struct PushToTalkControllerTests {
         #expect(controller.translationKeyIsOn)
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown)
         #expect(tap.activeKey == .rightOption)
-        #expect(controller.state == .idle)
+        // It records silently while it waits.
+        #expect(controller.state == .arming)
         tap.fireTimer()
         #expect(controller.state == .listening)
         controller.setTranslationKeyOn(false)
@@ -2102,9 +2424,11 @@ struct PushToTalkControllerTests {
         let controlDown = TalkKey.rightControl.downFlag.union(.maskControl)
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: controlDown)
         #expect(tap.activeKey == .rightControl)
-        #expect(controller.state == .idle)
+        #expect(controller.state == .arming)
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: controlDown.union(TalkKey.rightOption.downFlag).union(.maskAlternate))
         #expect(tap.activeKey == combination)
+        // The combination waits without an early capture, so right Control's is dropped.
+        #expect(controller.state == .idle)
         tap.fireTimer()
         #expect(controller.state == .listening)
         // Picking the combination for the talk key swaps the keys.

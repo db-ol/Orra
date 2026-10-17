@@ -128,7 +128,8 @@ struct MenuBarIcon: View {
             switch dictation {
             case .listening, .waitingForSecondPress, .handsFree: return "mic.fill"
             case .processing: return "waveform"
-            case .idle: break
+            // A press that has not counted yet shows nothing.
+            case .idle, .arming: break
             }
         }
         switch modelState {

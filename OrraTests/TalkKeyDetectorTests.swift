@@ -359,10 +359,11 @@ struct TalkKeyDetectorTests {
     @Test func aDelayedKeyWaitsWhileHandsFreeIsOff() {
         var detector = TalkKeyDetector(keys: [.rightControl, .rightOption], delayedKeys: [.rightOption], handsFreeEnabled: false)
         let optionDown = TalkKey.rightOption.downFlag.union(.maskAlternate)
-        #expect(detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown) == .passThrough)
+        // The microphone starts silently at the key down.
+        #expect(detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown) == Decision(event: .armed, swallow: false))
         #expect(detector.phase == .arming(.rightOption))
-        // Released before the wait: nothing was recorded and nothing is left behind.
-        #expect(detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: []) == .passThrough)
+        // Released before the wait: the capture is dropped and nothing is left behind.
+        #expect(detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: []) == Decision(event: .cancelled, swallow: false))
         #expect(detector.phase == .up)
         // Held through the wait, it is a hold like any other.
         _ = detector.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: optionDown)

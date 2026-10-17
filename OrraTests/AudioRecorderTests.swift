@@ -107,6 +107,99 @@ struct AudioRecorderTests {
         #expect(store.take().isEmpty)
     }
 
+    // MARK: When the first audio arrived
+
+    @Test func theFirstBufferAndTheFirstSoundAreKeptUntilTheNextRecording() {
+        let arrival = AudioArrival()
+        #expect(arrival.firstBufferHostTime == 0)
+        // An empty buffer is no buffer.
+        arrival.record(peak: 0.5, count: 0, at: 50)
+        #expect(arrival.firstBufferHostTime == 0)
+        // Zeros from a microphone that is starting: a buffer, but no sound.
+        arrival.record(peak: 0, count: 512, at: 100)
+        arrival.record(peak: 0.000_005, count: 512, at: 200)
+        #expect(arrival.firstBufferHostTime == 100)
+        #expect(arrival.firstSoundHostTime == 0)
+        // The noise of a working microphone counts as sound.
+        arrival.record(peak: AudioArrival.soundFloor, count: 512, at: 300)
+        arrival.record(peak: 0.5, count: 512, at: 400)
+        #expect(arrival.firstBufferHostTime == 100)
+        #expect(arrival.firstSoundHostTime == 300)
+        arrival.reset()
+        #expect(arrival.firstBufferHostTime == 0)
+        #expect(arrival.firstSoundHostTime == 0)
+    }
+
+    @Test func soundCountsFromTheFloorOfTheSilenceCheck() {
+        #expect(AudioArrival.soundFloor == Silence.threshold)
+        #expect(AudioArrival.soundFloor == 0.000_01)
+    }
+
+    @Test func waitingForSoundEndsWithTheSoundOrAtTheDeadline() async {
+        let arrival = AudioArrival()
+        let started = ContinuousClock.now
+        await arrival.waitForSound(until: started + .milliseconds(100))
+        #expect(started.duration(to: .now) >= .milliseconds(100))
+        arrival.record(peak: 0.1, count: 512, at: 1)
+        let again = ContinuousClock.now
+        await arrival.waitForSound(until: again + .seconds(10))
+        #expect(again.duration(to: .now) < .seconds(1))
+    }
+
+    @Test func hostTimesBecomeInstantsOfTheContinuousClock() throws {
+        // Apple silicon's timebase: 125 / 3 nanoseconds a tick, 24 million ticks a second.
+        let timebase = mach_timebase_info_data_t(numer: 125, denom: 3)
+        let now = ContinuousClock.now
+        let instant = try #require(HostTime.instant(76_000_000, now: now, hostNow: 100_000_000, timebase: timebase))
+        #expect(instant.duration(to: now) == .seconds(1))
+        // A stamp of zero is a buffer that never came.
+        #expect(HostTime.instant(0, now: now, hostNow: 100_000_000, timebase: timebase) == nil)
+        // A stamp after the reading counts as now.
+        #expect(HostTime.instant(100_000_010, now: now, hostNow: 100_000_000, timebase: timebase) == now)
+        // With this Mac's own clocks, a stamp taken now is now, within a millisecond.
+        let live = try #require(HostTime.instant(mach_absolute_time()))
+        #expect(abs(DictationTimings.milliseconds(live.duration(to: .now))) <= 1)
+    }
+
+    // MARK: Keeping a chosen microphone's unit
+
+    /// A unit records the next hold only after a hold whose stop worked, whose device stayed
+    /// and that lost no audio.
+    @Test func aKeptUnitRecordsTheNextHoldOnlyAfterAGoodOne() {
+        let good = InputUnit.StopResult(samples: [0.1], interrupted: false, lostCallbacks: 0, ran: .seconds(2), status: noErr)
+        #expect(AudioRecorder.keepsUnit(after: good, gotFirstBuffer: true))
+        // A failed stop closed the unit, so its IO ended, and the next hold needs a new one.
+        var failedStop = good
+        failedStop.status = -10_863
+        #expect(!AudioRecorder.keepsUnit(after: failedStop, gotFirstBuffer: true))
+        var cut = good
+        cut.interrupted = true
+        #expect(!AudioRecorder.keepsUnit(after: cut, gotFirstBuffer: true))
+        var lost = good
+        lost.lostCallbacks = 1
+        #expect(!AudioRecorder.keepsUnit(after: lost, gotFirstBuffer: true))
+    }
+
+    /// A unit whose IO ran for a second in a hold without a single buffer is made again,
+    /// rather than kept for every hold to come. A shorter hold without a buffer, such as a
+    /// shortcut during the wait of the translation key, keeps it.
+    @Test func aUnitWithoutAnyBufferIsMadeAgainOnceItsIORanASecond() {
+        #expect(AudioRecorder.firstBufferLimit == .seconds(1))
+        let silent = InputUnit.StopResult(samples: [], interrupted: false, lostCallbacks: 0, ran: .seconds(1), status: noErr)
+        #expect(!AudioRecorder.keepsUnit(after: silent, gotFirstBuffer: false))
+        var longer = silent
+        longer.ran = .seconds(30)
+        #expect(!AudioRecorder.keepsUnit(after: longer, gotFirstBuffer: false))
+        var shortcut = silent
+        shortcut.ran = .milliseconds(80)
+        #expect(AudioRecorder.keepsUnit(after: shortcut, gotFirstBuffer: false))
+        var neverStarted = silent
+        neverStarted.ran = .zero
+        #expect(AudioRecorder.keepsUnit(after: neverStarted, gotFirstBuffer: false))
+        // A buffer of zeros is still a buffer: a muted microphone keeps its unit.
+        #expect(AudioRecorder.keepsUnit(after: longer, gotFirstBuffer: true))
+    }
+
     @Test func lengthRules() {
         #expect(RecordingLimits.minimumHold == .milliseconds(300))
         #expect(RecordingLimits.maximumDuration == .seconds(RecordingLimits.maximumSeconds))

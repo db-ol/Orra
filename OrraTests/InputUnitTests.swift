@@ -39,6 +39,27 @@ struct InputUnitTests {
         #expect(buffer.samples() == [1, 2, 3, 4, 5])
     }
 
+    /// The buffer of a unit kept between holds starts over for each hold and keeps no audio
+    /// of the hold before.
+    @Test func aClearedCaptureBufferStartsOverWithoutTheOldAudio() {
+        let buffer = CaptureBuffer(capacity: 4)
+        let first: [Float] = [0.5, 0.25, -0.5]
+        first.withUnsafeBufferPointer { buffer.append($0.baseAddress!, count: $0.count) }
+        buffer.clear()
+        #expect(buffer.samples().isEmpty)
+        let second: [Float] = [0.75]
+        second.withUnsafeBufferPointer { buffer.append($0.baseAddress!, count: $0.count) }
+        #expect(buffer.samples() == [0.75])
+        // The room is the whole buffer again, and the old samples behind the new one are gone.
+        let more: [Float] = [1, 1, 1, 1]
+        more.withUnsafeBufferPointer { buffer.append($0.baseAddress!, count: $0.count) }
+        #expect(buffer.samples() == [0.75, 1, 1, 1])
+        buffer.clear()
+        let one: [Float] = [0.1]
+        one.withUnsafeBufferPointer { buffer.append($0.baseAddress!, count: $0.count) }
+        #expect(buffer.samples() == [0.1])
+    }
+
     @Test func anEmptyCaptureBufferDropsEverything() {
         let buffer = CaptureBuffer(capacity: 0)
         let samples: [Float] = [1, 2]
@@ -56,7 +77,7 @@ struct InputUnitTests {
 
     /// Builds and initializes a unit for each wired input of this Mac, the built in
     /// microphone and USB devices, and stops it without ever starting it. Nothing is
-    /// recorded and the microphone indicator stays off. Wireless inputs such as an iPhone
+    /// recorded, and no IO runs. Wireless inputs such as an iPhone
     /// or AirPods are left alone, so the test never wakes them.
     ///
     /// Initializing a unit already asks macOS for microphone access. A build without a
@@ -76,8 +97,13 @@ struct InputUnitTests {
             #expect(result.samples.isEmpty)
             #expect(!result.interrupted)
             #expect(result.lostCallbacks == 0)
-            // Stopping twice is harmless.
+            // A unit that never started has nothing to stop, so nothing can fail.
+            #expect(result.status == noErr)
+            #expect(result.ran == .zero)
+            // Stopping twice is harmless, and the unit stays usable for the next hold.
             #expect(unit.stop().samples.isEmpty)
+            #expect(!unit.isInterrupted)
+            #expect(!unit.isClosed)
             setUp.append("\(AudioInput.fourCC(input.transport)) \(AudioInput.inputChannelCount(input.id)) ch \(Int(unit.sampleRate)) Hz")
         }
         // Which kinds of device were set up, without names, so a run shows what it covered.

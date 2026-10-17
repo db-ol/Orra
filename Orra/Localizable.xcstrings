@@ -3681,12 +3681,12 @@
         }
       }
     },
-    "The translation key waits a moment before it records, so its shortcuts and the characters Option types keep working. With Double press for hands free on, press it twice quickly to translate hands free." : {
+    "The translation key counts as a dictation only after you hold it alone for a moment, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it. With Double press for hands free on, press it twice quickly to translate hands free." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "翻译键要按住片刻才开始录音，所以它的快捷键和 Option 键输入的字符照常可用。打开“连按两下进入免手持模式”后，快速连按两下翻译键，就能免手持翻译。"
+            "value" : "翻译键要单独按住片刻才算一次听写，所以它的快捷键和 Option 键输入的字符照常可用。翻译键是 fn 键或右侧的 Control、Option、Command 键时，按下就开始录音。打开“连按两下进入免手持模式”后，快速连按两下翻译键，就能免手持翻译。"
           }
         }
       }

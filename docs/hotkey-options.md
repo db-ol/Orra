@@ -244,22 +244,38 @@ user can change. Implemented in `Orra/TalkKey.swift`, `Orra/TalkKeyDetector.swif
   key again. The welcome window's recorder records the talk key, so it swaps the same way.
 - The tap watches the translation key only while translation is on. The detector and the
   tap still take a set of keys, which then holds two.
-- The translation key waits `TalkKeyDetector.leftKeyDelay` (0.3 seconds) before it
-  records, whichever key it is, by the mechanism of the left hand keys: the detector takes
-  a set of delayed keys, and a press of one is `arming` until the timer fires. Any other
-  key, modifier or click during the wait makes the press a shortcut that records nothing,
-  plays no cue and passes every event through, so Option E and the other characters right
-  Option types, and shortcuts such as Option Command Escape, keep working. A hold longer
-  than the wait that then meets another key is cancelled like any hold, and the key passes
+- The translation key waits `TalkKeyDetector.leftKeyDelay` (0.3 seconds) before its
+  press counts, whichever key it is, by the mechanism of the left hand keys: the detector
+  takes a set of delayed keys, and a press of one is `arming` until the timer fires. Any
+  other key, modifier or click during the wait makes the press a shortcut that plays no
+  cue and passes every event through, so Option E and the other characters right Option
+  types, and shortcuts such as Option Command Escape, keep working. A hold longer than the
+  wait that then meets another key is cancelled like any hold, and the key passes
   through. The talk key keeps its own rule: a right hand key or fn starts at once.
+- Since 2026-10-16 a right hand key or fn that waits, the translation key or a key inside
+  another watched combination, starts the microphone at its key down (event `armed`,
+  state `arming`), silently: no cue, no sound and no message. When the press counts, that
+  recording becomes the dictation, so it starts at the key down. The shortest dictation,
+  `RecordingLimits.minimumHold`, still counts from the moment the press counted, so a
+  press of the key alone has to last as long as before to be transcribed. A shortcut, a
+  click or a release before the wait is over drops it silently, and the samples are
+  thrown away.
+  A press dropped before its start began never starts the microphone, so quick
+  shortcuts do not line up starts and stops in front of the next hold.
+  Left hand keys and combinations of modifiers keep the old rule and record nothing while
+  they wait, because they are part of so many shortcuts that the microphone indicator
+  would flash at each one. A press in double press mode records nothing at its press
+  anyway. The indicator may still flash for a shortcut with right Option.
 - Hands free works the same for both keys, under the one switch "Double press for hands
   free". A double press of the translation key records hands free, the indicator says
   "Press right Option to finish", and the next press of that key alone pastes the
-  translation. As for a left hand key, its tap never recorded, so the double press starts
-  the recording at the second release. A press of the other key during a hands free
+  translation. Its tap's recording is dropped at the tap's release, and the second press
+  records from its key down. A left hand key's tap never recorded, so its double press
+  starts the recording at the second release. A press of the other key during a hands free
   dictation is ignored, as any other modifier.
 - A tap of the talk key followed within the double press window by the translation key
-  drops the tap's recording, and the translation key records after its own wait.
+  drops the tap's recording, and the translation key records after its own wait, without
+  starting at its key down, because one event cannot both drop a recording and start one.
 - Settings, General has a recorder field for the translation key under Keys, right after
   the talk key's. It is always shown and dimmed with "Turn on Translation under Features
   to use this key." while translation is off (a Translation page until 2026-10-13, then a
@@ -290,7 +306,9 @@ keyboards, such as the Logitech MX Keys, never send fn to the Mac. Implemented i
   and the translation key work as for the talk key. A hands free dictation ends with the
   key that started it. When the second key is one of the modifiers of a combination of
   another key, such as right Control beside ⌃ ⌥, it waits 0.3 seconds, so the combination
-  can take over, as the talk key already did beside a translation combination.
+  can take over, as the talk key already did beside a translation combination. Since
+  2026-10-16 it records from its key down while it waits. A combination that counts at once
+  keeps that recording, and one that waits drops it.
 - The menu, the idle bar and the welcome window say "Hold fn or right Control to talk".
   The Talk Key submenu adds "Second Key: ⌃ Right Control".
 - Once, when the talk key uses fn, no second key is set, setup is complete, the welcome

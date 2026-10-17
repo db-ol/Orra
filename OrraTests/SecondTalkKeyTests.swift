@@ -178,9 +178,12 @@ struct SecondTalkKeyTests {
         let controlDown = TalkKey.rightControl.downFlag.union(.maskControl)
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: controlDown)
         #expect(tap.activeKey == .rightControl)
-        #expect(controller.state == .idle)
+        // Right Control records silently while it waits.
+        #expect(controller.state == .arming)
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: controlDown.union(TalkKey.rightOption.downFlag).union(.maskAlternate))
         #expect(tap.activeKey == combination)
+        // The talk combination counts at once and keeps that recording.
+        #expect(controller.state == .listening)
     }
 
     // MARK: Hints

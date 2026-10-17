@@ -185,10 +185,12 @@ struct TriggerModeTests {
     @Test mutating func aCombinationTakesOverFromOneOfItsModifiersThatWaits() {
         var detector = TalkKeyDetector(keys: [.rightControl, Self.controlOption], delayedKeys: [.rightControl, Self.controlOption])
         let rightControl = TalkKey.rightControl.downFlag.union(.maskControl)
-        #expect(event(.flagsChanged, TalkKey.rightControl.keyCode, rightControl, &detector).event == nil)
+        // Right Control starts the microphone silently while it waits.
+        #expect(event(.flagsChanged, TalkKey.rightControl.keyCode, rightControl, &detector).event == .armed)
         #expect(detector.phase == .arming(.rightControl))
         advance(100)
-        #expect(event(.flagsChanged, 58, rightControl.union(.maskAlternate).union(Self.leftOptionBit), &detector).event == nil)
+        // The combination waits without an early capture, so right Control's is dropped.
+        #expect(event(.flagsChanged, 58, rightControl.union(.maskAlternate).union(Self.leftOptionBit), &detector).event == .cancelled)
         #expect(detector.phase == .arming(Self.controlOption))
         #expect(detector.timerFired(generation: detector.generation) == .pressed(isRepeat: false))
         advance(900)
