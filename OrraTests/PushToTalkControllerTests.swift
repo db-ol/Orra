@@ -19,6 +19,9 @@ final class FakeMicrophone {
     /// How long after the cue begins to wait for it the first sound arrives, nil for a
     /// microphone that delivers none.
     var soundDelay: Duration? = .zero
+    /// While true the first sound has not arrived, until the test sets it to false or the
+    /// cue's limit passes. Unlike `soundDelay`, it does not depend on how fast the Mac runs.
+    var soundHeld = false
     /// What the timing log reads about the start.
     var onset = CaptureOnset(path: .unit, transport: 0x7573_6220)
     /// How often the controller read `onset`, once for each hold it logs.
@@ -68,6 +71,9 @@ final class FakeMicrophone {
             cancel: { self.calls.append("cancel") },
             level: { self.level },
             waitForSound: { deadline in
+                while self.soundHeld, ContinuousClock.now < deadline {
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
                 guard let delay = self.soundDelay else {
                     try? await Task.sleep(until: deadline, clock: .continuous)
                     return
@@ -1028,17 +1034,18 @@ struct PushToTalkControllerTests {
     /// The start sound comes once the microphone delivers sound, not when it has started,
     /// since a microphone can deliver zeros for a while after its start.
     @Test func theStartSoundWaitsForSoundFromTheMicrophone() async throws {
-        mic.soundDelay = .milliseconds(300)
-        let controller = await makeController()
+        mic.soundHeld = true
+        // A limit no run reaches, so only the sound can bring the cue.
+        let controller = await makeController(soundWaitLimit: .seconds(60))
         let cues = CueRecorder(controller)
-        let pressed = ContinuousClock.now
         controller.handle(.pressed(isRepeat: false))
         try await waitUntil { mic.calls.contains("start") }
-        try await Task.sleep(for: .milliseconds(100))
+        // Longer than the 150 ms delay, so only the missing sound holds the cue back.
+        try await Task.sleep(for: .milliseconds(300))
         #expect(cues.list.isEmpty)
+        mic.soundHeld = false
         try await waitUntil { !cues.list.isEmpty }
         #expect(cues.list == [.listening])
-        #expect(pressed.duration(to: .now) >= .milliseconds(250))
     }
 
     /// A microphone that sends no sound gets the cue after the limit, so nobody waits for
@@ -1052,11 +1059,9 @@ struct PushToTalkControllerTests {
         let cues = CueRecorder(controller)
         let pressed = ContinuousClock.now
         controller.handle(.pressed(isRepeat: false))
-        try await waitUntil { mic.calls.contains("start") }
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(cues.list.isEmpty)
         try await waitUntil { !cues.list.isEmpty }
         #expect(cues.list == [.listening])
+        // The cue came only after the limit. A slow run makes this longer, never shorter.
         #expect(pressed.duration(to: .now) >= .milliseconds(250))
         controller.handle(.released)
         try await waitUntil { controller.state == .idle }
@@ -1065,13 +1070,14 @@ struct PushToTalkControllerTests {
     }
 
     @Test func theHandsFreeCueWaitsForSoundToo() async throws {
-        mic.soundDelay = .milliseconds(300)
-        let controller = await makeController()
+        mic.soundHeld = true
+        let controller = await makeController(soundWaitLimit: .seconds(60))
         let cues = CueRecorder(controller)
         controller.handle(.doublePressed)
         try await waitUntil { mic.calls.contains("start") }
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(300))
         #expect(cues.list.isEmpty)
+        mic.soundHeld = false
         try await waitUntil { !cues.list.isEmpty }
         #expect(cues.list == [.handsFree(finishHint: "Press right Control to finish")])
     }
