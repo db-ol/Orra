@@ -65,7 +65,7 @@ struct CaptionCleanupTests {
         }
         await cleanup.waitForLoad()
         #expect(fake.isLoaded)
-        #expect(!cleanup.isUnloadedWhileIdle)
+        #expect(cleanup.engineState != .unloadedWhileIdle)
         // Cleanup still needs it after captions stop, so it stays until the idle time.
         cleanup.captionsStopped()
         await cleanup.waitForLoad()

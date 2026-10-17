@@ -116,9 +116,9 @@ struct TalkKeyTests {
     }
 
     @Test func holdHintNamesTheKey() {
-        #expect(TalkKey.rightControl.holdHint() == "Hold right Control to talk")
-        #expect(TalkKey.leftCommand.holdHint() == "Hold left Command to talk")
-        #expect(TalkKey.fn.holdHint() == "Hold fn to talk")
+        #expect(Hotkey.rightControl.talkHint(mode: .hold) == "Hold right Control to talk")
+        #expect(Hotkey.leftCommand.talkHint(mode: .hold) == "Hold left Command to talk")
+        #expect(Hotkey.fn.talkHint(mode: .hold) == "Hold fn to talk")
     }
 
     @Test func onlyFnSwallowsItsEvents() {
@@ -126,8 +126,8 @@ struct TalkKeyTests {
     }
 
     @Test func finishHintNamesTheKey() {
-        #expect(TalkKey.rightControl.finishHint() == "Press right Control to finish")
-        #expect(TalkKey.fn.finishHint() == "Press fn to finish")
+        #expect(Hotkey.rightControl.finishHint() == "Press right Control to finish")
+        #expect(Hotkey.fn.finishHint() == "Press fn to finish")
     }
 
     @Test func fnIsRecommendedOnlyForABuiltInKeyboard() {
@@ -288,7 +288,7 @@ struct KeyRecorderTests {
     }
 
     @Test func translateHintAndSwapNoteNameTheKeys() {
-        #expect(TalkKey.rightOption.translateHint() == "Hold right Option to translate")
+        #expect(Hotkey.rightOption.translateHint(mode: .hold) == "Hold right Option to translate")
         #expect(KeySwap(talkKey: .rightOption, translationKey: .rightControl).message() == "The two keys swapped. The talk key is now right Option and the translation key right Control.")
     }
 }
@@ -376,21 +376,21 @@ struct TranslationKeyPreferenceTests {
 
     @Test func nothingSavedFollowsTheTalkKey() {
         withDefaults("nothingSaved") { defaults in
-            #expect(TranslationKeyPreference.load(talkKey: .rightControl, from: defaults) == .rightOption)
-            #expect(TranslationKeyPreference.load(talkKey: .fn, from: defaults) == .rightOption)
-            #expect(TranslationKeyPreference.load(talkKey: .rightOption, from: defaults) == .rightCommand)
+            #expect(TranslationKeyPreference.loadHotkey(talkKey: .rightControl, from: defaults) == .rightOption)
+            #expect(TranslationKeyPreference.loadHotkey(talkKey: .fn, from: defaults) == .rightOption)
+            #expect(TranslationKeyPreference.loadHotkey(talkKey: .rightOption, from: defaults) == .rightCommand)
         }
     }
 
     @Test func theSavedKeyComesBackUnlessItIsTheTalkKey() {
         withDefaults("saved") { defaults in
             TranslationKeyPreference.save(.leftCommand, to: defaults)
-            #expect(TranslationKeyPreference.load(talkKey: .rightControl, from: defaults) == .leftCommand)
+            #expect(TranslationKeyPreference.loadHotkey(talkKey: .rightControl, from: defaults) == .leftCommand)
             #expect(defaults.string(forKey: TranslationKeyPreference.defaultsKey) == "leftCommand")
             // Orra never saves the talk key's key, but a hand edited file could.
-            #expect(TranslationKeyPreference.load(talkKey: .leftCommand, from: defaults) == .rightOption)
+            #expect(TranslationKeyPreference.loadHotkey(talkKey: .leftCommand, from: defaults) == .rightOption)
             defaults.set("leftShift", forKey: TranslationKeyPreference.defaultsKey)
-            #expect(TranslationKeyPreference.load(talkKey: .rightControl, from: defaults) == .rightOption)
+            #expect(TranslationKeyPreference.loadHotkey(talkKey: .rightControl, from: defaults) == .rightOption)
         }
     }
 }

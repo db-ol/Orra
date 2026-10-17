@@ -44,7 +44,7 @@ nonisolated enum RecordingLimits {
     static let minimumHold: Duration = .milliseconds(300)
     /// A recording stops and is processed after this long.
     static let maximumSeconds = 60.0
-    static let maximumDuration: Duration = .seconds(60)
+    static let maximumDuration: Duration = .seconds(maximumSeconds)
     /// After the talk key is released, recording goes on this long, because the last
     /// buffer and the input latency still hold the end of the speech.
     static let releaseTail: Duration = .milliseconds(150)

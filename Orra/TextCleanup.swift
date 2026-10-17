@@ -21,6 +21,9 @@ final class TextCleanup {
         case unloaded
         case loading
         case ready
+        /// Out of memory because nobody dictated for `idleUnloadDelay`. The next press of
+        /// the talk key loads the model again, so Settings shows it as ready.
+        case unloadedWhileIdle
         case failed
     }
 
@@ -36,14 +39,8 @@ final class TextCleanup {
     var isConfirmingDownload = false
     /// True while Settings asks whether to download the model for translation.
     var isConfirmingTranslationDownload = false
-    /// Whether the model can run. Ready also covers a model unloaded after a while without
-    /// a dictation, see `isUnloadedWhileIdle`, since the next dictation loads it again and
-    /// Settings has nothing to show for it.
+    /// Whether the model can run.
     private(set) var engineState: EngineState = .unloaded
-    /// True while the model is out of memory because nobody dictated for
-    /// `idleUnloadDelay`. The state stays ready, and the next press of the talk key loads
-    /// the model again.
-    private(set) var isUnloadedWhileIdle = false
     /// True while meeting captions run, which translate with the model. The model is then
     /// loaded when it is in place and stays loaded, see `captionsStarted()`.
     private(set) var captionsNeedModel = false
@@ -55,7 +52,6 @@ final class TextCleanup {
     @ObservationIgnored private let save: (Bool) -> Void
     @ObservationIgnored private let saveTranslation: (Bool) -> Void
     @ObservationIgnored private let saveDirection: (TranslationDirection) -> Void
-    @ObservationIgnored private var loadTask: Task<Void, Never>?
     /// The latest load or unload. Each waits for the one before it, so they never overlap
     /// and never swap order.
     @ObservationIgnored private var engineWork: Task<Void, Never>?
@@ -178,13 +174,22 @@ final class TextCleanup {
     func dictationStarted() {
         isDictating = true
         loadWaitRanOut = false
+        modelNeededNow(loadingAgainFrom: folder, for: "a dictation")
+    }
+
+    /// A dictation or captions need the model now. Stops the idle timer, and loads the model
+    /// from `folder` again when it was unloaded while idle. True when it loads again.
+    @discardableResult
+    private func modelNeededNow(loadingAgainFrom folder: URL?, for use: String) -> Bool {
         idleTimer?.cancel()
         idleTimer = nil
-        guard needsModel, isUnloadedWhileIdle, let folder else { return }
-        isUnloadedWhileIdle = false
+        guard needsModel, engineState == .unloadedWhileIdle, let folder else { return false }
+        // `load` starts only from unloaded or failed, so its other callers leave a model
+        // unloaded while idle alone.
         engineState = .unloaded
-        Logger.rewrite.notice("Loading the cleanup model again for a dictation")
+        Logger.rewrite.notice("Loading the cleanup model again for \(use, privacy: .public)")
         load(from: folder)
+        return true
     }
 
     /// The dictation is over, pasted or not. Starts the idle timer.
@@ -207,7 +212,7 @@ final class TextCleanup {
 
     /// True when the model is in memory and nothing unloads it before the next dictation.
     private var isLoaded: Bool {
-        engineState == .ready && !isUnloadedWhileIdle
+        engineState == .ready
     }
 
     /// Waits for a load under way while `isWanted` holds, once per dictation, so a
@@ -271,7 +276,7 @@ final class TextCleanup {
     private func unloadWhileIdle() {
         idleTimer = nil
         guard needsModel, !isDictating, !captionsNeedModel, isLoaded else { return }
-        isUnloadedWhileIdle = true
+        engineState = .unloadedWhileIdle
         Logger.rewrite.notice("Unloading the cleanup model after no dictation for \(self.idleUnloadDelay ?? .zero, privacy: .public)")
         enqueue { [engine] in await engine.unload() }
     }
@@ -305,18 +310,12 @@ final class TextCleanup {
     func captionsStarted() {
         guard !captionsNeedModel else { return }
         captionsNeedModel = true
-        idleTimer?.cancel()
-        idleTimer = nil
-        guard case .installed(let folder) = models.state else { return }
-        if isUnloadedWhileIdle {
-            isUnloadedWhileIdle = false
-            engineState = .unloaded
-            Logger.rewrite.notice("Loading the cleanup model again for captions")
-            load(from: folder)
-        } else if isLoaded {
+        let installed: URL? = if case .installed(let folder) = models.state { folder } else { nil }
+        guard !modelNeededNow(loadingAgainFrom: installed, for: "captions"), let installed else { return }
+        if isLoaded {
             prepareTranslation()
         } else {
-            load(from: folder)
+            load(from: installed)
         }
     }
 
@@ -368,7 +367,7 @@ final class TextCleanup {
             setTranslationOn(true)
             if isLoaded {
                 prepareTranslation()
-            } else if !isUnloadedWhileIdle {
+            } else if engineState != .unloadedWhileIdle {
                 load(from: folder)
             }
         } else if isOn {
@@ -458,9 +457,7 @@ final class TextCleanup {
             models.cancel()
         }
         loadGeneration += 1
-        loadTask = nil
         engineState = .unloaded
-        isUnloadedWhileIdle = false
         idleTimer?.cancel()
         idleTimer = nil
         resumeAllWaiters()
@@ -471,7 +468,6 @@ final class TextCleanup {
     /// loads them again, or leads back to Download when one is damaged.
     func retryLoading() async {
         engineState = .unloaded
-        isUnloadedWhileIdle = false
         await models.prepare(checkingHashes: true)
     }
 
@@ -527,7 +523,7 @@ final class TextCleanup {
         engineState = .loading
         loadGeneration += 1
         let generation = loadGeneration
-        loadTask = enqueue { [weak self, engine] in
+        enqueue { [weak self, engine] in
             // Turned off, or off and on again, before its turn: the unload queued by
             // turning off runs next, and a newer load after it.
             guard let self, generation == loadGeneration else { return }
@@ -548,7 +544,6 @@ final class TextCleanup {
             // Turned off while loading. The unload queued then runs next.
             guard generation == loadGeneration else { return }
             engineState = loaded ? .ready : .failed
-            loadTask = nil
             resumeAllWaiters()
             // With translation on, its prompts are read before any other work on the model.
             if loaded {

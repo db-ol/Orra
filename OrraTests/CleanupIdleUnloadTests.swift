@@ -215,7 +215,7 @@ struct CleanupIdleUnloadTests {
     private func unloadWhileIdle(_ cleanup: TextCleanup) async throws {
         try await advance(by: idle)
         await cleanup.waitForLoad()
-        #expect(cleanup.isUnloadedWhileIdle)
+        #expect(cleanup.engineState == .unloadedWhileIdle)
         #expect(!fake.isLoaded)
     }
 
@@ -226,13 +226,13 @@ struct CleanupIdleUnloadTests {
         let cleanup = try await makeCleanup()
         try await advance(by: idle - .seconds(1))
         #expect(fake.isLoaded)
-        #expect(!cleanup.isUnloadedWhileIdle)
+        #expect(cleanup.engineState != .unloadedWhileIdle)
         try await advance(by: .seconds(1))
         await cleanup.waitForLoad()
         #expect(fake.events == ["load", "unload"])
-        #expect(cleanup.isUnloadedWhileIdle)
+        #expect(cleanup.engineState == .unloadedWhileIdle)
         // Settings still shows cleanup as working, since the next dictation loads it.
-        #expect(cleanup.engineState == .ready)
+        #expect(CleanupLabels.status(cleanup.models.state, engine: cleanup.engineState, total: cleanup.models.manifest.totalBytes, use: .cleanup) == nil)
         #expect(cleanup.isOn)
     }
 
@@ -289,7 +289,6 @@ struct CleanupIdleUnloadTests {
         try await unloadWhileIdle(cleanup)
         cleanup.dictationStarted()
         #expect(cleanup.engineState == .loading)
-        #expect(!cleanup.isUnloadedWhileIdle)
         await cleanup.waitForLoad()
         #expect(fake.events == ["load", "unload", "load"])
         #expect(cleanup.engineState == .ready)
@@ -391,7 +390,6 @@ struct CleanupIdleUnloadTests {
         #expect(fake.mostRunning == 1)
         #expect(!fake.isLoaded)
         #expect(cleanup.engineState == .unloaded)
-        #expect(!cleanup.isUnloadedWhileIdle)
         // No idle timer for a model that is off.
         cleanup.dictationEnded()
         try await settle()
@@ -413,7 +411,6 @@ struct CleanupIdleUnloadTests {
         #expect(fake.mostRunning == 1)
         #expect(fake.isLoaded)
         #expect(cleanup.engineState == .ready)
-        #expect(!cleanup.isUnloadedWhileIdle)
     }
 
     @Test func offWhileUnloadedThenOnLoadsAtOnce() async throws {
@@ -421,7 +418,7 @@ struct CleanupIdleUnloadTests {
         let cleanup = try await makeCleanup()
         try await unloadWhileIdle(cleanup)
         cleanup.turnOff()
-        #expect(!cleanup.isUnloadedWhileIdle)
+        #expect(cleanup.engineState != .unloadedWhileIdle)
         cleanup.turnOn()
         await cleanup.waitForLoad()
         #expect(fake.isLoaded)
@@ -583,7 +580,7 @@ struct CleanupIdleUnloadTests {
         try await unloadWhileIdle(cleanup)
         #expect(fake.events == ["load", "unload"])
         // Ready in Settings, but no translation can start on a model out of memory.
-        #expect(cleanup.engineState == .ready)
+        #expect(CleanupLabels.status(cleanup.models.state, engine: cleanup.engineState, total: cleanup.models.manifest.totalBytes, use: .translation) == nil)
         #expect(cleanup.translation.isReady() == false)
         #expect(await cleanup.translation.waitUntilLoaded() == false)
         cleanup.dictationStarted()
@@ -708,7 +705,6 @@ struct CleanupIdleUnloadTests {
         #expect(fake.events == ["load", "unload", "load", "unload"])
         #expect(!fake.isLoaded)
         #expect(cleanup.engineState == .unloaded)
-        #expect(!cleanup.isUnloadedWhileIdle)
         cleanup.dictationEnded()
         try await settle()
         #expect(clock.sleeping == 0)

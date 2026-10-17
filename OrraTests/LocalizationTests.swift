@@ -129,11 +129,11 @@ struct LocalizationTests {
         let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
         let chinese = try #require(Bundle(path: path))
         let locale = Locale(identifier: "zh-Hans")
-        #expect(TalkKey.rightControl.holdHint(in: locale) == "按住右侧 Control 键说话")
-        #expect(TalkKey.fn.holdHint(in: locale) == "按住地球仪（fn）键说话")
+        #expect(Hotkey.rightControl.talkHint(mode: .hold, in: locale) == "按住右侧 Control 键说话")
+        #expect(Hotkey.fn.talkHint(mode: .hold, in: locale) == "按住地球仪（fn）键说话")
         #expect(chinese.localizedString(forKey: "%@ (%@)", value: nil, table: nil) == "%@（%@）")
         #expect(chinese.localizedString(forKey: "Windows key", value: nil, table: nil) == "Windows 键")
-        #expect(TalkKey.leftCommand.finishHint(in: locale) == "按左侧 Command 键结束")
-        #expect(TalkKey.fn.finishHint(in: locale) == "按地球仪（fn）键结束")
+        #expect(Hotkey.leftCommand.finishHint(in: locale) == "按左侧 Command 键结束")
+        #expect(Hotkey.fn.finishHint(in: locale) == "按地球仪（fn）键结束")
     }
 }

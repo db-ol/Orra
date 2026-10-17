@@ -117,10 +117,10 @@ struct RecordingFeedbackTests {
     @Test func turningTheIndicatorOffHidesItAtOnceAndSavesTheChoice() {
         let feedback = makeFeedback()
         feedback.handle(.listening)
-        feedback.showsIndicator = false
+        feedback.onScreenHint = .off
         #expect(outputs.presented == [.listening, nil])
         #expect(outputs.saved == [FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false)])
-        feedback.showsIndicator = true
+        feedback.onScreenHint = .whileDictating
         #expect(outputs.presented == [.listening, nil, .listening])
         feedback.playsSounds = false
         #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: false, showsIdleBar: false))
@@ -282,7 +282,7 @@ struct RecordingFeedbackTests {
     @Test func turningTheIdleBarOffHidesItAndIsSaved() {
         let feedback = makeFeedback(preferences: .init())
         feedback.canDictate = true
-        feedback.showsIdleBar = false
+        feedback.onScreenHint = .whileDictating
         #expect(outputs.presented == [.idle, nil])
         #expect(outputs.saved.last == FeedbackPreference.Values(showsIndicator: true, playsSounds: true, showsIdleBar: false))
     }
@@ -385,7 +385,7 @@ struct RecordingFeedbackTests {
         let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let language = Bundle.main.preferredLocalizations.first ?? "en"
-        let hint = TalkKey.rightOption.finishHint()
+        let hint = Hotkey.rightOption.finishHint()
         let cues: [(String, [DictationCue])] = [
             ("listening-automatic", [.listening(translation: .automatic)]),
             ("listening-english", [.listening(translation: .english)]),

@@ -12,16 +12,15 @@ def tokens(text, setname):
     if setname == "ascend_mixed":
         t = re.sub(f"[{FILLERS}]", " ", t)
     out = []
+    single = False
     for tok in TOKEN.findall(t):
         # Acronyms spelled letter by letter ("i s m") count as one word ("ism").
-        if re.fullmatch(r"[a-z]", tok) and out and re.fullmatch(r"[a-z]+", out[-1]) and getattr(tokens, "_single", False):
+        if re.fullmatch(r"[a-z]", tok) and out and re.fullmatch(r"[a-z]+", out[-1]) and single:
             out[-1] += tok
         else:
             out.append(tok)
-        tokens._single = bool(re.fullmatch(r"[a-z]", tok)) or (tokens._single and re.fullmatch(r"[a-z]+", out[-1]) is not None and len(tok) == 1)
-    tokens._single = False
+        single = bool(re.fullmatch(r"[a-z]", tok)) or (single and re.fullmatch(r"[a-z]+", out[-1]) is not None and len(tok) == 1)
     return out
-tokens._single = False
 
 def is_cjk(tok):
     return re.fullmatch(f"[{CJK}]", tok) is not None

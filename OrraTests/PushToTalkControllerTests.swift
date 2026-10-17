@@ -2173,20 +2173,20 @@ struct PushToTalkControllerTests {
             saveTalkKey: { saved.append($0) }
         )
         #expect(controller.hasChosenTalkKey == false)
-        controller.startChoosingTalkKey()
+        controller.startChoosingKey(for: .talk)
         #expect(controller.isChoosingTalkKey)
         controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: .maskShift)
-        #expect(controller.keyChoiceNote == "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
+        #expect(controller.keyChoiceRejection?.message(for: .talk) == "Shift can't be the talk key. On its own, it switches input methods between Chinese and English.")
         controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: [])
         controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
-        #expect(controller.keyChoiceNote == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
+        #expect(controller.keyChoiceRejection?.message(for: .talk) == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
         controller.keyChoice(type: .flagsChanged, keyCode: 0x39, flags: .maskAlphaShift)
-        #expect(controller.keyChoiceNote == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
+        #expect(controller.keyChoiceRejection?.message(for: .talk) == "Caps Lock can't be the talk key. It turns capitals or the input method on and off.")
         // fn with an arrow is a key of its own, such as Page Up, not fn. Up Arrow has the
         // same name on every keyboard layout, unlike a letter.
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
         controller.keyChoice(type: .keyDown, keyCode: 0x7E, flags: .maskSecondaryFn)
-        #expect(controller.keyChoiceNote == "fn Up Arrow is a key combination and can't be the talk key.")
+        #expect(controller.keyChoiceRejection?.message(for: .talk) == "fn Up Arrow is a key combination and can't be the talk key.")
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey)
         #expect(controller.talkKey == .rightOption)
@@ -2195,7 +2195,7 @@ struct PushToTalkControllerTests {
         #expect(controller.isChoosingTalkKey)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftOption.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey == false)
-        #expect(controller.keyChoiceNote == nil)
+        #expect(controller.keyChoiceRejection == nil)
         #expect(controller.talkKey == .leftOption)
         #expect(saved == [.leftOption])
         #expect(controller.hasChosenTalkKey)
@@ -2212,14 +2212,14 @@ struct PushToTalkControllerTests {
             insert: inserter.insert,
             talkKey: .rightControl
         )
-        controller.startChoosingTalkKey()
+        controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
-        #expect(controller.keyChoiceNote == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
+        #expect(controller.keyChoiceRejection?.message(for: .talk) == "The Return key can't be the talk key. Holding it would type or do something in the app in front.")
         // A key up or other event that decides nothing keeps the note.
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [])
-        #expect(controller.keyChoiceNote != nil)
+        #expect(controller.keyChoiceRejection != nil)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [.maskAlternate, TalkKey.rightOption.downFlag])
-        #expect(controller.keyChoiceNote == nil)
+        #expect(controller.keyChoiceRejection == nil)
         #expect(controller.isChoosingTalkKey)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightOption.keyCode, flags: [])
         #expect(controller.talkKey == .rightOption)
@@ -2232,12 +2232,12 @@ struct PushToTalkControllerTests {
             insert: inserter.insert,
             talkKey: .fn
         )
-        controller.startChoosingTalkKey()
+        controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .keyDown, keyCode: 0x00, flags: [])
-        #expect(controller.keyChoiceNote != nil)
+        #expect(controller.keyChoiceRejection != nil)
         controller.keyChoice(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [])
         #expect(controller.isChoosingTalkKey == false)
-        #expect(controller.keyChoiceNote == nil)
+        #expect(controller.keyChoiceRejection == nil)
         #expect(controller.talkKey == .fn)
     }
 
@@ -2248,11 +2248,11 @@ struct PushToTalkControllerTests {
             insert: inserter.insert,
             talkKey: .fn
         )
-        controller.startChoosingTalkKey()
+        controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [.maskControl, TalkKey.rightControl.downFlag])
         controller.stopChoosingKey()
         // A new recording starts afresh, so the earlier press's release chooses nothing.
-        controller.startChoosingTalkKey()
+        controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [])
         #expect(controller.isChoosingTalkKey)
         #expect(controller.talkKey == .fn)
@@ -2314,7 +2314,7 @@ struct PushToTalkControllerTests {
         #expect(controller.choosingKeySlot == .translation)
         #expect(controller.isChoosingTalkKey == false)
         controller.keyChoice(type: .keyDown, keyCode: 0x24, flags: [])
-        #expect(controller.keyChoiceNote == "The Return key can't be the translation key. Holding it would type or do something in the app in front.")
+        #expect(controller.keyChoiceRejection?.message(for: .translation) == "The Return key can't be the translation key. Holding it would type or do something in the app in front.")
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [])
         #expect(controller.choosingKeySlot == nil)
@@ -2334,7 +2334,7 @@ struct PushToTalkControllerTests {
 
     @Test func recordingOneKeyStopsTheOther() {
         let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
-        controller.startChoosingTalkKey()
+        controller.startChoosingKey(for: .talk)
         controller.keyChoice(type: .flagsChanged, keyCode: TalkKey.leftCommand.keyCode, flags: [.maskCommand, TalkKey.leftCommand.downFlag])
         controller.startChoosingKey(for: .translation)
         // The half press belonged to the talk key's recording, so its release picks nothing.
@@ -2437,7 +2437,7 @@ struct PushToTalkControllerTests {
     @Test func aRecordedShortcutBecomesTheKey() {
         var saved: [Hotkey] = []
         let controller = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, saveTalkKey: { saved.append($0) })
-        controller.startChoosingTalkKey()
+        controller.startChoosingKey(for: .talk)
         let flags = CGEventFlags.maskCommand.union(CGEventFlags(rawValue: 0x08)).union(.maskShift)
         controller.keyChoice(type: .flagsChanged, keyCode: 0x38, flags: .maskShift)
         #expect(controller.keyChoiceRejection == .shift)
