@@ -641,6 +641,83 @@ struct ModelGateOverlapTests {
         #expect(probe.voiceOverlaps == 0)
         #expect(gate.snapshot == ModelGate.Snapshot())
     }
+
+    /// TranslationSpeech with `voice` behind `gate`, as VoiceEngines.live puts the app's
+    /// voice models.
+    private func makeSpeech(_ voice: FakeSynthesizer, at gate: ModelGate, isOn: Bool = true) -> (TranslationSpeech, FakePlayback) {
+        let playback = FakePlayback()
+        let speech = TranslationSpeech(
+            engines: .only(ExclusiveSynthesizer(voice, gate: gate)),
+            playback: playback,
+            outputs: { [TranslationSpeechTests.orraMicrophone] },
+            folders: { TranslationSpeechTests.folders },
+            settings: TranslationSpeech.Settings(isOn: isOn),
+            dictationPoll: .milliseconds(1)
+        )
+        return (speech, playback)
+    }
+
+    /// A stop while a piece waits for the gate behind a caption call, as with live captions
+    /// on: the piece leaves the gate's queue, so later caption calls are not held back and
+    /// the voice model never makes it. A translation after the stop is spoken. Both for a
+    /// streamed piece and for one that comes whole, as with a voice sample.
+    @Test(arguments: [true, false])
+    func aStopDropsAPieceThatWaitsForTheGate(streams: Bool) async throws {
+        let gate = ModelGate()
+        let voice = FakeSynthesizer()
+        voice.streamsPieces.withLock { $0 = streams }
+        voice.makes.withLock { $0 = { text, _ in [TranslationSpeechTests.reading(text)] } }
+        let (speech, playback) = makeSpeech(voice, at: gate)
+        speech.prepare()
+        await speech.waitUntilDone()
+        #expect(speech.isLoaded)
+
+        let caption = HeldWork()
+        let captioning = Task { try await gate.run(.shared) { await caption.run() } }
+        try await eventually { caption.began == 1 }
+        speech.speak("We have a meeting next Tuesday.", in: .english)
+        try await eventually { gate.snapshot.waiting == [.exclusive] }
+        speech.stop()
+        try await eventually { gate.snapshot.waiting.isEmpty }
+        caption.release()
+        try await captioning.value
+        await speech.waitUntilDone()
+        #expect(voice.spoken.withLock { $0 }.isEmpty)
+        #expect(playback.calls == ["start Orra Microphone", "stop"])
+        #expect(speech.state == .idle)
+        #expect(speech.problem == nil)
+        #expect(gate.snapshot == ModelGate.Snapshot())
+
+        speech.speak("Thanks a lot, everyone.", in: .english)
+        await speech.waitUntilDone()
+        #expect(voice.spoken.withLock { $0 } == ["en Thanks a lot, everyone."])
+        #expect(playback.calls.suffix(2) == ["finish", "stop"])
+        #expect(gate.snapshot == ModelGate.Snapshot())
+    }
+
+    /// Speak translations turned off while its load waits for the gate behind a caption
+    /// call: the load leaves the gate's queue and shows no problem, and the unload still
+    /// runs once the caption call is done.
+    @Test func turningSpeakTranslationsOffDropsALoadThatWaits() async throws {
+        let gate = ModelGate()
+        let voice = FakeSynthesizer()
+        let (speech, _) = makeSpeech(voice, at: gate, isOn: false)
+        let caption = HeldWork()
+        let captioning = Task { try await gate.run(.shared) { await caption.run() } }
+        try await eventually { caption.began == 1 }
+        speech.setOn(true)
+        try await eventually { gate.snapshot.waiting == [.exclusive] }
+        speech.setOn(false)
+        caption.release()
+        try await captioning.value
+        await speech.waitUntilDone()
+        #expect(voice.loads.withLock { $0 } == 0)
+        #expect(voice.unloads.withLock { $0 } == 1)
+        #expect(!speech.isLoaded)
+        #expect(speech.problem == nil)
+        #expect(speech.state == .idle)
+        #expect(gate.snapshot == ModelGate.Snapshot())
+    }
 }
 
 /// Notes each model call, and whether the gate was reserved during it.

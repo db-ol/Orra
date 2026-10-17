@@ -129,6 +129,12 @@ final class TranslationSpeech {
     @ObservationIgnored private var restoring: Task<Void, Never>?
     /// The translations queued and being spoken, one after another.
     @ObservationIgnored private var queue: Task<Void, Never>?
+    /// The translation or the load that the queue runs now, in a task of its own that
+    /// stop() cancels. So a piece or a load that waits for the model gate leaves the gate's
+    /// queue. It never takes the gate alone later and holds captions and dictation back for
+    /// work nobody waits for. A piece the voice model already makes goes on to its end, see
+    /// ExclusiveSynthesizer.
+    @ObservationIgnored private var stoppable: Task<Void, Never>?
     /// Counts the stops, so queued work of an older generation does nothing.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "speech")
@@ -533,9 +539,10 @@ final class TranslationSpeech {
     func prepare() {
         guard speaks else { return }
         let generation = generation
-        enqueue { [weak self] in
+        enqueueStoppable { [weak self] in
             guard let self, generation == self.generation, self.folders() != nil else { return }
             await self.waitWhileDictating(generation)
+            guard generation == self.generation else { return }
             _ = await self.loadIfNeeded()
         }
     }
@@ -544,14 +551,17 @@ final class TranslationSpeech {
     func speak(_ text: String, in language: TranslationTarget) {
         guard speaks else { return }
         let generation = generation
-        enqueue { [weak self] in
+        enqueueStoppable { [weak self] in
             await self?.run(text, in: language, generation: generation)
         }
     }
 
-    /// Stops what is playing and drops what is queued.
+    /// Stops what is playing and drops what is queued. A piece or a load that waits for
+    /// the model gate leaves it. A piece the voice model already makes goes on to its end
+    /// unheard, since its MLX work must stay inside the gate.
     func stop() {
         generation += 1
+        stoppable?.cancel()
         playback.stop()
         if state == .speaking {
             state = .idle
@@ -584,6 +594,17 @@ final class TranslationSpeech {
         }
     }
 
+    /// Queues `work` like enqueue, in a task that stop() cancels, see `stoppable`. Only for
+    /// work that a stop drops anyway, which checks the generation. Each gets a task of its
+    /// own, so a stop never reaches the work queued after it, such as the next translation.
+    private func enqueueStoppable(_ work: @escaping () async -> Void) {
+        enqueue { [weak self] in
+            let task = Task { await work() }
+            self?.stoppable = task
+            await task.value
+        }
+    }
+
     private func run(_ text: String, in language: TranslationTarget, generation: Int) async {
         guard generation == self.generation, let synthesizer else { return }
         guard let device = SpeechOutputChoice.resolve(output, outputs: outputs()) else {
@@ -593,7 +614,8 @@ final class TranslationSpeech {
             return
         }
         await waitWhileDictating(generation)
-        guard generation == self.generation, await loadIfNeeded() else { return }
+        // Again after the load, which a stop does not always cut short.
+        guard generation == self.generation, await loadIfNeeded(), generation == self.generation else { return }
         do {
             try playback.start(on: device)
         } catch {
@@ -740,6 +762,8 @@ final class TranslationSpeech {
                 heard()
                 playback.play(audio)
             }
+            // A stop ends the stream early, without an error.
+            guard generation == self.generation else { return .stopped }
             return .spoken(firstTry: nil)
         }
         var verdicts: [SpeechCheck.Verdict] = []
@@ -831,8 +855,9 @@ final class TranslationSpeech {
             logger.notice("The voice model \(self.engine?.name ?? "none", privacy: .public) loaded in \(started.duration(to: .now), privacy: .public)")
             return true
         } catch {
-            // A load of the model the user switched away from says nothing about the new one.
-            guard revision == synthesizerRevision else { return false }
+            // A load of the model the user switched away from says nothing about the new one,
+            // and a load that a stop took out of the model gate's queue says nothing at all.
+            guard revision == synthesizerRevision, !(error is CancellationError) else { return false }
             problem = String(localized: "The voice model could not be loaded.")
             logger.error("The voice model failed to load: \(String(describing: error), privacy: .public)")
             return false

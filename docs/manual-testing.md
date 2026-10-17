@@ -2168,6 +2168,12 @@ translations on, both voice downloads in place, and cleanup and translation on:
   translation is spoken. Each dictation is pasted, and the next translation is spoken.
 - [ ] Turn on live captions while a translation is spoken: captions go on, and the
   translation is spoken to its end.
+- [ ] With live captions running and a voice sample in use, dictate several sentences with
+  the translation key and click Stop Speaking before any of it is heard. It is not spoken,
+  and captions wait at most until the voice model ends the sentence it is making, never
+  for the rest of the translation. A sentence that still waits for the model gate leaves
+  at once without a pause. That wait is too short to catch by hand, so
+  ModelGateOverlapTests.aStopDropsAPieceThatWaitsForTheGate checks it.
 - [ ] Turn Speak translations off and on, and switch the voice model in a build with both,
   while dictating and while captions run. Orra keeps responding and the next translation
   is spoken.
