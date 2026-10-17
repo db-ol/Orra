@@ -171,7 +171,9 @@ struct ModelInstallerTests {
 
     @Test func cancelReturnsToResumeWithTheBytesKept() async throws {
         defer { temporary.remove() }
-        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(20))])
+        // The server stops after 400 KB of the weights and holds the connection open, so the
+        // download cannot finish before the test sees it running, however slow the Mac is.
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(dropAfter: 400_000, dropWhen: { false })])
         defer { servers.close() }
         let installer = makeInstaller(servers)
         await installer.prepare()
