@@ -154,8 +154,7 @@ nonisolated enum Vocabulary {
     }
 
     private static func isLatin(_ character: Character?) -> Bool {
-        guard let character else { return false }
-        return character.isASCII && (character.isLetter || character.isNumber)
+        character?.isASCIILetterOrDigit ?? false
     }
 
     /// False when the lowercased term cannot be in the transcript: a character of it is

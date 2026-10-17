@@ -270,21 +270,6 @@ nonisolated enum SpeechWordCheck {
     /// Chinese numerals, which a number may be read as. 幺 is one in a phone number.
     static let chineseNumerals: Set<Unicode.Scalar> = Set("零〇一二两三四五六七八九十百千万亿幺".unicodeScalars)
 
-    static func editDistance(_ a: [String], _ b: [String]) -> Int {
-        if a.isEmpty { return b.count }
-        if b.isEmpty { return a.count }
-        var previous = Array(0...b.count)
-        var current = [Int](repeating: 0, count: b.count + 1)
-        for i in 1...a.count {
-            current[0] = i
-            for j in 1...b.count {
-                current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
-            }
-            swap(&previous, &current)
-        }
-        return previous[b.count]
-    }
-
     private static func isCharacterScript(_ scalar: Unicode.Scalar) -> Bool {
         SpeechCheck.isCharacterScript(scalar)
     }

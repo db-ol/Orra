@@ -86,7 +86,7 @@ nonisolated enum OneCharacterFix {
     static func located(paste: [Character], edited: [Character], at oldIndex: Int, _ newIndex: Int, within bounds: Range<Int>) -> (suggestion: WordSuggestion, span: Range<Int>)? {
         let heard = paste[oldIndex]
         let corrected = edited[newIndex]
-        guard isHan(heard), isHan(corrected), !isGrammar(heard, corrected),
+        guard heard.isHan, corrected.isHan, !isGrammar(heard, corrected),
               SoundAlike.sound(String(heard)) == SoundAlike.sound(String(corrected))
                 || SoundAlike.soundsAlike(String(heard), String(corrected)) else { return nil }
         let range = guess(in: edited, at: newIndex, within: bounds)
@@ -130,7 +130,7 @@ nonisolated enum OneCharacterFix {
         var lower = range.lowerBound
         var upper = range.upperBound
         func joins(_ position: Int) -> Bool {
-            guard bounds.contains(position), isHan(text[position]), !functionWords.contains(text[position]) else { return false }
+            guard bounds.contains(position), text[position].isHan, !functionWords.contains(text[position]) else { return false }
             let edge = position < lower ? lower : upper - 1
             if split.isSingle(position) { return split.isSingle(edge) }
             guard takingItsTokens, let token = split.ranges[position] else { return false }
@@ -182,13 +182,5 @@ nonisolated enum OneCharacterFix {
             return true
         }
         return Tokens(ranges: ranges)
-    }
-
-    private static func isHan(_ character: Character) -> Bool {
-        character.unicodeScalars.allSatisfy { (0x3400...0x9FFF).contains($0.value) || (0xF900...0xFAFF).contains($0.value) }
-    }
-
-    private static func isSeparator(_ character: Character) -> Bool {
-        character.isWhitespace || character.isPunctuation || character.isSymbol
     }
 }

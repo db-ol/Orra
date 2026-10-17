@@ -121,11 +121,11 @@ nonisolated enum WordReplacement {
             // The same range is the user's word in another case, which a pair that only
             // fixes the case replaces.
             where !protected.contains(where: { $0.overlaps(range) && $0 != range }) {
-                if isHan(text[range.lowerBound]) || isHan(text[range.upperBound - 1]) {
+                if text[range.lowerBound].isHan || text[range.upperBound - 1].isHan {
                     let words = boundaries ?? ChineseWords.boundaries(in: String(text))
                     boundaries = words
-                    if isHan(text[range.lowerBound]), !words.contains(range.lowerBound) { continue }
-                    if isHan(text[range.upperBound - 1]), !words.contains(range.upperBound) { continue }
+                    if text[range.lowerBound].isHan, !words.contains(range.lowerBound) { continue }
+                    if text[range.upperBound - 1].isHan, !words.contains(range.upperBound) { continue }
                 }
                 found.append(Edit(range: range, corrected: pair.corrected, pair: pair))
             }
@@ -143,8 +143,8 @@ nonisolated enum WordReplacement {
     /// With `caseInsensitiveFirst`, a first Latin letter may differ in case.
     static func occurrences(of needle: [Character], in text: [Character], caseInsensitiveFirst: Bool) -> [Range<Int>] {
         guard !needle.isEmpty, needle.count <= text.count else { return [] }
-        let checksStart = isLatinLetterOrDigit(needle[0])
-        let checksEnd = isLatinLetterOrDigit(needle[needle.count - 1])
+        let checksStart = needle[0].isASCIILetterOrDigit
+        let checksEnd = needle[needle.count - 1].isASCIILetterOrDigit
         var ranges: [Range<Int>] = []
         for start in 0...(text.count - needle.count) {
             guard needle.indices.allSatisfy({ index in
@@ -154,8 +154,8 @@ nonisolated enum WordReplacement {
                         && character.lowercased() == needle[0].lowercased())
             }) else { continue }
             let end = start + needle.count
-            if checksStart, start > 0, isLatinLetterOrDigit(text[start - 1]) { continue }
-            if checksEnd, end < text.count, isLatinLetterOrDigit(text[end]) { continue }
+            if checksStart, start > 0, text[start - 1].isASCIILetterOrDigit { continue }
+            if checksEnd, end < text.count, text[end].isASCIILetterOrDigit { continue }
             ranges.append(start..<end)
         }
         return ranges
@@ -177,20 +177,20 @@ nonisolated enum WordReplacement {
         var words: [LatinWord] = []
         var index = 0
         while index < text.count {
-            guard isLatinLetterOrDigit(text[index]) else {
+            guard text[index].isASCIILetterOrDigit else {
                 index += 1
                 continue
             }
             let start = index
-            while index < text.count, isLatinLetterOrDigit(text[index])
-                    || (isJoiner(text[index]) && index + 1 < text.count && isLatinLetterOrDigit(text[index + 1])) {
+            while index < text.count, text[index].isASCIILetterOrDigit
+                    || (isJoiner(text[index]) && index + 1 < text.count && text[index + 1].isASCIILetterOrDigit) {
                 index += 1
             }
             let raw = String(text[start..<index]).lowercased()
             words.append(LatinWord(
                 range: start..<index,
-                normalized: String(raw.filter(isLatinLetterOrDigit)),
-                parts: raw.split(whereSeparator: { !isLatinLetterOrDigit($0) }).map(String.init)
+                normalized: String(raw.filter(\.isASCIILetterOrDigit)),
+                parts: raw.split(whereSeparator: { !$0.isASCIILetterOrDigit }).map(String.init)
             ))
         }
         return words
@@ -216,14 +216,6 @@ nonisolated enum WordReplacement {
     }
 
     // MARK: Characters
-
-    static func isLatinLetterOrDigit(_ character: Character) -> Bool {
-        character.isASCII && (character.isLetter || character.isNumber)
-    }
-
-    static func isHan(_ character: Character) -> Bool {
-        character.unicodeScalars.allSatisfy { (0x3400...0x9FFF).contains($0.value) || (0xF900...0xFAFF).contains($0.value) }
-    }
 
     private static func isJoiner(_ character: Character) -> Bool {
         "-_.+'".contains(character)
@@ -293,10 +285,10 @@ nonisolated struct OrdinaryWords: Sendable {
     /// see `ChineseWords.isOrdinary(_:)`.
     func holdsOnlyOrdinaryWords(_ text: String) -> Bool {
         let characters = Array(text)
-        if !characters.isEmpty, characters.allSatisfy(WordReplacement.isHan) {
+        if !characters.isEmpty, characters.allSatisfy(\.isHan) {
             return ChineseWords.isOrdinary(text)
         }
-        guard !characters.contains(where: { $0.isLetter && !WordReplacement.isLatinLetterOrDigit($0) }) else { return false }
+        guard !characters.contains(where: { $0.isLetter && !$0.isASCIILetterOrDigit }) else { return false }
         let words = WordReplacement.latinWords(in: characters)
         return !words.isEmpty && words.allSatisfy(isOrdinary)
     }
