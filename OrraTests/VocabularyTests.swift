@@ -153,65 +153,61 @@ struct VocabularyTests {
     }
 
     @Test func theVocabularyIsSavedOnThisMacWithItsDates() throws {
-        let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(VocabularyPreference.load(from: defaults).isEmpty)
-        let words = [
-            VocabularyWord("Orra", added: Date(timeIntervalSince1970: 1_000), lastUsed: Date(timeIntervalSince1970: 3_000)),
-            VocabularyWord("通义千问", added: Date(timeIntervalSince1970: 2_000))
-        ]
-        VocabularyPreference.save(words, to: defaults)
-        #expect(VocabularyPreference.load(from: defaults) == words)
+        try withTestDefaults("vocabulary") { defaults in
+            #expect(VocabularyPreference.load(from: defaults).isEmpty)
+            let words = [
+                VocabularyWord("Orra", added: Date(timeIntervalSince1970: 1_000), lastUsed: Date(timeIntervalSince1970: 3_000)),
+                VocabularyWord("通义千问", added: Date(timeIntervalSince1970: 2_000))
+            ]
+            VocabularyPreference.save(words, to: defaults)
+            #expect(VocabularyPreference.load(from: defaults) == words)
+        }
     }
 
     @Test func theWordsOfOrra010AreTakenOverWithoutLosingAny() throws {
-        let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let old = (1...100).map { "term\($0)" } + ["Orra", "通义千问"]
-        defaults.set(old, forKey: VocabularyPreference.legacyKey)
-        let moved = Date(timeIntervalSince1970: 5_000)
-        let words = VocabularyPreference.load(from: defaults, now: moved)
-        #expect(words.map(\.text) == old)
-        #expect(words.allSatisfy { $0.added == moved && $0.lastUsed == nil && $0.source == nil })
-        // Saved at once, so a later launch keeps the dates of the move.
-        #expect(defaults.data(forKey: VocabularyPreference.defaultsKey) != nil)
-        #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == words)
-        // Every save also writes the plain list, which 0.1.0 reads.
-        let later = Vocabulary.adding("Qwen", to: words, at: moved.addingTimeInterval(1))
-        VocabularyPreference.save(later, to: defaults)
-        #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == later)
-        #expect(defaults.stringArray(forKey: VocabularyPreference.legacyKey) == old + ["Qwen"])
+        try withTestDefaults("vocabulary") { defaults in
+            let old = (1...100).map { "term\($0)" } + ["Orra", "通义千问"]
+            defaults.set(old, forKey: VocabularyPreference.legacyKey)
+            let moved = Date(timeIntervalSince1970: 5_000)
+            let words = VocabularyPreference.load(from: defaults, now: moved)
+            #expect(words.map(\.text) == old)
+            #expect(words.allSatisfy { $0.added == moved && $0.lastUsed == nil && $0.source == nil })
+            // Saved at once, so a later launch keeps the dates of the move.
+            #expect(defaults.data(forKey: VocabularyPreference.defaultsKey) != nil)
+            #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == words)
+            // Every save also writes the plain list, which 0.1.0 reads.
+            let later = Vocabulary.adding("Qwen", to: words, at: moved.addingTimeInterval(1))
+            VocabularyPreference.save(later, to: defaults)
+            #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == later)
+            #expect(defaults.stringArray(forKey: VocabularyPreference.legacyKey) == old + ["Qwen"])
+        }
     }
 
     @Test func wordsAddedAfterGoingBackToOrra010AreKept() throws {
-        let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let added = Date(timeIntervalSince1970: 1_000)
-        let words = vocabularyWords((1...150).map { "term\($0)" }, added: added)
-        VocabularyPreference.save(words, to: defaults)
-        // 0.1.0 read the first 100, the user added one and it saved those 101 words.
-        defaults.set((1...100).map { "term\($0)" } + ["Orra"], forKey: VocabularyPreference.legacyKey)
-        let back = Date(timeIntervalSince1970: 9_000)
-        let loaded = VocabularyPreference.load(from: defaults, now: back)
-        #expect(loaded.map(\.text) == words.map(\.text) + ["Orra"])
-        #expect(loaded.dropLast().allSatisfy { $0.added == added })
-        #expect(loaded.last?.added == back)
-        #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == loaded)
+        try withTestDefaults("vocabulary") { defaults in
+            let added = Date(timeIntervalSince1970: 1_000)
+            let words = vocabularyWords((1...150).map { "term\($0)" }, added: added)
+            VocabularyPreference.save(words, to: defaults)
+            // 0.1.0 read the first 100, the user added one and it saved those 101 words.
+            defaults.set((1...100).map { "term\($0)" } + ["Orra"], forKey: VocabularyPreference.legacyKey)
+            let back = Date(timeIntervalSince1970: 9_000)
+            let loaded = VocabularyPreference.load(from: defaults, now: back)
+            #expect(loaded.map(\.text) == words.map(\.text) + ["Orra"])
+            #expect(loaded.dropLast().allSatisfy { $0.added == added })
+            #expect(loaded.last?.added == back)
+            #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == loaded)
+        }
     }
 
     @Test func anUnreadableSaveFallsBackToTheWordsOfTheLastSave() throws {
-        let suite = "io.github.db-ol.OrraTests.vocabulary-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        VocabularyPreference.save(vocabularyWords("Orra", "Qwen"), to: defaults)
-        defaults.set(Data("not json".utf8), forKey: VocabularyPreference.defaultsKey)
-        let now = Date(timeIntervalSince1970: 7_000)
-        #expect(VocabularyPreference.load(from: defaults, now: now) == vocabularyWords("Orra", "Qwen", added: now))
-        // The unreadable value is replaced.
-        #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == vocabularyWords("Orra", "Qwen", added: now))
+        try withTestDefaults("vocabulary") { defaults in
+            VocabularyPreference.save(vocabularyWords("Orra", "Qwen"), to: defaults)
+            defaults.set(Data("not json".utf8), forKey: VocabularyPreference.defaultsKey)
+            let now = Date(timeIntervalSince1970: 7_000)
+            #expect(VocabularyPreference.load(from: defaults, now: now) == vocabularyWords("Orra", "Qwen", added: now))
+            // The unreadable value is replaced.
+            #expect(VocabularyPreference.load(from: defaults, now: .distantFuture) == vocabularyWords("Orra", "Qwen", added: now))
+        }
     }
 
     @Test func savesInTheBackgroundKeepTheirOrder() throws {

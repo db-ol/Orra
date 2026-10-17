@@ -39,14 +39,13 @@ struct SetupDownloadTests {
     }
 
     @Test func thePreferenceTellsANeverMadeChoiceApart() throws {
-        let suite = "io.github.db-ol.OrraTests.cleanup-saved-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(CleanupPreference.saved(from: defaults) == nil)
-        CleanupPreference.save(false, to: defaults)
-        #expect(CleanupPreference.saved(from: defaults) == false)
-        CleanupPreference.save(true, to: defaults)
-        #expect(CleanupPreference.saved(from: defaults) == true)
+        try withTestDefaults("cleanup-saved") { defaults in
+            #expect(CleanupPreference.saved(from: defaults) == nil)
+            CleanupPreference.save(false, to: defaults)
+            #expect(CleanupPreference.saved(from: defaults) == false)
+            CleanupPreference.save(true, to: defaults)
+            #expect(CleanupPreference.saved(from: defaults) == true)
+        }
     }
 
     // MARK: The order

@@ -112,10 +112,6 @@ struct CleanupModelEvaluationTests {
         let completion: RewriteEngine.Completion?
     }
 
-    private static func seconds(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
-    }
-
     /// The median and the 95th percentile, as the benchmark computed them.
     private static func median(_ values: [Double]) -> Double {
         values.sorted()[values.count / 2]
@@ -140,7 +136,7 @@ struct CleanupModelEvaluationTests {
             completions.withLock { $0.append(completion) }
             return completion.answer
         })
-        return Run(text: result.text, outcome: result.outcome, seconds: seconds(started.duration(to: .now)), completion: completions.withLock { $0.last })
+        return Run(text: result.text, outcome: result.outcome, seconds: started.duration(to: .now) / .seconds(1), completion: completions.withLock { $0.last })
     }
 
     /// Runs every case with the prefix cache, as the app does. With
@@ -213,7 +209,7 @@ struct CleanupModelEvaluationTests {
                     }
                     report += "\n\(name), \(mode), \(way): \(cases.count) cases, exact \(exact), median \(String(format: "%.3f", Self.median(seconds))) s, p95 \(String(format: "%.3f", Self.p95(seconds))) s, max \(String(format: "%.3f", seconds.max() ?? 0)) s\n"
                     if !completions.isEmpty {
-                        let prefill = completions.map { Self.seconds($0.prefillTime) }
+                        let prefill = completions.map { $0.prefillTime / .seconds(1) }
                         let read = completions.map { Double($0.promptTokens - $0.cachedPromptTokens) }
                         report += "  model runs \(completions.count), prompt tokens median \(Int(Self.median(completions.map { Double($0.promptTokens) }))), cached median \(Int(Self.median(completions.map { Double($0.cachedPromptTokens) }))), read median \(Int(Self.median(read))), prefill median \(String(format: "%.3f", Self.median(prefill))) s, p95 \(String(format: "%.3f", Self.p95(prefill))) s\n"
                     }

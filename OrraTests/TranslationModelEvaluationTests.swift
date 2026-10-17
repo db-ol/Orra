@@ -102,10 +102,6 @@ struct TranslationModelEvaluationTests {
         return String(result)
     }
 
-    private static func seconds(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
-    }
-
     /// The median and the 95th percentile, as the benchmark computed them.
     private static func median(_ values: [Double]) -> Double {
         values.isEmpty ? 0 : values.sorted()[values.count / 2]
@@ -130,7 +126,7 @@ struct TranslationModelEvaluationTests {
             completions.withLock { $0.append(completion) }
             return completion.answer
         })
-        return Run(source: source, result: result, seconds: seconds(started.duration(to: .now)), completion: completions.withLock { $0.last })
+        return Run(source: source, result: result, seconds: started.duration(to: .now) / .seconds(1), completion: completions.withLock { $0.last })
     }
 
     /// How a run compares with the expected translation.
@@ -183,7 +179,7 @@ struct TranslationModelEvaluationTests {
             for target in TranslationTarget.allCases {
                 let started = ContinuousClock.now
                 _ = try await engine.translate(source, into: target)
-                seconds.append(Self.seconds(started.duration(to: .now)))
+                seconds.append(started.duration(to: .now) / .seconds(1))
             }
         }
         try await Task.sleep(for: .seconds(settle))
@@ -271,11 +267,11 @@ struct TranslationModelEvaluationTests {
                     counts[kind, default: 0] += 1
                     if let plain = uncached[item.set + item.id]?[target], let completion = plain.completion {
                         plainSeconds.append(plain.seconds)
-                        plainPrefill.append(Self.seconds(completion.prefillTime))
+                        plainPrefill.append(completion.prefillTime / .seconds(1))
                     }
                     if let completion = run.completion {
                         seconds.append(run.seconds)
-                        prefill.append(Self.seconds(completion.prefillTime))
+                        prefill.append(completion.prefillTime / .seconds(1))
                         if completion.cachedPromptTokens == 0 {
                             uncachedCount += 1
                         }

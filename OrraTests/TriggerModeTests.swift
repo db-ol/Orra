@@ -305,16 +305,8 @@ struct TriggerModeTests {
 /// Uses UserDefaults suites of its own, never Orra's real settings, as
 /// TalkKeyPreferenceTests does.
 struct HotkeyPreferenceTests {
-    private func withDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) rethrows {
-        let suite = "io.github.db-ol.OrraTests.HotkeyPreference.\(name)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
-        try body(defaults)
-    }
-
-    @Test func aSavedSingleKeyLoadsAsBefore() {
-        withDefaults("single") { defaults in
+    @Test func aSavedSingleKeyLoadsAsBefore() throws {
+        try withTestDefaults("HotkeyPreference.single") { defaults in
             #expect(TalkKeyPreference.loadHotkey(from: defaults) == .rightControl)
             // As every earlier Orra saved it.
             defaults.set(["fn"], forKey: TalkKeyPreference.defaultsKey)
@@ -325,8 +317,8 @@ struct HotkeyPreferenceTests {
         }
     }
 
-    @Test func aCombinationKeepsTheSingleKeyForAnOlderOrra() {
-        withDefaults("combination") { defaults in
+    @Test func aCombinationKeepsTheSingleKeyForAnOlderOrra() throws {
+        try withTestDefaults("HotkeyPreference.combination") { defaults in
             TalkKeyPreference.saveHotkey(.fn, to: defaults)
             let combination = Hotkey.combination(KeyCombination(modifiers: [.shift, .command], keyCode: 2, character: "D"))
             TalkKeyPreference.saveHotkey(combination, to: defaults)
@@ -340,8 +332,8 @@ struct HotkeyPreferenceTests {
         }
     }
 
-    @Test func aTranslationCombinationComesBack() {
-        withDefaults("translation") { defaults in
+    @Test func aTranslationCombinationComesBack() throws {
+        try withTestDefaults("HotkeyPreference.translation") { defaults in
             let combination = Hotkey.combination(KeyCombination(modifiers: [.control, .option]))
             TranslationKeyPreference.saveHotkey(combination, to: defaults)
             #expect(TranslationKeyPreference.loadHotkey(talkKey: .rightControl, from: defaults) == combination)
@@ -352,8 +344,8 @@ struct HotkeyPreferenceTests {
         }
     }
 
-    @Test func modesAreSavedPerKey() {
-        withDefaults("modes") { defaults in
+    @Test func modesAreSavedPerKey() throws {
+        try withTestDefaults("HotkeyPreference.modes") { defaults in
             #expect(TriggerModePreference.load(for: .talk, from: defaults) == .hold)
             TriggerModePreference.save(.toggle, for: .talk, to: defaults)
             TriggerModePreference.save(.doubleTap, for: .translation, to: defaults)

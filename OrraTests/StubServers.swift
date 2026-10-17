@@ -246,7 +246,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
             send(body, from: end, limit: limit, delay: delay, dropWhen: dropWhen, box: box)
         }
         if delay > .zero {
-            let seconds = Double(delay.components.seconds) + Double(delay.components.attoseconds) / 1e18
+            let seconds = delay / .seconds(1)
             DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { box.perform(next) }
         } else {
             box.perform(next)

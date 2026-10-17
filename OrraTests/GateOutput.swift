@@ -31,6 +31,6 @@ enum GateOutput {
     }
 
     static func seconds(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+        duration / .seconds(1)
     }
 }

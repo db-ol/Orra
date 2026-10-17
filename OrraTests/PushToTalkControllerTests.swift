@@ -228,15 +228,6 @@ struct PushToTalkControllerTests {
         return controller
     }
 
-    /// Waits until `condition` holds, for at most five seconds. It returns as soon as the
-    /// condition holds, so the long limit only matters on a slow machine, such as a
-    /// shared CI runner.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-    }
-
     private func dictate(_ controller: PushToTalkController) async throws {
         controller.handle(.pressed(isRepeat: false))
         try await waitUntil { mic.calls.contains("start") }

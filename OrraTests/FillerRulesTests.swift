@@ -113,14 +113,13 @@ struct FillerRulesTests {
     }
 
     @Test func thePreferenceIsOnUntilTurnedOff() throws {
-        let suite = "io.github.db-ol.OrraTests.fillers-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(FillerPreference.load(from: defaults))
-        FillerPreference.save(false, to: defaults)
-        #expect(!FillerPreference.load(from: defaults))
-        FillerPreference.save(true, to: defaults)
-        #expect(FillerPreference.load(from: defaults))
+        try withTestDefaults("fillers") { defaults in
+            #expect(FillerPreference.load(from: defaults))
+            FillerPreference.save(false, to: defaults)
+            #expect(!FillerPreference.load(from: defaults))
+            FillerPreference.save(true, to: defaults)
+            #expect(FillerPreference.load(from: defaults))
+        }
     }
 
     @Test(arguments: [

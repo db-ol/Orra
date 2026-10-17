@@ -270,16 +270,15 @@ struct CleanupIdleUnloadTests {
     }
 
     @Test func thePreferenceDefaultsToFifteenMinutes() throws {
-        let suite = "io.github.db-ol.OrraTests.idle-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(CleanupIdlePreference.load(from: defaults) == .seconds(900))
-        defaults.set(60, forKey: CleanupIdlePreference.defaultsKey)
-        #expect(CleanupIdlePreference.load(from: defaults) == .seconds(60))
-        defaults.set("120", forKey: CleanupIdlePreference.defaultsKey)
-        #expect(CleanupIdlePreference.load(from: defaults) == .seconds(120))
-        defaults.set(0, forKey: CleanupIdlePreference.defaultsKey)
-        #expect(CleanupIdlePreference.load(from: defaults) == nil)
+        try withTestDefaults("idle") { defaults in
+            #expect(CleanupIdlePreference.load(from: defaults) == .seconds(900))
+            defaults.set(60, forKey: CleanupIdlePreference.defaultsKey)
+            #expect(CleanupIdlePreference.load(from: defaults) == .seconds(60))
+            defaults.set("120", forKey: CleanupIdlePreference.defaultsKey)
+            #expect(CleanupIdlePreference.load(from: defaults) == .seconds(120))
+            defaults.set(0, forKey: CleanupIdlePreference.defaultsKey)
+            #expect(CleanupIdlePreference.load(from: defaults) == nil)
+        }
     }
 
     // MARK: Loading again

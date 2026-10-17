@@ -12,17 +12,10 @@ struct SecondTalkKeyTests {
     let inserter = FakeInserter()
     let tapSystem = FakeTapSystem()
 
-    private func withDefaults(_ body: (UserDefaults) throws -> Void) throws {
-        let suite = "io.github.db-ol.OrraTests.second-key-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        try body(defaults)
-    }
-
     // MARK: Storage
 
     @Test func theSecondKeyIsSavedUnderItsOwnKeyAndLeavesTheTalkKeyAlone() throws {
-        try withDefaults { defaults in
+        try withTestDefaults("second-key") { defaults in
             TalkKeyPreference.saveHotkey(.fn, to: defaults)
             #expect(SecondTalkKeyPreference.load(talkKey: .fn, translationKey: .rightOption, from: defaults) == nil)
             SecondTalkKeyPreference.save(.rightControl, to: defaults)
@@ -38,7 +31,7 @@ struct SecondTalkKeyTests {
     }
 
     @Test func aSavedSecondKeyThatClashesOrIsUnknownLoadsAsNone() throws {
-        try withDefaults { defaults in
+        try withTestDefaults("second-key") { defaults in
             defaults.set("rightControl", forKey: SecondTalkKeyPreference.defaultsKey)
             #expect(SecondTalkKeyPreference.load(talkKey: .rightControl, translationKey: .rightOption, from: defaults) == nil)
             #expect(SecondTalkKeyPreference.load(talkKey: .fn, translationKey: .rightControl, from: defaults) == nil)
@@ -275,48 +268,46 @@ struct ExternalKeyboardTests {
     }
 
     @Test func theTipShowsOnceEver() throws {
-        let suite = "io.github.db-ol.OrraTests.keyboard-tip-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        var offered: [TalkKey] = []
-        let tip = ExternalKeyboardTip(defaults: defaults) { offered.append($0) }
-        var waiting = ready
-        waiting.welcomeOpen = true
-        tip.check(waiting)
-        #expect(offered.isEmpty)
-        tip.check(ready)
-        tip.check(ready)
-        #expect(offered == [.rightControl])
-        tip.answer()
-        // The next launch never offers it again.
-        let next = ExternalKeyboardTip(defaults: defaults) { offered.append($0) }
-        next.check(ready)
-        #expect(offered == [.rightControl])
-        #expect(next.answered)
+        try withTestDefaults("keyboard-tip") { defaults in
+            var offered: [TalkKey] = []
+            let tip = ExternalKeyboardTip(defaults: defaults) { offered.append($0) }
+            var waiting = ready
+            waiting.welcomeOpen = true
+            tip.check(waiting)
+            #expect(offered.isEmpty)
+            tip.check(ready)
+            tip.check(ready)
+            #expect(offered == [.rightControl])
+            tip.answer()
+            // The next launch never offers it again.
+            let next = ExternalKeyboardTip(defaults: defaults) { offered.append($0) }
+            next.check(ready)
+            #expect(offered == [.rightControl])
+            #expect(next.answered)
+        }
     }
 
     @Test func theTipIsCheckedAgainBeforeItAdds() throws {
-        let suite = "io.github.db-ol.OrraTests.keyboard-tip-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let tip = ExternalKeyboardTip(defaults: defaults) { _ in }
-        #expect(tip.stillOffers(.rightControl, in: ready))
-        // The user picked a second key, or changed the talk key, while the tip waited.
-        var situation = ready
-        situation.secondTalkKey = .leftOption
-        #expect(!tip.stillOffers(.rightControl, in: situation))
-        situation = ready
-        situation.talkKey = .rightCommand
-        #expect(!tip.stillOffers(.rightControl, in: situation))
-        situation = ready
-        situation.externalKeyboard = false
-        #expect(!tip.stillOffers(.rightControl, in: situation))
-        // Right Control became the translation key, so the tip would now offer another key.
-        situation = ready
-        situation.translationKey = .rightControl
-        #expect(!tip.stillOffers(.rightControl, in: situation))
-        tip.answer()
-        #expect(!tip.stillOffers(.rightControl, in: ready))
+        try withTestDefaults("keyboard-tip") { defaults in
+            let tip = ExternalKeyboardTip(defaults: defaults) { _ in }
+            #expect(tip.stillOffers(.rightControl, in: ready))
+            // The user picked a second key, or changed the talk key, while the tip waited.
+            var situation = ready
+            situation.secondTalkKey = .leftOption
+            #expect(!tip.stillOffers(.rightControl, in: situation))
+            situation = ready
+            situation.talkKey = .rightCommand
+            #expect(!tip.stillOffers(.rightControl, in: situation))
+            situation = ready
+            situation.externalKeyboard = false
+            #expect(!tip.stillOffers(.rightControl, in: situation))
+            // Right Control became the translation key, so the tip would now offer another key.
+            situation = ready
+            situation.translationKey = .rightControl
+            #expect(!tip.stillOffers(.rightControl, in: situation))
+            tip.answer()
+            #expect(!tip.stillOffers(.rightControl, in: ready))
+        }
     }
 
     @Test func aWaitingTipThatNoLongerFitsIsDropped() {

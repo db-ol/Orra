@@ -62,20 +62,19 @@ struct VoiceEngineChoiceTests {
     }
 
     @Test func thePickIsSaved() throws {
-        let name = "VoiceEngineChoiceTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defer { defaults.removePersistentDomain(forName: name) }
-        #expect(SpeechPreference.voiceModel(in: defaults) == nil)
-        SpeechPreference.saveVoiceModel(.cosyVoice, to: defaults)
-        #expect(SpeechPreference.voiceModel(in: defaults) == .cosyVoice)
-        #expect(defaults.string(forKey: SpeechPreference.voiceModelKey) == "cosyvoice3")
-        defaults.set("some-other-model", forKey: SpeechPreference.voiceModelKey)
-        #expect(SpeechPreference.voiceModel(in: defaults) == nil)
-        SpeechPreference.saveVoiceModel(nil, to: defaults)
-        #expect(defaults.object(forKey: SpeechPreference.voiceModelKey) == nil)
-        let settings = TranslationSpeech.Settings(isOn: true, alsoPastes: true, output: nil, voiceModel: .qwen3)
-        settings.save(to: defaults)
-        #expect(TranslationSpeech.Settings.load(from: defaults) == settings)
+        try withTestDefaults("voice-model") { defaults in
+            #expect(SpeechPreference.voiceModel(in: defaults) == nil)
+            SpeechPreference.saveVoiceModel(.cosyVoice, to: defaults)
+            #expect(SpeechPreference.voiceModel(in: defaults) == .cosyVoice)
+            #expect(defaults.string(forKey: SpeechPreference.voiceModelKey) == "cosyvoice3")
+            defaults.set("some-other-model", forKey: SpeechPreference.voiceModelKey)
+            #expect(SpeechPreference.voiceModel(in: defaults) == nil)
+            SpeechPreference.saveVoiceModel(nil, to: defaults)
+            #expect(defaults.object(forKey: SpeechPreference.voiceModelKey) == nil)
+            let settings = TranslationSpeech.Settings(isOn: true, alsoPastes: true, output: nil, voiceModel: .qwen3)
+            settings.save(to: defaults)
+            #expect(TranslationSpeech.Settings.load(from: defaults) == settings)
+        }
     }
 }
 
