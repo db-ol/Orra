@@ -58,8 +58,9 @@ A set is a folder `<sets>/<name>/` with `clips/<id>.wav` (16 kHz mono) and
 
     {"id": "zh_terms_1", "language": "zh", "reference": "...", "context": ["Kubernetes"], "expect_terms": ["Kubernetes"], "forbid_terms": []}
 
-- language: "zh", "en" or "mixed". English is scored per word, the others per Chinese
-  character and per Latin word.
+- language: "zh", "en", "mixed", "ja" or "es". English is scored per word, Chinese and
+  mixed per Chinese character and per Latin word, Japanese per Han character and per kana,
+  and Spanish per word with its accents, as Tools/speech-eval/score.py scores them.
 - reference: the text Orra should paste with cleanup off, so after the filler and number
   rules, for example 3点 for 三点.
 - context: the vocabulary the dictation runs with, may be empty.

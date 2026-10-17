@@ -52,6 +52,18 @@ all three models on both chips (test_score.py checks it):
   so 2011 against 二零一一 is four errors.
 - mer_mixed: the same tokens over the 64 code switched ASCEND clips.
 
+Two more groups are Orra's, for a corpus of Japanese or Spanish clips (see Other
+languages). They count only when a run has clips in them, so the speech corpus scores
+exactly as before:
+
+- cer_ja: character error rate over the clips with lang ja. NFKC, lower case, one token per
+  Han character, per kana (the long vowel mark ー included) and per mark 々 or 〆, and one
+  per run of other letters and digits. The middle dot ・ and other punctuation never count.
+- wer_es: word error rate over the clips with lang es. One token per run of letters and
+  digits with their accents, so año is one word and does not match ano. Han characters and
+  kana count one each, as in cer_ja, so a transcript in Chinese or Japanese counts per
+  character.
+
 Errors are summed over a group and divided by its reference tokens. score.py also gives
 the rate per stratum, the number of silence and noise clips with any output, and, for
 Orra's runs, decode time and real time factor (decode time over audio time).
@@ -78,10 +90,13 @@ Orra's runs, decode time and real time factor (decode time over audio time).
 
        TEST_RUNNER_ORRA_SPEECH_EVAL=1 TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=$HOME/projects/orra-project/bench/speech-corpus TEST_RUNNER_ORRA_SPEECH_EVAL_OUT=$HOME/projects/orra-project/bench/speech-corpus/results xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/SpeechCorpusEvaluationTests
 
-   The path includes LanguageGuard, and `language_passes` counts the passes it added to a
-   clip. With `TEST_RUNNER_ORRA_SPEECH_EVAL_HINTS=1` the test also writes `text_chinese`
-   and `text_english`, each clip transcribed with that language as the hint, and their
-   times.
+   The path includes LanguageGuard. `language_passes` counts the passes it added to a
+   clip, and `language_pass` names the pass that gave `text`: `chinese` or `english` for
+   one of those, `unhinted` for the first pass, also when no added pass helped.
+   `text_unhinted` is the first pass after the same post steps, the text without
+   LanguageGuard, and `text_pass_chinese` and `text_pass_english` hold the added passes.
+   With `TEST_RUNNER_ORRA_SPEECH_EVAL_HINTS=1` the test also writes `text_chinese` and
+   `text_english`, each clip transcribed with that language as the hint, and their times.
 
    Optional: `TEST_RUNNER_ORRA_SPEECH_MODEL_DIR` for another model folder,
    `TEST_RUNNER_ORRA_SPEECH_MODEL_ID` for the Hugging Face ID that speech-swift reads the
@@ -101,6 +116,35 @@ Orra's runs, decode time and real time factor (decode time over audio time).
 
 The texts in the results are transcripts of public recordings, not anyone's dictation.
 The test never logs them. Keep results outside the repository.
+
+## Other languages
+
+The test and score.py also take a corpus of Japanese or Spanish clips in the same layout,
+such as 200 clips each of the FLEURS ja_jp and es_419 test sets (CC BY 4.0): a folder with
+`clips/<id>.wav` and `manifest.jsonl`, one line per clip with `id`, `stratum`, `lang` (`ja`
+or `es`), `duration` and `reference`. Orra never gives the model either language as the
+hint, so these clips show what a Japanese or Spanish speaker gets today: `text_unhinted`
+for what the model chose, and `text` and `language_pass` for what LanguageGuard made of
+it. The 392 clip check is skipped for such a corpus.
+
+The test also transcribes each such clip with its own language as the hint, into
+`text_japanese` or `text_spanish` with its time, for what the model can do once Orra knows
+the language. SpeechLanguage has no case for either language, so that no path of the app
+can pick one, and this pass runs on a second copy of the model that the test loads with
+Orra's decoding options.
+
+Score each text with the corpus's manifest:
+
+    python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl results/fleurs-ja.json
+    python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl --field text_unhinted results/fleurs-ja.json
+    python3 Tools/speech-eval/score.py --manifest <corpus>/manifest.jsonl --field text_japanese results/fleurs-ja.json
+
+The table leaves out any group or stratum that no run has clips in, so a run of Spanish
+clips shows only wer_es and es, and a run without clips in a row shows n/a. The timing
+rows read the time of the pass that wrote the field when the run holds one, such as
+decode_seconds_japanese for text_japanese or decode_seconds_chinese for text_chinese.
+`text`, `ruled_text`, `text_unhinted` and the `text_pass` fields have none of their own
+and read decode_seconds, the whole path with LanguageGuard's passes.
 
 ## Baseline
 

@@ -7,7 +7,9 @@ import Foundation
 /// character, other scripts per word, punctuation and case are ignored. One difference:
 /// score.py joins letters spelled one by one into one word and this does not, so the q17_auto
 /// baseline reads 3.73% on fleurs_en and 9.97% on ascend_mixed here, against 3.6 and 9.5 in
-/// the table of docs/asr-baseline.md.
+/// the table of docs/asr-baseline.md. Kana and the marks 々 and 〆 count per character like
+/// Han, as Japanese is scored in Tools/speech-eval/score.py, and letters with accents stay in
+/// their word.
 enum TranscriptScoring {
     static func tokens(_ text: String, dropFillers: Bool) -> [String] {
         var normalized = text.precomposedStringWithCompatibilityMapping
@@ -21,7 +23,7 @@ enum TranscriptScoring {
         var result: [String] = []
         var word = ""
         for character in normalized {
-            if character.unicodeScalars.contains(where: { (0x3400...0x9FFF).contains($0.value) || (0xF900...0xFAFF).contains($0.value) }) {
+            if character.unicodeScalars.contains(where: { isCharacterToken($0.value) }) {
                 if !word.isEmpty { result.append(word); word = "" }
                 result.append(String(character))
             } else if character.isLetter || character.isNumber {
@@ -33,6 +35,16 @@ enum TranscriptScoring {
         }
         if !word.isEmpty { result.append(word) }
         return result
+    }
+
+    /// Han, 々 and 〆, and kana without the middle dot, the double hyphen and the voicing
+    /// marks, which are punctuation.
+    private static func isCharacterToken(_ value: UInt32) -> Bool {
+        switch value {
+        case 0x3005...0x3006, 0x3041...0x3096, 0x309D...0x309F, 0x30A1...0x30FA, 0x30FC...0x30FF, 0x31F0...0x31FF,
+             0x3400...0x9FFF, 0xF900...0xFAFF: true
+        default: false
+        }
     }
 
     static func editDistance(_ a: [String], _ b: [String]) -> Int {

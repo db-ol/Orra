@@ -55,6 +55,12 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(scored["forbidden_found"], [])
         self.assertEqual(gate.score_set_clip(clip, "Open Cursor.")["forbidden_found"], ["Cursor"])
 
+    def test_spanish_counts_words_and_japanese_characters(self):
+        scored = gate.score_set_clip({"language": "es", "reference": "El año pasado."}, "el ano pasado")
+        self.assertEqual((scored["errors"], scored["tokens"]), (1, 3))
+        scored = gate.score_set_clip({"language": "ja", "reference": "東京へ行きます。"}, "東京に行きます")
+        self.assertEqual((scored["errors"], scored["tokens"]), (1, 7))
+
     def test_percentile_is_nearest_rank(self):
         self.assertEqual(gate.percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.9), 9)
         self.assertEqual(gate.percentile([5], 0.9), 5)

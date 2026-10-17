@@ -760,7 +760,8 @@ got worse than the baseline, see docs/release-gate.md.
     transcript (resampling, the silence check, Qwen3Engine without a vocabulary,
     TranscriptGuard, ChineseText.simplified) and writes each clip's text and timing to a
     JSON file that Tools/speech-eval/score.py scores with Voxt's normalization.
-    Tools/speech-eval/README.md describes how to build the corpus and score. In Release:
+    Tools/speech-eval/README.md describes how to build the corpus and score, and how the
+    same test measures a corpus of Japanese or Spanish clips. In Release:
 
         TEST_RUNNER_ORRA_SPEECH_EVAL=1 TEST_RUNNER_ORRA_SPEECH_CORPUS_DIR=<corpus folder> TEST_RUNNER_ORRA_SPEECH_EVAL_OUT=<results folder> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/SpeechCorpusEvaluationTests
 

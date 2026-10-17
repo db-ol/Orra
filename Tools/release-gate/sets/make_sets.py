@@ -35,7 +35,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DEFAULT_OUT = Path(os.environ.get("ORRA_BENCH", Path.home() / "projects/orra-project/bench")) / "gate-sets"
 ONE_VARIANT = [{"suffix": ""}]
-VOICES = {"en": "Samantha", "zh": "Tingting", "mixed": "Tingting"}
+VOICES = {"en": "Samantha", "zh": "Tingting", "mixed": "Tingting", "ja": "Kyoko", "es": "Paulina"}
 
 
 def load_set(folder: Path) -> tuple[list[dict], list[dict]]:
