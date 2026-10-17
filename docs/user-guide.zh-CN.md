@@ -2,7 +2,7 @@
 
 [English](user-guide.md) · 简体中文
 
-Orra 的概览、下载和隐私说明见 [README](../README.zh-CN.md)。
+Orra 的概览和下载见 [README](../README.zh-CN.md)，隐私的详细说明见 [privacy.zh-CN.md](privacy.zh-CN.md)。
 
 ## 开始使用
 
