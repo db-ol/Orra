@@ -137,7 +137,7 @@ nonisolated struct CaptionSegmenter: Sendable {
         var finished: [CaptionSegment] = []
         var offset = 0
         while pending.count - offset >= frameLength {
-            let frame = Array(pending[offset..<(offset + frameLength)])
+            let frame = pending[offset..<(offset + frameLength)]
             if let segment = take(frame, at: pendingStart + offset) {
                 finished.append(segment)
             }
@@ -161,7 +161,7 @@ nonisolated struct CaptionSegmenter: Sendable {
         return segment(of: sentence, keepingFrames: sentence.levels.count)
     }
 
-    private func rms(_ frame: [Float]) -> Float {
+    private func rms(_ frame: ArraySlice<Float>) -> Float {
         var sum: Float = 0
         for sample in frame {
             sum += sample * sample
@@ -181,9 +181,11 @@ nonisolated struct CaptionSegmenter: Sendable {
         Int((settings.pause / settings.frameSeconds).rounded())
     }
 
-    private mutating func take(_ frame: [Float], at index: Int) -> CaptionSegment? {
+    private mutating func take(_ frame: ArraySlice<Float>, at index: Int) -> CaptionSegment? {
         let level = rms(frame)
-        guard var sentence = current else {
+        // Taken out of `current`, so the appends below grow its buffers in place instead of
+        // copying them on every frame. A sentence that goes on is put back at the end.
+        guard var sentence = current.take() else {
             listen(frame, level: level, at: index)
             return nil
         }
@@ -196,7 +198,6 @@ nonisolated struct CaptionSegmenter: Sendable {
             sentence.silentFrames += 1
         }
         if sentence.silentFrames >= pauseFrames {
-            current = nil
             return segment(of: sentence, keepingFrames: sentence.voicedFrames + tailFrames)
         }
         if Double(sentence.samples.count) / Double(sampleRate) >= settings.maximumLength {
@@ -212,7 +213,7 @@ nonisolated struct CaptionSegmenter: Sendable {
 
     /// Between sentences: follows the noise floor, keeps the preroll and starts a sentence
     /// after `startFrames` loud frames in a row.
-    private mutating func listen(_ frame: [Float], level: Float, at index: Int) {
+    private mutating func listen(_ frame: ArraySlice<Float>, level: Float, at index: Int) {
         if level >= startThreshold {
             onset.append(contentsOf: frame)
             onsetFrames += 1
