@@ -176,17 +176,100 @@ nonisolated final class LevelMeter: Sendable {
         return value.isFinite ? min(max(value, 0), 1) : 0
     }
 
-    /// Stores the largest magnitude among the samples. Safe on Core Audio's real time
-    /// thread.
-    func record(_ samples: UnsafePointer<Float>, count: Int) {
-        guard count > 0 else { return }
+    /// Stores the largest magnitude among the samples and returns it. Safe on Core Audio's
+    /// real time thread.
+    @discardableResult
+    func record(_ samples: UnsafePointer<Float>, count: Int) -> Float {
+        guard count > 0 else { return 0 }
         var peak: Float = 0
         vDSP_maxmgv(samples, 1, &peak, vDSP_Length(count))
         peakBits.store(peak.bitPattern, ordering: .relaxed)
+        return peak
     }
 
     func reset() {
         peakBits.store(0, ordering: .relaxed)
+    }
+}
+
+/// When the first audio of a recording arrived, for the start cue and the timing log. The
+/// audio thread stores the host time of the first buffer and of the first buffer with
+/// sound in two atomics, so it neither locks nor allocates. The times are when Orra got
+/// the buffer, so a buffer of the engine, about 100 ms long, arrives up to that much after
+/// its first sample was recorded.
+nonisolated final class AudioArrival: Sendable {
+    /// A buffer whose peak reaches this has sound. It is the floor of the silence check,
+    /// about -100 dBFS, so the two agree on what counts as sound. A microphone that is
+    /// starting, muted or cut off, such as a MacBook's with the lid closed, or a Bluetooth
+    /// one in its first moment as reported, delivers zeros, which stay below it. The noise
+    /// of a working microphone is expected to reach it without any speech, so the start
+    /// cue does not wait for the user to speak.
+    static let soundFloor = Silence.threshold
+
+    /// Mach host times, zero until the buffer arrived.
+    private let firstBuffer = Atomic<UInt64>(0)
+    private let firstSound = Atomic<UInt64>(0)
+
+    /// Forgets the times of the previous recording. Called before the audio starts.
+    func reset() {
+        firstBuffer.store(0, ordering: .relaxed)
+        firstSound.store(0, ordering: .releasing)
+    }
+
+    /// Notes a buffer of `count` samples whose largest magnitude is `peak`, arriving at the
+    /// host time `now`. Safe on Core Audio's real time thread.
+    func record(peak: Float, count: Int, at now: UInt64 = mach_absolute_time()) {
+        guard count > 0 else { return }
+        if firstBuffer.load(ordering: .relaxed) == 0 {
+            firstBuffer.store(now, ordering: .relaxed)
+        }
+        if peak >= Self.soundFloor, firstSound.load(ordering: .relaxed) == 0 {
+            firstSound.store(now, ordering: .releasing)
+        }
+    }
+
+    /// The host time of the first buffer, and of the first buffer with sound, or zero.
+    var firstBufferHostTime: UInt64 {
+        firstBuffer.load(ordering: .acquiring)
+    }
+
+    var firstSoundHostTime: UInt64 {
+        firstSound.load(ordering: .acquiring)
+    }
+
+    /// Returns once a buffer with sound has arrived, or at `deadline`, or when the task is
+    /// cancelled. It looks every 5 ms, because the real time thread cannot wake a task
+    /// without a lock or an allocation.
+    @concurrent
+    func waitForSound(until deadline: ContinuousClock.Instant) async {
+        while firstSoundHostTime == 0, ContinuousClock.now < deadline, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+}
+
+/// Turns the mach host times of the audio thread into instants of the continuous clock,
+/// which the key events and the controller use.
+nonisolated enum HostTime {
+    static let timebase: mach_timebase_info_data_t = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return info
+    }()
+
+    /// The instant of `hostTime`, or nil for zero. Both clocks advance together while the
+    /// Mac is awake, so a stamp from the hold that just ended is placed by its distance to
+    /// a pair of readings taken now.
+    static func instant(
+        _ hostTime: UInt64,
+        now: ContinuousClock.Instant = .now,
+        hostNow: UInt64 = mach_absolute_time(),
+        timebase: mach_timebase_info_data_t = timebase
+    ) -> ContinuousClock.Instant? {
+        guard hostTime != 0, timebase.denom != 0 else { return nil }
+        let ticks = hostNow >= hostTime ? hostNow - hostTime : 0
+        let nanoseconds = Double(ticks) * Double(timebase.numer) / Double(timebase.denom)
+        return now - .nanoseconds(Int64(nanoseconds.rounded()))
     }
 }
 
@@ -198,6 +281,23 @@ nonisolated enum AudioRecorderError: Error, Equatable {
     case inputUnitFailed(step: String, status: OSStatus)
 }
 
+/// How the latest recording started, for the timing log: the way it recorded, how its
+/// device is connected, and when its first buffer and its first buffer with sound arrived.
+nonisolated struct CaptureOnset: Equatable, Sendable {
+    nonisolated enum Path: String, Sendable {
+        /// The chosen microphone's InputUnit.
+        case unit
+        /// AVAudioEngine on the system default input.
+        case engine
+    }
+
+    var path: Path?
+    /// The device's transport type, such as 'usb ', or 0 when it could not be read.
+    var transport: UInt32 = 0
+    var firstBuffer: ContinuousClock.Instant?
+    var firstSound: ContinuousClock.Instant?
+}
+
 /// Records the microphone into memory while the talk key is held. Nothing is written to disk.
 ///
 /// An actor, so the audio hardware starts and stops away from the main thread. The
@@ -205,10 +305,19 @@ nonisolated enum AudioRecorderError: Error, Equatable {
 /// Bluetooth microphone can take seconds.
 ///
 /// Two ways to record:
-/// - A microphone chosen in Orra's menu records through an InputUnit made for the hold and
-///   bound to that device. InputUnit says why.
+/// - A microphone chosen in Orra's menu records through an InputUnit bound to that device.
+///   InputUnit says why. The unit stays set up between holds, so a hold only starts and
+///   stops its IO. It goes as soon as another microphone or System Default is chosen, and
+///   when the system default records. It is made again after its device went away or
+///   changed, and after any failure, see `keepsUnit(after:gotFirstBuffer:)`.
 /// - The system default input records through AVAudioEngine, as it did before the choice
-///   existed. It also records while the chosen microphone is not connected.
+///   existed. It also records while the chosen microphone is not connected. After a hold
+///   the engine is prepared again, which AVAudioEngine's documentation describes as
+///   allocating what a start needs without starting the hardware. That happens once the
+///   recording is handed over, so the release does not wait for it.
+///
+/// Between holds no IO runs. Whether macOS shows its microphone indicator for a unit or an
+/// engine that is set up but stopped is not documented, see docs/microphone-choice.md.
 ///
 /// AVAudioEngine calls the tap on an audio thread. The tap block is built in a nonisolated
 /// function, so it is not tied to any actor. It only copies the first channel into the
@@ -224,12 +333,20 @@ actor AudioRecorder {
     private var engine: AVAudioEngine?
     /// The default input when `engine` was made.
     private var engineInput: AudioDeviceID?
+    /// The chosen microphone's unit, kept between holds. Nil until a chosen microphone
+    /// records, and again once the system default records.
+    private var unit: InputUnit?
     private let store = SampleStore()
     /// How loud the recording in progress is, for the recording indicator.
     nonisolated let meter = LevelMeter()
+    /// When the first audio of the latest recording arrived.
+    nonisolated let arrival = AudioArrival()
     private var sampleRate = 0.0
     /// What records the current hold. Nil between holds.
     private var source: Source?
+    /// How the latest recording started, for the timing log.
+    private var latestPath: CaptureOnset.Path?
+    private var latestTransport: UInt32 = 0
     private let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "audio")
 
     /// Starts recording. Call only when microphone access is authorized, because starting
@@ -239,14 +356,44 @@ actor AudioRecorder {
     func start(preferredInput: String?) throws {
         guard source == nil else { return }
         meter.reset()
+        arrival.reset()
+        latestPath = nil
+        latestTransport = 0
         if let preferredInput {
             if let device = AudioInput.device(uid: preferredInput) {
+                // The engine stays prepared on the default input only while that records,
+                // so a chosen microphone leaves the default input alone.
+                discardEngine()
                 try startUnit(on: device)
                 return
             }
-            logger.notice("The chosen microphone is not connected, so the system default input records")
+            // Info, because it comes at every press while the microphone is away, also for
+            // a shortcut during the wait of a key. The controller logs a notice once for
+            // each dictation the system default recorded instead.
+            logger.info("The chosen microphone is not connected, so the system default input records")
         }
+        // A unit kept for a chosen microphone is no longer needed.
+        unit = nil
         try startEngine()
+    }
+
+    /// How the latest recording started and when its first audio arrived.
+    func onset() -> CaptureOnset {
+        CaptureOnset(
+            path: latestPath,
+            transport: latestTransport,
+            firstBuffer: HostTime.instant(arrival.firstBufferHostTime),
+            firstSound: HostTime.instant(arrival.firstSoundHostTime)
+        )
+    }
+
+    /// Lets go of the kept unit unless it is bound to the microphone with the UID
+    /// `preferredInput`, for when the choice changes, so the device is released then and not
+    /// at the next press. A hold that records through it goes on, and the unit goes once
+    /// that hold has stopped it.
+    func microphoneChosen(_ preferredInput: String?) {
+        guard let unit, unit.device.uid != preferredInput else { return }
+        self.unit = nil
     }
 
     /// Stops recording and returns what was recorded.
@@ -257,10 +404,7 @@ actor AudioRecorder {
         defer { meter.reset() }
         switch source {
         case .unit(let unit):
-            let result = unit.stop()
-            if result.interrupted || result.lostCallbacks > 0 {
-                logger.notice("The chosen microphone changed or went away: \(result.interrupted, privacy: .public), callbacks lost: \(result.lostCallbacks, privacy: .public)")
-            }
+            let result = endUnit(unit)
             return AudioRecording(samples: result.samples, sampleRate: unit.sampleRate, wasCut: result.interrupted, input: unit.device)
         case .engine(let input):
             // The engine stops itself when the input device changes. The recording is then
@@ -269,6 +413,8 @@ actor AudioRecorder {
             endEngine()
             if wasCut {
                 discardEngine()
+            } else {
+                prepareEngineLater()
             }
             return AudioRecording(samples: store.take(), sampleRate: sampleRate, wasCut: wasCut, input: input)
         }
@@ -281,19 +427,83 @@ actor AudioRecorder {
         defer { meter.reset() }
         switch source {
         case .unit(let unit):
-            _ = unit.stop()
+            _ = endUnit(unit)
         case .engine:
+            let kept = engine?.isRunning == true
             endEngine()
+            if kept {
+                prepareEngineLater()
+            }
             _ = store.take()
         }
     }
 
     private func startUnit(on device: AudioInput) throws {
         let began = ContinuousClock.now
-        let unit = try InputUnit(device: device, maximumSeconds: RecordingLimits.maximumSeconds, meter: meter)
-        try unit.start()
+        let unit = try readyUnit(for: device)
+        do {
+            try unit.start()
+        } catch {
+            // A unit that failed is made again at the next hold.
+            self.unit = nil
+            throw error
+        }
         source = .unit(unit)
-        logger.notice("Recording from the chosen microphone over \(AudioInput.fourCC(device.transport), privacy: .public) at \(Int(unit.sampleRate), privacy: .public) Hz, started in \(began.duration(to: .now), privacy: .public)")
+        latestPath = .unit
+        latestTransport = device.transport
+        // Info, because a shortcut during the wait of a key starts the microphone too. The
+        // timing line of each hold that counted holds the path and the transport.
+        logger.info("Recording from the chosen microphone over \(AudioInput.fourCC(device.transport), privacy: .public) at \(Int(unit.sampleRate), privacy: .public) Hz, started in \(began.duration(to: .now), privacy: .public)")
+    }
+
+    /// Stops the unit of a hold, and lets the next hold make a new one when this one is not
+    /// to be trusted again, see `keepsUnit(after:gotFirstBuffer:)`. Logs numbers only.
+    private func endUnit(_ unit: InputUnit) -> InputUnit.StopResult {
+        let result = unit.stop()
+        let gotFirstBuffer = arrival.firstBufferHostTime != 0
+        if result.status != noErr {
+            logger.error("Stopping the chosen microphone failed with status \(result.status, privacy: .public), so its unit was closed")
+        }
+        if result.interrupted || result.lostCallbacks > 0 {
+            logger.notice("The chosen microphone changed or went away: \(result.interrupted, privacy: .public), callbacks lost: \(result.lostCallbacks, privacy: .public)")
+        }
+        if !gotFirstBuffer, result.ran >= Self.firstBufferLimit {
+            logger.notice("The chosen microphone delivered no audio in \(result.ran, privacy: .public), so the next hold makes its unit again")
+        }
+        if !Self.keepsUnit(after: result, gotFirstBuffer: gotFirstBuffer), self.unit === unit {
+            self.unit = nil
+        }
+        return result
+    }
+
+    /// How long a unit's IO may run in a hold without delivering a single buffer before the
+    /// next hold makes a new unit. A short press, such as a shortcut during the wait of a
+    /// key, can end before the first buffer of a working unit, so it keeps the unit. One
+    /// second is the limit of the wait for sound, by which a working microphone has
+    /// delivered sound, see PushToTalkController.
+    nonisolated static let firstBufferLimit: Duration = .seconds(1)
+
+    /// Whether the unit that recorded a hold may record the next one. Not when its stop
+    /// failed, which closed it, when its device changed or went away, when a callback lost
+    /// its audio, or when its IO ran for `firstBufferLimit` and delivered no buffer at all.
+    nonisolated static func keepsUnit(after result: InputUnit.StopResult, gotFirstBuffer: Bool) -> Bool {
+        result.status == noErr && !result.interrupted && result.lostCallbacks == 0
+            && (gotFirstBuffer || result.ran < firstBufferLimit)
+    }
+
+    /// The kept unit while it is still open and bound to `device` at the device's rate, or a
+    /// new one. The unit's device watch notices a change between holds too, and the rate is
+    /// read again in case its notice is still on the way.
+    private func readyUnit(for device: AudioInput) throws -> InputUnit {
+        if let unit, !unit.isClosed, unit.device == device, !unit.isInterrupted,
+           let rate = AudioInput.nominalSampleRate(device.id), abs(rate - unit.sampleRate) <= 1 {
+            return unit
+        }
+        // The old unit lets go of its device first.
+        unit = nil
+        let made = try InputUnit(device: device, maximumSeconds: RecordingLimits.maximumSeconds, meter: meter, arrival: arrival)
+        unit = made
+        return made
     }
 
     private func startEngine() throws {
@@ -325,7 +535,7 @@ actor AudioRecorder {
         store.begin(limit: Int(hardware.sampleRate * RecordingLimits.maximumSeconds))
         // About 100 ms per buffer, so little speech waits in a half filled buffer.
         let bufferSize = AVAudioFrameCount(hardware.sampleRate / 10)
-        input.installTap(onBus: 0, bufferSize: bufferSize, format: format, block: Self.tapBlock(store: store, meter: meter))
+        input.installTap(onBus: 0, bufferSize: bufferSize, format: format, block: Self.tapBlock(store: store, meter: meter, arrival: arrival))
         engine.prepare()
         do {
             try engine.start()
@@ -335,14 +545,41 @@ actor AudioRecorder {
             discardEngine()
             throw error
         }
-        source = .engine(defaultID.flatMap { AudioInput.device(id: $0) })
-        logger.notice("Recording from the system default input")
+        let device = defaultID.flatMap { AudioInput.device(id: $0) }
+        source = .engine(device)
+        latestPath = .engine
+        latestTransport = device?.transport ?? 0
+        // Info, for the same reason as the line of a chosen microphone.
+        logger.info("Recording from the system default input")
     }
 
+    /// Stops the engine and the hardware.
     private func endEngine() {
         guard let engine else { return }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+    }
+
+    /// Prepares the kept engine for the next hold after the caller got what it waited for.
+    /// Apple's documentation of AVAudioEngine says that stop releases what prepare
+    /// allocated, and that start calls prepare when it was not called after stop and only
+    /// then starts the hardware, so preparing between holds moves that work out of the
+    /// next press without starting anything. It runs as a job of its own on this actor,
+    /// after stop or cancel returned, so the time from the release to the paste does not
+    /// include it.
+    private func prepareEngineLater() {
+        Task { self.prepareIdleEngine() }
+    }
+
+    /// Prepares the engine only while no hold records and the next hold would use it: the
+    /// default input is still the one it was made for, and that input still reports a
+    /// format, which startEngine checks too, because a device that went away can raise an
+    /// exception.
+    private func prepareIdleEngine() {
+        guard source == nil, let engine, !engine.isRunning, engineInput == AudioInput.defaultDeviceID() else { return }
+        let hardware = engine.inputNode.inputFormat(forBus: 0)
+        guard hardware.sampleRate > 0, hardware.channelCount > 0 else { return }
+        engine.prepare()
     }
 
     private func discardEngine() {
@@ -350,12 +587,13 @@ actor AudioRecorder {
         engineInput = nil
     }
 
-    nonisolated private static func tapBlock(store: SampleStore, meter: LevelMeter) -> AVAudioNodeTapBlock {
+    nonisolated private static func tapBlock(store: SampleStore, meter: LevelMeter, arrival: AudioArrival) -> AVAudioNodeTapBlock {
         { buffer, _ in
             let samples = MicrophoneChannel.samples(from: buffer)
             samples.withUnsafeBufferPointer { pointer in
                 if let base = pointer.baseAddress {
-                    meter.record(base, count: pointer.count)
+                    let peak = meter.record(base, count: pointer.count)
+                    arrival.record(peak: peak, count: pointer.count)
                 }
             }
             store.append(samples)
@@ -375,6 +613,14 @@ struct AudioCapture {
     /// The peak of the latest audio while recording, from 0 to 1, for the recording
     /// indicator. Fakes may leave it at zero.
     var level: () -> Float = { 0 }
+    /// Returns once the recording in progress has delivered a buffer with sound, or at the
+    /// deadline. Fakes may return at once, as if sound came right after the start.
+    var waitForSound: (ContinuousClock.Instant) async -> Void = { _ in }
+    /// How the latest recording started, for the timing log. Fakes may leave it empty.
+    var onset: () async -> CaptureOnset = { CaptureOnset() }
+    /// Tells the microphone the UID of the newly chosen microphone, or nil for the system
+    /// default, so what it kept for the choice before goes at once. Fakes may ignore it.
+    var microphoneChosen: (String?) async -> Void = { _ in }
 
     static func live() -> AudioCapture {
         let recorder = AudioRecorder()
@@ -384,7 +630,10 @@ struct AudioCapture {
             start: { preferredInput in try await recorder.start(preferredInput: preferredInput) },
             stop: { await recorder.stop() },
             cancel: { await recorder.cancel() },
-            level: { recorder.meter.peak }
+            level: { recorder.meter.peak },
+            waitForSound: { deadline in await recorder.arrival.waitForSound(until: deadline) },
+            onset: { await recorder.onset() },
+            microphoneChosen: { preferredInput in await recorder.microphoneChosen(preferredInput) }
         )
     }
 }

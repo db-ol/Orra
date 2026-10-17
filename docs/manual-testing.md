@@ -89,11 +89,13 @@ got worse than the baseline, see docs/release-gate.md.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
-  - PushToTalkStateMachineTests covers the full transition table (5 states by 7 events,
-    35 rows) and each edge case decision, including cancel, a tap that waits for a second
+  - PushToTalkStateMachineTests covers the full transition table (6 states by 8 events,
+    48 rows) and each edge case decision, including cancel, a tap that waits for a second
     press, a second press that resumes listening and ends as a double press or a hold, a
-    double press from idle and after a tap, and presses during hands free and during
-    processing.
+    double press from idle and after a tap, presses during hands free and during
+    processing, and since 2026-10-16 an early capture that a press keeps, that a release
+    starting hands free keeps, that a cancel, a release or a tap drops, and that is ignored
+    outside idle.
   - TalkKeyHandsFreeTests drives the detector with a clock the test moves: a quick double
     press that starts hands free at the second release, a tap whose window closes, a slow
     second press that is an ordinary hold, a tap followed by a hold for a right and a left
@@ -172,7 +174,25 @@ got worse than the baseline, see docs/release-gate.md.
   - AudioRecorderTests covers taking only the first input channel of plain and
     interleaved buffers, resampling a whole recording from 48, 44.1 and 24 kHz to 16 kHz
     without losing the end, the sample store limit, and the length rules. They use
-    synthetic buffers, not the microphone.
+    synthetic buffers, not the microphone. Since 2026-10-16 they also cover the times of
+    the first buffer and the first buffer with sound, the floor for sound, the wait for
+    sound that ends with it or at its deadline, and turning host times into instants of
+    the continuous clock, and when a kept unit records the next hold: not after a failed
+    stop, a device change, a lost callback, or a second of IO without a buffer, while a
+    shorter hold without one keeps it. InputUnitTests covers clearing the capture buffer
+    that a kept unit reuses, and CaptureTimingsTests the timing log line.
+  - PushToTalkControllerTests, since 2026-10-16, checks that the start sound waits for
+    sound from the microphone, that a microphone without sound gets it after the limit and
+    its hold still ends with the message about the silence, that the hands free cue waits
+    too, that an early capture starts without a cue and becomes the dictation with one
+    start, that a dropped one says nothing and leaves the last message alone, that it
+    waits silently for the model and for a microphone that cannot start, that quick
+    shortcuts keep the microphone's starts and cancels in order, that a press over before
+    its start began never starts the microphone, that a start failing after a shortcut
+    dropped its press says nothing, that the timing log reads the start once for each
+    hold, after the paste, never for a dropped capture, that a press that captured early
+    counts the minimum hold from the moment it counted, and that a new microphone choice
+    reaches the microphone at once, and the same choice again does not.
   - TextInserterTests covers pasting with Command V, restoring the old pasteboard, keeping
     what the user copied afterwards, pasting while another process holds secure input,
     leaving a password field and the pasteboard alone, leaving a field that cannot be
@@ -553,13 +573,18 @@ got worse than the baseline, see docs/release-gate.md.
   - Translation with the local model, added on 2026-10-12, with the translation key, the
     translation settings and the badge since 2026-10-13:
   - TalkKeyHandsFreeTests and TalkKeyDetectorTests check a key that waits on the right
-    hand side, as the translation key does: it records only after 0.3 s, Option E, Shift
-    or a click during the wait records nothing and passes through, a shortcut after the
-    wait cancels the hold, a double press of it starts hands free with one start of the
-    microphone and only that key ends it, with hands free off a tap of it leaves nothing,
-    a tap of the talk key followed by it drops the tap's recording and records after the
-    wait, and changing the waiting keys keeps a press under way. The random sequences run
-    with right Option waiting for every other seed.
+    hand side, as the translation key does: since 2026-10-16 it starts the microphone at
+    its key down and its press counts after 0.3 s, timed from the key down. Option E,
+    Shift, a click or a reset during the wait drops that capture and passes through, a
+    shortcut after the wait cancels the hold, a double press of it drops the tap's capture
+    and keeps the second press's for hands free, and only that key ends it, with hands free
+    off a tap of it drops its capture, a tap of the talk key followed by it drops the tap's
+    recording and records after the wait without an early capture, and changing the
+    waiting keys keeps a press under way. Only right hand keys and fn that wait capture
+    early, a press to start released during the wait keeps its capture, a change to double
+    press during the wait drops it, and a combination that counts at once keeps the
+    capture of its first modifier. TriggerModeTests checks that a combination that waits
+    drops it. The random sequences run with right Option waiting for every other seed.
   - TriggerModeTests and HotkeyPreferenceTests, added on 2026-10-14, check press to start
     and stop (a press records and its release keeps recording, a long press too, a
     shortcut cancels, a left key tapped starts at its release, Escape and its key up are
@@ -1049,10 +1074,16 @@ test starts, so these checks are the first real recordings through it:
 - [ ] If AirPods are around: choose them while the default input stays on the Brio, and
   dictate. Then choose the Brio while AirPods are the default input, play music, and
   dictate: the music should keep its quality, because only the Brio is opened.
-- [ ] The log names the path of each hold, without device names:
-  `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "audio"'`
-  shows "Recording from the chosen microphone over usb  at 48000 Hz, started in ...
-  seconds" or "Recording from the system default input".
+- [ ] The log names the path of each hold, without device names. Since 2026-10-16 these
+  lines are info, because a shortcut during the wait of the translation key starts the
+  microphone too, so they show only live:
+  `log stream --level info --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "audio"'`
+  while dictating shows "Recording from the chosen microphone over usb  at 48000 Hz,
+  started in ... seconds" or "Recording from the system default input". The timing line
+  of each dictation, see Capture start below, keeps the path and the transport in the
+  log store. A dictation the system default recorded instead of a chosen microphone that
+  is not connected adds the notice "The chosen microphone was not connected, so the
+  system default input recorded".
 
 Local dictation, added on 2026-10-04, partly verified by hand.
 The package, the microphone usage description, the Metal Toolchain and the plugin trust
@@ -1755,7 +1786,8 @@ in the running app:
   on. Pointing at the Translation switch shows the length limit, Paste Original Text
   and that Orra never learns from a translated paste. Pointing at the translation key
   field shows which keys can be the translation key, that the two keys
-  swap, and the wait before it records. Turning it on without the model asks "Download the model for
+  swap, that a press counts only after a moment, and since 2026-10-16 that fn and the
+  right hand keys start recording when pressed. Turning it on without the model asks "Download the model for
   translation?", and Cancel leaves it off. With cleanup on and the model in place it turns
   on at once, and with cleanup on and the model downloading it turns on without asking.
 - [ ] While translation is on and the model is not ready, a row under Translate into,
@@ -1771,8 +1803,10 @@ in the running app:
   translation on is not slower than the next ones. Say "Let's meet next Tuesday" and
   the Chinese is pasted.
 - [ ] The wait: hold right Option for less than a moment and type Option E then E (é),
-  and Option Command Escape opens Force Quit. Neither records, shows the indicator or
-  plays a sound. A hold of right Option shows the indicator only after about 0.3 s.
+  and Option Command Escape opens Force Quit. Neither shows the bars or plays a sound.
+  Since 2026-10-16 the microphone starts at the press and stops at the shortcut, so the
+  orange microphone indicator may flash, but it must not stay on. A hold of right Option
+  shows the bars only after about 0.3 s.
 - [ ] The badge: while the translation key records, the bars show 译 next to them, EN or
   中 with Into English or Into Chinese picked, also while transcribing. The talk key
   shows no badge. With Reduce Motion on in Accessibility settings the badge is the same
@@ -1846,9 +1880,9 @@ modifiers with a regular key, such as ⇧ ⌘ D:
   copy, paste, the app switcher, Spotlight and the input source switch keep working.
   ⌥ ⌘ C and ⌘ F5 can still be chosen.
 - [ ] With the talk key right Control and the translation key ⌃ ⌥: right Control alone
-  records after about 0.3 s, right Control then Option within that time translates, and
-  Option then right Control translates too. Note that right Control then waits like a
-  left key in this setup.
+  counts after about 0.3 s and keeps what was said from the press, right Control then
+  Option within that time translates, and Option then right Control translates too. Note
+  that right Control then waits like a left key in this setup.
 - [ ] Picking for the talk key the combination the translation key has swaps them and
   shows the swap note with the combination's symbols.
 - [ ] After a restart, both combinations and both modes are kept. Picking a single key
@@ -2047,6 +2081,48 @@ to try other segmenter settings. With `TEST_RUNNER_ORRA_CAPTION_INTERIM=1` the r
 run shows interim text every second, as the app does, and records when the first text of
 each sentence showed. A summary of counts and times goes to out.summary.txt.
 The output holds the text of the audio, so it goes outside the repository.
+
+Capture start, added on 2026-10-16, not verified yet. A key that waits records from its
+press, the start sound waits for sound from the microphone, a chosen microphone's unit
+stays set up between holds, the engine is prepared again after each hold, and each hold
+logs one timing line. Speak right at the press for the first checks, a short Chinese
+sentence such as "今天下午开会" works well:
+
+- [ ] fn as the talk key: the first character is in the text.
+- [ ] Right Control as the talk key: the first character is in the text.
+- [ ] The translation key, right Option, with Translation on: the first word is in the
+  translation, although the start sound plays only after about 0.3 s.
+- [ ] The start sound and the bars come once the microphone delivers sound. Speaking right
+  after the sound always keeps the first syllable. With the lid closed and the MacBook
+  microphone as the default input, the sound comes after about a second, and the hold
+  ends with "The lid is closed, so the built in microphone is off".
+- [ ] With right Option as the translation key and Translation on, type Option E then E
+  (é), and Option Command Escape, in Notes: the characters and Force Quit work, no sound
+  plays and no bars show. The orange microphone indicator may flash, and it is off right
+  after. Do it ten times quickly, then hold right Option and dictate: it works.
+- [ ] Between holds the orange microphone indicator stays off, with the Brio 500 chosen
+  under Microphone and with System Default. Check it again a minute after a dictation.
+- [ ] With the Brio 500 chosen, another app can record from it between dictations, such
+  as QuickTime Player's New Audio Recording.
+- [ ] With AirPods as the chosen microphone, and again as the default input with System
+  Default: play music, dictate once, and the music returns to full quality after the
+  dictation.
+- [ ] Unplug the chosen microphone between two dictations and plug it back in: the next
+  dictations work. Change its rate in Audio MIDI Setup between two dictations: the next
+  dictation works too.
+- [ ] With the Brio 500 chosen, dictate, then choose System Default: QuickTime Player can
+  record from the Brio right away, before the next press.
+- [ ] Hold right Option, with Translation on, for about half a second while speaking and
+  let go: nothing is pasted, as before 2026-10-16, because the press counts after 0.3 s
+  and the shortest dictation is 0.3 s from there.
+- [ ] The timing log line appears once for each hold:
+  `/usr/bin/log show --last 10m --info --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"' | grep "Capture start"`
+  shows lines such as "Capture start: key waited no, path unit, transport usb, from key
+  down: start returned 41 ms, first buffer 52 ms, first sound 52 ms", one per dictation,
+  and none for a shortcut during the wait. Report a Problem's report holds the same
+  lines under its log. The 2026-10-16 measurement had 0.33 s from making a unit to its
+  start for a USB microphone, so compare the start returned time of a chosen microphone
+  with that.
 
 ## Not implemented
 

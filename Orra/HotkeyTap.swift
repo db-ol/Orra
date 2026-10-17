@@ -25,7 +25,8 @@ import CoreGraphics
 /// The detector has no clock. The tap passes the time each event arrived, and runs the
 /// one timer the detector asks for at a time, for the delay of a left hand key or the
 /// translation key, or for a tap's double press window, as a task on the main actor that
-/// never blocks.
+/// never blocks. The time of a key down is read in the tap's callback, before anything
+/// else, so the timing log measures from there.
 ///
 /// While the user records a talk key by pressing it, see `chooseKey`, the tap reports
 /// key events instead of detecting holds, but only while Orra is the active app.
@@ -60,8 +61,8 @@ final class HotkeyTap {
 
     /// - Parameters:
     ///   - keys: The keys that start a dictation.
-    ///   - delayedKeys: The keys among them that wait before they record, as the left hand
-    ///     keys do, see `TalkKeyDetector.delayedKeys`.
+    ///   - delayedKeys: The keys among them whose press counts only after a wait, as the
+    ///     left hand keys do, see `TalkKeyDetector.delayedKeys`.
     ///   - modes: How each key starts a dictation. A key missing here holds.
     ///   - install: Creates the tap, see `Install`.
     ///   - onEvent: Receives the push to talk events.
@@ -90,8 +91,8 @@ final class HotkeyTap {
         self.onSwitchedOff = onSwitchedOff
     }
 
-    /// Switches to other talk keys at once, to the keys among them that wait before they
-    /// record, see `TalkKeyDetector.delayedKeys`, and to their modes. Ends a hold or a
+    /// Switches to other talk keys at once, to the keys among them whose press counts only
+    /// after a wait, see `TalkKeyDetector.delayedKeys`, and to their modes. Ends a hold or a
     /// hands free dictation of a key that is no longer one.
     func setKeys(_ keys: Set<Hotkey>, delayedKeys: Set<Hotkey> = [], modes: [Hotkey: TriggerMode] = [:]) {
         let event = detector.setKeys(keys, delayedKeys: delayedKeys, modes: modes)
@@ -114,6 +115,13 @@ final class HotkeyTap {
     /// The talk key the current press or dictation is about, if any.
     var activeKey: Hotkey? {
         detector.phase.key
+    }
+
+    /// When the key of the current press or dictation went down, as the tap saw it, and
+    /// whether the press waited before it counted. For the timing log.
+    var press: (keyDown: ContinuousClock.Instant, waited: Bool)? {
+        guard detector.phase.key != nil, let pressedAt = detector.pressedAt else { return nil }
+        return (pressedAt, detector.pressWaited)
     }
 
     /// While `chooser` is set and Orra is the active app, every key down and flags changed
@@ -270,13 +278,14 @@ nonisolated private func hotkeyTapCallback(
     event: CGEvent,
     userInfo: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
+    // First, so a key down is timed as early as Orra can see it.
+    let now = ContinuousClock.now
     guard let userInfo else {
         return Unmanaged.passUnretained(event)
     }
     let tap = Unmanaged<HotkeyTap>.fromOpaque(userInfo).takeUnretainedValue()
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     let flags = event.flags
-    let now = ContinuousClock.now
     let swallow = MainActor.assumeIsolated {
         tap.handle(type: type, keyCode: keyCode, flags: flags, at: now)
     }

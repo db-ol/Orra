@@ -633,8 +633,9 @@ nonisolated enum TalkKeyPreference {
 ///
 /// It is never the talk key and never the translation key, so a press always belongs to
 /// one slot. A combination as the talk key may share a modifier with it, such as ⌃ ⌥ and
-/// right Control. Then right Control waits a moment before it records, so the combination
-/// can take over, as with the translation key.
+/// right Control. Then a press of right Control counts only after a moment, so the
+/// combination can take over, as with the translation key. It records from its key down
+/// meanwhile, see `TalkKeyDetector.capturesEarly(_:)`.
 nonisolated enum SecondTalkKey {
     /// Whether `key` can be the second key beside these two keys.
     static func isAllowed(_ key: TalkKey, talkKey: Hotkey, translationKey: Hotkey) -> Bool {

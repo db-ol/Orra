@@ -11,6 +11,8 @@
 ///     waitingForSecondPress --cancel--------> idle
 ///     idle --double press--> handsFree --release--> processing
 ///                            handsFree --cancel---> idle
+///     idle --armed--> arming --press or double press--> listening or handsFree
+///                     arming --cancel, release or tap--> idle
 ///
 /// This type is pure logic. It decides what a hotkey event means in the current
 /// state and reports the resulting transition, if any. It knows nothing about
@@ -49,10 +51,19 @@
 ///   and a cancel, from Escape or a change of keys, discards it. A press, tap or
 ///   double press then is ignored. The hotkey layer sends a release only for a press
 ///   on its own, not for the release of the double press that started it.
+/// - A key that waits before its press counts may start the microphone at its key down
+///   (event armed), see `TalkKeyDetector.capturesEarly(_:)`. Arming records silently.
+///   The press counting, or a double press at its release, keeps that recording and makes
+///   it a dictation. A cancel drops it silently, and so does a release or a tap, which
+///   the hotkey layer does not send while arming, so a lost event cannot leave the
+///   microphone running. Armed in any other state is ignored, like a press.
 /// - `processingFinished` outside of processing is ignored as stale.
 nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
     nonisolated enum State: CaseIterable, Equatable, Sendable {
         case idle
+        /// A key that waits is down and its press has not counted yet. The microphone
+        /// records silently: no cue, no sound and no message.
+        case arming
         case listening
         /// The key was tapped. The recording goes on until the second press or the end
         /// of the window for it.
@@ -77,6 +88,9 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         case cancelled
         /// The work that followed a release is done, with or without a result.
         case processingFinished
+        /// A key that waits went down on its own, and its press may still turn out to be a
+        /// shortcut. Start capturing silently.
+        case armed
     }
 
     /// What the owner has to do after an event changed the state.
@@ -100,6 +114,13 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         case cancelledListening
         /// processing to idle. Ready for the next press.
         case finished
+        /// idle to arming. Start capturing audio without a cue.
+        case startedArming
+        /// arming to listening or handsFree. The press counts: keep capturing, and the
+        /// recording becomes a dictation.
+        case confirmedArming
+        /// arming to idle. Stop capturing and drop the recording, silently.
+        case droppedArming
     }
 
     private(set) var state: State = .idle
@@ -109,7 +130,7 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
     /// Whether the microphone records in this state.
     var isRecording: Bool {
         switch state {
-        case .listening, .waitingForSecondPress, .handsFree: true
+        case .arming, .listening, .waitingForSecondPress, .handsFree: true
         case .idle, .processing: false
         }
     }
@@ -126,6 +147,18 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         case (.idle, .doublePressed):
             state = .handsFree
             return .startedHandsFree
+        case (.idle, .armed):
+            state = .arming
+            return .startedArming
+        case (.arming, .pressed):
+            state = .listening
+            return .confirmedArming
+        case (.arming, .doublePressed):
+            state = .handsFree
+            return .confirmedArming
+        case (.arming, .cancelled), (.arming, .released), (.arming, .tapped):
+            state = .idle
+            return .droppedArming
         case (.listening, .released), (.handsFree, .released):
             state = .processing
             return .startedProcessing
@@ -145,13 +178,15 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
             state = .idle
             return .finished
         case (.idle, .released), (.idle, .tapped), (.idle, .cancelled), (.idle, .processingFinished),
-             (.listening, .pressed), (.listening, .processingFinished),
+             (.arming, .armed), (.arming, .processingFinished),
+             (.listening, .pressed), (.listening, .processingFinished), (.listening, .armed),
              (.waitingForSecondPress, .released),
              (.waitingForSecondPress, .tapped), (.waitingForSecondPress, .processingFinished),
+             (.waitingForSecondPress, .armed),
              (.handsFree, .pressed), (.handsFree, .tapped), (.handsFree, .doublePressed),
-             (.handsFree, .processingFinished),
+             (.handsFree, .processingFinished), (.handsFree, .armed),
              (.processing, .pressed), (.processing, .released), (.processing, .tapped),
-             (.processing, .doublePressed), (.processing, .cancelled):
+             (.processing, .doublePressed), (.processing, .cancelled), (.processing, .armed):
             return nil
         }
     }

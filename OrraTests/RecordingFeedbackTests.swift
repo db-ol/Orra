@@ -486,10 +486,11 @@ struct LevelMeterTests {
         let meter = LevelMeter()
         #expect(meter.peak == 0)
         let loud: [Float] = [0.1, -0.5, 0.25]
-        loud.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: $0.count) }
+        // It also returns the peak, for the time of the first sound.
+        #expect(loud.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: $0.count) } == 0.5)
         #expect(meter.peak == 0.5)
         let quiet: [Float] = [0.01, -0.02]
-        quiet.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: $0.count) }
+        #expect(quiet.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: $0.count) } == 0.02)
         #expect(meter.peak == 0.02)
         meter.reset()
         #expect(meter.peak == 0)
@@ -498,10 +499,10 @@ struct LevelMeterTests {
     @Test func clampsOverloadsAndIgnoresAnEmptyBuffer() {
         let meter = LevelMeter()
         let clipped: [Float] = [1.5, -2]
-        clipped.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: $0.count) }
+        #expect(clipped.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: $0.count) } == 2)
         #expect(meter.peak == 1)
         let empty: [Float] = [0]
-        empty.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: 0) }
+        #expect(empty.withUnsafeBufferPointer { meter.record($0.baseAddress!, count: 0) } == 0)
         #expect(meter.peak == 1)
     }
 }

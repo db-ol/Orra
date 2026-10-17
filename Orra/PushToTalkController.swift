@@ -5,13 +5,15 @@ import os
 
 /// What the recording indicator and the sounds follow. A dictation sends listening,
 /// transcribing, recordingStopped and finished, in that order. Listening waits until the
-/// hold has lasted a moment and the microphone has started, so a shortcut with the talk
-/// key, such as right Control+C, sends nothing. A hands free dictation sends handsFree in
-/// place of listening, or after it when a hold turned into one. A hold that ends early
+/// hold has lasted a moment and the microphone has delivered sound, so a shortcut with
+/// the talk key, such as right Control+C, sends nothing, and speech after the start sound
+/// is recorded. A press that has not counted yet sends nothing either. A hands free
+/// dictation sends handsFree in place of listening, or after it when a hold turned into
+/// one. A hold that ends early
 /// skips to finished, which comes only when there is a message to show or an indicator to
 /// clear.
 nonisolated enum DictationCue: Equatable, Sendable {
-    /// The hold has lasted long enough to be a dictation, and the microphone is recording.
+    /// The hold has lasted long enough to be a dictation, and the microphone delivers sound.
     /// `translation` is the direction when the translation key started it, so the
     /// indicator shows that the text will be pasted translated.
     case listening(translation: TranslationDirection?)
@@ -186,19 +188,34 @@ final class PushToTalkController {
     @ObservationIgnored private let releaseTail: Duration
     @ObservationIgnored private let accessCheckDelay: Duration
     @ObservationIgnored private let listeningCueDelay: Duration
-    /// Sends the listening cue once the hold has lasted `listeningCueDelay`.
+    @ObservationIgnored private let soundWaitLimit: Duration
+    /// Sends the listening cue once the hold has lasted `listeningCueDelay` and the
+    /// microphone delivered sound.
     @ObservationIgnored private var listeningCueTask: Task<Void, Never>?
     /// Whether the current hold has shown the indicator, so its end has to clear it.
     @ObservationIgnored private var indicatorShown = false
     @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
-    /// Starts the microphone off the main thread. Its value tells whether it started.
-    @ObservationIgnored private var captureStart: Task<Bool, Never>?
+    /// Starts the microphone off the main thread. Its value is when the start returned, or
+    /// nil when the microphone did not start.
+    @ObservationIgnored private var captureStart: Task<ContinuousClock.Instant?, Never>?
     /// Stops the microphone after a cancelled hold. The next start waits for it, so a
-    /// late cancel cannot stop the recording of a newer hold.
+    /// late cancel cannot stop the recording of a newer hold, and so does the next cancel.
     @ObservationIgnored private var captureCancel: Task<Void, Never>?
+    /// How the microphone started for the current hold, for the timing log. Its `counted`
+    /// time also tells whether the hold counted, see `holdCounted`.
+    @ObservationIgnored private var holdTimings: CaptureTimings?
+    /// Whether the current hold counted as a dictation. A press that waits counts once its
+    /// wait ends, and until then it shows and says nothing.
+    private var holdCounted: Bool {
+        holdTimings?.counted != nil
+    }
     /// Counts the holds that started the microphone, so a late failure of an older start
     /// leaves the current hold alone.
     @ObservationIgnored private var holdNumber = 0
+    /// When the current hold counted as a dictation, which `minimumHold` counts from. A
+    /// press that captured early records from its key down but counts only after its wait,
+    /// as before, so holding a key that waits alone a little longer than the wait is still
+    /// too short to transcribe.
     @ObservationIgnored private var pressedAt: ContinuousClock.Instant?
     /// The microphone chosen when the current hold started.
     @ObservationIgnored private var holdMicrophone: MicrophoneChoice?
@@ -258,6 +275,8 @@ final class PushToTalkController {
     ///     `watchAccess()`.
     ///   - listeningCueDelay: How long a hold lasts before the indicator shows and the
     ///     start sound plays. A shortcut with the talk key is over sooner.
+    ///   - soundWaitLimit: How long after the microphone started the cue waits for sound
+    ///     from it, see `scheduleListeningCue(after:hold:)`.
     ///   - talkKey: The key that starts a dictation, as saved by the user.
     ///   - saveTalkKey: Saves the key after the user changes it.
     ///   - talkKeyChosen: Whether the user has saved a talk key before.
@@ -297,6 +316,7 @@ final class PushToTalkController {
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
         listeningCueDelay: Duration = .milliseconds(150),
+        soundWaitLimit: Duration = .seconds(1),
         talkKey: Hotkey = Hotkey.defaultKey,
         saveTalkKey: @escaping (Hotkey) -> Void = { _ in },
         talkKeyChosen: Bool = false,
@@ -334,6 +354,7 @@ final class PushToTalkController {
         self.releaseTail = releaseTail
         self.accessCheckDelay = accessCheckDelay
         self.listeningCueDelay = listeningCueDelay
+        self.soundWaitLimit = soundWaitLimit
         self.talkKey = talkKey
         self.saveTalkKey = saveTalkKey
         self.hasChosenTalkKey = talkKeyChosen
@@ -455,11 +476,15 @@ final class PushToTalkController {
     }
 
     /// Chooses the microphone for the next dictations, or the system default for nil, and
-    /// saves the choice.
+    /// saves the choice. What the microphone kept for the choice before goes now, not at
+    /// the next press.
     func setMicrophone(_ choice: MicrophoneChoice?) {
         guard choice != microphone else { return }
         microphone = choice
         saveMicrophone(choice)
+        Task { [capture] in
+            await capture.microphoneChosen(choice?.uid)
+        }
     }
 
     /// Makes `key` the talk key and saves the choice. Saved even when it is the key in use
@@ -576,12 +601,13 @@ final class PushToTalkController {
         return keys
     }
 
-    /// The translation key waits before it records, as a left hand key does, so Option
-    /// shortcuts and the characters right Option types keep working. A combination with a
-    /// regular key is hidden from apps and needs no wait. The talk key and the second talk
-    /// key do not wait, unless one is a modifier of another watched key's combination, such
-    /// as right Control beside Control and Option, so the combination can take over within
-    /// the wait.
+    /// The translation key waits before its press counts, as a left hand key does, so
+    /// Option shortcuts and the characters right Option types keep working. A combination
+    /// with a regular key is hidden from apps and needs no wait. The talk key and the second
+    /// talk key do not wait, unless one is a modifier of another watched key's combination,
+    /// such as right Control beside Control and Option, so the combination can take over
+    /// within the wait. A right hand key or fn among these records from its key down while
+    /// it waits, see `TalkKeyDetector.capturesEarly(_:)`.
     private var delayedKeys: Set<Hotkey> {
         let watched = watchedKeys
         var keys: Set<Hotkey> = translationKeyIsOn && !translationKey.hasRegularKey ? [translationKey] : []
@@ -763,18 +789,43 @@ final class PushToTalkController {
         state = machine.state
         logger.debug("Push to talk transition: \(String(describing: transition), privacy: .public)")
         switch transition {
-        case .startedListening, .startedHandsFree, .resumedListening:
+        case .startedListening, .startedHandsFree, .resumedListening, .confirmedArming:
             // The direction is read once, so the indicator and the paste agree.
             holdTranslation = translationKeyIsOn && key == translationKey ? translation.direction() : nil
         default:
             break
         }
         switch transition {
+        case .startedArming:
+            // A press that may still be a shortcut starts the microphone silently, so the
+            // recording starts at the key down once the press counts. Nothing here may show,
+            // say or load anything. When the microphone cannot start silently, the press
+            // starts it once it counts, and says then why it cannot.
+            holdMessage = nil
+            indicatorShown = false
+            captureStart = nil
+            guard !isRecordingVoiceSample, modelState == .ready, capture.access() == .authorized else {
+                handle(.cancelled)
+                return
+            }
+            startCapture()
+        case .confirmedArming:
+            clearHoldNotes()
+            let counted = ContinuousClock.now
+            pressedAt = counted
+            holdTimings?.counted = counted
+            beginUserActivity()
+            cleanup.dictationStarted()
+            // The delay counts from the key down, which the wait has used up already.
+            let held = holdTimings.map { $0.keyDown.duration(to: counted) } ?? .zero
+            scheduleListeningCue(after: state == .listening ? max(.zero, listeningCueDelay - held) : .zero, hold: holdNumber)
+        case .droppedArming:
+            // A shortcut, or a press too short to count: no cue, no sound and no message.
+            recordingLimitTask?.cancel()
+            listeningCueTask?.cancel()
+            cancelCapture(logsTimings: false)
         case .startedListening, .startedHandsFree:
-            problem = nil
-            notice = nil
-            microphoneNotice = nil
-            suggestsSoundSettings = false
+            clearHoldNotes()
             holdMessage = nil
             indicatorShown = false
             // The previous hold's start belongs to that hold only.
@@ -822,20 +873,21 @@ final class PushToTalkController {
             let start = captureStart
             let chosen = holdMicrophone
             let translating = holdTranslation
+            let captureTimings = holdTimings
             Task { [weak self] in
                 await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, translating: translating, releasedAt: released)
+                // After the paste, because the microphone gets ready for the next hold once
+                // it stopped, and reading how it started waits for that.
+                if let startedAt = await start?.value {
+                    await self?.logCaptureTimings(captureTimings, startedAt: startedAt)
+                }
                 self?.handle(.processingFinished)
             }
         case .cancelledListening:
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
             endUserActivity()
-            let start = captureStart
-            captureCancel = Task { [capture] in
-                if await start?.value == true {
-                    await capture.cancel()
-                }
-            }
+            cancelCapture(logsTimings: true)
             endCue(holdMessage ?? problem)
             cleanup.dictationEnded()
         case .finished:
@@ -843,6 +895,41 @@ final class PushToTalkController {
             endCue(holdMessage ?? problem ?? notice)
             cleanup.dictationEnded()
         }
+    }
+
+    /// Clears what the menu showed about the last hold, once a new one starts.
+    private func clearHoldNotes() {
+        problem = nil
+        notice = nil
+        microphoneNotice = nil
+        suggestsSoundSettings = false
+    }
+
+    /// Stops the microphone after a hold that ends without processing, and logs how it
+    /// started when `logsTimings` is true. Waits for the cancel before, so cancels and
+    /// starts reach the microphone in the order of the holds. A start that has not begun
+    /// yet is skipped, see `startCapture()`.
+    private func cancelCapture(logsTimings: Bool) {
+        let start = captureStart
+        start?.cancel()
+        let previous = captureCancel
+        let timings = logsTimings ? holdTimings : nil
+        captureCancel = Task { [weak self, capture] in
+            await previous?.value
+            guard let started = await start?.value else { return }
+            await capture.cancel()
+            await self?.logCaptureTimings(timings, startedAt: started)
+        }
+    }
+
+    /// One line per hold whose microphone started, nothing when `timings` is nil. Notice
+    /// rather than info, so it stays in the log store, where Report a Problem reads it.
+    /// Numbers only.
+    private func logCaptureTimings(_ timings: CaptureTimings?, startedAt: ContinuousClock.Instant) async {
+        guard var timings else { return }
+        timings.startReturned = startedAt
+        timings.onset = await capture.onset()
+        logger.notice("Capture start: \(timings.summary, privacy: .public)")
     }
 
     /// Ends the hold for the indicator: shows the message when there is one, and otherwise
@@ -909,32 +996,9 @@ final class PushToTalkController {
         case .authorized:
             pressedAt = .now
             beginUserActivity()
-            holdNumber += 1
-            let hold = holdNumber
-            let previousCancel = captureCancel
-            let chosen = microphone
-            holdMicrophone = chosen
-            // The hardware starts off the main thread, so the key event is answered at once.
-            // A cancelled hold may still be stopping the microphone, so that goes first.
-            captureStart = Task { [weak self, capture] in
-                await previousCancel?.value
-                do {
-                    try await capture.start(chosen?.uid)
-                    return true
-                } catch {
-                    self?.recordingFailedToStart(error, hold: hold, chosen: chosen)
-                    return false
-                }
-            }
-            recordingLimitTask = Task { [weak self, maximumRecordingDuration] in
-                try? await Task.sleep(for: maximumRecordingDuration)
-                guard !Task.isCancelled, let self, state == .listening || state == .handsFree else { return }
-                logger.info("Recording reached its maximum length")
-                // The audio buffer holds no more, so the dictation ends here and says why.
-                notice = String(localized: "Orra records up to 1 minute at a time, so the recording stopped there.")
-                handle(.released)
-            }
-            scheduleListeningCue(after: cueDelay, hold: hold)
+            startCapture()
+            holdTimings?.counted = pressedAt
+            scheduleListeningCue(after: cueDelay, hold: holdNumber)
         case .notDetermined:
             // The system prompt that follows says enough.
             handle(.cancelled)
@@ -948,18 +1012,63 @@ final class PushToTalkController {
         }
     }
 
+    /// Starts the microphone off the main thread and the recording limit, and shows and says
+    /// nothing, so a press that has not counted yet can start it too.
+    private func startCapture() {
+        // From the key down when the tap saw it, so the log covers the wait of a key too.
+        let press = tap?.press
+        holdTimings = CaptureTimings(keyDown: press?.keyDown ?? .now, waited: press?.waited ?? false)
+        holdNumber += 1
+        let hold = holdNumber
+        let previousCancel = captureCancel
+        let chosen = microphone
+        holdMicrophone = chosen
+        // The hardware starts off the main thread, so the key event is answered at once.
+        // A cancelled hold may still be stopping the microphone, so that goes first.
+        captureStart = Task { [weak self, capture] in
+            await previousCancel?.value
+            // A hold that ended meanwhile, such as a shortcut typed while a slow microphone
+            // still started for the press before, needs no microphone. Its cancel then
+            // has nothing to stop, so the next hold waits only for starts already begun.
+            guard !Task.isCancelled else { return nil }
+            do {
+                try await capture.start(chosen?.uid)
+                return ContinuousClock.now
+            } catch {
+                self?.recordingFailedToStart(error, hold: hold, chosen: chosen)
+                return nil
+            }
+        }
+        recordingLimitTask = Task { [weak self, maximumRecordingDuration] in
+            try? await Task.sleep(for: maximumRecordingDuration)
+            guard !Task.isCancelled, let self, state == .listening || state == .handsFree else { return }
+            logger.info("Recording reached its maximum length")
+            // The audio buffer holds no more, so the dictation ends here and says why.
+            notice = String(localized: "Orra records up to 1 minute at a time, so the recording stopped there.")
+            handle(.released)
+        }
+    }
+
     /// Sends the listening cue, or the hands free cue, once `delay` has passed and the
-    /// microphone has started, if the hold is still the current one and still records.
+    /// microphone has delivered sound, if the hold is still the current one and still
+    /// records.
+    ///
+    /// The wait for sound covers a microphone that takes a while to start, which took
+    /// 0.3 s for a USB microphone, and one that delivers zeros after it started, as a
+    /// Bluetooth one is reported to do for about half a second. So whoever starts talking
+    /// at the sound is recorded from the first syllable. A microphone that sends no sound
+    /// within `soundWaitLimit` after it started gets the cue anyway, so nobody is left
+    /// waiting, and its hold ends with the message about the silence as before. One second
+    /// is twice that reported Bluetooth delay, so a working microphone has sent sound by
+    /// then. A microphone that fails to start sends no cue.
     private func scheduleListeningCue(after delay: Duration, hold: Int) {
         let started = captureStart
-        listeningCueTask = Task { [weak self] in
+        listeningCueTask = Task { [weak self, capture, soundWaitLimit] in
             if delay > .zero {
                 try? await Task.sleep(for: delay)
             }
-            // The cue also waits for the microphone, which can take 0.3 s for a USB
-            // microphone, so whoever starts talking at the sound is recorded from the
-            // first syllable. A microphone that fails to start sends no cue.
-            guard await started?.value == true else { return }
+            guard let startedAt = await started?.value else { return }
+            await capture.waitForSound(startedAt + soundWaitLimit)
             guard !Task.isCancelled, let self, holdNumber == hold else { return }
             switch state {
             case .listening:
@@ -968,7 +1077,7 @@ final class PushToTalkController {
             case .handsFree:
                 indicatorShown = true
                 onCue(.handsFree(finishHint: handsFreeKey.finishHint(), translation: holdTranslation))
-            case .idle, .waitingForSecondPress, .processing:
+            case .idle, .arming, .waitingForSecondPress, .processing:
                 break
             }
         }
@@ -978,6 +1087,15 @@ final class PushToTalkController {
         logger.error("Could not start recording: \(String(describing: error), privacy: .public)")
         // A newer hold has started since. This one was cancelled and nobody waits for it.
         guard hold == holdNumber else { return }
+        // A press that has not counted says nothing, also when a shortcut dropped it before
+        // the start failed. Once a press counts, it starts the microphone again and says
+        // then what went wrong.
+        guard holdCounted else {
+            if machine.state == .arming {
+                handle(.cancelled)
+            }
+            return
+        }
         if case AudioRecorderError.inputUnitFailed = error, let chosen {
             problem = String(localized: "\(chosen.name) could not start")
             // System Default records another way, so it is the way out. With the lid
@@ -996,10 +1114,10 @@ final class PushToTalkController {
     /// Ends a hold that was released: waits for the microphone to have started, records
     /// the short tail, stops, and transcribes unless the hold was too short or cut.
     /// `translating` is the direction when the translation key started the dictation.
-    private func finishRecording(start: Task<Bool, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
+    private func finishRecording(start: Task<ContinuousClock.Instant?, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
         var timings = DictationTimings(releasedAt: released)
         // A failed start already set the problem.
-        guard await start?.value == true else { return }
+        guard await start?.value != nil else { return }
         timings.lap(.start)
         if releaseTail > .zero {
             try? await Task.sleep(for: releaseTail)
@@ -1018,6 +1136,9 @@ final class PushToTalkController {
         onCue(.recordingStopped)
         if let chosen, recording.input?.uid != chosen.uid {
             // The chosen microphone was not connected, so the system default recorded.
+            // Logged here, once for a dictation, rather than at each start, which a
+            // shortcut during the wait of a key makes too.
+            logger.notice("The chosen microphone was not connected, so the system default input recorded")
             if let name = recording.input?.name {
                 microphoneNotice = String(localized: "\(chosen.name) is not connected, so \(name) recorded.")
             } else {

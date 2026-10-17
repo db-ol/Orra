@@ -64,9 +64,9 @@ AirPods, and buffers from the wrong device. The engine also opens the default in
 before the device can be changed, so a Bluetooth default input still switches to its
 call profile (reported).
 
-So a microphone chosen in Orra records through an input only audio unit (AUHAL) made
-for each hold and bound to that device, which is how Apple's Technical Note TN2091
-describes device input. `Orra/InputUnit.swift` follows it:
+So a microphone chosen in Orra records through an input only audio unit (AUHAL) bound
+to that device, which is how Apple's Technical Note TN2091 describes device input.
+`Orra/InputUnit.swift` follows it:
 
 1. Enable input on element 1 and disable output on element 0.
 2. Bind the device. TN2091 says this works only after IO is enabled. Orra always binds,
@@ -78,22 +78,42 @@ describes device input. `Orra/InputUnit.swift` follows it:
 4. Take the device's first channel with a channel map, as the engine path does.
 5. Set the input callback, initialize and start.
 
-On release the unit is stopped, uninitialized and disposed, so the device is released
-and the microphone indicator turns off.
+Since 2026-10-16 the unit stays initialized between holds, so a hold only starts and
+stops its IO, and the next press does not wait for steps 1 to 5. Until then every hold
+made, initialized and disposed a unit, and one measured cold start of a USB microphone
+took 0.33 s from making the unit to the start returning. On release the unit's IO stops,
+and no IO runs until the next hold, so the microphone indicator is meant to stay off
+between holds (see Not verified yet). Orra disposes the unit as soon as System Default or
+another microphone is chosen, and a hold that records through it at that moment keeps it
+until its end. It also disposes the unit when the system default records because the
+chosen microphone is not connected. It makes the unit again at the next press after its
+device went away, changed its rate or lost its input channels, and after any failure: a
+start that failed, a recording that was cut or lost callbacks, a stop that failed, and
+IO that ran for a second in a hold without delivering a single buffer. A shorter hold
+without a buffer, such as a shortcut during the wait of the translation key, keeps the
+unit. When AudioOutputUnitStop fails, its status goes to the log and the unit is
+uninitialized and disposed at once, so its IO does not go on until the next press.
 
 The input callback runs on Core Audio's real time thread. It renders into scratch
 memory set aside in advance and copies into a buffer for the whole recording, which is
-allocated and touched before the start. It takes no lock, allocates nothing and logs
-nothing.
+allocated and touched before the first start. It takes no lock, allocates nothing and
+logs nothing. After each hold the buffer is read and zeroed, so no audio stays in memory
+until the next hold.
 
-During a hold Orra listens to the bound device. If the device goes away, runs at
-another rate, or has no input channels left, the recording is cut, as a recording
-through the engine is cut when its device changes. A change of the default input does
-not matter for a chosen microphone. The listeners are removed at the end of the hold.
-Core Audio matches a removal by its block, and Swift wraps a closure in a new block at
-every call, so Orra passes one stored block through C function references. Calling the
-functions directly left every hold's listeners behind (checked on this Mac in review,
-and covered by a test since).
+Orra listens to the bound device for as long as the unit lives. If the device goes away,
+runs at another rate, or has no input channels left during a hold, the recording is cut,
+as a recording through the engine is cut when its device changes. Between holds the same
+change makes the next press build a new unit. A change of the default input does not
+matter for a chosen microphone. The listeners are removed with the unit. Core Audio
+matches a removal by its block, and Swift wraps a closure in a new block at every call,
+so Orra passes one stored block through C function references. Calling the functions
+directly left every hold's listeners behind (checked on this Mac in review, and covered
+by a test since).
+
+The callback also stores the host time of the first buffer and of the first buffer with
+sound, a peak of at least -100 dBFS, the floor of the silence check, in two atomics. The
+start sound waits for that sound, at most one second after the start, and the timing log
+reports both times, see docs/manual-testing.md.
 
 System Default still records through AVAudioEngine, as before. It is also the way out
 if the unit misbehaves on some Mac: choose System Default and pick the device in System
@@ -104,6 +124,16 @@ the lid is closed, because the default input is then often the internal micropho
 When a chosen microphone records no sound at all, the menu points to Orra's own
 Microphone choice instead of the Sound settings, because the input picked in Sound
 settings does not change what a chosen microphone records.
+
+After a hold the engine is stopped and then prepared again. Apple's documentation of
+AVAudioEngine says that stop() stops the engine and the hardware and releases what
+prepare() allocated, that prepare() preallocates resources to start responsively, and
+that start() calls prepare() when it was not called after stop() and then starts the
+hardware. So the hardware starts only in start(). The engine is prepared after the
+recording is handed over, so the time from the release to the paste does not include it,
+and only while no hold records and the default input is still the engine's and reports
+a format. An engine that stopped itself because its device changed is not prepared, and
+the next hold builds a new one.
 
 The engine is rebuilt only when the default input changed since the engine was made.
 An earlier version compared the default input with the device read back from the
@@ -131,6 +161,22 @@ records from the choice or the default and explains the silence afterwards.
 
 ## Not verified yet
 
+- That no microphone indicator shows and no device stays busy between holds. Apple's
+  documentation of AudioUnitInitialize says initializing allocates memory and makes the
+  formats valid. AudioOutputUnitStart and AudioOutputUnitStop are documented as starting
+  and stopping the I/O unit, and kAudioDevicePropertyDeviceIsRunning (SDK) as telling
+  whether the device performs IO. Nothing Apple documents says whether an initialized but
+  stopped AUHAL, or a prepared but stopped engine, turns on the indicator or keeps the
+  device from other apps. Initializing an input unit already asks macOS for microphone
+  access, as InputUnitTests notes, which is a permission check, not the indicator.
+  docs/manual-testing.md has the checks.
+- Whether a kept unit or a prepared engine on a Bluetooth input keeps that headset in
+  its call profile between holds, which would lower the quality of what it plays.
+- How much faster a hold starts with the kept unit and the prepared engine. The timing
+  log line of each hold shows it, see docs/manual-testing.md.
+- That uninitializing and disposing a unit whose AudioOutputUnitStop failed ends its IO.
+  No stop has failed on this Mac, and a test cannot make one fail without starting IO,
+  so only the decision to make a new unit afterwards is tested.
 - Recording through the unit on inputs other than the Brio 500. On 2026-10-05 the
   maintainer chose the Brio 500 with the lid closed and dictated through the unit with no
   problems. InputUnitTests builds and initializes a unit for each wired input of this Mac

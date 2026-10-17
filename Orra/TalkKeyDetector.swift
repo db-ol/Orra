@@ -27,8 +27,14 @@ import CoreGraphics
 ///   only once the key has been held alone for `leftKeyDelay`. Until then nothing records
 ///   and no cue plays, and any other key, modifier or click turns the press into a shortcut
 ///   silently and lets every event through. The right hand modifiers and fn start at once,
-///   unless they are among `delayedKeys`, which wait the same way. The translation key is
-///   one, so Option shortcuts and the characters right Option types keep working.
+///   unless they are among `delayedKeys`, which wait the same way but record meanwhile, see
+///   below. The translation key is one, so Option shortcuts and the characters right Option
+///   types keep working.
+/// - A right hand key or fn that waits captures early (event `.armed`), see
+///   `capturesEarly(_:)`: the microphone starts silently at the key down, so the speech of
+///   the wait is kept when the press counts (event `.pressed`, or `.doublePressed` at a
+///   release that starts hands free). When the press turns out to be a shortcut, or ends
+///   before it counts, the event is `.cancelled`, which drops the capture silently.
 /// - Any other key going down, or another modifier changing, during a hold turns the hold
 ///   into a shortcut such as Fn+Delete (forward delete), Fn+arrows (Home, End, Page Up,
 ///   Page Down) or right Control+C. The hold is cancelled and the other key passes through
@@ -119,8 +125,8 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     nonisolated enum Phase: Equatable, Sendable {
         /// No talk key is down and no dictation runs hands free.
         case up
-        /// A left hand key is down on its own, and `leftKeyDelay` has not passed yet. Nothing
-        /// records.
+        /// A key that waits is down on its own, and `leftKeyDelay` has not passed yet. Nothing
+        /// records, unless the press captures early, see `capturesEarly(_:)`.
         case arming(Hotkey)
         /// The key is held on its own. A push to talk hold is in progress.
         case holding(Hotkey)
@@ -190,7 +196,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
 
     /// How long a left hand modifier has to be held on its own before recording starts.
     /// Shortcuts such as Command+C press the second key well within this, so they never
-    /// record or play the start sound. Speech in this first moment is not recorded.
+    /// record or play the start sound. Speech in this first moment is not recorded. A right
+    /// hand key or fn among `delayedKeys` waits as long before its press counts, and
+    /// records from its key down meanwhile, see `capturesEarly(_:)`.
     static let leftKeyDelay: Duration = .milliseconds(300)
     /// A press released sooner than this is a tap, the first half of a double press. It is
     /// as long as `RecordingLimits.minimumHold`, so a tap was always too short to transcribe.
@@ -203,8 +211,8 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     static let escapeKeyCode: Int64 = 0x35
 
     private(set) var keys: Set<Hotkey>
-    /// Keys that wait for `leftKeyDelay` before they record, like the left hand keys, even
-    /// on the right hand side. Only keys in `keys` count.
+    /// Keys whose press counts only after `leftKeyDelay`, like the left hand keys, even on
+    /// the right hand side. Only keys in `keys` count.
     private(set) var delayedKeys: Set<Hotkey>
     /// How each key starts a dictation, see TriggerMode. A key missing here holds.
     private(set) var modes: [Hotkey: TriggerMode]
@@ -219,8 +227,13 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     }
     /// Counts phase changes, so a timer started for an earlier phase does nothing.
     private(set) var generation = 0
-    /// When the key of the current press went down.
-    private var pressedAt: ContinuousClock.Instant?
+    /// When the key of the current press went down, as the event tap saw it.
+    private(set) var pressedAt: ContinuousClock.Instant?
+    /// Whether the current press waited before it counted, for the timing log.
+    private(set) var pressWaited = false
+    /// Whether the press that is arming started the microphone at its key down. Read only
+    /// while arming.
+    private var isCapturingEarly = false
     /// Whether the current press came within a tap's window, so its quick release is a
     /// double press.
     private var isSecondPress = false
@@ -235,9 +248,19 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         self.handsFreeEnabled = handsFreeEnabled
     }
 
-    /// Whether a press of `key` waits for `leftKeyDelay` before it records.
+    /// Whether a press of `key` waits for `leftKeyDelay` before it counts. Until then it
+    /// records nothing, unless it captures early, see `capturesEarly(_:)`.
     func waitsBeforeRecording(_ key: Hotkey) -> Bool {
         key.waitsBeforeRecording || delayedKeys.contains(key)
+    }
+
+    /// Whether a press of `key` that waits starts the microphone at its key down, silently,
+    /// so the recording starts there once the press counts. Only a single right hand key or
+    /// fn that waits because it is among `delayedKeys`. A left hand key or a combination of
+    /// modifiers is part of too many shortcuts, and starting the microphone for each would
+    /// flash its indicator. A press in double press mode records nothing anyway.
+    func capturesEarly(_ key: Hotkey) -> Bool {
+        delayedKeys.contains(key) && key.single != nil && !key.waitsBeforeRecording && mode(of: key) != .doubleTap
     }
 
     /// How `key` starts a dictation.
@@ -338,8 +361,17 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             // the tap's recording is discarded.
             phase = .up
             var decision = handleChange(of: other, isDown: true, type: type, flags: flags, at: now)
-            if recording, decision.event == nil {
-                decision.event = .cancelled
+            if recording {
+                switch decision.event {
+                case nil:
+                    decision.event = .cancelled
+                case .armed:
+                    // One event cannot drop the tap's recording and start another, so this
+                    // press waits without an early capture.
+                    decision.event = cancelEarlyCapture()
+                default:
+                    break
+                }
             }
             return decision
         }
@@ -359,17 +391,33 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         case .ignore:
             return .passThrough
         case .other:
+            let droppedEarlyCapture = phase == .arming(active) && isCapturingEarly
             let decision = otherInput(isEscape: type == .keyDown && keyCode == Self.escapeKeyCode)
             // A combination that one of its own modifiers began, such as Control and Option
             // after a press of right Control that waited, takes over once nothing records.
+            // An early capture of that modifier has not counted yet either.
             switch phase {
             case .passingThrough, .cancelled:
-                guard decision.event == nil,
+                guard decision.event == nil || droppedEarlyCapture,
                       let combination = orderedKeys.first(where: { $0.combination != nil && $0 != active && $0.signal(type: type, keyCode: keyCode, flags: flags, isDown: false) == .down }) else {
                     return decision
                 }
                 phase = .up
-                return handleChange(of: combination, isDown: true, type: type, flags: flags, at: now)
+                var takeover = handleChange(of: combination, isDown: true, type: type, flags: flags, at: now)
+                if droppedEarlyCapture {
+                    switch takeover.event {
+                    case .pressed:
+                        // The combination counts at once and keeps the capture, which began
+                        // at the key down of its first modifier.
+                        break
+                    case .armed:
+                        // The capture goes on as the combination's own.
+                        takeover.event = nil
+                    default:
+                        takeover.event = .cancelled
+                    }
+                }
+                return takeover
             default:
                 return decision
             }
@@ -382,10 +430,11 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         guard generation == self.generation else { return nil }
         switch phase {
         case .arming(let key) where mode(of: key) == .doubleTap:
-            // Held too long to be a tap. A hold does nothing in this mode.
+            // Held too long to be a tap. A hold does nothing in this mode. The mode can
+            // have changed during the press, so an early capture is dropped.
             isSecondPress = false
             phase = .cancelled(key)
-            return nil
+            return isCapturingEarly ? .cancelled : nil
         case .arming(let key):
             // Held long enough to be a hold, even when it was a second press.
             isSecondPress = false
@@ -400,9 +449,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     }
 
     /// A mouse button went down. Ends a hold of a key that modifies clicks, see
-    /// `TalkKey.modifiesClicks`, and returns `.cancelled` then. Turns a left hand key that
-    /// waits for its delay into a shortcut, ends a tap's window, and keeps a press during a
-    /// hands free dictation from finishing it.
+    /// `TalkKey.modifiesClicks`, and returns `.cancelled` then. Turns a key that waits for
+    /// its delay into a shortcut, which drops an early capture, ends a tap's window, and
+    /// keeps a press during a hands free dictation from finishing it.
     mutating func cancelForClick() -> PushToTalkStateMachine.Event? {
         switch phase {
         case .holding(let key) where key.modifiesClicks:
@@ -410,7 +459,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             return .cancelled
         case .arming(let key):
             phase = .passingThrough(key)
-            return nil
+            return isCapturingEarly ? .cancelled : nil
         case .tapped(_, let recording):
             phase = .up
             return recording ? .cancelled : nil
@@ -439,7 +488,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
 
     /// Forgets the current hold, for when the tap was off and may have missed events, or
     /// the key stopped being a talk key. Returns `.cancelled` when a recording was in
-    /// progress.
+    /// progress, also an early capture.
     mutating func reset() -> PushToTalkStateMachine.Event? {
         defer {
             phase = .up
@@ -448,7 +497,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         switch phase {
         case .holding, .handsFree, .handsFreeKeyDown, .tapped(_, recording: true):
             return .cancelled
-        case .up, .arming, .cancelled, .passingThrough, .tapped(_, recording: false):
+        case .arming:
+            return isCapturingEarly ? .cancelled : nil
+        case .up, .cancelled, .passingThrough, .tapped(_, recording: false):
             return nil
         }
     }
@@ -465,18 +516,19 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             }
             pressedAt = now
             if waitsBeforeRecording(key) || mode(of: key) == .doubleTap {
-                phase = .arming(key)
-                return Decision(event: nil, swallow: swallow)
+                return Decision(event: arm(key), swallow: swallow)
             }
             phase = .holding(key)
+            pressWaited = false
             return Decision(event: .pressed(isRepeat: false), swallow: swallow)
         case (.arming, false):
-            // Released before the delay: nothing recorded. A press to start in toggle mode,
-            // a tap when double presses count, and the end of a double press when it was
-            // the second press.
+            // Released before the delay. A press to start in toggle mode and the second press
+            // of a double press count, and keep an early capture. Anything else counted
+            // nothing and drops it, also a first tap that may still become a double press.
+            let dropped: PushToTalkStateMachine.Event? = isCapturingEarly ? .cancelled : nil
             guard !key.twinIsDown(atReleaseWith: flags) else {
                 phase = .up
-                return Decision(event: nil, swallow: swallow)
+                return Decision(event: dropped, swallow: swallow)
             }
             if mode(of: key) == .toggle || (isSecondPress && doublePressStartsHandsFree(key)) {
                 phase = .handsFree(key)
@@ -484,10 +536,10 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             }
             guard doublePressStartsHandsFree(key) else {
                 phase = .up
-                return Decision(event: nil, swallow: swallow)
+                return Decision(event: dropped, swallow: swallow)
             }
             phase = .tapped(key, recording: false)
-            return Decision(event: nil, swallow: swallow)
+            return Decision(event: dropped, swallow: swallow)
         case (.holding, false):
             if key.twinIsDown(atReleaseWith: flags) {
                 phase = .up
@@ -519,10 +571,11 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             isSecondPress = true
             if waitsBeforeRecording(key) || mode(of: key) == .doubleTap {
                 // A left hand key's tap never recorded, see `tapLimit`.
-                phase = .arming(key)
-                return Decision(event: recording ? .cancelled : nil, swallow: swallow)
+                let armed = arm(key)
+                return Decision(event: recording ? cancelEarlyCapture() : armed, swallow: swallow)
             }
             phase = .holding(key)
+            pressWaited = false
             return Decision(event: .pressed(isRepeat: false), swallow: swallow)
         case (.handsFree, true):
             pressedAt = now
@@ -552,6 +605,21 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         }
     }
 
+    /// Starts the wait of a press of `key`. Returns `.armed` when the press captures early.
+    private mutating func arm(_ key: Hotkey) -> PushToTalkStateMachine.Event? {
+        phase = .arming(key)
+        pressWaited = true
+        isCapturingEarly = capturesEarly(key)
+        return isCapturingEarly ? .armed : nil
+    }
+
+    /// Lets the press that is arming wait without an early capture, for when a recording
+    /// has to be cancelled first. Returns that `.cancelled`.
+    private mutating func cancelEarlyCapture() -> PushToTalkStateMachine.Event {
+        isCapturingEarly = false
+        return .cancelled
+    }
+
     /// Another key went down, or another modifier changed.
     private mutating func otherInput(isEscape: Bool) -> Decision {
         switch phase {
@@ -559,9 +627,10 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             phase = .cancelled(key)
             return Decision(event: .cancelled, swallow: false)
         case .arming(let key):
-            // A shortcut with a left hand key, such as Command+C. Nothing recorded yet.
+            // A shortcut with a key that waits, such as Command+C. Nothing counted yet, and
+            // an early capture is dropped.
             phase = .passingThrough(key)
-            return .passThrough
+            return Decision(event: isCapturingEarly ? .cancelled : nil, swallow: false)
         case .tapped(_, let recording):
             phase = .up
             return Decision(event: recording ? .cancelled : nil, swallow: false)

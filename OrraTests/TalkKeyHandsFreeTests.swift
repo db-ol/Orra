@@ -465,50 +465,67 @@ struct TalkKeyHandsFreeTests {
     // MARK: Keys that wait on the right hand side
 
     /// The translation key waits like a left hand key, so right Option still types its
-    /// characters and works in shortcuts, while the talk key next to it starts at once.
-    @Test mutating func aDelayedRightKeyRecordsOnlyAfterTheDelay() {
+    /// characters and works in shortcuts, while the talk key next to it starts at once. It
+    /// starts the microphone at its key down, silently, and its press counts after the wait.
+    @Test mutating func aDelayedRightKeyCapturesEarlyAndCountsAfterTheDelay() {
         var detector = TalkKeyDetector(keys: [.rightControl, .rightOption], delayedKeys: [.rightOption])
         #expect(detector.waitsBeforeRecording(.rightOption))
+        #expect(detector.capturesEarly(.rightOption))
         #expect(detector.waitsBeforeRecording(.rightControl) == false)
-        #expect(down(.rightOption, &detector) == .passThrough)
+        #expect(detector.capturesEarly(.rightControl) == false)
+        let pressed = clock.now
+        #expect(down(.rightOption, &detector) == Decision(event: .armed, swallow: false))
         #expect(detector.phase == .arming(.rightOption))
         #expect(detector.timer == .leftKeyDelay)
         #expect(TalkKeyDetector.leftKeyDelay == .milliseconds(300))
+        #expect(detector.pressedAt == pressed)
+        #expect(detector.pressWaited)
         clock.advance(TalkKeyDetector.leftKeyDelay)
         #expect(fire(&detector) == .pressed(isRepeat: false))
         #expect(detector.phase == .holding(.rightOption))
+        // The press is still timed from its key down.
+        #expect(detector.pressedAt == pressed)
         clock.advance(.seconds(2))
         #expect(up(.rightOption, &detector) == Decision(event: .released, swallow: false))
         // The talk key does not wait.
         clock.advance(.seconds(1))
         #expect(down(.rightControl, &detector) == Decision(event: .pressed(isRepeat: false), swallow: false))
+        #expect(detector.pressWaited == false)
+        #expect(detector.pressedAt == clock.now)
     }
 
-    @Test mutating func anOptionShortcutDuringTheWaitIsSilent() {
+    /// A shortcut during the wait, or a press that ends before it, drops the early capture
+    /// silently, and every event passes through.
+    @Test mutating func anOptionShortcutDuringTheWaitDropsTheEarlyCapture() {
         var detector = TalkKeyDetector(keys: [.rightControl, .rightOption], delayedKeys: [.rightOption])
         let optionFlags = TalkKey.rightOption.downFlag.union(.maskAlternate)
-        _ = down(.rightOption, &detector)
+        #expect(down(.rightOption, &detector).event == .armed)
         clock.advance(.milliseconds(120))
-        // Option E types an accent: nothing records and every event passes through.
-        #expect(keyDown(Self.e, &detector, flags: optionFlags) == .passThrough)
+        // Option E types an accent: the capture is dropped and every event passes through.
+        #expect(keyDown(Self.e, &detector, flags: optionFlags) == Decision(event: .cancelled, swallow: false))
         #expect(detector.phase == .passingThrough(.rightOption))
         #expect(detector.timer == nil)
         clock.advance(.milliseconds(400))
         #expect(up(.rightOption, &detector) == .passThrough)
         #expect(detector.phase == .up)
-        // Option with another modifier and a click during the wait are silent too.
-        _ = down(.rightOption, &detector)
-        #expect(detector.handle(type: .flagsChanged, keyCode: Self.shift, flags: optionFlags.union(.maskShift), at: clock.now) == .passThrough)
+        // Option with another modifier and a click during the wait drop it too.
+        #expect(down(.rightOption, &detector).event == .armed)
+        #expect(detector.handle(type: .flagsChanged, keyCode: Self.shift, flags: optionFlags.union(.maskShift), at: clock.now) == Decision(event: .cancelled, swallow: false))
         #expect(detector.phase == .passingThrough(.rightOption))
         _ = up(.rightOption, &detector, with: .maskShift)
-        _ = down(.rightOption, &detector)
-        #expect(detector.cancelForClick() == nil)
+        #expect(down(.rightOption, &detector).event == .armed)
+        #expect(detector.cancelForClick() == .cancelled)
         #expect(detector.phase == .passingThrough(.rightOption))
+        _ = up(.rightOption, &detector)
+        // So does a reset, such as a change of keys.
+        #expect(down(.rightOption, &detector).event == .armed)
+        #expect(detector.reset() == .cancelled)
+        #expect(detector.phase == .up)
     }
 
     @Test mutating func aShortcutAfterTheWaitCancelsTheRecording() {
         var detector = TalkKeyDetector(keys: [.rightOption], delayedKeys: [.rightOption])
-        _ = down(.rightOption, &detector)
+        #expect(down(.rightOption, &detector).event == .armed)
         clock.advance(TalkKeyDetector.leftKeyDelay)
         #expect(fire(&detector) == .pressed(isRepeat: false))
         #expect(keyDown(Self.e, &detector, flags: TalkKey.rightOption.downFlag.union(.maskAlternate)) == Decision(event: .cancelled, swallow: false))
@@ -523,8 +540,9 @@ struct TalkKeyHandsFreeTests {
                 transitions.append(transition)
             }
         }
-        // As for a left hand key, the tap never recorded, so the microphone starts once.
-        #expect(transitions == [.startedHandsFree])
+        // The tap's early capture is dropped at its release. The second press's is kept and
+        // becomes the hands free dictation.
+        #expect(transitions == [.startedArming, .droppedArming, .startedArming, .confirmedArming])
         #expect(detector.phase == .handsFree(.rightOption))
         // The talk key does not end it, the translation key does.
         clock.advance(.seconds(3))
@@ -538,7 +556,7 @@ struct TalkKeyHandsFreeTests {
 
     @Test mutating func withHandsFreeOffADelayedKeyTapLeavesNothing() {
         var detector = TalkKeyDetector(keys: [.rightOption], delayedKeys: [.rightOption], handsFreeEnabled: false)
-        #expect(tap(.rightOption, &detector) == [])
+        #expect(tap(.rightOption, &detector) == [.armed, .cancelled])
         #expect(detector.phase == .up)
         #expect(detector.timer == nil)
     }
@@ -558,12 +576,90 @@ struct TalkKeyHandsFreeTests {
         clock.advance(.milliseconds(80))
         feed(up(.rightControl, &detector).event)
         clock.advance(.milliseconds(100))
-        feed(down(.rightOption, &detector).event)
+        // One event cannot drop the tap's recording and start another, so the translation
+        // key waits without an early capture this time.
+        let optionDown = down(.rightOption, &detector)
+        #expect(optionDown.event == .cancelled)
+        feed(optionDown.event)
         #expect(detector.phase == .arming(.rightOption))
         clock.advance(TalkKeyDetector.leftKeyDelay)
         feed(fire(&detector))
         #expect(detector.phase == .holding(.rightOption))
         #expect(transitions == [.startedListening, .awaitingSecondPress, .cancelledListening, .startedListening])
+    }
+
+    /// Only a right hand key or fn that waits captures early. A left hand key or a
+    /// combination of modifiers is part of too many shortcuts, a key that does not wait has
+    /// no need, and a press in double press mode records nothing.
+    @Test mutating func onlyRightHandKeysAndFnThatWaitCaptureEarly() {
+        let controlOption = Hotkey.combination(KeyCombination(modifiers: [.control, .option]))
+        var detector = TalkKeyDetector(
+            keys: [.rightOption, .fn, .leftCommand, .rightControl, controlOption],
+            delayedKeys: [.rightOption, .fn, .leftCommand, controlOption]
+        )
+        #expect(detector.capturesEarly(.rightOption))
+        #expect(detector.capturesEarly(.fn))
+        #expect(detector.capturesEarly(.leftCommand) == false)
+        #expect(detector.capturesEarly(controlOption) == false)
+        #expect(detector.capturesEarly(.rightControl) == false)
+        #expect(down(.leftCommand, &detector) == .passThrough)
+        #expect(detector.phase == .arming(.leftCommand))
+        #expect(detector.pressWaited)
+        // A left hand shortcut stays silent, as before.
+        #expect(keyDown(Self.c, &detector, flags: Self.leftCommandFlags) == .passThrough)
+        _ = up(.leftCommand, &detector)
+        let doubleTap = TalkKeyDetector(keys: [.rightOption], delayedKeys: [.rightOption], modes: [.rightOption: .doubleTap])
+        #expect(doubleTap.capturesEarly(.rightOption) == false)
+    }
+
+    /// Press to start and stop, released before the wait is over, starts hands free with
+    /// the recording from the key down.
+    @Test mutating func aPressToStartReleasedDuringTheWaitKeepsTheEarlyCapture() {
+        var detector = TalkKeyDetector(keys: [.rightOption], delayedKeys: [.rightOption], modes: [.rightOption: .toggle])
+        var machine = PushToTalkStateMachine()
+        var transitions: [PushToTalkStateMachine.Transition] = []
+        func feed(_ event: Event?) {
+            if let event, let transition = machine.handle(event) {
+                transitions.append(transition)
+            }
+        }
+        feed(down(.rightOption, &detector).event)
+        clock.advance(.milliseconds(100))
+        feed(up(.rightOption, &detector).event)
+        #expect(detector.phase == .handsFree(.rightOption))
+        #expect(transitions == [.startedArming, .confirmedArming])
+        #expect(machine.state == .handsFree)
+    }
+
+    /// A change to double press mode during the wait, after which a hold records nothing,
+    /// drops the early capture when the tap's limit passes.
+    @Test mutating func aModeChangedDuringTheWaitDropsTheEarlyCapture() {
+        var detector = TalkKeyDetector(keys: [.rightOption], delayedKeys: [.rightOption])
+        #expect(down(.rightOption, &detector).event == .armed)
+        #expect(detector.setKeys([.rightOption], delayedKeys: [.rightOption], modes: [.rightOption: .doubleTap]) == nil)
+        #expect(detector.timer == .tapLimit)
+        clock.advance(TalkKeyDetector.tapLimit)
+        #expect(fire(&detector) == .cancelled)
+        #expect(detector.phase == .cancelled(.rightOption))
+    }
+
+    /// Right Control waits as a modifier of the watched combination Control and Option.
+    /// When the combination counts at once, as a talk key does, it keeps the capture that
+    /// right Control started.
+    @Test mutating func aCombinationThatCountsAtOnceKeepsTheEarlyCapture() {
+        let controlOption = Hotkey.combination(KeyCombination(modifiers: [.control, .option]))
+        var detector = TalkKeyDetector(keys: [.rightControl, controlOption], delayedKeys: [.rightControl])
+        var machine = PushToTalkStateMachine()
+        let rightControlDown = down(.rightControl, &detector)
+        #expect(rightControlDown.event == .armed)
+        _ = machine.handle(.armed)
+        clock.advance(.milliseconds(60))
+        let optionFlags = Self.rightControlFlags.union(.maskAlternate).union(TalkKey.leftOption.downFlag)
+        let optionDown = detector.handle(type: .flagsChanged, keyCode: TalkKey.leftOption.keyCode, flags: optionFlags, at: clock.now)
+        #expect(optionDown.event == .pressed(isRepeat: false))
+        #expect(detector.phase == .holding(controlOption))
+        #expect(machine.handle(.pressed(isRepeat: false)) == .confirmedArming)
+        #expect(machine.state == .listening)
     }
 
     @Test func changingTheDelayedKeysKeepsAPressUnderWay() {

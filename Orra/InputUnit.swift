@@ -3,8 +3,8 @@ import CoreAudio
 import Foundation
 import Synchronization
 
-/// Records one hold from a microphone chosen in Orra, through an input only audio unit
-/// (AUHAL) made for that hold and bound to that device.
+/// Records the holds from a microphone chosen in Orra, through an input only audio unit
+/// (AUHAL) bound to that device.
 ///
 /// AVAudioEngine has no documented way to record from a device other than the default
 /// input on macOS. Pointing its input node at another device is reported to deliver no
@@ -18,8 +18,27 @@ import Synchronization
 /// initialize, and start. docs/microphone-choice.md has the sources and what is not
 /// verified yet.
 ///
+/// The unit stays initialized between holds, so a hold only starts and stops its IO, and
+/// no IO runs between holds. AudioRecorder makes a new one when the device changes, after
+/// the device went away or changed, and after a failure.
+///
 /// Not Sendable. AudioRecorder makes, starts and stops it on its own actor.
 nonisolated final class InputUnit {
+    /// What a stop returns.
+    nonisolated struct StopResult {
+        var samples: [Float]
+        /// The device went away, changed its rate or lost its input channels.
+        var interrupted: Bool
+        /// Callbacks of this recording whose audio was lost.
+        var lostCallbacks: Int
+        /// How long the IO ran, from the start returning to the stop. Zero when it did not
+        /// start.
+        var ran: Duration
+        /// What AudioOutputUnitStop returned, noErr also when the unit was not running.
+        /// When it is not noErr, the unit was closed.
+        var status: OSStatus
+    }
+
     let device: AudioInput
     /// The rate of the samples, which is the device's own.
     let sampleRate: Double
@@ -27,14 +46,21 @@ nonisolated final class InputUnit {
     private let context: InputRenderContext
     private var watch: DeviceWatch?
     private var isRunning = false
-    private var isClosed = false
+    /// When the IO of the current recording started.
+    private var startedAt: ContinuousClock.Instant?
+    /// True once the unit was uninitialized and disposed. It records nothing more, and
+    /// AudioRecorder makes a new one.
+    private(set) var isClosed = false
 
-    /// Builds and initializes the unit without starting it, so nothing is recorded yet.
+    /// Builds and initializes the unit without starting it, so nothing is recorded yet, and
+    /// watches the device for as long as the unit lives, so a device that went away or
+    /// changed its rate is noticed also between holds.
     /// - Parameters:
-    ///   - maximumSeconds: Room for this much audio is set aside before the recording
+    ///   - maximumSeconds: Room for this much audio is set aside before the first recording
     ///     starts. Audio past it is dropped.
     ///   - meter: Gets the peak of every buffer, for the recording indicator.
-    init(device: AudioInput, maximumSeconds: Double, meter: LevelMeter? = nil) throws {
+    ///   - arrival: Gets the time of the first buffer and the first buffer with sound.
+    init(device: AudioInput, maximumSeconds: Double, meter: LevelMeter = LevelMeter(), arrival: AudioArrival = AudioArrival()) throws {
         var description = AudioComponentDescription(
             componentType: kAudioUnitType_Output,
             componentSubType: kAudioUnitSubType_HALOutput,
@@ -56,7 +82,8 @@ nonisolated final class InputUnit {
                 unit: unit,
                 capacity: Int(format.mSampleRate * maximumSeconds),
                 maximumFrames: InputUnit.maximumFrames(of: unit),
-                meter: meter
+                meter: meter,
+                arrival: arrival
             )
             var callback = AURenderCallbackStruct(
                 inputProc: { refCon, flags, timestamp, bus, frames, _ in
@@ -73,6 +100,7 @@ nonisolated final class InputUnit {
             self.sampleRate = format.mSampleRate
             self.unit = unit
             self.context = context
+            watch = DeviceWatch(device: device.id, sampleRate: format.mSampleRate, flag: context.interrupted)
         } catch {
             AudioComponentInstanceDispose(unit)
             throw error
@@ -100,26 +128,54 @@ nonisolated final class InputUnit {
         )
     }
 
-    /// Starts recording, and watches the device, so a device that goes away or changes its
-    /// rate during the hold marks the recording as cut.
-    func start() throws {
-        guard !isRunning, !isClosed else { return }
-        watch = DeviceWatch(device: device.id, sampleRate: sampleRate, flag: context.interrupted)
-        do {
-            try InputUnit.check(AudioOutputUnitStart(unit), "start the input unit")
-        } catch {
-            watch = nil
-            throw error
-        }
-        isRunning = true
+    /// True once the device went away, changed its rate or lost its input channels since
+    /// the unit was made. Such a unit is made again.
+    var isInterrupted: Bool {
+        context.interrupted.isSet
     }
 
-    /// Stops the unit for good, lets go of the device, and returns what was recorded. Also
-    /// right for a unit that never started.
-    func stop() -> (samples: [Float], interrupted: Bool, lostCallbacks: Int) {
-        close()
-        // The unit is disposed, so no callback writes anymore.
-        return (context.buffer.samples(), context.interrupted.isSet, context.lostCallbacks.load(ordering: .relaxed))
+    /// Starts a recording with an empty capture buffer. A device that goes away or changes
+    /// its rate during the hold marks the recording as cut.
+    func start() throws {
+        guard !isRunning, !isClosed else { return }
+        // No IO runs, so no callback writes.
+        context.buffer.clear()
+        context.lostCallbacks.store(0, ordering: .relaxed)
+        try InputUnit.check(AudioOutputUnitStart(unit), "start the input unit")
+        isRunning = true
+        startedAt = .now
+    }
+
+    /// Stops the device's IO and returns what was recorded, and clears the capture buffer,
+    /// so the audio does not stay in memory until the next hold. The unit stays
+    /// initialized for the next start. Also right for a unit that never started.
+    ///
+    /// When AudioOutputUnitStop fails, the IO may still run, so the unit is closed:
+    /// uninitialized and disposed, which ends its IO and removes the callback. The result
+    /// holds the status, and AudioRecorder makes a new unit for the next hold.
+    func stop() -> StopResult {
+        var status = noErr
+        let ran = startedAt.map { $0.duration(to: .now) } ?? .zero
+        startedAt = nil
+        if isRunning {
+            status = AudioOutputUnitStop(unit)
+            if status == noErr {
+                isRunning = false
+            } else {
+                close()
+            }
+        }
+        // Stopping, or closing after a failed stop, returns once the device's IO has
+        // stopped, so no callback writes anymore.
+        let samples = context.buffer.samples()
+        context.buffer.clear()
+        return StopResult(
+            samples: samples,
+            interrupted: context.interrupted.isSet,
+            lostCallbacks: context.lostCallbacks.load(ordering: .relaxed),
+            ran: ran,
+            status: status
+        )
     }
 
     /// Stopping returns once the device's IO has stopped, and disposing the unit removes
@@ -201,14 +257,16 @@ nonisolated final class InputRenderContext: @unchecked Sendable {
     /// Callbacks whose audio was lost: more frames than the scratch memory holds, or a
     /// failed render.
     let lostCallbacks = Atomic<Int>(0)
-    private let meter: LevelMeter?
+    private let meter: LevelMeter
+    private let arrival: AudioArrival
     private let scratch: UnsafeMutablePointer<Float>
     private let scratchFrames: Int
     private let list: UnsafeMutableAudioBufferListPointer
 
-    init(unit: AudioUnit, capacity: Int, maximumFrames: Int, meter: LevelMeter? = nil) {
+    init(unit: AudioUnit, capacity: Int, maximumFrames: Int, meter: LevelMeter, arrival: AudioArrival) {
         self.unit = unit
         self.meter = meter
+        self.arrival = arrival
         buffer = CaptureBuffer(capacity: capacity)
         scratchFrames = maximumFrames
         scratch = .allocate(capacity: maximumFrames)
@@ -240,15 +298,16 @@ nonisolated final class InputRenderContext: @unchecked Sendable {
             return status
         }
         buffer.append(scratch, count: count)
-        meter?.record(scratch, count: count)
+        let peak = meter.record(scratch, count: count)
+        arrival.record(peak: peak, count: count)
         return noErr
     }
 }
 
-/// Room for a whole recording. Allocated and touched before the recording starts, so the
-/// real time thread only copies. One thread appends, and the count it publishes with an
-/// atomic store covers only samples already written. Reading is for after the unit has
-/// stopped.
+/// Room for a whole recording. Allocated and touched before the first recording starts, so
+/// the real time thread only copies. One thread appends, and the count it publishes with an
+/// atomic store covers only samples already written. Reading and clearing are for while the
+/// unit is stopped.
 nonisolated final class CaptureBuffer: @unchecked Sendable {
     let capacity: Int
     private let storage: UnsafeMutablePointer<Float>
@@ -278,6 +337,13 @@ nonisolated final class CaptureBuffer: @unchecked Sendable {
     func samples() -> [Float] {
         Array(UnsafeBufferPointer(start: storage, count: count.load(ordering: .acquiring)))
     }
+
+    /// Zeroes what was recorded and starts over at the beginning.
+    func clear() {
+        let filled = count.load(ordering: .acquiring)
+        storage.update(repeating: 0, count: filled)
+        count.store(0, ordering: .releasing)
+    }
 }
 
 /// Set once the device a unit records from goes away, changes its rate, or loses its input
@@ -294,10 +360,10 @@ nonisolated final class InterruptionFlag: Sendable {
     }
 }
 
-/// Listens to one device while it records and sets the flag when the device goes away,
-/// runs at another rate, or has no input channels left. AudioRecording holds one rate, so
-/// such a recording is cut, as the engine cuts one when its device changes. The listeners
-/// are removed when this is released.
+/// Listens to one device for as long as its unit lives and sets the flag when the device
+/// goes away, runs at another rate, or has no input channels left. AudioRecording holds one
+/// rate, so such a recording is cut, as the engine cuts one when its device changes, and
+/// the unit is made again. The listeners are removed when this is released.
 ///
 /// Core Audio matches a removal to its registration by the block. Swift imports the
 /// listener type as a Swift closure and wraps it in a new block at every call, so calling
