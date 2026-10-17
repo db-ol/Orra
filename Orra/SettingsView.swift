@@ -308,6 +308,7 @@ private struct GeneralSettings: View {
             } header: {
                 Text("Dictation")
             }
+            SpokenLanguagesSection(pushToTalk: pushToTalk)
             Section {
                 Picker(selection: Binding(
                     get: { pushToTalk.microphone?.uid ?? "" },
@@ -367,6 +368,43 @@ private struct GeneralSettings: View {
             return MicrophoneChoice(uid: input.uid, name: input.name)
         }
         return pushToTalk.microphone?.uid == uid ? pushToTalk.microphone : nil
+    }
+}
+
+/// Languages I Speak: a switch for each language the user can add to Chinese and English,
+/// as a beta, see SpokenLanguages.
+private struct SpokenLanguagesSection: View {
+    let pushToTalk: PushToTalkController
+
+    var body: some View {
+        Section {
+            toggle(
+                .spanish,
+                title: "Spanish (Beta)",
+                detail: "Spanish is pasted as you said it, without extra passes that can turn it into Chinese or English."
+            )
+            .help(Text("Orra takes text as Spanish only when it reads most like Spanish, so Portuguese, Catalan or Italian is still checked as before."))
+            toggle(
+                .japanese,
+                title: "Japanese (Beta)",
+                detail: "Japanese is pasted as you said it, without extra passes that can turn it into Chinese or English."
+            )
+            .help(Text("With Japanese on, text with kana is taken as Japanese, and Orra no longer asks the speech model again in Chinese. Turn it on only if you dictate in Japanese."))
+        } header: {
+            Text("Languages I Speak")
+        } footer: {
+            Text("Orra always takes Chinese and English. Cleanup with the local model works in these two only, so a language added here is pasted without it.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func toggle(_ language: SpeechLanguage, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
+        Toggle(isOn: Binding(
+            get: { pushToTalk.spokenLanguages.contains(language) },
+            set: { pushToTalk.setSpeaks(language, $0) }
+        )) {
+            DescribedLabel(title: title, detail: detail, systemImage: "character.bubble")
+        }
     }
 }
 

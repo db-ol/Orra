@@ -801,6 +801,15 @@ got worse than the baseline, see docs/release-gate.md.
     cancellation still ends the dictation, and that the echo check runs on the new
     text. PushToTalkControllerTests checks that the dictation pastes the text of the
     pass in Chinese.
+  - With Spanish or Japanese added under Languages I Speak, since 2026-10-17,
+    LanguageGuardTests checks that text in an added language is not foreign while
+    Portuguese, Catalan, Italian, French, German, Korean, Russian and the Swedish
+    transcript stay foreign and Chinese and English read the same, that such text is
+    transcribed once, and that the added languages are asked for after Chinese and
+    English. PushToTalkControllerTests checks that an added language is pasted without
+    the cleanup model and translated without its cleanup, SpokenLanguagesTests the
+    setting and the names it saves, and EngineTurnsTests that captions use the languages
+    of the moment.
   - ContextNumbersTests checks which transcripts may hold a number in Chinese characters,
     the value of Chinese numbers (一九六六, 两千零五, 三十三万, 六点五, none for 三万五), that
     such a number written with the vocabulary takes the digits of the pass without it
@@ -1716,6 +1725,29 @@ Transcripts in a third language, added on 2026-10-13, not verified yet:
   name is written the vocabulary's way.
 - [ ] The log says which pass stood and how long it took, and no text:
   `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"'`.
+
+Languages I Speak, added on 2026-10-17, not verified yet:
+
+- [ ] Settings, General has a Languages I Speak section (我说的语言) after Dictation, with
+  Spanish (Beta) and Japanese (Beta) (西班牙语（测试版） and 日语（测试版）), both off on a
+  first launch and after an update. The footer says cleanup works in Chinese and English
+  only, and pointing at each switch shows its help.
+- [ ] With Spanish off, play a long Spanish sentence near the microphone while you hold
+  the talk key, such as `say -v Mónica "Mañana tenemos una reunión con el equipo de
+  ventas a las diez de la mañana."`. The log shows a line starting "Transcript was in
+  another language". Turn Spanish on and do it again: it is pasted in Spanish, sooner,
+  and the log shows no such line.
+- [ ] With Japanese on, do the same with `say -v Kyoko "これはパンとオリーブオイルの簡単な夕食です。"`:
+  it is pasted in Japanese, and the log shows no such line.
+- [ ] With both on, dictate Chinese, English and mixed sentences and the "Pa amb Oli"
+  sentence above: each is pasted as with both off.
+- [ ] With Spanish and Clean Up Text on, a Spanish sentence that starts with "No," is
+  pasted as said, without waiting for the cleanup model.
+- [ ] With Spanish and Translation on, the translation key translates a Spanish sentence
+  as before, and Paste Original Text pastes the Spanish as it was heard.
+- [ ] With Spanish on, Live Captions of a Spanish video show Spanish text about as soon
+  as they show English.
+- [ ] Both switches keep their state after Orra restarts.
 
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 

@@ -365,4 +365,28 @@ struct EngineTurnsTests {
         #expect(reports.map(\.original) == ["Let's look at the numbers.", "Let's look at the numbers.", "That sounds good.", "That sounds good."])
         #expect(reports.last?.translation == .done("听起来不错。"))
     }
+
+    /// The captions check the language of each sentence with the languages the user speaks
+    /// at that moment, as dictation does.
+    @Test func captionsCheckTheLanguageWithTheLanguagesTheUserSpeaks() async throws {
+        let speech = FakeSpeech()
+        speech.reply = LanguageGuardTests.spanish
+        var languages = SpokenLanguages.chineseAndEnglish
+        let engines = CaptionEngines.shared(
+            transcription: speech.transcription,
+            isSpeechReady: { true },
+            languages: { languages },
+            canTranslate: { false },
+            direction: { .automatic },
+            complete: { _, _ in "" },
+            turns: EngineTurns()
+        )
+        #expect(try await engines.transcribe([0.1]) == LanguageGuardTests.spanish)
+        #expect(speech.receivedLanguages == [nil, .chinese, .english])
+        languages = SpokenLanguages(adding: [.spanish])
+        let interim = try #require(engines.transcribeInterim)
+        #expect(try await interim([0.1]) == LanguageGuardTests.spanish)
+        #expect(try await engines.transcribe([0.1]) == LanguageGuardTests.spanish)
+        #expect(speech.receivedLanguages == [nil, .chinese, .english, nil, nil])
+    }
 }

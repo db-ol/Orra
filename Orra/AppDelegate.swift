@@ -39,7 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             removesFillerWords: FillerPreference.load(),
             saveRemovesFillerWords: { FillerPreference.save($0) },
             writesNumbersAsDigits: NumberPreference.load(),
-            saveWritesNumbersAsDigits: { NumberPreference.save($0) }
+            saveWritesNumbersAsDigits: { NumberPreference.save($0) },
+            spokenLanguages: SpokenLanguagesPreference.load(),
+            saveSpokenLanguages: { SpokenLanguagesPreference.save($0) }
         )
     }()
     /// The voice models this build links, see VoiceEngines.
@@ -66,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engines: .live(
             transcription: transcription,
             isSpeechReady: { [pushToTalk] in pushToTalk.modelState == .ready },
+            languages: { [pushToTalk] in pushToTalk.spokenLanguages },
             cleanup: cleanup,
             turns: turns
         ),

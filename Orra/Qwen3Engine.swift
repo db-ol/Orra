@@ -74,10 +74,13 @@ actor Qwen3Engine {
     }
 }
 
-/// A language Qwen3-ASR can be told to write, by the name its prompt uses.
+/// A language Qwen3-ASR can be told to write, by the name its prompt uses. Spanish and
+/// Japanese only for a user who speaks them, see SpokenLanguages.
 nonisolated enum SpeechLanguage: String, Sendable {
     case chinese = "Chinese"
     case english = "English"
+    case spanish = "Spanish"
+    case japanese = "Japanese"
 
     /// The language a translation into `target` is written in.
     init(_ target: TranslationTarget) {

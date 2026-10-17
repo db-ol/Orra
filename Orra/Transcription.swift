@@ -17,7 +17,7 @@ struct Transcription {
 
 extension Transcription {
     /// Turns samples into text with the vocabulary as context, guarded against a transcript
-    /// in a language other than Chinese or English, see `checkingLanguage`, and against an
+    /// in a language the user does not speak, see `checkingLanguage`, and against an
     /// echo of the vocabulary, see VocabularyEcho. When the text is only vocabulary terms,
     /// the same samples are transcribed again without the vocabulary. If that pass hears nothing,
     /// nobody spoke and the text is empty. Otherwise the user said the terms, and the text
@@ -29,9 +29,9 @@ extension Transcription {
     /// in digits from a pass without it, see `takingNumbers`, unless `takingDigits` is off
     /// because the user wants numbers in words.
     /// Logs a timing and whether speech was heard, never the text.
-    func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double, takingDigits: Bool = true) async throws -> String {
+    func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double, takingDigits: Bool = true, languages: SpokenLanguages = .chineseAndEnglish) async throws -> String {
         let context = Vocabulary.context(terms)
-        let text = try await checkingLanguage(try await transcribe(samples, context, nil), of: samples, context: context)
+        let text = try await checkingLanguage(try await transcribe(samples, context, nil), of: samples, context: context, languages: languages)
         guard !terms.isEmpty else { return text }
         guard await Self.isOnlyTerms(text, of: terms) else {
             guard takingDigits else { return text }
@@ -74,21 +74,22 @@ extension Transcription {
         return merged
     }
 
-    /// Returns the text when LanguageGuard finds it in Chinese or English. Otherwise the
-    /// model chose a third language, and the same samples are transcribed again with the
-    /// same context, first with Chinese as the language, then with English. The first of
-    /// these passes that gives text in Chinese or English stands. Chinese goes first. On
-    /// the speech corpus and on FLEURS the model chose a third language only for Chinese
-    /// speech, and with English as the language it translated that clip into English. A
-    /// known limit: if English speech ever came out in a third language, the pass in
-    /// Chinese would keep it in English for most clips but translate some, on the corpus
-    /// 10 of 147 English clips. When neither pass helps or one fails, the text stands as
-    /// it was.
+    /// Returns the text when LanguageGuard finds it in a language the user speaks, Chinese,
+    /// English or one they added. Otherwise the model chose another language, and the same
+    /// samples are transcribed again with the same context, first with Chinese as the
+    /// language, then with English, then with each added language, see
+    /// SpokenLanguages.passes. The first of these passes that gives text in a language the
+    /// user speaks stands. Chinese goes first. On the speech corpus and on FLEURS the model
+    /// chose a third language only for Chinese speech, and with English as the language it
+    /// translated that clip into English. A known limit: if English speech ever came out in
+    /// a third language, the pass in Chinese would keep it in English for most clips but
+    /// translate some, on the corpus 10 of 147 English clips. When no pass helps or one
+    /// fails, the text stands as it was.
     /// Logs a timing and the language that stood, never the text.
-    func checkingLanguage(_ text: String, of samples: [Float], context: String?) async throws -> String {
-        guard await Self.isForeign(text) else { return text }
+    func checkingLanguage(_ text: String, of samples: [Float], context: String?, languages: SpokenLanguages = .chineseAndEnglish) async throws -> String {
+        guard await Self.isForeign(text, speaking: languages) else { return text }
         let started = ContinuousClock.now
-        for language in [SpeechLanguage.chinese, .english] {
+        for language in languages.passes {
             let hinted: String
             do {
                 hinted = try await transcribe(samples, context, language)
@@ -98,19 +99,19 @@ extension Transcription {
                 Logger.pushToTalk.error("Transcript was in another language, the pass in \(language.rawValue, privacy: .public) failed after \(started.duration(to: .now), privacy: .public)")
                 return text
             }
-            if !hinted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, await !Self.isForeign(hinted) {
+            if !hinted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, await !Self.isForeign(hinted, speaking: languages) {
                 Logger.pushToTalk.notice("Transcript was in another language, the pass in \(language.rawValue, privacy: .public) stands, took \(started.duration(to: .now), privacy: .public)")
                 return hinted
             }
         }
-        Logger.pushToTalk.notice("Transcript was in another language, no pass in Chinese or English helped, took \(started.duration(to: .now), privacy: .public)")
+        Logger.pushToTalk.notice("Transcript was in another language, no pass in a language the user speaks helped, took \(started.duration(to: .now), privacy: .public)")
         return text
     }
 
     /// Off the main actor, since NLLanguageRecognizer reads the whole text.
     @concurrent
-    nonisolated private static func isForeign(_ text: String) async -> Bool {
-        LanguageGuard.isForeign(text)
+    nonisolated private static func isForeign(_ text: String, speaking languages: SpokenLanguages) async -> Bool {
+        LanguageGuard.isForeign(text, speaking: languages)
     }
 
     /// Off the main actor, since a long transcript is compared character by character.

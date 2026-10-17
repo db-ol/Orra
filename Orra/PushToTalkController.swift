@@ -124,6 +124,9 @@ final class PushToTalkController {
     /// the paste, see NumberRules. Saved through `saveWritesNumbersAsDigits` whenever it
     /// changes.
     private(set) var writesNumbersAsDigits: Bool
+    /// The languages the user dictates in, Chinese and English and any they added, see
+    /// SpokenLanguages. Saved through `saveSpokenLanguages` whenever they change.
+    private(set) var spokenLanguages: SpokenLanguages
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
     /// True while Settings records a voice sample with the microphone. A press of the talk
@@ -251,6 +254,7 @@ final class PushToTalkController {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
     @ObservationIgnored private let saveWritesNumbersAsDigits: (Bool) -> Void
+    @ObservationIgnored private let saveSpokenLanguages: (SpokenLanguages) -> Void
     @ObservationIgnored private var accessCheckTask: Task<Void, Never>?
     @ObservationIgnored private var accessObserver: (any NSObjectProtocol)?
     @ObservationIgnored private let logger = Logger.pushToTalk
@@ -304,6 +308,8 @@ final class PushToTalkController {
     ///   - saveRemovesFillerWords: Saves the choice after the user changes it.
     ///   - writesNumbersAsDigits: Whether spoken numbers become digits, as saved.
     ///   - saveWritesNumbersAsDigits: Saves the choice after the user changes it.
+    ///   - spokenLanguages: The languages the user dictates in, as saved.
+    ///   - saveSpokenLanguages: Saves them after the user changes them.
     ///   - now: The time, for the dates of the vocabulary. Tests pass fakes.
     init(
         capture: AudioCapture,
@@ -342,6 +348,8 @@ final class PushToTalkController {
         saveRemovesFillerWords: @escaping (Bool) -> Void = { _ in },
         writesNumbersAsDigits: Bool = true,
         saveWritesNumbersAsDigits: @escaping (Bool) -> Void = { _ in },
+        spokenLanguages: SpokenLanguages = .chineseAndEnglish,
+        saveSpokenLanguages: @escaping (SpokenLanguages) -> Void = { _ in },
         now: @escaping () -> Date = { Date() }
     ) {
         self.capture = capture
@@ -383,6 +391,8 @@ final class PushToTalkController {
         self.saveRemovesFillerWords = saveRemovesFillerWords
         self.writesNumbersAsDigits = writesNumbersAsDigits
         self.saveWritesNumbersAsDigits = saveWritesNumbersAsDigits
+        self.spokenLanguages = spokenLanguages
+        self.saveSpokenLanguages = saveSpokenLanguages
         self.now = now
     }
 
@@ -484,6 +494,15 @@ final class PushToTalkController {
         guard on != writesNumbersAsDigits else { return }
         writesNumbersAsDigits = on
         saveWritesNumbersAsDigits(on)
+    }
+
+    /// Adds a language the user dictates in, or takes it out, for the next dictations, and
+    /// saves the choice. Chinese and English always stay.
+    func setSpeaks(_ language: SpeechLanguage, _ on: Bool) {
+        let languages = spokenLanguages.setting(language, on: on)
+        guard languages != spokenLanguages else { return }
+        spokenLanguages = languages
+        saveSpokenLanguages(languages)
     }
 
     /// Chooses the microphone for the next dictations, or the system default for nil, and
@@ -1198,7 +1217,8 @@ final class PushToTalkController {
                 samples,
                 vocabulary: Vocabulary.forModel(vocabulary),
                 audioSeconds: recording.duration,
-                takingDigits: writesNumbersAsDigits
+                takingDigits: writesNumbersAsDigits,
+                languages: spokenLanguages
             )
             timings.lap(.recognition)
             var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
@@ -1232,7 +1252,11 @@ final class PushToTalkController {
             // with the model leaves exactly that text. A model that the press of the key
             // started to load is waited for, a bounded time.
             let ruled = text
-            let step = await translate(text, translating)
+            // Text in a language the user added gets no cleanup by the model, whose prompt
+            // and checks know Chinese and English only. Translation still runs, and its
+            // checks read the translation.
+            let cleansUp = await Self.addedLanguage(of: heard, speaking: spokenLanguages) == nil
+            let step = await translate(text, translating, cleansUp: cleansUp)
             let translated = step?.result
             let language = step?.target
             timings.lap(.translation)
@@ -1240,7 +1264,7 @@ final class PushToTalkController {
                 // In place of the cleanup step, since the translation prompt cleans up too.
                 text = translated.text
             } else if CleanupStep.isWorthCleaning(text) {
-                if CleanupStep.hasWorkForModel(text, heard: heard) {
+                if cleansUp, CleanupStep.hasWorkForModel(text, heard: heard) {
                     let loaded = await cleanup.waitUntilLoaded()
                     timings.lap(.cleanupWait)
                     if loaded {
@@ -1248,9 +1272,9 @@ final class PushToTalkController {
                         timings.lap(.cleanup)
                     }
                 } else {
-                    // The gate found no filler or correction cue, so the model is skipped.
-                    // The check still ends the cleanup step, so its time is not counted
-                    // as part of the paste.
+                    // The gate found no filler or correction cue, or the text is in a
+                    // language the user added, so the model is skipped. The check still
+                    // ends the cleanup step, so its time is not counted as part of the paste.
                     timings.lap(.cleanup)
                 }
             }
@@ -1326,8 +1350,9 @@ final class PushToTalkController {
     /// started, the text too long, or nothing in it to translate, such as digits only. The
     /// step's result holds the text without translation whenever the translation cannot be
     /// used. Every case that pastes the text untranslated, other than one with nothing to
-    /// translate or already in the target language, leaves a notice that says so.
-    private func translate(_ text: String, _ direction: TranslationDirection?) async -> (result: TranslationStep.Result, target: TranslationTarget)? {
+    /// translate or already in the target language, leaves a notice that says so. Without
+    /// `cleansUp`, the model's cleanup of the text never stands in for the translation.
+    private func translate(_ text: String, _ direction: TranslationDirection?, cleansUp: Bool) async -> (result: TranslationStep.Result, target: TranslationTarget)? {
         guard let direction else { return nil }
         guard await translation.waitUntilLoaded() else {
             notice = String(localized: "The local model is not ready, so the text was pasted without translation.")
@@ -1339,7 +1364,7 @@ final class PushToTalkController {
             return nil
         }
         // The model is loaded by now, so this does not wait.
-        let cleansUp = await cleanup.waitUntilLoaded()
+        let cleansUp = await cleanup.waitUntilLoaded() && cleansUp
         let result = await TranslationStep.run(text, into: target, cleansUp: cleansUp, complete: translation.complete)
         switch result.outcome {
         case .translated, .unchanged:
@@ -1348,6 +1373,12 @@ final class PushToTalkController {
             notice = String(localized: "This dictation was pasted without translation.")
         }
         return (result, target)
+    }
+
+    /// Off the main actor, since NLLanguageRecognizer reads the whole text.
+    @concurrent
+    nonisolated private static func addedLanguage(of text: String, speaking languages: SpokenLanguages) async -> SpeechLanguage? {
+        LanguageGuard.addedLanguage(of: text, speaking: languages)
     }
 
     /// Off the main actor, since the first use reads the word lists, see OrdinaryWords.
