@@ -13,6 +13,9 @@ final class FakeSynthesizer: SpeechSynthesizer {
     let unloads = Mutex(0)
     let forgets = Mutex(0)
     let failsLoad = Mutex(false)
+    /// Holds each load until the test releases it, like a load that a stop cannot cut
+    /// short.
+    let holdsLoad = Mutex<HeldWork?>(nil)
     let failsSpeaking = Mutex(false)
     /// Whether it streams, as Qwen3-TTS without a voice sample does.
     let streamsPieces = Mutex(true)
@@ -26,6 +29,9 @@ final class FakeSynthesizer: SpeechSynthesizer {
 
     func load(model: URL, codec: URL) async throws {
         loads.withLock { $0 += 1 }
+        if let held = holdsLoad.withLock({ $0 }) {
+            await held.run()
+        }
         if failsLoad.withLock({ $0 }) { throw TestError() }
     }
 
@@ -229,6 +235,24 @@ struct TranslationSpeechTests {
         speech.speak("Thanks a lot, everyone.", in: .english)
         await speech.waitUntilDone()
         #expect(spoken == ["en Thanks a lot, everyone."])
+    }
+
+    /// A stop while the model loads for a translation: the load ends and the model stays
+    /// loaded, but nothing starts to play and the menu offers no Stop Speaking.
+    @Test func aStopDuringTheLoadPlaysNothing() async throws {
+        let load = HeldWork()
+        synthesizer.holdsLoad.withLock { $0 = load }
+        let speech = makeSpeech()
+        speech.speak("We have a meeting next Tuesday.", in: .english)
+        try await eventually { load.began == 1 }
+        speech.stop()
+        load.release()
+        await speech.waitUntilDone()
+        #expect(spoken.isEmpty)
+        #expect(playback.calls == ["stop"])
+        #expect(speech.state == .idle)
+        #expect(speech.isLoaded)
+        #expect(speech.problem == nil)
     }
 
     static let threeSeconds = VoiceSample(samples: [Float](repeating: 0.1, count: 48_000), sampleRate: 16_000)

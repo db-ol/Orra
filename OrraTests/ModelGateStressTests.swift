@@ -42,6 +42,8 @@ struct ModelGateStressTests {
     @Test func theModelsNeverHangTogether() async throws {
         let folders = try #require(GateStress.folders)
         let watchdog = GateStress.Watchdog()
+        // Also when a round throws, so the watchdog does not report a hang 60 s later.
+        defer { watchdog.stop() }
         let clips = GateStress.clips()
         let sample = GateStress.voiceSample()
         let rewrite = RewriteEngine()
@@ -49,7 +51,6 @@ struct ModelGateStressTests {
         for round in 1...GateStress.rounds {
             try await GateStress.round(round, folders: folders, rewrite: rewrite, clips: clips, sample: sample, watchdog: watchdog, tally: tally)
         }
-        watchdog.stop()
         let report = tally.report(rounds: GateStress.rounds, bypass: GateStress.bypass)
         print(report)
         if let path = GateStress.environment["ORRA_GATE_STRESS_REPORT"] {
