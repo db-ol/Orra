@@ -1221,6 +1221,16 @@
         }
       }
     },
+    "Getting Started…" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "入门指南…"
+          }
+        }
+      }
+    },
     "Globe 🌐" : {
       "comment" : "The fn key of recent Macs, which shows a globe",
       "localizations" : {

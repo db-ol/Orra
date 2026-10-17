@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Orra
 
-/// The steps of the welcome window, and when launch shows it.
+/// The steps of the welcome window, when launch shows it and what the menu calls it.
 struct SetupChecklistTests {
     private let folder = URL(fileURLWithPath: "/nonexistent/Models/qwen3")
 
@@ -52,7 +52,8 @@ struct SetupChecklistTests {
         #expect(!checklist(modelState: .unavailable(.missing)).isComplete)
     }
 
-    /// Decides whether launch opens the welcome window and the menu offers Setup Guide.
+    /// Decides whether launch opens the welcome window and what a click on the Dock icon
+    /// opens.
     @Test func aModelThatIsStillLoadingNeedsNothingFromTheUser() {
         #expect(!checklist().needsUser)
         #expect(!checklist(modelState: .notLoaded).needsUser)
@@ -64,5 +65,24 @@ struct SetupChecklistTests {
         #expect(checklist(installer: .failed(.offline)).needsUser)
         #expect(checklist(microphone: .denied).needsUser)
         #expect(checklist(hotkeyActive: false).needsUser)
+    }
+
+    /// The menu always has the item that opens the welcome window. Getting Started waits
+    /// for the loaded model, because only then does the window show Orra is ready and Try
+    /// next. Meeting Interpretation's sheet names Setup Guide when microphone access is
+    /// missing, so that title must hold then.
+    @Test func theMenuItemReadsGettingStartedOnceSetupIsComplete() {
+        #expect(checklist().menuTitle() == "Getting Started…")
+        #expect(checklist(modelState: .notLoaded).menuTitle() == "Setup Guide…")
+        #expect(checklist(modelState: .loading).menuTitle() == "Setup Guide…")
+        #expect(checklist(installer: .downloading(bytes: 10, source: nil)).menuTitle() == "Setup Guide…")
+        #expect(checklist(modelState: .unavailable(.failedToLoad)).menuTitle() == "Setup Guide…")
+        #expect(checklist(hotkeyActive: false).menuTitle() == "Setup Guide…")
+        for access in [MicrophoneAccess.notDetermined, .denied, .notConfigured] {
+            #expect(checklist(microphone: access).menuTitle() == "Setup Guide…")
+        }
+        let chinese = Locale(identifier: "zh-Hans")
+        #expect(checklist().menuTitle(locale: chinese) == "入门指南…")
+        #expect(checklist(hotkeyActive: false).menuTitle(locale: chinese) == "设置向导…")
     }
 }

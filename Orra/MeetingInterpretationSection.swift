@@ -92,6 +92,8 @@ struct MeetingInterpretationSection: View {
     /// model and the microphone busy.
     private var recordingBlocker: LocalizedStringKey? {
         if pushToTalk.microphoneAccess != .authorized {
+            // Without microphone access setup is not complete, so the menu item reads Setup
+            // Guide, see SetupChecklist.menuTitle(locale:).
             "Orra needs microphone access to record. Setup Guide in the Orra menu can turn it on."
         } else if captions?.isOn == true {
             "Turn off Live captions to record."
