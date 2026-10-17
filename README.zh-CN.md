@@ -6,7 +6,6 @@
   <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Orra.dmg-0A84FF?logo=apple&logoColor=white" alt="下载 Orra.dmg"></a>
   <a href="https://db-ol.github.io/Orra/zh/"><img src="https://img.shields.io/badge/%E5%AE%98%E7%BD%91-db--ol.github.io%2FOrra-555555?logo=safari&logoColor=white" alt="Orra 官网"></a>
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=%E7%89%88%E6%9C%AC&color=0A84FF" alt="最新版本"></a>
-  <a href="https://github.com/db-ol/Orra"><img src="https://img.shields.io/badge/GitHub-Star-0A84FF?logo=github&logoColor=white" alt="在 GitHub 上给 Orra 点 Star"></a>
 </p>
 
 <p align="center"><sub><a href="README.md">English</a> · 简体中文</sub></p>

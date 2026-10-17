@@ -6,7 +6,6 @@
   <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/download-Orra.dmg-0A84FF?logo=apple&logoColor=white" alt="Download Orra.dmg"></a>
   <a href="https://db-ol.github.io/Orra/"><img src="https://img.shields.io/badge/website-db--ol.github.io%2FOrra-555555?logo=safari&logoColor=white" alt="Orra website"></a>
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=release&color=0A84FF" alt="Latest release"></a>
-  <a href="https://github.com/db-ol/Orra"><img src="https://img.shields.io/badge/GitHub-Star-0A84FF?logo=github&logoColor=white" alt="Star Orra on GitHub"></a>
 </p>
 
 <p align="center"><sub>English · <a href="README.zh-CN.md">简体中文</a></sub></p>
