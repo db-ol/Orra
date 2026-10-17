@@ -105,14 +105,22 @@ nonisolated extension VoiceSample {
 }
 
 /// A voice model that turns text into speech. The app's is Qwen3-TTS from speech-swift,
-/// see Qwen3VoiceEngine, built only when that product is linked. Tests pass a fake.
+/// see Qwen3VoiceEngine, built only when that product is linked. The app puts it behind
+/// the model gate, see ExclusiveSynthesizer. Tests pass a fake.
 protocol SpeechSynthesizer: Sendable {
     /// Loads the model from the folders the voice model installers filled.
     func load(model: URL, codec: URL) async throws
     func unload() async
     /// Speaks `text` in `language`, in the voice of `voice` when there is one, as audio in
-    /// order. The stream ends after the last piece, and stops early when the task that
-    /// reads it is cancelled.
+    /// order. The stream ends after the last piece. When the task that reads it is
+    /// cancelled, the reader gets no more parts.
+    ///
+    /// The stream ends only once the model is done with the piece. A model that goes on
+    /// after the reader stopped, as Qwen3VoiceEngine does with a streamed piece, keeps the
+    /// stream open until it is done, and ends it then. ExclusiveSynthesizer counts on this:
+    /// it reads the stream to its end and holds the model gate until then, so no MLX work
+    /// of the voice model runs outside the gate, see ModelGate. Every voice model must
+    /// keep to this.
     func speak(_ text: String, in language: TranslationTarget, voice: VoiceSample?) -> AsyncThrowingStream<SpokenAudio, any Error>
     /// Whether `speak` streams a piece as it is made, in several parts, rather than whole
     /// at its end. TranslationSpeech checks a whole piece before it plays, and only caps

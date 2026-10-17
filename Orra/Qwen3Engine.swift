@@ -89,11 +89,12 @@ nonisolated enum SpeechLanguage: String, Sendable {
 }
 
 extension Transcription {
-    /// The app's speech model. The caption measurement passes an engine of its own.
-    static func qwen3(_ engine: Qwen3Engine = Qwen3Engine()) -> Transcription {
-        return Transcription(
+    /// The app's speech model, which loads and transcribes only while it shares `gate`,
+    /// see ModelGate. The caption measurement passes an engine of its own.
+    static func qwen3(_ engine: Qwen3Engine = Qwen3Engine(), gate: ModelGate = .live) -> Transcription {
+        Transcription(
             load: { try await engine.load() },
             transcribe: { samples, context, language in try await engine.transcribe(samples, context: context, language: language) }
-        )
+        ).gated(gate)
     }
 }

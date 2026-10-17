@@ -226,6 +226,11 @@ final class PushToTalkController {
     /// Orra is a menu bar app without windows, which App Nap may throttle, and someone is
     /// waiting for this work.
     @ObservationIgnored private var userActivity: (any NSObjectProtocol)?
+    /// Held from the press of a key until the dictation is pasted or the hold ends, so a
+    /// voice request that waits cannot come in between the dictation's model calls, see
+    /// ModelGate.reserve. Nil with a speech model that runs at no gate, as a test's fake.
+    /// Nothing in between waits for a voice request: a translation to speak is only queued.
+    @ObservationIgnored private var gateReservation: ModelGate.Reservation?
     @ObservationIgnored private var machine = PushToTalkStateMachine()
     @ObservationIgnored private var tap: HotkeyTap?
     @ObservationIgnored private let saveTalkKey: (Hotkey) -> Void
@@ -413,10 +418,16 @@ final class PushToTalkController {
         }
         modelState = .loading
         let started = ContinuousClock.now
+        // Reserves the model gate, so the speech model loads ahead of a voice model that
+        // waits, also at launch, see ModelGate.reserve.
+        let reservation = transcription.gate?.reserve()
+        defer { reservation?.end() }
         do {
             try await transcription.load()
             modelState = .ready
-            logger.info("Speech model loaded in \(started.duration(to: .now), privacy: .public)")
+            // Notice rather than info, so it stays in the log store, where the launch check
+            // in docs/manual-testing.md reads it.
+            logger.notice("Speech model loaded in \(started.duration(to: .now), privacy: .public)")
         } catch TranscriptionError.modelMissing {
             modelState = .unavailable(.missing)
         } catch {
@@ -815,6 +826,7 @@ final class PushToTalkController {
             pressedAt = counted
             holdTimings?.counted = counted
             beginUserActivity()
+            reserveModelGate()
             cleanup.dictationStarted()
             // The delay counts from the key down, which the wait has used up already.
             let held = holdTimings.map { $0.keyDown.duration(to: counted) } ?? .zero
@@ -841,6 +853,7 @@ final class PushToTalkController {
                 handle(.cancelled)
                 return
             }
+            reserveModelGate()
             // Loads the model when it was unloaded while idle, so it loads while the user
             // speaks, for cleanup and for translation.
             cleanup.dictationStarted()
@@ -890,10 +903,12 @@ final class PushToTalkController {
             cancelCapture(logsTimings: true)
             endCue(holdMessage ?? problem)
             cleanup.dictationEnded()
+            endModelGateReservation()
         case .finished:
             endUserActivity()
             endCue(holdMessage ?? problem ?? notice)
             cleanup.dictationEnded()
+            endModelGateReservation()
         }
     }
 
@@ -985,6 +1000,16 @@ final class PushToTalkController {
             ProcessInfo.processInfo.endActivity(userActivity)
         }
         userActivity = nil
+    }
+
+    private func reserveModelGate() {
+        guard gateReservation == nil else { return }
+        gateReservation = transcription.gate?.reserve()
+    }
+
+    private func endModelGateReservation() {
+        gateReservation?.end()
+        gateReservation = nil
     }
 
     /// Starts the microphone for a hold, or ends the hold when that is not possible.

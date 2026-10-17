@@ -65,7 +65,8 @@ struct VoiceEngines {
     }
 
     /// The products this build links: Qwen3TTS, CosyVoiceTTS, both or neither. Without
-    /// one, Settings says that this build cannot speak.
+    /// one, Settings says that this build cannot speak. Each runs alone at the model gate,
+    /// see ExclusiveSynthesizer.
     static var live: VoiceEngines {
         var available: [VoiceEngineKind] = []
         #if canImport(Qwen3TTS)
@@ -78,13 +79,13 @@ struct VoiceEngines {
             switch kind {
             case .qwen3:
                 #if canImport(Qwen3TTS)
-                return Qwen3VoiceEngine()
+                return ExclusiveSynthesizer(Qwen3VoiceEngine())
                 #else
                 return nil
                 #endif
             case .cosyVoice:
                 #if canImport(CosyVoiceTTS)
-                return CosyVoiceEngine()
+                return ExclusiveSynthesizer(CosyVoiceEngine())
                 #else
                 return nil
                 #endif
