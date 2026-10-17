@@ -13,6 +13,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var pushToTalk: PushToTalkController = { [self] in
         let talkKey = TalkKeyPreference.loadHotkey()
         let translationKey = TranslationKeyPreference.loadHotkey(talkKey: talkKey)
+        // Reading either permission never shows a prompt.
+        let setUpBefore = TriggerModePreference.wasSetUpBefore(
+            talkKeySaved: TalkKeyPreference.isSaved(),
+            microphone: MicrophoneAccess.current(),
+            accessibilityAllowed: AXIsProcessTrusted()
+        )
         return PushToTalkController(
             capture: .live(),
             transcription: transcription,
@@ -27,8 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             saveTranslationKey: { TranslationKeyPreference.saveHotkey($0) },
             secondTalkKey: SecondTalkKeyPreference.load(talkKey: talkKey, translationKey: translationKey),
             saveSecondTalkKey: { SecondTalkKeyPreference.save($0) },
-            talkMode: TriggerModePreference.load(for: .talk),
-            translationMode: TriggerModePreference.load(for: .translation),
+            talkMode: TriggerModePreference.load(for: .talk, setUpBefore: setUpBefore),
+            translationMode: TriggerModePreference.load(for: .translation, setUpBefore: setUpBefore),
             saveTriggerMode: { TriggerModePreference.save($0, for: $1) },
             handsFree: HandsFreePreference.load(),
             saveHandsFree: { HandsFreePreference.save($0) },
@@ -303,6 +309,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         captions.showWindow = { [captionWindow] in captionWindow.show() }
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
+        // A new user's talk key stays in Press to start and stop once Orra is set up, and an
+        // earlier user's in Hold, see TriggerModePreference.
+        TriggerModePreference.keepTalkMode(pushToTalk.talkMode)
         // Before the tap is installed, so it watches the translation key from the start.
         followTranslation()
         pushToTalk.start()

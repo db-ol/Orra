@@ -15,7 +15,14 @@ nonisolated enum TriggerMode: String, CaseIterable, Identifiable, Sendable {
     /// hold does nothing.
     case doubleTap
 
+    /// The mode of a key with nothing saved: the translation key, and the talk key of a
+    /// user who set Orra up before new users started in `newTalkKeyMode`, see
+    /// TriggerModePreference.
     static let defaultMode: TriggerMode = .hold
+
+    /// The mode a new user's talk key starts in, which the maintainer chose on 2026-10-17.
+    /// The welcome window offers the other two.
+    static let newTalkKeyMode: TriggerMode = .toggle
 
     var id: String { rawValue }
 
@@ -374,18 +381,46 @@ nonisolated enum Hotkey: Hashable, Sendable {
     }
 }
 
-/// Keeps how each key starts a dictation in UserDefaults. Hold until the user picks
-/// another.
+/// Keeps how each key starts a dictation in UserDefaults.
+///
+/// A new user's talk key starts in Press to start and stop, and the translation key in
+/// Hold. Earlier versions of Orra started the talk key in Hold too and saved no mode until
+/// the user picked one, so a user who set Orra up with one of them has nothing saved and
+/// keeps Hold, see `wasSetUpBefore`. A launch with no mode saved saves the one the talk key
+/// started in, see `keepTalkMode`, since a new user looks set up from the next launch on.
 nonisolated enum TriggerModePreference {
     static func defaultsKey(for slot: KeySlot) -> String {
         slot == .talk ? "talkKeyMode" : "translationKeyMode"
     }
 
-    static func load(for slot: KeySlot, from defaults: UserDefaults = .standard) -> TriggerMode {
-        defaults.string(forKey: defaultsKey(for: slot)).flatMap(TriggerMode.init(rawValue:)) ?? .defaultMode
+    /// The saved mode, or nil when none is saved or the saved one is unknown.
+    static func saved(for slot: KeySlot, in defaults: UserDefaults = .standard) -> TriggerMode? {
+        defaults.string(forKey: defaultsKey(for: slot)).flatMap(TriggerMode.init(rawValue:))
+    }
+
+    /// The saved mode, or the one the key starts in: `TriggerMode.newTalkKeyMode` for the
+    /// talk key of a user who never set Orra up, Hold otherwise.
+    static func load(for slot: KeySlot, setUpBefore: Bool, from defaults: UserDefaults = .standard) -> TriggerMode {
+        saved(for: slot, in: defaults) ?? (slot == .talk && !setUpBefore ? .newTalkKeyMode : .defaultMode)
     }
 
     static func save(_ mode: TriggerMode, for slot: KeySlot, to defaults: UserDefaults = .standard) {
         defaults.set(mode.rawValue, forKey: defaultsKey(for: slot))
+    }
+
+    /// Whether Orra was set up on this Mac before: a talk key was saved, or Orra has
+    /// microphone or Accessibility access. Every earlier Orra needed both permissions before
+    /// its first dictation, and macOS keeps them for Orra across updates, while a new user
+    /// has given neither at the first launch. A talk key was saved only by users who chose
+    /// one, so it alone would miss everyone who kept right Control.
+    static func wasSetUpBefore(talkKeySaved: Bool, microphone: MicrophoneAccess, accessibilityAllowed: Bool) -> Bool {
+        talkKeySaved || microphone == .authorized || accessibilityAllowed
+    }
+
+    /// Saves the mode the talk key started in, unless a mode is saved, so it stays once
+    /// the user has set Orra up. AppDelegate calls it at launch.
+    static func keepTalkMode(_ mode: TriggerMode, in defaults: UserDefaults = .standard) {
+        guard saved(for: .talk, in: defaults) == nil else { return }
+        save(mode, for: .talk, to: defaults)
     }
 }
