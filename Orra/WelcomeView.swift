@@ -84,7 +84,7 @@ struct WelcomeView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Welcome to Orra")
                     .font(.title2.bold())
-                Text("Hold a key, speak, and let go. Orra types what you said into the app you are using. Your voice is turned into text on this Mac.")
+                intro
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -93,7 +93,7 @@ struct WelcomeView: View {
             HStack(alignment: .center, spacing: 10) {
                 OrraGuide(waves: step == .ready)
                     .frame(width: 76, height: 76)
-                GuideBubble(line: step.line(locale: Locale(identifier: localization)))
+                GuideBubble(line: step.line(talkMode: pushToTalk.talkMode, locale: Locale(identifier: localization)))
                 Spacer(minLength: 0)
             }
             .padding(.top, 12)
@@ -123,6 +123,24 @@ struct WelcomeView: View {
             .padding(.bottom, 20)
         }
         .frame(width: 560)
+    }
+
+    /// What Orra does, with how the talk key works in its mode.
+    private var intro: Text {
+        switch pushToTalk.talkMode {
+        case .hold: Text("Hold a key, speak, and let go. Orra types what you said into the app you are using. Your voice is turned into text on this Mac.")
+        case .toggle: Text("Press a key, speak, and press it again. Orra types what you said into the app you are using. Your voice is turned into text on this Mac.")
+        case .doubleTap: Text("Press a key twice, speak, and press it once more. Orra types what you said into the app you are using. Your voice is turned into text on this Mac.")
+        }
+    }
+
+    /// The first dictation to try once Orra is ready, in the talk key's mode.
+    private var tryIt: Text {
+        switch pushToTalk.talkMode {
+        case .hold: Text("Try it in any app: hold the talk key, say something, and let go. The text appears where you are typing.")
+        case .toggle: Text("Try it in any app: press the talk key, say something, and press it again. The text appears where you are typing.")
+        case .doubleTap: Text("Try it in any app: press the talk key twice, say something, and press it once more. The text appears where you are typing.")
+        }
     }
 
     /// Turns Settings to `tab` and opens it in front, as the menu's Settings… does.
@@ -162,7 +180,7 @@ struct WelcomeView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Orra is ready")
                         .font(.headline)
-                    Text("Try it in any app: hold the talk key, say something, and let go. The text appears where you are typing.")
+                    tryIt
                         .fixedSize(horizontal: false, vertical: true)
                     if pushToTalk.handsFreeOn, pushToTalk.talkMode == .hold {
                         Text("For a longer text, press the talk key twice quickly and talk hands free. Press it once more to paste.")
@@ -394,8 +412,15 @@ private struct MicrophoneStepDetail: View {
                 Text("Orra can use the microphone.")
                     .foregroundStyle(.secondary)
             case .notDetermined:
-                Text("Orra records only while you hold the talk key.")
-                    .foregroundStyle(.secondary)
+                Group {
+                    if pushToTalk.talkMode == .hold {
+                        Text("Orra records only while you hold the talk key.")
+                    } else {
+                        Text("Orra records only after you press the talk key, until you press it again.")
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 Button("Allow Microphone Access…") {
                     pushToTalk.requestMicrophoneAccess()
                 }
@@ -415,8 +440,8 @@ private struct MicrophoneStepDetail: View {
     }
 }
 
-/// The talk key: the recorder that shows the key and changes it, and which key suits this
-/// Mac's keyboard.
+/// The talk key: the recorder that shows the key and changes it, which key suits this
+/// Mac's keyboard, and the key's mode with every choice in view, as Settings saves it.
 private struct TalkKeyStepDetail: View {
     let pushToTalk: PushToTalkController
     /// Read once when the step appears, not in an initial value, which SwiftUI would
@@ -431,6 +456,8 @@ private struct TalkKeyStepDetail: View {
             if let keyboard {
                 recommendation(for: keyboard)
             }
+            TriggerModePicker(pushToTalk: pushToTalk, slot: .talk, showsEveryMode: true)
+                .padding(.top, 4)
         }
         .task {
             if keyboard == nil {

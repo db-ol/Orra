@@ -336,6 +336,26 @@
         }
       }
     },
+    "All set! Press the talk key and say hello." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备好了！按一下说话键，打个招呼吧。"
+          }
+        }
+      }
+    },
+    "All set! Press the talk key twice and say hello." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备好了！连按两下说话键，打个招呼吧。"
+          }
+        }
+      }
+    },
     "Allow Accessibility" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2294,6 +2314,16 @@
         }
       }
     },
+    "Orra records only after you press the talk key, until you press it again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 只在你按下说话键后录音，再按一下就停止。"
+          }
+        }
+      }
+    },
     "Orra records only while you hold the talk key." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2416,12 +2446,12 @@
         }
       }
     },
-    "Pick the key you hold to talk." : {
+    "Pick your talk key and how it works." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选一个说话时按住的键。"
+            "value" : "选好说话键和它的用法。"
           }
         }
       }
@@ -2516,6 +2546,16 @@
         }
       }
     },
+    "Press a key in Hold mode twice quickly to keep recording after you let go." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快速连按两下用法为“按住”的键，松开后继续录音。"
+          }
+        }
+      }
+    },
     "Press a key or a combination" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2536,6 +2576,26 @@
         }
       }
     },
+    "Press a key twice, speak, and press it once more. Orra types what you said into the app you are using. Your voice is turned into text on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两下键开始说话，说完再按一下。Orra 会把你说的话输入到你正在使用的 App 中。语音在这台 Mac 上转成文字。"
+          }
+        }
+      }
+    },
+    "Press a key, speak, and press it again. Orra types what you said into the app you are using. Your voice is turned into text on this Mac." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按一下键开始说话，说完再按一下。Orra 会把你说的话输入到你正在使用的 App 中。语音在这台 Mac 上转成文字。"
+          }
+        }
+      }
+    },
     "Press the key once to start, and once more to paste. Escape cancels." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2552,26 +2612,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "快速连按两下这个键开始，再按一下粘贴。按 Esc 键取消。"
-          }
-        }
-      }
-    },
-    "Press the talk key twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "快速连按两下说话键，松开后 Orra 会继续录音。再按一下说话键就会粘贴，按 Esc 键则取消。按住说话的用法不变。"
-          }
-        }
-      }
-    },
-    "Press the talk key twice quickly to keep recording after you let go." : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "快速连按两下说话键，松开后继续录音。"
           }
         }
       }
@@ -3988,6 +4028,26 @@
         }
       }
     },
+    "Try it in any app: press the talk key twice, say something, and press it once more. The text appears where you are typing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在任何 App 中试试：连按两下说话键，说点什么，再按一下。文字会出现在你正在输入的位置。"
+          }
+        }
+      }
+    },
+    "Try it in any app: press the talk key, say something, and press it again. The text appears where you are typing." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在任何 App 中试试：按一下说话键，说点什么，再按一下。文字会出现在你正在输入的位置。"
+          }
+        }
+      }
+    },
     "Try next" : {
       "localizations" : {
         "zh-Hans" : {
@@ -4095,6 +4155,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请单独按 fn、Control、Option 或 Command 键，或者按一组组合键，例如 ⌃ ⌥ 或 ⇧ ⌘ D。按 Esc 键取消。"
+          }
+        }
+      }
+    },
+    "Use the talk key on its own. A press together with another key is a shortcut and records nothing, so shortcuts with a left Control, Option or Command key keep working." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单独使用说话键。和其他键一起按下时算作快捷键，不会录音，所以左侧 Control、Option、Command 键的快捷键照常可用。"
           }
         }
       }
@@ -4236,6 +4306,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Windows 键"
+          }
+        }
+      }
+    },
+    "With a key in Hold mode, press it twice quickly and Orra keeps recording after you let go. Press the key once more to paste, or Escape to cancel. Holding the key works as before." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用法为“按住”的键，快速连按两下后松开，Orra 会继续录音。再按一下这个键就会粘贴，按 Esc 键则取消。按住说话的用法不变。"
           }
         }
       }

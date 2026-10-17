@@ -618,6 +618,12 @@ got worse than the baseline, see docs/release-gate.md.
     press during the wait drops it, and a combination that counts at once keeps the
     capture of its first modifier. TriggerModeTests checks that a combination that waits
     drops it. The random sequences run with right Option waiting for every other seed.
+  - HotkeyPreferenceTests checks since 2026-10-17 that a new user's talk key starts in
+    press to start and stop and the translation key in hold, that a saved talk key,
+    microphone access or Accessibility access each keeps hold for a user without a saved
+    mode, that the first launch saves the mode so it stays once the user has set Orra up,
+    and that a saved mode always wins. SetupDownloadTests checks the guide's line for
+    each mode.
   - TriggerModeTests and HotkeyPreferenceTests, added on 2026-10-14, check press to start
     and stop (a press records and its release keeps recording, a long press too, a
     shortcut cancels, a left key tapped starts at its release, Escape and its key up are
@@ -1269,8 +1275,9 @@ remove Orra's Accessibility access while it runs. Undo all of it afterwards:
 - [ ] While the model downloads, Allow Microphone Access… shows the macOS prompt, and the
   step gets its check mark after Allow.
 - [ ] Grant Accessibility Access… shows the macOS prompt. After turning Orra on in the
-  list, the step shows "Hold right Control to talk", or the keys that are on, within a
-  few seconds.
+  list, the step shows the talk key's hint within a few seconds, such as "Press right
+  Control to talk, and again to finish" for a new user since 2026-10-17, or "Hold right
+  Control to talk" in Hold.
 - [ ] After the download, the model step shows a spinner and "Loading the speech model…",
   then its check mark. Only then does the window say "Orra is ready", and Done closes it.
   The menu shows Getting Started… in place of Setup Guide…, and the next launch shows no
@@ -1974,6 +1981,51 @@ keyboard. The tip was not seen in the running app:
 - [ ] To see the tip again, quit Orra and run
   `defaults delete io.github.db-ol.Orra externalKeyboardTipShown` and
   `defaults delete io.github.db-ol.Orra secondTalkKey`.
+
+Press to start and stop for new users, added on 2026-10-17, not verified yet. A new
+user's talk key starts in Press to start and stop, and the welcome window offers Hold and
+Double press. The translation key stays in Hold. A user who set Orra up before has no
+saved mode and keeps Hold: Orra counts as set up before when a talk key is saved or Orra
+has microphone or Accessibility access, and the first launch saves the mode it chose. For
+a new user, prepare a first launch as in Welcome window above, and also run
+`defaults delete io.github.db-ol.Orra talkKeys`, `talkKeyCombination` and `talkKeyMode`
+the same way. Put them back afterwards:
+
+- [ ] Step 4, Choose your talk key, shows Talk key mode with three radio buttons, Hold,
+  Press to start and stop and Double press, with Press to start and stop selected and
+  "Press the key once to start, and once more to paste. Escape cancels." under them.
+  `defaults read io.github.db-ol.Orra talkKeyMode` prints toggle right after the launch.
+- [ ] The texts say press: the line under the title "Press a key, speak, and press it
+  again.", the microphone step "Orra records only after you press the talk key, until
+  you press it again.", the Accessibility step, the menu and the idle bar "Press right
+  Control to talk, and again to finish", the guide at step 4 "Pick your talk key and how
+  it works.", and once ready "All set! Press the talk key and say hello." and "Try it in
+  any app: press the talk key, say something, and press it again." No line about double
+  pressing for hands free shows.
+- [ ] A press of right Control in TextEdit starts recording, the next press pastes, and
+  Escape cancels.
+- [ ] Picking Hold in step 4 changes those texts to Hold at once, the line about double
+  pressing for hands free appears once Orra is ready, Settings, General shows Talk key
+  mode Hold, and Hold is still picked after a restart. Double press works the same way
+  and its texts say "press the talk key twice".
+- [ ] In 简体中文 the buttons read 按住, 按一下开始，再按一下结束 and 连按两下, the line under
+  them uses full width punctuation, and nothing is cut off. Switching the language at the
+  top of the window switches them at once.
+- [ ] Settings, General, with the talk key in Press to start and stop and translation off:
+  Double press for hands free is dimmed and says "Press a key in Hold mode twice quickly
+  to keep recording after you let go." With translation on and its key in Hold, the
+  switch works again. The talk key's help reads "Use the talk key on its own…", and
+  "Hold the talk key on its own…" in Hold.
+- [ ] A new user who turns on Translation finds the translation key in Hold, and holding
+  it translates as before.
+- [ ] Update from an earlier version keeping Hold: on a Mac where 0.4.1 is set up with
+  right Control never chosen and no mode ever picked (`defaults read
+  io.github.db-ol.Orra talkKeyMode` finds nothing), update to this build. The talk key
+  is in Hold in Settings and the welcome window, holding it dictates as before, double
+  pressing still starts hands free, and `talkKeyMode` now reads hold.
+- [ ] The same update with fn saved as the talk key, and again with only Accessibility
+  allowed after `tccutil reset Microphone io.github.db-ol.Orra`: Hold both times.
+- [ ] An update with a mode saved, such as Double press, keeps that mode.
 
 Live captions, added on 2026-10-14 as Meeting Captions. On 2026-10-15 the maintainer
 checked captions and the scroll follow with a local build. Live Captions, under Meeting

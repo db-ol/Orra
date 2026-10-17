@@ -375,14 +375,20 @@ nonisolated enum GuideStep: Equatable, Sendable, CaseIterable {
         return .ready
     }
 
-    func line(locale: Locale = .interface) -> String {
+    /// The line, which says how to use the talk key in its mode once Orra is ready.
+    func line(talkMode: TriggerMode, locale: Locale = .interface) -> String {
         var resource: LocalizedStringResource = switch self {
         case .download: "Hi, I’m Orra. First, let me download what I need. It happens once."
         case .microphone: "Let me hear you. Allow the microphone."
         case .accessibility: "Now let me type for you. Allow Accessibility."
-        case .talkKey: "Pick the key you hold to talk."
+        case .talkKey: "Pick your talk key and how it works."
         case .downloading: "Still downloading. It goes on if you close this window."
-        case .ready: "All set! Hold the talk key and say hello."
+        case .ready:
+            switch talkMode {
+            case .hold: "All set! Hold the talk key and say hello."
+            case .toggle: "All set! Press the talk key and say hello."
+            case .doubleTap: "All set! Press the talk key twice and say hello."
+            }
         }
         resource.locale = locale
         return String(localized: resource)

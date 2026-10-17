@@ -291,7 +291,8 @@ final class PushToTalkController {
     ///   - secondTalkKey: The second talk key, as saved, or nil. One that is the talk key or
     ///     the translation key is dropped.
     ///   - saveSecondTalkKey: Saves the second talk key after it changes.
-    ///   - talkMode: How the talk key starts a dictation, as saved.
+    ///   - talkMode: How the talk key starts a dictation, as saved, or as it starts for this
+    ///     user while nothing is saved, see TriggerModePreference.
     ///   - translationMode: How the translation key starts a dictation, as saved.
     ///   - saveTriggerMode: Saves the mode of a key after the user changes it.
     ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
