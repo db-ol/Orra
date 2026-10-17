@@ -373,9 +373,10 @@ nonisolated final class InterruptionFlag: Sendable {
 /// take a block, which hand Core Audio the one block stored here.
 nonisolated final class DeviceWatch {
     typealias Listener = @convention(block) (UInt32, UnsafePointer<AudioObjectPropertyAddress>) -> Void
-    private typealias Registration = @convention(c) (AudioObjectID, UnsafePointer<AudioObjectPropertyAddress>, DispatchQueue?, @escaping Listener) -> OSStatus
-    private static let addListener: Registration = AudioObjectAddPropertyListenerBlock
-    private static let removeListener: Registration = AudioObjectRemovePropertyListenerBlock
+    typealias Registration = @convention(c) (AudioObjectID, UnsafePointer<AudioObjectPropertyAddress>, DispatchQueue?, @escaping Listener) -> OSStatus
+    /// Internal, because DeviceListWatch registers through them too.
+    static let addListener: Registration = AudioObjectAddPropertyListenerBlock
+    static let removeListener: Registration = AudioObjectRemovePropertyListenerBlock
 
     private let device: AudioDeviceID
     private let queue = DispatchQueue(label: "io.github.db-ol.Orra.input-device")

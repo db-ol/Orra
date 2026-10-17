@@ -189,7 +189,7 @@ final class LearnedNotice {
 
     private func hide(after duration: Duration) {
         hide?.cancel()
-        let seconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+        let seconds = duration / .seconds(1)
         countdown = Countdown(hidesAt: now().addingTimeInterval(seconds), seconds: seconds)
         hide = Task { [weak self, sleep] in
             do {
@@ -362,23 +362,13 @@ final class LearnedNoticePanel {
 
     /// Internal so tests can check the panel without showing it.
     func makePanel() -> NoticePanel {
-        let panel = NoticePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 80),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: true
-        )
-        panel.isFloatingPanel = true
+        let panel = NoticePanel(overlaySize: NSSize(width: 420, height: 80))
         // A click on a button leaves the focus alone. Only a click into the field makes
         // the panel key.
         panel.becomesKeyOnlyIfNeeded = true
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
         panel.hasShadow = false
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
         // The panel is key only while the user edits the offered word in its field, so its
         // key status holds the countdown. A click back into another app ends it, also when
         // the field keeps its focus inside the panel.
@@ -397,11 +387,7 @@ final class LearnedNoticePanel {
 
     /// Bottom center of the screen with the pointer, above the recording indicator.
     private func place(_ panel: NSPanel) {
-        let pointer = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) } ?? NSScreen.main
-        guard let visible = screen?.visibleFrame else { return }
-        let size = panel.frame.size
-        panel.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2, y: visible.minY + 76))
+        panel.placeAtBottomCenter(raisedBy: 76)
     }
 }
 

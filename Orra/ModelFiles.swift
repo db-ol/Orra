@@ -6,7 +6,7 @@ import os
 extension Logger {
     /// Finding, downloading and installing the speech model. States, file names and sizes
     /// only, never file contents or paths.
-    nonisolated static let modelDownload = Logger(subsystem: "io.github.db-ol.Orra", category: "model-download")
+    nonisolated static let modelDownload = Logger(subsystem: ProblemReport.subsystem, category: "model-download")
 }
 
 /// One file of the speech model, pinned by its size and SHA-256.

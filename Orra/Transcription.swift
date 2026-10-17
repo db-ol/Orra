@@ -37,7 +37,6 @@ extension Transcription {
             guard takingDigits else { return text }
             return try await takingNumbers(into: text, of: samples, terms: terms)
         }
-        let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
         let started = ContinuousClock.now
         let plain: String
         do {
@@ -45,11 +44,11 @@ extension Transcription {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            logger.error("Transcript held only vocabulary terms, the pass without them failed after \(started.duration(to: .now), privacy: .public)")
+            Logger.pushToTalk.error("Transcript held only vocabulary terms, the pass without them failed after \(started.duration(to: .now), privacy: .public)")
             return text
         }
         let heardSpeech = !VocabularyEcho.normalized(TranscriptGuard.clean(plain, audioSeconds: audioSeconds)).isEmpty
-        logger.notice("Transcript held only vocabulary terms, the pass without them took \(started.duration(to: .now), privacy: .public), speech heard: \(heardSpeech, privacy: .public)")
+        Logger.pushToTalk.notice("Transcript held only vocabulary terms, the pass without them took \(started.duration(to: .now), privacy: .public), speech heard: \(heardSpeech, privacy: .public)")
         return heardSpeech ? text : ""
     }
 
@@ -60,7 +59,6 @@ extension Transcription {
     /// Logs a timing and whether digits were taken, never the text.
     func takingNumbers(into text: String, of samples: [Float], terms: [String]) async throws -> String {
         guard ContextNumbers.mayHoldSpokenNumber(text) else { return text }
-        let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
         let started = ContinuousClock.now
         let plain: String
         do {
@@ -68,11 +66,11 @@ extension Transcription {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            logger.error("Transcript may hold a number in words, the pass without the vocabulary failed after \(started.duration(to: .now), privacy: .public)")
+            Logger.pushToTalk.error("Transcript may hold a number in words, the pass without the vocabulary failed after \(started.duration(to: .now), privacy: .public)")
             return text
         }
         let merged = await Self.merging(text, plain: plain, terms: terms)
-        logger.notice("Transcript may hold a number in words, the pass without the vocabulary took \(started.duration(to: .now), privacy: .public), digits taken: \(merged != text, privacy: .public)")
+        Logger.pushToTalk.notice("Transcript may hold a number in words, the pass without the vocabulary took \(started.duration(to: .now), privacy: .public), digits taken: \(merged != text, privacy: .public)")
         return merged
     }
 
@@ -89,7 +87,6 @@ extension Transcription {
     /// Logs a timing and the language that stood, never the text.
     func checkingLanguage(_ text: String, of samples: [Float], context: String?) async throws -> String {
         guard await Self.isForeign(text) else { return text }
-        let logger = Logger(subsystem: "io.github.db-ol.Orra", category: "push-to-talk")
         let started = ContinuousClock.now
         for language in [SpeechLanguage.chinese, .english] {
             let hinted: String
@@ -98,15 +95,15 @@ extension Transcription {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                logger.error("Transcript was in another language, the pass in \(language.rawValue, privacy: .public) failed after \(started.duration(to: .now), privacy: .public)")
+                Logger.pushToTalk.error("Transcript was in another language, the pass in \(language.rawValue, privacy: .public) failed after \(started.duration(to: .now), privacy: .public)")
                 return text
             }
             if !hinted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, await !Self.isForeign(hinted) {
-                logger.notice("Transcript was in another language, the pass in \(language.rawValue, privacy: .public) stands, took \(started.duration(to: .now), privacy: .public)")
+                Logger.pushToTalk.notice("Transcript was in another language, the pass in \(language.rawValue, privacy: .public) stands, took \(started.duration(to: .now), privacy: .public)")
                 return hinted
             }
         }
-        logger.notice("Transcript was in another language, no pass in Chinese or English helped, took \(started.duration(to: .now), privacy: .public)")
+        Logger.pushToTalk.notice("Transcript was in another language, no pass in Chinese or English helped, took \(started.duration(to: .now), privacy: .public)")
         return text
     }
 

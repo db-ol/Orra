@@ -10,37 +10,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let transcription = Transcription.qwen3()
     /// How captions give way to dictation on the shared models, see EngineTurns.
     let turns = EngineTurns()
-    lazy var pushToTalk = PushToTalkController(
-        capture: .live(),
-        transcription: transcription,
-        cleanup: cleanup.model.sharing(turns),
-        translation: cleanup.translation,
-        voice: speech.voiceForDictation,
-        insert: TextInserter.live().insert,
-        talkKey: TalkKeyPreference.loadHotkey(),
-        saveTalkKey: { TalkKeyPreference.saveHotkey($0) },
-        talkKeyChosen: TalkKeyPreference.isSaved(),
-        translationKey: TranslationKeyPreference.loadHotkey(talkKey: TalkKeyPreference.loadHotkey()),
-        saveTranslationKey: { TranslationKeyPreference.saveHotkey($0) },
-        secondTalkKey: SecondTalkKeyPreference.load(
-            talkKey: TalkKeyPreference.loadHotkey(),
-            translationKey: TranslationKeyPreference.loadHotkey(talkKey: TalkKeyPreference.loadHotkey())
-        ),
-        saveSecondTalkKey: { SecondTalkKeyPreference.save($0) },
-        talkMode: TriggerModePreference.load(for: .talk),
-        translationMode: TriggerModePreference.load(for: .translation),
-        saveTriggerMode: { TriggerModePreference.save($0, for: $1) },
-        handsFree: HandsFreePreference.load(),
-        saveHandsFree: { HandsFreePreference.save($0) },
-        microphone: MicrophonePreference.load(),
-        saveMicrophone: { MicrophonePreference.save($0) },
-        vocabulary: VocabularyPreference.load(),
-        saveVocabulary: { VocabularyPreference.saveInBackground($0) },
-        removesFillerWords: FillerPreference.load(),
-        saveRemovesFillerWords: { FillerPreference.save($0) },
-        writesNumbersAsDigits: NumberPreference.load(),
-        saveWritesNumbersAsDigits: { NumberPreference.save($0) }
-    )
+    lazy var pushToTalk: PushToTalkController = { [self] in
+        let talkKey = TalkKeyPreference.loadHotkey()
+        let translationKey = TranslationKeyPreference.loadHotkey(talkKey: talkKey)
+        return PushToTalkController(
+            capture: .live(),
+            transcription: transcription,
+            cleanup: cleanup.model.sharing(turns),
+            translation: cleanup.translation,
+            voice: speech.voiceForDictation,
+            insert: TextInserter.live().insert,
+            talkKey: talkKey,
+            saveTalkKey: { TalkKeyPreference.saveHotkey($0) },
+            talkKeyChosen: TalkKeyPreference.isSaved(),
+            translationKey: translationKey,
+            saveTranslationKey: { TranslationKeyPreference.saveHotkey($0) },
+            secondTalkKey: SecondTalkKeyPreference.load(talkKey: talkKey, translationKey: translationKey),
+            saveSecondTalkKey: { SecondTalkKeyPreference.save($0) },
+            talkMode: TriggerModePreference.load(for: .talk),
+            translationMode: TriggerModePreference.load(for: .translation),
+            saveTriggerMode: { TriggerModePreference.save($0, for: $1) },
+            handsFree: HandsFreePreference.load(),
+            saveHandsFree: { HandsFreePreference.save($0) },
+            microphone: MicrophonePreference.load(),
+            saveMicrophone: { MicrophonePreference.save($0) },
+            vocabulary: VocabularyPreference.load(),
+            saveVocabulary: { VocabularyPreference.saveInBackground($0) },
+            removesFillerWords: FillerPreference.load(),
+            saveRemovesFillerWords: { FillerPreference.save($0) },
+            writesNumbersAsDigits: NumberPreference.load(),
+            saveWritesNumbersAsDigits: { NumberPreference.save($0) }
+        )
+    }()
     /// The voice models this build links, see VoiceEngines.
     let voiceEngines = VoiceEngines.live
     /// The downloads of the voice model that speaks, for Speak Translation.
@@ -134,6 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var keyboardTip: ExternalKeyboardTip = ExternalKeyboardTip { [weak self] key in
         self?.learnedNotice.offerKeyboardTip(key)
     }
+    private var menuObserver: (any NSObjectProtocol)?
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
     nonisolated static var isHostedByXcode: Bool {
@@ -186,6 +188,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } onChange: { [weak self] in
             DispatchQueue.main.async {
                 self?.followKeyboardTip()
+            }
+        }
+    }
+
+    /// Reads the login item, the microphones and the copied word again each time a menu
+    /// opens, Orra's menu bar menu included, so the open menu shows them as they are now.
+    private func refreshWhenMenusOpen() {
+        menuObserver = NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification,
+            object: nil,
+            queue: .main
+        ) { [openAtLogin, audioInputs, clipboard] _ in
+            MainActor.assumeIsolated {
+                openAtLogin.refresh()
+                audioInputs.refresh()
+                clipboard.refresh()
             }
         }
     }
@@ -289,9 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         followTranslation()
         pushToTalk.start()
         followReadiness()
-        openAtLogin.refreshWhenMenusOpen()
-        audioInputs.refreshWhenMenusOpen()
-        clipboard.refreshWhenMenusOpen()
+        refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
         Task { [models, pushToTalk, welcome, cleanup, setup, speech, voiceModels] in

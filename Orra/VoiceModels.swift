@@ -106,17 +106,9 @@ nonisolated enum VoiceModelStatus: Equatable, Sendable {
 
     init(_ model: ModelInstaller.State, _ codec: ModelInstaller.State, modelTotal: Int64, codecTotal: Int64) {
         let states = [(model, modelTotal), (codec, codecTotal)]
-        func present(_ state: ModelInstaller.State, _ total: Int64) -> Int64 {
-            switch state {
-            case .missing(let bytes): bytes
-            case .downloading(let bytes, _): bytes
-            case .verifying, .installed: total
-            case .checking, .failed: 0
-            }
-        }
         let total = modelTotal + codecTotal
-        let bytes = states.reduce(Int64(0)) { $0 + present($1.0, $1.1) }
-        if states.allSatisfy({ if case .installed = $0.0 { true } else { false } }) {
+        let bytes = states.reduce(Int64(0)) { $0 + CombinedProgress.bytes($1.0, total: $1.1) }
+        if states.allSatisfy({ $0.0.isInstalled }) {
             self = .installed
         } else if states.contains(where: { if case .checking = $0.0 { true } else { false } }) {
             self = .checking

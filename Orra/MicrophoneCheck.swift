@@ -95,7 +95,12 @@ nonisolated struct AudioInput: Equatable, Sendable {
 
     /// The input channels of all the device's input streams together.
     static func inputChannelCount(_ id: AudioDeviceID) -> Int {
-        var address = address(kAudioDevicePropertyStreamConfiguration, scope: kAudioObjectPropertyScopeInput)
+        channelCount(id, scope: kAudioObjectPropertyScopeInput)
+    }
+
+    /// The channels of all the device's streams in `scope`, input or output, together.
+    static func channelCount(_ id: AudioDeviceID, scope: AudioObjectPropertyScope) -> Int {
+        var address = address(kAudioDevicePropertyStreamConfiguration, scope: scope)
         var size: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size) == noErr, size > 0 else { return 0 }
         // The list has one AudioBuffer per stream, so its size varies.

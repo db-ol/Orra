@@ -113,7 +113,7 @@ nonisolated enum TranslationPreference {
     static let defaultsKey = "translatesWithTranslationKey"
 
     static func load(from defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: defaultsKey) as? Bool ?? false
+        defaults.bool(forKey: defaultsKey, default: false)
     }
 
     static func save(_ on: Bool, to defaults: UserDefaults = .standard) {

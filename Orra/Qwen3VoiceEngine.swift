@@ -107,23 +107,17 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
     }
 
     nonisolated func speak(_ text: String, in language: TranslationTarget, voice: VoiceSample?) -> AsyncThrowingStream<SpokenAudio, any Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    try await self.run(text, language: language, voice: voice, continuation: continuation)
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
+        SpokenAudio.stream { continuation in
+            try await self.run(text, language: language, voice: voice, continuation: continuation)
         }
     }
 
     private func run(_ text: String, language: TranslationTarget, voice: VoiceSample?, continuation: AsyncThrowingStream<SpokenAudio, any Error>.Continuation) async throws {
         await settle()
         guard let model, let encoder else { throw TranscriptionError.modelMissing }
-        let name = Self.languageName(language)
+        // The language tags Qwen3-TTS takes are the English names in lowercase, "english"
+        // and "chinese".
+        let name = language.logName.lowercased()
         // See VoiceCacheLimit.
         VoiceCacheLimit.begin()
         defer { VoiceCacheLimit.end() }
@@ -160,14 +154,6 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
     /// Only without a voice sample, see the type's notes.
     nonisolated func streams(voice: VoiceSample?) -> Bool {
         voice == nil
-    }
-
-    /// The language tags Qwen3-TTS takes.
-    nonisolated static func languageName(_ language: TranslationTarget) -> String {
-        switch language {
-        case .english: "english"
-        case .chinese: "chinese"
-        }
     }
 }
 #endif

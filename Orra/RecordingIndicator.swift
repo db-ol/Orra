@@ -95,22 +95,12 @@ final class RecordingIndicatorPanel {
     /// Internal so tests can check the panel without showing it.
     func makePanel() -> NSPanel? {
         guard let feedback else { return nil }
-        let panel = NonactivatingPanel(
-            contentRect: NSRect(origin: .zero, size: RecordingIndicatorView.panelSize),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: true
-        )
-        panel.isFloatingPanel = true
+        let panel = NonactivatingPanel(overlaySize: RecordingIndicatorView.panelSize)
         panel.level = .statusBar
         // On every Space, over full screen apps too, and never in the window cycle.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
         panel.contentView = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
         self.panel = panel
         // A display added or removed, or the Dock moved: the bar stays at the bottom.
@@ -129,11 +119,7 @@ final class RecordingIndicatorPanel {
 
     /// Bottom center of the screen with the pointer, above the Dock.
     private func place(_ panel: NSPanel) {
-        let pointer = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) } ?? NSScreen.main
-        guard let visible = screen?.visibleFrame else { return }
-        let size = panel.frame.size
-        panel.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2, y: visible.minY + 8))
+        panel.placeAtBottomCenter(raisedBy: 8)
     }
 }
 
@@ -141,6 +127,29 @@ final class RecordingIndicatorPanel {
 final class NonactivatingPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+}
+
+extension NSPanel {
+    /// A borderless panel that floats over other apps without activating Orra: clear around
+    /// its content, still shown while Orra is not active, and kept when closed. The caller
+    /// sets its level, Spaces, shadow and focus.
+    convenience init(overlaySize size: NSSize) {
+        self.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        isFloatingPanel = true
+        backgroundColor = .clear
+        isOpaque = false
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+    }
+
+    /// Moves the panel to the bottom center of the screen with the pointer, `offset` points
+    /// above the bottom of that screen's visible frame.
+    func placeAtBottomCenter(raisedBy offset: CGFloat) {
+        let pointer = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) } ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        setFrameOrigin(NSPoint(x: visible.midX - frame.size.width / 2, y: visible.minY + offset))
+    }
 }
 
 /// The indicator, drawn at the bottom of a clear panel: a small dark capsule with white

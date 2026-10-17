@@ -7,7 +7,7 @@ import os
 extension Logger {
     /// Loading and running the cleanup model. Timings, token counts and guard outcomes only,
     /// never text.
-    nonisolated static let rewrite = Logger(subsystem: "io.github.db-ol.Orra", category: "rewrite")
+    nonisolated static let rewrite = Logger(subsystem: ProblemReport.subsystem, category: "rewrite")
 }
 
 nonisolated extension ModelManifest {

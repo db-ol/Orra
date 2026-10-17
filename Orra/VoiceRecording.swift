@@ -243,7 +243,7 @@ final class VoiceRecording: Identifiable {
         ticker = Task { [tick, maximum] in
             while !Task.isCancelled, generation == self.generation, phase == .recording, let started {
                 let now = started.duration(to: .now)
-                elapsed = Self.seconds(now)
+                elapsed = now / .seconds(1)
                 let target = RecordingFeedback.meterLevel(peak: recorder.level())
                 level = target >= level ? target : max(target, level * 0.85)
                 if now >= maximum {
@@ -285,9 +285,5 @@ final class VoiceRecording: Identifiable {
             return .failed(String(localized: "No sound came from the microphone"))
         }
         return .recorded
-    }
-
-    private static func seconds(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
     }
 }

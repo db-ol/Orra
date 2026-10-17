@@ -73,7 +73,6 @@ final class AudioInputList {
     private(set) var lidClosed = false
 
     @ObservationIgnored private let read: () -> Reading
-    @ObservationIgnored private var menuObserver: (any NSObjectProtocol)?
 
     init(read: @escaping () -> Reading) {
         self.read = read
@@ -91,20 +90,5 @@ final class AudioInputList {
         inputs = reading.inputs
         defaultInput = reading.defaultInput
         lidClosed = reading.lidClosed
-    }
-
-    /// Reads again each time a menu opens, Orra's menu bar menu included, so the open
-    /// menu shows the current devices.
-    func refreshWhenMenusOpen() {
-        guard menuObserver == nil else { return }
-        menuObserver = NotificationCenter.default.addObserver(
-            forName: NSMenu.didBeginTrackingNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.refresh()
-            }
-        }
     }
 }

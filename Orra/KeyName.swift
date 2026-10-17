@@ -57,34 +57,8 @@ enum KeyName {
     /// can type Latin letters, such as ABC under a Chinese input method. Reads the layout
     /// only, which needs no permission.
     static func character(forKeyCode keyCode: Int64) -> String? {
-        guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
-              let property = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
-            return nil
-        }
-        let layout = Unmanaged<CFData>.fromOpaque(property).takeUnretainedValue() as Data
-        var deadKeyState: UInt32 = 0
-        var characters = [UniChar](repeating: 0, count: 4)
-        var length = 0
-        let status = layout.withUnsafeBytes { bytes -> OSStatus in
-            guard let keyboard = bytes.bindMemory(to: UCKeyboardLayout.self).baseAddress else {
-                return OSStatus(paramErr)
-            }
-            return UCKeyTranslate(
-                keyboard,
-                UInt16(truncatingIfNeeded: keyCode),
-                UInt16(kUCKeyActionDisplay),
-                0,
-                UInt32(LMGetKbdType()),
-                OptionBits(1 << kUCKeyTranslateNoDeadKeysBit),
-                &deadKeyState,
-                characters.count,
-                &length,
-                &characters
-            )
-        }
-        guard status == noErr, length > 0 else { return nil }
-        let text = String(utf16CodeUnits: characters, count: length)
-            .trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters))
+        guard let text = KeyboardLayout.character(for: CGKeyCode(truncatingIfNeeded: keyCode), in: .asciiCapable)?
+            .trimmingCharacters(in: .whitespacesAndNewlines.union(.controlCharacters)) else { return nil }
         return text.isEmpty ? nil : text.uppercased()
     }
 }

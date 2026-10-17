@@ -282,9 +282,9 @@ nonisolated enum FeedbackPreference {
 
     static func load(from defaults: UserDefaults = .standard) -> Values {
         Values(
-            showsIndicator: defaults.object(forKey: indicatorKey) as? Bool ?? true,
-            playsSounds: defaults.object(forKey: soundsKey) as? Bool ?? true,
-            showsIdleBar: defaults.object(forKey: idleBarKey) as? Bool ?? true
+            showsIndicator: defaults.bool(forKey: indicatorKey, default: true),
+            playsSounds: defaults.bool(forKey: soundsKey, default: true),
+            showsIdleBar: defaults.bool(forKey: idleBarKey, default: true)
         )
     }
 

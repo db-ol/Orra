@@ -104,16 +104,8 @@ actor CosyVoiceEngine: SpeechSynthesizer {
     }
 
     nonisolated func speak(_ text: String, in language: TranslationTarget, voice: VoiceSample?) -> AsyncThrowingStream<SpokenAudio, any Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    try await self.run(text, language: language, voice: voice, continuation: continuation)
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { _ in task.cancel() }
+        SpokenAudio.stream { continuation in
+            try await self.run(text, language: language, voice: voice, continuation: continuation)
         }
     }
 
@@ -124,8 +116,8 @@ actor CosyVoiceEngine: SpeechSynthesizer {
         VoiceCacheLimit.begin()
         defer { VoiceCacheLimit.end() }
         // CosyVoice3 reads the language from the text. The tag only keeps the call the same
-        // as Qwen3-TTS's.
-        let name = Self.languageName(language)
+        // as Qwen3-TTS's, see Qwen3VoiceEngine.
+        let name = language.logName.lowercased()
         let samples: [Float]
         if let voice {
             guard !voice.transcript.isEmpty else { throw EngineError.noTranscript }
@@ -156,13 +148,6 @@ actor CosyVoiceEngine: SpeechSynthesizer {
     /// Never at 1f54e56, see the type's notes.
     nonisolated func streams(voice: VoiceSample?) -> Bool {
         false
-    }
-
-    nonisolated static func languageName(_ language: TranslationTarget) -> String {
-        switch language {
-        case .english: "english"
-        case .chinese: "chinese"
-        }
     }
 }
 #endif
