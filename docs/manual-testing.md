@@ -86,6 +86,33 @@ got worse than the baseline, see docs/release-gate.md.
     the switch turned off and on or Remove while it waits ends the load for good, a sample
     picked meanwhile wins unless the speech model could not take it, a stray file is
     deleted while the switch is off, and the code logs neither the audio nor the words.
+  - ModelGateTests covers the model gate of 2026-10-16 without models: shared calls run
+    together, the voice model runs alone, a voice request that waits holds back the
+    shared calls that came after it, a reservation keeps a voice request that waits out
+    between two calls and lets in the shared calls queued behind it, the voice waits for
+    every reservation and ending one twice counts once, requests enter in the order they
+    came, a cancelled waiter leaves the queue, an unload of either side waits through
+    cancellation, a body that throws releases the gate, a call that can enter does not
+    suspend, and a body is marked as inside the gate. ModelGateOverlapTests runs fakes of
+    the three models through the wrappers and finds no voice work next to speech or
+    cleanup work in the launch loads, a dictation right after a stopped piece, captions
+    during a cloned piece, and an unload and a forgotten voice during other calls, while
+    the speech and cleanup work do overlap. Without the gate the launch loads overlap at
+    once. ModelGateReservationTests checks that a dictation reserves the gate from the
+    press of its key until it is pasted or cancelled, that the speech and cleanup loads
+    and the prompts read with the cleanup load run with a reservation, and the voice
+    sample, the word check and the prompts read ahead later without one, and that the
+    prompts read with the load go ahead of a voice request that waits.
+    ModelGateWiringTests checks without models that the app's speech and cleanup models
+    from Transcription.qwen3 and CleanupEngine.live queue at the gate, and that every voice
+    model of VoiceEngines.live runs alone at the app's gate. CompileLockTests runs only
+    when asked for, see its comment. With the gate, 20 rounds of mlx-swift's lock order
+    inversion finished on 2026-10-16, and without it the first round hung on mlx-swift
+    0.31.6. ModelGateStressTests runs the three real models only when asked for, see its
+    comment. In a Debug build on 2026-10-16, without the gate the first round hung at the
+    three loads, as a test build of 0.4.1 did at launch, and with the gate 4 rounds of
+    30 s finished, and 2 more rounds of 20 s once a dictation reserved the gate. Its
+    Release run of 30 rounds is still to do.
   - RecordingFeedbackTests maps each saved pair of the recording indicator and idle bar
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
@@ -2123,6 +2150,31 @@ sentence such as "今天下午开会" works well:
   lines under its log. The 2026-10-16 measurement had 0.33 s from making a unit to its
   start for a USB microphone, so compare the start returned time of a chosen microphone
   with that.
+
+Model gate, added on 2026-10-16, not verified yet. The voice model runs alone, the
+speech and cleanup models share the gate, and a dictation reserves it, so no voice work
+comes in between its calls, see Orra/ModelGate.swift. Use a Release build with Speak
+translations on, both voice downloads in place, and cleanup and translation on:
+
+- [ ] Quit and open Orra 20 times. Each time the menu bar icon leaves the hourglass and
+  Settings shows the speech model ready, and the log has one load line of each model:
+  `/usr/bin/log show --last 2m --info --predicate 'subsystem == "io.github.db-ol.Orra" AND (category == "push-to-talk" OR category == "rewrite" OR category == "speech")' | grep -i "loaded"`
+  shows "Speech model loaded", "Cleanup model loaded and warmed up" and "The voice model
+  Qwen3-TTS loaded".
+- [ ] Right after a launch, while the voice model still loads, dictate with the
+  translation key. The translation is pasted, and the menu does not say that the
+  dictation was pasted without translation.
+- [ ] Dictate short and long holds, with the talk key and the translation key, while a
+  translation is spoken. Each dictation is pasted, and the next translation is spoken.
+- [ ] Turn on live captions while a translation is spoken: captions go on, and the
+  translation is spoken to its end.
+- [ ] Turn Speak translations off and on, and switch the voice model in a build with both,
+  while dictating and while captions run. Orra keeps responding and the next translation
+  is spoken.
+- [ ] `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "model-gate"'`
+  shows only waits over 100 ms, each with its access, whether the gate was reserved and
+  its length, never text.
+- [ ] On any hang, run `sample Orra 5` and keep the output.
 
 ## Not implemented
 

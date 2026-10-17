@@ -158,6 +158,38 @@ IDs decoded alone to the same text. RewriteTokenizerTests checks CleanupTokenize
 IDs that transformers in Python gave, now for Qwen3.5 4B. In a Debug build the port loaded in 0.41 s and
 swift-transformers loads in 0.70 s, once when the model loads.
 
+## The model gate
+
+mlx-swift 0.31.6 can deadlock. A compiled function takes its own lock and then MLX's
+evaluation lock, but while its body is traced, which happens on its first call and for
+every new shape, the evaluation lock is held, so a compiled function called from that body
+takes its lock after the evaluation lock. MLXNN's activations, such as silu and gelu, are
+one compiled function each for the whole process. When a trace calls one of them while
+another thread calls it directly, each thread can hold the lock the other waits for. That
+could hang Orra 0.4.0 at launch with Speak translations on, and it hung a test build of
+0.4.1. mlx-swift pull request 461 fixed it in 0.32.2, which speech-swift's pin of
+mlx-swift-lm 3.31.4 rules out for now.
+
+Orra/ModelGate.swift keeps Orra out of it without a package change. The voice model runs
+alone, and the speech model and the cleanup model share the gate with each other. This is
+only correct while one property of the packages holds: no model of the shared group builds
+a compiled function whose trace calls another compiled function. On 2026-10-16, at the
+versions above:
+
+- Qwen3ASR, MLXCommon and AudioCommon of speech-swift call `compile(` nowhere.
+- mlx-swift-lm 3.31.4 calls it only in Gemma4Text, GPTOSS and SwitchLayers.swift, whose
+  `compiledSiluProduct` serves mixture of experts models. Qwen3.5 4B is a dense model and
+  runs none of them.
+- Qwen3TTS builds such functions (Qwen3TTS.swift and SpeechTokenizerDecoder.swift), and so
+  does CosyVoiceTTS. Both run alone at the gate.
+
+Check this again on every update of speech-swift, mlx-swift-lm or mlx-swift, and before
+the speech or cleanup model changes: look for `compile(` in the code those models run,
+and for what each traced body calls. A mixture of experts cleanup model or a Gemma 4 model
+would break the property. Such a model would have to run alone at the gate too, or wait
+for an mlx-swift release with the fix. Once Orra takes one, the ungated rounds of
+CompileLockTests pass, and the voice model could share the gate.
+
 ## Keeping speech-swift or carrying only Qwen3ASR
 
 Still the maintainer's decision. Carrying only the Apache-2.0 sources of Qwen3ASR,

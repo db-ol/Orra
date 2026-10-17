@@ -531,6 +531,11 @@ final class TextCleanup {
             // Turned off, or off and on again, before its turn: the unload queued by
             // turning off runs next, and a newer load after it.
             guard let self, generation == loadGeneration else { return }
+            // Reserves the model gate for the load and the prompts read after it, at
+            // launch, at the press of a key and from Settings alike, so a voice model that
+            // waits does not come in between, see ModelGate.reserve.
+            let reservation = engine.gate?.reserve()
+            defer { reservation?.end() }
             let loaded: Bool
             do {
                 try await engine.load(folder)
@@ -602,14 +607,18 @@ struct CleanupEngine {
     /// Reads the translation prompt for a target ahead, see
     /// RewriteEngine.prepareTranslation.
     var prepareTranslation: @Sendable (TranslationTarget) async throws -> Void = { _ in }
+    /// The model gate the cleanup model runs at, see `gated`. Nil when it runs at none, as
+    /// a test's stand in does. A load reserves it, see TextCleanup.
+    var gate: ModelGate? = nil
 
-    static func live(_ engine: RewriteEngine = RewriteEngine()) -> CleanupEngine {
+    /// The app's cleanup model, which runs only while it shares `gate`, see ModelGate.
+    static func live(_ engine: RewriteEngine = RewriteEngine(), gate: ModelGate = .live) -> CleanupEngine {
         CleanupEngine(
             load: { try await engine.load(from: $0) },
             unload: { await engine.unload() },
             complete: { try await engine.cleanUp($0).answer },
             translate: { try await engine.translate($0, into: $1).answer },
             prepareTranslation: { try await engine.prepareTranslation(into: $0) }
-        )
+        ).gated(gate)
     }
 }

@@ -10,6 +10,9 @@ struct Transcription {
     /// term per line, or nil. The language is the one the model must write, or nil to let
     /// it choose.
     var transcribe: (_ samples: [Float], _ context: String?, _ language: SpeechLanguage?) async throws -> String
+    /// The model gate the speech model runs at, see `gated`. Nil when it runs at none, as
+    /// a test's fake does. A dictation reserves it, see PushToTalkController.
+    var gate: ModelGate? = nil
 }
 
 extension Transcription {
