@@ -138,13 +138,12 @@ struct NumberRulesTests {
     }
 
     @Test func thePreferenceIsOnUntilTurnedOff() throws {
-        let suite = "io.github.db-ol.OrraTests.numbers-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(NumberPreference.load(from: defaults))
-        NumberPreference.save(false, to: defaults)
-        #expect(!NumberPreference.load(from: defaults))
-        NumberPreference.save(true, to: defaults)
-        #expect(NumberPreference.load(from: defaults))
+        try withTestDefaults("numbers") { defaults in
+            #expect(NumberPreference.load(from: defaults))
+            NumberPreference.save(false, to: defaults)
+            #expect(!NumberPreference.load(from: defaults))
+            NumberPreference.save(true, to: defaults)
+            #expect(NumberPreference.load(from: defaults))
+        }
     }
 }

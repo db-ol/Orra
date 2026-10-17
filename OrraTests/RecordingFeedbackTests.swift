@@ -46,13 +46,6 @@ struct RecordingFeedbackTests {
         )
     }
 
-    /// Waits until `condition` holds, for at most five seconds.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-    }
-
     @Test func aDictationShowsTheMeterThenTheSpinnerThenNothing() {
         let feedback = makeFeedback()
         feedback.handle(.listening)
@@ -190,12 +183,11 @@ struct RecordingFeedbackTests {
     }
 
     @Test func thePreferencesAreOnUntilTurnedOff() throws {
-        let suite = "io.github.db-ol.OrraTests.feedback-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: true, playsSounds: true, showsIdleBar: true))
-        FeedbackPreference.save(FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false), to: defaults)
-        #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false))
+        try withTestDefaults("feedback") { defaults in
+            #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: true, playsSounds: true, showsIdleBar: true))
+            FeedbackPreference.save(FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false), to: defaults)
+            #expect(FeedbackPreference.load(from: defaults) == FeedbackPreference.Values(showsIndicator: false, playsSounds: true, showsIdleBar: false))
+        }
     }
 
     /// Every pair of the two switches saved by earlier versions reads as one choice of the
@@ -207,26 +199,24 @@ struct RecordingFeedbackTests {
         (false, true, OnScreenHint.whileReady),
     ])
     func savedSwitchesKeepTheirMeaningAsTheOnScreenHint(indicator: Bool, idleBar: Bool, hint: OnScreenHint) throws {
-        let suite = "io.github.db-ol.OrraTests.hint-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(indicator, forKey: FeedbackPreference.indicatorKey)
-        defaults.set(idleBar, forKey: FeedbackPreference.idleBarKey)
-        let saved = FeedbackPreference.load(from: defaults)
-        #expect(OnScreenHint(saved) == hint)
-        #expect(hint.showsIndicator == indicator)
-        #expect(hint.showsIdleBar == idleBar)
-        let feedback = makeFeedback(preferences: saved)
-        #expect(feedback.onScreenHint == hint)
-        #expect(feedback.showsIndicator == indicator)
-        #expect(feedback.showsIdleBar == idleBar)
+        try withTestDefaults("hint") { defaults in
+            defaults.set(indicator, forKey: FeedbackPreference.indicatorKey)
+            defaults.set(idleBar, forKey: FeedbackPreference.idleBarKey)
+            let saved = FeedbackPreference.load(from: defaults)
+            #expect(OnScreenHint(saved) == hint)
+            #expect(hint.showsIndicator == indicator)
+            #expect(hint.showsIdleBar == idleBar)
+            let feedback = makeFeedback(preferences: saved)
+            #expect(feedback.onScreenHint == hint)
+            #expect(feedback.showsIndicator == indicator)
+            #expect(feedback.showsIdleBar == idleBar)
+        }
     }
 
     @Test func nothingSavedMeansTheHintShowsAlways() throws {
-        let suite = "io.github.db-ol.OrraTests.hint-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(OnScreenHint(FeedbackPreference.load(from: defaults)) == .always)
+        try withTestDefaults("hint") { defaults in
+            #expect(OnScreenHint(FeedbackPreference.load(from: defaults)) == .always)
+        }
     }
 
     @Test func theBarOnlyWhileReadyIsOfferedOnlyToWhoeverHasIt() {

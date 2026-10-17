@@ -588,15 +588,14 @@ struct VoiceSampleFileTests {
     }
 
     @Test func theSwitchIsSavedAsABoolOnly() throws {
-        let name = "VoiceSampleFileTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defer { defaults.removePersistentDomain(forName: name) }
-        #expect(!TranslationSpeech.Settings.load(from: defaults).remembersVoice)
-        var settings = TranslationSpeech.Settings()
-        settings.remembersVoice = true
-        settings.save(to: defaults)
-        #expect(TranslationSpeech.Settings.load(from: defaults).remembersVoice)
-        #expect(defaults.object(forKey: SpeechPreference.remembersVoiceKey) as? Bool == true)
+        try withTestDefaults("remembers-voice") { defaults in
+            #expect(!TranslationSpeech.Settings.load(from: defaults).remembersVoice)
+            var settings = TranslationSpeech.Settings()
+            settings.remembersVoice = true
+            settings.save(to: defaults)
+            #expect(TranslationSpeech.Settings.load(from: defaults).remembersVoice)
+            #expect(defaults.object(forKey: SpeechPreference.remembersVoiceKey) as? Bool == true)
+        }
     }
 
     // MARK: Nothing logged

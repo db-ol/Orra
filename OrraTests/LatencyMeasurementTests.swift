@@ -340,7 +340,7 @@ enum LatencyMeasurement {
     }
 
     static func ms(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) * 1_000 + Double(duration.components.attoseconds) / 1e15
+        duration / .milliseconds(1)
     }
 
     static func f(_ value: Double, _ digits: Int) -> String {

@@ -252,10 +252,11 @@ struct MeetingCaptionsTests {
     }
 
     @Test func theDisplayModeIsReadBack() throws {
-        let defaults = try #require(UserDefaults(suiteName: "orra-caption-test-\(UUID().uuidString)"))
-        #expect(CaptionDisplayMode.load(from: defaults) == .translationOnly)
-        CaptionDisplayMode.originalAndTranslation.save(to: defaults)
-        #expect(CaptionDisplayMode.load(from: defaults) == .originalAndTranslation)
+        try withTestDefaults("caption") { defaults in
+            #expect(CaptionDisplayMode.load(from: defaults) == .translationOnly)
+            CaptionDisplayMode.originalAndTranslation.save(to: defaults)
+            #expect(CaptionDisplayMode.load(from: defaults) == .originalAndTranslation)
+        }
     }
 }
 

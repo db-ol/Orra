@@ -72,15 +72,14 @@ struct TranslationDirectionTests {
     }
 
     @Test func theSettingIsAutomaticUntilSaved() throws {
-        let suite = "io.github.db-ol.OrraTests.translation-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(TranslationDirection.load(from: defaults) == .automatic)
-        TranslationDirection.chinese.save(to: defaults)
-        #expect(TranslationDirection.load(from: defaults) == .chinese)
-        TranslationDirection.automatic.save(to: defaults)
-        #expect(TranslationDirection.load(from: defaults) == .automatic)
-        defaults.set("klingon", forKey: TranslationDirection.defaultsKey)
-        #expect(TranslationDirection.load(from: defaults) == .automatic)
+        try withTestDefaults("translation") { defaults in
+            #expect(TranslationDirection.load(from: defaults) == .automatic)
+            TranslationDirection.chinese.save(to: defaults)
+            #expect(TranslationDirection.load(from: defaults) == .chinese)
+            TranslationDirection.automatic.save(to: defaults)
+            #expect(TranslationDirection.load(from: defaults) == .automatic)
+            defaults.set("klingon", forKey: TranslationDirection.defaultsKey)
+            #expect(TranslationDirection.load(from: defaults) == .automatic)
+        }
     }
 }

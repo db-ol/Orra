@@ -57,22 +57,14 @@ struct MicrophoneChoiceTests {
 
 /// Uses UserDefaults suites of its own, never Orra's real settings.
 struct MicrophonePreferenceTests {
-    private func withDefaults(_ name: String, _ body: (UserDefaults) throws -> Void) rethrows {
-        let suite = "io.github.db-ol.OrraTests.MicrophonePreference.\(name)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        defer { defaults.removePersistentDomain(forName: suite) }
-        try body(defaults)
-    }
-
-    @Test func nothingSavedMeansTheSystemDefault() {
-        withDefaults("nothingSaved") { defaults in
+    @Test func nothingSavedMeansTheSystemDefault() throws {
+        try withTestDefaults("MicrophonePreference.nothingSaved") { defaults in
             #expect(MicrophonePreference.load(from: defaults) == nil)
         }
     }
 
-    @Test func aChoiceComesBackAndCanBeCleared() {
-        withDefaults("saved") { defaults in
+    @Test func aChoiceComesBackAndCanBeCleared() throws {
+        try withTestDefaults("MicrophonePreference.saved") { defaults in
             let brio = MicrophoneChoice(uid: "brio-uid", name: "Brio 500")
             MicrophonePreference.save(brio, to: defaults)
             #expect(MicrophonePreference.load(from: defaults) == brio)

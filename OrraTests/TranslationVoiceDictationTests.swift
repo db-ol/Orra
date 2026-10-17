@@ -44,12 +44,6 @@ struct TranslationVoiceDictationTests {
         return controller
     }
 
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-    }
-
     private func dictate(_ controller: PushToTalkController, with key: TalkKey) async throws {
         let starts = mic.calls.filter { $0 == "start" }.count
         controller.handle(.pressed(isRepeat: false), key: .key(key))

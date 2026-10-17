@@ -80,10 +80,6 @@ extension RealModelTests {
             return Array(UnsafeBufferPointer(start: output.floatChannelData![0], count: Int(output.frameLength)))
         }
 
-        private static func seconds(_ duration: Duration) -> Double {
-            Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
-        }
-
         /// Waits until `condition` holds, for at most `timeout`.
         private static func waitUntil(timeout: Duration = .seconds(60), _ condition: () -> Bool) async throws {
             let deadline = ContinuousClock.now + timeout
@@ -235,7 +231,7 @@ extension RealModelTests {
                     let speech = try EvaluationData.samples(set: set, name: clip.name)
                     let start = ContinuousClock.now
                     let raw = try await engine.transcribe(speech)
-                    latencies.append(Self.seconds(start.duration(to: .now)))
+                    latencies.append(start.duration(to: .now) / .seconds(1))
                     hypotheses.append(Self.finalText(raw, samples: speech))
                 }
                 let references = clips.map(\.reference)
@@ -264,7 +260,7 @@ extension RealModelTests {
                 let speech = try EvaluationData.samples(set: "fleurs_zh", name: clip.name)
                 let start = ContinuousClock.now
                 _ = try await engine.transcribe(speech)
-                latencies.append(Self.seconds(start.duration(to: .now)))
+                latencies.append(start.duration(to: .now) / .seconds(1))
                 let footprint = MemoryFootprint.current()
                 footprints.append(footprint)
                 if round == 0 {

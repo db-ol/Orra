@@ -95,14 +95,13 @@ struct TextCleanupTests {
     }
 
     @Test func thePreferenceIsOffUntilSaved() throws {
-        let suite = "io.github.db-ol.OrraTests.cleanup-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(CleanupPreference.load(from: defaults) == false)
-        CleanupPreference.save(true, to: defaults)
-        #expect(CleanupPreference.load(from: defaults))
-        CleanupPreference.save(false, to: defaults)
-        #expect(CleanupPreference.load(from: defaults) == false)
+        try withTestDefaults("cleanup") { defaults in
+            #expect(CleanupPreference.load(from: defaults) == false)
+            CleanupPreference.save(true, to: defaults)
+            #expect(CleanupPreference.load(from: defaults))
+            CleanupPreference.save(false, to: defaults)
+            #expect(CleanupPreference.load(from: defaults) == false)
+        }
     }
 
     /// Turning cleanup on without the model asks first, and nothing goes online until the
@@ -269,15 +268,14 @@ struct TextCleanupTests {
     // MARK: Translation
 
     @Test func translationIsOffUntilSavedAndTheDirectionIsAutomatic() throws {
-        let suite = "io.github.db-ol.OrraTests.translation-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(TranslationPreference.load(from: defaults) == false)
-        TranslationPreference.save(true, to: defaults)
-        #expect(TranslationPreference.load(from: defaults))
-        #expect(TranslationDirection.load(from: defaults) == .automatic)
-        TranslationDirection.chinese.save(to: defaults)
-        #expect(TranslationDirection.load(from: defaults) == .chinese)
+        try withTestDefaults("translation") { defaults in
+            #expect(TranslationPreference.load(from: defaults) == false)
+            TranslationPreference.save(true, to: defaults)
+            #expect(TranslationPreference.load(from: defaults))
+            #expect(TranslationDirection.load(from: defaults) == .automatic)
+            TranslationDirection.chinese.save(to: defaults)
+            #expect(TranslationDirection.load(from: defaults) == .chinese)
+        }
     }
 
     /// Turning translation on without the model asks as cleanup does, and nothing goes

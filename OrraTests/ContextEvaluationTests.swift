@@ -53,10 +53,6 @@ extension RealModelTests {
             FileManager.default.fileExists(atPath: EvaluationData.root.appendingPathComponent("sets/\(set)/terms.tsv").path)
         }
 
-        private static func seconds(_ duration: Duration) -> Double {
-            Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
-        }
-
         private static func percent(_ part: Int, _ whole: Int) -> String {
             String(format: "%.1f%%", 100 * Double(part) / Double(max(whole, 1)))
         }
@@ -122,7 +118,7 @@ extension RealModelTests {
                     for withContext in [false, true] {
                         let start = ContinuousClock.now
                         let raw = try await engine.transcribe(speech, context: withContext ? context : nil)
-                        let elapsed = Self.seconds(start.duration(to: .now))
+                        let elapsed = start.duration(to: .now) / .seconds(1)
                         let text = Self.finalText(raw, samples: speech)
                         let heard = Self.normalized(text)
                         let found = counted.filter { heard.contains(Self.normalized($0)) }.count

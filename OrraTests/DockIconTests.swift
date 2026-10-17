@@ -29,12 +29,11 @@ struct DockIconTests {
         #expect(fakes.policies == [.regular, .accessory])
         #expect(fakes.saved == [false])
 
-        let suite = "io.github.db-ol.OrraTests.dock-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(DockIcon.live(defaults: defaults).showsInDock)
-        defaults.set(false, forKey: DockIcon.defaultsKey)
-        #expect(!DockIcon.live(defaults: defaults).showsInDock)
+        try withTestDefaults("dock") { defaults in
+            #expect(DockIcon.live(defaults: defaults).showsInDock)
+            defaults.set(false, forKey: DockIcon.defaultsKey)
+            #expect(!DockIcon.live(defaults: defaults).showsInDock)
+        }
     }
 
     @Test func whileOffAnOpenWindowShowsTheIcon() {

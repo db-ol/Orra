@@ -18,7 +18,7 @@ import Testing
 @MainActor
 struct CleanupIdleUnloadMeasurementTests {
     private static func seconds(_ duration: Duration) -> String {
-        String(format: "%.3f s", Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18)
+        String(format: "%.3f s", duration / .seconds(1))
     }
 
     private static func gigabytes(_ bytes: UInt64) -> String {

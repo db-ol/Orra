@@ -119,7 +119,7 @@ struct CaptionPipelineMeasurementTests {
             }) { sentence in
                 // Seconds since the start of the file and since the end of the sentence was
                 // fed, as the live captions would see it, in real time only.
-                let now = Self.seconds(fedAt.duration(to: .now))
+                let now = fedAt.duration(to: .now) / .seconds(1)
                 let sinceEnd = now - sentence.end
                 var line = lines[sentence.id] ?? ["file": file.lastPathComponent, "id": sentence.id, "interim_count": 0]
                 if lines[sentence.id] == nil {
@@ -227,10 +227,6 @@ struct CaptionPipelineMeasurementTests {
             sorted[min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded()))]
         }
         return String(format: "median %.2f s, p90 %.2f s, max %.2f s, n %d", at(0.5), at(0.9), sorted.last!, sorted.count)
-    }
-
-    private static func seconds(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
     }
 
     private static func audioFiles(at url: URL) throws -> [URL] {
