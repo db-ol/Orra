@@ -188,6 +188,7 @@ struct PushToTalkControllerTests {
 
     private func makeController(
         limit: Duration = RecordingLimits.maximumDuration,
+        countdown: Duration = RecordingLimits.countdown,
         minimumHold: Duration = .zero,
         listeningCueDelay: Duration = .zero,
         soundWaitLimit: Duration = .seconds(1),
@@ -199,6 +200,7 @@ struct PushToTalkControllerTests {
             insert: inserter.insert,
             frontmostApp: { [workspace] in workspace.frontmost },
             maximumRecordingDuration: limit,
+            countdown: countdown,
             minimumHold: minimumHold,
             releaseTail: .zero,
             listeningCueDelay: listeningCueDelay,
@@ -818,7 +820,7 @@ struct PushToTalkControllerTests {
         #expect(mic.calls == ["start", "stop"])
         #expect(controller.state == .idle)
         #expect(inserter.inserted == ["你好"])
-        #expect(controller.notice == "Orra records up to 1 minute at a time, so the recording stopped there.")
+        #expect(controller.notice == "Orra records up to 5 minutes at a time, so the recording stopped there.")
         // The real release that follows later changes nothing.
         controller.handle(.released)
         #expect(mic.calls == ["start", "stop"])
@@ -844,9 +846,31 @@ struct PushToTalkControllerTests {
 
     // MARK: Long dictations
 
+    static let limitNotice = "Orra records up to 5 minutes at a time, so the recording stopped there."
+
     /// A recording of `seconds` at 16 kHz with no pause in it.
     private func longRecording(seconds: Double) -> AudioRecording {
         AudioRecording(samples: FakeMicrophone.tone(count: Int(seconds * 16_000)), sampleRate: 16_000)
+    }
+
+    @Test func theIndicatorCountsDownBeforeTheLimit() async throws {
+        let controller = await makeController(limit: .milliseconds(300), countdown: .milliseconds(200))
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        let near = try #require(cues.list.firstIndex(of: .limitNear(remaining: .milliseconds(200))))
+        let transcribing = try #require(cues.list.firstIndex(of: .transcribing))
+        #expect(near < transcribing)
+        #expect(cues.list.filter { if case .limitNear = $0 { true } else { false } }.count == 1)
+        #expect(cues.list.last == .finished(message: Self.limitNotice))
+    }
+
+    @Test func aDictationReleasedBeforeTheCountdownSendsNone() async throws {
+        let controller = await makeController(limit: .seconds(10), countdown: .seconds(5))
+        let cues = CueRecorder(controller)
+        try await dictate(controller)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(cues.list == [.listening, .transcribing, .recordingStopped, .finished(message: nil)])
     }
 
     @Test func aMinuteIsTranscribedInOnePass() async throws {
@@ -928,6 +952,19 @@ struct PushToTalkControllerTests {
         #expect(speech.receivedSampleCounts.count == 2)
         #expect(inserter.inserted.isEmpty)
         #expect(controller.problem == "The recording could not be transcribed")
+    }
+
+    /// Every reason that applies is told: here the limit and a part that was not transcribed.
+    @Test func theNoticesOfALongDictationAddUp() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.queued = [.success("早上好。"), .failure(TestError()), .success("晚上好。")]
+        let controller = await makeController(limit: .milliseconds(50))
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        let both = Self.limitNotice + " Part of this dictation could not be transcribed."
+        #expect(controller.notice == both)
+        #expect(cues.list.last == .finished(message: both))
     }
 
     @Test func aTapTheSystemSwitchedOffShowsTheTalkKeyOffUntilANewTapIsInstalled() async throws {
@@ -2182,7 +2219,7 @@ struct PushToTalkControllerTests {
         controller.handle(.doublePressed)
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(inserter.inserted == ["你好"])
-        #expect(cues.list.last == .finished(message: "Orra records up to 1 minute at a time, so the recording stopped there."))
+        #expect(cues.list.last == .finished(message: "Orra records up to 5 minutes at a time, so the recording stopped there."))
     }
 
     @Test func aDoublePressWithoutTheModelSaysWhy() async throws {

@@ -47,9 +47,13 @@ nonisolated enum RecordingLimits {
     /// Holds of the talk key shorter than this are taps, not speech, and are discarded.
     /// Measured from press to release, not from the audio that arrived.
     static let minimumHold: Duration = .milliseconds(300)
-    /// A recording stops and is processed after this long.
-    static let maximumSeconds = 60.0
+    /// A recording stops and is processed after this long. Both ways to record set aside
+    /// room for this much audio, see AudioRecorder. A recording longer than a minute is
+    /// transcribed in pieces, see RecordingPieces.
+    static let maximumSeconds = 300.0
     static let maximumDuration: Duration = .seconds(maximumSeconds)
+    /// The indicator counts down the seconds left for this long before the limit.
+    static let countdown: Duration = .seconds(15)
     /// After the talk key is released, recording goes on this long, because the last
     /// buffer and the input latency still hold the end of the speech.
     static let releaseTail: Duration = .milliseconds(150)
@@ -506,6 +510,8 @@ actor AudioRecorder {
         }
         // The old unit lets go of its device first.
         unit = nil
+        // Its room for a whole recording stays while the unit is kept: 57.6 MB at 48 kHz
+        // for 5 minutes.
         let made = try InputUnit(device: device, maximumSeconds: RecordingLimits.maximumSeconds, meter: meter, arrival: arrival)
         unit = made
         return made

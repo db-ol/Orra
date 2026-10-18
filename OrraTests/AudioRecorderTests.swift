@@ -203,8 +203,11 @@ struct AudioRecorderTests {
     @Test func lengthRules() {
         #expect(RecordingLimits.minimumHold == .milliseconds(300))
         #expect(RecordingLimits.maximumDuration == .seconds(RecordingLimits.maximumSeconds))
-        // The recording limit notice and both user guides say 1 minute. Change them with it.
-        #expect(RecordingLimits.maximumDuration == .seconds(60))
+        // Both user guides and docs/manual-testing.md say 5 minutes and 15 s. Change them
+        // with these.
+        #expect(RecordingLimits.maximumDuration == .seconds(300))
+        #expect(RecordingLimits.countdown == .seconds(15))
+        #expect(PushToTalkController.limitNotice == "Orra records up to 5 minutes at a time, so the recording stopped there.")
         #expect(RecordingLimits.releaseTail == .milliseconds(150))
         #expect(AudioRecording(samples: Array(repeating: 0, count: 24_000), sampleRate: 48_000).duration == 0.5)
         #expect(AudioRecording(samples: [], sampleRate: 0).duration == 0)

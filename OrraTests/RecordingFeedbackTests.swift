@@ -94,6 +94,46 @@ struct RecordingFeedbackTests {
         feedback.handle(.finished(message: nil))
     }
 
+    @Test func theIndicatorCountsDownTheLastSeconds() async throws {
+        let feedback = makeFeedback()
+        feedback.handle(.listening)
+        #expect(feedback.secondsLeft == nil)
+        #expect(feedback.countdownText == nil)
+        feedback.handle(.limitNear(remaining: .milliseconds(1_500)))
+        #expect(feedback.secondsLeft == 2)
+        #expect(feedback.countdownText == "Stops in 2 s")
+        #expect(feedback.display == .listening)
+        try await waitUntil { feedback.secondsLeft == 1 }
+        #expect(feedback.secondsLeft == 1)
+        // It stays at 1 until the recording stops.
+        try await Task.sleep(for: .milliseconds(700))
+        #expect(feedback.secondsLeft == 1)
+        feedback.handle(.transcribing)
+        #expect(feedback.secondsLeft == nil)
+        #expect(feedback.countdownText == nil)
+    }
+
+    @Test func theCountdownGoesOnWhenAHoldTurnsHandsFreeAndEndsWithTheDictation() {
+        let feedback = makeFeedback()
+        feedback.handle(.listening)
+        feedback.handle(.limitNear(remaining: .seconds(15)))
+        #expect(feedback.secondsLeft == 15)
+        feedback.handle(.handsFree(finishHint: "Press right Control to finish"))
+        #expect(feedback.secondsLeft == 15)
+        // Escape ends the dictation without a paste.
+        feedback.handle(.finished(message: nil))
+        #expect(feedback.secondsLeft == nil)
+    }
+
+    @Test func theSecondsLeftRoundUp() {
+        let now = ContinuousClock.now
+        #expect(RecordingFeedback.secondsLeft(until: now + .seconds(15), now: now) == 15)
+        #expect(RecordingFeedback.secondsLeft(until: now + .milliseconds(14_200), now: now) == 15)
+        #expect(RecordingFeedback.secondsLeft(until: now + .milliseconds(100), now: now) == 1)
+        #expect(RecordingFeedback.secondsLeft(until: now, now: now) == 0)
+        #expect(RecordingFeedback.secondsLeft(until: now - .seconds(1), now: now) == 0)
+    }
+
     @Test func withTheIndicatorOffNothingShowsButTheSoundsPlay() {
         let feedback = makeFeedback(preferences: .init(showsIndicator: false, playsSounds: true, showsIdleBar: false))
         feedback.handle(.listening)
@@ -351,6 +391,8 @@ struct RecordingFeedbackTests {
         #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: nil) == "Listening")
         #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: .automatic) == "Listening This dictation will be translated.")
         #expect(RecordingIndicatorView.accessibilityLabel("Press right Option to finish", translation: .english) == "Press right Option to finish This dictation will be translated into English.")
+        #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: nil, countdown: "Stops in 12 s") == "Listening Stops in 12 s")
+        #expect(RecordingIndicatorView.accessibilityLabel("Press right Option to finish", translation: .automatic, countdown: "Stops in 3 s") == "Press right Option to finish This dictation will be translated. Stops in 3 s")
         #expect(TranslationDirection.chinese.badgeDescription() == "This dictation will be translated into Chinese.")
     }
 
@@ -378,6 +420,15 @@ struct RecordingFeedbackTests {
         #expect(try drawnPixels(translated) > drawnPixels(plain))
     }
 
+    @Test func theViewDrawsTheCountdownNextToTheBars() throws {
+        let plain = makeFeedback()
+        plain.handle(.listening)
+        let counting = makeFeedback()
+        counting.handle(.listening)
+        counting.handle(.limitNear(remaining: .seconds(12)))
+        #expect(try drawnPixels(counting) > drawnPixels(plain))
+    }
+
     /// Renders the indicator with the badge to PNGs, for a look without running the app.
     /// Off unless ORRA_SETTINGS_SNAPSHOTS names a folder, as for the settings pages.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
@@ -393,6 +444,8 @@ struct RecordingFeedbackTests {
             ("listening-talk-key", [.listening]),
             ("hands-free-automatic", [.handsFree(finishHint: hint, translation: .automatic)]),
             ("transcribing-english", [.listening(translation: .english), .transcribing]),
+            ("listening-countdown", [.listening, .limitNear(remaining: .seconds(12))]),
+            ("hands-free-countdown", [.handsFree(finishHint: hint, translation: .automatic), .limitNear(remaining: .seconds(9))]),
         ]
         for (name, sequence) in cues {
             let feedback = makeFeedback(FeedbackOutputs())

@@ -17,7 +17,7 @@ extension Logger {
 /// dictation sends handsFree in place of listening, or after it when a hold turned into
 /// one. A hold that ends early
 /// skips to finished, which comes only when there is a message to show or an indicator to
-/// clear.
+/// clear. A dictation that nears the recording limit sends limitNear while it records.
 nonisolated enum DictationCue: Equatable, Sendable {
     /// The hold has lasted long enough to be a dictation, and the microphone delivers sound.
     /// `translation` is the direction when the translation key started it, so the
@@ -36,6 +36,9 @@ nonisolated enum DictationCue: Equatable, Sendable {
     case recordingStopped
     /// The hold is over. The message says why nothing was pasted, when there is a reason.
     case finished(message: String?)
+    /// Only `remaining` is left before the recording limit stops the dictation, so the
+    /// indicator counts down the seconds.
+    case limitNear(remaining: Duration)
 }
 
 /// Connects the talk key, the microphone, the speech model and text insertion, and
@@ -190,6 +193,7 @@ final class PushToTalkController {
     @ObservationIgnored private let isTrusted: @MainActor () -> Bool
     @ObservationIgnored private let installTap: HotkeyTap.Install
     @ObservationIgnored private let maximumRecordingDuration: Duration
+    @ObservationIgnored private let countdown: Duration
     @ObservationIgnored private let minimumHold: Duration
     @ObservationIgnored private let releaseTail: Duration
     @ObservationIgnored private let accessCheckDelay: Duration
@@ -285,6 +289,7 @@ final class PushToTalkController {
     ///     so they never install a real tap.
     ///   - maximumRecordingDuration: A hold longer than this is processed as if the key
     ///     had been released.
+    ///   - countdown: How long before that limit the indicator counts down.
     ///   - minimumHold: Holds shorter than this are discarded.
     ///   - releaseTail: How long recording goes on after the talk key is released.
     ///   - accessCheckDelay: How long Orra waits before it checks access again, see
@@ -333,6 +338,7 @@ final class PushToTalkController {
         isTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
         installTap: @escaping HotkeyTap.Install = HotkeyTap.installLive,
         maximumRecordingDuration: Duration = RecordingLimits.maximumDuration,
+        countdown: Duration = RecordingLimits.countdown,
         minimumHold: Duration = RecordingLimits.minimumHold,
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
@@ -374,6 +380,7 @@ final class PushToTalkController {
         self.isTrusted = isTrusted
         self.installTap = installTap
         self.maximumRecordingDuration = maximumRecordingDuration
+        self.countdown = countdown
         self.minimumHold = minimumHold
         self.releaseTail = releaseTail
         self.accessCheckDelay = accessCheckDelay
@@ -1095,14 +1102,36 @@ final class PushToTalkController {
                 return nil
             }
         }
-        recordingLimitTask = Task { [weak self, maximumRecordingDuration] in
-            try? await Task.sleep(for: maximumRecordingDuration)
-            guard !Task.isCancelled, let self, state == .listening || state == .handsFree else { return }
-            logger.info("Recording reached its maximum length")
-            // The audio buffer holds no more, so the dictation ends here and says why.
-            notice = String(localized: "Orra records up to 1 minute at a time, so the recording stopped there.")
-            handle(.released)
+        recordingLimitTask = Task { [weak self, maximumRecordingDuration, countdown] in
+            let lead = min(countdown, maximumRecordingDuration)
+            try? await Task.sleep(for: maximumRecordingDuration - lead)
+            guard !Task.isCancelled else { return }
+            self?.recordingLimitNears(lead)
+            try? await Task.sleep(for: lead)
+            guard !Task.isCancelled else { return }
+            self?.recordingReachedLimit()
         }
+    }
+
+    /// What the menu and the indicator say after a stop at the recording limit.
+    nonisolated static var limitNotice: String {
+        String(localized: "Orra records up to \(Int(RecordingLimits.maximumSeconds / 60)) minutes at a time, so the recording stopped there.")
+    }
+
+    /// Lets the indicator count down the `remaining` time of a dictation that records.
+    private func recordingLimitNears(_ remaining: Duration) {
+        guard state == .listening || state == .handsFree else { return }
+        onCue(.limitNear(remaining: remaining))
+    }
+
+    /// Ends a dictation that records at the limit, as if the key had been released, and
+    /// says why.
+    private func recordingReachedLimit() {
+        guard state == .listening || state == .handsFree else { return }
+        logger.info("Recording reached its maximum length")
+        // The audio buffer holds no more, so the dictation ends here and says why.
+        notice = Self.limitNotice
+        handle(.released)
     }
 
     /// Sends the listening cue, or the hands free cue, once `delay` has passed and the

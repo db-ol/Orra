@@ -2334,12 +2334,12 @@
         }
       }
     },
-    "Orra records up to 1 minute at a time, so the recording stopped there." : {
+    "Orra records up to %lld minutes at a time, so the recording stopped there." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 每次最多录 1 分钟，所以录音到这里就停止了。"
+            "value" : "Orra 每次最多录 %lld 分钟，所以录音到这里就停止了。"
           }
         }
       }
@@ -3330,6 +3330,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止朗读"
+          }
+        }
+      }
+    },
+    "Stops in %lld s" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒后停止"
           }
         }
       }

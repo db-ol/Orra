@@ -248,7 +248,7 @@ extension RealModelTests {
             let singleRate = 100 * Double(single.errors) / Double(max(single.tokens, 1))
             let lengths = pieces.map { String(format: "%.1f", $0.seconds) }.joined(separator: ", ")
             Attachment.record("\(set): \(references.count) clips, \(String(format: "%.1f", seconds)) s in pieces of \(lengths) s, \(latency), error \(String(format: "%.1f", joinedRate))% in pieces, \(String(format: "%.1f", singleRate))% one by one", named: "pieces-\(set).txt")
-            #expect(seconds >= target - 30)
+            #expect(seconds >= target - 30 && seconds <= RecordingLimits.maximumSeconds)
             #expect(pieces.count > 1)
             #expect(pieces.allSatisfy { $0.seconds <= RecordingPieces.maximumSeconds })
             #expect(transcript.missing == 0)
