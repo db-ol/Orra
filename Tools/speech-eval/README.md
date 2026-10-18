@@ -36,7 +36,8 @@ the source on 2026-10-12:
 Strata: short is 2 to 5 s for English and 2 to 7 s for Chinese, mid is 10 to 20 s, long
 joins utterances of one LibriSpeech chapter or one FLEURS group with 0.4 s gaps into 60 to
 120 s, and snr10 adds white noise at 10 dB SNR to eight mid clips. Long clips are longer
-than Orra's 60 s recording limit, so they test the model beyond what one dictation sends.
+than the pieces of at most 60 s that Orra transcribes a dictation in, so they test one pass
+over more audio than a dictation sends.
 
 ## Metrics
 

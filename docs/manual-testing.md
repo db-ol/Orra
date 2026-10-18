@@ -126,13 +126,13 @@ got worse than the baseline, see docs/release-gate.md.
     switches to its on screen hint and back, so saved settings keep their meaning, and
     checks that a picked hint sets both switches and saves once.
   - PushToTalkStateMachineTests covers the full transition table (6 states by 9 events,
-    54 rows, since 2026-10-17 with the press after a stop at the recording limit, which no
-    state takes) and each edge case decision, including cancel, a tap that waits for a second
-    press, a second press that resumes listening and ends as a double press or a hold, a
-    double press from idle and after a tap, presses during hands free and during
-    processing, and since 2026-10-16 an early capture that a press keeps, that a release
-    starting hands free keeps, that a cancel, a release or a tap drops, and that is ignored
-    outside idle.
+    54 rows, since 2026-10-17 with the press after a stop at the recording limit, which
+    only arming takes, as a cancel) and each edge case decision, including cancel, a tap
+    that waits for a second press, a second press that resumes listening and ends as a
+    double press or a hold, a double press from idle and after a tap, presses during
+    hands free and during processing, and since 2026-10-16 an early capture that a press
+    keeps, that a release starting hands free keeps, that a cancel, a release or a tap
+    drops, and that is ignored outside idle.
   - TalkKeyHandsFreeTests drives the detector with a clock the test moves: a quick double
     press that starts hands free at the second release, a tap whose window closes, a slow
     second press that is an ordinary hold, a tap followed by a hold for a right and a left
@@ -143,16 +143,19 @@ got worse than the baseline, see docs/release-gate.md.
     and down and Escape outside hands free, a shortcut with a left key and the key with
     another modifier that do not finish, a Control click and an fn click, a change of keys,
     the owner ending hands free, and reset. Since 2026-10-17 it covers the wait after a
-    stop at the recording limit: the press meant to stop records nothing and tells at its
-    release, also in Double press, after a first press in Press to start and stop that was
-    still down, and for a press under way at the stop, fn stays hidden, Escape and typing
-    pass through, a shortcut or a click keeps the wait, a hold in Hold mode is left alone,
-    and the owner, another talk key, a change of keys and reset end the wait. For the left keys it covers the delay, a
-    shortcut, a click and another modifier before the delay that stay silent, a double
-    press that starts hands free without recording the tap, a lone tap, and telling a left
-    key from its right twin. Thousands of random presses with hands free on check that only
-    fn's events and Escape during hands free are swallowed and that the detector and the
-    state model agree on hands free.
+    stop at the recording limit: in Hold mode a quick press meant to stop tells at its
+    release and drops its early capture, a press held past the wait is a hold, a left key
+    waits as usual, and a double press still starts hands free. In Double press and after
+    a first press in Press to start and stop that was still down, the press meant to stop
+    records nothing however long it is, and so does a press under way at the stop. fn
+    stays hidden, Escape and typing pass through, a shortcut or a click keeps the wait, a
+    shortcut with another talk key keeps it too, a hold in Hold mode is left alone, and
+    the owner, a change of keys and reset end the wait. For the left keys it covers the
+    delay, a shortcut, a click and another modifier before the delay that stay silent, a
+    double press that starts hands free without recording the tap, a lone tap, and
+    telling a left key from its right twin. Thousands of random presses with hands free
+    on check that only fn's events and Escape during hands free are swallowed and that
+    the detector and the state model agree on hands free.
   - TalkKeyDetectorTests covers, for fn as before, a hold of fn alone, Caps Lock, fn with
     another modifier, modifier rollover, a key or modifier during a hold (Fn+Delete), key
     code 179, arrows carrying the fn flag, release without press, repeated presses, that
@@ -257,13 +260,18 @@ got worse than the baseline, see docs/release-gate.md.
     installer. Since 2026-10-17 it checks the countdown cue before the limit and none for
     a shorter dictation, a minute in one pass, a longer dictation in pieces of at most a
     minute with the vocabulary and the number pass for each, a failed piece, an empty one
-    in the middle and at the end, every piece failing, a cancelled piece ending the whole
-    dictation, the notices of a long dictation adding up, and the notice about a long
-    dictation pasted without cleanup only while cleanup is on and has work. Through the
-    tap it checks that after a stop at the limit the press meant to stop only clears the
-    notice, in Press to start and stop, Double press and hands free in Hold mode, and that
-    a press after the window, the press after one during the transcription, a press in
-    Hold mode and another talk key during the wait record as usual. With a fake in place of the keyboard tap and the access check, it checks
+    in the middle and at the end that is not missing, minutes of silence that say only
+    that nothing was recognized, every piece failing, a cancelled piece ending the whole
+    dictation, the notices of a long dictation adding up, each on a menu line of its own,
+    and the notice about a long dictation pasted without cleanup only while cleanup is on
+    and has work, with no wait for the model. Through the tap it checks that after a stop
+    at the limit the press meant to stop only clears the notice, in Press to start and
+    stop, Double press and hands free in Hold mode, that the notice that stays says first
+    why the recording stopped, that in Hold mode a hold records and a double press starts
+    hands free, that a press of another key that turns out to be a shortcut keeps the
+    wait, and that a press after the window, the press after one during the
+    transcription, a press in Hold mode and another talk key during the wait record as
+    usual. With a fake in place of the keyboard tap and the access check, it checks
     that the menu shows the talk key as off as soon as the system switches the tap off,
     that a new tap is installed after the pause while access is there, and that no tap
     comes back when the access check says no, or still says yes while the system refuses
@@ -276,13 +284,13 @@ got worse than the baseline, see docs/release-gate.md.
     failed to load, and microphone access that is off or impossible in the build.
   - RecordingFeedbackTests checks what the indicator shows and which sound plays for each
     cue, a message that goes after a while without hiding the next hold, since 2026-10-17
-    the countdown of the last seconds, which stays at 1 and ends with the recording, and
-    the message after a stop at the limit, which stays until it is cleared or its window
-    ends, the indicator
-    and the sounds turned off, the idle bar between dictations, only while Orra can
-    dictate, and turned off, that the view draws it, the area where the pointer counts
-    as over the bar, saving the choices, the level meter's scale, how it rises
-    and falls, and that it reads the microphone only while it is on screen. It makes the
+    the countdown of the last seconds, which stays at 1, ends with the recording and keeps
+    the capsule's width below 10, and the message after a stop at the limit, which stays
+    until it is cleared or its window ends, the indicator and the sounds turned off, the
+    idle bar between dictations, only while Orra can dictate, and turned off, that the
+    view draws it, the area where the pointer counts as over the bar, saving the choices,
+    the level meter's scale, how it rises and falls, and that it reads the microphone
+    only while it is on screen. It makes the
     app's own indicator panel without showing it and checks that the panel can never
     become key or main, lets clicks through, and shows on every Space and over full
     screen apps. It uses fakes for the panel and the sounds otherwise, so no window opens
@@ -947,9 +955,10 @@ got worse than the baseline, see docs/release-gate.md.
   full piece and not in an earlier one, five minutes of sentences are cut between them,
   speech without a pause is cut within those 15 s, the last piece keeps at least a
   second, and other sample rates are cut by their time. It also covers the join for
-  Chinese, English and mixed text, with and without punctuation at the cut, that one
-  piece gives exactly the text a whole recording gave before, that each piece is guarded
-  on its own, and which pieces count as giving no text.
+  Chinese, English and mixed text, with and without punctuation at the cut, and with no
+  space between Chinese and a digit, a % or a quotation mark, that one piece gives
+  exactly the text a whole recording gave before, that each piece is guarded on its own,
+  and that only failed pieces count as missing.
 - ProblemReportTests covers the diagnostic report of Report a Problem…: the home folder,
   account name, full name and computer name are taken out, names under three characters
   and other users' folders stay, the report lists the facts and only counts of the
@@ -2402,6 +2411,13 @@ the last 15 s. Use a Release build:
   then press the key once. The message goes away, and no start sound, bars or recording
   follow. Press again: a new recording starts. The same with Double press, and with hands
   free from a double press in Hold mode.
+- [ ] In Hold mode, after hands free stopped at the limit, hold the key while the message
+  shows and speak at once: the bars and the start sound come, and the first words are
+  in the text. A quick double press instead starts hands free.
+- [ ] With the interface in Chinese, the stop at 5 minutes shows
+  "Orra 每次最多录 5 分钟，所以录音到这里就停止了。" for 30 s. With cleanup on and fillers in
+  the dictation, "超过 400 个字符的听写不会整理，会直接粘贴。" follows it with no space
+  after the full width period, and the menu shows the two on lines of their own.
 - [ ] After a stop at the limit, leave the message alone: it goes after 30 s, and the next
   press records as usual. A press while the 5 minutes are still being transcribed
   records nothing, and the message then goes after the usual 4 s.
