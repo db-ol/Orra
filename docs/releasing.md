@@ -106,8 +106,9 @@ with every release. The script:
 5. puts it in a DMG with a link to Applications, signs the DMG, notarizes and staples it,
 6. checks both with Gatekeeper,
 7. signs the DMG with the update key, writes appcast.xml with the release notes and signs it
-   too, since Orra requires a signed feed, and writes the DMG's SHA-256 next to it,
-8. writes release-notes.md, the text of the GitHub release,
+   too, since Orra requires a signed feed,
+8. writes release-notes.md, the text of the GitHub release, and then the DMG's SHA-256 next
+   to the DMG,
 9. copies the finished DMG to Orra.dmg, byte for byte, without building it again, and
    checks that the two files are identical, so Orra.dmg has the same SHA-256.
 
