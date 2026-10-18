@@ -26,7 +26,7 @@ struct TranslationVoiceDictationTests {
         }
     }
 
-    private func controller(_ translation: PushToTalkControllerTests.FakeTranslation, voice: Recorder) async -> PushToTalkController {
+    private func controller(_ translation: PushToTalkControllerTests.FakeTranslation, voice: Recorder, language: DictationLanguage = .chinese) async -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -36,7 +36,8 @@ struct TranslationVoiceDictationTests {
             frontmostApp: { 100 },
             minimumHold: .zero,
             releaseTail: .zero,
-            listeningCueDelay: .zero
+            listeningCueDelay: .zero,
+            dictationLanguage: language
         )
         controller.setTranslationKeyOn(true)
         await controller.loadModel()
@@ -123,5 +124,24 @@ struct TranslationVoiceDictationTests {
         try await dictate(controller, with: .rightOption)
         #expect(voice.spoken.isEmpty)
         #expect(inserter.inserted.last == "We have a meeting next Tuesday.")
+    }
+
+    /// The voice speaks a translation in its target language: Japanese and Spanish too.
+    @Test func eachTranslationIsSpokenInItsLanguage() async throws {
+        let voice = Recorder()
+        let translation = PushToTalkControllerTests.FakeTranslation(answer: #"{"cleaned": "Can you send me the report today?", "translation": "¿Me puedes mandar el reporte hoy?"}"#)
+        let spanish = await controller(translation, voice: voice, language: .spanish)
+        speech.reply = "Can you send me the report today?"
+        try await dictate(spanish, with: .rightOption)
+        #expect(voice.spoken == ["es ¿Me puedes mandar el reporte hoy?"])
+        translation.shared.answer.withLock { $0 = #"{"cleaned": "ありがとうございます", "translation": "Thank you very much."}"# }
+        let japanese = await controller(translation, voice: voice, language: .japanese)
+        speech.reply = "ありがとうございます"
+        try await dictate(japanese, with: .rightOption)
+        #expect(voice.spoken.last == "en Thank you very much.")
+        translation.shared.answer.withLock { $0 = #"{"cleaned": "See you tomorrow.", "translation": "また明日。"}"# }
+        speech.reply = "See you tomorrow."
+        try await dictate(japanese, with: .rightOption)
+        #expect(voice.spoken.last == "ja また明日。")
     }
 }

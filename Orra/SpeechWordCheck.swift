@@ -98,9 +98,10 @@ nonisolated enum SpeechWordCheck {
     /// a name or a term, gets no hint: it is compared by character, and told to write
     /// English, the speech model would likely write those characters in pinyin or English
     /// words. Without a hint it listens as it did before the hint, which the limits were
-    /// measured with. A Chinese piece keeps its hint.
+    /// measured with. A Chinese or Japanese piece keeps its hint, and a Spanish piece is
+    /// treated as an English one.
     static func hint(for piece: String, in language: TranslationTarget) -> TranslationTarget? {
-        language == .english && usesCharacters(piece) ? nil : language
+        (language == .english || language == .spanish) && usesCharacters(piece) ? nil : language
     }
 
     /// Whether `text` is compared character by character: when it has any Chinese,
@@ -164,7 +165,8 @@ nonisolated enum SpeechWordCheck {
                 word = String.UnicodeScalarView()
                 hasDigits = false
             }
-            let text = String(word)
+            // Accents do not count, since the speech model may leave them out: qué is que.
+            let text = String(word).folding(options: .diacriticInsensitive, locale: nil)
             if numberWords.contains(text) || (hasDigits && (text.isEmpty || ordinalEndings.contains(text))) {
                 tokens.append(.number)
             } else if !text.isEmpty {
@@ -252,23 +254,35 @@ nonisolated enum SpeechWordCheck {
     /// Ordinal endings of a number written in digits, such as "1st".
     static let ordinalEndings: Set<String> = ["st", "nd", "rd", "th"]
 
-    /// Words that go with the number before them, see `numberParts`.
-    static let wordsAfterNumbers: Set<String> = ["percent", "dollar", "dollars", "oclock", "点", "分", "之", "半", "刻"]
+    /// Words that go with the number before them, see `numberParts`, in English, Chinese,
+    /// Japanese (時) and Spanish (y media, por ciento, pesos), with their accents left out.
+    static let wordsAfterNumbers: Set<String> = [
+        "percent", "dollar", "dollars", "oclock", "点", "分", "之", "半", "刻", "時", "时",
+        "y", "media", "cuarto", "por", "pesos", "dolares", "euros",
+    ]
 
     /// Words that go between two numbers, see `numberParts`.
-    static let wordsBetweenNumbers: Set<String> = ["point", "and"]
+    static let wordsBetweenNumbers: Set<String> = ["point", "and", "punto", "coma", "y"]
 
-    /// English number words, which a number may be read as.
+    /// English and Spanish number words, which a number may be read as. The Spanish ones
+    /// without accents, as the units are compared.
     static let numberWords: Set<String> = [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
         "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
         "hundred", "thousand", "million", "billion",
         "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+        "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez",
+        "once", "doce", "trece", "catorce", "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve",
+        "veinte", "veintiuno", "veintidos", "veintitres", "veinticuatro", "veinticinco", "veintiseis",
+        "veintisiete", "veintiocho", "veintinueve", "treinta", "cuarenta", "cincuenta", "sesenta",
+        "setenta", "ochenta", "noventa", "cien", "ciento", "doscientos", "trescientos", "cuatrocientos",
+        "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos", "mil", "millon", "millones",
     ]
 
-    /// Chinese numerals, which a number may be read as. 幺 is one in a phone number.
-    static let chineseNumerals: Set<Unicode.Scalar> = Set("零〇一二两三四五六七八九十百千万亿幺".unicodeScalars)
+    /// Chinese and Japanese numerals, which a number may be read as. 幺 is one in a phone
+    /// number.
+    static let chineseNumerals: Set<Unicode.Scalar> = Set("零〇一二两三四五六七八九十百千万亿億兆幺".unicodeScalars)
 
     private static func isCharacterScript(_ scalar: Unicode.Scalar) -> Bool {
         SpeechCheck.isCharacterScript(scalar)

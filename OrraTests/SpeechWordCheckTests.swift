@@ -16,6 +16,33 @@ struct SpeechWordCheckTests {
         #expect(SpeechWordCheck.hint(for: "用 API 做。", in: .chinese) == .chinese)
     }
 
+    /// A Spanish piece is heard like an English one, and a Japanese piece keeps its hint.
+    @Test func japaneseAndSpanishPiecesGetTheirHint() {
+        #expect(SpeechWordCheck.hint(for: "Nos vemos mañana.", in: .spanish) == .spanish)
+        #expect(SpeechWordCheck.hint(for: "Pregúntale a 田中 por favor.", in: .spanish) == nil)
+        #expect(SpeechWordCheck.hint(for: "また明日。", in: .japanese) == .japanese)
+        #expect(SpeechWordCheck.hint(for: "PRを見てください。", in: .japanese) == .japanese)
+    }
+
+    /// Accents do not count, since the speech model may leave them out, and Spanish
+    /// numbers and the words that go with them do not count, as English ones do not.
+    @Test func spanishAccentsAndNumbersDoNotCount() {
+        #expect(SpeechWordCheck.units(of: "¿Qué pasó, José?") == ["que", "paso", "jose"])
+        #expect(SpeechWordCheck.passes(text: "¿Qué pasó, José?", heard: "Que paso Jose"))
+        #expect(SpeechWordCheck.units(of: "Son las 3 y media.") == ["son", "las"])
+        #expect(SpeechWordCheck.passes(text: "Cuesta 2,500 pesos.", heard: "Cuesta dos mil quinientos pesos."))
+        #expect(SpeechWordCheck.passes(text: "Subió un 10 por ciento.", heard: "Subió un diez por ciento."))
+        #expect(!SpeechWordCheck.passes(text: "La reunión es el martes.", heard: "The meeting is on Tuesday."))
+    }
+
+    /// Japanese is compared character by character, with numbers in Han characters, 億 and
+    /// 兆 among them, left out.
+    @Test func japaneseIsComparedByCharacter() {
+        #expect(SpeechWordCheck.units(of: "3時半に会いましょう。") == ["に", "会", "い", "ま", "し", "ょ", "う"])
+        #expect(SpeechWordCheck.passes(text: "予算は15億円です。", heard: "予算は十五億円です。"))
+        #expect(!SpeechWordCheck.passes(text: "明日の会議は中止です。", heard: "明天的会议取消了。"))
+    }
+
     @Test func chineseIsComparedByCharacterAndEnglishByWord() {
         #expect(SpeechWordCheck.units(of: "我同意。") == ["我", "同", "意"])
         #expect(SpeechWordCheck.units(of: "Sorry, I was on mute.") == ["sorry", "i", "was", "on", "mute"])

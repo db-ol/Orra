@@ -67,6 +67,31 @@ struct VoiceRecordingTests {
         #expect((32...50).contains(han))
     }
 
+    /// For Japanese and Spanish the scripts follow the same rule, with the language of the
+    /// pair, and the picker offers English and that language.
+    @Test func japaneseAndSpanishHaveScriptsOfTheirOwn() {
+        #expect(VoiceScript.language(direction: .english, language: .japanese, interface: Locale(identifier: "en")) == .japanese)
+        #expect(VoiceScript.language(direction: .japanese, language: .japanese, interface: Locale(identifier: "ja")) == .english)
+        #expect(VoiceScript.language(direction: .automatic, language: .japanese, interface: Locale(identifier: "ja")) == .japanese)
+        #expect(VoiceScript.language(direction: .automatic, language: .spanish, interface: Locale(identifier: "es-419")) == .spanish)
+        #expect(VoiceScript.language(direction: .automatic, language: .spanish, interface: Locale(identifier: "en")) == .english)
+        // A choice saved for Chinese acts as Automatic.
+        #expect(VoiceScript.language(direction: .chinese, language: .spanish, interface: Locale(identifier: "es-419")) == .spanish)
+        let japanese = VoiceScript.text(in: .japanese)
+        let spanish = VoiceScript.text(in: .spanish)
+        #expect(TranslationDirection.source(of: japanese, in: .japanese) == .partner)
+        #expect(TranslationDirection.source(of: spanish, in: .spanish) == .partner)
+        // About 10 seconds read aloud, as the other scripts.
+        #expect((50...75).contains(japanese.count))
+        #expect((20...32).contains(spanish.split(separator: " ").count))
+        #expect(VoiceScript.name(of: .japanese) == "日本語")
+        #expect(VoiceScript.name(of: .spanish) == "Español")
+        #expect(DictationLanguage.spanish.translationTargets == [.english, .spanish])
+        let recording = VoiceRecording(recorder: mic.recorder, playback: playback, output: { nil }, scriptLanguage: .japanese, scriptLanguages: DictationLanguage.japanese.translationTargets)
+        #expect(recording.scriptLanguages == [.english, .japanese])
+        #expect(recording.script == japanese)
+    }
+
     @Test func aNewRecordingShowsTheScriptOfItsLanguage() {
         let recording = makeRecording()
         #expect(recording.script == VoiceScript.text(in: .english))
