@@ -8,7 +8,7 @@
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=%E7%89%88%E6%9C%AC&color=0A84FF" alt="最新版本"></a>
 </p>
 
-<p align="center"><sub><a href="README.md">English</a> · 简体中文</sub></p>
+<p align="center"><sub><a href="README.md">English</a> · 简体中文 · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a></sub></p>
 
 <p align="center">
   <strong>开源的 Mac 语音输入 App。</strong><br>
