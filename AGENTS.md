@@ -48,20 +48,33 @@ trusted once in Xcode. docs/dependencies.md has the details.
   automatically. Do not edit project.pbxproj by hand.
 
 ## Localization
-- The interface is in English and Simplified Chinese. Orra/Localizable.xcstrings holds the
-  strings, and Orra/InfoPlist.xcstrings the microphone and system audio prompts.
+- The interface is in English, Simplified Chinese (zh-Hans), Japanese (ja) and Spanish
+  (es-419). Orra/Localizable.xcstrings holds the strings, and Orra/InfoPlist.xcstrings the
+  microphone and system audio prompts. Spanish is Latin American Spanish, which a Mac in
+  any Spanish falls back to, and it matches the menu items SwiftUI adds.
 - SwiftUI text literals are localized on their own. Text built in code uses
   `String(localized:)`, and SwiftUI shows text that is already localized with
   `Text(verbatim:)`.
-- Every new or changed string needs its Chinese translation in the catalog, marked
-  translated, with full width punctuation (，。：？！（）“”) and a space between Chinese and
-  a Latin word or a number. Keep the keys in the order Xcode writes them, sorted with
-  `localizedStandardCompare`, and remove a string the code no longer uses, which Xcode marks
-  stale. LocalizationTests checks the strings in the catalog and their order. Xcode adds
-  new strings to the catalog when it builds, a command line build does not. This lists
-  every string the code uses, in build/Localizations:
+- Every new or changed string needs all three translations in the catalog, marked
+  translated. Each names menu items, settings panes and keys as macOS does in that
+  language.
+  - Chinese: full width punctuation (，。：？！（）“”) and a space between Chinese and a
+    Latin word or a number.
+  - Japanese: です and ます in sentences, the plain form on buttons and menu items. 、 and
+    。, full width parentheses, a half width ? and :, and “ ” around the names of buttons
+    and settings and around quoted words, as macOS writes them, not 「」. No space between
+    Japanese and a Latin word, a number or an argument, as in Orraを終了 and %lld秒.
+    Dictation is 音声入力.
+  - Spanish: tú, sentence case, ¿? and ¡!, “ ” around quoted words but no quotes around
+    the names of buttons and settings. Latin American words, as macOS uses them in es-419:
+    Configuración, la Mac, presionar, agregar.
+- Keep the keys in the order Xcode writes them, sorted with `localizedStandardCompare`, and
+  remove a string the code no longer uses, which Xcode marks stale. LocalizationTests
+  checks the strings in the catalog and their order. Xcode adds new strings to the catalog
+  when it builds, a command line build does not. This lists every string the code uses, in
+  build/Localizations:
 
-      xcodebuild -exportLocalizations -project Orra.xcodeproj -scheme Orra -derivedDataPath build/DerivedData -localizationPath build/Localizations -exportLanguage zh-Hans ARCHS=arm64
+      xcodebuild -exportLocalizations -project Orra.xcodeproj -scheme Orra -derivedDataPath build/DerivedData -localizationPath build/Localizations -exportLanguage zh-Hans -exportLanguage ja -exportLanguage es-419 ARCHS=arm64
 
 ## Runtime rules
 - The keyboard tap runs on the main thread, so every key press on the Mac waits for it. Never
