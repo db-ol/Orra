@@ -12,7 +12,7 @@
 
 <p align="center">
   <strong>Open source voice input for the Mac.</strong><br>
-  Hold a key, speak, let go, and the words land in the app you are typing in.<br>
+  Press a key, speak, press it again, and the words land in the app you are typing in.<br>
   Your speech is turned into text on your own Mac, never on a server.
 </p>
 
@@ -95,7 +95,7 @@ Orra checks for a new version only after you allow it, and installs one only whe
 - Signed with a Developer ID and notarized by Apple, so it opens without a warning.
 - Not in the Mac App Store, because the App Store's sandbox does not let an app notice a key in other apps or paste into them.
 
-When you open Orra, a welcome window walks you through downloading the models, allowing the microphone and Accessibility, and choosing your talk key. The [user guide](docs/user-guide.md) explains each feature and its settings.
+When you open Orra, a welcome window walks you through downloading the models, allowing the microphone and Accessibility, and choosing your talk key and how it works. The [user guide](docs/user-guide.md) explains each feature and its settings.
 
 ## Privacy
 

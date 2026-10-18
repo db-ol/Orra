@@ -211,8 +211,12 @@ struct SetupDownloadTests {
         let speechOnly = DownloadSummary(speech: missing, speechTotal: speechTotal, cleanup: missing, cleanupTotal: cleanupTotal, wantsCleanup: false, queuesCleanup: false, includesSpeech: true, memoryKeepsCleanupOff: 8, locale: chinese)
         #expect(speechOnly.button == "下载语音模型（2.47 GB）")
         #expect(speechOnly.lines == ["这台 Mac 只有 8 GB 内存，所以整理功能先关着。之后可以在“设置 → 通用”里打开。"])
-        #expect(GuideStep.download.line(locale: chinese) == "你好，我是 Orra。先下载我需要的模型，只需一次。")
-        #expect(GuideStep.ready.line(locale: Locale(identifier: "en")) == "All set! Hold the talk key and say hello.")
+        #expect(GuideStep.download.line(talkMode: .toggle, locale: chinese) == "你好，我是 Orra。先下载我需要的模型，只需一次。")
+        #expect(GuideStep.ready.line(talkMode: .hold, locale: Locale(identifier: "en")) == "All set! Hold the talk key and say hello.")
+        #expect(GuideStep.ready.line(talkMode: .toggle, locale: Locale(identifier: "en")) == "All set! Press the talk key and say hello.")
+        #expect(GuideStep.ready.line(talkMode: .doubleTap, locale: Locale(identifier: "en")) == "All set! Press the talk key twice and say hello.")
+        #expect(GuideStep.ready.line(talkMode: .toggle, locale: chinese) == "准备好了！按一下说话键，打个招呼吧。")
+        #expect(GuideStep.talkKey.line(talkMode: .toggle, locale: chinese) == "选好说话键和它的用法。")
     }
 
     // MARK: The guide
@@ -238,9 +242,11 @@ struct SetupDownloadTests {
 
     @Test func everyStepHasALine() {
         let english = Locale(identifier: "en")
-        let lines = GuideStep.allCases.map { $0.line(locale: english) }
-        #expect(Set(lines).count == GuideStep.allCases.count)
-        #expect(lines.allSatisfy { !$0.isEmpty })
+        for mode in TriggerMode.allCases {
+            let lines = GuideStep.allCases.map { $0.line(talkMode: mode, locale: english) }
+            #expect(Set(lines).count == GuideStep.allCases.count)
+            #expect(lines.allSatisfy { !$0.isEmpty })
+        }
     }
 
     // MARK: Driving the installers
