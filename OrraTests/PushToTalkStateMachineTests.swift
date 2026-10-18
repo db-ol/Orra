@@ -26,6 +26,7 @@ struct PushToTalkStateMachineTests {
         .cancelled,
         .processingFinished,
         .armed,
+        .pressedAfterLimit,
     ]
 
     /// Every state and event pair with the decided outcome. See the doc comment
@@ -39,6 +40,7 @@ struct PushToTalkStateMachineTests {
         Row(from: .idle, event: .cancelled, to: .idle, transition: nil),
         Row(from: .idle, event: .processingFinished, to: .idle, transition: nil),
         Row(from: .idle, event: .armed, to: .arming, transition: .startedArming),
+        Row(from: .idle, event: .pressedAfterLimit, to: .idle, transition: nil),
 
         Row(from: .arming, event: .pressed(isRepeat: false), to: .listening, transition: .confirmedArming),
         Row(from: .arming, event: .pressed(isRepeat: true), to: .arming, transition: nil),
@@ -48,6 +50,7 @@ struct PushToTalkStateMachineTests {
         Row(from: .arming, event: .cancelled, to: .idle, transition: .droppedArming),
         Row(from: .arming, event: .processingFinished, to: .arming, transition: nil),
         Row(from: .arming, event: .armed, to: .arming, transition: nil),
+        Row(from: .arming, event: .pressedAfterLimit, to: .arming, transition: nil),
 
         Row(from: .listening, event: .pressed(isRepeat: false), to: .listening, transition: nil),
         Row(from: .listening, event: .pressed(isRepeat: true), to: .listening, transition: nil),
@@ -57,6 +60,7 @@ struct PushToTalkStateMachineTests {
         Row(from: .listening, event: .cancelled, to: .idle, transition: .cancelledListening),
         Row(from: .listening, event: .processingFinished, to: .listening, transition: nil),
         Row(from: .listening, event: .armed, to: .listening, transition: nil),
+        Row(from: .listening, event: .pressedAfterLimit, to: .listening, transition: nil),
 
         Row(from: .waitingForSecondPress, event: .pressed(isRepeat: false), to: .listening, transition: .resumedListening),
         Row(from: .waitingForSecondPress, event: .pressed(isRepeat: true), to: .waitingForSecondPress, transition: nil),
@@ -66,6 +70,7 @@ struct PushToTalkStateMachineTests {
         Row(from: .waitingForSecondPress, event: .cancelled, to: .idle, transition: .cancelledListening),
         Row(from: .waitingForSecondPress, event: .processingFinished, to: .waitingForSecondPress, transition: nil),
         Row(from: .waitingForSecondPress, event: .armed, to: .waitingForSecondPress, transition: nil),
+        Row(from: .waitingForSecondPress, event: .pressedAfterLimit, to: .waitingForSecondPress, transition: nil),
 
         Row(from: .handsFree, event: .pressed(isRepeat: false), to: .handsFree, transition: nil),
         Row(from: .handsFree, event: .pressed(isRepeat: true), to: .handsFree, transition: nil),
@@ -75,6 +80,7 @@ struct PushToTalkStateMachineTests {
         Row(from: .handsFree, event: .cancelled, to: .idle, transition: .cancelledListening),
         Row(from: .handsFree, event: .processingFinished, to: .handsFree, transition: nil),
         Row(from: .handsFree, event: .armed, to: .handsFree, transition: nil),
+        Row(from: .handsFree, event: .pressedAfterLimit, to: .handsFree, transition: nil),
 
         Row(from: .processing, event: .pressed(isRepeat: false), to: .processing, transition: nil),
         Row(from: .processing, event: .pressed(isRepeat: true), to: .processing, transition: nil),
@@ -84,6 +90,7 @@ struct PushToTalkStateMachineTests {
         Row(from: .processing, event: .cancelled, to: .processing, transition: nil),
         Row(from: .processing, event: .processingFinished, to: .idle, transition: .finished),
         Row(from: .processing, event: .armed, to: .processing, transition: nil),
+        Row(from: .processing, event: .pressedAfterLimit, to: .processing, transition: nil),
     ]
 
     /// Drives a fresh machine into `state` using real events only.

@@ -381,6 +381,139 @@ struct TalkKeyHandsFreeTests {
         #expect(detector.phase == .up)
     }
 
+    // MARK: After a stop at the recording limit
+
+    /// The press that was meant to finish a hands free dictation the limit stopped records
+    /// nothing, however long it is, and only tells at its release. The press after it
+    /// records as usual.
+    @Test mutating func afterAStopAtTheLimitThePressMeantToStopOnlyTells() {
+        var detector = TalkKeyDetector(keys: [.rightControl])
+        _ = startHandsFree(.rightControl, &detector)
+        #expect(detector.stopAtLimit() == true)
+        #expect(detector.phase == .stoppedAtLimit(.rightControl))
+        #expect(detector.timer == nil)
+        // Escape and typing pass through.
+        #expect(keyDown(Self.escape, &detector) == .passThrough)
+        #expect(keyDown(Self.c, &detector) == .passThrough)
+        clock.advance(.seconds(5))
+        #expect(down(.rightControl, &detector) == .passThrough)
+        clock.advance(.seconds(2))
+        #expect(up(.rightControl, &detector) == Decision(event: .pressedAfterLimit, swallow: false))
+        #expect(detector.phase == .up)
+        #expect(down(.rightControl, &detector) == Decision(event: .pressed(isRepeat: false), swallow: false))
+    }
+
+    /// In Double press, the single press that finishes a dictation is the one that tells.
+    @Test mutating func inDoublePressASinglePressTells() {
+        var detector = TalkKeyDetector(keys: [.rightControl], modes: [.rightControl: .doubleTap])
+        #expect(startHandsFree(.rightControl, &detector) == [.doublePressed])
+        #expect(detector.stopAtLimit() == true)
+        _ = down(.rightControl, &detector)
+        clock.advance(.milliseconds(80))
+        #expect(up(.rightControl, &detector).event == .pressedAfterLimit)
+        #expect(detector.phase == .up)
+    }
+
+    /// In Press to start and stop, a first press still down when the limit stops the
+    /// recording is not the press meant to stop it, so the next one is.
+    @Test mutating func inPressToStartAndStopAFirstPressStillDownWaitsForTheNext() {
+        var detector = TalkKeyDetector(keys: [.rightControl], modes: [.rightControl: .toggle])
+        #expect(down(.rightControl, &detector).event == .pressed(isRepeat: false))
+        #expect(detector.stopAtLimit() == true)
+        clock.advance(.seconds(1))
+        #expect(up(.rightControl, &detector) == .passThrough)
+        #expect(detector.phase == .stoppedAtLimit(.rightControl))
+        _ = down(.rightControl, &detector)
+        #expect(up(.rightControl, &detector).event == .pressedAfterLimit)
+    }
+
+    /// A press under way when the limit stops a hands free dictation is the press that was
+    /// meant to stop it.
+    @Test mutating func aPressUnderWayAtTheLimitTells() {
+        var detector = TalkKeyDetector(keys: [.rightControl])
+        _ = startHandsFree(.rightControl, &detector)
+        _ = down(.rightControl, &detector)
+        #expect(detector.stopAtLimit() == true)
+        #expect(up(.rightControl, &detector).event == .pressedAfterLimit)
+        #expect(detector.phase == .up)
+    }
+
+    /// fn's events stay hidden, as during the dictation.
+    @Test mutating func afterAStopAtTheLimitFnStaysHidden() {
+        var detector = TalkKeyDetector(keys: [.fn])
+        _ = startHandsFree(.fn, &detector)
+        #expect(detector.stopAtLimit() == true)
+        #expect(down(.fn, &detector) == Decision(event: nil, swallow: true))
+        #expect(up(.fn, &detector) == Decision(event: .pressedAfterLimit, swallow: true))
+    }
+
+    /// A shortcut with the key, such as Control C, or a Control click, tells nothing and the
+    /// wait goes on.
+    @Test mutating func aShortcutAfterAStopAtTheLimitKeepsWaiting() {
+        var detector = TalkKeyDetector(keys: [.rightControl])
+        _ = startHandsFree(.rightControl, &detector)
+        _ = detector.stopAtLimit()
+        _ = down(.rightControl, &detector)
+        #expect(keyDown(Self.c, &detector, flags: Self.rightControlFlags) == .passThrough)
+        #expect(up(.rightControl, &detector) == .passThrough)
+        #expect(detector.phase == .stoppedAtLimit(.rightControl))
+        _ = down(.rightControl, &detector)
+        #expect(detector.cancelForClick() == nil)
+        #expect(up(.rightControl, &detector) == .passThrough)
+        #expect(detector.phase == .stoppedAtLimit(.rightControl))
+        _ = down(.rightControl, &detector)
+        #expect(up(.rightControl, &detector).event == .pressedAfterLimit)
+    }
+
+    /// A hold in Hold mode finishes nothing at its release, so it stays as it is.
+    @Test mutating func aHoldInHoldModeIsLeftAlone() {
+        var detector = TalkKeyDetector(keys: [.rightControl])
+        _ = down(.rightControl, &detector)
+        #expect(detector.stopAtLimit() == false)
+        #expect(detector.phase == .holding(.rightControl))
+        clock.advance(.seconds(1))
+        #expect(up(.rightControl, &detector).event == .released)
+    }
+
+    @Test mutating func theOwnerEndsTheWait() {
+        var detector = TalkKeyDetector(keys: [.rightControl])
+        _ = startHandsFree(.rightControl, &detector)
+        _ = detector.stopAtLimit()
+        detector.endLimitWindow()
+        #expect(detector.phase == .up)
+        #expect(down(.rightControl, &detector).event == .pressed(isRepeat: false))
+        clock.advance(.seconds(1))
+        _ = up(.rightControl, &detector)
+
+        // Ended while the key is down, its release tells nothing.
+        _ = startHandsFree(.rightControl, &detector)
+        _ = detector.stopAtLimit()
+        _ = down(.rightControl, &detector)
+        detector.endLimitWindow()
+        #expect(up(.rightControl, &detector) == .passThrough)
+        #expect(detector.phase == .up)
+    }
+
+    @Test mutating func anotherTalkKeyEndsTheWaitWithAPressOfItsOwn() {
+        var detector = TalkKeyDetector(keys: [.rightControl, .fn])
+        _ = startHandsFree(.rightControl, &detector)
+        _ = detector.stopAtLimit()
+        #expect(down(.fn, &detector) == Decision(event: .pressed(isRepeat: false), swallow: true))
+        #expect(detector.phase == .holding(.fn))
+    }
+
+    @Test mutating func aChangeOfKeysOrAResetEndsTheWaitSilently() {
+        var detector = TalkKeyDetector(keys: [.rightControl, .fn])
+        _ = startHandsFree(.rightControl, &detector)
+        _ = detector.stopAtLimit()
+        #expect(detector.setKeys([.fn]) == nil)
+        #expect(detector.phase == .up)
+        _ = startHandsFree(.fn, &detector)
+        _ = detector.stopAtLimit()
+        #expect(detector.reset() == nil)
+        #expect(detector.phase == .up)
+    }
+
     // MARK: Left hand keys
 
     @Test mutating func aLeftKeyRecordsOnlyAfterItsDelay() {

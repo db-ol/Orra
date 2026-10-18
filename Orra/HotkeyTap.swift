@@ -112,6 +112,21 @@ final class HotkeyTap {
         updateTimer()
     }
 
+    /// The owner tells that the recording limit stopped the current dictation. True when
+    /// the next press of its key only sends `.pressedAfterLimit`, see
+    /// `TalkKeyDetector.stopAtLimit()`.
+    func stopAtLimit() -> Bool {
+        let waits = detector.stopAtLimit()
+        updateTimer()
+        return waits
+    }
+
+    /// The owner ends the wait for that press, see `TalkKeyDetector.endLimitWindow()`.
+    func endLimitWindow() {
+        detector.endLimitWindow()
+        updateTimer()
+    }
+
     /// The talk key the current press or dictation is about, if any.
     var activeKey: Hotkey? {
         detector.phase.key

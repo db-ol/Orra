@@ -58,6 +58,9 @@
 ///   the hotkey layer does not send while arming, so a lost event cannot leave the
 ///   microphone running. Armed in any other state is ignored, like a press.
 /// - `processingFinished` outside of processing is ignored as stale.
+/// - `pressedAfterLimit` is ignored in every state. It only tells the owner that the press
+///   meant to finish a dictation came after the recording limit had stopped it, so the
+///   owner dismisses the notice, see `TalkKeyDetector.stopAtLimit()`.
 nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
     nonisolated enum State: CaseIterable, Equatable, Sendable {
         case idle
@@ -91,6 +94,9 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         /// A key that waits went down on its own, and its press may still turn out to be a
         /// shortcut. Start capturing silently.
         case armed
+        /// The key that was to finish a dictation was pressed and released on its own after
+        /// the recording limit had stopped that dictation. Nothing records.
+        case pressedAfterLimit
     }
 
     /// What the owner has to do after an event changed the state.
@@ -139,7 +145,7 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
     /// event was ignored in the current state.
     mutating func handle(_ event: Event) -> Transition? {
         switch (state, event) {
-        case (_, .pressed(isRepeat: true)):
+        case (_, .pressed(isRepeat: true)), (_, .pressedAfterLimit):
             return nil
         case (.idle, .pressed):
             state = .listening

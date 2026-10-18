@@ -54,6 +54,10 @@ nonisolated enum RecordingLimits {
     static let maximumDuration: Duration = .seconds(maximumSeconds)
     /// The indicator counts down the seconds left for this long before the limit.
     static let countdown: Duration = .seconds(15)
+    /// After the limit stopped a dictation that a press of its key was to finish, the
+    /// notice says why for this long, and a press of that key meanwhile only dismisses it,
+    /// see `TalkKeyDetector.stopAtLimit()`.
+    static let noticeWindow: Duration = .seconds(30)
     /// After the talk key is released, recording goes on this long, because the last
     /// buffer and the input latency still hold the end of the speech.
     static let releaseTail: Duration = .milliseconds(150)

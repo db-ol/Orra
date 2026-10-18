@@ -96,6 +96,7 @@ final class RecordingFeedback {
     @ObservationIgnored private let play: (Sound) -> Void
     @ObservationIgnored private let save: (FeedbackPreference.Values) -> Void
     @ObservationIgnored private let messageDuration: Duration
+    @ObservationIgnored private let limitMessageDuration: Duration
     @ObservationIgnored private let levelInterval: Duration
     @ObservationIgnored private var levelTask: Task<Void, Never>?
     @ObservationIgnored private var hideTask: Task<Void, Never>?
@@ -111,6 +112,8 @@ final class RecordingFeedback {
     ///   - save: Saves the preferences after a change.
     ///   - holdHint: How to talk, for the idle bar.
     ///   - messageDuration: How long a message stays.
+    ///   - limitMessageDuration: How long the message after a stop at the recording limit
+    ///     stays, unless the controller dismisses it sooner.
     ///   - levelInterval: How often the meter reads the level.
     init(
         preferences: FeedbackPreference.Values,
@@ -120,6 +123,7 @@ final class RecordingFeedback {
         save: @escaping (FeedbackPreference.Values) -> Void,
         holdHint: @escaping () -> String = { "" },
         messageDuration: Duration = .seconds(4),
+        limitMessageDuration: Duration = RecordingLimits.noticeWindow,
         levelInterval: Duration = .milliseconds(33)
     ) {
         onScreenHint = OnScreenHint(preferences)
@@ -130,6 +134,7 @@ final class RecordingFeedback {
         self.play = play
         self.save = save
         self.messageDuration = messageDuration
+        self.limitMessageDuration = limitMessageDuration
         self.levelInterval = levelInterval
     }
 
@@ -173,18 +178,15 @@ final class RecordingFeedback {
             }
         case .finished(let message?):
             translation = nil
-            show(.message(message))
-            let shown = display
-            hideTask = Task { [weak self, messageDuration] in
-                try? await Task.sleep(for: messageDuration)
-                guard !Task.isCancelled, let self, display == shown else { return }
-                show(nil)
-            }
+            showMessage(message, for: messageDuration)
         case .finished(nil):
             translation = nil
             show(nil)
         case .limitNear(let remaining):
             countDown(to: .now + remaining)
+        case .stoppedAtLimit(let message):
+            translation = nil
+            showMessage(message, for: limitMessageDuration)
         }
     }
 
@@ -212,6 +214,16 @@ final class RecordingFeedback {
                 guard !Task.isCancelled else { return }
                 self?.secondsLeft = max(Self.secondsLeft(until: end), 1)
             }
+        }
+    }
+
+    private func showMessage(_ message: String, for duration: Duration) {
+        show(.message(message))
+        let shown = display
+        hideTask = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled, let self, display == shown else { return }
+            show(nil)
         }
     }
 

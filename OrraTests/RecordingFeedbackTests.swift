@@ -29,7 +29,8 @@ struct RecordingFeedbackTests {
     private func makeFeedback(
         _ outputs: FeedbackOutputs? = nil,
         preferences: FeedbackPreference.Values = .init(showsIdleBar: false),
-        messageDuration: Duration = .seconds(4)
+        messageDuration: Duration = .seconds(4),
+        limitMessageDuration: Duration = RecordingLimits.noticeWindow
     ) -> RecordingFeedback {
         let outputs = outputs ?? self.outputs
         return RecordingFeedback(
@@ -42,6 +43,7 @@ struct RecordingFeedbackTests {
             play: { [outputs] in outputs.played.append($0) },
             save: { [outputs] in outputs.saved.append($0) },
             messageDuration: messageDuration,
+            limitMessageDuration: limitMessageDuration,
             levelInterval: .milliseconds(5)
         )
     }
@@ -132,6 +134,23 @@ struct RecordingFeedbackTests {
         #expect(RecordingFeedback.secondsLeft(until: now + .milliseconds(100), now: now) == 1)
         #expect(RecordingFeedback.secondsLeft(until: now, now: now) == 0)
         #expect(RecordingFeedback.secondsLeft(until: now - .seconds(1), now: now) == 0)
+    }
+
+    /// The message after a stop at the limit stays for the window of the press that was
+    /// meant to stop, and that press dismisses it.
+    @Test func theMessageAfterAStopAtTheLimitStaysUntilDismissed() async throws {
+        let feedback = makeFeedback(messageDuration: .milliseconds(20), limitMessageDuration: .seconds(30))
+        feedback.handle(.stoppedAtLimit(message: "Orra records up to 5 minutes at a time, so the recording stopped there."))
+        #expect(feedback.display == .message("Orra records up to 5 minutes at a time, so the recording stopped there."))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(feedback.display == .message("Orra records up to 5 minutes at a time, so the recording stopped there."))
+        feedback.handle(.finished(message: nil))
+        #expect(feedback.display == nil)
+        // Without the press it goes after its window.
+        let short = makeFeedback(FeedbackOutputs(), limitMessageDuration: .milliseconds(50))
+        short.handle(.stoppedAtLimit(message: "Orra records up to 5 minutes at a time, so the recording stopped there."))
+        try await waitUntil { short.display == nil }
+        #expect(short.display == nil)
     }
 
     @Test func withTheIndicatorOffNothingShowsButTheSoundsPlay() {
@@ -446,6 +465,7 @@ struct RecordingFeedbackTests {
             ("transcribing-english", [.listening(translation: .english), .transcribing]),
             ("listening-countdown", [.listening, .limitNear(remaining: .seconds(12))]),
             ("hands-free-countdown", [.handsFree(finishHint: hint, translation: .automatic), .limitNear(remaining: .seconds(9))]),
+            ("stopped-at-limit", [.stoppedAtLimit(message: PushToTalkController.limitNotice)]),
         ]
         for (name, sequence) in cues {
             let feedback = makeFeedback(FeedbackOutputs())
