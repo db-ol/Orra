@@ -112,6 +112,46 @@ struct FillerRulesTests {
         #expect(FillerRules.removingFillers(from: input) == input)
     }
 
+    /// In Cantonese 呃 is also the verb to cheat. A dictation with characters such as 佢, 咗
+    /// or 唔好 is Cantonese, and a single 呃 right next to another Chinese character stays.
+    @Test(arguments: [
+        "佢呃咗我啲钱。", "佢呃咗我啲錢", "唔好俾人呃", "唔好俾人呃！", "佢成日呃人㗎。", "我唔呃你。",
+        "佢呃咗我 100 蚊。",
+    ])
+    func keepsTheCantoneseVerb(_ input: String) {
+        #expect(FillerRules.removingFillers(from: input) == input)
+    }
+
+    @Test(arguments: [
+        // 呃 apart from the words is a filler in Cantonese too.
+        ("呃，我哋听日去。", "我哋听日去。"),
+        ("我哋听日去，呃，饮茶。", "我哋听日去，饮茶。"),
+        ("呃 佢听日嚟。", "佢听日嚟。"),
+        ("呃……佢唔嚟喇。", "佢唔嚟喇。"),
+        // So is a run of 呃.
+        ("我哋呃呃听日去。", "我哋听日去。"),
+        // 呃 before a comma with no word right before it is a filler, even where the speaker
+        // said the verb, as on a Common Voice clip where the speaker said 呃人哋 (tricks others).
+        ("呃，人哋帮佢哋做嘢。", "人哋帮佢哋做嘢。"),
+        // The space the model writes before English hides the verb.
+        ("唔好俾 Peter 呃。", "唔好俾 Peter。"),
+        // A filler written right next to a word cannot be told from the verb, so it stays.
+        ("跟住呃，我哋去饮茶。", "跟住呃，我哋去饮茶。"),
+        ("嗰个呃协议我睇咗。", "嗰个呃协议我睇咗。"),
+        // So does one in Mandarin with a Cantonese word.
+        ("大家都说唔该，然后呃我们就去吃饭了。", "大家都说唔该，然后呃我们就去吃饭了。"),
+        // Mandarin loses a 呃 next to words.
+        ("我呃想一下。", "我想一下。"),
+        ("认真看那个呃协议条款。", "认真看那个协议条款。"),
+        ("他呃骗了我的钱。", "他骗了我的钱。"),
+        // 唔 standing apart or running into another hum is the Mandarin sound, not Cantonese.
+        ("唔，我呃想一下。", "唔，我想一下。"),
+        ("唔唔，我呃想一下。", "唔唔，我想一下。"),
+    ])
+    func cantonese(_ input: String, _ expected: String) {
+        #expect(FillerRules.removingFillers(from: input) == expected)
+    }
+
     @Test func thePreferenceIsOnUntilTurnedOff() throws {
         try withTestDefaults("fillers") { defaults in
             #expect(FillerPreference.load(from: defaults))

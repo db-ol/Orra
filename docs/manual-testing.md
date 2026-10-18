@@ -355,9 +355,12 @@ got worse than the baseline, see docs/release-gate.md.
     checks that the cases that need a model lose only fillers, never a word or a number,
     and covers spacing between Chinese and English, punctuation left behind, capitals at a
     sentence start, replies such as 嗯，好的 and uh-huh, interjections such as 嗯哼 and
-    嗯呢, acronyms such as UM, and words such as 金额 and 呃逆. PushToTalkControllerTests
-    checks that the paste has the fillers removed while the setting is on and not while it
-    is off, and that a change is saved.
+    嗯呢, acronyms such as UM, and words such as 金额 and 呃逆. It checks that the Cantonese
+    verb 呃 (to cheat) stays in a Cantonese dictation, as in 佢呃咗我啲钱 and 唔好俾人呃,
+    while 呃 apart from the words is still a filler there, that a filler written right next
+    to a word stays in a Cantonese dictation, and that in a Mandarin dictation a 呃 next to
+    words still goes. PushToTalkControllerTests checks that the paste has the fillers removed
+    while the setting is on and not while it is off, and that a change is saved.
   - NumberRulesTests runs the number rules on every case of
     Tools/rewrite-eval/numbers.jsonl and checks that applying them twice changes nothing
     more. It checks that every cleanup in cases.jsonl without a number stays as it is,
