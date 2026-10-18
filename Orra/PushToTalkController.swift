@@ -149,8 +149,14 @@ final class PushToTalkController {
     private(set) var modelState: ModelState = .notLoaded
     /// The latest error, shown in the menu until the next hold.
     private(set) var problem: String?
-    /// The latest note that is not an error, shown in the menu until the next hold.
-    private(set) var notice: String?
+    /// The latest notes that are not errors, shown in the menu until the next hold, each
+    /// on a line of its own. A long dictation can have several, such as the stop at the
+    /// limit and a paste without translation.
+    private(set) var notices: [String] = []
+    /// The notes as one text, for the indicator, or nil when there is none.
+    var notice: String? {
+        notices.isEmpty ? nil : RecordingPieces.joined(notices)
+    }
     /// What to do about the microphone after the latest hold, or which microphone recorded
     /// because the chosen one was not connected. Kept apart from `notice`, so a paste
     /// notice cannot hide it. Shown in the menu until the next hold.
@@ -1018,7 +1024,7 @@ final class PushToTalkController {
     /// Clears what the menu showed about the last hold, once a new one starts.
     private func clearHoldNotes() {
         problem = nil
-        notice = nil
+        notices = []
         microphoneNotice = nil
         suggestsSoundSettings = false
     }
@@ -1198,7 +1204,7 @@ final class PushToTalkController {
         guard state == .listening || state == .handsFree else { return }
         logger.info("Recording reached its maximum length")
         // The audio buffer holds no more, so the dictation ends here and says why.
-        notice = Self.limitNotice
+        notices = [Self.limitNotice]
         // Before the release, after which the tap no longer knows the dictation.
         awaitsPressAfterLimit = tap?.stopAtLimit() == true
         handle(.released)
@@ -1498,7 +1504,7 @@ final class PushToTalkController {
         case .pasted, .nothingToInsert:
             break
         case .skippedPasswordField:
-            notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
+            notices = [String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")]
         }
     }
 
@@ -1536,7 +1542,7 @@ final class PushToTalkController {
     /// a long one can say both that it stopped at the limit and that it was pasted without
     /// translation.
     private func addNotice(_ note: String) {
-        notice = RecordingPieces.joined([notice ?? "", note])
+        notices.append(note)
     }
 
     /// Off the main actor, since the first use reads the word lists, see OrdinaryWords.

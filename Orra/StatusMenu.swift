@@ -65,7 +65,8 @@ struct StatusMenu: View {
                     pushToTalk.openSoundSettings()
                 }
             }
-            if let notice = pushToTalk.notice {
+            // One line each, since a menu item does not wrap.
+            ForEach(pushToTalk.notices, id: \.self) { notice in
                 Text(notice)
             }
             if let transcript = pushToTalk.lastTranscript {

@@ -982,6 +982,8 @@ struct PushToTalkControllerTests {
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         let both = Self.limitNotice + " Part of this dictation could not be transcribed."
         #expect(controller.notice == both)
+        // The menu shows each on a line of its own.
+        #expect(controller.notices == [Self.limitNotice, "Part of this dictation could not be transcribed."])
         #expect(cues.list.last == .finished(message: both))
     }
 
