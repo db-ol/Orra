@@ -2406,6 +2406,16 @@
         }
       }
     },
+    "Part of this dictation could not be transcribed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写有一部分无法转写。"
+          }
+        }
+      }
+    },
     "Paste Original Text" : {
       "localizations" : {
         "zh-Hans" : {

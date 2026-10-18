@@ -126,6 +126,8 @@ final class FakeSpeech {
     private(set) var receivedContexts: [String?] = []
     /// The language each transcription was told to write, nil when none.
     private(set) var receivedLanguages: [SpeechLanguage?] = []
+    /// What the next transcriptions give, one each, in place of the replies above.
+    var queued: [Result<String, any Error>] = []
 
     var transcription: Transcription {
         Transcription(
@@ -142,6 +144,9 @@ final class FakeSpeech {
                 self.receivedSampleCounts.append(samples.count)
                 if self.delay > .zero {
                     try await Task.sleep(for: self.delay)
+                }
+                if !self.queued.isEmpty {
+                    return try self.queued.removeFirst().get()
                 }
                 if let error = self.transcribeError { throw error }
                 if context == nil, let error = self.transcribeErrorWithoutContext { throw error }
@@ -835,6 +840,94 @@ struct PushToTalkControllerTests {
         controller.handle(.cancelled)
         try await waitUntil { mic.calls.count == 4 }
         #expect(mic.calls == ["start", "stop", "start", "cancel"])
+    }
+
+    // MARK: Long dictations
+
+    /// A recording of `seconds` at 16 kHz with no pause in it.
+    private func longRecording(seconds: Double) -> AudioRecording {
+        AudioRecording(samples: FakeMicrophone.tone(count: Int(seconds * 16_000)), sampleRate: 16_000)
+    }
+
+    @Test func aMinuteIsTranscribedInOnePass() async throws {
+        mic.recording = longRecording(seconds: 60)
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts == [960_000])
+        #expect(inserter.inserted == ["你好"])
+        #expect(controller.notice == nil)
+    }
+
+    @Test func aLongerDictationIsTranscribedInPiecesOfAMinute() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.queued = [.success("早上好。"), .success("中午好。"), .success("晚上好。")]
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 3)
+        #expect(speech.receivedSampleCounts.allSatisfy { $0 <= 960_000 })
+        #expect(speech.receivedSampleCounts.reduce(0, +) == 130 * 16_000)
+        #expect(inserter.inserted == ["早上好。中午好。晚上好。"])
+        #expect(controller.notice == nil)
+        #expect(controller.problem == nil)
+    }
+
+    /// Each piece gets the vocabulary and the checks of a whole recording, here the number
+    /// pass, which a piece that may hold a number in words asks for.
+    @Test func eachPieceGetsTheVocabularyAndTheNumberPass() async throws {
+        mic.recording = longRecording(seconds: 100)
+        let controller = await makeController()
+        controller.addToVocabulary("Orra")
+        speech.reply = "Orra 在二零二四年发布。"
+        speech.replyWithoutContext = "Aura 在2024年发布。"
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Orra", nil, "Orra", nil])
+        #expect(inserter.inserted == ["Orra 在2024年发布。Orra 在2024年发布。"])
+    }
+
+    @Test func aFailedPieceLeavesTheOthersAndSaysSo() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.queued = [.success("早上好。"), .failure(TestError()), .success("晚上好。")]
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 3)
+        #expect(inserter.inserted == ["早上好。晚上好。"])
+        #expect(controller.problem == nil)
+        #expect(controller.notice == "Part of this dictation could not be transcribed.")
+    }
+
+    /// A piece without text inside the dictation is reported like a failed one, but not the
+    /// last, which is often the quiet before the key stopped the recording.
+    @Test func anEmptyPieceSaysSoUnlessItIsTheLast() async throws {
+        mic.recording = longRecording(seconds: 130)
+        let controller = await makeController()
+        speech.queued = [.success("早上好。"), .success(""), .success("晚上好。")]
+        try await dictate(controller)
+        #expect(inserter.inserted == ["早上好。晚上好。"])
+        #expect(controller.notice == "Part of this dictation could not be transcribed.")
+        speech.queued = [.success("早上好。"), .success("中午好。"), .success("")]
+        try await dictate(controller)
+        #expect(inserter.inserted.last == "早上好。中午好。")
+        #expect(controller.notice == nil)
+    }
+
+    @Test func whenEveryPieceFailsTheDictationFails() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.transcribeError = TestError()
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 3)
+        #expect(inserter.inserted.isEmpty)
+        #expect(controller.problem == "The recording could not be transcribed")
+    }
+
+    @Test func aCancellationEndsTheWholeDictation() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.queued = [.success("早上好。"), .failure(CancellationError()), .success("晚上好。")]
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 2)
+        #expect(inserter.inserted.isEmpty)
+        #expect(controller.problem == "The recording could not be transcribed")
     }
 
     @Test func aTapTheSystemSwitchedOffShowsTheTalkKeyOffUntilANewTapIsInstalled() async throws {

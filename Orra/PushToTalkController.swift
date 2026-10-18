@@ -1265,7 +1265,7 @@ final class PushToTalkController {
                 return
             }
             let names = screenNames(from: screen, target: target)
-            let raw = try await transcription.transcribe(
+            let pieces = try await transcription.transcribeInPieces(
                 samples,
                 vocabulary: names.isEmpty ? Vocabulary.forModel(vocabulary) : Vocabulary.forModel(vocabulary, screenNames: names),
                 holdsScreenNames: !names.isEmpty,
@@ -1273,7 +1273,11 @@ final class PushToTalkController {
                 takingDigits: writesNumbersAsDigits
             )
             timings.lap(.recognition)
-            var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            let transcript = RecordingPieces.transcript(of: pieces)
+            var text = transcript.text
+            if transcript.missing > 0 {
+                addNotice(String(localized: "Part of this dictation could not be transcribed."))
+            }
             // The text as heard, before the filler rule, for the cleanup gate: a filler
             // cue the rule removed still asks for the model.
             let heard = text
@@ -1347,7 +1351,7 @@ final class PushToTalkController {
             }
             // Paste only into the app that was in front when the key was released.
             if let target, let current = frontmostApp(), current != target {
-                notice = String(localized: "Another app came to the front, so the text was not pasted. Use Copy Last Dictation.")
+                addNotice(String(localized: "Another app came to the front, so the text was not pasted. Use Copy Last Dictation."))
                 return
             }
             switch await insert(text) {
@@ -1366,7 +1370,7 @@ final class PushToTalkController {
                     onPasted(text, app, originalText, replacements)
                 }
             case .skippedPasswordField:
-                notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
+                addNotice(String(localized: "Orra does not paste into password fields. Use Copy Last Dictation."))
             case .nothingToInsert:
                 break
             }
@@ -1402,12 +1406,12 @@ final class PushToTalkController {
     private func translate(_ text: String, _ direction: TranslationDirection?) async -> (result: TranslationStep.Result, target: TranslationTarget)? {
         guard let direction else { return nil }
         guard await translation.waitUntilLoaded() else {
-            notice = String(localized: "The local model is not ready, so the text was pasted without translation.")
+            addNotice(String(localized: "The local model is not ready, so the text was pasted without translation."))
             return nil
         }
         guard let target = direction.target(for: text) else { return nil }
         guard text.count <= TranslationStep.maximumLength else {
-            notice = String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation.")
+            addNotice(String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation."))
             return nil
         }
         // The model is loaded by now, so this does not wait.
@@ -1417,9 +1421,16 @@ final class PushToTalkController {
         case .translated, .unchanged:
             break
         case .unreadable, .heldBack, .timedOut, .failed:
-            notice = String(localized: "This dictation was pasted without translation.")
+            addNotice(String(localized: "This dictation was pasted without translation."))
         }
         return (result, target)
+    }
+
+    /// Adds a note for the menu and the indicator after those the dictation has already, so
+    /// a long one can say both that it stopped at the limit and that it was pasted without
+    /// translation.
+    private func addNotice(_ note: String) {
+        notice = RecordingPieces.joined([notice ?? "", note])
     }
 
     /// Off the main actor, since the first use reads the word lists, see OrdinaryWords.

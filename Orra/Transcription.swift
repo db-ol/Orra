@@ -93,6 +93,49 @@ extension Transcription {
         return await Self.merging(text, plain: plain, terms: terms)
     }
 
+    /// Turns a recording into text in pieces of at most a minute, see RecordingPieces, one
+    /// after another, each the way `transcribe(_:vocabulary:holdsScreenNames:audioSeconds:takingDigits:)`
+    /// turns a recording into text, with the vocabulary, its echo check, the number pass
+    /// and the language check of its own. A recording of up to a minute is one piece,
+    /// transcribed as before, and its failure throws. Of several pieces, one that fails
+    /// gives no text and the others go on, while a cancellation ends them all. When no
+    /// piece gave text and one failed, the first failure throws.
+    /// Logs the number of pieces and their times, never the text.
+    func transcribeInPieces(_ samples: [Float], vocabulary terms: [String], holdsScreenNames: Bool = false, audioSeconds: Double, takingDigits: Bool = true) async throws -> [TranscribedPiece] {
+        // A recording of up to a minute needs no look for a cut.
+        let isOnePiece = Double(samples.count) <= RecordingPieces.maximumSeconds * Double(RecordingLimits.sampleRate)
+        let bounds = isOnePiece ? [samples.indices] : await Self.pieces(of: samples)
+        guard bounds.count > 1 else {
+            let text = try await transcribe(samples, vocabulary: terms, holdsScreenNames: holdsScreenNames, audioSeconds: audioSeconds, takingDigits: takingDigits)
+            return [TranscribedPiece(text: text, seconds: audioSeconds)]
+        }
+        let started = ContinuousClock.now
+        var pieces: [TranscribedPiece] = []
+        var failure: (any Error)?
+        var lastTook = Duration.zero
+        for (index, range) in bounds.enumerated() {
+            let seconds = Double(range.count) / Double(RecordingLimits.sampleRate)
+            let pieceStarted = ContinuousClock.now
+            do {
+                let text = try await transcribe(Array(samples[range]), vocabulary: terms, holdsScreenNames: holdsScreenNames, audioSeconds: seconds, takingDigits: takingDigits)
+                pieces.append(TranscribedPiece(text: text, seconds: seconds))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                Logger.pushToTalk.error("Piece \(index + 1, privacy: .public) of \(bounds.count, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                failure = failure ?? error
+                pieces.append(TranscribedPiece(text: nil, seconds: seconds))
+            }
+            lastTook = pieceStarted.duration(to: .now)
+        }
+        let failed = pieces.count(where: { $0.text == nil })
+        Logger.pushToTalk.notice("Transcribed \(bounds.count, privacy: .public) pieces in \(started.duration(to: .now), privacy: .public), the last in \(lastTook, privacy: .public), failed: \(failed, privacy: .public)")
+        if let failure, pieces.allSatisfy({ $0.text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true }) {
+            throw failure
+        }
+        return pieces
+    }
+
     /// The text written with the vocabulary, with its numbers in Chinese characters written
     /// as digits where a pass without the vocabulary wrote the same number in digits, see
     /// ContextNumbers. That pass runs only when the text may hold such a number. When it
@@ -146,6 +189,12 @@ extension Transcription {
         }
         Logger.pushToTalk.notice("Transcript was in another language, no pass in Chinese or English helped, took \(started.duration(to: .now), privacy: .public)")
         return text
+    }
+
+    /// Off the main actor, since the cuts read the whole recording.
+    @concurrent
+    nonisolated private static func pieces(of samples: [Float]) async -> [Range<Int>] {
+        RecordingPieces.bounds(of: samples)
     }
 
     /// Off the main actor, since NLLanguageRecognizer reads the whole text.
