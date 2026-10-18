@@ -329,24 +329,29 @@ got worse than the baseline, see docs/release-gate.md.
     and the window title as the farthest text. Also the common words read from a tokenizer
     vocabulary, and the switch saved and off by default. The reading, with a scripted field,
     so no app is read: the last 1,000 characters before the cursor through a range of the
-    text or the whole text cut at the cursor, the end of a field without a cursor, nothing
-    from a password field, an element that is no text field, an app holding secure input or
-    Orra itself, no copy of a field over 20,000 characters without ranges, and no question
-    to the app after the deadline. The three protections against a list of names written
-    over speech: a name said alone stays, silence gives no text, a list over speech, a
+    text or the whole text cut at the cursor, only the window title from a field without a
+    cursor, nothing from a password field, a password manager, an element that is no text
+    field, an app holding secure input or Orra itself, no copy of a field over 20,000
+    characters without ranges, and no question to the app after the deadline, the window
+    title's second question included. The three protections against a list of names
+    written over speech: a name said alone stays, also when the pass without names writes
+    it in another script or as more words, silence gives no text, a list over speech, a
     leading list and a text mostly of names give way to the pass without them, a failed
-    pass keeps the text, digits come from the same pass, an ordinary dictation runs one
-    pass, and the vocabulary alone keeps today's check. The controller: while off nothing
-    is read and the model gets the vocabulary as before, while on the names come first in
-    the vocabulary's spelling, a reading that has not ended or that read another app than
-    the paste is not used and not waited for, a shortcut reads nothing, an early capture
-    reads once its press counts, and a list of names is never pasted. VocabularyTests
+    pass keeps the text, digits come from the same pass, an ordinary dictation or a
+    greeting with one name runs one pass, and the vocabulary alone keeps today's check. The
+    controller: while off nothing is read and the model gets the vocabulary as before,
+    while on the names come first in the vocabulary's spelling, a reading that has not
+    ended or that read another app than the paste is not used and not waited for, a
+    shortcut reads nothing, an early capture reads once its press counts and its time limit
+    counts from that press, and a list of names is never pasted. VocabularyTests
     checks that the names take the places of the oldest words within the limit of 200.
     Outside the test suite, the extractor was compared with the experiment's on all 592
     texts of the experiment at limits of 20 and 40: the same terms in every case at 40, and
     at 20 different only where more than 20 terms compete, where Orra keeps those nearest
     the cursor. The protections gave the experiment's decision on all 997 of its recorded
-    runs, 16 of which they caught.
+    runs, 16 of which they caught, each with four terms or more. Taking a text for a list
+    only when it holds two terms or more left all 997 decisions as they were and cut the
+    extra passes for a text that may be a list from 21 to 16.
   - ScreenNamesEvaluationTests, opt in, ran the experiment's 104 clips through Orra's path
     with the real model on 2026-10-17, loaded from the experiment's own copy. Without names
     the text matched the experiment's on all 104 clips, and with the names of the page added
@@ -1636,12 +1641,14 @@ Use names on screen, added on 2026-10-17, not verified yet. Turn on Use names on
   shows "Names on screen: N found in" with a time for each dictation, numbers only,
   never a name or any text.
 - [ ] Dictate into a password field, and in Terminal with Secure Keyboard Entry on: the
-  log says 0 found. In an app whose text macOS cannot read, such as Sublime Text, dictation
-  works as before with 0 found.
+  log says 0 found. So does the search field of Passwords, and of 1Password or Bitwarden
+  when one is installed. In an app whose text macOS cannot read, such as Sublime Text,
+  dictation works as before with 0 found.
 - [ ] Right after a launch, hold the key for a very short dictation: it is as quick as
   before. The log may say the names were not read in time.
 - [ ] Hold the key without speaking in a field full of names, and with noise: nothing is
-  pasted. Say only one of the names: it is pasted.
+  pasted. Say only one of the names: it is pasted as written on the screen, also an
+  English name that Orra writes in Chinese characters with the switch off.
 - [ ] Hold the key, switch to another app with the mouse while speaking, and let go there:
   the log says the names came from another app.
 - [ ] With a note that holds Warrington, say Warrenton: note what comes out. This is the
