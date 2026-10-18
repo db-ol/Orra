@@ -1434,13 +1434,11 @@ final class PushToTalkController {
                     // as part of the paste.
                     timings.lap(.cleanup)
                 }
-            } else if text.count > CleanupStep.maximumLength, CleanupStep.hasWorkForModel(text, heard: heard) {
+            } else if cleanup.isOn(), text.count > CleanupStep.maximumLength, CleanupStep.hasWorkForModel(text, heard: heard) {
                 // Said only when cleanup is on and the model would have had work, so a long
-                // dictation it would have left as it was says nothing.
-                if await cleanup.waitUntilLoaded() {
-                    addNotice(String(localized: "Dictations over \(CleanupStep.maximumLength) characters are pasted without cleanup."))
-                }
-                timings.lap(.cleanupWait)
+                // dictation it would have left as it was says nothing. Nothing waits for
+                // the model here, since it would not run anyway.
+                addNotice(String(localized: "Dictations over \(CleanupStep.maximumLength) characters are pasted without cleanup."))
             }
             let isTranslation = translated?.isTranslation == true
             if isTranslation {

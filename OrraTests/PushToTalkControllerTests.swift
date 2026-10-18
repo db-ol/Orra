@@ -987,9 +987,14 @@ struct PushToTalkControllerTests {
         #expect(cues.list.last == .finished(message: both))
     }
 
+    /// Said without a wait for the model, which would not run anyway.
     @Test func aLongDictationSaysItWasPastedWithoutCleanup() async throws {
         let cleanups = Mutex(0)
-        let controller = await controller(cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { _ in
+        var waits = 0
+        let controller = await controller(cleanup: CleanupModel(isOn: { true }, waitUntilLoaded: {
+            waits += 1
+            return true
+        }, complete: { _ in
             cleanups.withLock { $0 += 1 }
             return #"{"cleaned": "我们明天开会。"}"#
         }))
@@ -997,6 +1002,7 @@ struct PushToTalkControllerTests {
         speech.reply = String(repeating: "呃我们明天下午开会讨论一下。", count: 20)
         try await dictate(controller)
         #expect(cleanups.withLock { $0 } == 0)
+        #expect(waits == 0)
         #expect((inserter.inserted.first?.count ?? 0) > CleanupStep.maximumLength)
         #expect(controller.notice == "Dictations over 400 characters are pasted without cleanup.")
         // Without a filler or a correction the model would have had nothing to do.

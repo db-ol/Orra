@@ -271,6 +271,9 @@ nonisolated enum RewriteError: Error, Equatable {
 
 /// What PushToTalkController needs from the cleanup model. Closures, so tests pass fakes.
 struct CleanupModel {
+    /// Whether the user turned cleanup on, without waiting for the model, see
+    /// TextCleanup.isOn.
+    var isOn: () -> Bool = { false }
     /// Whether the model can clean up a transcript now, after waiting a bounded time for a
     /// load under way, see TextCleanup.waitUntilLoaded.
     var waitUntilLoaded: () async -> Bool
