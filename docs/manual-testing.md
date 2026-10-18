@@ -397,13 +397,19 @@ got worse than the baseline, see docs/release-gate.md.
     macOS 26 and 158 of 201 and 70 of 81 as it runs on macOS 27. The extractor with its own
     Chinese rules gives 161 of 201 and 70 of 81 on both, with 78 errors on the other words,
     and 170 of 201 and 70 of 81 with the page names too.
-  - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
-    translation marked translated, that each translation keeps the arguments of the
-    English string, that the Chinese uses full width punctuation and a space next to a
-    Latin word or a number, that the built app carries the Chinese strings, that Chinese
-    is chosen only when it comes before English in the preferred languages and never for
-    Traditional Chinese alone, the Chinese talk key hint, the Chinese form of a key name
-    with its other label, and the Chinese hint that finishes a hands free dictation.
+  - LocalizationTests checks that every string in both catalogs has a Simplified Chinese,
+    a Japanese and a Spanish (es-419) translation marked translated, each plural form
+    too, that each translation keeps the arguments of the English string, that the
+    Chinese uses full width punctuation and a space next to a Latin word or a number, that
+    the Japanese has no ASCII comma or period outside a number, no ASCII parentheses or
+    quotes, no 「」 (it uses “ ” as macOS does), no full width ? : or !, and no space
+    between Japanese and a Latin word, a number or an argument, that
+    the Spanish pairs ¿? and ¡! and has no full width punctuation outside a Chinese
+    example, that the built app carries the strings and prompts of each language, that
+    Spanish counts one second in the singular, that each language is chosen only when it
+    comes before English in the preferred languages, that Chinese is never chosen for
+    Traditional Chinese alone, that every Spanish of the Mac gets es-419, and the talk key
+    hints, key names and finish hints in Chinese, Japanese and Spanish.
   - SetupDownloadTests covers who gets the cleanup model with the welcome window's one
     download (a new user from 16 GB of memory, never over a saved choice), the line on
     memory under 16 GB, the order of the download (speech model first, cleanup model
@@ -417,8 +423,9 @@ got worse than the baseline, see docs/release-gate.md.
     button opens.
   - WelcomeLanguageTests covers the language picked in the welcome window: the
     localization of each choice, Same as the Mac for English, Chinese, Traditional
-    Chinese and French first, Chinese text built in code while Orra runs in English, that
-    SwiftUI draws a text literal in the language of the environment's locale, and that
+    Chinese, Japanese, Spanish from Spain and Mexico and French first, Chinese, Japanese
+    and Spanish text built in code while Orra runs in English, that SwiftUI draws a text
+    literal in the language of the environment's locale, and that
     closing the window restarts Orra only with setup complete, no dictation running, a
     language picked in the window other than the one it started with, and no other Orra
     window open.
@@ -1814,6 +1821,24 @@ launch as for the welcome window above, with the Mac in English:
   opens again within a few seconds, in Chinese, with no welcome window, the same talk key,
   and the speech model loading.
 - [ ] Done without a change of language does not restart Orra.
+
+Japanese and Spanish interface, added on 2026-10-18, not verified yet. The settings pages,
+the cleanup options sheet, the welcome window and the indicator were rendered to images in
+both languages, see the pull request:
+
+- [ ] Interface language in Settings and Language in the welcome window offer 日本語 and
+  Español. After the restart the menu, Settings, the welcome window, the indicator, the
+  captions window and the notices are in that language.
+- [ ] In Spanish, the menu items macOS adds, such as Configuración… and Salir de Orra in
+  the app menu of the Settings window, use the same words as Orra's own text. A Mac in
+  Spain's Spanish gets the same Latin American Spanish.
+- [ ] A Mac with Japanese or Spanish first shows Orra in that language with Same as the
+  Mac, and a Mac with French then Japanese shows Japanese.
+- [ ] The microphone and system audio prompts of macOS show Orra's text in Japanese and in
+  Spanish.
+- [ ] The card beside System Settings and its steps name the panes as System Settings
+  shows them in that language.
+- [ ] A native speaker reads the menu, the welcome window and the General page first.
 - [ ] With setup complete, choose 简体中文 in Settings, leave Restart Orra unclicked, close
   Settings and click Done in the welcome window: Orra does not restart.
 - [ ] With setup complete and 简体中文 picked in the welcome window, open Report a Problem,

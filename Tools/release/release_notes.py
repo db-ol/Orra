@@ -28,7 +28,8 @@ LANGUAGES = (
     Language("en", "English"),
     Language("zh-Hans", "简体中文"),
     Language("ja", "日本語"),
-    Language("es", "Español"),
+    # Latin American Spanish, which a Mac in any Spanish falls back to.
+    Language("es-419", "Español"),
 )
 
 # The last version whose notes are one file in English and Chinese.

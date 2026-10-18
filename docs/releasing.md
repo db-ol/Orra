@@ -49,13 +49,15 @@ so each language has its own file in docs/release-notes, in Markdown:
 - `<version>.md` in English,
 - `<version>.zh-Hans.md` in Simplified Chinese,
 - `<version>.ja.md` in Japanese,
-- `<version>.es.md` in Spanish.
+- `<version>.es-419.md` in Spanish, the Latin American Spanish of Orra's interface.
 
 Whoever prepares the release writes the English notes and translates them into the other
 three, all in one pull request, such as "Release notes for 0.5.0". The maintainer reviews
 every language before it is merged. A translation names menu items and settings exactly as
 Orra shows them in that language, as Orra/Localizable.xcstrings has them. Chinese uses
-full width punctuation, and Japanese uses 、。「」（）.
+full width punctuation. Japanese uses 、。（） and “ ” around the names of settings, as
+macOS does. Spanish uses the Latin American words of the interface, such as Configuración
+and la Mac.
 
 make-release.sh refuses to build a version after 0.4.2 while a file is missing or empty.
 To check the files before that:
@@ -68,8 +70,8 @@ limits to the localizations of Orra itself. So the notes come in the language th
 Orra shows, also when it was chosen in Orra's own settings. Someone whose languages Orra
 does not have, such as French or Traditional Chinese, sees English in both. Sparkle's own
 buttons follow the same rule, so the whole update window is in one language, English on a
-Mac in German too. The codes are the names of Orra's localizations (en, zh-Hans, ja, es)
-and must stay so. A new language of the interface needs its own file and an entry in
+Mac in German too. The codes are the names of Orra's localizations (en, zh-Hans, ja,
+es-419) and must stay so. A new language of the interface needs its own file and an entry in
 Tools/release/release_notes.py, and a test of the release scripts fails until it has them.
 Until users run an Orra that has the language, they see the notes in English, as they see
 the rest of Orra.

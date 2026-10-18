@@ -6,11 +6,14 @@ import Testing
 
 /// The language picked in the welcome window: which localization it shows, that the window
 /// switches to it while Orra runs in another, and when closing the window restarts Orra.
-/// The tests run in English, so Chinese here is always a language Orra did not start with.
+/// The tests run in English, so Chinese, Japanese and Spanish here are always a language
+/// Orra did not start with.
 @MainActor
 struct WelcomeLanguageTests {
-    private let available = ["zh-Hans", "en"]
+    private let available = ["zh-Hans", "ja", "es-419", "en"]
     private let chinese = Locale(identifier: "zh-Hans")
+    private let japanese = Locale(identifier: "ja")
+    private let spanish = Locale(identifier: "es-419")
 
     @Test func theMacsChoiceFollowsTheMacsLanguages() {
         #expect(AppLanguage.system.localization(macLanguages: ["en-US", "zh-Hans-US"], available: available) == "en")
@@ -21,6 +24,11 @@ struct WelcomeLanguageTests {
         #expect(AppLanguage.system.localization(macLanguages: ["fr-FR", "zh-Hans-CN"], available: available) == "zh-Hans")
         #expect(AppLanguage.system.localization(macLanguages: ["fr-FR"], available: available) == "en")
         #expect(AppLanguage.system.localization(macLanguages: [], available: available) == "en")
+        #expect(AppLanguage.system.localization(macLanguages: ["ja-JP", "en-US"], available: available) == "ja")
+        #expect(AppLanguage.system.localization(macLanguages: ["de-DE", "ja-JP"], available: available) == "ja")
+        // Spain's Spanish falls back to the Latin American one.
+        #expect(AppLanguage.system.localization(macLanguages: ["es-ES", "en-US"], available: available) == "es-419")
+        #expect(AppLanguage.system.localization(macLanguages: ["es-MX"], available: available) == "es-419")
     }
 
     @Test func aLanguageOfOrrasOwnIgnoresTheMac() {
@@ -28,6 +36,10 @@ struct WelcomeLanguageTests {
         #expect(AppLanguage.chinese.localization(macLanguages: ["en-US"], available: available) == "zh-Hans")
         #expect(AppLanguage.chinese.localization() == "zh-Hans")
         #expect(AppLanguage.english.localization() == "en")
+        #expect(AppLanguage.japanese.localization(macLanguages: ["zh-Hans-CN"], available: available) == "ja")
+        #expect(AppLanguage.japanese.localization() == "ja")
+        #expect(AppLanguage.spanish.localization(macLanguages: ["es-ES"], available: available) == "es-419")
+        #expect(AppLanguage.spanish.localization() == "es-419")
     }
 
     @Test func orraStartedInTheTestLanguage() {
@@ -39,6 +51,8 @@ struct WelcomeLanguageTests {
     @Test func textBuiltInCodeFollowsThePickedLanguage() {
         #expect(WelcomeWindow.title(in: "zh-Hans") == "欢迎使用 Orra")
         #expect(WelcomeWindow.title(in: "en") == "Welcome to Orra")
+        #expect(WelcomeWindow.title(in: "ja") == "ようこそOrraへ")
+        #expect(WelcomeWindow.title(in: "es-419") == "Te damos la bienvenida a Orra")
         #expect(TalkKey.rightOption.fullName(in: chinese) == "⌥ 右侧 Option 键（Alt）")
         #expect(TalkKey.rightOption.fullName() == "⌥ Right Option (Alt)")
         #expect(Hotkey.rightControl.talkHint(mode: .hold, in: chinese) == "按住右侧 Control 键说话")
@@ -47,6 +61,10 @@ struct WelcomeLanguageTests {
         #expect(PushToTalkController.ModelProblem.missing.message(in: chinese) == "这台 Mac 上没有语音模型")
         #expect(ModelInstaller.State.checking.menuLines(total: 1, locale: chinese) == ["正在准备语音模型…"])
         #expect(ModelInstaller.State.downloading(bytes: 0, source: nil).buttonTitle(total: 1, locale: chinese) == "取消下载")
+        #expect(ModelInstaller.State.downloading(bytes: 0, source: nil).buttonTitle(total: 1, locale: japanese) == "ダウンロードをキャンセル")
+        #expect(ModelInstaller.State.downloading(bytes: 0, source: nil).buttonTitle(total: 1, locale: spanish) == "Cancelar descarga")
+        #expect(PushToTalkController.ModelProblem.missing.message(in: japanese) == "このMacに音声認識モデルがありません")
+        #expect(PushToTalkController.ModelProblem.missing.message(in: spanish) == "El modelo de transcripción no está en esta Mac")
     }
 
     /// SwiftUI looks up a text literal in the locale of the environment, not only formats
@@ -64,6 +82,11 @@ struct WelcomeLanguageTests {
         let button = image(Button("Not Now") {}.environment(\.locale, chinese))
         #expect(button == image(Button {} label: { Text(verbatim: "以后") }))
         #expect(image(Text("Done").environment(\.locale, Locale(identifier: "en"))) == image(Text(verbatim: "Done")))
+        // Localized text carries its language, and macOS may draw Japanese text with and
+        // without it in different fonts, so both sides name one.
+        let hiragino = Font.custom("Hiragino Sans", size: 13)
+        #expect(image(Text("Cancel").font(hiragino).environment(\.locale, japanese)) == image(Text(verbatim: "キャンセル").font(hiragino)))
+        #expect(image(Text("Done").environment(\.locale, spanish)) == image(Text(verbatim: "Listo")))
     }
 
     @Test func closingRestartsOnlyWhenSetupIsCompleteAndTheLanguageWasPickedInTheWindow() {

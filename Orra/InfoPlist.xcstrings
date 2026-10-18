@@ -11,6 +11,18 @@
             "value" : "Orra"
           }
         },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -29,6 +41,18 @@
             "value" : "Orra listens to the sound your Mac plays, such as a call, to show live captions and translations. The audio stays on this Mac."
           }
         },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra escucha el sonido que reproduce tu Mac, como una llamada, para mostrar subtítulos y traducciones en vivo. El audio no sale de esta Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraは、ライブキャプションと翻訳を表示するために、通話などMacで再生される音声を聞き取ります。聞き取った音声がこのMacから送信されることはありません。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -45,6 +69,18 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Orra records your voice while you hold the talk key and turns it into text on this Mac."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra graba tu voz mientras mantienes presionada la tecla para hablar y la convierte en texto en esta Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraは、音声入力キーを押している間あなたの声を録音し、このMac上でテキストに変換します。"
           }
         },
         "zh-Hans" : {
