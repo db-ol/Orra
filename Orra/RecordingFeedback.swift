@@ -192,7 +192,12 @@ final class RecordingFeedback {
 
     /// The seconds left as the indicator shows them, such as "Stops in 12 s", or nil.
     var countdownText: String? {
-        secondsLeft.map { String(localized: "Stops in \($0) s") }
+        secondsLeft.map { Self.countdownText(seconds: $0) }
+    }
+
+    /// The countdown text for `seconds`.
+    nonisolated static func countdownText(seconds: Int) -> String {
+        String(localized: "Stops in \(seconds) s")
     }
 
     /// The whole seconds from `now` to `end`, rounded up, so the count reaches 1 in the

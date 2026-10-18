@@ -254,14 +254,19 @@ extension RecordingIndicatorView {
         }
     }
 
-    /// The seconds left before the recording limit, or nothing. The digits keep their
-    /// width, so the capsule does not shift as they count down.
+    /// The seconds left before the recording limit, or nothing. It keeps the width of the
+    /// first count, which has the most digits, so the capsule does not shift as the count
+    /// drops below 10.
     @ViewBuilder fileprivate var countdown: some View {
         if let text = feedback.countdownText {
-            Text(verbatim: text)
-                .font(.callout)
-                .monospacedDigit()
-                .foregroundStyle(.white)
+            ZStack(alignment: .leading) {
+                Text(verbatim: RecordingFeedback.countdownText(seconds: Int((RecordingLimits.countdown / .seconds(1)).rounded(.up))))
+                    .hidden()
+                Text(verbatim: text)
+                    .foregroundStyle(.white)
+            }
+            .font(.callout)
+            .monospacedDigit()
         }
     }
 }

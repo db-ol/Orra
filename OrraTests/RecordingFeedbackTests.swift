@@ -448,6 +448,33 @@ struct RecordingFeedbackTests {
         #expect(try drawnPixels(counting) > drawnPixels(plain))
     }
 
+    /// The capsule keeps its width as the count drops from two digits to one.
+    @Test func theCountdownKeepsTheCapsuleWidth() throws {
+        func width(_ remaining: Duration) throws -> Int {
+            let feedback = makeFeedback()
+            feedback.handle(.listening)
+            feedback.handle(.limitNear(remaining: remaining))
+            return try drawnColumns(feedback).count
+        }
+        let ten = try width(.seconds(10))
+        #expect(ten > 0)
+        #expect(try width(.seconds(9)) == ten)
+        #expect(try width(.seconds(15)) == ten)
+    }
+
+    /// The columns of the indicator that hold a pixel that is not clear.
+    private func drawnColumns(_ feedback: RecordingFeedback) throws -> ClosedRange<Int> {
+        let view = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
+        view.frame = NSRect(origin: .zero, size: RecordingIndicatorView.panelSize)
+        view.layoutSubtreeIfNeeded()
+        let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: image)
+        let columns = (0..<image.pixelsWide).filter { x in
+            (0..<image.pixelsHigh).contains { y in (image.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 }
+        }
+        return try #require(columns.first) ... #require(columns.last)
+    }
+
     /// Renders the indicator with the badge to PNGs, for a look without running the app.
     /// Off unless ORRA_SETTINGS_SNAPSHOTS names a folder, as for the settings pages.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
