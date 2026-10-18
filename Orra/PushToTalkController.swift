@@ -256,8 +256,9 @@ final class PushToTalkController {
     @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
     @ObservationIgnored private let saveWritesNumbersAsDigits: (Bool) -> Void
     @ObservationIgnored private let saveUsesScreenNames: (Bool) -> Void
-    /// Reads the names on the screen of an app for the speech model, see ScreenNames.
-    @ObservationIgnored private let readScreenNames: @Sendable (pid_t) async -> [String]
+    /// Reads the names on the screen of an app for the speech model, until a time limit
+    /// after the press it gets, see ScreenNames.
+    @ObservationIgnored private let readScreenNames: @Sendable (pid_t, ContinuousClock.Instant) async -> [String]
     /// The reading of the screen for the current hold, started when its press counted,
     /// while Use names on screen is on. Nil otherwise.
     @ObservationIgnored private var holdScreenRead: ScreenNamesRead?
@@ -317,7 +318,8 @@ final class PushToTalkController {
     ///   - saveWritesNumbersAsDigits: Saves the choice after the user changes it.
     ///   - usesScreenNames: Whether names on the screen go to the speech model, as saved.
     ///   - saveUsesScreenNames: Saves the choice after the user changes it.
-    ///   - readScreenNames: Reads the names on the screen of an app. Tests pass fakes.
+    ///   - readScreenNames: Reads the names on the screen of an app, until a time limit
+    ///     after the press. Tests pass fakes.
     ///   - now: The time, for the dates of the vocabulary. Tests pass fakes.
     init(
         capture: AudioCapture,
@@ -358,7 +360,7 @@ final class PushToTalkController {
         saveWritesNumbersAsDigits: @escaping (Bool) -> Void = { _ in },
         usesScreenNames: Bool = false,
         saveUsesScreenNames: @escaping (Bool) -> Void = { _ in },
-        readScreenNames: @escaping @Sendable (pid_t) async -> [String] = { await ScreenNames.read(inApp: $0) },
+        readScreenNames: @escaping @Sendable (pid_t, ContinuousClock.Instant) async -> [String] = { await ScreenNames.read(inApp: $0, pressedAt: $1) },
         now: @escaping () -> Date = { Date() }
     ) {
         self.capture = capture
@@ -1147,7 +1149,7 @@ final class PushToTalkController {
         let read = ScreenNamesRead(app: app)
         holdScreenRead = read
         Task { [readScreenNames] in
-            read.finish(await readScreenNames(app))
+            read.finish(await readScreenNames(app, read.started))
         }
     }
 

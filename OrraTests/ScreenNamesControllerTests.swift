@@ -12,10 +12,10 @@ struct ScreenNamesControllerTests {
     let inserter = FakeInserter()
     let workspace = FakeWorkspace()
 
-    /// A reading of the screen that records the apps it read, and waits for `release`
-    /// while `holds` is set.
+    /// A reading of the screen that records the apps it read and the presses it got, and
+    /// waits for `release` while `holds` is set.
     final class FakeScreen: Sendable {
-        private let state = Mutex<(reads: [pid_t], holds: Bool, waiting: [CheckedContinuation<Void, Never>])>(([], false, []))
+        private let state = Mutex<(reads: [pid_t], presses: [ContinuousClock.Instant], holds: Bool, waiting: [CheckedContinuation<Void, Never>])>(([], [], false, []))
         let names: [String]
 
         init(names: [String], holds: Bool = false) {
@@ -27,10 +27,15 @@ struct ScreenNamesControllerTests {
             state.withLock { $0.reads }
         }
 
-        func read(_ app: pid_t) async -> [String] {
+        var presses: [ContinuousClock.Instant] {
+            state.withLock { $0.presses }
+        }
+
+        func read(_ app: pid_t, pressed: ContinuousClock.Instant) async -> [String] {
             await withCheckedContinuation { continuation in
                 let waits = state.withLock { state in
                     state.reads.append(app)
+                    state.presses.append(pressed)
                     if state.holds { state.waiting.append(continuation) }
                     return state.holds
                 }
@@ -61,7 +66,7 @@ struct ScreenNamesControllerTests {
             vocabulary: vocabularyWords(vocabulary),
             usesScreenNames: on,
             saveUsesScreenNames: saved,
-            readScreenNames: { await screen.read($0) }
+            readScreenNames: { await screen.read($0, pressed: $1) }
         )
         await controller.loadModel()
         return controller
@@ -167,8 +172,14 @@ struct ScreenNamesControllerTests {
         controller.handle(.armed)
         try await waitUntil { mic.calls.filter { $0 == "start" }.count == 2 }
         #expect(screen.reads.isEmpty)
+        let counted = ContinuousClock.now
         controller.handle(.pressed(isRepeat: false))
+        let answered = ContinuousClock.now
         try await waitUntil { screen.reads.count == 1 }
+        // The time limit of the reading counts from the press that counted, not from when
+        // the reading got to run.
+        let pressed = try #require(screen.presses.first)
+        #expect(counted <= pressed && pressed <= answered)
         await Task.yield()
         controller.handle(.released)
         try await waitUntil { controller.state == .idle }

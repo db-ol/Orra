@@ -32,7 +32,10 @@ struct ScreenReaderTests {
     ) -> ScreenField {
         let units = Array(text.utf16)
         return ScreenField(
-            kind: kind,
+            kind: {
+                asked.add("kind")
+                return kind
+            },
             selection: {
                 asked.add("selection")
                 onAsk()
@@ -54,7 +57,7 @@ struct ScreenReaderTests {
                 onAsk()
                 return text
             },
-            windowTitle: {
+            windowTitle: { _ in
                 asked.add("title")
                 onAsk()
                 return title
@@ -62,8 +65,9 @@ struct ScreenReaderTests {
         )
     }
 
-    static func source(_ field: ScreenField?, secureInputHolder: pid_t? = nil, asked: Asked) -> ScreenSource {
+    static func source(_ field: ScreenField?, bundleIdentifier: String? = "com.apple.Notes", secureInputHolder: pid_t? = nil, asked: Asked) -> ScreenSource {
         ScreenSource(
+            bundleIdentifier: { _ in bundleIdentifier },
             secureInputHolder: { secureInputHolder },
             focusedField: { _ in
                 asked.add("field")
@@ -81,7 +85,7 @@ struct ScreenReaderTests {
         let field = Self.field(text: text, cursor: 41, asked: asked)
         let screen = ScreenReader.read(inApp: app, from: Self.source(field, asked: asked), deadline: later)
         #expect(screen == ScreenText(beforeCursor: "Hi Dana, the Quorvia notes are attached. ", windowTitle: "Notes"))
-        #expect(asked.all == ["field", "selection", "text", "title"])
+        #expect(asked.all == ["field", "kind", "selection", "text", "title"])
     }
 
     @Test func readsAtMostTheLastThousandCharacters() {
@@ -103,14 +107,16 @@ struct ScreenReaderTests {
         let field = Self.field(text: "林悦你好，青岚计划的排期在附件里。谢谢", cursor: 17, rangeReads: false, asked: asked)
         let screen = ScreenReader.read(inApp: app, from: Self.source(field, asked: asked), deadline: later)
         #expect(screen?.beforeCursor == "林悦你好，青岚计划的排期在附件里。")
-        #expect(asked.all == ["field", "selection", "text", "length", "value", "title"])
+        #expect(asked.all == ["field", "kind", "selection", "text", "length", "value", "title"])
     }
 
-    @Test func aFieldWithoutACursorIsReadFromItsEnd() {
+    @Test func aFieldWithoutACursorGivesOnlyItsWindowTitle() {
+        // Its text may lie after the cursor, as the quoted mail of a reply does.
         let asked = Asked()
-        let field = Self.field(text: "Ask Bram about Kelpstone.", cursor: nil, asked: asked)
+        let field = Self.field(text: "Ask Bram about Kelpstone.", cursor: nil, title: "Re: Quorvia", asked: asked)
         let screen = ScreenReader.read(inApp: app, from: Self.source(field, asked: asked), deadline: later)
-        #expect(screen?.beforeCursor == "Ask Bram about Kelpstone.")
+        #expect(screen == ScreenText(beforeCursor: "", windowTitle: "Re: Quorvia"))
+        #expect(asked.all == ["field", "kind", "selection", "title"])
     }
 
     @Test func aLongFieldWithoutRangesIsNotCopied() {
@@ -126,14 +132,29 @@ struct ScreenReaderTests {
         let asked = Asked()
         let field = Self.field(kind: .password, text: "hunter2", cursor: 7, asked: asked)
         #expect(ScreenReader.read(inApp: app, from: Self.source(field, asked: asked), deadline: later) == nil)
-        #expect(asked.all == ["field"])
+        #expect(asked.all == ["field", "kind"])
+    }
+
+    @Test func aPasswordManagerIsNotAsked() {
+        // Its search field, notes and a password shown in clear are plain text fields.
+        for manager in ["com.1password.1password", "com.apple.Passwords", "com.bitwarden.desktop"] {
+            let asked = Asked()
+            let field = Self.field(text: "Recovery code 4F7K-Q2ZX", cursor: 23, asked: asked)
+            #expect(ScreenReader.read(inApp: app, from: Self.source(field, bundleIdentifier: manager, asked: asked), deadline: later) == nil)
+            #expect(asked.all.isEmpty)
+        }
+        // An app without a bundle identifier is read.
+        let asked = Asked()
+        let field = Self.field(text: "Kelpstone", cursor: 9, asked: asked)
+        let screen = ScreenReader.read(inApp: app, from: Self.source(field, bundleIdentifier: nil, asked: asked), deadline: later)
+        #expect(screen?.beforeCursor == "Kelpstone")
     }
 
     @Test func anElementThatIsNoTextFieldIsNotRead() {
         let asked = Asked()
         let field = Self.field(kind: .unknown, text: "Kelpstone", cursor: 9, asked: asked)
         #expect(ScreenReader.read(inApp: app, from: Self.source(field, asked: asked), deadline: later) == nil)
-        #expect(asked.all == ["field"])
+        #expect(asked.all == ["field", "kind"])
     }
 
     @Test func anAppWithSecureInputIsNotAsked() {
@@ -165,7 +186,7 @@ struct ScreenReaderTests {
             clock.withLock { $0 }
         }
         #expect(screen == ScreenText(beforeCursor: "Ask Bram about Kelpstone.", windowTitle: nil))
-        #expect(asked.all == ["field", "selection", "text"])
+        #expect(asked.all == ["field", "kind", "selection", "text"])
         // An app that answers too slowly gives nothing at all.
         let slow = Asked()
         let slowField = Self.field(text: "Ask Bram about Kelpstone.", cursor: 25, asked: slow) {
@@ -176,7 +197,23 @@ struct ScreenReaderTests {
             clock.withLock { $0 }
         }
         #expect(nothing == nil)
-        #expect(slow.all == ["field", "selection"])
+        #expect(slow.all == ["field", "kind", "selection"])
+    }
+
+    @Test func theWindowTitleIsAskedForOnlyInTime() {
+        let clock = Mutex(ContinuousClock.now)
+        let start = clock.withLock { $0 }
+        var field = Self.field(text: "", cursor: 0, asked: Asked())
+        // The live title asks the app for the window, then for its title only while there
+        // is time. Here the first question uses up the time.
+        field.windowTitle = { inTime in
+            clock.withLock { $0 += .milliseconds(600) }
+            return inTime() ? "Notes" : nil
+        }
+        let screen = ScreenReader.read(inApp: app, from: Self.source(field, asked: Asked()), deadline: start + .milliseconds(500)) {
+            clock.withLock { $0 }
+        }
+        #expect(screen == nil)
     }
 
     @Test func aLongWindowTitleIsCut() {
