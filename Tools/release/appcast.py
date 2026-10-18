@@ -24,6 +24,9 @@ import release_notes  # noqa: E402
 
 REPOSITORY = "https://github.com/db-ol/Orra"
 MINIMUM_SYSTEM_VERSION = "15.6"
+# Sparkle opens this from the Version History button of its alert that Orra is up to date.
+# The releases page has the notes of every version, for someone who skipped some.
+VERSION_HISTORY = f"{REPOSITORY}/releases"
 
 
 def description(language, notes):
@@ -58,7 +61,7 @@ def main(arguments):
       <sparkle:version>{escape(build)}</sparkle:version>
       <sparkle:shortVersionString>{escape(version)}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>{MINIMUM_SYSTEM_VERSION}</sparkle:minimumSystemVersion>
-      <sparkle:fullReleaseNotesLink>{escape(f"{REPOSITORY}/releases/tag/v{version}")}</sparkle:fullReleaseNotesLink>
+      <sparkle:fullReleaseNotesLink>{escape(VERSION_HISTORY)}</sparkle:fullReleaseNotesLink>
       {descriptions}
       <enclosure url={quoteattr(url)} length="{os.path.getsize(dmg)}" type="application/x-apple-diskimage" sparkle:edSignature={quoteattr(signature)}/>
     </item>
