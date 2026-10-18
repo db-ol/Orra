@@ -63,6 +63,29 @@ nonisolated enum DictationLanguage: String, CaseIterable, Identifiable, Sendable
         self == .chinese
     }
 
+    /// The language translation goes between with English, see TranslationDirection.
+    var translationLanguage: TranslationTarget {
+        switch self {
+        case .chinese: .chinese
+        case .japanese: .japanese
+        case .spanish: .spanish
+        }
+    }
+
+    /// The targets of translation, English first, as the prompts are read ahead.
+    var translationTargets: [TranslationTarget] {
+        [.english, translationLanguage]
+    }
+
+    /// The fixed direction into this language.
+    var translationDirection: TranslationDirection {
+        switch self {
+        case .chinese: .chinese
+        case .japanese: .japanese
+        case .spanish: .spanish
+        }
+    }
+
     /// The choice for a new user, from the Mac's first language: Japanese for Japanese,
     /// Spanish for Spanish, and Chinese for any other, such as English or Chinese.
     static func preferred(macLanguages: [String]) -> DictationLanguage {

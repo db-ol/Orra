@@ -10,13 +10,22 @@ nonisolated enum VoiceSampleCaptureError: Error, Equatable {
 /// 10 seconds at a calm pace, which fits VoiceSample.maximumSeconds. Each script is in its
 /// own language whatever language Orra shows, so it is not localized.
 nonisolated enum VoiceScript {
-    /// The language the user speaks in meetings: the source of a fixed translation
-    /// direction, and for the automatic one the language Orra shows.
-    static func language(direction: TranslationDirection, interface: Locale = .interface) -> TranslationTarget {
-        switch direction {
-        case .english: .chinese
-        case .chinese: .english
-        case .automatic: interface.language.languageCode == .chinese ? .chinese : .english
+    /// The language the user speaks in meetings, for a user who dictates in `language`:
+    /// the source of a fixed translation direction as it acts for that language, and for
+    /// the automatic one that language when Orra shows it, English otherwise.
+    static func language(direction: TranslationDirection, language: DictationLanguage = .chinese, interface: Locale = .interface) -> TranslationTarget {
+        let own = language.translationLanguage
+        switch direction.effective(for: language) {
+        case .english: return own
+        case .chinese, .japanese, .spanish: return .english
+        case .automatic:
+            let shown: Locale.LanguageCode? = switch own {
+            case .chinese: .chinese
+            case .japanese: .japanese
+            case .spanish: .spanish
+            case .english: .english
+            }
+            return interface.language.languageCode == shown ? own : .english
         }
     }
 
@@ -26,6 +35,10 @@ nonisolated enum VoiceScript {
             "This morning the weather was clear, so I walked to the market. I bought apples, fresh bread and some coffee, and then I read by the window for a while."
         case .chinese:
             "今天早上天气很好，我走路去了市场。买了一些苹果、新鲜的面包和咖啡，然后坐在窗边看了一会儿书。"
+        case .japanese:
+            "今朝は天気が良かったので、歩いて市場へ行きました。りんごと焼きたてのパン、それにコーヒーを買って、しばらく窓辺で本を読みました。"
+        case .spanish:
+            "Esta mañana el día estaba despejado, así que caminé hasta el mercado. Compré manzanas, pan fresco y un poco de café, y luego leí un rato junto a la ventana."
         }
     }
 
@@ -34,6 +47,8 @@ nonisolated enum VoiceScript {
         switch language {
         case .english: "English"
         case .chinese: "中文"
+        case .japanese: "日本語"
+        case .spanish: "Español"
         }
     }
 }
@@ -92,6 +107,8 @@ final class VoiceRecording: Identifiable {
     private(set) var isPlaying = false
     /// The script's language, which the user can change.
     var scriptLanguage: TranslationTarget
+    /// The languages of the scripts the user can pick: English and the dictation language.
+    let scriptLanguages: [TranslationTarget]
     /// The sample once recorded, held in memory only.
     private(set) var sample: VoiceSample?
 
@@ -112,6 +129,7 @@ final class VoiceRecording: Identifiable {
     ///   - playback: Plays the sample back. Tests pass fakes.
     ///   - output: The device the sample plays back on, the system's default output.
     ///   - scriptLanguage: The language of the script shown first.
+    ///   - scriptLanguages: The languages of the scripts the user can pick.
     ///   - maximum: How long a recording may run. Tests pass a short one.
     ///   - tick: How often the time and the meter update.
     init(
@@ -119,6 +137,7 @@ final class VoiceRecording: Identifiable {
         playback: any SpeechPlayback,
         output: @escaping () -> AudioOutput?,
         scriptLanguage: TranslationTarget,
+        scriptLanguages: [TranslationTarget] = DictationLanguage.chinese.translationTargets,
         maximum: Duration = .seconds(VoiceRecording.maximumSeconds),
         tick: Duration = .milliseconds(33)
     ) {
@@ -126,6 +145,7 @@ final class VoiceRecording: Identifiable {
         self.playback = playback
         self.output = output
         self.scriptLanguage = scriptLanguage
+        self.scriptLanguages = scriptLanguages
         self.maximum = maximum
         self.tick = tick
     }

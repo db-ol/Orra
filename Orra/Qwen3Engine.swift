@@ -87,6 +87,8 @@ nonisolated enum SpeechLanguage: String, Sendable {
         switch target {
         case .chinese: self = .chinese
         case .english: self = .english
+        case .japanese: self = .japanese
+        case .spanish: self = .spanish
         }
     }
 }

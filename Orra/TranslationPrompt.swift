@@ -23,11 +23,13 @@ nonisolated enum TranslationPrompt {
 
     static let sourceRule = #""cleaned" is always in the language the speaker used, word for word after the cleanup. Never translate "cleaned", not even in part."#
 
+    /// The system text of the Chinese routes, see `system(_ route:)` for every route.
     static func system(_ target: TranslationTarget) -> String {
         let language = name(target)
         let mixed = switch target {
         case .english: "Mixed text is translated completely: no Chinese stays in the English. Chinese names become pinyin."
         case .chinese: "Mixed text is translated completely: English words become Chinese, and only names, product names and acronyms such as PR, CPU or iPhone stay in English."
+        case .japanese, .spanish: preconditionFailure("Japanese and Spanish have prompts of their own, see system(_ route:)")
         }
         return """
         You clean up dictated text and translate it into \(language). Each user message is a JSON object whose "transcript" field holds what a person said, written down by speech recognition. It may be Chinese, English, or both mixed.
@@ -53,6 +55,8 @@ nonisolated enum TranslationPrompt {
         switch target {
         case .english: "English"
         case .chinese: "Simplified Chinese"
+        case .japanese: "Japanese"
+        case .spanish: "Spanish"
         }
     }
 
@@ -97,18 +101,21 @@ nonisolated enum TranslationPrompt {
         ("Uh, let's move the 周会 to Thursday.", "Let's move the 周会 to Thursday.", "我们把周会改到周四吧。"),
     ]
 
+    /// The examples of the Chinese routes, see `examples(_ route:)` for every route.
     static func examples(_ target: TranslationTarget) -> [Example] {
         switch target {
         case .english: englishExamples
         case .chinese: chineseExamples
+        case .japanese, .spanish: preconditionFailure("Japanese and Spanish have examples of their own, see examples(_ route:)")
         }
     }
 
     /// The start of the answer, written into the prompt for the model, as for cleanup.
     static let prefill = RewritePrompt.prefill
 
-    /// The whole prompt in Qwen3.5's chat format, as its chat template renders it with the
-    /// generation prompt and thinking turned off, followed by the prefill.
+    /// The whole prompt of a Chinese route in Qwen3.5's chat format, as its chat template
+    /// renders it with the generation prompt and thinking turned off, followed by the
+    /// prefill.
     static func text(for transcript: String, into target: TranslationTarget) -> String {
         var prompt = "<|im_start|>system\n" + system(target) + "<|im_end|>\n"
         for example in examples(target) {
@@ -116,6 +123,20 @@ nonisolated enum TranslationPrompt {
             prompt += "<|im_start|>assistant\n" + answer(cleaned: example.cleaned, translation: example.translation) + "<|im_end|>\n"
         }
         prompt += "<|im_start|>user\n" + user(transcript, target) + "<|im_end|>\n"
+        prompt += "<|im_start|>assistant\n" + RewritePrompt.noThinking + prefill
+        return prompt
+    }
+
+    /// The whole prompt of a route, in the same format. The Chinese routes get exactly the
+    /// prompt of `text(for:into:)` with their target.
+    static func text(for transcript: String, into route: TranslationRoute) -> String {
+        guard route.language != .chinese else { return text(for: transcript, into: route.target) }
+        var prompt = "<|im_start|>system\n" + system(route) + "<|im_end|>\n"
+        for example in examples(route) {
+            prompt += "<|im_start|>user\n" + user(example.transcript, route.target) + "<|im_end|>\n"
+            prompt += "<|im_start|>assistant\n" + answer(cleaned: example.cleaned, translation: example.translation) + "<|im_end|>\n"
+        }
+        prompt += "<|im_start|>user\n" + user(transcript, route.target) + "<|im_end|>\n"
         prompt += "<|im_start|>assistant\n" + RewritePrompt.noThinking + prefill
         return prompt
     }

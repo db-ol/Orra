@@ -66,6 +66,14 @@ nonisolated enum TranslationStep {
         text.count <= maximumLength && TranslationDirection.sourceLanguage(of: text) != nil
     }
 
+    /// Whether a text of a user who dictates in `language` can be translated: a letter of
+    /// any script for Japanese and Spanish, kana only Japanese among them, and the rule
+    /// above for Chinese.
+    static func isWorthTranslating(_ text: String, in language: DictationLanguage) -> Bool {
+        guard language != .chinese else { return isWorthTranslating(text) }
+        return text.count <= maximumLength && TranslationDirection.source(of: text, in: language) != nil
+    }
+
     /// The outcome for the model's answer for `text`, as TranslationPrompt.parse read it:
     /// unreadable when it could not be read, held back when the translation fails a check,
     /// unchanged when it is the text itself, and translated otherwise. Captions use it too.
@@ -77,9 +85,27 @@ nonisolated enum TranslationStep {
         return answer.translation == text ? .unchanged : .translated
     }
 
-    /// The text to paste and what happened. `cleansUp` says whether cleanup is on, so the
-    /// model's cleanup may stand in for the translation. Logs the outcome and the time,
-    /// never text.
+    /// The outcome on a route, the same way. The Chinese routes get the verdict above. On
+    /// the others, for text in the target language already, a translation that only
+    /// repeats the model's cleanup is unchanged too, so the cleanup of Japanese or Spanish
+    /// text never slips in as its translation. Text in the other language keeps a
+    /// translation that the model also wrote into "cleaned", which it sometimes does.
+    static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into route: TranslationRoute) -> Outcome {
+        guard route.language != .chinese else { return verdict(on: answer, for: text, into: route.target) }
+        guard let answer else { return .unreadable }
+        if let failure = TranslationGuard.check(source: text, output: answer.translation, route: route) {
+            return .heldBack(failure)
+        }
+        if answer.translation == text {
+            return .unchanged
+        }
+        let inTarget = TranslationDirection.source(of: text, in: route.language) == (route.target == .english ? .english : .partner)
+        return inTarget && answer.translation == answer.cleaned ? .unchanged : .translated
+    }
+
+    /// The text to paste and what happened, on a Chinese route. `cleansUp` says whether
+    /// cleanup is on, so the model's cleanup may stand in for the translation. Logs the
+    /// outcome and the time, never text.
     @concurrent
     static func run(
         _ text: String,
@@ -88,8 +114,37 @@ nonisolated enum TranslationStep {
         timeout: Duration? = nil,
         complete: @escaping @Sendable (String, TranslationTarget) async throws -> String
     ) async -> Result {
+        await run(text, into: .chinese(target), cleansUp: cleansUp, timeout: timeout) { text, route in
+            try await complete(text, route.target)
+        }
+    }
+
+    /// Whether a route of Japanese or Spanish into that language has its text in that
+    /// language already, so the model has nothing to translate. Its rewrite would only
+    /// restyle or clean up the text, which Orra never pastes for Japanese or Spanish, so
+    /// the model does not run. The Chinese routes always run it.
+    static func isInItsLanguage(_ text: String, on route: TranslationRoute) -> Bool {
+        route.language != .chinese && route.target != .english && TranslationDirection.source(of: text, in: route.language) == .partner
+    }
+
+    /// The text to paste and what happened, on any route, the same way. On a route of
+    /// Japanese or Spanish, text in the target language already is pasted as it is, see
+    /// `isInItsLanguage(_:on:)`, and a translation that only repeats the model's cleanup
+    /// pastes the text the step got unless cleanup stands in, see `verdict(on:for:into:)`.
+    @concurrent
+    static func run(
+        _ text: String,
+        into route: TranslationRoute,
+        cleansUp: Bool,
+        timeout: Duration? = nil,
+        complete: @escaping @Sendable (String, TranslationRoute) async throws -> String
+    ) async -> Result {
+        if isInItsLanguage(text, on: route) {
+            Logger.rewrite.notice("Translation into \(route.logName, privacy: .public) not needed, the text is in that language")
+            return Result(text: text, untranslated: text, outcome: .unchanged)
+        }
         let started = ContinuousClock.now
-        let (result, timedOut) = await TimedCall.run(within: timeout ?? Self.timeout(for: text)) { try await complete(text, target) }
+        let (result, timedOut) = await TimedCall.run(within: timeout ?? Self.timeout(for: text)) { try await complete(text, route) }
         var outcome = Outcome.failed
         var untranslated = text
         var translation: String?
@@ -108,7 +163,7 @@ nonisolated enum TranslationStep {
                         cleanup = "used"
                     }
                 }
-                outcome = verdict(on: parsed, for: text, into: target)
+                outcome = verdict(on: parsed, for: text, into: route)
                 if outcome == .translated {
                     translation = parsed?.translation
                 }
@@ -117,7 +172,7 @@ nonisolated enum TranslationStep {
                 Logger.rewrite.error("Translation failed with \(String(reflecting: type(of: error)), privacy: .public)")
             }
         }
-        Logger.rewrite.notice("Translation into \(target.logName, privacy: .public) \(outcome.logName, privacy: .public) after \(started.duration(to: .now), privacy: .public), its cleanup \(cleanup, privacy: .public)")
+        Logger.rewrite.notice("Translation into \(route.logName, privacy: .public) \(outcome.logName, privacy: .public) after \(started.duration(to: .now), privacy: .public), its cleanup \(cleanup, privacy: .public)")
         return Result(text: translation ?? untranslated, untranslated: untranslated, outcome: outcome)
     }
 }
@@ -131,17 +186,18 @@ struct TranslationModel {
     /// Whether the model can translate now, after waiting a bounded time for a load the
     /// press of the key started, see TextCleanup.waitUntilLoadedForTranslation.
     var waitUntilLoaded: () async -> Bool
-    /// Which way to translate, as the user set it.
+    /// Which way to translate, as the user set it. PushToTalkController makes it
+    /// effective for the dictation language, see TranslationDirection.effective(for:).
     var direction: () -> TranslationDirection
-    /// The model's answer for a transcript and a target, see RewriteEngine.translate.
-    var complete: @Sendable (String, TranslationTarget) async throws -> String
+    /// The model's answer for a transcript and a route, see RewriteEngine.translate.
+    var complete: @Sendable (String, TranslationRoute) async throws -> String
 
     /// Without `waitUntilLoaded`, nothing is waited for and `isReady` decides.
     init(
         isReady: @escaping () -> Bool,
         waitUntilLoaded: (() async -> Bool)? = nil,
         direction: @escaping () -> TranslationDirection,
-        complete: @escaping @Sendable (String, TranslationTarget) async throws -> String
+        complete: @escaping @Sendable (String, TranslationRoute) async throws -> String
     ) {
         self.isReady = isReady
         self.waitUntilLoaded = waitUntilLoaded ?? { isReady() }

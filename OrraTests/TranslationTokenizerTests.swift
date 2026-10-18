@@ -26,7 +26,7 @@ struct TranslationTokenizerTests {
         let encode = { (text: String) in tokenizer.encode(text: text, addSpecialTokens: false) }
         let tools = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Tools/rewrite-eval")
         var count = 0
-        for target in TranslationTarget.allCases {
+        for target in DictationLanguage.chinese.translationTargets {
             let prefix = PromptPrefix.translationPrompt(into: target, encode: encode)
             for file in ["cases.jsonl", "adversarial.jsonl", "translation-probes.jsonl"] {
                 for line in try String(contentsOf: tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {

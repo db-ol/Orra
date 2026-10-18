@@ -82,4 +82,18 @@ struct WelcomeSuggestionTests {
         #expect(on[0].button == nil)
         #expect(WelcomeSuggestion.onLabel(locale: chinese) == "已打开")
     }
+
+    /// The translation line names the dictation language, which translation goes between
+    /// with English.
+    @Test func theTranslationLineNamesTheDictationLanguage() {
+        let line = { (language: DictationLanguage, locale: Locale) in
+            WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: language, locale: locale)[1].line
+        }
+        #expect(line(.chinese, english) == "Hold the translation key and speak. Chinese becomes English, and English becomes Chinese.")
+        #expect(line(.japanese, english) == "Hold the translation key and speak. Japanese becomes English, and English becomes Japanese.")
+        #expect(line(.spanish, english) == "Hold the translation key and speak. Spanish becomes English, and English becomes Spanish.")
+        #expect(line(.japanese, Locale(identifier: "ja")) == "翻訳キーを押したまま話します。日本語は英語に、英語は日本語になります。")
+        #expect(line(.spanish, Locale(identifier: "es-419")) == "Mantén presionada la tecla de traducción y habla. El español pasa a inglés y el inglés, a español.")
+        #expect(line(.spanish, chinese) == "按住翻译键说话，西班牙文变成英文，英文变成西班牙文。")
+    }
 }

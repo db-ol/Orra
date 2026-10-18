@@ -43,6 +43,20 @@ nonisolated enum TranslationGuard {
         case lostInstruction
         /// Acronyms of the source missing from an English translation.
         case acronymLost([String])
+        /// A Japanese translation that is mostly Latin letters.
+        case notJapanese
+        /// Chinese in a Japanese translation, see TranslationGuard.isChineseInJapanese.
+        case chineseInJapanese
+        /// Kana in an English translation, other than a short name of the source.
+        case kanaInEnglish
+        /// Spanish left in an English translation.
+        case notEnglish
+        /// English left in a Spanish translation.
+        case notSpanish
+        /// Accented letters in Spanish that Spanish does not write: another language.
+        case foreignLatin
+        /// Han characters in a Spanish translation, other than a short name of the source.
+        case hanInSpanish
 
         /// The reason in the words of guards2.py, for the tests. It may hold numbers and
         /// acronyms from the text, so it is never logged.
@@ -66,6 +80,13 @@ nonisolated enum TranslationGuard {
             case .json: "JSON in output"
             case .lostInstruction: "lost the instruction before a colon"
             case .acronymLost(let acronyms): "acronym lost " + acronyms.joined(separator: ",")
+            case .notJapanese: "not Japanese"
+            case .chineseInJapanese: "Chinese in Japanese output"
+            case .kanaInEnglish: "kana in English output"
+            case .notEnglish: "Spanish in English output"
+            case .notSpanish: "English in Spanish output"
+            case .foreignLatin: "foreign accented Latin"
+            case .hanInSpanish: "Han in Spanish output"
             }
         }
 
@@ -90,6 +111,13 @@ nonisolated enum TranslationGuard {
             case .json: "JSON"
             case .lostInstruction: "lost instruction"
             case .acronymLost: "acronym"
+            case .notJapanese: "not Japanese"
+            case .chineseInJapanese: "Chinese in Japanese"
+            case .kanaInEnglish: "kana in English"
+            case .notEnglish: "not English"
+            case .notSpanish: "not Spanish"
+            case .foreignLatin: "foreign accent"
+            case .hanInSpanish: "Han in Spanish"
             }
         }
 
@@ -157,7 +185,7 @@ nonisolated enum TranslationGuard {
         }
 
         switch target {
-        case .chinese:
+        case .chinese, .japanese, .spanish:
             let han = RewriteGuard.han(output).count
             let script = letters + han
             if script > 0, Double(letters) / Double(script) > 0.6, han < 2 {
@@ -470,34 +498,34 @@ nonisolated enum TranslationGuard {
     // MARK: Patterns
 
     // NSRegularExpression, which reads code points as Python does and has lookbehind.
-    private static func regex(_ pattern: String, _ options: NSRegularExpression.Options = []) -> NSRegularExpression {
+    static func regex(_ pattern: String, _ options: NSRegularExpression.Options = []) -> NSRegularExpression {
         try! NSRegularExpression(pattern: pattern, options: options)
     }
 
-    private static let thousandsSeparator = regex(#"(?<=\d),(?=\d{3})"#)
-    private static let digitsWithMultiplier = regex(#"(\d+(?:\.\d+)?)\s*(百万|千万|万|亿|千|[kKmMbB]n?\b|thousand|million|billion|hundred|dozen)?"#)
-    private static let chineseNumeral = regex("[零〇一二两三四五六七八九十百千万亿幺]+")
+    static let thousandsSeparator = regex(#"(?<=\d),(?=\d{3})"#)
+    static let digitsWithMultiplier = regex(#"(\d+(?:\.\d+)?)\s*(百万|千万|万|亿|千|[kKmMbB]n?\b|thousand|million|billion|hundred|dozen)?"#)
+    static let chineseNumeral = regex("[零〇一二两三四五六七八九十百千万亿幺]+")
     /// A run of Chinese numerals with no unit inside or around it, and not the decimals of
     /// a number such as 三点一四一五九, which `chineseDecimal` reads.
-    private static let chineseDigitRun = regex("(?<![零〇一二两三四五六七八九幺十百千万亿])(?<![零〇一二两三四五六七八九十百千万亿]点)[零〇一二两三四五六七八九幺]++(?![十百千万亿])")
-    private static let chineseDecimal = regex("([零一二两三四五六七八九十]+)点([零一二三四五六七八九]+)(万|亿)?")
-    private static let tenThousandsAndThousands = regex(#"(\d+)\s*万\s*(\d)\s*千"#)
-    private static let tenThousandsAndDigit = regex(#"(\d+)\s*万\s*(\d)(?![\d.])"#)
-    private static let decimal = regex(#"\d+(?:\.\d+)?"#)
-    private static let lowercaseWord = regex("[a-z]+")
+    static let chineseDigitRun = regex("(?<![零〇一二两三四五六七八九幺十百千万亿])(?<![零〇一二两三四五六七八九十百千万亿]点)[零〇一二两三四五六七八九幺]++(?![十百千万亿])")
+    static let chineseDecimal = regex("([零一二两三四五六七八九十]+)点([零一二三四五六七八九]+)(万|亿)?")
+    static let tenThousandsAndThousands = regex(#"(\d+)\s*万\s*(\d)\s*千"#)
+    static let tenThousandsAndDigit = regex(#"(\d+)\s*万\s*(\d)(?![\d.])"#)
+    static let decimal = regex(#"\d+(?:\.\d+)?"#)
+    static let lowercaseWord = regex("[a-z]+")
     /// A month's name or its first three letters, in lowercase text.
-    private static let monthPatterns = months.map { month in regex("\\b(\(month)|\(month.prefix(3)))\\b") }
+    static let monthPatterns = months.map { month in regex("\\b(\(month)|\(month.prefix(3)))\\b") }
     /// 周一 to 周日 and 周天, also with 星期 or 礼拜.
-    private static let chineseWeekdays = "一二三四五六日天".map { regex("(周|星期|礼拜)" + String($0)) }
-    private static let noon = regex(#"\bnoon\b|中午"#, .caseInsensitive)
-    private static let midnight = regex(#"\bmidnight\b|午夜|半夜|凌晨"#, .caseInsensitive)
-    private static let half = regex(#"\bhalf\b"#, .caseInsensitive)
-    private static let quarter = regex(#"\bquarter\b"#, .caseInsensitive)
-    private static let hanRun = regex("[\u{3400}-\u{9FFF}\u{F900}-\u{FAFF}]+")
-    private static let accent = regex("[\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{24F}]")
-    private static let colon = regex("[:：]")
-    private static let timeColon = regex(#"\d[:：]\d"#)
-    private static let acronym = regex("(?<![A-Za-z])[A-Z]{2,}(?=s?(?![A-Za-z]))")
+    static let chineseWeekdays = "一二三四五六日天".map { regex("(周|星期|礼拜)" + String($0)) }
+    static let noon = regex(#"\bnoon\b|中午"#, .caseInsensitive)
+    static let midnight = regex(#"\bmidnight\b|午夜|半夜|凌晨"#, .caseInsensitive)
+    static let half = regex(#"\bhalf\b"#, .caseInsensitive)
+    static let quarter = regex(#"\bquarter\b"#, .caseInsensitive)
+    static let hanRun = regex("[\u{3400}-\u{9FFF}\u{F900}-\u{FAFF}]+")
+    static let accent = regex("[\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{24F}]")
+    static let colon = regex("[:：]")
+    static let timeColon = regex(#"\d[:：]\d"#)
+    static let acronym = regex("(?<![A-Za-z])[A-Z]{2,}(?=s?(?![A-Za-z]))")
     /// Words that signal a spoken correction, which can make a translation much shorter.
     static let correctionCue = regex(#"不对|不是|我是说|说错了|应该是|删掉|算了|撤回|i mean|sorry|actually|scratch that|no wait|\bwait\b|never mind|rather"#, .caseInsensitive)
     /// Words of an instruction before a colon: translate, answer, 翻译, 用英文说.
@@ -505,22 +533,22 @@ nonisolated enum TranslationGuard {
 
     // MARK: Helpers
 
-    private static func matches(_ regex: NSRegularExpression, _ text: String) -> Bool {
+    static func matches(_ regex: NSRegularExpression, _ text: String) -> Bool {
         regex.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)) != nil
     }
 
-    private static func all(_ regex: NSRegularExpression, in text: String) -> [String] {
+    static func all(_ regex: NSRegularExpression, in text: String) -> [String] {
         let ns = text as NSString
         return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range) }
     }
 
     /// Whether `text` holds `part`, code point for code point, as Python's `in` compares.
-    private static func contains(_ text: String, _ part: String) -> Bool {
+    static func contains(_ text: String, _ part: String) -> Bool {
         (text as NSString).range(of: part, options: .literal).location != NSNotFound
     }
 
     /// Every match replaced by what `replacement` makes of its groups.
-    private static func replacing(_ regex: NSRegularExpression, in text: String, with replacement: ([String]) -> String) -> String {
+    static func replacing(_ regex: NSRegularExpression, in text: String, with replacement: ([String]) -> String) -> String {
         let ns = text as NSString
         var result = ""
         var last = 0
@@ -537,18 +565,18 @@ nonisolated enum TranslationGuard {
     }
 
     /// The digits times 1000 without leading zeros, as Python's str(int(digits) * 1000).
-    private static func thousands(_ digits: String) -> String {
+    static func thousands(_ digits: String) -> String {
         let trimmed = digits.drop { $0 == "0" }
         return trimmed.isEmpty ? "0" : trimmed + "000"
     }
 
-    private static func removingThousandsSeparators(_ text: String) -> String {
+    static func removingThousandsSeparators(_ text: String) -> String {
         thousandsSeparator.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: "")
     }
 
     /// Decimal digits of any script, full width ones among them, as ASCII digits, so
     /// Double reads them as Python's float does.
-    private static func asciiDigits(_ text: String) -> String {
+    static func asciiDigits(_ text: String) -> String {
         var result = String.UnicodeScalarView()
         for scalar in text.unicodeScalars {
             if scalar.properties.numericType == .decimal, let value = scalar.properties.numericValue, !scalar.isASCII {

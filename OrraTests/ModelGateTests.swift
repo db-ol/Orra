@@ -585,7 +585,7 @@ struct ModelGateOverlapTests {
         let captions = Task {
             for _ in 0..<8 {
                 _ = try await models.speech.transcribe(samples, nil, nil)
-                _ = try await models.cleanup.translate("Hello.", .chinese)
+                _ = try await models.cleanup.translate("Hello.", .chinese(.chinese))
             }
         }
         for try await _ in models.voice.speak("We met at noon.", in: .english, voice: ProbedModels.sample) {}
@@ -600,7 +600,7 @@ struct ModelGateOverlapTests {
         await models.voice.unload()
         try await caption.value
         let readings = probe.begun(.cleanup)
-        let reading = Task { try await models.cleanup.prepareTranslation(.english) }
+        let reading = Task { try await models.cleanup.prepareTranslation(.chinese(.english)) }
         try await eventually { probe.begun(.cleanup) > readings }
         await models.voice.forgetVoice()
         try await reading.value
@@ -843,7 +843,7 @@ struct ModelGateReservationTests {
             load: { _ in log.note("load") },
             unload: {},
             complete: { _ in "" },
-            prepareTranslation: { target in log.note("prepare \(target.rawValue)") }
+            prepareTranslation: { route in log.note("prepare \(route.target.rawValue)") }
         ).gated(gate)
         try temporary.writeAll(to: temporary.installed)
         let cleanup = TextCleanup(
@@ -879,7 +879,7 @@ struct ModelGateReservationTests {
             load: { _ in await loading.run() },
             unload: {},
             complete: { _ in "" },
-            prepareTranslation: { target in order.withLock { $0.append("prepare \(target.rawValue)") } }
+            prepareTranslation: { route in order.withLock { $0.append("prepare \(route.target.rawValue)") } }
         ).gated(gate)
         try temporary.writeAll(to: temporary.installed)
         let cleanup = TextCleanup(
@@ -942,9 +942,9 @@ struct ModelGateWiringTests {
         let (voice, speaking) = try await holdForTheVoice(gate)
         let cleaning = Task { try await cleanup.complete("Hello.") }
         try await eventually { gate.snapshot.waiting.count == 1 }
-        let translating = Task { try await cleanup.translate("Hello.", .chinese) }
+        let translating = Task { try await cleanup.translate("Hello.", .chinese(.chinese)) }
         try await eventually { gate.snapshot.waiting.count == 2 }
-        let reading = Task { try await cleanup.prepareTranslation(.english) }
+        let reading = Task { try await cleanup.prepareTranslation(.chinese(.english)) }
         try await eventually { gate.snapshot.waiting.count == 3 }
         let unloading = Task { await cleanup.unload() }
         try await eventually { gate.snapshot.waiting.count == 4 }

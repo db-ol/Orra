@@ -168,7 +168,7 @@ struct TranslationModelEvaluationTests {
         try await engine.load(from: folder)
         try await Task.sleep(for: .seconds(settle))
         report += line("after load")
-        for target in TranslationTarget.allCases {
+        for target in DictationLanguage.chinese.translationTargets {
             try await engine.prepareTranslation(into: target)
         }
         try await Task.sleep(for: .seconds(settle))
@@ -176,7 +176,7 @@ struct TranslationModelEvaluationTests {
         let sources = try Self.cases().filter { $0.set == "regular" }.prefix(25).map { Self.appRules($0.input) }
         var seconds: [Double] = []
         for source in sources {
-            for target in TranslationTarget.allCases {
+            for target in DictationLanguage.chinese.translationTargets {
                 let started = ContinuousClock.now
                 _ = try await engine.translate(source, into: target)
                 seconds.append(started.duration(to: .now) / .seconds(1))
@@ -205,7 +205,7 @@ struct TranslationModelEvaluationTests {
         let loadTime = loadStarted.duration(to: .now)
         let loaded = MemoryFootprint.current()
         var report = "Load and warm up: \(loadTime), memory footprint \(Double(loaded) / 1e9) GB after load (\(Double(loaded - min(before, loaded)) / 1e9) GB more than before), cleanup prefix cache \(Double(await engine.prefixCacheBytes) / 1e6) MB\n"
-        for target in TranslationTarget.allCases {
+        for target in DictationLanguage.chinese.translationTargets {
             let started = ContinuousClock.now
             try await engine.prepareTranslation(into: target)
             report += "Prefix cache into \(target.logName) filled in \(started.duration(to: .now)), \(Double(await engine.translationPrefixCacheBytes(target)) / 1e6) MB\n"
@@ -218,7 +218,7 @@ struct TranslationModelEvaluationTests {
         var details = ""
         for item in cases {
             let source = Self.appRules(item.input)
-            for target in TranslationTarget.allCases {
+            for target in DictationLanguage.chinese.translationTargets {
                 let run = await Self.run(source, into: target, engine: engine, usingPrefixCache: true)
                 runs[item.set + item.id, default: [:]][target] = run
                 if compares {
@@ -314,7 +314,7 @@ struct TranslationModelEvaluationTests {
         let long = cases.filter { $0.set == "long" }
         report += "\nlong dictations:\n"
         for item in long {
-            for target in TranslationTarget.allCases {
+            for target in DictationLanguage.chinese.translationTargets {
                 guard let run = runs[item.set + item.id]?[target] else { continue }
                 report += "  \(item.id)->\(target.rawValue) \(run.source.count) characters: \(run.result?.outcome.logName ?? "not translated, too long"), \(Self.format(run.seconds)) s of \(TranslationStep.timeout(for: run.source)) allowed, \(run.completion?.generatedTokens ?? 0) tokens written\n"
                 if run.result != nil {
@@ -327,7 +327,7 @@ struct TranslationModelEvaluationTests {
             var differ: [String] = []
             var answers = 0
             for item in cases {
-                for target in TranslationTarget.allCases {
+                for target in DictationLanguage.chinese.translationTargets {
                     guard let cached = runs[item.set + item.id]?[target], let plain = uncached[item.set + item.id]?[target] else { continue }
                     if cached.completion?.answer != plain.completion?.answer {
                         answers += 1

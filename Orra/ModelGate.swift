@@ -345,12 +345,14 @@ extension CleanupEngine {
         let complete = complete
         let translate = translate
         let prepareTranslation = prepareTranslation
+        let keepTranslationPrefixes = keepTranslationPrefixes
         return CleanupEngine(
             load: { folder in try await gate.run(.shared) { try await load(folder) } },
             unload: { await gate.runEvenIfCancelled(.shared) { await unload() } },
             complete: { text in try await gate.run(.shared) { try await complete(text) } },
-            translate: { text, target in try await gate.run(.shared) { try await translate(text, target) } },
-            prepareTranslation: { target in try await gate.run(.shared) { try await prepareTranslation(target) } },
+            translate: { text, route in try await gate.run(.shared) { try await translate(text, route) } },
+            prepareTranslation: { route in try await gate.run(.shared) { try await prepareTranslation(route) } },
+            keepTranslationPrefixes: { routes in await gate.runEvenIfCancelled(.shared) { await keepTranslationPrefixes(routes) } },
             gate: gate
         )
     }

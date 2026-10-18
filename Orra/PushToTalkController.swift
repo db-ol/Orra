@@ -24,10 +24,10 @@ nonisolated enum DictationCue: Equatable, Sendable {
     /// The hold has lasted long enough to be a dictation, and the microphone delivers sound.
     /// `translation` is the direction when the translation key started it, so the
     /// indicator shows that the text will be pasted translated.
-    case listening(translation: TranslationDirection?)
+    case listening(translation: TranslationCue?)
     /// A hands free dictation records. The hint says how to finish it, such as "Press
     /// right Control to finish". `translation` as for listening.
-    case handsFree(finishHint: String, translation: TranslationDirection? = nil)
+    case handsFree(finishHint: String, translation: TranslationCue? = nil)
 
     /// A dictation of the talk key is recording.
     static let listening = DictationCue.listening(translation: nil)
@@ -199,9 +199,10 @@ final class PushToTalkController {
     @ObservationIgnored private let cleanup: CleanupModel
     @ObservationIgnored private let translation: TranslationModel
     @ObservationIgnored private let voice: TranslationVoice
-    /// The direction of the dictation under way when the translation key started it, read
+    /// The direction of the dictation under way when the translation key started it, as it
+    /// acts for the dictation language then, read
     /// at its start. Nil for a dictation of the talk key.
-    @ObservationIgnored private var holdTranslation: TranslationDirection?
+    @ObservationIgnored private var holdTranslation: TranslationCue?
     @ObservationIgnored private let insert: @MainActor (String) async -> InsertionResult
     @ObservationIgnored private let frontmostApp: @MainActor () -> pid_t?
     @ObservationIgnored private let lidIsClosed: @MainActor () -> Bool
@@ -882,7 +883,7 @@ final class PushToTalkController {
         switch transition {
         case .startedListening, .startedHandsFree, .resumedListening, .confirmedArming:
             // The direction is read once, so the indicator and the paste agree.
-            holdTranslation = translationKeyIsOn && key == translationKey ? translation.direction() : nil
+            holdTranslation = translationKeyIsOn && key == translationKey ? TranslationCue(direction: translation.direction(), language: dictationLanguage) : nil
         default:
             break
         }
@@ -1330,7 +1331,7 @@ final class PushToTalkController {
     /// the short tail, stops, and transcribes unless the hold was too short or cut.
     /// `translating` is the direction when the translation key started the dictation, and
     /// `screen` the reading of the screen for it, if any.
-    private func finishRecording(start: Task<ContinuousClock.Instant?, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, screen: ScreenNamesRead?, releasedAt released: ContinuousClock.Instant) async {
+    private func finishRecording(start: Task<ContinuousClock.Instant?, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationCue?, screen: ScreenNamesRead?, releasedAt released: ContinuousClock.Instant) async {
         var timings = DictationTimings(releasedAt: released)
         // A failed start already set the problem.
         guard await start?.value != nil else { return }
@@ -1368,7 +1369,7 @@ final class PushToTalkController {
     /// the translation passes its checks. The speech model gets the names `screen` found
     /// before the vocabulary. Logs timings, never the text. `timings` gets the time of each
     /// step.
-    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, screen: ScreenNamesRead?, timings: inout DictationTimings) async {
+    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationCue?, screen: ScreenNamesRead?, timings: inout DictationTimings) async {
         do {
             let (samples, silent) = await Self.prepared(recording)
             timings.lap(.resampling)
@@ -1444,10 +1445,10 @@ final class PushToTalkController {
             // with the model leaves exactly that text. A model that the press of the key
             // started to load is waited for, a bounded time.
             let ruled = text
-            // Text in Japanese or Spanish is translated too, but the cleanup the translation
-            // prompt writes never stands in for it, since the cleanup checks know Chinese
-            // and English only.
-            let step = await translate(text, translating, cleansUp: takesSteps)
+            // Text in Japanese or Spanish is translated between that language and English,
+            // but the cleanup the translation prompt writes never stands in for it, since the
+            // cleanup checks know Chinese and English only.
+            let step = await translate(text, translating, spoken: spoken, cleansUp: takesSteps)
             let translated = step?.result
             let language = step?.target
             timings.lap(.translation)
@@ -1550,20 +1551,24 @@ final class PushToTalkController {
     /// used. Every case that pastes the text untranslated, other than one with nothing to
     /// translate or already in the target language, leaves a notice that says so. Without
     /// `cleansUp`, the model's cleanup of the text never stands in for the translation.
-    private func translate(_ text: String, _ direction: TranslationDirection?, cleansUp: Bool) async -> (result: TranslationStep.Result, target: TranslationTarget)? {
-        guard let direction else { return nil }
+    /// `spoken` is the dictation language the text was transcribed in, and the direction
+    /// acts as it does for that language, see TranslationDirection.effective(for:).
+    private func translate(_ text: String, _ cue: TranslationCue?, spoken: DictationLanguage, cleansUp: Bool) async -> (result: TranslationStep.Result, target: TranslationTarget)? {
+        guard let cue else { return nil }
         guard await translation.waitUntilLoaded() else {
             addNotice(String(localized: "The local model is not ready, so the text was pasted without translation."))
             return nil
         }
-        guard let target = direction.target(for: text) else { return nil }
+        let direction = cue.direction.effective(for: spoken)
+        let target = spoken == .chinese ? direction.target(for: text) : await Self.translationTarget(of: text, direction: direction, language: spoken)
+        guard let target else { return nil }
         guard text.count <= TranslationStep.maximumLength else {
             addNotice(String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation."))
             return nil
         }
         // The model is loaded by now, so this does not wait.
         let cleansUp = await cleanup.waitUntilLoaded() && cleansUp
-        let result = await TranslationStep.run(text, into: target, cleansUp: cleansUp, complete: translation.complete)
+        let result = await TranslationStep.run(text, into: TranslationRoute(spoken, into: target), cleansUp: cleansUp, complete: translation.complete)
         switch result.outcome {
         case .translated, .unchanged:
             break
@@ -1578,6 +1583,12 @@ final class PushToTalkController {
     /// translation.
     private func addNotice(_ note: String) {
         notices.append(note)
+    }
+
+    /// Off the main actor, since the Spanish rule may run NLLanguageRecognizer.
+    @concurrent
+    nonisolated private static func translationTarget(of text: String, direction: TranslationDirection, language: DictationLanguage) async -> TranslationTarget? {
+        direction.target(for: text, in: language)
     }
 
     /// Off the main actor, since NLLanguageRecognizer reads the whole text.

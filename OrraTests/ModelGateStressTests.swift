@@ -315,8 +315,8 @@ enum GateStress {
             let reservation = cleanup.gate?.reserve()
             defer { reservation?.end() }
             try await cleanup.load(folders.cleanup)
-            for target in TextCleanup.preparedTargets(.automatic) {
-                try await cleanup.prepareTranslation(target)
+            for route in TextCleanup.preparedRoutes(.automatic, .chinese) {
+                try await cleanup.prepareTranslation(route)
             }
         }
         let voiceLoad = Task { try await voice.load(model: folders.voice.model, codec: folders.voice.codec) }
@@ -362,7 +362,7 @@ enum GateStress {
                 if index % 2 == 0 {
                     _ = try await cleanup.complete(text)
                 } else {
-                    _ = try await cleanup.translate(text, index % 4 == 1 ? .english : .chinese)
+                    _ = try await cleanup.translate(text, .chinese(index % 4 == 1 ? .english : .chinese))
                 }
                 tally.call()
                 watchdog.progress()

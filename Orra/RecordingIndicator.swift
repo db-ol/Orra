@@ -177,7 +177,7 @@ struct RecordingIndicatorView: View {
 
     /// What VoiceOver reads for the indicator: what it shows, that the dictation will be
     /// translated when the badge shows, and the seconds left when they show.
-    static func accessibilityLabel(_ shown: String, translation: TranslationDirection?, countdown: String? = nil) -> String {
+    static func accessibilityLabel(_ shown: String, translation: TranslationCue?, countdown: String? = nil) -> String {
         [shown, translation?.badgeDescription(), countdown].compactMap(\.self).joined(separator: " ")
     }
 
@@ -250,7 +250,7 @@ extension RecordingIndicatorView {
     /// The badge of a dictation that will be translated, or nothing.
     @ViewBuilder fileprivate var badge: some View {
         if let translation = feedback.translation {
-            TranslationBadge(direction: translation)
+            TranslationBadge(cue: translation)
         }
     }
 
@@ -276,10 +276,10 @@ extension RecordingIndicatorView {
 /// moves, so it needs nothing for Reduce Motion, and VoiceOver reads it with the
 /// indicator's label.
 struct TranslationBadge: View {
-    let direction: TranslationDirection
+    let cue: TranslationCue
 
     var body: some View {
-        Text(verbatim: direction.badge)
+        Text(verbatim: cue.badge)
             .font(.system(size: 11, weight: .bold, design: .rounded))
             .foregroundStyle(.black)
             .padding(.horizontal, 4)

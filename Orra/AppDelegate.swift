@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             microphone: MicrophoneAccess.current(),
             accessibilityAllowed: AXIsProcessTrusted()
         )
-        return PushToTalkController(
+        let controller = PushToTalkController(
             capture: .live(),
             transcription: transcription,
             cleanup: cleanup.model.sharing(turns),
@@ -49,8 +49,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             usesScreenNames: ScreenNamesPreference.load(),
             saveUsesScreenNames: { ScreenNamesPreference.save($0) },
             dictationLanguage: DictationLanguagePreference.load(setUpBefore: setUpBefore),
-            saveDictationLanguage: { DictationLanguagePreference.save($0) }
+            // Translation goes between English and the dictation language, so the model
+            // reads the prompts of the new language ahead.
+            saveDictationLanguage: { [cleanup] in
+                DictationLanguagePreference.save($0)
+                cleanup.setDictationLanguage($0)
+            }
         )
+        cleanup.setDictationLanguage(controller.dictationLanguage)
+        return controller
     }()
     /// The voice models this build links, see VoiceEngines.
     let voiceEngines = VoiceEngines.live

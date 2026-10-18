@@ -79,9 +79,22 @@ struct SettingsPageTests {
     /// The target picker under Translation shows each direction with its explanation, and
     /// the row under the switch says where the model stands in the words of translation.
     @Test func everyDirectionHasATitleAndAnExplanation() {
-        #expect(TranslationDirection.allCases == [.automatic, .english, .chinese])
-        let details = TranslationDirection.allCases.map { "\($0.detail)" }
+        #expect(TranslationDirection.choices(for: .chinese) == [.automatic, .english, .chinese])
+        let details = TranslationDirection.choices(for: .chinese).map { "\($0.detail)" }
         #expect(Set(details).count == details.count)
+        // Each dictation language has its choices, each with its own explanation, and the
+        // Chinese ones are those there always were.
+        var all: Set<String> = []
+        for language in DictationLanguage.allCases {
+            let choices = TranslationDirection.choices(for: language)
+            #expect(choices == [.automatic, .english, language.translationDirection])
+            for direction in choices {
+                all.insert("\(direction.detail(for: language))")
+            }
+        }
+        #expect(all.count == 7)
+        #expect(TranslationDirection.choices(for: .chinese).map { "\($0.detail(for: .chinese))" } == details)
+        #expect("\(TranslationDirection.japanese.title)" != "\(TranslationDirection.spanish.title)")
         #expect(CleanupLabels.lines(.missing(bytesPresent: 0), total: 100, use: .translation) == ["The local model is not on this Mac yet. Until it is, Orra pastes the text without translation."])
         #expect(CleanupLabels.loading(.translation) == "Loading the local model…")
         #expect(CleanupLabels.loading(.cleanup) == "Loading the cleanup model…")

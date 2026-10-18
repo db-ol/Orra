@@ -2575,6 +2575,50 @@
         }
       }
     },
+    "Everything you say is pasted in Japanese. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que dices se pega en japonés. Los términos comunes en inglés, como PR o iPhone, pueden quedar en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容はすべて日本語でペーストされます。PRやiPhoneなど、よく使われる英語の用語は英語のまま残ることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以日文粘贴。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
+    "Everything you say is pasted in Spanish. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que dices se pega en español. Los términos comunes en inglés, como PR o iPhone, pueden quedar en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容はすべてスペイン語でペーストされます。PRやiPhoneなど、よく使われる英語の用語は英語のまま残ることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以西班牙文粘贴。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
     "Features" : {
       "localizations" : {
         "es-419" : {
@@ -3108,6 +3152,50 @@
         }
       }
     },
+    "Hold the translation key and speak. Japanese becomes English, and English becomes Japanese." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantén presionada la tecla de traducción y habla. El japonés pasa a inglés y el inglés, a japonés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻訳キーを押したまま話します。日本語は英語に、英語は日本語になります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住翻译键说话，日文变成英文，英文变成日文。"
+          }
+        }
+      }
+    },
+    "Hold the translation key and speak. Spanish becomes English, and English becomes Spanish." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantén presionada la tecla de traducción y habla. El español pasa a inglés y el inglés, a español."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻訳キーを押したまま話します。スペイン語は英語に、英語はスペイン語になります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按住翻译键说话，西班牙文变成英文，英文变成西班牙文。"
+          }
+        }
+      }
+    },
     "Hold the translation key, speak, and let go. Orra pastes what you said in another language." : {
       "localizations" : {
         "es-419" : {
@@ -3259,6 +3347,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其中有 Orra 的版本、设置、权限和最近一小时的日志，你的 Mac 的信息，以及最近的崩溃报告。其中没有听写的文字，也没有录音。你的名字和 Mac 的名称会被去掉。"
+          }
+        }
+      }
+    },
+    "Japanese" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Japonés"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日本語"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日文"
+          }
+        }
+      }
+    },
+    "Japanese is translated into English, and English into Japanese. Mixed text goes by the language most of it is in, and text in another language is translated into English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El japonés se traduce al inglés y el inglés, al japonés. Un texto mixto se traduce según el idioma que predomina, y un texto en otro idioma se traduce al inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日本語は英語に、英語は日本語に翻訳されます。日本語と英語が混在したテキストは、多く含まれている方の言語として扱われます。ほかの言語のテキストは英語に翻訳されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日文翻译成英文，英文翻译成日文。日英混说时，按说得多的那种语言来判断，其他语言翻译成英文。"
           }
         }
       }
@@ -7176,6 +7308,50 @@
         }
       }
     },
+    "Spanish" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Español"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スペイン語"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "西班牙文"
+          }
+        }
+      }
+    },
+    "Spanish is translated into English, and English into Spanish. Mixed text goes by the language most of it is in, and text in another language is translated into English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El español se traduce al inglés y el inglés, al español. Un texto mixto se traduce según el idioma que predomina, y un texto en otro idioma se traduce al inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スペイン語は英語に、英語はスペイン語に翻訳されます。スペイン語と英語が混在したテキストは、多く含まれている方の言語として扱われます。ほかの言語のテキストは英語に翻訳されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "西班牙文翻译成英文，英文翻译成西班牙文。西英混说时，按说得多的那种语言来判断，其他语言翻译成英文。"
+          }
+        }
+      }
+    },
     "Speak into" : {
       "localizations" : {
         "es-419" : {
@@ -8593,6 +8769,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这次听写会被翻译成英文。"
+          }
+        }
+      }
+    },
+    "This dictation will be translated into Japanese." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este dictado se traducirá al japonés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この音声入力は日本語に翻訳されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写会被翻译成日文。"
+          }
+        }
+      }
+    },
+    "This dictation will be translated into Spanish." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este dictado se traducirá al español."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この音声入力はスペイン語に翻訳されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写会被翻译成西班牙文。"
           }
         }
       }

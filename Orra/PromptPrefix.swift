@@ -27,6 +27,12 @@ nonisolated enum PromptPrefix {
         shared(encode(TranslationPrompt.text(for: "你好", into: target)), encode(TranslationPrompt.text(for: "Hello there", into: target)))
     }
 
+    /// The prefix of the translation prompt for a route, found the same way. The Chinese
+    /// routes get the prefix of their target.
+    static func translationPrompt(into route: TranslationRoute, encode: (String) -> [Int]) -> [Int] {
+        shared(encode(TranslationPrompt.text(for: "你好", into: route)), encode(TranslationPrompt.text(for: "Hello there", into: route)))
+    }
+
     /// The tokens two prompts share at their start, less `margin`. Empty when they share
     /// fewer than that.
     static func shared(_ first: [Int], _ second: [Int]) -> [Int] {

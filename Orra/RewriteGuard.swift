@@ -175,6 +175,13 @@ nonisolated enum RewriteGuard {
     // MARK: Openers and phrases
 
     static func checkOpeners(source: String, output: String) -> Failure? {
+        checkOpeners(source: source, output: output, openers: openers, excuses: excuses, anywhere: anywhere)
+    }
+
+    /// The opener and phrase checks with other tables, for the translations of Japanese
+    /// and Spanish, see TranslationGuard. With `latinBoundaries`, an English word of the
+    /// source ends where its Latin letters end, so "Sorryね" holds "sorry".
+    static func checkOpeners(source: String, output: String, openers: [[String]], excuses: [String: [String]], anywhere: [[String]], latinBoundaries: Bool = false) -> Failure? {
         let outputText = normalized(output)
         let head = Array(outputText.unicodeScalars.prefix(24))
         let sourceText = normalized(source)
@@ -187,7 +194,7 @@ nonisolated enum RewriteGuard {
             guard let hit else { continue }
             let allowed = group + (excuses[group[0]] ?? [])
             let excused = allowed.contains { phrase in
-                isASCII(phrase) ? containsWord(phrase, in: sourceText) : sourceText.contains(phrase)
+                isASCII(phrase) ? containsWord(phrase, in: sourceText, latinBoundaries: latinBoundaries) : sourceText.contains(phrase)
             }
             if !excused {
                 return .assistantOpener(hit)
@@ -298,10 +305,12 @@ nonisolated enum RewriteGuard {
         text.lowercased().replacing(nonWord, with: "")
     }
 
-    /// Whether an ASCII phrase occurs in the text between word boundaries.
-    private static func containsWord(_ phrase: String, in text: String) -> Bool {
+    /// Whether an ASCII phrase occurs in the text between word boundaries, or with
+    /// `latinBoundaries` between characters that are not Latin letters.
+    private static func containsWord(_ phrase: String, in text: String, latinBoundaries: Bool = false) -> Bool {
         let escaped = NSRegularExpression.escapedPattern(for: phrase)
-        guard let regex = try? NSRegularExpression(pattern: "\\b" + escaped + "\\b") else { return false }
+        let pattern = latinBoundaries ? "(?<![A-Za-z])" + escaped + "(?![A-Za-z])" : "\\b" + escaped + "\\b"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
         return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
