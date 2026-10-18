@@ -66,11 +66,18 @@ The feed has one description for each file, English first, each with the xml:lan
 language. Sparkle picks one with `+[NSBundle preferredLocalizationsFromArray:]`, which macOS
 limits to the localizations of Orra itself. So the notes come in the language the rest of
 Orra shows, also when it was chosen in Orra's own settings. Someone whose languages Orra
-does not have, such as French or Traditional Chinese, sees English in both. The codes are
-the names of Orra's localizations (en, zh-Hans, ja, es) and must stay so. A new language of
-the interface needs its own file and an entry in Tools/release/release_notes.py, and a test
-of the release scripts fails until it has them. Until users run an Orra that has the
-language, they see the notes in English, as they see the rest of Orra.
+does not have, such as French or Traditional Chinese, sees English in both. Sparkle's own
+buttons follow the same rule, so the whole update window is in one language, English on a
+Mac in German too. The codes are the names of Orra's localizations (en, zh-Hans, ja, es)
+and must stay so. A new language of the interface needs its own file and an entry in
+Tools/release/release_notes.py, and a test of the release scripts fails until it has them.
+Until users run an Orra that has the language, they see the notes in English, as they see
+the rest of Orra.
+
+All of this holds only while Orra leaves out the Info.plist key
+CFBundleAllowMixedLocalizations. That key lifts the limit, so an Orra without Japanese would
+show Japanese notes and Japanese buttons on a Mac in Japanese, around an English interface.
+A test of the release scripts fails if the key shows up in Orra/Info.plist or the project.
 
 Versions up to 0.4.2 have one file with English and then Chinese. They keep it, and the
 scripts treat it as before: one description without a language, and the file as it is on
