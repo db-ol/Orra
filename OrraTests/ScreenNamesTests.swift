@@ -97,6 +97,27 @@ struct ScreenNamesTests {
         }
     }
 
+    @Test func chineseNamesComeFromOrrasOwnRulesOnEverySystem() {
+        // NLTagger finds 林悦 and 凌越 here on macOS 26 and no Chinese name on macOS 27, so the
+        // names come from the surname rule instead, the same on both.
+        let text = "Ines 你好，林悦那边已经确认了设计稿，凌越下周休假，测试由甄若岚临时接手。"
+        let tagged = ScreenNames.taggedNames(in: text, tokens: ScreenNames.latinTokens(in: text), common: Self.common)
+        #expect(!tagged.contains { $0.0.contains(where: ScreenNames.isHan) }, "\(tagged)")
+        let ranked = ScreenNames.rankedTerms(in: ScreenText(beforeCursor: text), common: Self.common)
+        for name in ["林悦", "凌越", "甄若岚"] {
+            #expect(ranked.first { $0.text == name }?.source == .name, "\(name) in \(ranked.map(\.text))")
+        }
+    }
+
+    @Test func ordinaryWordsAfterASurnameAreNoNames() {
+        // 张 as a measure word, 余 after a number, a verb before 了, a word with nothing beside
+        // it where names sit, grammar after one character, and the start of a longer name.
+        for text in ["给我一张纸，这张图不对。", "20 余人受伤。", "汤洒了，钟停了。", "任何在高纬度地区开车的人。", "有白烟从工厂里冒出。", "该委员会是马尔泰利领导的。"] {
+            let names = ScreenNames.rankedTerms(in: ScreenText(beforeCursor: text), common: Self.common).filter { $0.source == .name }
+            #expect(names.isEmpty, "\(names.map(\.text)) in \(text)")
+        }
+    }
+
     @Test func englishTermsInChineseTextAreKeptWhole() {
         let review = terms("技术评审纪要\n\n这份文档仅供内部讨论，请勿外传。以下内容根据上周的讨论整理，如有遗漏请直接在文档里补充。议题一：Tessaro 的 backfill 任务太慢，覃思远建议按租户做 sharding。议题二：Marrowind 网关的 OAuth token 刷新有抖动。Bram Oosthuizen 列席。结论：")
         for term in ["Tessaro", "backfill", "sharding", "Marrowind", "OAuth token", "Bram Oosthuizen", "覃思远"] {

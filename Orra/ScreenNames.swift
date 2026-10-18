@@ -103,10 +103,9 @@ nonisolated struct CommonWords: Sendable {
 /// screen is off by default.
 ///
 /// Written for that experiment with what every Mac and Orra already have, and moved here
-/// unchanged:
-/// - personal, place and organization names that NLTagger finds (its name type scheme covers
-///   English and Simplified Chinese), with a following word that says what the name names,
-///   as 计划 in 青岚计划 or 语 in 加泰罗尼亚语.
+/// with one change: the experiment took Chinese names from NLTagger, which finds none on
+/// macOS 27, so Orra finds them with its own rules below on every system.
+/// - personal, place and organization names in Latin letters that NLTagger finds.
 /// - Latin words that are not common: capitalized inside a sentence, mixed case such as
 ///   gRPC, all capitals of 2 to 6 letters such as QBR, letters with digits such as p99,
 ///   and lower case words of 5 letters or more that are not common words (CommonWords),
@@ -116,10 +115,14 @@ nonisolated struct CommonWords: Sendable {
 ///   consent: a word the writer kept in English is a term.
 /// - Han words of the system's word breaker that are not common words, such as 蜉蝣 or 拓扑,
 ///   joined when they stand together, as 嵌合抗原.
+/// - Chinese personal names of a common surname and a given name of one or two characters
+///   that the word breaker does not hold as a word, such as 甄若岚 or 欧阳澈, where the name
+///   ends cleanly: no character or rare word goes on after it.
 /// - runs of 2 to 4 Han characters that the word breaker leaves as single characters and
 ///   that hold no grammar character, which is how it treats names it does not know, such as
-///   星澜 or 戈马, when the run is followed by a word that says what it names, occurs twice,
-///   or sits where names sit (after 是, 由 or 给, before punctuation, 负责 or 老师).
+///   星澜 or 戈马, when the run is followed by or ends in a word that says what it names,
+///   which makes it a name, as 青岚计划 or 汀澜岛, occurs twice, or sits where names sit
+///   (after 是, 由 or 给, before punctuation, 你好, 负责 or 老师).
 /// - text in 《》, 「」 or Chinese quotation marks up to 12 characters.
 ///
 /// The window title is read as a line above the text, the farthest from the cursor. The
@@ -128,6 +131,7 @@ nonisolated struct CommonWords: Sendable {
 /// `limit`, the ones nearest the cursor stay. The experiment found 20 too few on a page full
 /// of names, and 40 better with no more mistakes. It took 2 to 3 ms for a text of a few
 /// hundred characters, and up to 124 ms when NLTagger switched between Chinese and English.
+/// NLTagger now runs only on text with Latin letters.
 nonisolated enum ScreenNames {
     /// At most this many terms reach the model with a dictation.
     static let limit = 40
@@ -179,10 +183,7 @@ nonisolated enum ScreenNames {
         for (term, position) in names { add(term, source: .name, position: position) }
         for (term, position) in latinTerms(in: text, tokens: tokens, common: common) { add(term, source: .other, position: position) }
         for (term, position) in latinInChinese(in: text) { add(term, source: .other, position: position) }
-        let nameRanges = names.map { $0.1..<($0.1 + $0.0.count) }
-        for (term, position, source) in hanTerms(in: text, common: common) where !nameRanges.contains(where: { $0.overlaps(position..<(position + term.count)) }) {
-            add(term, source: source, position: position)
-        }
+        for (term, position, source) in hanTerms(in: text, common: common) { add(term, source: source, position: position) }
         for (term, position) in quoted(in: text) { add(term, source: .name, position: position) }
 
         var terms = order.compactMap { found[$0] }
@@ -266,17 +267,20 @@ nonisolated enum ScreenNames {
         titles.contains(word.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")))
     }
 
+    /// Names in Latin letters that NLTagger finds. Its name type scheme is for English: on
+    /// macOS 26 it also found Chinese names, but on macOS 27 it finds none, so Chinese names
+    /// come from hanTerms on every system.
     static func taggedNames(in text: String, tokens: [LatinToken], common: CommonWords) -> [(String, Int)] {
+        guard tokens.contains(where: { $0.word.contains(where: \.isLetter) }) else { return [] }
         let tagger = NLTagger(tagSchemes: [.nameType])
         tagger.string = text
         var result: [(String, Int)] = []
         let wanted: Set<NLTag> = [.personalName, .placeName, .organizationName]
         let startsOnly = Set(tokens.filter(\.sentenceStart).map { $0.word.lowercased() })
             .subtracting(tokens.filter { !$0.sentenceStart }.map { $0.word.lowercased() })
-        let characters = Array(text)
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .nameType,
                              options: [.omitWhitespace, .omitPunctuation, .joinNames]) { tag, range in
-            guard let tag, wanted.contains(tag) else { return true }
+            guard let tag, wanted.contains(tag), !text[range].contains(where: isHan) else { return true }
             var name = String(text[range])
             var position = text.distance(from: text.startIndex, to: range.lowerBound)
             var parts = name.split(separator: " ").map(String.init)
@@ -289,15 +293,6 @@ nonisolated enum ScreenNames {
             // "Character notes".
             if parts.count == 1, titles.contains(name.lowercased()) || startsOnly.contains(name.lowercased()) && common.isCommonLatin(name) {
                 return true
-            }
-            // A Han name with the word that says what it names, as 鹭岛 and 项目.
-            if name.allSatisfy(isHan) {
-                let end = position + name.count
-                for suffix in suffixWords where end + suffix.count <= characters.count
-                    && String(characters[end..<(end + suffix.count)]) == suffix {
-                    name += suffix
-                    break
-                }
             }
             result.append((name, position))
             return true
@@ -423,7 +418,8 @@ nonisolated enum ScreenNames {
     // MARK: Han
 
     /// Han words of the word breaker that are not common words, joined when they stand
-    /// together, and runs of single characters that look like unknown names.
+    /// together, runs of single characters that look like unknown names, and names that
+    /// start with a surname. None of these needs the system to know the name.
     static func hanTerms(in text: String, common: CommonWords) -> [(String, Int, Source)] {
         let string = text as NSString
         guard string.length > 0 else { return [] }
@@ -449,33 +445,118 @@ nonisolated enum ScreenNames {
             let characters = Array(token)
             guard characters.allSatisfy(isHan) else { return .other }
             if characters.count == 1 {
-                return OneCharacterFix.functionWords.contains(characters[0]) || commonSingles.contains(characters[0]) ? .other : .single
+                return OneCharacterFix.functionWords.contains(characters[0]) || commonSingles.contains(characters[0])
+                    || nameNeighbours.contains(token) ? .other : .single
             }
             if characters.allSatisfy({ commonSingles.contains($0) || OneCharacterFix.functionWords.contains($0) }) { return .other }
             return common.han.contains(token) || characters.contains(where: OneCharacterFix.functionWords.contains) ? .other : .rare
         }
-        var result: [(String, Int, Source)] = []
-        var group: [(text: String, location: Int, kind: Kind)] = []
-        var previous: (text: String, location: Int)?
+        let kinds = tokens.map { kind($0.text) }
+        func end(_ index: Int) -> Int {
+            tokens[index].location + tokens[index].text.utf16.count
+        }
+        /// Whether the token at `index` starts where the one before it ends.
+        func follows(_ index: Int) -> Bool {
+            index > 0 && index < tokens.count && tokens[index].location == end(index - 1)
+        }
+        /// The word right after the token at `index`, as one token and as two, since the word
+        /// breaker splits some of them, as 你好 into 你 and 好.
+        func words(after index: Int) -> [String] {
+            guard follows(index + 1) else { return [] }
+            let next = tokens[index + 1].text
+            return follows(index + 2) ? [next, next + tokens[index + 2].text] : [next]
+        }
+        /// The word right before the token at `index`, as one token and as two.
+        func words(before index: Int) -> [String] {
+            guard follows(index) else { return [] }
+            let previous = tokens[index - 1].text
+            return follows(index - 1) ? [previous, tokens[index - 2].text + previous] : [previous]
+        }
         func isBoundary(_ unit: Int) -> Bool {
             guard unit >= 0, unit < string.length else { return true }
             let character = Character(UnicodeScalar(string.character(at: unit)) ?? " ")
             return !character.isLetter && !character.isNumber
         }
-        func flush(next: (text: String, location: Int)?) {
-            defer { group = [] }
-            guard let first = group.first, let last = group.last else { return }
-            let start = first.location
-            let end = last.location + last.text.utf16.count
-            guard end - start == group.reduce(0, { $0 + $1.text.utf16.count }) else { return }
-            var term = string.substring(with: NSRange(location: start, length: end - start))
-            let singles = group.filter { $0.kind == .single }.count
-            let hasRare = group.contains { $0.kind == .rare }
-            let nextWord = next.flatMap { $0.location == end ? $0.text : nil }
-            let previousWord = previous.flatMap { $0.location + $0.text.utf16.count == start ? $0.text : nil }
+        /// The character before the UTF-16 offset `unit`, past any spaces.
+        func character(before unit: Int) -> Character? {
+            var unit = unit - 1
+            while unit >= 0, string.character(at: unit) == 0x20 {
+                unit -= 1
+            }
+            return unit >= 0 ? UnicodeScalar(string.character(at: unit)).map(Character.init) : nil
+        }
+
+        var result: [(String, Int, Source)] = []
+        // Personal names that start with a surname, as 甄若岚 or 欧阳澈: the surname, then a
+        // given name of one or two characters that the word breaker does not hold as a word.
+        var inName = [Bool](repeating: false, count: tokens.count)
+        var index = 0
+        while index < tokens.count {
+            defer { index += 1 }
+            var surname = tokens[index].text
+            var next = index + 1
+            if surname.count == 1, follows(next), compoundSurnames.contains(surname + tokens[next].text) {
+                surname += tokens[next].text
+                next += 1
+            }
+            guard compoundSurnames.contains(surname) || surname.count == 1 && surnames.contains(surname),
+                  let position = offsets[tokens[index].location] else { continue }
+            // Not the end of a word the word breaker does not know, and not a measure word
+            // after a number, as 张 in 一张纸 or 余 in 20 余人.
+            if follows(index), kinds[index - 1] != .other { continue }
+            if let mark = character(before: tokens[index].location), countWords.contains(mark) { continue }
+            var given: [String] = []
+            while follows(next), given.joined().count < 2 {
+                let token = tokens[next].text
+                let isFirst = given.isEmpty
+                guard token.allSatisfy(isHan), !nameNeighbours.contains(token),
+                      token.count == 1 && (!OneCharacterFix.functionWords.contains(Character(token)) || isFirst && token == "一")
+                      || isFirst && token.count == 2 && kinds[next] == .rare else { break }
+                given.append(token)
+                next += 1
+            }
+            guard let last = given.last, let lastCharacter = last.last, given != ["一"] else { continue }
+            let name = surname + given.joined()
+            let following = follows(next) ? tokens[next].text : nil
+            // A given name ends in a character that is no common word on its own, as 好 or 下,
+            // and no character of the name follows it, nor a word that makes it a verb, as 了
+            // in 钟停了.
+            if last.count == 1 && commonSingles.contains(lastCharacter) { continue }
+            if let following, kinds[next] == .single || notAfterNames.contains(following) { continue }
+            let besideName = words(before: index).first.map(beforeNames.contains) == true
+                || words(after: next - 1).contains(where: nameNeighbours.contains)
+                || following == nil || occurrences(of: name, in: text) >= 2
+            if last.count == 2 {
+                // A rare word, which a given name of two characters often is to the word breaker,
+                // as 思远 in 覃思远, makes a name only where names sit, so 高纬度 is none.
+                guard besideName else { continue }
+            } else if given.count == 1, let following {
+                // A given name of one character, as 悦 in 林悦, is not followed by a rare word
+                // that could be the rest of a longer word, as 泰利 after 马尔, nor by grammar
+                // unless the name sits where names sit, as 从 after 白烟.
+                let grammar = following.count == 1 && OneCharacterFix.functionWords.contains(Character(following))
+                if kinds[next] == .rare || grammar && !besideName { continue }
+            }
+            result.append((name, position, .name))
+            for token in index..<next {
+                inName[token] = true
+            }
+            index = next - 1
+        }
+
+        /// A run of single characters and rare words, from the token at `first` to the one at `last`.
+        func addRun(from first: Int, to last: Int) {
+            let start = tokens[first].location
+            var term = string.substring(with: NSRange(location: start, length: end(last) - start))
+            let singles = (first...last).filter { kinds[$0] == .single }.count
+            let hasRare = (first...last).contains { kinds[$0] == .rare }
+            let after = words(after: last)
             var named = false
-            if let nextWord, suffixWords.contains(nextWord) {
-                term += nextWord
+            if let next = after.first, suffixWords.contains(next) {
+                term += next
+                named = true
+            } else if !hasRare, let suffix = suffixWords.first(where: { term.hasSuffix($0) }), term.count - suffix.count >= 2 {
+                // The word that says what it names left as a single character too, as 岛 in 汀澜岛.
                 named = true
             }
             guard term.count >= 2, term.count <= 8, let position = offsets[start] else { return }
@@ -485,33 +566,58 @@ nonisolated enum ScreenNames {
             }
             guard (2...4).contains(singles) else { return }
             // A name the word breaker does not know sits where names sit: before a word that
-            // says what it names, said twice, after 是, 由 or 给, or before punctuation, 负责
-            // or 老师.
+            // says what it names, which makes it a name, said twice, after 是, 由 or 给, or
+            // before punctuation, 你好, 负责 or 老师.
             let repeated = occurrences(of: String(term.prefix(singles)), in: text) >= 2
-            let besideName = previousWord.map(nameNeighbours.contains) == true || nextWord.map(nameNeighbours.contains) == true
-                || isBoundary(end)
-            if named || repeated || besideName {
+            let besideName = (words(before: first) + after).contains(where: nameNeighbours.contains) || isBoundary(end(last))
+            if named {
+                result.append((term, position, .name))
+            } else if repeated || besideName {
                 result.append((term, position, .other))
             }
         }
-        for token in tokens {
-            let tokenKind = kind(token.text)
-            if tokenKind == .other {
-                flush(next: token)
-                previous = token
-            } else {
-                if let last = group.last, last.location + last.text.utf16.count != token.location {
-                    flush(next: nil)
-                }
-                if group.isEmpty, let last = previous, last.location + last.text.utf16.count != token.location {
-                    previous = nil
-                }
-                group.append((token.text, token.location, tokenKind))
+        var first = 0
+        while first < tokens.count {
+            guard kinds[first] != .other, !inName[first] else {
+                first += 1
+                continue
             }
+            var last = first
+            while follows(last + 1), kinds[last + 1] != .other, !inName[last + 1] {
+                last += 1
+            }
+            addRun(from: first, to: last)
+            first = last + 1
         }
-        flush(next: nil)
         return result
     }
+
+    /// Single character surnames, the common ones of the Chinese surname lists, without those
+    /// that are mostly grammar or a word of their own, as 于, 和, 成 or 全.
+    static let surnames: Set<String> = Set("""
+        王李张刘陈杨黄赵吴周徐孙马朱胡郭何高林罗郑梁谢宋唐许韩冯邓曹彭曾肖田董袁潘蒋蔡余杜叶程苏魏吕丁任沈姚卢姜崔钟谭陆汪范金石廖贾
+        夏韦付方白邹孟熊秦邱江尹薛闫段雷侯龙史陶黎贺顾毛郝龚邵钱严覃武戴莫孔汤常温康施文牛樊葛邢安齐易乔伍庞颜倪庄聂章鲁岳翟殷詹申欧
+        耿关兰焦俞左柳甘祝宁符舒阮柯纪梅童凌毕季裴霍涂苗谷盛曲翁冉骆蓝辛靳柴蒙鲍华喻祁蒲房滕屈饶牟艾尤阳穆卓吉缪
+        麦褚娄窦戚岑卜冷晏柏宗瞿桂佟臧闵苟邬卞姬仇栾隋刁巫寇桑甄丛仲虞敖巩佘池麻苑迟邝
+        匡鞠荆冀郁胥储栗燕楚鄢劳谌奚皮粟冼蔺闻厉伊仝郜阚权帅屠豆朴廉禹漆狄
+        扈晁芮阙浦戈鹿邸雍辜裘亓邰赫杭况逯茹嵇湛戎茅尉檀昝濮隗邴芈訾逄
+        """.filter(\.isHan).map(String.init))
+
+    /// Surnames of two characters.
+    static let compoundSurnames: Set<String> = [
+        "欧阳", "司马", "上官", "诸葛", "东方", "皇甫", "尉迟", "公孙", "慕容", "令狐", "夏侯", "长孙", "宇文", "司徒", "端木",
+        "独孤", "南宫", "西门", "百里", "呼延", "澹台", "公冶", "申屠", "太史", "轩辕", "钟离", "闻人", "赫连", "万俟", "司空",
+    ]
+
+    /// Characters before a measure word, which 张 or 条 follow as often as a surname does.
+    static let countWords: Set<Character> = Set("一二两三四五六七八九十百千万几这那哪每某各半整多0123456789")
+
+    /// Words that do not follow a name but the verb or adjective that two characters after a
+    /// surname can be.
+    static let notAfterNames: Set<String> = ["了", "着", "过", "得", "地", "一"]
+
+    /// Words that stand before a name: who is asked, given or told something.
+    static let beforeNames: Set<String> = ["是", "由", "和", "跟", "与", "给", "让", "找", "叫", "请", "问", "@"]
 
     /// Words that stand next to a name: who does what, and how people are addressed.
     static let nameNeighbours: Set<String> = ["是", "由", "和", "跟", "与", "给", "让", "找", "叫", "请", "问", "@", "负责", "说", "建议", "提出",
