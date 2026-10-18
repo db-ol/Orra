@@ -899,7 +899,8 @@ got worse than the baseline, see docs/release-gate.md.
     the pair and on the Chinese routes, for chrF. FLEURS stays on the Mac.
 
     On 2026-10-18, on an M5 Pro with the installed model, in Release builds, each pasted
-    translation in the automatic direction was read by a person against the reference.
+    translation of the two probe files in the automatic direction was read by a person
+    against the reference.
     Faithful counts the ones that keep the meaning, small wording slips among them. The
     times are for the step with the prefix cache. Japanese into English is from the run
     before the last, since another job used the GPU during the last one (median 0.42 s, p90
