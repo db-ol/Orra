@@ -206,7 +206,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ está seleccionado en Micrófono. Elige ahí otro micrófono o Predeterminado del sistema."
+            "value" : "%@ está seleccionado en Micrófono. Cámbialo por otro micrófono o por Predeterminado del sistema."
           }
         },
         "ja" : {
@@ -3003,7 +3003,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mantén presionada solo la tecla para hablar, habla y suéltala. Una tecla Control, Opción o Comando izquierda empieza a grabar solo después de mantenerla presionada sola un momento, así que sus funciones rápidas de teclado siguen funcionando."
+            "value" : "Mantén presionada la tecla para hablar sin otras teclas, habla y suéltala. Si es la tecla Control, Opción o Comando izquierda, empieza a grabar solo cuando la mantienes presionada sola un momento, así que sus funciones rápidas de teclado siguen funcionando."
           }
         },
         "ja" : {
@@ -3180,7 +3180,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Incluye la versión, la configuración, los permisos y el registro de la última hora de Orra, datos sobre tu Mac y los reportes de fallos recientes. No incluye texto dictado ni audio. Se quitan tu nombre y el nombre de tu Mac."
+            "value" : "Incluye la versión de Orra, su configuración, sus permisos y su registro de la última hora, datos sobre tu Mac y los reportes de fallos recientes. No incluye texto dictado ni audio. Se quitan tu nombre y el nombre de tu Mac."
           }
         },
         "ja" : {
@@ -4331,7 +4331,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Después de la descarga, todo funciona en esta Mac. Lo que dices nunca se envía a ningún lado."
+            "value" : "Después de la descarga, todo se ejecuta en esta Mac. Lo que dices nunca se envía a ninguna parte."
           }
         },
         "ja" : {
@@ -4663,7 +4663,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra no pudo reproducir en %@."
+            "value" : "Orra no pudo reproducir audio en %@."
           }
         },
         "ja" : {
@@ -4949,7 +4949,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra necesita su modelo de transcripción para transcribir."
+            "value" : "Orra necesita su modelo de transcripción para convertir la voz en texto."
           }
         },
         "ja" : {
@@ -5015,7 +5015,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra nunca habla por las bocinas por iniciativa propia. Sin Orra Microphone, elige aquí un dispositivo, como un dispositivo de loopback que una app de reuniones pueda usar como micrófono."
+            "value" : "Orra nunca habla a través de las bocinas por su cuenta. Sin Orra Microphone, elige aquí un dispositivo, como un dispositivo de loopback que una app de reuniones pueda usar como micrófono."
           }
         },
         "ja" : {
@@ -5059,7 +5059,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra solo graba después de que presionas la tecla para hablar, hasta que la vuelves a presionar."
+            "value" : "Orra solo graba desde que presionas la tecla para hablar hasta que la vuelves a presionar."
           }
         },
         "ja" : {
@@ -5103,7 +5103,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra graba hasta %lld minutos cada vez, así que la grabación se detuvo ahí."
+            "value" : "Orra graba hasta %lld minutos cada vez, así que la grabación se detuvo en ese punto."
           }
         },
         "ja" : {
@@ -5347,7 +5347,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nombres de personas, productos y términos que usas. Orra se los da al modelo de transcripción para que los escriba como tú. Se quedan en esta Mac."
+            "value" : "Nombres de personas, productos y términos que usas. Orra se los da al modelo de transcripción para que los escriba a tu manera. No salen de esta Mac."
           }
         },
         "ja" : {
@@ -5898,7 +5898,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lee el campo donde dictaste durante 3 minutos después de pegar y agrega a tu vocabulario las palabras mal oídas que corriges."
+            "value" : "Durante 3 minutos después de pegar, lee el campo donde dictaste y agrega a tu vocabulario las palabras mal oídas que corrijas."
           }
         },
         "ja" : {
@@ -6052,7 +6052,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Graba solo tu propia voz. Orra anota lo que dijiste con su modelo de transcripción y guarda la grabación y las palabras en la memoria hasta que se cierre. La otra parte escucha una voz sintetizada, así que avísale."
+            "value" : "Graba solo tu propia voz. Orra convierte en texto lo que dijiste con su modelo de transcripción y guarda la grabación y las palabras en la memoria hasta que se cierre. La otra parte escucha una voz sintetizada, así que avísale."
           }
         },
         "ja" : {
@@ -6074,7 +6074,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Graba solo tu propia voz. Orra anota lo que dijiste con su modelo de transcripción y guarda las palabras en la memoria hasta que se cierre. Con Recordar mi voz activado, guarda la grabación en esta Mac hasta que la elimines. La otra parte escucha una voz sintetizada, así que avísale."
+            "value" : "Graba solo tu propia voz. Orra convierte en texto lo que dijiste con su modelo de transcripción y guarda las palabras en la memoria hasta que se cierre. Con Recordar mi voz activado, guarda la grabación en esta Mac hasta que la elimines. La otra parte escucha una voz sintetizada, así que avísale."
           }
         },
         "ja" : {
@@ -6250,7 +6250,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Elimina las muletillas y aplica las rectificaciones que haces al hablar, como “三点，哦不对，四点”. Necesita una descarga de %@ y unos 4 GB de memoria, agrega menos de un segundo a un dictado corto y más a uno largo, y funciona en esta Mac. Pegar texto original, en el menú de Orra, recupera el texto de antes de la limpieza."
+            "value" : "Elimina las muletillas y aplica las rectificaciones que haces al hablar, como “三点，哦不对，四点”. Necesita una descarga de %@ y unos 4 GB de memoria, agrega menos de un segundo a un dictado corto y más a uno largo, y se ejecuta en esta Mac. Pegar texto original, en el menú de Orra, recupera el texto de antes de la limpieza."
           }
         },
         "ja" : {
@@ -6294,7 +6294,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Elimina “um”, “uh” y “erm” cuando solo llenan una pausa, y los mismos sonidos en chino. Las palabras con significado se quedan como las dijiste."
+            "value" : "Elimina “um”, “uh” y “erm” cuando solo rellenan una pausa, y los mismos sonidos en chino. Las palabras con significado se quedan como las dijiste."
           }
         },
         "ja" : {
@@ -6360,7 +6360,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Los reportes se publican en GitHub y son públicos, así que no incluyas datos privados. Necesitas una cuenta gratuita de GitHub. Si no iniciaste sesión, GitHub te pide que inicies sesión o que crees una cuenta. Después de iniciar sesión, GitHub muestra el formulario con tu texto. Después de crear una cuenta, si el formulario está vacío, elige Continuar en GitHub otra vez."
+            "value" : "Los reportes se envían a GitHub y son públicos, así que no incluyas datos privados. Necesitas una cuenta gratuita de GitHub. Si no iniciaste sesión, GitHub te pide que inicies sesión o que crees una cuenta. Después de iniciar sesión, GitHub muestra el formulario con tu texto ya escrito. Después de crear una cuenta, si el formulario está vacío, elige Continuar en GitHub otra vez."
           }
         },
         "ja" : {
@@ -7181,7 +7181,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La voz se convierte en texto en esta Mac, y la limpieza opcional también se hace aquí. Orra solo se conecta a Internet para descargar el modelo de transcripción o el modelo de limpieza cuando se lo pides, y para buscar actualizaciones cuando lo permites."
+            "value" : "La voz se convierte en texto en esta Mac, y la limpieza opcional también se hace en ella. Orra solo se conecta a Internet para descargar el modelo de transcripción o el modelo de limpieza cuando se lo pides, y para buscar actualizaciones cuando lo permites."
           }
         },
         "ja" : {
@@ -7534,7 +7534,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La tecla %@ no puede ser la tecla para hablar. Mantenerla presionada escribiría algo o haría algo en la app que está al frente."
+            "value" : "La tecla %@ no puede ser la tecla para hablar. Mantenerla presionada escribiría texto o haría algo en la app que está al frente."
           }
         },
         "ja" : {
@@ -7556,7 +7556,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La tecla %@ no puede ser la tecla de traducción. Mantenerla presionada escribiría algo o haría algo en la app que está al frente."
+            "value" : "La tecla %@ no puede ser la tecla de traducción. Mantenerla presionada escribiría texto o haría algo en la app que está al frente."
           }
         },
         "ja" : {
@@ -7600,7 +7600,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo de limpieza todavía no está en esta Mac. Mientras tanto, Orra pega el texto sin limpiar."
+            "value" : "El modelo de limpieza todavía no está en esta Mac. Hasta que se descargue, Orra pega el texto sin limpiar."
           }
         },
         "ja" : {
@@ -7628,7 +7628,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La descarga necesita %1$@ de espacio disponible y hay %2$@ disponibles."
+            "value" : "La descarga necesita %1$@ de espacio disponible y solo hay %2$@ disponibles."
           }
         },
         "ja" : {
@@ -7738,7 +7738,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo local todavía no está en esta Mac. Mientras tanto, los subtítulos muestran lo que se dijo sin traducir."
+            "value" : "El modelo local todavía no está en esta Mac. Hasta que se descargue, los subtítulos muestran lo que se dijo sin traducir."
           }
         },
         "ja" : {
@@ -7760,7 +7760,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo local todavía no está en esta Mac. Mientras tanto, Orra pega el texto sin traducir."
+            "value" : "El modelo local todavía no está en esta Mac. Hasta que se descargue, Orra pega el texto sin traducir."
           }
         },
         "ja" : {
@@ -7870,7 +7870,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El micrófono necesita permiso"
+            "value" : "Se necesita acceso al micrófono"
           }
         },
         "ja" : {
@@ -7892,7 +7892,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo viene de Hugging Face o de una réplica. Tu voz se queda en esta Mac."
+            "value" : "El modelo viene de Hugging Face o de una réplica. Tu voz no sale de esta Mac."
           }
         },
         "ja" : {
@@ -7914,7 +7914,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo viene de Hugging Face o de una réplica. Tu texto se queda en esta Mac."
+            "value" : "El modelo viene de Hugging Face o de una réplica. Tu texto no sale de esta Mac."
           }
         },
         "ja" : {
@@ -8002,7 +8002,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Las reglas se aplican en cada dictado, con o sin el modelo local, y antes que él."
+            "value" : "Las reglas se aplican a cada dictado antes del modelo local, lo uses o no."
           }
         },
         "ja" : {
@@ -8222,7 +8222,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La tecla de traducción cuenta como dictado solo después de mantenerla presionada sola un momento, así que sus funciones rápidas de teclado y los caracteres que escribe la tecla Opción siguen funcionando. Si es la tecla fn o una tecla Control, Opción o Comando derecha, empieza a grabar en cuanto la presionas. Con Presionar dos veces para manos libres activado, presiónala rápido dos veces para traducir con manos libres."
+            "value" : "La tecla de traducción cuenta como dictado solo después de mantenerla presionada sola un momento, así que sus funciones rápidas de teclado y los caracteres que escribe la tecla Opción siguen funcionando. Si es la tecla fn o una tecla Control, Opción o Comando derecha, empieza a grabar en cuanto la presionas. Con Presionar dos veces para manos libres activado, presiónala rápido dos veces para traducir en modo manos libres."
           }
         },
         "ja" : {
@@ -8558,7 +8558,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta tecla no puede ser la tecla para hablar. Mantenerla presionada escribiría algo o haría algo en la app que está al frente."
+            "value" : "Esta tecla no puede ser la tecla para hablar. Mantenerla presionada escribiría texto o haría algo en la app que está al frente."
           }
         },
         "ja" : {
@@ -8580,7 +8580,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta tecla no puede ser la tecla de traducción. Mantenerla presionada escribiría algo o haría algo en la app que está al frente."
+            "value" : "Esta tecla no puede ser la tecla de traducción. Mantenerla presionada escribiría texto o haría algo en la app que está al frente."
           }
         },
         "ja" : {
@@ -8977,7 +8977,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Activa Traducción en General para usar esto."
+            "value" : "Activa Traducción en General para usar esta función."
           }
         },
         "ja" : {
@@ -9176,7 +9176,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Usa la tecla para hablar sola. Si la presionas junto con otra tecla, es una función rápida de teclado y no graba nada, así que las funciones rápidas de teclado con una tecla Control, Opción o Comando izquierda siguen funcionando."
+            "value" : "Usa la tecla para hablar sin otras teclas. Si la presionas junto con otra tecla, es una función rápida de teclado y no graba nada, así que las funciones rápidas de teclado que usan la tecla Control, Opción o Comando izquierda siguen funcionando."
           }
         },
         "ja" : {
@@ -9396,7 +9396,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Qué hiciste, qué esperabas y qué pasó en su lugar."
+            "value" : "Qué hiciste, qué esperabas y qué pasó en realidad."
           }
         },
         "ja" : {
@@ -9440,7 +9440,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cuando esta opción está activada, Orra lee el texto del campo donde dictaste durante un máximo de 3 minutos después de pegar, mientras sigas en ese campo, nunca un campo de contraseña. Cuando corriges una palabra mal oída, Orra agrega la forma correcta a tu vocabulario y muestra un aviso donde puedes deshacerlo. Orra solo guarda los pares de palabras, en esta Mac. Funciona en las apps que permiten que macOS lea su texto, como Notas, Mail y Safari, pero no en algunos editores y terminales. Ahí, copia la palabra correcta y agrégala desde el menú de Orra."
+            "value" : "Cuando esta opción está activada, Orra lee el texto del campo donde dictaste hasta 3 minutos después de cada vez que pega, mientras sigas en ese campo, y nunca lee un campo de contraseña. Cuando corriges una palabra mal oída, Orra agrega la forma correcta a tu vocabulario y muestra un aviso donde puedes deshacerlo. Orra solo guarda los pares de palabras, en esta Mac. Funciona en las apps que permiten que macOS lea su texto, como Notas, Mail y Safari, pero no en algunos editores y terminales. En esas apps, copia la palabra correcta y agrégala desde el menú de Orra."
           }
         },
         "ja" : {
@@ -9462,7 +9462,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mientras este micrófono no esté conectado, Orra usa el predeterminado del sistema. Con la tapa cerrada, el micrófono integrado de una MacBook está desactivado."
+            "value" : "Mientras este micrófono no esté conectado, Orra usa la entrada predeterminada del sistema. Con la tapa cerrada, el micrófono integrado de una MacBook está desactivado."
           }
         },
         "ja" : {
@@ -9484,7 +9484,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mientras dictas, unas barras blancas en la parte inferior de la pantalla se mueven con tu voz y explican por qué cuando no se pega nada. La opción Siempre también deja ahí una barra pequeña mientras Orra está en espera, que muestra cómo hablar cuando colocas el puntero sobre ella."
+            "value" : "Mientras dictas, unas barras blancas en la parte inferior de la pantalla se mueven con tu voz y, cuando no se pega nada, explican por qué. Con la opción Siempre, mientras Orra está en espera también queda ahí una barra pequeña que muestra cómo hablar cuando colocas el puntero sobre ella."
           }
         },
         "ja" : {

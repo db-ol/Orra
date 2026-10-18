@@ -44,7 +44,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra escucha el sonido que reproduce tu Mac, como una llamada, para mostrar subtítulos y traducciones en vivo. El audio se queda en esta Mac."
+            "value" : "Orra escucha el sonido que reproduce tu Mac, como una llamada, para mostrar subtítulos y traducciones en vivo. El audio no sale de esta Mac."
           }
         },
         "ja" : {
