@@ -158,8 +158,11 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
   end it. Typing and clicks otherwise leave the dictation alone. Escape cancels it
   without pasting. Escape is swallowed only while a hands free dictation runs, and its key
   up passes through, because the tap does not watch key ups. Changing the talk keys so
-  that the key is no longer one cancels the dictation. The recording stops at the existing
-  limit of 60 seconds and pastes, with a message that says why.
+  that the key is no longer one cancels the dictation. The recording stops at the limit,
+  60 seconds at first and 5 minutes since 2026-10-17, and pastes, with a message that
+  says why. Since then the next press of the key, until that message goes 30 seconds
+  after it shows, only clears it, because it was meant to stop the recording that the
+  limit already stopped. The same holds in Press to start and stop and in Double press.
 - The controller tells the tap when no hands free dictation runs, for example after the
   limit or when a double press came while the previous dictation was still being
   transcribed, so Escape is never kept from the app by mistake.
