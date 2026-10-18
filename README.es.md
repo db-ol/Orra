@@ -28,7 +28,7 @@
 
 ### Dictado en cualquier app
 
-Habla en chino, en inglés o en los dos mezclados en la misma oración. El modelo Qwen3-ASR 1.7B lo transcribe en tu Mac y Orra lo pega donde está el cursor. Las muletillas como 呃, um y uh desaparecen, y los números dichos en chino, como fechas, precios y porcentajes, se escriben con cifras.
+Habla en chino (mandarín y cantonés), en inglés o en los dos mezclados en la misma oración. En Idioma de dictado, en Configuración, puedes elegir en su lugar japonés o español con inglés, en beta. El modelo Qwen3-ASR 1.7B lo transcribe en tu Mac y Orra lo pega donde está el cursor. Las muletillas como 呃, um y uh desaparecen, y los números dichos en chino, como fechas, precios y porcentajes, se escriben con cifras.
 
 </td>
 <td width="50%"><img src="docs/images/readme/en/dictation.gif" alt="Con la tecla para hablar presionada, alguien dice “Um, I’ll post Wednesday’s meeting notes this afternoon.” Las barras de la cápsula de Orra se mueven con la voz, y la oración aparece en una nota sin el um." width="100%"></td>
