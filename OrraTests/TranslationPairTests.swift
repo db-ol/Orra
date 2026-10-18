@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Synchronization
 import Testing
@@ -41,22 +42,28 @@ struct TranslationPairTests {
     // MARK: Prompts
 
     /// The Chinese routes get the prompts of their target, character for character, for
-    /// every input of the Chinese evaluation, as heard and after the rules.
+    /// every input of the Chinese evaluation, as heard and after the rules, and those are
+    /// the prompts of 2ebabb1, before Japanese and Spanish: their SHA-256 is the one a
+    /// test computed there the same way.
     @Test func theChineseRoutesKeepTheirPrompts() throws {
         var count = 0
+        var hasher = SHA256()
         for file in ["cases.jsonl", "adversarial.jsonl", "translation-probes.jsonl"] {
             for line in try String(contentsOf: Self.tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
                 let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
                 let input = try #require(object["input"] as? String)
                 for text in [input, NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: input))] {
                     for target in DictationLanguage.chinese.translationTargets {
-                        #expect(TranslationPrompt.text(for: text, into: .chinese(target)) == TranslationPrompt.text(for: text, into: target))
+                        let prompt = TranslationPrompt.text(for: text, into: .chinese(target))
+                        #expect(prompt == TranslationPrompt.text(for: text, into: target))
+                        hasher.update(data: Data((prompt + "\u{1E}").utf8))
                         count += 1
                     }
                 }
             }
         }
         #expect(count == 2 * 2 * (182 + 70 + 116))
+        #expect(hasher.finalize().map { String(format: "%02x", $0) }.joined() == "940f77cf7e86a0906f8e461ce96d73392ff974d2107f22eae6a1bc5c6bf84b2a")
         #expect(TranslationPrompt.text(for: TranslationPromptCases.englishTranscript, into: .chinese(.english)) == TranslationPromptCases.englishPrompt)
         #expect(TranslationPrompt.text(for: TranslationPromptCases.chineseTranscript, into: .chinese(.chinese)) == TranslationPromptCases.chinesePrompt)
     }
