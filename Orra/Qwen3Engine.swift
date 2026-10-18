@@ -60,7 +60,7 @@ actor Qwen3Engine {
         let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
         // No language hint by default: docs/asr-baseline.md shows that a fixed hint hurts
         // mixed Chinese and English. LanguageGuard asks for one only when the model chose
-        // a language other than these two. The token budget grows with the length of the audio.
+        // a language other than the user's two. The token budget grows with the length of the audio.
         // Use the options overload on purpose. The shorter overload bans any repeated
         // three token sequence once audio passes 15 seconds, which changes repeated
         // numbers and words. Loops are cut by TranscriptGuard and the token budget instead.
@@ -74,10 +74,13 @@ actor Qwen3Engine {
     }
 }
 
-/// A language Qwen3-ASR can be told to write, by the name its prompt uses.
+/// A language Qwen3-ASR can be told to write, by the name its prompt uses. Japanese and
+/// Spanish only for a user who dictates in them, see DictationLanguage.
 nonisolated enum SpeechLanguage: String, Sendable {
     case chinese = "Chinese"
     case english = "English"
+    case japanese = "Japanese"
+    case spanish = "Spanish"
 
     /// The language a translation into `target` is written in.
     init(_ target: TranslationTarget) {

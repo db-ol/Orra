@@ -895,6 +895,28 @@ got worse than the baseline, see docs/release-gate.md.
     cancellation still ends the dictation, and that the echo check runs on the new
     text. PushToTalkControllerTests checks that the dictation pastes the text of the
     pass in Chinese.
+  - With Japanese or Spanish as the dictation language, since 2026-10-18,
+    LanguageGuardTests checks that Japanese with kana, Japanese and Chinese in Han
+    characters only and their mix with English count as Japanese, that Spanish and Latin
+    text too short to judge count as Spanish, that English stays English for both, that
+    Portuguese, Catalan, Italian, French, German, Korean, Russian, the Swedish transcript
+    and, for Spanish, Chinese and Japanese stay foreign, and that Chinese reads every text
+    as before. With a stand in engine it checks that such text is transcribed once, that
+    Japanese in Han characters only gets no other pass, that Chinese for a Spanish
+    speaker goes to the pass in Spanish first, and that the passes are the dictation
+    language and then English. PushToTalkControllerTests checks that Japanese is pasted
+    with its Han characters as written and without the rules or the cleanup model, that
+    English of the same user still gets both, that Chinese still simplifies the same Han
+    characters, that Spanish skips the cleanup model and is translated without its
+    cleanup, that the dictation reads the language at its start, that only English of
+    such a user is reported for learning from corrections, and that picking the language
+    saves it. DictationLanguageTests checks the names, the passes, that only
+    Chinese simplifies and takes the digits of the pass without the vocabulary, the
+    language a new user starts with from the Mac's first language, that a user who set
+    Orra up before keeps Chinese, that the first launch saves the language and that a
+    saved choice wins. CaptionPipelineTests and EngineTurnsTests check that captions
+    take the dictation language of each sentence's moment and keep Japanese Han
+    characters, and RecordingPiecesTests that pieces keep them too.
   - ContextNumbersTests checks which transcripts may hold a number in Chinese characters,
     the value of Chinese numbers (一九六六, 两千零五, 三十三万, 六点五, none for 三万五), that
     such a number written with the vocabulary takes the digits of the pass without it
@@ -1885,6 +1907,42 @@ Transcripts in a third language, added on 2026-10-13, not verified yet:
   name is written the vocabulary's way.
 - [ ] The log says which pass stood and how long it took, and no text:
   `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"'`.
+
+Dictation language, added on 2026-10-18, not verified yet. Each check of a new user needs
+a first launch prepared as in Welcome window above, and also
+`defaults delete io.github.db-ol.Orra dictationLanguage`:
+
+- [ ] Settings, General, Dictation starts with Dictation language (听写语言), with the
+  choices 中文（普通话和粤语）+ English, 日本語 + English (Beta) and Español + English
+  (Beta), the last two with （测试版） in Chinese. The line under it says "You can mix the
+  two languages in one sentence.", and for Japanese or Spanish also "Clean Up Text works on
+  English sentences only for now."
+- [ ] The welcome window shows Dictation language under Language with the same choices.
+  Picking one there changes Settings at once, and
+  `defaults read io.github.db-ol.Orra dictationLanguage` prints its name.
+- [ ] A new user with Japanese first in System Settings, Language & Region gets 日本語 +
+  English, with Spanish first Español + English, and with English or Chinese first 中文
+  + English. A user who set Orra up before keeps 中文 + English after the update, also
+  with Japanese first.
+- [ ] With Japanese chosen, `say -v Kyoko "これはパンとオリーブオイルの簡単な夕食です。"` near
+  the microphone is pasted in Japanese, and the log shows no line starting "Transcript was
+  in another language". A short sentence in kanji only, such as 東京駅, keeps its kanji.
+- [ ] With Spanish chosen, `say -v Mónica "Mañana tenemos una reunión con el equipo de
+  ventas a las diez de la mañana."` is pasted in Spanish, sooner than with Chinese
+  chosen, and the log shows no such line.
+- [ ] With Japanese or Spanish and Clean Up Text on, a sentence in that language with a
+  filler or "No," is pasted as said, without waiting for the cleanup model. An English
+  sentence with um is cleaned up as before.
+- [ ] With Spanish and Learn from my corrections on, fixing que to qué in a pasted Spanish
+  sentence learns nothing, while fixing a misheard name in an English sentence still
+  does.
+- [ ] With Chinese chosen, Chinese, English and mixed sentences and the "Pa amb Oli"
+  sentence above are pasted as before.
+- [ ] With Spanish and Translation on, the translation key translates a Spanish sentence,
+  and Paste Original Text pastes the Spanish as it was heard.
+- [ ] With Japanese chosen, Live Captions of a Japanese video show Japanese text about as
+  soon as they show English, and switching to Chinese changes the next sentence.
+- [ ] The choice stays after Orra restarts.
 
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 

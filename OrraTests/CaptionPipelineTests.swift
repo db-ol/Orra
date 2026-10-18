@@ -19,6 +19,10 @@ final class FakeCaptionModels {
     /// Holds each translation until the test lets it go.
     var holdsTranslations = false
     private(set) var transcribed = 0
+    /// The dictation language each transcription was given.
+    private(set) var languages: [DictationLanguage] = []
+    /// The dictation language the engines report, as the user's setting.
+    var language = DictationLanguage.chinese
     private(set) var translated: [(String, TranslationTarget)] = []
     private(set) var running = 0
     private(set) var mostRunning = 0
@@ -39,11 +43,11 @@ final class FakeCaptionModels {
     func engines(turns: EngineTurns? = nil) -> CaptionEngines {
         CaptionEngines(
             isSpeechReady: { [self] in speechReady },
-            transcribe: { [self] samples in
+            transcribe: { [self] samples, language in
                 if let turns {
-                    return try await turns.captionTurn { try await self.transcribe(samples) }
+                    return try await turns.captionTurn { try await self.transcribe(samples, language) }
                 }
-                return try await transcribe(samples)
+                return try await transcribe(samples, language)
             },
             canTranslate: { [self] in translationReady },
             direction: { [self] in direction },
@@ -52,13 +56,15 @@ final class FakeCaptionModels {
                     return try await turns.captionTranslationTurn { try await self.translate(text, target) }
                 }
                 return try await translate(text, target)
-            }
+            },
+            language: { [self] in language }
         )
     }
 
-    private func transcribe(_ samples: [Float]) async throws -> String {
+    private func transcribe(_ samples: [Float], _ language: DictationLanguage) async throws -> String {
         let turn = transcribed
         transcribed += 1
+        languages.append(language)
         running += 1
         mostRunning = max(mostRunning, running)
         defer { running -= 1 }
@@ -181,6 +187,22 @@ struct CaptionPipelineTests {
         #expect(models.transcribed == 0)
     }
 
+    /// Each sentence is checked with the dictation language chosen when it is transcribed,
+    /// and keeps its Han characters as written for Japanese.
+    @Test func eachSentenceTakesTheDictationLanguageOfItsMoment() async throws {
+        let models = FakeCaptionModels([LanguageGuardTests.japaneseInHan, LanguageGuardTests.japaneseInHan])
+        var reports: [CaptionSentence] = []
+        let pipeline = CaptionPipeline(engines: models.engines()) { reports.append($0) }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        try await eventually { models.transcribed == 1 }
+        models.language = .japanese
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        await pipeline.finish()
+        #expect(models.languages == [.chinese, .japanese])
+        #expect(Set(reports.filter { $0.id == 1 }.map(\.original)) == [ChineseText.simplified(LanguageGuardTests.japaneseInHan)])
+        #expect(Set(reports.filter { $0.id == 2 }.map(\.original)) == [LanguageGuardTests.japaneseInHan])
+    }
+
     @Test func silenceAndEmptyTranscriptsGiveNoSentence() async throws {
         let models = FakeCaptionModels(["", "  ", "Okay."])
         var reports: [CaptionSentence] = []
@@ -253,6 +275,29 @@ struct EngineTurnsTests {
         var ran = false
         var attempts = 0
         var started = false
+    }
+
+    /// The captions check the language of each sentence with the dictation language they
+    /// are given, as dictation does.
+    @Test func captionsCheckTheLanguageWithTheDictationLanguage() async throws {
+        let speech = FakeSpeech()
+        speech.reply = LanguageGuardTests.spanish
+        let engines = CaptionEngines.shared(
+            transcription: speech.transcription,
+            isSpeechReady: { true },
+            language: { .spanish },
+            canTranslate: { false },
+            direction: { .automatic },
+            complete: { _, _ in "" },
+            turns: EngineTurns()
+        )
+        #expect(engines.language() == .spanish)
+        #expect(try await engines.transcribe([0.1], .chinese) == LanguageGuardTests.spanish)
+        #expect(speech.receivedLanguages == [nil, .chinese, .english])
+        let interim = try #require(engines.transcribeInterim)
+        #expect(try await interim([0.1], .spanish) == LanguageGuardTests.spanish)
+        #expect(try await engines.transcribe([0.1], .spanish) == LanguageGuardTests.spanish)
+        #expect(speech.receivedLanguages == [nil, .chinese, .english, nil, nil])
     }
 
     @Test func aCaptionCallWaitsWhileADictationRuns() async throws {

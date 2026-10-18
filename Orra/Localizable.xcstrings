@@ -47,6 +47,28 @@
         }
       }
     },
+    "%@ (Beta)" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (Beta)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（ベータ版）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@（测试版）"
+          }
+        }
+      }
+    },
     "%@ (lid closed)" : {
       "localizations" : {
         "es-419" : {
@@ -1536,6 +1558,28 @@
         }
       }
     },
+    "Clean Up Text works on English sentences only for now." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Por ahora, Limpiar texto solo funciona con oraciones en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“テキストを整える”は、今のところ英語の文にのみ対応しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“整理文字”目前只处理英文句子。"
+          }
+        }
+      }
+    },
     "Clean up with a local model" : {
       "localizations" : {
         "es-419" : {
@@ -1861,6 +1905,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "听写"
+          }
+        }
+      }
+    },
+    "Dictation language" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Idioma de dictado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力の言語"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写语言"
           }
         }
       }
@@ -9630,6 +9696,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "之后也可以在“设置”的“通用”中更改。"
+          }
+        }
+      }
+    },
+    "You can mix the two languages in one sentence." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puedes mezclar los dos idiomas en una misma oración."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1つの文の中で2つの言語を混ぜて話せます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一句话里可以混说这两种语言。"
           }
         }
       }

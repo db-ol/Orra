@@ -28,7 +28,7 @@
 
 ### Dictation into any app
 
-Speak Chinese, English, or both mixed in one sentence. The Qwen3-ASR 1.7B model writes it down on your Mac and Orra pastes it where your cursor is. Fillers such as 呃, um and uh go away, and numbers spoken in Chinese, such as dates, prices and percentages, become digits.
+Speak Chinese (Mandarin and Cantonese), English, or both mixed in one sentence. Under Dictation language in Settings you can pick Japanese or Spanish with English instead, as a beta. The Qwen3-ASR 1.7B model writes it down on your Mac and Orra pastes it where your cursor is. Fillers such as 呃, um and uh go away, and numbers spoken in Chinese, such as dates, prices and percentages, become digits.
 
 </td>
 <td width="50%"><img src="docs/images/readme/en/dictation.gif" alt="Holding the talk key, someone says “Um, I’ll post Wednesday’s meeting notes this afternoon.” The bars in Orra’s capsule move with the voice, and the sentence appears in a note without the um." width="100%"></td>
