@@ -31,8 +31,9 @@ extension Transcription {
     ///
     /// When the terms hold names read from the screen, `holdsScreenNames`, the protections
     /// of ListEcho apply too, so a list of names is never pasted in place of speech: a text
-    /// of only terms that does not sound like the pass without them gives way to that pass,
-    /// and so does a text that may be a list, see `checkingList`.
+    /// of two or more terms only that does not sound like the pass without them gives way
+    /// to that pass, and so does a text that may be a list, see `checkingList`. A name said
+    /// alone stays.
     /// Logs a timing and whether speech was heard, never the text.
     func transcribe(_ samples: [Float], vocabulary terms: [String], holdsScreenNames: Bool = false, audioSeconds: Double, takingDigits: Bool = true) async throws -> String {
         let context = Vocabulary.context(terms)
@@ -58,7 +59,7 @@ extension Transcription {
         let heardSpeech = !VocabularyEcho.normalized(TranscriptGuard.clean(plain, audioSeconds: audioSeconds)).isEmpty
         Logger.pushToTalk.notice("Transcript held only vocabulary terms, the pass without them took \(started.duration(to: .now), privacy: .public), speech heard: \(heardSpeech, privacy: .public)")
         guard heardSpeech else { return "" }
-        if holdsScreenNames, await Self.isListOverSpeech(text, plain: plain) {
+        if holdsScreenNames, await Self.isListOverSpeech(text, plain: plain, terms: terms) {
             Logger.pushToTalk.notice("Transcript was a list of terms over speech (\(ListEcho.Protection.onlyTermsOverSpeech.rawValue, privacy: .public)), the pass without them stands")
             return try await checkingLanguage(plain, of: samples, context: nil)
         }
@@ -177,10 +178,11 @@ extension Transcription {
         ListEcho.protection(text, plain: plain, terms: terms, heardSpeech: heardSpeech)
     }
 
-    /// Off the main actor, since the sound of Han text comes from a transform.
+    /// Off the main actor, since the sound of Han text comes from a transform and the text
+    /// is compared with every term.
     @concurrent
-    nonisolated private static func isListOverSpeech(_ text: String, plain: String) async -> Bool {
-        ListEcho.isListOverSpeech(text, plain: plain)
+    nonisolated private static func isListOverSpeech(_ text: String, plain: String, terms: [String]) async -> Bool {
+        ListEcho.isListOverSpeech(text, plain: plain, terms: terms)
     }
 }
 

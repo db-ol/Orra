@@ -15,14 +15,29 @@ struct ListEchoTests {
         // 0.44 alike only, but just as long.
         #expect(VocabularyEcho.isOnlyTerms("尉迟岚。", of: ["尉迟岚", "Quorvia"]))
         #expect(ListEcho.soundSimilarity("鱼鳍蓝。", "尉迟岚。") < 0.5)
-        #expect(!ListEcho.isListOverSpeech("尉迟岚。", plain: "鱼鳍蓝。"))
-        #expect(!ListEcho.isListOverSpeech("Ngozi Adeyemi.", plain: "Ngozi Adeyemi."))
+        #expect(!ListEcho.isListOverSpeech("尉迟岚。", plain: "鱼鳍蓝。", terms: ["尉迟岚", "Quorvia"]))
+        #expect(!ListEcho.isListOverSpeech("Ngozi Adeyemi.", plain: "Ngozi Adeyemi.", terms: ["Ngozi Adeyemi"]))
+    }
+
+    @Test func aNameSaidAloneStaysWhenThePlainPassWritesItInAnotherScriptOrAsMoreWords() {
+        let terms = ["Joaquin Arevalo", "Bartholomew Crane", "p99"]
+        // Not alike and not as long, but one name is no list.
+        #expect(ListEcho.soundSimilarity("华金·阿雷瓦洛。", "Joaquin Arevalo.") < 0.5)
+        #expect(!ListEcho.isListOverSpeech("Joaquin Arevalo.", plain: "华金·阿雷瓦洛。", terms: terms))
+        #expect(!ListEcho.isListOverSpeech("Bartholomew Crane.", plain: "巴塞洛缪·克兰。", terms: terms))
+        #expect(!ListEcho.isListOverSpeech("p99.", plain: "P ninety-nine.", terms: terms))
+        // Two names are.
+        #expect(ListEcho.isListOverSpeech("Joaquin Arevalo, Bartholomew Crane.", plain: "Okay.", terms: terms))
+        // A greeting with one name is mostly the name, and needs no second pass.
+        #expect(ListEcho.termCoverage("Hi Joaquin Arevalo.", terms: terms) >= 0.6)
+        #expect(!ListEcho.mayBeList("Hi Joaquin Arevalo.", terms: terms))
+        #expect(ListEcho.protection("Hi Joaquin Arevalo.", plain: "Hi Wakeen.", terms: terms, heardSpeech: true) == nil)
     }
 
     @Test func aListWrittenOverSpeechIsFound() {
         let list = "Ngozi Adeyemi, Bartholomew Crane, Nkosi Adebayo, Marrowind."
         #expect(VocabularyEcho.isOnlyTerms(list, of: ["Ngozi Adeyemi", "Bartholomew Crane", "Nkosi Adebayo", "Marrowind"]))
-        #expect(ListEcho.isListOverSpeech(list, plain: "Let's ship it."))
+        #expect(ListEcho.isListOverSpeech(list, plain: "Let's ship it.", terms: ["Ngozi Adeyemi", "Bartholomew Crane", "Nkosi Adebayo", "Marrowind"]))
     }
 
     @Test func aListAtTheStartIsFoundUnlessThePlainPassHasItsNames() {
@@ -43,7 +58,7 @@ struct ListEchoTests {
         #expect(ListEcho.protection(text, plain: "Update.", terms: labs, heardSpeech: true) == .mostlyTerms)
         #expect(ListEcho.protection(text, plain: "", terms: labs, heardSpeech: false) == nil)
         // A greeting with a name is mostly the name, and stays.
-        #expect(ListEcho.mayBeList("Hi Callum Reyes.", terms: ["Callum Reyes"]))
+        #expect(!ListEcho.mayBeList("Hi Callum Reyes.", terms: ["Callum Reyes"]))
         #expect(ListEcho.protection("Hi Callum Reyes.", plain: "Hi Kalam Rayes.", terms: ["Callum Reyes"], heardSpeech: true) == nil)
     }
 
@@ -85,6 +100,22 @@ struct ListEchoTests {
         speech.replyWithoutContext = "鱼鳍蓝。"
         #expect(try await transcribe(speech, ["尉迟岚", "Quorvia"], screenNames: true) == "尉迟岚。")
         #expect(speech.receivedContexts == ["尉迟岚\nQuorvia", nil])
+    }
+
+    @Test func withScreenNamesANameSaidAloneInAnotherScriptStays() async throws {
+        let speech = FakeSpeech()
+        speech.reply = "Joaquin Arevalo."
+        speech.replyWithoutContext = "华金·阿雷瓦洛。"
+        #expect(try await transcribe(speech, ["Joaquin Arevalo", "Quorvia"], screenNames: true) == "Joaquin Arevalo.")
+        #expect(speech.receivedContexts == ["Joaquin Arevalo\nQuorvia", nil])
+    }
+
+    @Test func withScreenNamesAGreetingWithOneNameIsTranscribedOnce() async throws {
+        let speech = FakeSpeech()
+        speech.reply = "Hi Joaquin Arevalo."
+        speech.replyWithoutContext = "Hi Wakeen."
+        #expect(try await transcribe(speech, ["Joaquin Arevalo", "Quorvia"], screenNames: true) == "Hi Joaquin Arevalo.")
+        #expect(speech.receivedContexts == ["Joaquin Arevalo\nQuorvia"])
     }
 
     @Test func withScreenNamesALeadingListGivesWayToThePlainPass() async throws {

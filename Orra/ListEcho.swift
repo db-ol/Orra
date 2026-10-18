@@ -9,19 +9,22 @@ import Foundation
 ///
 /// Three protections, each decided against the pass without the context, which then
 /// stands:
-/// 1. The text is only terms (VocabularyEcho), the pass without the context heard speech,
-///    the two do not sound alike (`soundSimilarity` below 0.5), and one has half again as
-///    many words as the other. The length keeps a name said alone that the pass without
-///    the context spells in other letters, as 尉迟岚 and 鱼鳍蓝.
+/// 1. The text is only terms (VocabularyEcho), two or more of them, the pass without the
+///    context heard speech, the two do not sound alike (`soundSimilarity` below 0.5), and
+///    one has half again as many words as the other. The length keeps a name said alone
+///    that the pass without the context spells in other letters, as 尉迟岚 and 鱼鳍蓝.
 /// 2. The text starts with two or more terms in list order, separated only by punctuation,
 ///    and the pass without the context does not have half of them among its first words.
-/// 3. Terms make up 60% or more of the text's words, the pass without the context holds
-///    less than half that share and heard speech, and the text has half again as many
-///    words. The length keeps a dictation of one or two names, as "Callum."
+/// 3. Terms make up 60% or more of the text's words, two or more terms, the pass without
+///    the context holds less than half that share and heard speech, and the text has half
+///    again as many words. The length keeps a dictation of one or two names, as "Callum."
 ///
 /// On 548 clips with speech in six kinds of context, 16 that only said names and 24
 /// without speech, they caught every list seen and never a name said alone. The two
 /// length rules were set after seeing the 16 clips of names, so they rest on few clips.
+/// Every list caught held four terms or more. The rule of two terms came after, for a name
+/// said alone that the pass without the context writes in another script or as more words,
+/// as Joaquin Arevalo and 华金·阿雷瓦洛, which none of the 16 clips had.
 /// A word is a Latin word or a Han character. Text only, so tests need no model.
 nonisolated enum ListEcho {
     nonisolated enum Protection: String, Sendable {
@@ -32,7 +35,8 @@ nonisolated enum ListEcho {
 
     /// Protection 1, for a text that is only terms while the pass without the context,
     /// `plain`, heard speech.
-    static func isListOverSpeech(_ text: String, plain: String) -> Bool {
+    static func isListOverSpeech(_ text: String, plain: String, terms: [String]) -> Bool {
+        guard holdsSeveralTerms(text, terms: terms) else { return false }
         let units = Double(unitCount(text))
         let plainUnits = Double(unitCount(plain))
         let lengthsDiffer = max(units, plainUnits) >= 1.5 * max(1, min(units, plainUnits))
@@ -42,7 +46,8 @@ nonisolated enum ListEcho {
     /// Whether protection 2 or 3 may apply to a text that is not only terms, so the pass
     /// without the context has to run. Most dictations need no such pass.
     static func mayBeList(_ text: String, terms: [String]) -> Bool {
-        leadingItems(text, terms: terms) != nil || termCoverage(text, terms: terms) >= 0.6
+        leadingItems(text, terms: terms) != nil
+            || termCoverage(text, terms: terms) >= 0.6 && holdsSeveralTerms(text, terms: terms)
     }
 
     /// Protection 2 or 3, for a text that is not only terms, or nil when neither applies.
@@ -51,11 +56,18 @@ nonisolated enum ListEcho {
             return .leadingList
         }
         let coverage = termCoverage(text, terms: terms)
-        if heardSpeech, coverage >= 0.6, termCoverage(plain, terms: terms) < coverage / 2,
+        if heardSpeech, coverage >= 0.6, holdsSeveralTerms(text, terms: terms),
+           termCoverage(plain, terms: terms) < coverage / 2,
            Double(unitCount(text)) >= 1.5 * Double(unitCount(plain)) {
             return .mostlyTerms
         }
         return nil
+    }
+
+    /// Whether terms occur two or more times in the text, see `occurrences`, as in a list.
+    /// One name said alone occurs once.
+    static func holdsSeveralTerms(_ text: String, terms: [String]) -> Bool {
+        occurrences(of: expandedNames(terms), in: Array(text)).count >= 2
     }
 
     // MARK: Sound
