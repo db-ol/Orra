@@ -163,6 +163,15 @@ class RepositoryTests(unittest.TestCase):
                 languages.update(entry.get("localizations", {}))
             self.assertLessEqual(languages, codes, catalog)
 
+    def test_sparkle_picks_among_orras_own_localizations(self):
+        # macOS limits Sparkle's pick of the notes, and of its own buttons, to Orra's
+        # localizations. This key lifts that limit, so an Orra without Japanese would show
+        # Japanese notes around an English interface. It can come from Info.plist or from an
+        # INFOPLIST_KEY_ build setting.
+        for path in ("Orra/Info.plist", "Orra.xcodeproj/project.pbxproj"):
+            with open(REPOSITORY / path, encoding="utf-8") as file:
+                self.assertNotIn("CFBundleAllowMixedLocalizations", file.read(), path)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1775,8 +1775,9 @@ Release notes in the interface language, added on 2026-10-18, not verified yet. 
 the first release after 0.4.2, whose notes come in one file for each language:
 
 - [ ] The update window shows the notes in the language Orra shows: English on a Mac in
-  English or French, 简体中文 on a Mac in Simplified Chinese. With 简体中文 chosen as the
-  interface language in Settings on a Mac in English, the notes are in Chinese too.
+  English, French or German, 简体中文 on a Mac in Simplified Chinese. With 简体中文 chosen as
+  the interface language in Settings on a Mac in English, the notes are in Chinese too. The
+  buttons of the window are in the same language as the notes.
 - [ ] Once Orra has Japanese and Spanish, a Mac in Japanese or Spanish gets the notes in
   that language. An Orra without them shows English notes there, like the rest of Orra.
 - [ ] On the newest release, Check for Updates says Orra is up to date and offers Version
