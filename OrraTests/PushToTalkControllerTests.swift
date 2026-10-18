@@ -1129,6 +1129,21 @@ struct PushToTalkControllerTests {
         try await waitUntil { controller.state == .idle && mic.calls.count == 4 }
     }
 
+    /// When the stopped dictation gave no text, the notice that stays says first why it
+    /// stopped, and then why nothing was pasted.
+    @Test func theNoticeAfterTheLimitSaysWhyItStoppedFirst() async throws {
+        speech.reply = ""
+        let controller = try await startedController(limit: .milliseconds(200))
+        controller.setTriggerMode(.toggle, for: .talk)
+        let cues = CueRecorder(controller)
+        let tap = try #require(tapSystem.installed)
+        var now = ContinuousClock.now
+        press(tap, at: &now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 2 }
+        try await waitUntil { cues.list.last.map { if case .stoppedAtLimit = $0 { true } else { false } } == true }
+        #expect(cues.list.last == .stoppedAtLimit(message: Self.limitNotice + " No speech was recognized"))
+    }
+
     /// A press while the dictation is still being transcribed is the one that was meant to
     /// stop it. It records nothing, the notice then shows as any message does, and the next
     /// press records.

@@ -974,12 +974,12 @@ final class PushToTalkController {
             endModelGateReservation()
         case .finished:
             endUserActivity()
-            let message = holdMessage ?? problem ?? notice
-            if awaitsPressAfterLimit, let message {
-                showLimitNotice(message)
+            if awaitsPressAfterLimit {
+                // The limit first, since explaining the stop is what the long wait is for.
+                showLimitNotice(RecordingPieces.joined([notice ?? "", holdMessage ?? problem ?? ""]))
             } else {
                 endLimitWait()
-                endCue(message)
+                endCue(holdMessage ?? problem ?? notice)
             }
             cleanup.dictationEnded()
             endModelGateReservation()
