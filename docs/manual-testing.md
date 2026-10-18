@@ -325,8 +325,9 @@ got worse than the baseline, see docs/release-gate.md.
     Use names on screen, added on 2026-10-17. The extractor, on texts of the context
     experiment of 2026-10-15: names in English and Chinese without their courtesy title or
     the greeting, rare words, acronyms and codes, English terms kept whole in Chinese text,
-    a name said more often first, names before other terms, the 40 terms nearest the cursor,
-    and the window title as the farthest text. Also the common words read from a tokenizer
+    a name said more often first, names before other terms, Chinese names from Orra's own
+    rules on every system, no name from an ordinary word after a surname character, the 40
+    terms nearest the cursor, and the window title as the farthest text. Also the common words read from a tokenizer
     vocabulary, and the switch saved and off by default. The reading, with a scripted field,
     so no app is read: the last 1,000 characters before the cursor through a range of the
     text or the whole text cut at the cursor, only the window title from a field without a
@@ -345,20 +346,29 @@ got worse than the baseline, see docs/release-gate.md.
     shortcut reads nothing, an early capture reads once its press counts and its time limit
     counts from that press, and a list of names is never pasted. VocabularyTests
     checks that the names take the places of the oldest words within the limit of 200.
-    Outside the test suite, the extractor was compared with the experiment's on all 592
-    texts of the experiment at limits of 20 and 40: the same terms in every case at 40, and
-    at 20 different only where more than 20 terms compete, where Orra keeps those nearest
-    the cursor. The protections gave the experiment's decision on all 997 of its recorded
+    Outside the test suite, the extractor as moved over was compared with the experiment's
+    on all 592 texts of the experiment at limits of 20 and 40: the same terms in every case
+    at 40, and at 20 different only where more than 20 terms compete, where Orra keeps those
+    nearest the cursor. NLTagger finds no Chinese names on macOS 27, so the extractor now
+    finds them with its own rules. On the 592 texts the English terms stay the same, and
+    105 of the 118 Chinese target names on the screen are terms, as with NLTagger on macOS
+    26, against 89 for the extractor as moved over on macOS 27. On 112 texts of ordinary
+    Chinese prose no ordinary word became a name. The protections gave the experiment's decision on all 997 of its recorded
     runs, 16 of which they caught, each with four terms or more. Taking a text for a list
     only when it holds two terms or more left all 997 decisions as they were and cut the
     extra passes for a text that may be a list from 21 to 16.
   - ScreenNamesEvaluationTests, opt in, ran the experiment's 104 clips through Orra's path
-    with the real model on 2026-10-17, loaded from the experiment's own copy. Without names
-    the text matched the experiment's on all 104 clips, and with the names of the page added
-    to Orra's names it matched the experiment's C1 on all 104. Scored as the experiment
-    scored, without names 107 of 201 target names were right, 59 of 81 in real speech, with
-    Orra's names from the text before the cursor 164 of 201 and 73 of 81, and with the page
-    names too 173 of 201 and 73 of 81, as in the experiment.
+    with the real model on 2026-10-17, loaded from the experiment's own copy. With the
+    extractor as moved over, the text without names matched the experiment's on all 104
+    clips, and with the names of the page added to Orra's names it matched the experiment's
+    C1 on all 104. The numbers below are scored as the experiment scored, with the count of
+    its score.py, which finds 201 target names, 81 in real speech. The test's own summary
+    counts them another way and finds 191 and 75. Without names 107 of 201 were right, 59 of
+    81 in real speech, with 83 errors on the 1,932 other words. With Orra's names from the
+    text before the cursor, the extractor as moved over gave 164 of 201 and 73 of 81 on
+    macOS 26 and 158 of 201 and 70 of 81 as it runs on macOS 27. The extractor with its own
+    Chinese rules gives 161 of 201 and 70 of 81 on both, with 78 errors on the other words,
+    and 170 of 201 and 70 of 81 with the page names too.
   - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
     translation marked translated, that each translation keeps the arguments of the
     English string, that the Chinese uses full width punctuation and a space next to a

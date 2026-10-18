@@ -90,17 +90,18 @@ nonisolated struct CommonWords: Sendable {
 }
 
 /// Takes names and rare words out of the text on the screen, for the speech model's
-/// context. Measured on 2026-10-15 and 16 with Qwen3-ASR 1.7B: when a name the user says
-/// is on the page, giving the model the names and rare words of the text before the cursor
-/// and the names elsewhere on the page raised the names written right from 107 to 173 of
-/// 201 (59 to 73 of 81 on real speech), and the other words did not get worse. Orra reads
-/// no names elsewhere on the page, see ScreenReader, and its own path wrote 164 of 201 (73
-/// of 81) right on the same clips, see ScreenNamesEvaluationTests. The text itself is
-/// never given to the model, since then the model writes it out when nobody speaks. The
-/// known risk: when a name on the screen sounds like a name the user says that is not
-/// there, the model can write the name on the screen instead, 13 times in 59 such names on
-/// real speech, and no check found so far tells the two cases apart. So Use names on
-/// screen is off by default.
+/// context. Measured on 2026-10-15 and 16 with Qwen3-ASR 1.7B: when a name the user says is
+/// on the page, giving the model the names and rare words of the text before the cursor and
+/// the names elsewhere on the page raised the names written right from 107 to 173 of 201
+/// (59 to 73 of 81 on real speech), and the other words did not get worse. Orra reads no
+/// names elsewhere on the page, see ScreenReader. Scored as the experiment scored, its own
+/// path with the extractor below wrote 161 of 201 (70 of 81) right on the same clips, with
+/// 78 errors on the other words against 83 without names, see ScreenNamesEvaluationTests,
+/// whose own summary counts the targets another way. The text itself is never given to the
+/// model, since then the model writes it out when nobody speaks. The known risk: when a
+/// name on the screen sounds like a name the user says that is not there, the model can
+/// write the name on the screen instead, 13 times in 59 such names on real speech, and no
+/// check found so far tells the two cases apart. So Use names on screen is off by default.
 ///
 /// Written for that experiment with what every Mac and Orra already have, and moved here
 /// with one change: the experiment took Chinese names from NLTagger, which finds none on
