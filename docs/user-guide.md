@@ -1,6 +1,6 @@
 # Orra user guide
 
-English · [简体中文](user-guide.zh-CN.md)
+English · [简体中文](user-guide.zh-CN.md) · [日本語](user-guide.ja.md) · [Español](user-guide.es.md)
 
 The [README](../README.md) has the overview of Orra and the download, and [privacy.md](privacy.md) the privacy details.
 

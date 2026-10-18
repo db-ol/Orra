@@ -8,7 +8,7 @@
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=release&color=0A84FF" alt="Latest release"></a>
 </p>
 
-<p align="center"><sub>English · <a href="README.zh-CN.md">简体中文</a></sub></p>
+<p align="center"><sub>English · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a></sub></p>
 
 <p align="center">
   <strong>Open source voice input for the Mac.</strong><br>

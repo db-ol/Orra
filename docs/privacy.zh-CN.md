@@ -1,6 +1,6 @@
 # Orra 隐私说明
 
-[English](privacy.md) · 简体中文
+[English](privacy.md) · 简体中文 · [日本語](privacy.ja.md) · [Español](privacy.es.md)
 
 [README](../README.zh-CN.md) 里是简短的概要，这里是详细说明。
 

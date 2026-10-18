@@ -1,6 +1,6 @@
 # Orra 使用指南
 
-[English](user-guide.md) · 简体中文
+[English](user-guide.md) · 简体中文 · [日本語](user-guide.ja.md) · [Español](user-guide.es.md)
 
 Orra 的概览和下载见 [README](../README.zh-CN.md)，隐私的详细说明见 [privacy.zh-CN.md](privacy.zh-CN.md)。
 
