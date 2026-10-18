@@ -10,8 +10,10 @@
 # release. Output goes to build/release/<version>/. docs/releasing.md has the setup: the
 # Developer ID Application certificate and the Sparkle update key in the login keychain, and
 # the notarytool profile "orra-notary". The release notes come from
-# docs/release-notes/<version>.md, in Markdown, and show in the update window. Pass --no-notarize as a third argument to stop before the upload, to check
-# a build quickly.
+# docs/release-notes/<version>.md in English and the files next to it in the other languages
+# of Orra's interface, in Markdown. The update window shows the one in the language of the
+# interface. Pass --no-notarize as a third argument to stop before the upload, to check a
+# build quickly.
 set -euo pipefail
 
 TEAM="X77KW5VYFJ"
@@ -66,9 +68,10 @@ if $notarize; then
         exit 1
     }
 fi
-if $notarize && [[ ! -s "$notes" ]]; then
-    echo "Write the release notes in $notes first. The update window shows them." >&2
-    exit 1
+# After 0.4.2 every language of the interface needs its notes. release_notes.py checks them
+# before anything is built, and names each file that is missing or empty.
+if $notarize; then
+    python3 -I "$root/Tools/release/release_notes.py" check "$version" "$notes" || exit 1
 fi
 
 rm -rf "$out"
@@ -179,6 +182,9 @@ if $notarize; then
     "$sparkle/sign_update" --account "$UPDATE_KEY_ACCOUNT" "$out/appcast.xml"
     "$sparkle/sign_update" --account "$UPDATE_KEY_ACCOUNT" --verify "$out/appcast.xml"
     echo "Feed: $out/appcast.xml"
+    # The text of the GitHub release, every language under its own heading.
+    python3 -I "$root/Tools/release/release_notes.py" body "$version" "$notes" > "$out/release-notes.md"
+    echo "Release notes for GitHub: $out/release-notes.md"
 fi
 
 # The checksum file names the DMG without a folder, so that `shasum -c` works wherever the
