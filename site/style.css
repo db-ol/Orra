@@ -1,4 +1,4 @@
-/* Orra website. One style sheet for the English and the Chinese page. */
+/* Orra website. One style sheet for the pages in every language. */
 
 :root {
   color-scheme: light dark;
@@ -69,6 +69,22 @@ h1,
 h2,
 .statement {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* The Japanese page names Japanese fonts first, or its kanji would take the Chinese shapes
+   of PingFang SC. Chinese text on that page keeps the Chinese fonts. */
+html:lang(ja) body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "Noto Sans CJK JP", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html:lang(ja) h1,
+html:lang(ja) h2,
+html:lang(ja) .statement {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "Noto Sans CJK JP", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html:lang(ja) :lang(zh) {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 a {
