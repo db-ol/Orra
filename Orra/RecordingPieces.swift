@@ -85,11 +85,12 @@ nonisolated enum RecordingPieces {
         return (joined(texts), pieces.count(where: { $0.text == nil }))
     }
 
-    /// Joins texts the way their language needs. Chinese runs on without a space, and so
-    /// does anything after full width punctuation such as 。 or ，, and before punctuation.
-    /// Elsewhere a space goes between: between English words, after a period, and between
-    /// a Chinese and an English word, as the speech model writes them within one piece. No
-    /// punctuation is added, so a piece cut inside a sentence runs on into the next one.
+    /// Joins texts the way their language needs, as the speech model spaces them within one
+    /// piece. Chinese runs on without a space, also next to a digit or a symbol such as %
+    /// or a quotation mark, and so does anything after full width punctuation such as 。
+    /// or ，, and before punctuation. A space goes between English words, after the end of
+    /// an English sentence or clause, and between a Chinese word and one in Latin letters.
+    /// No punctuation is added, so a piece cut inside a sentence runs on into the next one.
     /// Empty texts are left out.
     static func joined(_ texts: [String]) -> String {
         var result = ""
@@ -106,14 +107,19 @@ nonisolated enum RecordingPieces {
         if last.isWhitespace || first.isWhitespace || (last.isWide && first.isWide) {
             return false
         }
-        if last.isWide && last.isPunctuation {
-            return false
+        if last.isWide {
+            return !last.isPunctuation && first.isLetter
+        }
+        if first.isWide {
+            return !first.isPunctuation && (last.isLetter || Self.clauseEnds.contains(last))
         }
         return !first.isPunctuation || Self.openingPunctuation.contains(first)
     }
 
     /// Punctuation that opens what follows, so a space may go before it.
     private static let openingPunctuation: Set<Character> = ["(", "[", "{", "“", "‘", "\"", "'", "（", "「", "『", "《", "【"]
+    /// Punctuation that ends an English sentence or clause, so a space follows it.
+    private static let clauseEnds: Set<Character> = [".", ",", "!", "?", ";", ":"]
 }
 
 nonisolated private extension Character {
