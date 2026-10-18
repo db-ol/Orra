@@ -925,19 +925,31 @@ struct PushToTalkControllerTests {
         #expect(controller.notice == "Part of this dictation could not be transcribed.")
     }
 
-    /// A piece without text inside the dictation is reported like a failed one, but not the
-    /// last, which is often the quiet before the key stopped the recording.
-    @Test func anEmptyPieceSaysSoUnlessItIsTheLast() async throws {
+    /// A piece without text is quiet, such as a pause to think in a hands free dictation,
+    /// so nothing is said to be missing, in the middle or at the end.
+    @Test func anEmptyPieceIsNotMissing() async throws {
         mic.recording = longRecording(seconds: 130)
         let controller = await makeController()
         speech.queued = [.success("早上好。"), .success(""), .success("晚上好。")]
         try await dictate(controller)
         #expect(inserter.inserted == ["早上好。晚上好。"])
-        #expect(controller.notice == "Part of this dictation could not be transcribed.")
+        #expect(controller.notice == nil)
         speech.queued = [.success("早上好。"), .success("中午好。"), .success("")]
         try await dictate(controller)
         #expect(inserter.inserted.last == "早上好。中午好。")
         #expect(controller.notice == nil)
+    }
+
+    /// Minutes without speech say only that nothing was recognized.
+    @Test func aLongSilenceSaysOnlyThatNothingWasRecognized() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.reply = ""
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 3)
+        #expect(controller.notice == nil)
+        #expect(cues.list.last == .finished(message: "No speech was recognized"))
     }
 
     @Test func whenEveryPieceFailsTheDictationFails() async throws {

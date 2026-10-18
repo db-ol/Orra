@@ -156,17 +156,19 @@ struct RecordingPiecesTests {
         #expect(transcript.missing == 0)
     }
 
-    @Test func piecesWithoutTextAreCounted() {
+    /// Only failed pieces are missing. An empty one is quiet, such as a pause to think in a
+    /// hands free dictation or the quiet before the key stopped the recording.
+    @Test func failedPiecesAreCounted() {
         func missing(_ texts: [String?]) -> Int {
             RecordingPieces.transcript(of: texts.map { TranscribedPiece(text: $0, seconds: 50) }).missing
         }
         #expect(missing(["一。", nil, "三。"]) == 1)
-        #expect(missing(["一。", "", "三。"]) == 1)
-        #expect(missing(["一。", "  ", "三。"]) == 1)
         #expect(missing(["一。", "二。", nil]) == 1)
-        // The last piece is often only the quiet before the key stopped the recording.
+        #expect(missing([nil, "二。", nil]) == 2)
+        #expect(missing(["一。", "", "三。"]) == 0)
+        #expect(missing(["一。", "  ", "三。"]) == 0)
         #expect(missing(["一。", "二。", ""]) == 0)
-        #expect(missing([nil, "", nil]) == 3)
+        #expect(missing(["", "", ""]) == 0)
         #expect(missing([""]) == 0)
         let text = RecordingPieces.transcript(of: [TranscribedPiece(text: "一。", seconds: 50), TranscribedPiece(text: nil, seconds: 50), TranscribedPiece(text: "三。", seconds: 50)]).text
         #expect(text == "一。三。")

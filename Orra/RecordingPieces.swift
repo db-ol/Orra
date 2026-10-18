@@ -73,23 +73,16 @@ nonisolated enum RecordingPieces {
     }
 
     /// The text of a dictation from what the speech model wrote for its pieces, and how
-    /// many pieces gave no text. Each text goes through TranscriptGuard for the length of
-    /// its own piece and into simplified characters, as a whole recording did before, so
-    /// one piece gives exactly the text it always did. A piece that failed counts as one
-    /// that gave no text, and so does an empty one, except the last of several, which is
-    /// often only the quiet before the key stopped the recording.
+    /// many pieces failed. Each text goes through TranscriptGuard for the length of its own
+    /// piece and into simplified characters, as a whole recording did before, so one piece
+    /// gives exactly the text it always did. An empty piece is not missing: the speech
+    /// model writes nothing for silence, such as a long pause to think or the quiet before
+    /// the key stopped the recording.
     static func transcript(of pieces: [TranscribedPiece]) -> (text: String, missing: Int) {
-        var texts: [String] = []
-        var missing = 0
-        for (index, piece) in pieces.enumerated() {
-            let text = piece.text.map { ChineseText.simplified(TranscriptGuard.clean($0, audioSeconds: piece.seconds)) } ?? ""
-            if !text.isEmpty {
-                texts.append(text)
-            } else if piece.text == nil || index < pieces.count - 1 {
-                missing += 1
-            }
+        let texts = pieces.compactMap { piece in
+            piece.text.map { ChineseText.simplified(TranscriptGuard.clean($0, audioSeconds: piece.seconds)) }
         }
-        return (joined(texts), missing)
+        return (joined(texts), pieces.count(where: { $0.text == nil }))
     }
 
     /// Joins texts the way their language needs. Chinese runs on without a space, and so
