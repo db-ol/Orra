@@ -199,9 +199,9 @@ final class PushToTalkController {
     @ObservationIgnored private let cleanup: CleanupModel
     @ObservationIgnored private let translation: TranslationModel
     @ObservationIgnored private let voice: TranslationVoice
-    /// The direction of the dictation under way when the translation key started it, as it
-    /// acts for the dictation language then, read
-    /// at its start. Nil for a dictation of the talk key.
+    /// The direction of the dictation under way when the translation key started it, read
+    /// at its start, as it acts for the dictation language then, and that language. Nil
+    /// for a dictation of the talk key.
     @ObservationIgnored private var holdTranslation: TranslationCue?
     @ObservationIgnored private let insert: @MainActor (String) async -> InsertionResult
     @ObservationIgnored private let frontmostApp: @MainActor () -> pid_t?
