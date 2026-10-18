@@ -177,7 +177,7 @@ struct WelcomeView: View {
                 SuggestionsBlock(
                     suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, locale: Locale(identifier: localization)),
                     locale: Locale(identifier: localization),
-                    open: { openSettings(.general) }
+                    open: { openSettings($0.settingsTab) }
                 )
             }
         }
@@ -188,13 +188,12 @@ struct WelcomeView: View {
 }
 
 /// What to try next, under "Orra is ready": one compact row for each feature, with its symbol,
-/// its name and one line, and a button that opens Settings, or On when it is on already.
-/// Settings opens on General, where cleanup, translation and Meeting Interpretation are. It
-/// cannot scroll to a section, so the meeting row says where its parts are.
+/// its name and one line, and a button that opens Settings on the feature's page, or On when
+/// it is on already.
 private struct SuggestionsBlock: View {
     let suggestions: [WelcomeSuggestion]
     let locale: Locale
-    let open: () -> Void
+    let open: (WelcomeSuggestion.Kind) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -225,7 +224,7 @@ private struct SuggestionsBlock: View {
                     }
                     Spacer(minLength: 8)
                     if let button = suggestion.button {
-                        Button(button, action: open)
+                        Button(button) { open(suggestion.kind) }
                             .controlSize(.small)
                     } else if suggestion.isOn {
                         HStack(spacing: 4) {
@@ -240,6 +239,16 @@ private struct SuggestionsBlock: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension WelcomeSuggestion.Kind {
+    /// The page of Settings that the row's button opens, where the feature is set up.
+    var settingsTab: SettingsTab {
+        switch self {
+        case .cleanup, .translation: .general
+        case .meeting: .meeting
+        }
     }
 }
 
