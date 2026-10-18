@@ -851,6 +851,16 @@
         }
       }
     },
+    "Dictations over %lld characters are pasted without cleanup." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 %lld 个字符的听写不会整理，会直接粘贴。"
+          }
+        }
+      }
+    },
     "Dictations over %lld characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost." : {
       "localizations" : {
         "zh-Hans" : {
