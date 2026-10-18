@@ -60,9 +60,8 @@ got worse than the baseline, see docs/release-gate.md.
   two more skipped ones being the opt in idle unload measurements. With trigger modes and
   key combinations, it ended in TEST SUCCEEDED with 2515 test cases passed and 17 skipped
   on 2026-10-14 in 50 s, the real model tests included. With long dictations in pieces,
-  the test command with `-skip-testing:OrraTests/RealModelTests` ended in TEST SUCCEEDED
-  with 2976 test cases passed and 18 skipped on 2026-10-17, and DictationQualityTests
-  passed with the real model.
+  it ended in TEST SUCCEEDED with 2998 test cases passed and 21 skipped on 2026-10-17 in
+  92 s, the real model tests included.
   - SettingsPageTests checks the four tabs, each with its own icon and color, and the
     sheet of General, that a tab or sheet asked for, such as Vocabulary or Meeting
     Interpretation, opens once while Settings… afterwards opens General alone, that a
