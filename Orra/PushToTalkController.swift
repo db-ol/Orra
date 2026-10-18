@@ -852,8 +852,8 @@ final class PushToTalkController {
             }
         }
         if event == .pressedAfterLimit {
+            // An early capture of that press, if any, is dropped below.
             pressedAfterLimit()
-            return
         }
         guard let transition = machine.handle(event) else { return }
         state = machine.state
@@ -875,7 +875,6 @@ final class PushToTalkController {
             indicatorShown = false
             captureStart = nil
             holdScreenRead = nil
-            endLimitWait()
             guard !isRecordingVoiceSample, modelState == .ready, capture.access() == .authorized else {
                 handle(.cancelled)
                 return
@@ -883,6 +882,9 @@ final class PushToTalkController {
             startCapture()
         case .confirmedArming:
             clearHoldNotes()
+            // Only a press that counts ends the wait after a stop at the limit, not one
+            // that may still turn out to be a shortcut.
+            endLimitWait()
             let counted = ContinuousClock.now
             holdTimings?.counted = counted
             beginUserActivity()

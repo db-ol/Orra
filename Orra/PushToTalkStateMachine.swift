@@ -12,7 +12,7 @@
 ///     idle --double press--> handsFree --release--> processing
 ///                            handsFree --cancel---> idle
 ///     idle --armed--> arming --press or double press--> listening or handsFree
-///                     arming --cancel, release or tap--> idle
+///                     arming --cancel, release, tap or press after limit--> idle
 ///
 /// This type is pure logic. It decides what a hotkey event means in the current
 /// state and reports the resulting transition, if any. It knows nothing about
@@ -58,9 +58,10 @@
 ///   the hotkey layer does not send while arming, so a lost event cannot leave the
 ///   microphone running. Armed in any other state is ignored, like a press.
 /// - `processingFinished` outside of processing is ignored as stale.
-/// - `pressedAfterLimit` is ignored in every state. It only tells the owner that the press
-///   meant to finish a dictation came after the recording limit had stopped it, so the
-///   owner dismisses the notice, see `TalkKeyDetector.stopAtLimit()`.
+/// - `pressedAfterLimit` tells the owner that the press meant to finish a dictation came
+///   after the recording limit had stopped it, so the owner dismisses the notice, see
+///   `TalkKeyDetector.stopAtLimit()`. That press records nothing, so while arming it drops
+///   the early capture as a cancel does, and every other state ignores it.
 nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
     nonisolated enum State: CaseIterable, Equatable, Sendable {
         case idle
@@ -95,7 +96,8 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         /// shortcut. Start capturing silently.
         case armed
         /// The key that was to finish a dictation was pressed and released on its own after
-        /// the recording limit had stopped that dictation. Nothing records.
+        /// the recording limit had stopped that dictation. Nothing records, and an early
+        /// capture of that press is dropped.
         case pressedAfterLimit
     }
 
@@ -145,7 +147,7 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
     /// event was ignored in the current state.
     mutating func handle(_ event: Event) -> Transition? {
         switch (state, event) {
-        case (_, .pressed(isRepeat: true)), (_, .pressedAfterLimit):
+        case (_, .pressed(isRepeat: true)):
             return nil
         case (.idle, .pressed):
             state = .listening
@@ -162,7 +164,7 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         case (.arming, .doublePressed):
             state = .handsFree
             return .confirmedArming
-        case (.arming, .cancelled), (.arming, .released), (.arming, .tapped):
+        case (.arming, .cancelled), (.arming, .released), (.arming, .tapped), (.arming, .pressedAfterLimit):
             state = .idle
             return .droppedArming
         case (.listening, .released), (.handsFree, .released):
@@ -183,16 +185,17 @@ nonisolated struct PushToTalkStateMachine: Equatable, Sendable {
         case (.processing, .processingFinished):
             state = .idle
             return .finished
-        case (.idle, .released), (.idle, .tapped), (.idle, .cancelled), (.idle, .processingFinished),
+        case (.idle, .released), (.idle, .tapped), (.idle, .cancelled), (.idle, .processingFinished), (.idle, .pressedAfterLimit),
              (.arming, .armed), (.arming, .processingFinished),
-             (.listening, .pressed), (.listening, .processingFinished), (.listening, .armed),
+             (.listening, .pressed), (.listening, .processingFinished), (.listening, .armed), (.listening, .pressedAfterLimit),
              (.waitingForSecondPress, .released),
              (.waitingForSecondPress, .tapped), (.waitingForSecondPress, .processingFinished),
-             (.waitingForSecondPress, .armed),
+             (.waitingForSecondPress, .armed), (.waitingForSecondPress, .pressedAfterLimit),
              (.handsFree, .pressed), (.handsFree, .tapped), (.handsFree, .doublePressed),
-             (.handsFree, .processingFinished), (.handsFree, .armed),
+             (.handsFree, .processingFinished), (.handsFree, .armed), (.handsFree, .pressedAfterLimit),
              (.processing, .pressed), (.processing, .released), (.processing, .tapped),
-             (.processing, .doublePressed), (.processing, .cancelled), (.processing, .armed):
+             (.processing, .doublePressed), (.processing, .cancelled), (.processing, .armed),
+             (.processing, .pressedAfterLimit):
             return nil
         }
     }

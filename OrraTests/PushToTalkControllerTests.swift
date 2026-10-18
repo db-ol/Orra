@@ -1061,15 +1061,56 @@ struct PushToTalkControllerTests {
         press(tap, at: &now)
         #expect(controller.state == .idle)
         #expect(cues.list.last == .finished(message: nil))
+        // In Hold mode the press began an early capture, which its release dropped before
+        // the microphone started.
         try await Task.sleep(for: .milliseconds(50))
         #expect(mic.calls == ["start", "stop"])
         // The menu still says why the recording stopped.
         #expect(controller.notice == Self.limitNotice)
+        if mode == .hold {
+            // Past the window in which the press could begin a double press.
+            try await Task.sleep(for: TalkKeyDetector.doublePressWindow + .milliseconds(100))
+        }
         press(tap, at: &now)
         if mode != .toggle {
             press(tap, at: &now)
         }
         #expect(controller.state == .handsFree)
+        try await waitUntil { mic.calls.count == 3 }
+        #expect(mic.calls == ["start", "stop", "start"])
+        _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 4 }
+    }
+
+    /// In Hold mode, holding the key is how one dictates, so after a stop at the limit a
+    /// hold records as usual, from its key down, and clears the notice.
+    @Test func inHoldModeAHoldAfterTheLimitRecords() async throws {
+        let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.hold)
+        var now = initial
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: HotkeyTapTests.rightControlDown, at: now)
+        #expect(controller.state == .arming)
+        try await waitUntil { mic.calls.count == 3 }
+        // The tap's own timer counts the press once it has waited.
+        try await waitUntil { controller.state == .listening }
+        // The notice gives way to the bars.
+        try await waitUntil { cues.list.last == .listening }
+        #expect(cues.list.last == .listening)
+        now = now.advanced(by: .seconds(1))
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && inserter.inserted.count == 2 }
+        #expect(mic.calls == ["start", "stop", "start", "stop"])
+        #expect(controller.notice == nil)
+    }
+
+    /// In Hold mode a double press right after a stop at the limit starts hands free: its
+    /// first press clears the notice and its second starts the recording.
+    @Test func inHoldModeADoublePressAfterTheLimitStartsHandsFree() async throws {
+        let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.hold)
+        var now = initial
+        press(tap, at: &now)
+        press(tap, at: &now)
+        #expect(controller.state == .handsFree)
+        #expect(cues.list.contains(.finished(message: nil)))
         try await waitUntil { mic.calls.count == 3 }
         #expect(mic.calls == ["start", "stop", "start"])
         _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
@@ -1132,6 +1173,25 @@ struct PushToTalkControllerTests {
         #expect(mic.calls == ["start", "stop", "start"])
         controller.handle(.cancelled)
         try await waitUntil { mic.calls.count == 4 }
+    }
+
+    /// A press of another key that may still be a shortcut, such as one that waits and
+    /// captures early, does not end the wait, so the press meant to stop still only
+    /// dismisses the notice.
+    @Test func aPressThatTurnsOutAShortcutKeepsTheWait() async throws {
+        let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.toggle)
+        var now = initial
+        controller.handle(.armed)
+        #expect(controller.state == .arming)
+        try await waitUntil { mic.calls.count == 3 }
+        controller.handle(.cancelled)
+        #expect(controller.state == .idle)
+        try await waitUntil { mic.calls.count == 4 }
+        press(tap, at: &now)
+        #expect(controller.state == .idle)
+        #expect(cues.list.last == .finished(message: nil))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mic.calls == ["start", "stop", "start", "cancel"])
     }
 
     /// Another talk key during the wait starts its own dictation, and ends the wait.

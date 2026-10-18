@@ -50,7 +50,7 @@ struct PushToTalkStateMachineTests {
         Row(from: .arming, event: .cancelled, to: .idle, transition: .droppedArming),
         Row(from: .arming, event: .processingFinished, to: .arming, transition: nil),
         Row(from: .arming, event: .armed, to: .arming, transition: nil),
-        Row(from: .arming, event: .pressedAfterLimit, to: .arming, transition: nil),
+        Row(from: .arming, event: .pressedAfterLimit, to: .idle, transition: .droppedArming),
 
         Row(from: .listening, event: .pressed(isRepeat: false), to: .listening, transition: nil),
         Row(from: .listening, event: .pressed(isRepeat: true), to: .listening, transition: nil),

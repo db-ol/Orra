@@ -163,6 +163,10 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
   says why. Since then the next press of the key, until that message goes 30 seconds
   after it shows, only clears it, because it was meant to stop the recording that the
   limit already stopped. The same holds in Press to start and stop and in Double press.
+  In Hold mode, where holding the key is how one dictates, that press waits as a left
+  hand key does: released sooner it only clears the message, and held longer it is a
+  hold as usual, which keeps the speech of the wait. A quick double press then still
+  starts hands free.
 - The controller tells the tap when no hands free dictation runs, for example after the
   limit or when a double press came while the previous dictation was still being
   transcribed, so Escape is never kept from the app by mistake.
