@@ -607,6 +607,12 @@ final class TranslationSpeech {
 
     private func run(_ text: String, in language: TranslationTarget, generation: Int) async {
         guard generation == self.generation, let synthesizer else { return }
+        // A model that does not speak the language would play other words.
+        if let engine, !engine.speaks(language) {
+            problem = String(localized: "CosyVoice3 does not speak Japanese, so the translation was not spoken. Qwen3-TTS does.")
+            logger.notice("The voice model does not speak \(language.logName, privacy: .public), so the translation was not spoken")
+            return
+        }
         guard let device = SpeechOutputChoice.resolve(output, outputs: outputs()) else {
             problem = output.map { String(localized: "\($0.name) is not connected, so the translation was not spoken.") }
                 ?? String(localized: "Choose where Orra speaks the translation in Settings.")

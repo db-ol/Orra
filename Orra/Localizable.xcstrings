@@ -1819,6 +1819,28 @@
         }
       }
     },
+    "CosyVoice3 does not speak Japanese, so the translation was not spoken. Qwen3-TTS does." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CosyVoice3 no habla japonés, así que la traducción no se leyó en voz alta. Qwen3-TTS sí lo habla."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CosyVoice3は日本語を話せないため、訳文を読み上げませんでした。Qwen3-TTSは日本語を話せます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CosyVoice3 不会说日语，所以没有说出译文。Qwen3-TTS 会说。"
+          }
+        }
+      }
+    },
     "Creating the report…" : {
       "localizations" : {
         "es-419" : {

@@ -717,6 +717,32 @@ struct TranslationSpeechTests {
         #expect(playback.calls == ["start Orra Microphone", "play 240", "play 480", "finish", "stop"])
     }
 
+    /// CosyVoice3 does not speak Japanese, so a Japanese translation is not spoken and
+    /// Settings says why. Spanish is spoken, and Qwen3-TTS speaks Japanese.
+    @Test func cosyVoiceDoesNotSpeakJapanese() async {
+        let speech = TranslationSpeech(
+            engines: .only(synthesizer, as: .cosyVoice),
+            playback: playback,
+            outputs: { [Self.orraMicrophone] },
+            folders: { Self.folders },
+            settings: TranslationSpeech.Settings(isOn: true, alsoPastes: true, output: nil),
+            dictationPoll: .milliseconds(1)
+        )
+        speech.speak("明日は雨です。", in: .japanese)
+        await speech.waitUntilDone()
+        #expect(spoken.isEmpty)
+        #expect(playback.calls.isEmpty)
+        #expect(speech.problem == "CosyVoice3 does not speak Japanese, so the translation was not spoken. Qwen3-TTS does.")
+        speech.speak("Mañana llueve.", in: .spanish)
+        await speech.waitUntilDone()
+        #expect(spoken == ["es Mañana llueve."])
+        #expect(VoiceEngineKind.qwen3.speaks(.japanese))
+        #expect(!VoiceEngineKind.cosyVoice.speaks(.japanese))
+        for target in TranslationTarget.allCases where target != .japanese {
+            #expect(VoiceEngineKind.cosyVoice.speaks(target))
+        }
+    }
+
     /// The switch is saved, on by default.
     @Test func theWordCheckSwitchIsSaved() throws {
         var saved: [TranslationSpeech.Settings] = []

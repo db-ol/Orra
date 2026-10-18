@@ -30,6 +30,14 @@ nonisolated enum VoiceEngineKind: String, CaseIterable, Sendable, Identifiable {
         case .cosyVoice: (.cosyVoice, .cosyVoiceSpeaker)
         }
     }
+
+    /// Whether the model speaks translations into `language`. Both speak English, Chinese
+    /// and Spanish. CosyVoice3 does not speak Japanese well enough: in a round trip on
+    /// 2026-10-18 the speech model heard other words in 45 of 55 pieces of Japanese without
+    /// a voice sample, where Qwen3-TTS passed 54.
+    func speaks(_ language: TranslationTarget) -> Bool {
+        !(self == .cosyVoice && language == .japanese)
+    }
 }
 
 /// Which voice model speaks.
