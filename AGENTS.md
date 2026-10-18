@@ -1,6 +1,9 @@
 # Orra engineering guide
 
 Orra is an open source voice input app for macOS. Transcription runs on the user's Mac.
+Projects, an optional module for mail and project folders, is planned and not built yet.
+Projects code must keep it off by default, read mail only through the Mail app and files
+only in the folders the user adds, and work on them only with the local cleanup model.
 This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Platform
@@ -16,12 +19,15 @@ This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Intended flow
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
+Projects (planned, optional): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window and the clipboard, on the user's click
 
 Keep it simple. Do not add a protocol, layer, or abstraction without a concrete need in the code today.
 
-## v0.1 non-goals
-No backend, no accounts, no analytics, no database, no cloud transcription, and no platforms
-other than macOS. No cloud LLM rewriting. Optional rewriting on this Mac with a local model, with the dictated
+## Out of scope
+No backend, no Orra accounts, no analytics, no cloud transcription, and no platforms other
+than macOS. No database, except the Projects index (SQLite from macOS, in Application
+Support), which Projects code may create and use only while Projects is on. No cloud LLM,
+neither for rewriting nor for Projects. Optional rewriting on this Mac with a local model, with the dictated
 text always recoverable, is allowed. It is off by default, except that on a Mac with 16 GB
 of memory or more, a new user's Download Models in the welcome window also downloads the
 cleanup model and turns cleanup on. The button shows the total size of both models, and
@@ -91,6 +97,24 @@ trusted once in Xcode. docs/dependencies.md has the details.
   1,000 characters before the cursor. A field that does not say where its cursor is gives only the
   window title. It keeps what it read in memory for that dictation only, gives the speech model
   only the names and rare words taken from it, and never logs or saves the text or the names.
+- Projects code must read mail only through the Mail app's scripting, only from the mailboxes
+  the user chose and only while Mail runs. It must read files only in the folders the user
+  added to a project, and nothing at all while Projects is off. It must never launch Mail,
+  read ~/Library/Mail or ask for Full Disk Access. It must never log mail or file text,
+  subjects, addresses, names or file names, only counts, timings and error codes.
+- The Projects model must have no tools. Projects code must treat the model's output as data
+  and show it in the Projects window as plain text only. Code in Orra/Projects must never call
+  TextInserter, post keyboard events, perform Accessibility actions, open URLs or run
+  processes. The Mail bridge must send only its fixed read requests and `reply` with
+  `opening window`, with every value passed as an Apple Event parameter, never inside script
+  text. The first Projects code adds a check for these rules to Tools/ci/check_rules.py.
+- Dictation goes first. Projects code must have the model read a long prompt in slices, and
+  must start no model call from the press of the talk key or the translation key until the
+  dictation is pasted or cancelled, as captions do, see EngineTurns. Every Projects model call
+  must go through ModelGate. No model whose trace calls another compiled function, such as a
+  mixture of experts model, may join the shared group of ModelGate, see docs/dependencies.md.
+  Projects code must load the cleanup model only while the Projects window is open or a
+  Projects request runs.
 - Orra never writes audio to disk or to the log. The one exception, approved by the maintainer
   on 2026-10-15, is Remember my voice in Settings, off until the user turns it on. It keeps
   the voice sample's audio, never what is said in it, in
@@ -104,7 +128,10 @@ trusted once in Xcode. docs/dependencies.md has the details.
   update checks through Sparkle that the user allowed or started.
   Launching must never touch the network before the user allowed update checks. Any other
   network use needs the maintainer's approval. docs/model-download.md describes the
-  download, and docs/releasing.md the update feed.
+  download, and docs/releasing.md the update feed. Projects code must never connect to a
+  mail server. It must read mail only through the Mail app, which syncs on its own, and
+  must never render email HTML or load remote content. Reading mail over IMAP or a provider
+  API needs the maintainer's approval first.
 
 ## Needs maintainer approval
 Do not change signing, the Development Team, the Bundle ID, entitlements, App Sandbox, or the
@@ -132,6 +159,8 @@ docs/privacy.md, as docs/website.md describes.
 - Never run the tests from an unsigned build on a Mac where a person is logged in without that
   skip in place. Setting up an audio unit asks for microphone access, and answering the prompt
   rewrites Orra's microphone permission for the unsigned build.
+- Tests never send Apple Events. Projects code must keep the Mail bridge behind closures, and
+  tests pass fakes, as they do for the models.
 
 Changing one of the checked values still needs the maintainer's approval first. The commit that
 makes the approved change also updates the expected values in Tools/ci/check_rules.py, or the
