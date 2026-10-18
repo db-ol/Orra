@@ -67,20 +67,22 @@ def load(version, notes_path):
     single_file = parse_version(version) <= LAST_SINGLE_FILE_VERSION
     translations = [path_for(notes_path, language.code) for language in LANGUAGES[1:]]
     if single_file and not any(os.path.exists(path) for path in translations):
-        if not os.path.exists(notes_path) or not read_text(notes_path):
+        text = read_text(notes_path) if os.path.exists(notes_path) else ""
+        if not text:
             raise NotesError(f"Write the release notes in {notes_path}. The update window shows them.")
-        return [(None, read_text(notes_path))]
+        return [(None, text)]
 
     notes = []
     problems = []
     for language in LANGUAGES:
         path = path_for(notes_path, language.code)
-        if not os.path.exists(path):
+        text = read_text(path) if os.path.exists(path) else None
+        if text is None:
             problems.append(f"{path} is missing")
-        elif not read_text(path):
+        elif not text:
             problems.append(f"{path} is empty")
         else:
-            notes.append((language.code, read_text(path)))
+            notes.append((language.code, text))
     if problems:
         raise NotesError(
             "The update window shows the release notes in the language of Orra's interface, "
