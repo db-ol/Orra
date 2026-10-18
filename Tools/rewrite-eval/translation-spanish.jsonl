@@ -1,0 +1,125 @@
+{"id": "tes001", "kind": "es", "input": "Mañana no puedo ir a la oficina, voy a trabajar desde casa.", "label": "es", "ref": "I can't go to the office tomorrow, I'm going to work from home."}
+{"id": "tes002", "kind": "es", "input": "¿Ya comiste?", "label": "es", "ref": "Have you eaten yet?"}
+{"id": "tes003", "kind": "es", "input": "Te mando el archivo en un rato.", "label": "es", "ref": "I'll send you the file in a bit."}
+{"id": "tes004", "kind": "es", "input": "Avísame cuando llegues al aeropuerto.", "label": "es", "ref": "Let me know when you get to the airport."}
+{"id": "tes005", "kind": "es", "input": "Disculpe, ¿me podría decir dónde queda la estación?", "label": "es", "ref": "Excuse me, could you tell me where the station is?"}
+{"id": "tes006", "kind": "es", "input": "Les comparto la presentación antes de la reunión.", "label": "es", "ref": "I'm sharing the presentation with you all before the meeting."}
+{"id": "tes007", "kind": "es", "input": "Se me olvidó el celular en la casa.", "label": "es", "ref": "I left my phone at home."}
+{"id": "tes008", "kind": "es", "input": "Estoy embarazada de tres meses.", "label": "es", "ref": "I'm three months pregnant."}
+{"id": "tes009", "kind": "es", "input": "Actualmente trabajo en una empresa de software.", "label": "es", "ref": "I currently work at a software company."}
+{"id": "tes010", "kind": "es", "input": "La librería de la esquina cerró.", "label": "es", "ref": "The bookstore on the corner closed."}
+{"id": "tes011", "kind": "es", "input": "No pude asistir a la conferencia porque estaba resfriado.", "label": "es", "ref": "I couldn't attend the conference because I had a cold."}
+{"id": "tes012", "kind": "es", "input": "Gracias por todo, de verdad me ayudaste muchísimo.", "label": "es", "ref": "Thanks for everything, you really helped me a lot."}
+{"id": "tes013", "kind": "es", "input": "Eh, creo que la reunión se movió al jueves.", "label": "es", "ref": "I think the meeting was moved to Thursday."}
+{"id": "tes014", "kind": "es", "input": "Este, no sé si te llegó mi mensaje.", "label": "es", "ref": "I don't know if you got my message."}
+{"id": "tes015", "kind": "es", "input": "Estimado equipo, les escribo para confirmar la fecha de entrega.", "label": "es", "ref": "Dear team, I'm writing to confirm the delivery date."}
+{"id": "tes016", "kind": "es", "input": "No te preocupes, yo me encargo.", "label": "es", "ref": "Don't worry, I'll take care of it."}
+{"id": "tes017", "kind": "es", "input": "¿Cuánto se tarda en llegar al centro?", "label": "es", "ref": "How long does it take to get downtown?"}
+{"id": "tes018", "kind": "es_noaccent", "input": "Manana tenemos reunion a las diez.", "label": "es", "ref": "We have a meeting tomorrow at 10."}
+{"id": "tes019", "kind": "es_noaccent", "input": "Ya llegue, estoy en la entrada.", "label": "es", "ref": "I'm here, I'm at the entrance."}
+{"id": "tes020", "kind": "es_noaccent", "input": "Que hora es?", "label": "es", "ref": "What time is it?"}
+{"id": "tes021", "kind": "es_noaccent", "input": "Como estas? Hace mucho que no hablamos.", "label": "es", "ref": "How are you? We haven't talked in a long time."}
+{"id": "tes022", "kind": "es_noaccent", "input": "Despues te explico, ahora estoy manejando.", "label": "es", "ref": "I'll explain later, I'm driving right now."}
+{"id": "tes023", "kind": "es_noaccent", "input": "El esta en la reunion con el cliente.", "label": "es", "ref": "He's in the meeting with the client."}
+{"id": "tes024", "kind": "es_noaccent", "input": "Si, manana te confirmo.", "label": "es", "ref": "Yes, I'll confirm tomorrow."}
+{"id": "tes025", "kind": "es_noaccent", "input": "Tu crees que este listo para el viernes?", "label": "es", "ref": "Do you think it'll be ready by Friday?"}
+{"id": "tes026", "kind": "es_noaccent", "input": "Necesito que me mandes la informacion lo antes posible.", "label": "es", "ref": "I need you to send me the information as soon as possible."}
+{"id": "tes027", "kind": "es_noaccent", "input": "Gracias, papa.", "label": "es", "ref": "Thanks, Dad."}
+{"id": "tes028", "kind": "es_noaccent", "input": "La pelicula empieza a las ocho y media.", "label": "es", "ref": "The movie starts at 8:30."}
+{"id": "tes029", "kind": "es_noaccent", "input": "Cual es la direccion de la oficina nueva?", "label": "es", "ref": "What's the address of the new office?"}
+{"id": "tes030", "kind": "es_term", "input": "Te lo mando por WhatsApp.", "label": "es", "ref": "I'll send it to you on WhatsApp."}
+{"id": "tes031", "kind": "es_term", "input": "Subí los archivos a Google Drive.", "label": "es", "ref": "I uploaded the files to Google Drive."}
+{"id": "tes032", "kind": "es_term", "input": "El deadline es el viernes.", "label": "es", "ref": "The deadline is Friday."}
+{"id": "tes033", "kind": "es_term", "input": "¿Ya revisaste el pull request?", "label": "es", "ref": "Have you reviewed the pull request yet?"}
+{"id": "tes034", "kind": "es_term", "input": "Mi iPhone no carga, creo que es el cable.", "label": "es", "ref": "My iPhone won't charge, I think it's the cable."}
+{"id": "tes035", "kind": "es_term", "input": "Pídele a Jennifer que actualice el dashboard.", "label": "es", "ref": "Ask Jennifer to update the dashboard."}
+{"id": "tes036", "kind": "es_term", "input": "Hagamos la llamada por Zoom a las cuatro.", "label": "es", "ref": "Let's do the call on Zoom at 4."}
+{"id": "tes037", "kind": "es_term", "input": "Compré unos audífonos en Amazon y llegaron rotos.", "label": "es", "ref": "I bought some headphones on Amazon and they arrived broken."}
+{"id": "tes038", "kind": "es_term", "input": "El feedback del cliente fue muy positivo.", "label": "es", "ref": "The client's feedback was very positive."}
+{"id": "tes039", "kind": "es_term", "input": "Necesito el reporte de Q3 antes del lunes.", "label": "es", "ref": "I need the Q3 report before Monday."}
+{"id": "tes040", "kind": "es_term", "input": "Nos vemos en el Starbucks de la avenida Reforma.", "label": "es", "ref": "See you at the Starbucks on Reforma Avenue."}
+{"id": "tes041", "kind": "es_term", "input": "Michael dice que el sprint termina el miércoles.", "label": "es", "ref": "Michael says the sprint ends on Wednesday."}
+{"id": "tes042", "kind": "en", "input": "I'll be working from home tomorrow.", "label": "en", "ref": "Mañana voy a trabajar desde casa."}
+{"id": "tes043", "kind": "en", "input": "Can you send me the slides before the meeting?", "label": "en", "ref": "¿Me puedes mandar las diapositivas antes de la reunión?"}
+{"id": "tes044", "kind": "en", "input": "Sorry, I missed your call.", "label": "en", "ref": "Perdón, no pude contestar tu llamada."}
+{"id": "tes045", "kind": "en", "input": "Let's grab lunch next week.", "label": "en", "ref": "Vamos a almorzar la próxima semana."}
+{"id": "tes046", "kind": "en", "input": "The printer on the second floor is broken again.", "label": "en", "ref": "La impresora del segundo piso otra vez no funciona."}
+{"id": "tes047", "kind": "en", "input": "I think we should wait until the client replies.", "label": "en", "ref": "Creo que deberíamos esperar a que el cliente responda."}
+{"id": "tes048", "kind": "en", "input": "Hey, are you still at the office?", "label": "en", "ref": "Oye, ¿sigues en la oficina?"}
+{"id": "tes049", "kind": "en", "input": "Thanks for your help today, I really appreciate it.", "label": "en", "ref": "Gracias por tu ayuda hoy, de verdad te lo agradezco."}
+{"id": "tes050", "kind": "en", "input": "Please don't forget to bring your passport.", "label": "en", "ref": "Por favor, no olvides traer tu pasaporte."}
+{"id": "tes051", "kind": "en_name", "input": "Send the file to José.", "label": "en", "ref": "Mándale el archivo a José."}
+{"id": "tes052", "kind": "en_name", "input": "I'm flying to Bogotá on Monday.", "label": "en", "ref": "El lunes vuelo a Bogotá."}
+{"id": "tes053", "kind": "en_name", "input": "Did María Fernanda approve the budget?", "label": "en", "ref": "¿María Fernanda aprobó el presupuesto?"}
+{"id": "tes054", "kind": "en_name", "input": "We had tacos at a little place in Coyoacán.", "label": "en", "ref": "Comimos tacos en un lugarcito de Coyoacán."}
+{"id": "tes055", "kind": "en_name", "input": "Tell Jose the demo moved to Friday.", "label": "en", "ref": "Dile a José que la demo se movió al viernes."}
+{"id": "tes056", "kind": "en_name", "input": "Our client is based in Medellín.", "label": "en", "ref": "Nuestro cliente está en Medellín."}
+{"id": "tes057", "kind": "en_name", "input": "Thanks, Doña Carmen.", "label": "en", "ref": "Gracias, doña Carmen."}
+{"id": "tes058", "kind": "en_name", "input": "Ask Licenciado Ramírez to sign the contract.", "label": "en", "ref": "Pídele al licenciado Ramírez que firme el contrato."}
+{"id": "tes059", "kind": "en_name", "input": "The office is near Parque Kennedy in Miraflores.", "label": "en", "ref": "La oficina está cerca del Parque Kennedy, en Miraflores."}
+{"id": "tes060", "kind": "en_name", "input": "We should try the empanadas at Doña Rosa's.", "label": "en", "ref": "Deberíamos probar las empanadas de Doña Rosa."}
+{"id": "tes061", "kind": "en_name", "input": "I'm meeting Sofia in Cancun next week.", "label": "en", "ref": "La próxima semana voy a ver a Sofía en Cancún."}
+{"id": "tes062", "kind": "short", "input": "Sí", "label": "es", "ref": "Yes"}
+{"id": "tes063", "kind": "short", "input": "Sí.", "label": "es", "ref": "Yes."}
+{"id": "tes064", "kind": "short", "input": "Claro", "label": "es", "ref": "Of course"}
+{"id": "tes065", "kind": "short", "input": "Sí, claro.", "label": "es", "ref": "Yes, of course."}
+{"id": "tes066", "kind": "short", "input": "Dale.", "label": "es", "ref": "OK."}
+{"id": "tes067", "kind": "short", "input": "De acuerdo.", "label": "es", "ref": "All right."}
+{"id": "tes068", "kind": "short", "input": "Gracias.", "label": "es", "ref": "Thanks."}
+{"id": "tes069", "kind": "short", "input": "Perfecto, gracias.", "label": "es", "ref": "Perfect, thanks."}
+{"id": "tes070", "kind": "short", "input": "Ajá.", "label": "es", "ref": "Uh-huh."}
+{"id": "tes071", "kind": "short", "input": "Listo.", "label": "es", "ref": "Done."}
+{"id": "tes072", "kind": "short", "input": "OK", "label": "en", "ref": "Está bien"}
+{"id": "tes073", "kind": "short", "input": "Sure.", "label": "en", "ref": "Claro."}
+{"id": "tes074", "kind": "short", "input": "No problem.", "label": "en", "ref": "No hay problema."}
+{"id": "tes075", "kind": "short", "input": "Thanks!", "label": "en", "ref": "¡Gracias!"}
+{"id": "tes076", "kind": "number", "input": "123", "label": "none", "ref": "123"}
+{"id": "tes077", "kind": "number", "input": "55 1234 5678", "label": "none", "ref": "55 1234 5678"}
+{"id": "tes078", "kind": "number", "input": "14:30", "label": "none", "ref": "14:30"}
+{"id": "tes079", "kind": "number", "input": "50%", "label": "none", "ref": "50%"}
+{"id": "tes080", "kind": "number", "input": "$1,200", "label": "none", "ref": "$1,200"}
+{"id": "tes081", "kind": "matrix", "input": "Te veo later.", "label": "es", "ref": "See you later."}
+{"id": "tes082", "kind": "matrix", "input": "I think que sí.", "label": "either", "ref": "I think so."}
+{"id": "tes083", "kind": "matrix", "input": "Ya está ready el documento.", "label": "es", "ref": "The document is ready."}
+{"id": "tes084", "kind": "matrix", "input": "Let's go a comer.", "label": "either", "ref": "Let's go eat."}
+{"id": "tes085", "kind": "matrix", "input": "¿Me puedes hacer un favor? Can you check the numbers?", "label": "either", "ref": "Can you do me a favor? Can you check the numbers?"}
+{"id": "tes086", "kind": "matrix", "input": "Thank you, amiga.", "label": "en", "ref": "Gracias, amiga."}
+{"id": "tes087", "kind": "matrix", "input": "Estoy super busy hoy.", "label": "es", "ref": "I'm super busy today."}
+{"id": "tes088", "kind": "matrix", "input": "I'll call you mañana.", "label": "en", "ref": "Te llamo mañana."}
+{"id": "tes089", "kind": "en_num", "input": "The meeting is on March 15 at 2:30 PM.", "label": "en", "ref": "La reunión es el 15 de marzo a las 2:30 de la tarde."}
+{"id": "tes090", "kind": "en_num", "input": "It costs $45.99 plus tax.", "label": "en", "ref": "Cuesta $45.99 más impuestos."}
+{"id": "tes091", "kind": "en_num", "input": "Our budget for Q3 is 50K.", "label": "en", "ref": "Nuestro presupuesto para el tercer trimestre es de 50 mil."}
+{"id": "tes092", "kind": "en_num", "input": "The flight leaves at 6:45 AM on October 3rd.", "label": "en", "ref": "El vuelo sale el 3 de octubre a las 6:45 de la mañana."}
+{"id": "tes093", "kind": "en_num", "input": "We raised 3 million dollars last year.", "label": "en", "ref": "El año pasado recaudamos 3 millones de dólares."}
+{"id": "tes094", "kind": "en_num", "input": "About 1.5 billion people use it.", "label": "en", "ref": "Lo usan unos 1,500 millones de personas."}
+{"id": "tes095", "kind": "en_num", "input": "See you at 8 tonight.", "label": "en", "ref": "Nos vemos hoy a las 8 de la noche."}
+{"id": "tes096", "kind": "en_num", "input": "It's 30 degrees today.", "label": "en", "ref": "Hoy hace 30 grados."}
+{"id": "tes097", "kind": "en_num", "input": "The conference runs from June 2 to June 5.", "label": "en", "ref": "La conferencia es del 2 al 5 de junio."}
+{"id": "tes098", "kind": "en_num", "input": "The package weighs 2 pounds.", "label": "en", "ref": "El paquete pesa 2 libras."}
+{"id": "tes099", "kind": "es_num", "input": "La reunión es a las tres y media de la tarde.", "label": "es", "ref": "The meeting is at 3:30 in the afternoon."}
+{"id": "tes100", "kind": "es_num", "input": "El presupuesto es de unos doscientos mil pesos.", "label": "es", "ref": "The budget is about 200,000 pesos."}
+{"id": "tes101", "kind": "es_num", "input": "Nos vemos el quince de septiembre.", "label": "es", "ref": "See you on September 15."}
+{"id": "tes102", "kind": "es_num", "input": "La renta subió a 12,500 pesos al mes.", "label": "es", "ref": "The rent went up to 12,500 pesos a month."}
+{"id": "tes103", "kind": "es_num", "input": "El vuelo sale a las 6:45 de la mañana.", "label": "es", "ref": "The flight leaves at 6:45 in the morning."}
+{"id": "tes104", "kind": "es_num", "input": "Somos como 40 personas.", "label": "es", "ref": "There are about 40 of us."}
+{"id": "tes105", "kind": "es_num", "input": "Me costó 350 dólares.", "label": "es", "ref": "It cost me 350 dollars."}
+{"id": "tes106", "kind": "es_num", "input": "El evento es el 2 de noviembre de 2026.", "label": "es", "ref": "The event is on November 2, 2026."}
+{"id": "tes107", "kind": "es_num", "input": "La entrega es el día 25.", "label": "es", "ref": "The delivery is on the 25th."}
+{"id": "tes108", "kind": "es_num", "input": "La empresa vale como mil millones de dólares.", "label": "es", "ref": "The company is worth about a billion dollars."}
+{"id": "tes109", "kind": "es_num", "input": "Tenemos 15% de descuento hasta el domingo.", "label": "es", "ref": "We have a 15% discount until Sunday."}
+{"id": "tes110", "kind": "es_num", "input": "Son 2 mil 500 pesos con impuestos incluidos.", "label": "es", "ref": "It's 2,500 pesos including tax."}
+{"id": "tes111", "kind": "es_num", "input": "Nací en 1990.", "label": "es", "ref": "I was born in 1990."}
+{"id": "tes112", "kind": "colon", "input": "Aviso: mañana no hay clases.", "label": "es", "ref": "Notice: there are no classes tomorrow."}
+{"id": "tes113", "kind": "colon", "input": "Ojo: la reunión cambió a las cuatro.", "label": "es", "ref": "Heads up: the meeting was moved to 4 o'clock."}
+{"id": "tes114", "kind": "colon", "input": "Mi jefe dijo: hay que entregarlo hoy.", "label": "es", "ref": "My boss said: it has to be turned in today."}
+{"id": "tes115", "kind": "colon", "input": "Recordatorio: el pago vence el viernes.", "label": "es", "ref": "Reminder: the payment is due Friday."}
+{"id": "tes116", "kind": "colon", "input": "Quick update: the client signed.", "label": "en", "ref": "Actualización rápida: el cliente firmó."}
+{"id": "tes117", "kind": "colon", "input": "The sign says: no parking.", "label": "en", "ref": "El letrero dice: prohibido estacionarse."}
+{"id": "tes118", "kind": "colon", "input": "Agenda: budget, hiring, and the office move.", "label": "en", "ref": "Agenda: presupuesto, contrataciones y la mudanza de la oficina."}
+{"id": "tes119", "kind": "long", "input": "Hola a todos, les comparto cómo vamos con la tienda en línea. El catálogo ya está terminado y el cliente lo revisó la semana pasada sin comentarios. Nos falta la integración con el sistema de pagos, porque el proveedor cambió su documentación. Calculamos unos diez días más, así que el lanzamiento se mueve del 3 al 14 de noviembre. La gerente del cliente está de acuerdo, siempre y cuando le mandemos un avance cada viernes. Por otro lado, el equipo de diseño propuso cambiar el color del botón de compra, porque en las pruebas muchos usuarios no lo encontraban. Quiero que lo hablemos el martes antes de decidir. Por último, registren sus horas en la hoja compartida antes del día 30. Gracias.", "label": "es", "ref": ""}
+{"id": "tes120", "kind": "long", "input": "Oye, te queria contar que al final si nos vamos a cambiar de departamento. El nuevo esta mas cerca del trabajo y tiene un cuarto extra, asi que ya vas a tener donde quedarte cuando vengas. La mudanza es el sabado 22, empezamos como a las ocho de la manana. Si puedes venir a ayudar te lo agradeceria muchisimo, y despues comemos algo. Avisame que dias tienes libres.", "label": "es", "ref": ""}
+{"id": "tes121", "kind": "long", "input": "Hi team, a few updates before the long weekend. The client in Monterrey approved the second phase, so we'll start on Tuesday with a kickoff call at 9 AM. Andrés will lead the design work and Lucía will handle the data migration. Please review the scope document before the call and add your questions in the comments. The budget for this phase is 85,000 dollars, which is a bit lower than we asked for, so we'll need to be careful with extra requests. Also, the office will be closed on Monday, and the cleaning crew is coming on Saturday morning, so take anything valuable home. Have a great weekend.", "label": "en", "ref": ""}
+{"id": "tes122", "kind": "long", "input": "Mamá, te cuento cómo quedó todo para el viaje. Salimos el jueves 18 en el vuelo de las 7:40 de la mañana, así que hay que estar en el aeropuerto a más tardar a las cinco y media. Los boletos salieron en 9,800 pesos por persona, ida y vuelta, con una maleta documentada cada uno. El hotel está a dos cuadras de la playa y el desayuno viene incluido. El sábado queremos ir a las ruinas, pero hay que salir temprano porque después hace mucho calor, así que lleven gorra, protector solar y agua. El domingo en la noche es la cena de cumpleaños de la tía Lupe, ya hice la reservación para doce personas a las ocho. Y no se te olvide la identificación, porque sin eso no te dejan subir al avión.", "label": "es", "ref": ""}
+{"id": "tes123", "kind": "long", "input": "Hola a todos, les comparto cómo vamos con la tienda en línea. El catálogo ya está terminado y el cliente lo revisó la semana pasada sin comentarios. Nos falta la integración con el sistema de pagos, porque el prov", "label": "es", "ref": ""}
+{"id": "tes124", "kind": "long", "input": "Hi team, a few updates before the long weekend. The client in Monterrey approved the second phase, so we'll start on Tuesday with a kickoff call at 9 AM. Andrés will lead the design work and Lucía will handle the da", "label": "en", "ref": ""}
+{"id": "tes125", "kind": "long", "input": "Hoy en el standup comenté que ya terminé el bug del checkout y abrí el pull request, falta que Kevin lo revise. Después voy a trabajar en el dashboard de ventas, pero necesito acceso a la base de datos de staging. Si alguien me puede dar permisos, se los agradezco. El release del viernes sigue en pie.", "label": "es", "ref": ""}

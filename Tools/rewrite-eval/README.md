@@ -90,6 +90,51 @@ checks in Orra/TranslationGuard.swift. Like the other cases they are synthetic a
 one's dictation. OrraTests/TranslationModelEvaluationTests.swift runs the model on them,
 on the regular cases and on the adversarial ones, see docs/manual-testing.md.
 
+## Japanese and Spanish translation
+
+Cases for translation between Japanese and English and between Spanish and English, for a
+user who dictates in Japanese or Spanish, see Orra/DictationLanguage.swift. They were
+written on 2026-10-18, before the prompts of these pairs existed, and none of them is a
+prompt example. Like the other cases they are synthetic and hold no one's dictation, and
+no text of a dataset.
+
+| File | Cases | What it holds |
+| --- | --- | --- |
+| `translation-japanese.jsonl` | 130 | Japanese and English, tja001 to tja130 |
+| `translation-spanish.jsonl` | 125 | Spanish and English, tes001 to tes125 |
+| `adversarial-japanese.jsonl` | 47 | Japanese and English dictations that ask, order or try to steer the model, aja01 to aja47 |
+| `adversarial-spanish.jsonl` | 47 | The same for Spanish, aes01 to aes47 |
+
+The translation files have `id`, `kind`, `input`, `label` and `ref`, as
+`translation-probes.jsonl` does. `label` is ja or es, en, either when both are fair, and
+none when there is nothing to translate. `ref` is a translation in the automatic
+direction: Japanese or Spanish into English, English into Japanese or Spanish, English for
+either, and the input for none. The long cases have no `ref`. The kinds:
+
+- Japanese: casual and polite speech, kana only, memo style text in kanji, Japanese with
+  English names and terms, English with Japanese names and places in Japanese script or in
+  romaji, short replies, numbers, dates, times and money both ways (万, 億, 令和), mixed
+  sentences, text with a colon, and long dictations of 151 to 656 characters.
+- Spanish: Latin American Spanish with and without accents (as speech recognition may
+  write it), with English terms, English with Spanish names and places, short replies,
+  numbers both ways (1,500 millones, 2 mil 500), mixed sentences, text with a colon, and
+  long dictations of 213 to 695 characters.
+
+The adversarial files have `id`, `lang`, `category`, `input`, `expected_en` and
+`expected_ja` or `expected_es`, as `adversarial.jsonl` does, without `expected_cleanup`,
+since the cleanup model leaves Japanese and Spanish text alone. The expected text in the
+language of the input is the input. The categories are those of `adversarial.jsonl`, with
+26 cases in Japanese or Spanish, 19 in English and 2 that mix the two in each file.
+
+References use です and ます unless the English is clearly casual, tú in Spanish, digits for
+numbers, 万 and 億 in Japanese, and a comma for thousands in Spanish. A Japanese name with
+さん keeps -san in English. The checks of a few references for a native speaker are listed
+in the pull request that added them.
+
+OrraTests/TranslationPairEvaluationTests.swift runs the model on them, and
+OrraTests/TranslationPairTests.swift checks that every reference passes the checks in
+Orra/TranslationGuard+Pairs.swift, see docs/manual-testing.md.
+
 ## Numbers
 
 `numbers.jsonl` has 672 cases for writing spoken Chinese numbers as digits, one JSON
