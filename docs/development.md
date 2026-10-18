@@ -28,7 +28,7 @@ A Release build transcribes about a quarter faster than a Debug build. To keep o
 
 ## How the code is organized
 
-Orra is one app target, Orra/, with its unit tests in OrraTests/. The flow is: talk key (HotkeyTap, TalkKeyDetector) → recording (AudioRecorder, InputUnit) → transcription (Qwen3Engine, Transcription) → paste (TextInserter), driven by PushToTalkController and its state machine. Around it are the model download (ModelDownload, ModelInstaller), the feedback while dictating (RecordingFeedback, RecordingIndicator), the vocabulary and learning from corrections (Vocabulary, Corrections, CorrectionLearning, LearnedNotice), updates (AppUpdater) and the interface (StatusMenu, SettingsView, WelcomeView).
+Orra is one app target, Orra/, with its unit tests in OrraTests/. The flow is: talk key (HotkeyTap, TalkKeyDetector) → recording (AudioRecorder, InputUnit) → transcription (Qwen3Engine, Transcription) → paste (TextInserter), driven by PushToTalkController and its state machine. Around it are the model download (ModelDownload, ModelInstaller), the feedback while dictating (RecordingFeedback, RecordingIndicator), the vocabulary and learning from corrections (Vocabulary, Corrections, CorrectionLearning, LearnedNotice), names on the screen as context for the speech model (ScreenReader, ScreenNames, ListEcho), updates (AppUpdater) and the interface (StatusMenu, SettingsView, WelcomeView).
 
 The interface is in English and Simplified Chinese. AGENTS.md explains how to add or change a string.
 

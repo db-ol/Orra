@@ -124,6 +124,10 @@ final class PushToTalkController {
     /// the paste, see NumberRules. Saved through `saveWritesNumbersAsDigits` whenever it
     /// changes.
     private(set) var writesNumbersAsDigits: Bool
+    /// Whether names read from the screen at the press of the key go to the speech model
+    /// with the vocabulary, see ScreenNames. Off until the user turns it on. Saved through
+    /// `saveUsesScreenNames` whenever it changes.
+    private(set) var usesScreenNames: Bool
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
     /// True while Settings records a voice sample with the microphone. A press of the talk
@@ -251,6 +255,13 @@ final class PushToTalkController {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let saveRemovesFillerWords: (Bool) -> Void
     @ObservationIgnored private let saveWritesNumbersAsDigits: (Bool) -> Void
+    @ObservationIgnored private let saveUsesScreenNames: (Bool) -> Void
+    /// Reads the names on the screen of an app for the speech model, until a time limit
+    /// after the press it gets, see ScreenNames.
+    @ObservationIgnored private let readScreenNames: @Sendable (pid_t, ContinuousClock.Instant) async -> [String]
+    /// The reading of the screen for the current hold, started when its press counted,
+    /// while Use names on screen is on. Nil otherwise.
+    @ObservationIgnored private var holdScreenRead: ScreenNamesRead?
     @ObservationIgnored private var accessCheckTask: Task<Void, Never>?
     @ObservationIgnored private var accessObserver: (any NSObjectProtocol)?
     @ObservationIgnored private let logger = Logger.pushToTalk
@@ -305,6 +316,10 @@ final class PushToTalkController {
     ///   - saveRemovesFillerWords: Saves the choice after the user changes it.
     ///   - writesNumbersAsDigits: Whether spoken numbers become digits, as saved.
     ///   - saveWritesNumbersAsDigits: Saves the choice after the user changes it.
+    ///   - usesScreenNames: Whether names on the screen go to the speech model, as saved.
+    ///   - saveUsesScreenNames: Saves the choice after the user changes it.
+    ///   - readScreenNames: Reads the names on the screen of an app, until a time limit
+    ///     after the press. Tests pass fakes.
     ///   - now: The time, for the dates of the vocabulary. Tests pass fakes.
     init(
         capture: AudioCapture,
@@ -343,6 +358,9 @@ final class PushToTalkController {
         saveRemovesFillerWords: @escaping (Bool) -> Void = { _ in },
         writesNumbersAsDigits: Bool = true,
         saveWritesNumbersAsDigits: @escaping (Bool) -> Void = { _ in },
+        usesScreenNames: Bool = false,
+        saveUsesScreenNames: @escaping (Bool) -> Void = { _ in },
+        readScreenNames: @escaping @Sendable (pid_t, ContinuousClock.Instant) async -> [String] = { await ScreenNames.read(inApp: $0, pressedAt: $1) },
         now: @escaping () -> Date = { Date() }
     ) {
         self.capture = capture
@@ -384,6 +402,9 @@ final class PushToTalkController {
         self.saveRemovesFillerWords = saveRemovesFillerWords
         self.writesNumbersAsDigits = writesNumbersAsDigits
         self.saveWritesNumbersAsDigits = saveWritesNumbersAsDigits
+        self.usesScreenNames = usesScreenNames
+        self.saveUsesScreenNames = saveUsesScreenNames
+        self.readScreenNames = readScreenNames
         self.now = now
     }
 
@@ -485,6 +506,14 @@ final class PushToTalkController {
         guard on != writesNumbersAsDigits else { return }
         writesNumbersAsDigits = on
         saveWritesNumbersAsDigits(on)
+    }
+
+    /// Turns Use names on screen on or off for the next dictations and saves the choice.
+    /// Turned off, nothing is read any more, and a reading under way is not used.
+    func setUsesScreenNames(_ on: Bool) {
+        guard on != usesScreenNames else { return }
+        usesScreenNames = on
+        saveUsesScreenNames(on)
     }
 
     /// Chooses the microphone for the next dictations, or the system default for nil, and
@@ -811,6 +840,7 @@ final class PushToTalkController {
             holdMessage = nil
             indicatorShown = false
             captureStart = nil
+            holdScreenRead = nil
             guard !isRecordingVoiceSample, modelState == .ready, capture.access() == .authorized else {
                 handle(.cancelled)
                 return
@@ -823,6 +853,7 @@ final class PushToTalkController {
             beginUserActivity()
             reserveModelGate()
             cleanup.dictationStarted()
+            startReadingScreen()
             // The delay counts from the key down, which the wait has used up already.
             let held = holdTimings.map { $0.keyDown.duration(to: counted) } ?? .zero
             scheduleListeningCue(after: state == .listening ? max(.zero, listeningCueDelay - held) : .zero, hold: holdNumber)
@@ -830,6 +861,7 @@ final class PushToTalkController {
             // A shortcut, or a press too short to count: no cue, no sound and no message.
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
+            holdScreenRead = nil
             cancelCapture(logsTimings: false)
         case .startedListening, .startedHandsFree:
             clearHoldNotes()
@@ -882,8 +914,10 @@ final class PushToTalkController {
             let chosen = holdMicrophone
             let translating = holdTranslation
             let captureTimings = holdTimings
+            let screen = holdScreenRead
+            holdScreenRead = nil
             Task { [weak self] in
-                await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, translating: translating, releasedAt: released)
+                await self?.finishRecording(start: start, chosen: chosen, heldFor: heldFor, target: target, translating: translating, screen: screen, releasedAt: released)
                 // After the paste, because the microphone gets ready for the next hold once
                 // it stopped, and reading how it started waits for that.
                 if let startedAt = await start?.value {
@@ -894,6 +928,7 @@ final class PushToTalkController {
         case .cancelledListening:
             recordingLimitTask?.cancel()
             listeningCueTask?.cancel()
+            holdScreenRead = nil
             endUserActivity()
             cancelCapture(logsTimings: true)
             endCue(holdMessage ?? problem)
@@ -1019,6 +1054,7 @@ final class PushToTalkController {
             startCapture()
             holdTimings?.counted = counted
             scheduleListeningCue(after: cueDelay, hold: holdNumber)
+            startReadingScreen()
         case .notDetermined:
             // The system prompt that follows says enough.
             handle(.cancelled)
@@ -1103,6 +1139,37 @@ final class PushToTalkController {
         }
     }
 
+    /// Starts reading the names on the screen of the app in front for this dictation, while
+    /// Use names on screen is on, off the main actor, so the press is answered at once. The
+    /// dictation takes them only if the reading has ended by the time the speech model
+    /// starts, see `screenNames(from:target:)`.
+    private func startReadingScreen() {
+        holdScreenRead = nil
+        guard usesScreenNames, let app = frontmostApp() else { return }
+        let read = ScreenNamesRead(app: app)
+        holdScreenRead = read
+        Task { [readScreenNames] in
+            read.finish(await readScreenNames(app, read.started))
+        }
+    }
+
+    /// The names the reading of the screen found for this dictation, or none when it has
+    /// not ended, read another app than the one the text goes to, or the switch was turned
+    /// off meanwhile. Logs counts and times only, never a name.
+    private func screenNames(from read: ScreenNamesRead?, target: pid_t?) -> [String] {
+        guard let read, usesScreenNames else { return [] }
+        guard let finished = read.finished else {
+            logger.notice("Names on screen were not read in time, the dictation goes on without them")
+            return []
+        }
+        guard read.app == target else {
+            logger.notice("Names on screen came from another app, the dictation goes on without them")
+            return []
+        }
+        logger.notice("Names on screen: \(finished.names.count, privacy: .public) found in \(finished.took, privacy: .public)")
+        return finished.names
+    }
+
     private func recordingFailedToStart(_ error: any Error, hold: Int, chosen: MicrophoneChoice?) {
         logger.error("Could not start recording: \(String(describing: error), privacy: .public)")
         // A newer hold has started since. This one was cancelled and nobody waits for it.
@@ -1133,8 +1200,9 @@ final class PushToTalkController {
 
     /// Ends a hold that was released: waits for the microphone to have started, records
     /// the short tail, stops, and transcribes unless the hold was too short or cut.
-    /// `translating` is the direction when the translation key started the dictation.
-    private func finishRecording(start: Task<ContinuousClock.Instant?, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, releasedAt released: ContinuousClock.Instant) async {
+    /// `translating` is the direction when the translation key started the dictation, and
+    /// `screen` the reading of the screen for it, if any.
+    private func finishRecording(start: Task<ContinuousClock.Instant?, Never>?, chosen: MicrophoneChoice?, heldFor: Duration, target: pid_t?, translating: TranslationDirection?, screen: ScreenNamesRead?, releasedAt released: ContinuousClock.Instant) async {
         var timings = DictationTimings(releasedAt: released)
         // A failed start already set the problem.
         guard await start?.value != nil else { return }
@@ -1165,13 +1233,14 @@ final class PushToTalkController {
                 microphoneNotice = String(localized: "\(chosen.name) is not connected, so the system default input recorded.")
             }
         }
-        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, timings: &timings)
+        await transcribeAndInsert(recording, chosen: chosen, target: target, translating: translating, screen: screen, timings: &timings)
     }
 
     /// Turns a recording into text and pastes it, translated when `translating` is set and
-    /// the translation passes its checks. Logs timings, never the text. `timings` gets the
-    /// time of each step.
-    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, timings: inout DictationTimings) async {
+    /// the translation passes its checks. The speech model gets the names `screen` found
+    /// before the vocabulary. Logs timings, never the text. `timings` gets the time of each
+    /// step.
+    private func transcribeAndInsert(_ recording: AudioRecording, chosen: MicrophoneChoice?, target: pid_t?, translating: TranslationDirection?, screen: ScreenNamesRead?, timings: inout DictationTimings) async {
         do {
             let (samples, silent) = await Self.prepared(recording)
             timings.lap(.resampling)
@@ -1195,9 +1264,11 @@ final class PushToTalkController {
                 logger.notice("The microphone delivered no sound for \(recording.duration, privacy: .public) s, lid closed: \(situation.lidClosed, privacy: .public)")
                 return
             }
+            let names = screenNames(from: screen, target: target)
             let raw = try await transcription.transcribe(
                 samples,
-                vocabulary: Vocabulary.forModel(vocabulary),
+                vocabulary: names.isEmpty ? Vocabulary.forModel(vocabulary) : Vocabulary.forModel(vocabulary, screenNames: names),
+                holdsScreenNames: !names.isEmpty,
                 audioSeconds: recording.duration,
                 takingDigits: writesNumbersAsDigits
             )

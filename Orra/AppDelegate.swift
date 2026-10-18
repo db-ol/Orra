@@ -45,7 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             removesFillerWords: FillerPreference.load(),
             saveRemovesFillerWords: { FillerPreference.save($0) },
             writesNumbersAsDigits: NumberPreference.load(),
-            saveWritesNumbersAsDigits: { NumberPreference.save($0) }
+            saveWritesNumbersAsDigits: { NumberPreference.save($0) },
+            usesScreenNames: ScreenNamesPreference.load(),
+            saveUsesScreenNames: { ScreenNamesPreference.save($0) }
         )
     }()
     /// The voice models this build links, see VoiceEngines.

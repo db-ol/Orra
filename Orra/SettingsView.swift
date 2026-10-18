@@ -316,6 +316,17 @@ private struct GeneralSettings: View {
                         learning.removeAll()
                     }
                 }
+                Toggle(isOn: Binding(
+                    get: { pushToTalk.usesScreenNames },
+                    set: { pushToTalk.setUsesScreenNames($0) }
+                )) {
+                    DescribedLabel(
+                        title: "Use names on screen (Beta)",
+                        detail: "Reads the text before the cursor and the window title when you start a dictation, and gives the speech model the names in them.",
+                        systemImage: "text.viewfinder"
+                    )
+                }
+                .help(Text("When this is on, each time you start a dictation, Orra reads up to 1,000 characters before the cursor in the field you dictate into and the title of its window, never a password field or a password manager. It gives the speech model up to 40 names and rare words from that text along with your vocabulary, never the text itself. The text stays in memory for that dictation only and is never saved or logged. A known risk: when a name on screen sounds like the name you say, Orra may write the name on screen instead. It works in apps that let macOS read their text."))
             } header: {
                 Text("Dictation")
             }

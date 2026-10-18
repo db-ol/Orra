@@ -244,6 +244,7 @@ final class ProblemReporter {
                     .init(name: "Open at login", on: openAtLogin.isOn),
                     .init(name: "Show in Dock", on: dockIcon.showsInDock),
                     .init(name: "Learn from corrections", on: learning.isOn),
+                    .init(name: "Use names on screen", on: pushToTalk.usesScreenNames),
                     .init(name: "Clean up with a local model", on: cleanup.isOn),
                     .init(name: "Translate with the translation key", on: cleanup.translationIsOn),
                     .init(name: "Check for updates automatically", on: updater.checksAutomatically),

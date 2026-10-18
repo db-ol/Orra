@@ -6,9 +6,9 @@ import OSLog
 struct Transcription {
     /// Loads the model. Throws when it cannot be loaded.
     var load: () async throws -> Void
-    /// Turns 16 kHz mono samples into text. The context is the user's vocabulary, one
-    /// term per line, or nil. The language is the one the model must write, or nil to let
-    /// it choose.
+    /// Turns 16 kHz mono samples into text. The context is the user's vocabulary, after
+    /// the names from the screen while Use names on screen is on, one term per line, or
+    /// nil. The language is the one the model must write, or nil to let it choose.
     var transcribe: (_ samples: [Float], _ context: String?, _ language: SpeechLanguage?) async throws -> String
     /// The model gate the speech model runs at, see `gated`. Nil when it runs at none, as
     /// a test's fake does. A dictation reserves it, see PushToTalkController.
@@ -28,12 +28,21 @@ extension Transcription {
     /// hears it is dropped like an echo. Any other text with the vocabulary gets its numbers
     /// in digits from a pass without it, see `takingNumbers`, unless `takingDigits` is off
     /// because the user wants numbers in words.
+    ///
+    /// When the terms hold names read from the screen, `holdsScreenNames`, the protections
+    /// of ListEcho apply too, so a list of names is never pasted in place of speech: a text
+    /// of two or more terms only that does not sound like the pass without them gives way
+    /// to that pass, and so does a text that may be a list, see `checkingList`. A name said
+    /// alone stays.
     /// Logs a timing and whether speech was heard, never the text.
-    func transcribe(_ samples: [Float], vocabulary terms: [String], audioSeconds: Double, takingDigits: Bool = true) async throws -> String {
+    func transcribe(_ samples: [Float], vocabulary terms: [String], holdsScreenNames: Bool = false, audioSeconds: Double, takingDigits: Bool = true) async throws -> String {
         let context = Vocabulary.context(terms)
         let text = try await checkingLanguage(try await transcribe(samples, context, nil), of: samples, context: context)
         guard !terms.isEmpty else { return text }
         guard await Self.isOnlyTerms(text, of: terms) else {
+            if holdsScreenNames, await Self.mayBeList(text, of: terms) {
+                return try await checkingList(text, of: samples, terms: terms, audioSeconds: audioSeconds, takingDigits: takingDigits)
+            }
             guard takingDigits else { return text }
             return try await takingNumbers(into: text, of: samples, terms: terms)
         }
@@ -49,7 +58,39 @@ extension Transcription {
         }
         let heardSpeech = !VocabularyEcho.normalized(TranscriptGuard.clean(plain, audioSeconds: audioSeconds)).isEmpty
         Logger.pushToTalk.notice("Transcript held only vocabulary terms, the pass without them took \(started.duration(to: .now), privacy: .public), speech heard: \(heardSpeech, privacy: .public)")
-        return heardSpeech ? text : ""
+        guard heardSpeech else { return "" }
+        if holdsScreenNames, await Self.isListOverSpeech(text, plain: plain, terms: terms) {
+            Logger.pushToTalk.notice("Transcript was a list of terms over speech (\(ListEcho.Protection.onlyTermsOverSpeech.rawValue, privacy: .public)), the pass without them stands")
+            return try await checkingLanguage(plain, of: samples, context: nil)
+        }
+        return text
+    }
+
+    /// For a text with names from the screen that may be a list written over speech, see
+    /// ListEcho: transcribes the samples again without the terms. When that pass shows the
+    /// text to be a list, the pass stands. Otherwise the text stands, with its numbers in
+    /// digits from that pass as in `takingNumbers` unless `takingDigits` is off. When the
+    /// pass fails, the text stands as it is.
+    /// Logs a timing and which protection decided, never the text.
+    private func checkingList(_ text: String, of samples: [Float], terms: [String], audioSeconds: Double, takingDigits: Bool) async throws -> String {
+        let started = ContinuousClock.now
+        let plain: String
+        do {
+            plain = try await transcribe(samples, nil, nil)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            Logger.pushToTalk.error("Transcript may be a list of terms, the pass without them failed after \(started.duration(to: .now), privacy: .public)")
+            return text
+        }
+        let heardSpeech = !VocabularyEcho.normalized(TranscriptGuard.clean(plain, audioSeconds: audioSeconds)).isEmpty
+        if let protection = await Self.protection(text, plain: plain, terms: terms, heardSpeech: heardSpeech) {
+            Logger.pushToTalk.notice("Transcript was a list of terms (\(protection.rawValue, privacy: .public)), the pass without them took \(started.duration(to: .now), privacy: .public) and stands")
+            return try await checkingLanguage(plain, of: samples, context: nil)
+        }
+        Logger.pushToTalk.notice("Transcript may have been a list of terms, the pass without them took \(started.duration(to: .now), privacy: .public), the text stands")
+        guard takingDigits, ContextNumbers.mayHoldSpokenNumber(text) else { return text }
+        return await Self.merging(text, plain: plain, terms: terms)
     }
 
     /// The text written with the vocabulary, with its numbers in Chinese characters written
@@ -123,6 +164,25 @@ extension Transcription {
     @concurrent
     nonisolated private static func isOnlyTerms(_ text: String, of terms: [String]) async -> Bool {
         VocabularyEcho.isOnlyTerms(text, of: terms)
+    }
+
+    /// Off the main actor, since a long transcript is compared with every term.
+    @concurrent
+    nonisolated private static func mayBeList(_ text: String, of terms: [String]) async -> Bool {
+        ListEcho.mayBeList(text, terms: terms)
+    }
+
+    /// Off the main actor, since a long transcript is compared with every term.
+    @concurrent
+    nonisolated private static func protection(_ text: String, plain: String, terms: [String], heardSpeech: Bool) async -> ListEcho.Protection? {
+        ListEcho.protection(text, plain: plain, terms: terms, heardSpeech: heardSpeech)
+    }
+
+    /// Off the main actor, since the sound of Han text comes from a transform and the text
+    /// is compared with every term.
+    @concurrent
+    nonisolated private static func isListOverSpeech(_ text: String, plain: String, terms: [String]) async -> Bool {
+        ListEcho.isListOverSpeech(text, plain: plain, terms: terms)
     }
 }
 

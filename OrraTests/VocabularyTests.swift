@@ -80,6 +80,19 @@ struct VocabularyTests {
         #expect(Vocabulary.forModel(used, limit: 3) == ["term0", "term3", "term4"])
     }
 
+    @Test func namesFromTheScreenComeFirstWithinTheLimit() {
+        let start = Date(timeIntervalSince1970: 0)
+        let words = (0..<250).map { VocabularyWord("term\($0)", added: start.addingTimeInterval(Double($0) * day)) }
+        let chosen = Vocabulary.forModel(words, screenNames: ["Dana Whitfield", "TERM249", "Quorvia", "dana whitfield"])
+        // A name the vocabulary holds keeps the vocabulary's spelling, and comes once.
+        #expect(Array(chosen.prefix(3)) == ["Dana Whitfield", "term249", "Quorvia"])
+        #expect(chosen.count == Vocabulary.modelLimit)
+        // The names take the places of the oldest words.
+        #expect(chosen.dropFirst(3) == ArraySlice((52..<249).map { "term\($0)" }))
+        #expect(Vocabulary.forModel(vocabularyWords("Orra"), screenNames: []) == ["Orra"])
+        #expect(Vocabulary.forModel([], screenNames: ["Quorvia"]) == ["Quorvia"])
+    }
+
     @Test func aPasteDatesTheWordsItHoldsIgnoringCase() {
         let then = Date(timeIntervalSince1970: 1_000)
         let now = Date(timeIntervalSince1970: 2_000)

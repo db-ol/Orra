@@ -68,9 +68,16 @@ trusted once in Xcode. docs/dependencies.md has the details.
   block the main thread, and keep audio and transcription work off the main actor.
 - Quit Orra before turning off or removing its Accessibility access. Revoking access while the
   tap is installed can freeze keyboard and mouse input (Apple Developer Forums thread 844416).
-- Orra reads another app's text only to learn from corrections, which is off until the user
-  turns it on: the field it pasted into, for 3 minutes and only while that field has the focus, never a password field or an app
-  holding secure input. It stores the word pairs only, never the text, and never logs either.
+- Orra reads another app's text only for two features, both off until the user turns them on,
+  never from a password field or an app holding secure input. Learning from corrections reads the
+  field it pasted into, for 3 minutes and only while that field has the focus. It stores the word
+  pairs only, never the text, and never logs either. Use names on screen reads up to 1,000
+  characters before the cursor in the focused field and the title of its window at the press that
+  starts a dictation, and never reads a password manager. In an app that cannot give part of a
+  field, it reads the whole field when it holds 20,000 characters or fewer and keeps only the last
+  1,000 characters before the cursor. A field that does not say where its cursor is gives only the
+  window title. It keeps what it read in memory for that dictation only, gives the speech model
+  only the names and rare words taken from it, and never logs or saves the text or the names.
 - Orra never writes audio to disk or to the log. The one exception, approved by the maintainer
   on 2026-10-15, is Remember my voice in Settings, off until the user turns it on. It keeps
   the voice sample's audio, never what is said in it, in

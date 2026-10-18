@@ -321,6 +321,54 @@ got worse than the baseline, see docs/release-gate.md.
     OneCharacterFixTests and WordSuggestionLearningTests cover a fix of one Chinese
     character: grammar pairs never offered, the guessed word from the system tokenizer,
     and adding, editing and declining the offered word.
+  - ScreenNamesTests, ScreenReaderTests, ListEchoTests and ScreenNamesControllerTests cover
+    Use names on screen, added on 2026-10-17. The extractor, on texts of the context
+    experiment of 2026-10-15: names in English and Chinese without their courtesy title or
+    the greeting, rare words, acronyms and codes, English terms kept whole in Chinese text,
+    a name said more often first, names before other terms, Chinese names from Orra's own
+    rules on every system, no name from an ordinary word after a surname character, the 40
+    terms nearest the cursor, and the window title as the farthest text. Also the common words read from a tokenizer
+    vocabulary, and the switch saved and off by default. The reading, with a scripted field,
+    so no app is read: the last 1,000 characters before the cursor through a range of the
+    text or the whole text cut at the cursor, only the window title from a field without a
+    cursor, nothing from a password field, a password manager, an element that is no text
+    field, an app holding secure input or Orra itself, no copy of a field over 20,000
+    characters without ranges, and no question to the app after the deadline, the window
+    title's second question included. The three protections against a list of names
+    written over speech: a name said alone stays, also when the pass without names writes
+    it in another script or as more words, silence gives no text, a list over speech, a
+    leading list and a text mostly of names give way to the pass without them, a failed
+    pass keeps the text, digits come from the same pass, an ordinary dictation or a
+    greeting with one name runs one pass, and the vocabulary alone keeps today's check. The
+    controller: while off nothing is read and the model gets the vocabulary as before,
+    while on the names come first in the vocabulary's spelling, a reading that has not
+    ended or that read another app than the paste is not used and not waited for, a
+    shortcut reads nothing, an early capture reads once its press counts and its time limit
+    counts from that press, and a list of names is never pasted. VocabularyTests
+    checks that the names take the places of the oldest words within the limit of 200.
+    Outside the test suite, the extractor as moved over was compared with the experiment's
+    on all 592 texts of the experiment at limits of 20 and 40: the same terms in every case
+    at 40, and at 20 different only where more than 20 terms compete, where Orra keeps those
+    nearest the cursor. NLTagger finds no Chinese names on macOS 27, so the extractor now
+    finds them with its own rules. On the 592 texts the English terms stay the same, and
+    105 of the 118 Chinese target names on the screen are terms, as with NLTagger on macOS
+    26, against 89 for the extractor as moved over on macOS 27. On 112 texts of ordinary
+    Chinese prose no ordinary word became a name. The protections gave the experiment's decision on all 997 of its recorded
+    runs, 16 of which they caught, each with four terms or more. Taking a text for a list
+    only when it holds two terms or more left all 997 decisions as they were and cut the
+    extra passes for a text that may be a list from 21 to 16.
+  - ScreenNamesEvaluationTests, opt in, ran the experiment's 104 clips through Orra's path
+    with the real model on 2026-10-17, loaded from the experiment's own copy. With the
+    extractor as moved over, the text without names matched the experiment's on all 104
+    clips, and with the names of the page added to Orra's names it matched the experiment's
+    C1 on all 104. The numbers below are scored as the experiment scored, with the count of
+    its score.py, which finds 201 target names, 81 in real speech. The test's own summary
+    counts them another way and finds 191 and 75. Without names 107 of 201 were right, 59 of
+    81 in real speech, with 83 errors on the 1,932 other words. With Orra's names from the
+    text before the cursor, the extractor as moved over gave 164 of 201 and 73 of 81 on
+    macOS 26 and 158 of 201 and 70 of 81 as it runs on macOS 27. The extractor with its own
+    Chinese rules gives 161 of 201 and 70 of 81 on both, with 78 errors on the other words,
+    and 170 of 201 and 70 of 81 with the page names too.
   - LocalizationTests checks that every string in both catalogs has a Simplified Chinese
     translation marked translated, that each translation keeps the arguments of the
     English string, that the Chinese uses full width punctuation and a space next to a
@@ -1586,6 +1634,37 @@ corrections on:
   my corrections off: 克劳德 is pasted as the model wrote it.
 - [ ] A learned pair for an ordinary word, such as there to their, never changes there.
 - [ ] With cleanup on, the cleaned text and Paste Original Text both have Claude.
+
+Use names on screen, added on 2026-10-17, not verified yet. Turn on Use names on screen
+(Beta) under Dictation in Settings, General first:
+
+- [ ] In Notes, write a few lines with an unusual name such as Quorvia or 甄若岚, put the
+  cursor after them and dictate a sentence with the name: it is spelled as in the note.
+  Turn the switch off and dictate it again: it comes out as without the switch.
+- [ ] In Mail, start a new message with the name in its subject and dictate into the empty
+  body: the window title gives the name. In a reply, the quoted mail after the cursor
+  gives nothing.
+- [ ] In TextEdit, put the cursor in the middle of a document over 20,000 characters and
+  dictate: the log shows names found, and typing and the start sound feel the same as
+  with the switch off. Try a long message in Safari and Chrome too.
+- [ ] `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"'`
+  shows "Names on screen: N found in" with a time for each dictation, numbers only,
+  never a name or any text.
+- [ ] Dictate into a password field, and in Terminal with Secure Keyboard Entry on: the
+  log says 0 found. So does the search field of Passwords, and of 1Password or Bitwarden
+  when one is installed. In an app whose text macOS cannot read, such as Sublime Text,
+  dictation works as before with 0 found.
+- [ ] Right after a launch, hold the key for a very short dictation: it is as quick as
+  before. The log may say the names were not read in time.
+- [ ] Hold the key without speaking in a field full of names, and with noise: nothing is
+  pasted. Say only one of the names: it is pasted as written on the screen, also an
+  English name that Orra writes in Chinese characters with the switch off.
+- [ ] Hold the key, switch to another app with the mouse while speaking, and let go there:
+  the log says the names came from another app.
+- [ ] With a note that holds Warrington, say Warrenton: note what comes out. This is the
+  known risk the help text names.
+- [ ] Settings, General, Dictation shows the switch with its line, and its help text when
+  the pointer rests on it, in English and Chinese. Report a Problem lists the setting.
 
 App icon, added on 2026-10-07, not verified yet:
 

@@ -137,6 +137,16 @@ nonisolated enum Vocabulary {
         return words.indices.filter(chosen.contains).map { words[$0].text }
     }
 
+    /// The words the model gets with names from the screen, see ScreenNames: the names
+    /// first, each in the vocabulary's spelling when the vocabulary holds it ignoring case,
+    /// then the other words of `forModel(_:limit:)`, `limit` in all.
+    static func forModel(_ words: [VocabularyWord], screenNames: [String], limit: Int = modelLimit) -> [String] {
+        let spellings = Dictionary(words.map { ($0.id, $0.text) }, uniquingKeysWith: { first, _ in first })
+        let names = Array(terms(from: screenNames.map { spellings[$0.lowercased()] ?? $0 }).prefix(limit))
+        let taken = Set(names.map { $0.lowercased() })
+        return names + forModel(words.filter { !taken.contains($0.id) }, limit: limit - names.count)
+    }
+
     /// The list with `date` as the last use of each word the transcript holds, ignoring
     /// case. A word that starts or ends with a Latin letter or digit counts only where
     /// the transcript has no Latin letter or digit right next to it, so "Orra" is not used
