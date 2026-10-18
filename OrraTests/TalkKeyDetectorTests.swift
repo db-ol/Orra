@@ -52,7 +52,7 @@ struct TalkKeyDetectorTests {
             _ = detector.handle(type: .keyDown, keyCode: Self.delete, flags: .maskSecondaryFn)
         case .passingThrough:
             _ = fnDown(&detector, with: .maskCommand)
-        case .arming, .tapped, .handsFree, .handsFreeKeyDown:
+        case .arming, .tapped, .handsFree, .handsFreeKeyDown, .stoppedAtLimitKeyDown:
             preconditionFailure("TalkKeyHandsFreeTests covers \(phase)")
         }
         precondition(detector.phase == phase, "helper failed to reach \(phase)")

@@ -851,6 +851,16 @@
         }
       }
     },
+    "Dictations over %lld characters are pasted without cleanup." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 %lld 个字符的听写不会整理，会直接粘贴。"
+          }
+        }
+      }
+    },
     "Dictations over %lld characters are pasted without translation, and so is a translation that fails Orra's checks or takes too long, so nothing you say is lost." : {
       "localizations" : {
         "zh-Hans" : {
@@ -2334,12 +2344,12 @@
         }
       }
     },
-    "Orra records up to 1 minute at a time, so the recording stopped there." : {
+    "Orra records up to %lld minutes at a time, so the recording stopped there." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 每次最多录 1 分钟，所以录音到这里就停止了。"
+            "value" : "Orra 每次最多录 %lld 分钟，所以录音到这里就停止了。"
           }
         }
       }
@@ -2402,6 +2412,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Page Up"
+          }
+        }
+      }
+    },
+    "Part of this dictation could not be transcribed." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这次听写有一部分无法转写。"
           }
         }
       }
@@ -3320,6 +3340,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "停止朗读"
+          }
+        }
+      }
+    },
+    "Stops in %lld s" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 秒后停止"
           }
         }
       }

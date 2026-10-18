@@ -160,6 +160,7 @@ final class TextCleanup {
     /// The closures for PushToTalkController.
     var model: CleanupModel {
         CleanupModel(
+            isOn: { [weak self] in self?.isOn ?? false },
             waitUntilLoaded: { [weak self] in await self?.waitUntilLoaded() ?? false },
             dictationStarted: { [weak self] in self?.dictationStarted() },
             dictationEnded: { [weak self] in self?.dictationEnded() },

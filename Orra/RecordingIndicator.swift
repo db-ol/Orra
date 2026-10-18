@@ -155,7 +155,8 @@ extension NSPanel {
 /// The indicator, drawn at the bottom of a clear panel: a small dark capsule with white
 /// bars that move with the voice while Orra listens, with how to finish in white text
 /// during a hands free dictation, and that settle into a slow wave while it transcribes,
-/// or a message. No microphone and no color, since macOS already shows its orange
+/// or a message. In the last seconds before the recording limit, the seconds left follow
+/// the bars. No microphone and no color, since macOS already shows its orange
 /// microphone indicator in the menu bar while Orra records.
 struct RecordingIndicatorView: View {
     static let panelSize = CGSize(width: 520, height: 150)
@@ -174,11 +175,10 @@ struct RecordingIndicatorView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    /// What VoiceOver reads for the indicator: what it shows, and that the dictation will
-    /// be translated when the badge shows.
-    static func accessibilityLabel(_ shown: String, translation: TranslationDirection?) -> String {
-        guard let translation else { return shown }
-        return "\(shown) \(translation.badgeDescription())"
+    /// What VoiceOver reads for the indicator: what it shows, that the dictation will be
+    /// translated when the badge shows, and the seconds left when they show.
+    static func accessibilityLabel(_ shown: String, translation: TranslationDirection?, countdown: String? = nil) -> String {
+        [shown, translation?.badgeDescription(), countdown].compactMap(\.self).joined(separator: " ")
     }
 
     @ViewBuilder private var content: some View {
@@ -188,10 +188,11 @@ struct RecordingIndicatorView: View {
                 IndicatorBars(heights: IndicatorBars.heights(level: feedback.level))
                     .animation(.linear(duration: 0.08), value: feedback.level)
                 badge
+                countdown
             }
             .barCapsuleStyle()
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(verbatim: Self.accessibilityLabel(String(localized: "Listening"), translation: feedback.translation)))
+            .accessibilityLabel(Text(verbatim: Self.accessibilityLabel(String(localized: "Listening"), translation: feedback.translation, countdown: feedback.countdownText)))
         case .handsFree(let hint):
             HStack(spacing: 10) {
                 IndicatorBars(heights: IndicatorBars.heights(level: feedback.level))
@@ -201,10 +202,11 @@ struct RecordingIndicatorView: View {
                 Text(verbatim: hint)
                     .font(.callout)
                     .foregroundStyle(.white)
+                countdown
             }
             .barCapsuleStyle()
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(verbatim: Self.accessibilityLabel(hint, translation: feedback.translation)))
+            .accessibilityLabel(Text(verbatim: Self.accessibilityLabel(hint, translation: feedback.translation, countdown: feedback.countdownText)))
         case .transcribing:
             HStack(spacing: 8) {
                 TranscribingBars()
@@ -249,6 +251,22 @@ extension RecordingIndicatorView {
     @ViewBuilder fileprivate var badge: some View {
         if let translation = feedback.translation {
             TranslationBadge(direction: translation)
+        }
+    }
+
+    /// The seconds left before the recording limit, or nothing. It keeps the width of the
+    /// first count, which has the most digits, so the capsule does not shift as the count
+    /// drops below 10.
+    @ViewBuilder fileprivate var countdown: some View {
+        if let text = feedback.countdownText {
+            ZStack(alignment: .leading) {
+                Text(verbatim: RecordingFeedback.countdownText(seconds: Int((RecordingLimits.countdown / .seconds(1)).rounded(.up))))
+                    .hidden()
+                Text(verbatim: text)
+                    .foregroundStyle(.white)
+            }
+            .font(.callout)
+            .monospacedDigit()
         }
     }
 }

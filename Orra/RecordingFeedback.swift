@@ -6,7 +6,8 @@ import Observation
 ///
 /// The indicator shows white bars that move with the voice while Orra listens, with how to
 /// finish during a hands free dictation, a slow wave of the same bars while it transcribes,
-/// and for a few seconds the reason when a hold ends without a paste. Next to the bars of a
+/// and for a few seconds the reason when a hold ends without a paste. In the last seconds
+/// before the recording limit, the seconds left show next to the bars. Next to the bars of a
 /// dictation of the translation key, a small badge says that it will be translated. In between, while
 /// Orra can dictate, a small bar at the bottom of the screen shows that it is ready, unless
 /// Settings turns it off.
@@ -44,6 +45,9 @@ final class RecordingFeedback {
     private(set) var translation: TranslationDirection?
     /// The microphone level for the meter, from 0 to 1, falling slowly after a peak.
     private(set) var level = 0.0
+    /// The whole seconds left before the recording limit stops the dictation on screen,
+    /// from its limitNear cue until it stops recording. Nil otherwise.
+    private(set) var secondsLeft: Int?
     /// The indicator and the idle bar as the one choice Settings shows. Setting it saves once
     /// and updates the panel once.
     var onScreenHint: OnScreenHint {
@@ -92,9 +96,11 @@ final class RecordingFeedback {
     @ObservationIgnored private let play: (Sound) -> Void
     @ObservationIgnored private let save: (FeedbackPreference.Values) -> Void
     @ObservationIgnored private let messageDuration: Duration
+    @ObservationIgnored private let limitMessageDuration: Duration
     @ObservationIgnored private let levelInterval: Duration
     @ObservationIgnored private var levelTask: Task<Void, Never>?
     @ObservationIgnored private var hideTask: Task<Void, Never>?
+    @ObservationIgnored private var countdownTask: Task<Void, Never>?
 
     /// - Parameters:
     ///   - preferences: Whether the indicator shows and the sounds play, as saved.
@@ -106,6 +112,8 @@ final class RecordingFeedback {
     ///   - save: Saves the preferences after a change.
     ///   - holdHint: How to talk, for the idle bar.
     ///   - messageDuration: How long a message stays.
+    ///   - limitMessageDuration: How long the message after a stop at the recording limit
+    ///     stays, unless the controller dismisses it sooner.
     ///   - levelInterval: How often the meter reads the level.
     init(
         preferences: FeedbackPreference.Values,
@@ -115,6 +123,7 @@ final class RecordingFeedback {
         save: @escaping (FeedbackPreference.Values) -> Void,
         holdHint: @escaping () -> String = { "" },
         messageDuration: Duration = .seconds(4),
+        limitMessageDuration: Duration = RecordingLimits.noticeWindow,
         levelInterval: Duration = .milliseconds(33)
     ) {
         onScreenHint = OnScreenHint(preferences)
@@ -125,6 +134,7 @@ final class RecordingFeedback {
         self.play = play
         self.save = save
         self.messageDuration = messageDuration
+        self.limitMessageDuration = limitMessageDuration
         self.levelInterval = levelInterval
     }
 
@@ -168,15 +178,56 @@ final class RecordingFeedback {
             }
         case .finished(let message?):
             translation = nil
-            show(.message(message))
-            let shown = display
-            hideTask = Task { [weak self, messageDuration] in
-                try? await Task.sleep(for: messageDuration)
-                guard !Task.isCancelled, let self, display == shown else { return }
-                show(nil)
-            }
+            showMessage(message, for: messageDuration)
         case .finished(nil):
             translation = nil
+            show(nil)
+        case .limitNear(let remaining):
+            countDown(to: .now + remaining)
+        case .stoppedAtLimit(let message):
+            translation = nil
+            showMessage(message, for: limitMessageDuration)
+        }
+    }
+
+    /// The seconds left as the indicator shows them, such as "Stops in 12 s", or nil.
+    var countdownText: String? {
+        secondsLeft.map { Self.countdownText(seconds: $0) }
+    }
+
+    /// The countdown text for `seconds`.
+    nonisolated static func countdownText(seconds: Int) -> String {
+        String(localized: "Stops in \(seconds) s")
+    }
+
+    /// The whole seconds from `now` to `end`, rounded up, so the count reaches 1 in the
+    /// last second.
+    nonisolated static func secondsLeft(until end: ContinuousClock.Instant, now: ContinuousClock.Instant = .now) -> Int {
+        let left = now.duration(to: end)
+        return left > .zero ? Int((left / .seconds(1)).rounded(.up)) : 0
+    }
+
+    /// Counts `secondsLeft` down to `end`, one step at each whole second before it. It
+    /// stops at 1, also when the main actor is late, since the recording stops at `end`
+    /// and the indicator then moves on.
+    private func countDown(to end: ContinuousClock.Instant) {
+        countdownTask?.cancel()
+        secondsLeft = max(Self.secondsLeft(until: end), 1)
+        countdownTask = Task { [weak self] in
+            while let left = self?.secondsLeft, left > 1 {
+                try? await Task.sleep(until: end - .seconds(left - 1), clock: .continuous)
+                guard !Task.isCancelled else { return }
+                self?.secondsLeft = max(Self.secondsLeft(until: end), 1)
+            }
+        }
+    }
+
+    private func showMessage(_ message: String, for duration: Duration) {
+        show(.message(message))
+        let shown = display
+        hideTask = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled, let self, display == shown else { return }
             show(nil)
         }
     }
@@ -195,6 +246,10 @@ final class RecordingFeedback {
         display = newDisplay
         if newDisplay?.showsMeter != true {
             level = 0
+            // The recording has stopped, so the countdown is over.
+            countdownTask?.cancel()
+            countdownTask = nil
+            secondsLeft = nil
         }
         present(presented)
         updateLevelTask()

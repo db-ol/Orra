@@ -17,7 +17,9 @@ extension Logger {
 /// dictation sends handsFree in place of listening, or after it when a hold turned into
 /// one. A hold that ends early
 /// skips to finished, which comes only when there is a message to show or an indicator to
-/// clear.
+/// clear. A dictation that nears the recording limit sends limitNear while it records,
+/// and one that the limit stopped before a press of its key could finish it ends with
+/// stoppedAtLimit in place of finished.
 nonisolated enum DictationCue: Equatable, Sendable {
     /// The hold has lasted long enough to be a dictation, and the microphone delivers sound.
     /// `translation` is the direction when the translation key started it, so the
@@ -36,6 +38,13 @@ nonisolated enum DictationCue: Equatable, Sendable {
     case recordingStopped
     /// The hold is over. The message says why nothing was pasted, when there is a reason.
     case finished(message: String?)
+    /// Only `remaining` is left before the recording limit stops the dictation, so the
+    /// indicator counts down the seconds.
+    case limitNear(remaining: Duration)
+    /// The recording limit stopped a dictation that a press of its key was to finish, and
+    /// the dictation is over. The message says why, and stays a while, since that press may
+    /// still come. The press then clears it with finished.
+    case stoppedAtLimit(message: String)
 }
 
 /// Connects the talk key, the microphone, the speech model and text insertion, and
@@ -140,8 +149,14 @@ final class PushToTalkController {
     private(set) var modelState: ModelState = .notLoaded
     /// The latest error, shown in the menu until the next hold.
     private(set) var problem: String?
-    /// The latest note that is not an error, shown in the menu until the next hold.
-    private(set) var notice: String?
+    /// The latest notes that are not errors, shown in the menu until the next hold, each
+    /// on a line of its own. A long dictation can have several, such as the stop at the
+    /// limit and a paste without translation.
+    private(set) var notices: [String] = []
+    /// The notes as one text, for the indicator, or nil when there is none.
+    var notice: String? {
+        notices.isEmpty ? nil : RecordingPieces.joined(notices)
+    }
     /// What to do about the microphone after the latest hold, or which microphone recorded
     /// because the chosen one was not connected. Kept apart from `notice`, so a paste
     /// notice cannot hide it. Shown in the menu until the next hold.
@@ -190,6 +205,8 @@ final class PushToTalkController {
     @ObservationIgnored private let isTrusted: @MainActor () -> Bool
     @ObservationIgnored private let installTap: HotkeyTap.Install
     @ObservationIgnored private let maximumRecordingDuration: Duration
+    @ObservationIgnored private let countdown: Duration
+    @ObservationIgnored private let limitNoticeWindow: Duration
     @ObservationIgnored private let minimumHold: Duration
     @ObservationIgnored private let releaseTail: Duration
     @ObservationIgnored private let accessCheckDelay: Duration
@@ -201,6 +218,12 @@ final class PushToTalkController {
     /// Whether the current hold has shown the indicator, so its end has to clear it.
     @ObservationIgnored private var indicatorShown = false
     @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
+    /// True from a stop at the recording limit, when the key of the dictation waits for the
+    /// press that was meant to finish it, see `TalkKeyDetector.stopAtLimit()`, until that
+    /// press comes, the wait ends, or another dictation starts.
+    @ObservationIgnored private var awaitsPressAfterLimit = false
+    /// Ends that wait `limitNoticeWindow` after the notice showed.
+    @ObservationIgnored private var limitNoticeTask: Task<Void, Never>?
     /// Starts the microphone off the main thread. Its value is when the start returned, or
     /// nil when the microphone did not start.
     @ObservationIgnored private var captureStart: Task<ContinuousClock.Instant?, Never>?
@@ -285,6 +308,9 @@ final class PushToTalkController {
     ///     so they never install a real tap.
     ///   - maximumRecordingDuration: A hold longer than this is processed as if the key
     ///     had been released.
+    ///   - countdown: How long before that limit the indicator counts down.
+    ///   - limitNoticeWindow: How long the notice about a stop at the limit stays while the
+    ///     key waits for the press that was meant to finish the dictation.
     ///   - minimumHold: Holds shorter than this are discarded.
     ///   - releaseTail: How long recording goes on after the talk key is released.
     ///   - accessCheckDelay: How long Orra waits before it checks access again, see
@@ -333,6 +359,8 @@ final class PushToTalkController {
         isTrusted: @escaping @MainActor () -> Bool = { AXIsProcessTrusted() },
         installTap: @escaping HotkeyTap.Install = HotkeyTap.installLive,
         maximumRecordingDuration: Duration = RecordingLimits.maximumDuration,
+        countdown: Duration = RecordingLimits.countdown,
+        limitNoticeWindow: Duration = RecordingLimits.noticeWindow,
         minimumHold: Duration = RecordingLimits.minimumHold,
         releaseTail: Duration = RecordingLimits.releaseTail,
         accessCheckDelay: Duration = .seconds(2),
@@ -374,6 +402,8 @@ final class PushToTalkController {
         self.isTrusted = isTrusted
         self.installTap = installTap
         self.maximumRecordingDuration = maximumRecordingDuration
+        self.countdown = countdown
+        self.limitNoticeWindow = limitNoticeWindow
         self.minimumHold = minimumHold
         self.releaseTail = releaseTail
         self.accessCheckDelay = accessCheckDelay
@@ -821,6 +851,10 @@ final class PushToTalkController {
                 tap?.endHandsFree()
             }
         }
+        if event == .pressedAfterLimit {
+            // An early capture of that press, if any, is dropped below.
+            pressedAfterLimit()
+        }
         guard let transition = machine.handle(event) else { return }
         state = machine.state
         logger.debug("Push to talk transition: \(String(describing: transition), privacy: .public)")
@@ -848,6 +882,9 @@ final class PushToTalkController {
             startCapture()
         case .confirmedArming:
             clearHoldNotes()
+            // Only a press that counts ends the wait after a stop at the limit, not one
+            // that may still turn out to be a shortcut.
+            endLimitWait()
             let counted = ContinuousClock.now
             holdTimings?.counted = counted
             beginUserActivity()
@@ -867,6 +904,7 @@ final class PushToTalkController {
             clearHoldNotes()
             holdMessage = nil
             indicatorShown = false
+            endLimitWait()
             // The previous hold's start belongs to that hold only.
             captureStart = nil
             guard !isRecordingVoiceSample else {
@@ -936,16 +974,59 @@ final class PushToTalkController {
             endModelGateReservation()
         case .finished:
             endUserActivity()
-            endCue(holdMessage ?? problem ?? notice)
+            if awaitsPressAfterLimit {
+                // The limit first, since explaining the stop is what the long wait is for.
+                showLimitNotice(RecordingPieces.joined([notice ?? "", holdMessage ?? problem ?? ""]))
+            } else {
+                endLimitWait()
+                endCue(holdMessage ?? problem ?? notice)
+            }
             cleanup.dictationEnded()
             endModelGateReservation()
         }
     }
 
+    /// Shows why the recording limit stopped the dictation, and lets the key wait
+    /// `limitNoticeWindow` for the press that was meant to finish it.
+    private func showLimitNotice(_ message: String) {
+        indicatorShown = false
+        onCue(.stoppedAtLimit(message: message))
+        limitNoticeTask = Task { [weak self, limitNoticeWindow] in
+            try? await Task.sleep(for: limitNoticeWindow)
+            guard !Task.isCancelled else { return }
+            self?.endLimitWait()
+        }
+    }
+
+    /// The press that was meant to finish a dictation the recording limit had stopped. It
+    /// dismisses the notice about the limit. During the transcription there is no notice
+    /// yet, and the one that follows goes after the usual time.
+    private func pressedAfterLimit() {
+        guard awaitsPressAfterLimit else { return }
+        let showing = limitNoticeTask != nil
+        awaitsPressAfterLimit = false
+        limitNoticeTask?.cancel()
+        limitNoticeTask = nil
+        logger.info("A press after a stop at the recording limit started no recording")
+        if showing {
+            onCue(.finished(message: nil))
+        }
+    }
+
+    /// Stops waiting for the press after a stop at the recording limit, once its time is
+    /// up or another dictation starts. A notice still on screen goes by itself.
+    private func endLimitWait() {
+        guard awaitsPressAfterLimit else { return }
+        awaitsPressAfterLimit = false
+        limitNoticeTask?.cancel()
+        limitNoticeTask = nil
+        tap?.endLimitWindow()
+    }
+
     /// Clears what the menu showed about the last hold, once a new one starts.
     private func clearHoldNotes() {
         problem = nil
-        notice = nil
+        notices = []
         microphoneNotice = nil
         suggestsSoundSettings = false
     }
@@ -1095,14 +1176,40 @@ final class PushToTalkController {
                 return nil
             }
         }
-        recordingLimitTask = Task { [weak self, maximumRecordingDuration] in
-            try? await Task.sleep(for: maximumRecordingDuration)
-            guard !Task.isCancelled, let self, state == .listening || state == .handsFree else { return }
-            logger.info("Recording reached its maximum length")
-            // The audio buffer holds no more, so the dictation ends here and says why.
-            notice = String(localized: "Orra records up to 1 minute at a time, so the recording stopped there.")
-            handle(.released)
+        recordingLimitTask = Task { [weak self, maximumRecordingDuration, countdown] in
+            let lead = min(countdown, maximumRecordingDuration)
+            try? await Task.sleep(for: maximumRecordingDuration - lead)
+            guard !Task.isCancelled else { return }
+            self?.recordingLimitNears(lead)
+            try? await Task.sleep(for: lead)
+            guard !Task.isCancelled else { return }
+            self?.recordingReachedLimit()
         }
+    }
+
+    /// What the menu and the indicator say after a stop at the recording limit.
+    nonisolated static var limitNotice: String {
+        String(localized: "Orra records up to \(Int(RecordingLimits.maximumSeconds / 60)) minutes at a time, so the recording stopped there.")
+    }
+
+    /// Lets the indicator count down the `remaining` time of a dictation that records.
+    private func recordingLimitNears(_ remaining: Duration) {
+        guard state == .listening || state == .handsFree else { return }
+        onCue(.limitNear(remaining: remaining))
+    }
+
+    /// Ends a dictation that records at the limit, as if the key had been released, and
+    /// says why. When a press of the key was to finish it, see
+    /// `TalkKeyDetector.stopAtLimit()`, that press later only dismisses the notice, rather
+    /// than start a new recording the user did not mean.
+    private func recordingReachedLimit() {
+        guard state == .listening || state == .handsFree else { return }
+        logger.info("Recording reached its maximum length")
+        // The audio buffer holds no more, so the dictation ends here and says why.
+        notices = [Self.limitNotice]
+        // Before the release, after which the tap no longer knows the dictation.
+        awaitsPressAfterLimit = tap?.stopAtLimit() == true
+        handle(.released)
     }
 
     /// Sends the listening cue, or the hands free cue, once `delay` has passed and the
@@ -1265,7 +1372,7 @@ final class PushToTalkController {
                 return
             }
             let names = screenNames(from: screen, target: target)
-            let raw = try await transcription.transcribe(
+            let pieces = try await transcription.transcribeInPieces(
                 samples,
                 vocabulary: names.isEmpty ? Vocabulary.forModel(vocabulary) : Vocabulary.forModel(vocabulary, screenNames: names),
                 holdsScreenNames: !names.isEmpty,
@@ -1273,7 +1380,11 @@ final class PushToTalkController {
                 takingDigits: writesNumbersAsDigits
             )
             timings.lap(.recognition)
-            var text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: recording.duration))
+            let transcript = RecordingPieces.transcript(of: pieces)
+            var text = transcript.text
+            if transcript.missing > 0 {
+                addNotice(String(localized: "Part of this dictation could not be transcribed."))
+            }
             // The text as heard, before the filler rule, for the cleanup gate: a filler
             // cue the rule removed still asks for the model.
             let heard = text
@@ -1325,6 +1436,11 @@ final class PushToTalkController {
                     // as part of the paste.
                     timings.lap(.cleanup)
                 }
+            } else if cleanup.isOn(), text.count > CleanupStep.maximumLength, CleanupStep.hasWorkForModel(text, heard: heard) {
+                // Said only when cleanup is on and the model would have had work, so a long
+                // dictation it would have left as it was says nothing. Nothing waits for
+                // the model here, since it would not run anyway.
+                addNotice(String(localized: "Dictations over \(CleanupStep.maximumLength) characters are pasted without cleanup."))
             }
             let isTranslation = translated?.isTranslation == true
             if isTranslation {
@@ -1347,7 +1463,7 @@ final class PushToTalkController {
             }
             // Paste only into the app that was in front when the key was released.
             if let target, let current = frontmostApp(), current != target {
-                notice = String(localized: "Another app came to the front, so the text was not pasted. Use Copy Last Dictation.")
+                addNotice(String(localized: "Another app came to the front, so the text was not pasted. Use Copy Last Dictation."))
                 return
             }
             switch await insert(text) {
@@ -1366,7 +1482,7 @@ final class PushToTalkController {
                     onPasted(text, app, originalText, replacements)
                 }
             case .skippedPasswordField:
-                notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
+                addNotice(String(localized: "Orra does not paste into password fields. Use Copy Last Dictation."))
             case .nothingToInsert:
                 break
             }
@@ -1388,7 +1504,7 @@ final class PushToTalkController {
         case .pasted, .nothingToInsert:
             break
         case .skippedPasswordField:
-            notice = String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")
+            notices = [String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")]
         }
     }
 
@@ -1402,12 +1518,12 @@ final class PushToTalkController {
     private func translate(_ text: String, _ direction: TranslationDirection?) async -> (result: TranslationStep.Result, target: TranslationTarget)? {
         guard let direction else { return nil }
         guard await translation.waitUntilLoaded() else {
-            notice = String(localized: "The local model is not ready, so the text was pasted without translation.")
+            addNotice(String(localized: "The local model is not ready, so the text was pasted without translation."))
             return nil
         }
         guard let target = direction.target(for: text) else { return nil }
         guard text.count <= TranslationStep.maximumLength else {
-            notice = String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation.")
+            addNotice(String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation."))
             return nil
         }
         // The model is loaded by now, so this does not wait.
@@ -1417,9 +1533,16 @@ final class PushToTalkController {
         case .translated, .unchanged:
             break
         case .unreadable, .heldBack, .timedOut, .failed:
-            notice = String(localized: "This dictation was pasted without translation.")
+            addNotice(String(localized: "This dictation was pasted without translation."))
         }
         return (result, target)
+    }
+
+    /// Adds a note for the menu and the indicator after those the dictation has already, so
+    /// a long one can say both that it stopped at the limit and that it was pasted without
+    /// translation.
+    private func addNotice(_ note: String) {
+        notices.append(note)
     }
 
     /// Off the main actor, since the first use reads the word lists, see OrdinaryWords.

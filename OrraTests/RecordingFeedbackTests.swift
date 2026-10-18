@@ -29,7 +29,8 @@ struct RecordingFeedbackTests {
     private func makeFeedback(
         _ outputs: FeedbackOutputs? = nil,
         preferences: FeedbackPreference.Values = .init(showsIdleBar: false),
-        messageDuration: Duration = .seconds(4)
+        messageDuration: Duration = .seconds(4),
+        limitMessageDuration: Duration = RecordingLimits.noticeWindow
     ) -> RecordingFeedback {
         let outputs = outputs ?? self.outputs
         return RecordingFeedback(
@@ -42,6 +43,7 @@ struct RecordingFeedbackTests {
             play: { [outputs] in outputs.played.append($0) },
             save: { [outputs] in outputs.saved.append($0) },
             messageDuration: messageDuration,
+            limitMessageDuration: limitMessageDuration,
             levelInterval: .milliseconds(5)
         )
     }
@@ -92,6 +94,63 @@ struct RecordingFeedbackTests {
         #expect(feedback.display == .listening)
         #expect(outputs.lastPresented == .listening)
         feedback.handle(.finished(message: nil))
+    }
+
+    @Test func theIndicatorCountsDownTheLastSeconds() async throws {
+        let feedback = makeFeedback()
+        feedback.handle(.listening)
+        #expect(feedback.secondsLeft == nil)
+        #expect(feedback.countdownText == nil)
+        feedback.handle(.limitNear(remaining: .milliseconds(1_500)))
+        #expect(feedback.secondsLeft == 2)
+        #expect(feedback.countdownText == "Stops in 2 s")
+        #expect(feedback.display == .listening)
+        try await waitUntil { feedback.secondsLeft == 1 }
+        #expect(feedback.secondsLeft == 1)
+        // It stays at 1 until the recording stops.
+        try await Task.sleep(for: .milliseconds(700))
+        #expect(feedback.secondsLeft == 1)
+        feedback.handle(.transcribing)
+        #expect(feedback.secondsLeft == nil)
+        #expect(feedback.countdownText == nil)
+    }
+
+    @Test func theCountdownGoesOnWhenAHoldTurnsHandsFreeAndEndsWithTheDictation() {
+        let feedback = makeFeedback()
+        feedback.handle(.listening)
+        feedback.handle(.limitNear(remaining: .seconds(15)))
+        #expect(feedback.secondsLeft == 15)
+        feedback.handle(.handsFree(finishHint: "Press right Control to finish"))
+        #expect(feedback.secondsLeft == 15)
+        // Escape ends the dictation without a paste.
+        feedback.handle(.finished(message: nil))
+        #expect(feedback.secondsLeft == nil)
+    }
+
+    @Test func theSecondsLeftRoundUp() {
+        let now = ContinuousClock.now
+        #expect(RecordingFeedback.secondsLeft(until: now + .seconds(15), now: now) == 15)
+        #expect(RecordingFeedback.secondsLeft(until: now + .milliseconds(14_200), now: now) == 15)
+        #expect(RecordingFeedback.secondsLeft(until: now + .milliseconds(100), now: now) == 1)
+        #expect(RecordingFeedback.secondsLeft(until: now, now: now) == 0)
+        #expect(RecordingFeedback.secondsLeft(until: now - .seconds(1), now: now) == 0)
+    }
+
+    /// The message after a stop at the limit stays for the window of the press that was
+    /// meant to stop, and that press dismisses it.
+    @Test func theMessageAfterAStopAtTheLimitStaysUntilDismissed() async throws {
+        let feedback = makeFeedback(messageDuration: .milliseconds(20), limitMessageDuration: .seconds(30))
+        feedback.handle(.stoppedAtLimit(message: "Orra records up to 5 minutes at a time, so the recording stopped there."))
+        #expect(feedback.display == .message("Orra records up to 5 minutes at a time, so the recording stopped there."))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(feedback.display == .message("Orra records up to 5 minutes at a time, so the recording stopped there."))
+        feedback.handle(.finished(message: nil))
+        #expect(feedback.display == nil)
+        // Without the press it goes after its window.
+        let short = makeFeedback(FeedbackOutputs(), limitMessageDuration: .milliseconds(50))
+        short.handle(.stoppedAtLimit(message: "Orra records up to 5 minutes at a time, so the recording stopped there."))
+        try await waitUntil { short.display == nil }
+        #expect(short.display == nil)
     }
 
     @Test func withTheIndicatorOffNothingShowsButTheSoundsPlay() {
@@ -351,6 +410,8 @@ struct RecordingFeedbackTests {
         #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: nil) == "Listening")
         #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: .automatic) == "Listening This dictation will be translated.")
         #expect(RecordingIndicatorView.accessibilityLabel("Press right Option to finish", translation: .english) == "Press right Option to finish This dictation will be translated into English.")
+        #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: nil, countdown: "Stops in 12 s") == "Listening Stops in 12 s")
+        #expect(RecordingIndicatorView.accessibilityLabel("Press right Option to finish", translation: .automatic, countdown: "Stops in 3 s") == "Press right Option to finish This dictation will be translated. Stops in 3 s")
         #expect(TranslationDirection.chinese.badgeDescription() == "This dictation will be translated into Chinese.")
     }
 
@@ -378,6 +439,42 @@ struct RecordingFeedbackTests {
         #expect(try drawnPixels(translated) > drawnPixels(plain))
     }
 
+    @Test func theViewDrawsTheCountdownNextToTheBars() throws {
+        let plain = makeFeedback()
+        plain.handle(.listening)
+        let counting = makeFeedback()
+        counting.handle(.listening)
+        counting.handle(.limitNear(remaining: .seconds(12)))
+        #expect(try drawnPixels(counting) > drawnPixels(plain))
+    }
+
+    /// The capsule keeps its width as the count drops from two digits to one.
+    @Test func theCountdownKeepsTheCapsuleWidth() throws {
+        func width(_ remaining: Duration) throws -> Int {
+            let feedback = makeFeedback()
+            feedback.handle(.listening)
+            feedback.handle(.limitNear(remaining: remaining))
+            return try drawnColumns(feedback).count
+        }
+        let ten = try width(.seconds(10))
+        #expect(ten > 0)
+        #expect(try width(.seconds(9)) == ten)
+        #expect(try width(.seconds(15)) == ten)
+    }
+
+    /// The columns of the indicator that hold a pixel that is not clear.
+    private func drawnColumns(_ feedback: RecordingFeedback) throws -> ClosedRange<Int> {
+        let view = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
+        view.frame = NSRect(origin: .zero, size: RecordingIndicatorView.panelSize)
+        view.layoutSubtreeIfNeeded()
+        let image = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: image)
+        let columns = (0..<image.pixelsWide).filter { x in
+            (0..<image.pixelsHigh).contains { y in (image.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 }
+        }
+        return try #require(columns.first) ... #require(columns.last)
+    }
+
     /// Renders the indicator with the badge to PNGs, for a look without running the app.
     /// Off unless ORRA_SETTINGS_SNAPSHOTS names a folder, as for the settings pages.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
@@ -393,6 +490,9 @@ struct RecordingFeedbackTests {
             ("listening-talk-key", [.listening]),
             ("hands-free-automatic", [.handsFree(finishHint: hint, translation: .automatic)]),
             ("transcribing-english", [.listening(translation: .english), .transcribing]),
+            ("listening-countdown", [.listening, .limitNear(remaining: .seconds(12))]),
+            ("hands-free-countdown", [.handsFree(finishHint: hint, translation: .automatic), .limitNear(remaining: .seconds(9))]),
+            ("stopped-at-limit", [.stoppedAtLimit(message: PushToTalkController.limitNotice)]),
         ]
         for (name, sequence) in cues {
             let feedback = makeFeedback(FeedbackOutputs())

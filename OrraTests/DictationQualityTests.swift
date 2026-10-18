@@ -188,7 +188,8 @@ extension RealModelTests {
             try await engine.load()
             var report: [String] = []
             for (set, dropFillers, target) in [("fleurs_zh", false, 58.0), ("ascend_mixed", true, 30.0)] {
-                // Clips joined with short pauses, up to the target length, never past 60 s.
+                // Clips joined with short pauses, up to the target length, never past the
+                // minute that is one piece.
                 var samples: [Float] = []
                 var references: [String] = []
                 var single = (errors: 0, tokens: 0)
@@ -210,10 +211,48 @@ extension RealModelTests {
                 let joinedRate = 100 * Double(joined.errors) / Double(max(joined.tokens, 1))
                 let singleRate = 100 * Double(single.errors) / Double(max(single.tokens, 1))
                 report.append("\(set): \(references.count) clips, \(String(format: "%.1f", seconds)) s, \(latency), error \(String(format: "%.1f", joinedRate))% joined, \(String(format: "%.1f", singleRate))% one by one")
-                #expect(seconds <= RecordingLimits.maximumSeconds)
+                #expect(seconds <= RecordingPieces.maximumSeconds)
                 #expect(joinedRate <= singleRate + 3, "\(set): \(joinedRate)% joined against \(singleRate)% one by one")
             }
             Attachment.record(report.joined(separator: "\n"), named: "long-dictation.txt")
+        }
+
+        /// Minutes of speech, up to the longest dictation, transcribed in pieces of at most a
+        /// minute the way a dictation is, stay as accurate as the clips one by one, with no
+        /// piece lost.
+        @Test(arguments: [("fleurs_zh", false, 290.0), ("ascend_mixed", true, 150.0)])
+        func minutesInPiecesStayAccurate(_ set: String, _ dropFillers: Bool, _ target: Double) async throws {
+            let engine = RealModel.engine()
+            try await engine.load()
+            let transcription = Transcription(load: { try await engine.load() }, transcribe: { try await engine.transcribe($0, context: $1, language: $2) })
+            var samples: [Float] = []
+            var references: [String] = []
+            var single = (errors: 0, tokens: 0)
+            for clip in try EvaluationData.clips(in: set, count: 200) {
+                let speech = try EvaluationData.samples(set: set, name: clip.name)
+                let next = samples.count + speech.count + Self.rate / 2
+                guard Double(next) / Double(Self.rate) <= target else { continue }
+                let alone = Self.finalText(try await engine.transcribe(speech), samples: speech)
+                let counts = TranscriptScoring.counts(references: [clip.reference], hypotheses: [alone], dropFillers: dropFillers)
+                single = (single.errors + counts.errors, single.tokens + counts.tokens)
+                samples += speech + Self.silence(seconds: 0.5)
+                references.append(clip.reference)
+            }
+            let seconds = Double(samples.count) / Double(Self.rate)
+            let start = ContinuousClock.now
+            let pieces = try await transcription.transcribeInPieces(samples, vocabulary: [], audioSeconds: seconds)
+            let latency = start.duration(to: .now)
+            let transcript = RecordingPieces.transcript(of: pieces)
+            let joined = TranscriptScoring.counts(references: [references.joined(separator: " ")], hypotheses: [transcript.text], dropFillers: dropFillers)
+            let joinedRate = 100 * Double(joined.errors) / Double(max(joined.tokens, 1))
+            let singleRate = 100 * Double(single.errors) / Double(max(single.tokens, 1))
+            let lengths = pieces.map { String(format: "%.1f", $0.seconds) }.joined(separator: ", ")
+            Attachment.record("\(set): \(references.count) clips, \(String(format: "%.1f", seconds)) s in pieces of \(lengths) s, \(latency), error \(String(format: "%.1f", joinedRate))% in pieces, \(String(format: "%.1f", singleRate))% one by one", named: "pieces-\(set).txt")
+            #expect(seconds >= target - 30 && seconds <= RecordingLimits.maximumSeconds)
+            #expect(pieces.count > 1)
+            #expect(pieces.allSatisfy { $0.seconds <= RecordingPieces.maximumSeconds })
+            #expect(transcript.missing == 0)
+            #expect(joinedRate <= singleRate + 3, "\(set): \(joinedRate)% in pieces against \(singleRate)% one by one")
         }
 
         @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_FULL_EVAL"] != nil))

@@ -85,6 +85,16 @@ import CoreGraphics
 ///   so is its key up. At any other time Escape passes through.
 /// - While hands free is off, a short press is a hold like any other, which the controller
 ///   discards as too short.
+/// - When the recording limit stops a dictation that a press of its key was to finish, the
+///   user may not have noticed and still press the key to stop, which would start a new
+///   recording. So until the owner ends the wait, the next press of that key on its own
+///   sends `.pressedAfterLimit` at its release and records nothing, see `stopAtLimit()`.
+///   In Press to start and stop and in Double press that holds however long the press. In
+///   Hold mode, where holding the key is how one dictates, the press waits `leftKeyDelay`
+///   like a left hand key: released sooner, it is the press to stop, and held longer, it
+///   is a hold as usual. A key that records at once captures early meanwhile, so the hold
+///   keeps the speech of the wait. A shortcut with the key, Escape and other talk keys
+///   work as usual and leave the wait as it is.
 ///
 /// Decisions about trigger modes, see TriggerMode. Each key has its own, and a key without
 /// one holds. Double press for hands free applies to keys in hold mode only.
@@ -147,13 +157,19 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         /// when `finishes` is true: the press came on its own, and no key, modifier or
         /// click came since.
         case handsFreeKeyDown(Hotkey, finishes: Bool)
+        /// The key is down after a stop at the recording limit, in Press to start and stop or
+        /// Double press, or was down at the stop. It records nothing, however long, see
+        /// `stopAtLimit()`. Its release sends `.pressedAfterLimit` when `dismisses` is true:
+        /// the press came on its own, and no key, modifier or click came since.
+        case stoppedAtLimitKeyDown(Hotkey, dismisses: Bool)
 
         /// The talk key this phase is about, if any.
         var key: Hotkey? {
             switch self {
             case .up: nil
             case .arming(let key), .holding(let key), .cancelled(let key), .passingThrough(let key),
-                 .tapped(let key, _), .handsFree(let key), .handsFreeKeyDown(let key, _): key
+                 .tapped(let key, _), .handsFree(let key), .handsFreeKeyDown(let key, _),
+                 .stoppedAtLimitKeyDown(let key, _): key
             }
         }
 
@@ -161,7 +177,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         var keyIsDown: Bool {
             switch self {
             case .up, .tapped, .handsFree: false
-            case .arming, .holding, .cancelled, .passingThrough, .handsFreeKeyDown: true
+            case .arming, .holding, .cancelled, .passingThrough, .handsFreeKeyDown, .stoppedAtLimitKeyDown: true
             }
         }
 
@@ -239,6 +255,11 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     private var isSecondPress = false
     /// The regular key whose key down was hidden, so its key up is hidden too.
     private var hiddenKeyCode: Int64?
+    /// The key whose next press on its own was meant to finish a dictation that the
+    /// recording limit stopped, see `stopAtLimit()`. Nil when no such press is awaited.
+    /// Kept apart from the phase, so presses of other keys that turn out to be shortcuts
+    /// leave it alone.
+    private(set) var limitKey: Hotkey?
 
     init(keys: Set<Hotkey>, delayedKeys: Set<Hotkey> = [], modes: [Hotkey: TriggerMode] = [:], handsFreeEnabled: Bool = true) {
         self.keys = keys
@@ -306,6 +327,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         orderedKeys = Self.ordered(newKeys)
         delayedKeys = newDelayedKeys
         modes = newModes
+        if let limitKey, !newKeys.contains(limitKey) {
+            self.limitKey = nil
+        }
         guard let active = phase.key, !newKeys.contains(active) else { return nil }
         return reset()
     }
@@ -436,8 +460,12 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             phase = .cancelled(key)
             return isCapturingEarly ? .cancelled : nil
         case .arming(let key):
-            // Held long enough to be a hold, even when it was a second press.
+            // Held long enough to be a hold, even when it was a second press or the press
+            // after a stop at the limit.
             isSecondPress = false
+            if key == limitKey {
+                limitKey = nil
+            }
             phase = .holding(key)
             return .pressed(isRepeat: false)
         case .tapped(_, let recording):
@@ -466,6 +494,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         case .handsFreeKeyDown(let key, true) where key.modifiesClicks:
             phase = .handsFreeKeyDown(key, finishes: false)
             return nil
+        case .stoppedAtLimitKeyDown(let key, true) where key.modifiesClicks:
+            phase = .stoppedAtLimitKeyDown(key, dismisses: false)
+            return nil
         default:
             return nil
         }
@@ -486,6 +517,42 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         }
     }
 
+    /// The owner tells that the recording limit stopped the dictation of the current press
+    /// or hands free dictation. When a press of the key was to finish it, after a hands free
+    /// dictation or the first press in Press to start and stop that is still down, that
+    /// press is still to come. Until `endLimitWindow()`, the next press of the key on its
+    /// own then sends `.pressedAfterLimit` at its release and records nothing, unless in
+    /// Hold mode it is held long enough to be a hold. A press that is down already counts
+    /// as that press when it was to finish the dictation. Returns whether the key waits for
+    /// that press. A hold in Hold mode finishes nothing at its release, so it stays as it
+    /// is.
+    mutating func stopAtLimit() -> Bool {
+        switch phase {
+        case .handsFree(let key):
+            phase = .up
+            limitKey = key
+        case .handsFreeKeyDown(let key, let finishes):
+            phase = .stoppedAtLimitKeyDown(key, dismisses: finishes)
+            limitKey = key
+        case .holding(let key) where mode(of: key) == .toggle:
+            phase = .stoppedAtLimitKeyDown(key, dismisses: false)
+            limitKey = key
+        default:
+            return false
+        }
+        return true
+    }
+
+    /// The owner ends the wait for the press after a stop at the recording limit. A key
+    /// that is down then finishes nothing at its release, and a press in Hold mode that
+    /// still waits ends like any other.
+    mutating func endLimitWindow() {
+        limitKey = nil
+        if case .stoppedAtLimitKeyDown(let key, _) = phase {
+            phase = .cancelled(key)
+        }
+    }
+
     /// Forgets the current hold, for when the tap was off and may have missed events, or
     /// the key stopped being a talk key. Returns `.cancelled` when a recording was in
     /// progress, also an early capture.
@@ -493,13 +560,14 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         defer {
             phase = .up
             pressedAt = nil
+            limitKey = nil
         }
         switch phase {
         case .holding, .handsFree, .handsFreeKeyDown, .tapped(_, recording: true):
             return .cancelled
         case .arming:
             return isCapturingEarly ? .cancelled : nil
-        case .up, .cancelled, .passingThrough, .tapped(_, recording: false):
+        case .up, .cancelled, .passingThrough, .tapped(_, recording: false), .stoppedAtLimitKeyDown:
             return nil
         }
     }
@@ -515,7 +583,11 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
                 return .passThrough
             }
             pressedAt = now
-            if waitsBeforeRecording(key) || mode(of: key) == .doubleTap {
+            if key == limitKey, mode(of: key) != .hold {
+                phase = .stoppedAtLimitKeyDown(key, dismisses: true)
+                return Decision(event: nil, swallow: swallow)
+            }
+            if waitsBeforeRecording(key) || mode(of: key) == .doubleTap || key == limitKey {
                 return Decision(event: arm(key), swallow: swallow)
             }
             phase = .holding(key)
@@ -534,12 +606,20 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
                 phase = .handsFree(key)
                 return Decision(event: .doublePressed, swallow: swallow)
             }
+            var released = dropped
+            if key == limitKey {
+                // The press meant to stop a dictation that the limit stopped. Its event drops
+                // an early capture too, see PushToTalkStateMachine. A double press that
+                // follows still starts hands free.
+                limitKey = nil
+                released = .pressedAfterLimit
+            }
             guard doublePressStartsHandsFree(key) else {
                 phase = .up
-                return Decision(event: dropped, swallow: swallow)
+                return Decision(event: released, swallow: swallow)
             }
             phase = .tapped(key, recording: false)
-            return Decision(event: dropped, swallow: swallow)
+            return Decision(event: released, swallow: swallow)
         case (.holding, false):
             if key.twinIsDown(atReleaseWith: flags) {
                 phase = .up
@@ -588,6 +668,14 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             }
             phase = .up
             return Decision(event: .released, swallow: swallow)
+        case (.stoppedAtLimitKeyDown(_, let dismisses), false):
+            phase = .up
+            guard dismisses, !key.twinIsDown(atReleaseWith: flags) else {
+                // A shortcut with the key. The wait goes on.
+                return Decision(event: nil, swallow: swallow)
+            }
+            limitKey = nil
+            return Decision(event: .pressedAfterLimit, swallow: swallow)
         case (.cancelled, false):
             phase = .up
             return Decision(event: nil, swallow: swallow)
@@ -598,7 +686,7 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
             // A release without a press, for example a key held since before launch, or a
             // repeated press that belongs to another shortcut.
             return .passThrough
-        case (.arming, true), (.holding, true), (.cancelled, true), (.handsFreeKeyDown, true):
+        case (.arming, true), (.holding, true), (.cancelled, true), (.handsFreeKeyDown, true), (.stoppedAtLimitKeyDown, true):
             // A repeated press while the key is already down. Keep fn's events, and the
             // regular key of a combination, hidden.
             return Decision(event: nil, swallow: swallow)
@@ -609,7 +697,9 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
     private mutating func arm(_ key: Hotkey) -> PushToTalkStateMachine.Event? {
         phase = .arming(key)
         pressWaited = true
-        isCapturingEarly = capturesEarly(key)
+        // A key that records at once waits after a stop at the limit only to tell the press
+        // to stop from a hold, so it starts the microphone as it always does.
+        isCapturingEarly = capturesEarly(key) || (key == limitKey && !waitsBeforeRecording(key))
         return isCapturingEarly ? .armed : nil
     }
 
@@ -643,7 +733,10 @@ nonisolated struct TalkKeyDetector: Equatable, Sendable {
         case .handsFreeKeyDown(let key, true):
             phase = .handsFreeKeyDown(key, finishes: false)
             return .passThrough
-        case .up, .cancelled, .passingThrough, .handsFree, .handsFreeKeyDown:
+        case .stoppedAtLimitKeyDown(let key, true):
+            phase = .stoppedAtLimitKeyDown(key, dismisses: false)
+            return .passThrough
+        case .up, .cancelled, .passingThrough, .handsFree, .handsFreeKeyDown, .stoppedAtLimitKeyDown:
             return .passThrough
         }
     }

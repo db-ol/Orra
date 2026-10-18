@@ -126,6 +126,8 @@ final class FakeSpeech {
     private(set) var receivedContexts: [String?] = []
     /// The language each transcription was told to write, nil when none.
     private(set) var receivedLanguages: [SpeechLanguage?] = []
+    /// What the next transcriptions give, one each, in place of the replies above.
+    var queued: [Result<String, any Error>] = []
 
     var transcription: Transcription {
         Transcription(
@@ -142,6 +144,9 @@ final class FakeSpeech {
                 self.receivedSampleCounts.append(samples.count)
                 if self.delay > .zero {
                     try await Task.sleep(for: self.delay)
+                }
+                if !self.queued.isEmpty {
+                    return try self.queued.removeFirst().get()
                 }
                 if let error = self.transcribeError { throw error }
                 if context == nil, let error = self.transcribeErrorWithoutContext { throw error }
@@ -183,6 +188,7 @@ struct PushToTalkControllerTests {
 
     private func makeController(
         limit: Duration = RecordingLimits.maximumDuration,
+        countdown: Duration = RecordingLimits.countdown,
         minimumHold: Duration = .zero,
         listeningCueDelay: Duration = .zero,
         soundWaitLimit: Duration = .seconds(1),
@@ -194,6 +200,7 @@ struct PushToTalkControllerTests {
             insert: inserter.insert,
             frontmostApp: { [workspace] in workspace.frontmost },
             maximumRecordingDuration: limit,
+            countdown: countdown,
             minimumHold: minimumHold,
             releaseTail: .zero,
             listeningCueDelay: listeningCueDelay,
@@ -207,7 +214,11 @@ struct PushToTalkControllerTests {
 
     /// A started controller whose keyboard tap is a fake, so no real tap is installed. The
     /// fake allows the tap, so the hotkey is active.
-    private func startedController(translation: TranslationModel = .off) async throws -> PushToTalkController {
+    private func startedController(
+        translation: TranslationModel = .off,
+        limit: Duration = RecordingLimits.maximumDuration,
+        limitNoticeWindow: Duration = RecordingLimits.noticeWindow
+    ) async throws -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,
             transcription: speech.transcription,
@@ -216,6 +227,8 @@ struct PushToTalkControllerTests {
             frontmostApp: { [workspace] in workspace.frontmost },
             isTrusted: tapSystem.isTrusted,
             installTap: tapSystem.install,
+            maximumRecordingDuration: limit,
+            limitNoticeWindow: limitNoticeWindow,
             minimumHold: .zero,
             releaseTail: .zero,
             accessCheckDelay: .milliseconds(20)
@@ -813,7 +826,7 @@ struct PushToTalkControllerTests {
         #expect(mic.calls == ["start", "stop"])
         #expect(controller.state == .idle)
         #expect(inserter.inserted == ["你好"])
-        #expect(controller.notice == "Orra records up to 1 minute at a time, so the recording stopped there.")
+        #expect(controller.notice == "Orra records up to 5 minutes at a time, so the recording stopped there.")
         // The real release that follows later changes nothing.
         controller.handle(.released)
         #expect(mic.calls == ["start", "stop"])
@@ -835,6 +848,385 @@ struct PushToTalkControllerTests {
         controller.handle(.cancelled)
         try await waitUntil { mic.calls.count == 4 }
         #expect(mic.calls == ["start", "stop", "start", "cancel"])
+    }
+
+    // MARK: Long dictations
+
+    static let limitNotice = "Orra records up to 5 minutes at a time, so the recording stopped there."
+
+    /// A recording of `seconds` at 16 kHz with no pause in it.
+    private func longRecording(seconds: Double) -> AudioRecording {
+        AudioRecording(samples: FakeMicrophone.tone(count: Int(seconds * 16_000)), sampleRate: 16_000)
+    }
+
+    @Test func theIndicatorCountsDownBeforeTheLimit() async throws {
+        let controller = await makeController(limit: .milliseconds(300), countdown: .milliseconds(200))
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        let near = try #require(cues.list.firstIndex(of: .limitNear(remaining: .milliseconds(200))))
+        let transcribing = try #require(cues.list.firstIndex(of: .transcribing))
+        #expect(near < transcribing)
+        #expect(cues.list.filter { if case .limitNear = $0 { true } else { false } }.count == 1)
+        #expect(cues.list.last == .finished(message: Self.limitNotice))
+    }
+
+    @Test func aDictationReleasedBeforeTheCountdownSendsNone() async throws {
+        let controller = await makeController(limit: .seconds(10), countdown: .seconds(5))
+        let cues = CueRecorder(controller)
+        try await dictate(controller)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(cues.list == [.listening, .transcribing, .recordingStopped, .finished(message: nil)])
+    }
+
+    @Test func aMinuteIsTranscribedInOnePass() async throws {
+        mic.recording = longRecording(seconds: 60)
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts == [960_000])
+        #expect(inserter.inserted == ["你好"])
+        #expect(controller.notice == nil)
+    }
+
+    @Test func aLongerDictationIsTranscribedInPiecesOfAMinute() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.queued = [.success("早上好。"), .success("中午好。"), .success("晚上好。")]
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 3)
+        #expect(speech.receivedSampleCounts.allSatisfy { $0 <= 960_000 })
+        #expect(speech.receivedSampleCounts.reduce(0, +) == 130 * 16_000)
+        #expect(inserter.inserted == ["早上好。中午好。晚上好。"])
+        #expect(controller.notice == nil)
+        #expect(controller.problem == nil)
+    }
+
+    /// Each piece gets the vocabulary and the checks of a whole recording, here the number
+    /// pass, which a piece that may hold a number in words asks for.
+    @Test func eachPieceGetsTheVocabularyAndTheNumberPass() async throws {
+        mic.recording = longRecording(seconds: 100)
+        let controller = await makeController()
+        controller.addToVocabulary("Orra")
+        speech.reply = "Orra 在二零二四年发布。"
+        speech.replyWithoutContext = "Aura 在2024年发布。"
+        try await dictate(controller)
+        #expect(speech.receivedContexts == ["Orra", nil, "Orra", nil])
+        #expect(inserter.inserted == ["Orra 在2024年发布。Orra 在2024年发布。"])
+    }
+
+    @Test func aFailedPieceLeavesTheOthersAndSaysSo() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.queued = [.success("早上好。"), .failure(TestError()), .success("晚上好。")]
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 3)
+        #expect(inserter.inserted == ["早上好。晚上好。"])
+        #expect(controller.problem == nil)
+        #expect(controller.notice == "Part of this dictation could not be transcribed.")
+    }
+
+    /// A piece without text is quiet, such as a pause to think in a hands free dictation,
+    /// so nothing is said to be missing, in the middle or at the end.
+    @Test func anEmptyPieceIsNotMissing() async throws {
+        mic.recording = longRecording(seconds: 130)
+        let controller = await makeController()
+        speech.queued = [.success("早上好。"), .success(""), .success("晚上好。")]
+        try await dictate(controller)
+        #expect(inserter.inserted == ["早上好。晚上好。"])
+        #expect(controller.notice == nil)
+        speech.queued = [.success("早上好。"), .success("中午好。"), .success("")]
+        try await dictate(controller)
+        #expect(inserter.inserted.last == "早上好。中午好。")
+        #expect(controller.notice == nil)
+    }
+
+    /// Minutes without speech say only that nothing was recognized.
+    @Test func aLongSilenceSaysOnlyThatNothingWasRecognized() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.reply = ""
+        let controller = await makeController()
+        let cues = CueRecorder(controller)
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 3)
+        #expect(controller.notice == nil)
+        #expect(cues.list.last == .finished(message: "No speech was recognized"))
+    }
+
+    @Test func whenEveryPieceFailsTheDictationFails() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.transcribeError = TestError()
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 3)
+        #expect(inserter.inserted.isEmpty)
+        #expect(controller.problem == "The recording could not be transcribed")
+    }
+
+    @Test func aCancellationEndsTheWholeDictation() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.queued = [.success("早上好。"), .failure(CancellationError()), .success("晚上好。")]
+        let controller = await makeController()
+        try await dictate(controller)
+        #expect(speech.receivedSampleCounts.count == 2)
+        #expect(inserter.inserted.isEmpty)
+        #expect(controller.problem == "The recording could not be transcribed")
+    }
+
+    /// Every reason that applies is told: here the limit and a part that was not transcribed.
+    @Test func theNoticesOfALongDictationAddUp() async throws {
+        mic.recording = longRecording(seconds: 130)
+        speech.queued = [.success("早上好。"), .failure(TestError()), .success("晚上好。")]
+        let controller = await makeController(limit: .milliseconds(50))
+        let cues = CueRecorder(controller)
+        controller.handle(.pressed(isRepeat: false))
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        let both = Self.limitNotice + " Part of this dictation could not be transcribed."
+        #expect(controller.notice == both)
+        // The menu shows each on a line of its own.
+        #expect(controller.notices == [Self.limitNotice, "Part of this dictation could not be transcribed."])
+        #expect(cues.list.last == .finished(message: both))
+    }
+
+    /// Said without a wait for the model, which would not run anyway.
+    @Test func aLongDictationSaysItWasPastedWithoutCleanup() async throws {
+        let cleanups = Mutex(0)
+        var waits = 0
+        let controller = await controller(cleanup: CleanupModel(isOn: { true }, waitUntilLoaded: {
+            waits += 1
+            return true
+        }, complete: { _ in
+            cleanups.withLock { $0 += 1 }
+            return #"{"cleaned": "我们明天开会。"}"#
+        }))
+        mic.recording = longRecording(seconds: 100)
+        speech.reply = String(repeating: "呃我们明天下午开会讨论一下。", count: 20)
+        try await dictate(controller)
+        #expect(cleanups.withLock { $0 } == 0)
+        #expect(waits == 0)
+        #expect((inserter.inserted.first?.count ?? 0) > CleanupStep.maximumLength)
+        #expect(controller.notice == "Dictations over 400 characters are pasted without cleanup.")
+        // Without a filler or a correction the model would have had nothing to do.
+        speech.reply = String(repeating: "我们明天下午开会讨论一下。", count: 20)
+        try await dictate(controller)
+        #expect(controller.notice == nil)
+    }
+
+    @Test func withCleanupOffALongDictationSaysNothingAboutIt() async throws {
+        let controller = await makeController()
+        mic.recording = longRecording(seconds: 100)
+        speech.reply = String(repeating: "呃我们明天下午开会讨论一下。", count: 20)
+        try await dictate(controller)
+        #expect(controller.notice == nil)
+    }
+
+    // MARK: The press after a stop at the limit
+
+    /// A press of right Control through the tap, released after `held`.
+    private func press(_ tap: HotkeyTap, at now: inout ContinuousClock.Instant, held: Duration = .milliseconds(80)) {
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: HotkeyTapTests.rightControlDown, at: now)
+        now = now.advanced(by: held)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [], at: now)
+        now = now.advanced(by: .milliseconds(100))
+    }
+
+    /// Starts a dictation that the limit stops while the key is up, in `mode`, and waits until
+    /// it was pasted.
+    private func dictationStoppedAtLimit(_ mode: TriggerMode, limitNoticeWindow: Duration = RecordingLimits.noticeWindow) async throws -> (PushToTalkController, HotkeyTap, CueRecorder, ContinuousClock.Instant) {
+        let controller = try await startedController(limit: .milliseconds(200), limitNoticeWindow: limitNoticeWindow)
+        controller.setTriggerMode(mode, for: .talk)
+        let cues = CueRecorder(controller)
+        let tap = try #require(tapSystem.installed)
+        var now = ContinuousClock.now
+        // Press to start and stop starts with one press, the other two with a double press.
+        press(tap, at: &now)
+        if mode != .toggle {
+            press(tap, at: &now)
+        }
+        #expect(controller.state == .handsFree)
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        #expect(mic.calls == ["start", "stop"])
+        return (controller, tap, cues, now)
+    }
+
+    /// In every mode where a press finishes the dictation, that press after a stop at the
+    /// limit only dismisses the notice. The press after it records as usual.
+    @Test(arguments: [TriggerMode.toggle, .doubleTap, .hold])
+    func thePressMeantToStopOnlyDismissesTheNotice(_ mode: TriggerMode) async throws {
+        let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(mode)
+        var now = initial
+        #expect(cues.list.last == .stoppedAtLimit(message: Self.limitNotice))
+        #expect(controller.notice == Self.limitNotice)
+        // Escape is not kept from the app meanwhile.
+        #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now) == false)
+        press(tap, at: &now)
+        #expect(controller.state == .idle)
+        #expect(cues.list.last == .finished(message: nil))
+        // In Hold mode the press began an early capture, which its release dropped before
+        // the microphone started.
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mic.calls == ["start", "stop"])
+        // The menu still says why the recording stopped.
+        #expect(controller.notice == Self.limitNotice)
+        if mode == .hold {
+            // Past the window in which the press could begin a double press.
+            try await Task.sleep(for: TalkKeyDetector.doublePressWindow + .milliseconds(100))
+        }
+        press(tap, at: &now)
+        if mode != .toggle {
+            press(tap, at: &now)
+        }
+        #expect(controller.state == .handsFree)
+        try await waitUntil { mic.calls.count == 3 }
+        #expect(mic.calls == ["start", "stop", "start"])
+        _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 4 }
+    }
+
+    /// In Hold mode, holding the key is how one dictates, so after a stop at the limit a
+    /// hold records as usual, from its key down, and clears the notice.
+    @Test func inHoldModeAHoldAfterTheLimitRecords() async throws {
+        let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.hold)
+        var now = initial
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: HotkeyTapTests.rightControlDown, at: now)
+        #expect(controller.state == .arming)
+        try await waitUntil { mic.calls.count == 3 }
+        // The tap's own timer counts the press once it has waited.
+        try await waitUntil { controller.state == .listening }
+        // The notice gives way to the bars.
+        try await waitUntil { cues.list.last == .listening }
+        #expect(cues.list.last == .listening)
+        now = now.advanced(by: .seconds(1))
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && inserter.inserted.count == 2 }
+        #expect(mic.calls == ["start", "stop", "start", "stop"])
+        #expect(controller.notice == nil)
+    }
+
+    /// In Hold mode a double press right after a stop at the limit starts hands free: its
+    /// first press clears the notice and its second starts the recording.
+    @Test func inHoldModeADoublePressAfterTheLimitStartsHandsFree() async throws {
+        let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.hold)
+        var now = initial
+        press(tap, at: &now)
+        press(tap, at: &now)
+        #expect(controller.state == .handsFree)
+        #expect(cues.list.contains(.finished(message: nil)))
+        try await waitUntil { mic.calls.count == 3 }
+        #expect(mic.calls == ["start", "stop", "start"])
+        _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 4 }
+    }
+
+    @Test func aPressAfterTheWindowRecordsAsUsual() async throws {
+        let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.toggle, limitNoticeWindow: .milliseconds(100))
+        var now = initial
+        #expect(cues.list.last == .stoppedAtLimit(message: Self.limitNotice))
+        try await Task.sleep(for: .milliseconds(300))
+        press(tap, at: &now)
+        #expect(controller.state == .handsFree)
+        try await waitUntil { mic.calls.count == 3 }
+        _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 4 }
+    }
+
+    /// When the stopped dictation gave no text, the notice that stays says first why it
+    /// stopped, and then why nothing was pasted.
+    @Test func theNoticeAfterTheLimitSaysWhyItStoppedFirst() async throws {
+        speech.reply = ""
+        let controller = try await startedController(limit: .milliseconds(200))
+        controller.setTriggerMode(.toggle, for: .talk)
+        let cues = CueRecorder(controller)
+        let tap = try #require(tapSystem.installed)
+        var now = ContinuousClock.now
+        press(tap, at: &now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 2 }
+        try await waitUntil { cues.list.last.map { if case .stoppedAtLimit = $0 { true } else { false } } == true }
+        #expect(cues.list.last == .stoppedAtLimit(message: Self.limitNotice + " No speech was recognized"))
+    }
+
+    /// A press while the dictation is still being transcribed is the one that was meant to
+    /// stop it. It records nothing, the notice then shows as any message does, and the next
+    /// press records.
+    @Test func aPressDuringTheTranscriptionIsThePressMeantToStop() async throws {
+        speech.delay = .milliseconds(400)
+        let controller = try await startedController(limit: .milliseconds(200))
+        controller.setTriggerMode(.toggle, for: .talk)
+        let cues = CueRecorder(controller)
+        let tap = try #require(tapSystem.installed)
+        var now = ContinuousClock.now
+        press(tap, at: &now)
+        try await waitUntil { controller.state == .processing }
+        press(tap, at: &now)
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        #expect(cues.list.last == .finished(message: Self.limitNotice))
+        #expect(mic.calls == ["start", "stop"])
+        press(tap, at: &now)
+        #expect(controller.state == .handsFree)
+        try await waitUntil { mic.calls.count == 3 }
+        _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 4 }
+    }
+
+    /// In Hold mode the key is still down when the limit stops the recording, and its
+    /// release finishes nothing. The next press records as usual.
+    @Test func inHoldModeTheNextPressRecordsAsUsual() async throws {
+        let controller = try await startedController(limit: .milliseconds(200))
+        let cues = CueRecorder(controller)
+        let tap = try #require(tapSystem.installed)
+        var now = ContinuousClock.now
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: HotkeyTapTests.rightControlDown, at: now)
+        #expect(controller.state == .listening)
+        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        #expect(cues.list.last == .finished(message: Self.limitNotice))
+        now = now.advanced(by: .seconds(1))
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [], at: now)
+        #expect(controller.state == .idle)
+        now = now.advanced(by: .seconds(1))
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: HotkeyTapTests.rightControlDown, at: now)
+        #expect(controller.state == .listening)
+        try await waitUntil { mic.calls.count == 3 }
+        #expect(mic.calls == ["start", "stop", "start"])
+        controller.handle(.cancelled)
+        try await waitUntil { mic.calls.count == 4 }
+    }
+
+    /// A press of another key that may still be a shortcut, such as one that waits and
+    /// captures early, does not end the wait, so the press meant to stop still only
+    /// dismisses the notice.
+    @Test func aPressThatTurnsOutAShortcutKeepsTheWait() async throws {
+        let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.toggle)
+        var now = initial
+        controller.handle(.armed)
+        #expect(controller.state == .arming)
+        try await waitUntil { mic.calls.count == 3 }
+        controller.handle(.cancelled)
+        #expect(controller.state == .idle)
+        try await waitUntil { mic.calls.count == 4 }
+        press(tap, at: &now)
+        #expect(controller.state == .idle)
+        #expect(cues.list.last == .finished(message: nil))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(mic.calls == ["start", "stop", "start", "cancel"])
+    }
+
+    /// Another talk key during the wait starts its own dictation, and ends the wait.
+    @Test func anotherKeyDuringTheWaitRecordsAsUsual() async throws {
+        let (controller, tap, _, initial) = try await dictationStoppedAtLimit(.toggle)
+        var now = initial
+        controller.setSecondTalkKey(.fn)
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: .maskSecondaryFn, at: now)
+        #expect(controller.state == .listening)
+        now = now.advanced(by: .milliseconds(80))
+        _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.fn.keyCode, flags: [], at: now)
+        #expect(controller.state == .handsFree)
+        try await waitUntil { mic.calls.count == 3 }
+        _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 4 }
+        // The wait is over, so right Control records again.
+        press(tap, at: &now)
+        #expect(controller.state == .handsFree)
+        _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
+        try await waitUntil { controller.state == .idle && mic.calls.count == 6 }
     }
 
     @Test func aTapTheSystemSwitchedOffShowsTheTalkKeyOffUntilANewTapIsInstalled() async throws {
@@ -2089,7 +2481,8 @@ struct PushToTalkControllerTests {
         controller.handle(.doublePressed)
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(inserter.inserted == ["你好"])
-        #expect(cues.list.last == .finished(message: "Orra records up to 1 minute at a time, so the recording stopped there."))
+        // Without a keyboard tap no press waits, so the message goes as any message does.
+        #expect(cues.list.last == .finished(message: "Orra records up to 5 minutes at a time, so the recording stopped there."))
     }
 
     @Test func aDoublePressWithoutTheModelSaysWhy() async throws {
