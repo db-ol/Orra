@@ -74,13 +74,16 @@ nonisolated enum RecordingPieces {
 
     /// The text of a dictation from what the speech model wrote for its pieces, and how
     /// many pieces failed. Each text goes through TranscriptGuard for the length of its own
-    /// piece and into simplified characters, as a whole recording did before, so one piece
-    /// gives exactly the text it always did. An empty piece is not missing: the speech
-    /// model writes nothing for silence, such as a long pause to think or the quiet before
-    /// the key stopped the recording.
-    static func transcript(of pieces: [TranscribedPiece]) -> (text: String, missing: Int) {
+    /// piece and, when `simplifying`, into simplified characters, as a whole recording did
+    /// before, so one piece gives exactly the text it always did. An empty piece is not
+    /// missing: the speech model writes nothing for silence, such as a long pause to think
+    /// or the quiet before the key stopped the recording.
+    static func transcript(of pieces: [TranscribedPiece], simplifying: Bool = true) -> (text: String, missing: Int) {
         let texts = pieces.compactMap { piece in
-            piece.text.map { ChineseText.simplified(TranscriptGuard.clean($0, audioSeconds: piece.seconds)) }
+            piece.text.map { text in
+                let guarded = TranscriptGuard.clean(text, audioSeconds: piece.seconds)
+                return simplifying ? ChineseText.simplified(guarded) : guarded
+            }
         }
         return (joined(texts), pieces.count(where: { $0.text == nil }))
     }

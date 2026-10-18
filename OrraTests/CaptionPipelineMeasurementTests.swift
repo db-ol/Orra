@@ -79,13 +79,13 @@ struct CaptionPipelineMeasurementTests {
         let transcribe = engines.transcribe
         let transcribeInterim = engines.transcribeInterim ?? transcribe
         let translate = engines.translate
-        engines.transcribe = { samples in
+        engines.transcribe = { samples, language in
             calls.final += 1
-            return try await transcribe(samples)
+            return try await transcribe(samples, language)
         }
-        engines.transcribeInterim = { samples in
+        engines.transcribeInterim = { samples, language in
             calls.interim += 1
-            return try await transcribeInterim(samples)
+            return try await transcribeInterim(samples, language)
         }
         engines.translate = { text, target in
             calls.translation += 1

@@ -107,6 +107,7 @@ struct SettingsPageTests {
         try await render(.tab(.general), translationOn: true, name: "\(language)-0-general-translation-on")
         try await render(.tab(.general), translationOn: true, swapped: true, name: "\(language)-0-general-translation-swapped")
         try await render(.tab(.general), cleanupOn: true, translationOn: true, height: 1400, name: "\(language)-0-general-full-height")
+        try await render(.tab(.general), dictating: .japanese, height: 1400, name: "\(language)-0-general-japanese")
         try await render(.tab(.meeting), meeting: true, name: "\(language)-1-meeting-interpretation")
         try await render(.tab(.meeting), translationOn: true, meeting: true, height: 1200, name: "\(language)-1-meeting-interpretation-full-height")
         try await render(.tab(.vocabulary), name: "\(language)-2-vocabulary")
@@ -129,8 +130,9 @@ struct SettingsPageTests {
     /// at the size it opens at over that window, since a sheet does not draw outside a
     /// window on screen.
     /// With `meeting`, the Meeting Interpretation page has its parts, with captions that hear
-    /// nothing and a voice model that is not downloaded.
-    private func render(_ shown: Shown, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, height: CGFloat? = nil, name: String) async throws {
+    /// nothing and a voice model that is not downloaded. `dictating` is the dictation
+    /// language picked.
+    private func render(_ shown: Shown, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -146,7 +148,7 @@ struct SettingsPageTests {
             models: models,
             engine: CleanupEngine(load: { _ in }, unload: {}, complete: { $0 })
         )
-        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert)
+        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, dictationLanguage: dictating)
         for word in ["Orra", "Qwen3-ASR", "克劳德"] {
             pushToTalk.addToVocabulary(word)
         }
@@ -167,7 +169,7 @@ struct SettingsPageTests {
             updater: AppUpdater(),
             captions: meeting ? MeetingCaptions(
                 source: SystemAudioSource(start: { _ in }, stop: {}),
-                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
             ) : nil,
             speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,
             voiceModels: meeting ? VoiceModels(kind: .qwen3) { [temporary] manifest in

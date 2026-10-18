@@ -160,6 +160,16 @@ struct RecordingPiecesTests {
         #expect(transcript.missing == 0)
     }
 
+    /// For Japanese the pieces keep their Han characters as written, and are still
+    /// guarded and joined without a space.
+    @Test func piecesKeepTheirHanCharactersWithoutSimplifying() {
+        let transcript = RecordingPieces.transcript(of: [
+            TranscribedPiece(text: " 東京駅に着きました。 ", seconds: 50),
+            TranscribedPiece(text: "會議は十時からです。", seconds: 50),
+        ], simplifying: false)
+        #expect(transcript.text == "東京駅に着きました。會議は十時からです。")
+    }
+
     /// Only failed pieces are missing. An empty one is quiet, such as a pause to think in a
     /// hands free dictation or the quiet before the key stopped the recording.
     @Test func failedPiecesAreCounted() {

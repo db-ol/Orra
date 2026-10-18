@@ -275,6 +275,7 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section {
+                DictationLanguageRow(pushToTalk: pushToTalk)
                 Toggle(isOn: Binding(
                     get: { pushToTalk.handsFreeOn },
                     set: { pushToTalk.setHandsFreeOn($0) }
@@ -791,6 +792,49 @@ private struct VocabularySettings: View {
         defer { fieldFocused = true }
         pushToTalk.addToVocabulary(newTerm)
         newTerm = ""
+    }
+}
+
+/// Dictation language: Chinese, Japanese or Spanish, each with English. The line under the
+/// name says the two mix, and for Japanese and Spanish that Clean Up Text, the rules and the
+/// cleanup model, takes English only.
+private struct DictationLanguageRow: View {
+    let pushToTalk: PushToTalkController
+
+    var body: some View {
+        Picker(selection: Binding(
+            get: { pushToTalk.dictationLanguage },
+            set: { pushToTalk.setDictationLanguage($0) }
+        )) {
+            ForEach(DictationLanguage.allCases) { language in
+                language.title.tag(language)
+            }
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Dictation language")
+                    Group {
+                        Text("You can mix the two languages in one sentence.")
+                        if pushToTalk.dictationLanguage != .chinese {
+                            Text("Clean Up Text works on English sentences only for now.")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "character.bubble")
+            }
+        }
+    }
+}
+
+extension DictationLanguage {
+    /// The choice as Settings and the welcome window show it: its own name, which is never
+    /// translated, and for a beta the word Beta in the interface language.
+    var title: Text {
+        isBeta ? Text("\(name) (Beta)") : Text(verbatim: name)
     }
 }
 

@@ -66,7 +66,7 @@ struct StatusMenuTests {
             ),
             captions: MeetingCaptions(
                 source: SystemAudioSource(start: { _ in }, stop: {}),
-                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
             ),
             openAtLogin: OpenAtLogin(readStatus: { .off }, register: { _ in }, openLoginItemsSettings: {}),
             inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) },
