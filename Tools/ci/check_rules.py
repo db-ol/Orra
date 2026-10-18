@@ -51,8 +51,9 @@ EXPECTED_BUILD_SETTINGS = {
         "Orra": "NO",
     },
     # Notarization needs the hardened runtime. Under it the microphone needs the audio
-    # input entitlement, and nothing else is allowed. Xcode writes the other choices of the
-    # Hardened Runtime capability out as NO, which they must stay.
+    # input entitlement, and Projects needs the Apple Events entitlement to read mail in the
+    # Mail app (AUTOMATION_APPLE_EVENTS below). Nothing else is allowed. Xcode writes the
+    # other choices of the Hardened Runtime capability out as NO, which they must stay.
     "ENABLE_HARDENED_RUNTIME": {
         "Orra": "YES",
     },
@@ -110,8 +111,10 @@ EXPECTED_BUILD_SETTINGS = {
     "ENABLE_LIBRARY_VALIDATION": {},
     "PROVISIONING_PROFILE": {},
     "PROVISIONING_PROFILE_SPECIFIER": {},
+    # Projects reads mail in the Mail app through Apple Events, approved by the maintainer on
+    # 2026-10-18. The usage description is in INFO_PLIST below.
     "AUTOMATION_APPLE_EVENTS": {
-        "Orra": "NO",
+        "Orra": "YES",
     },
     "ENABLE_USER_SELECTED_FILES": {},
     "ENABLE_INCOMING_NETWORK_CONNECTIONS": {},
@@ -217,6 +220,8 @@ INFO_PLIST = {
     "SUAllowsAutomaticUpdates": False,
     # The system audio recording prompt for meeting captions, approved on 2026-10-15.
     "NSAudioCaptureUsageDescription": "Orra listens to the sound your Mac plays, such as a call, to show live captions and translations. The audio stays on this Mac.",
+    # The Automation prompt for Mail, which Projects needs, approved on 2026-10-18.
+    "NSAppleEventsUsageDescription": "Orra reads mail in the Mail app only for Projects, and only from the mailboxes you choose. The mail it reads stays on this Mac.",
 }
 RESOLVED_FILE = "Orra.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 DEPENDENCIES_DOC = "docs/dependencies.md"
