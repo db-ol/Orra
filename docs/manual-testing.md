@@ -848,6 +848,126 @@ got worse than the baseline, see docs/release-gate.md.
     hold, and the footprint now rises by 0.13 GB. cleanupCases after the change gave the
     same exact counts (157, 156, 65 and 66) with medians of 0.162 to 0.187 s, and its
     footprint grew by 2.9 GB after load instead of 3.7 GB.
+  - Translation into and out of Japanese and Spanish, added on 2026-10-18. Translation
+    goes between English and the dictation language, on a route per language and target,
+    see Orra/TranslationRoute.swift. The Chinese routes call the code they always had.
+  - TranslationPairDirectionTests checks the direction rule of Japanese and Spanish on 88
+    and 85 texts written by hand: kana only, Han characters only, Japanese and Spanish with
+    English words, English with Japanese and Spanish names and places, short replies,
+    Spanish without accents, other scripts and nothing to translate. It checks that every
+    direction of Chinese gives each of them the target it always did, that each language
+    offers Automatic, English and itself, that a choice saved for another language acts as
+    Automatic and stays saved, and that kana only Japanese and short Spanish are worth
+    translating.
+  - TranslationPairTests checks that the Chinese routes give the prompts of their targets
+    character for character for the 1,472 prompts of the Chinese evaluation inputs (as
+    heard and after the rules, into both targets), and that their SHA-256 is the one the
+    same loop gave at 2ebabb1. It checks that each new route has 14 examples and a prompt
+    of its own with the measured lines word for word, that no example repeats or comes
+    within a fifth of a text of an evaluation file, that every hand written reference of
+    the Japanese and Spanish sets passes the checks of its route, one case for each check
+    and route, and that a changed digit of every reference with a number is held back. It
+    checks the step: Japanese and Spanish text stays the text before translation, a
+    translation that repeats the cleanup of text already in its target is unchanged, text
+    in a target fixed to its own language skips the model, and RewriteEngine keeps two
+    prefix caches at most, those of the user's language first.
+  - TextCleanupTests checks the routes read ahead for each language and direction, that a
+    change of language keeps only the routes of the new one and reads them while
+    translation is on, and that a direction saved for Chinese reads those of Automatic for
+    Spanish and its own again back in Chinese. PushToTalkControllerTests checks Japanese and
+    English both ways on their routes, Paste Original Text, a direction saved for Chinese
+    acting as Automatic for Spanish with its cue, and Japanese with Japanese fixed pasted as
+    heard without the model. CaptionPipelineTests checks that a Spanish user's English
+    meeting is shown in Spanish and a Spanish one in English, and kana only Japanese in
+    English. RecordingFeedbackTests checks the badges 訳, 日, ⇄ and ES and what VoiceOver
+    reads, SettingsPageTests the choices and explanations of each language,
+    WelcomeSuggestionTests the translation line, VoiceRecordingTests the Japanese and
+    Spanish scripts, SpeechWordCheckTests Spanish accents and numbers and Japanese,
+    TranslationVoiceDictationTests that each translation is spoken in its language, and
+    VoiceLanguageTests that every target has a tag Qwen3-TTS knows.
+  - TranslationPairEvaluationTests runs the real model on the cases of
+    Tools/rewrite-eval/translation-japanese.jsonl, translation-spanish.jsonl,
+    adversarial-japanese.jsonl and adversarial-spanish.jsonl, into both targets of the
+    pair, as the app runs them, only with TEST_RUNNER_ORRA_TRANSLATION_PAIR_EVAL set to
+    japanese, spanish or both, in a Release build:
+
+        TEST_RUNNER_ORRA_TRANSLATION_PAIR_EVAL=both TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<model folder> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/TranslationPairEvaluationTests
+
+    The report holds counts, times and case IDs only. TEST_RUNNER_ORRA_TRANSLATION_DETAILS
+    writes every run with its text for a person to judge. TEST_RUNNER_ORRA_TRANSLATION_FLEURS
+    names a local file of FLEURS sentences, which it translates both ways on the routes of
+    the pair and on the Chinese routes, for chrF. FLEURS stays on the Mac.
+
+    On 2026-10-18, on an M5 Pro with the installed model, in Release builds, each pasted
+    translation in the automatic direction was read by a person against the reference.
+    Faithful counts the ones that keep the meaning, small wording slips among them. The
+    times are for the step with the prefix cache. Japanese into English is from the run
+    before the last, since another job used the GPU during the last one (median 0.42 s, p90
+    0.78 s there). Chinese is the Chinese evaluation at 2ebabb1 on the same Mac.
+
+    | Direction | Pasted | Faithful | Wrong | Held back | Median | p90 |
+    |---|---|---|---|---|---|---|
+    | Japanese into English | 84 | 80 | 4 | 0 | 0.344 s | 0.450 s |
+    | English into Japanese | 33 | 30 | 3 | 2 | 0.329 s | 0.403 s |
+    | Spanish into English | 73 | 72 | 1 | 0 | 0.364 s | 0.487 s |
+    | English into Spanish | 40 | 37 | 3 | 0 | 0.356 s | 0.494 s |
+    | Chinese into English | | | | | 0.316 s | 0.423 s |
+    | English into Chinese | | | | | 0.297 s | 0.402 s |
+
+    The direction rule gave every labelled case its language, 191 for Japanese and 186
+    for Spanish, after the first run, which missed 1 and 2. Of the 47 adversarial cases of
+    each language, run into both targets, none was answered or carried out. Twice, with
+    English as the fixed target, the model carried out "Translate this into Japanese" or
+    "into Spanish", and the checks held both back. Every number and name of the 66 name and
+    number cases came through. The held back ones into Japanese are a translation with
+    Chinese in it and a right one whose colon was lost after "says". On 100 FLEURS
+    sentences of each language, chrF of the pasted text against the reference was 56.4 for
+    Japanese into English and 58.6 for Spanish into English, against 56.6 and 56.0 for
+    Chinese into English of the same sentences, and 35.5 for English into Japanese and 52.8
+    for English into Spanish, against 36.4 and 38.8 into Chinese (by character for
+    Japanese and Chinese). The checks held back 2 of 99 FLEURS translations into Japanese
+    and 2 of 98 into Spanish, and none into English, where 1 answer of 95 from Spanish could
+    not be read.
+
+    For Japanese and Spanish text, "cleaned" only steers the translation. A small cleanup
+    with the fillers and correction words of each language (the prompt as it is) was
+    compared with one that keeps the text as heard, on 32 fillers, corrections and
+    controls written for this: the small cleanup left 2 of 12 fillers and applied 8 of 10
+    corrections, while keeping the text as heard left 11 fillers and applied 1 correction,
+    with the same controls kept and chrF within 0.3. One correction came out wrong with
+    either (明日、じゃなくて明後日 became tomorrow).
+
+    Each route's prefix cache holds 110 MB, and MLX's active memory with both caches of a
+    pair was 2.682 GB, as with the Chinese pair. After a run that used the Chinese routes
+    too, two caches were in memory. The Chinese evaluation on this branch gave the same
+    answer, outcome and pasted text as 2ebabb1 for all 736 runs, and its memory test the
+    same readings.
+
+    Speak Translations to Others was measured the same day with a scratch tool that runs
+    Orra's voice engines, SpeechChunks, SpeechCheck and SpeechWordCheck, and hears each
+    piece back with Qwen3-ASR 1.7B and the app's hint. 50 Japanese and 50 Spanish
+    sentences (30 FLEURS references and 20 pasted translations each) were spoken without a
+    voice sample and with two public FLEURS voices per language. A piece that fails is made
+    once more, as in the app.
+
+    | Model | Language | Voice | Pieces | Good after a second try |
+    |---|---|---|---|---|
+    | Qwen3-TTS | Spanish | none | 94 | 93 |
+    | Qwen3-TTS | Spanish | two samples | 188 | 185 |
+    | Qwen3-TTS | Japanese | none | 55 | 54 |
+    | Qwen3-TTS | Japanese | male sample | 55 | 53 |
+    | Qwen3-TTS | Japanese | female sample at -28 dBFS | 55 | 54 |
+    | CosyVoice3 | Spanish | none | 94 | 89 |
+    | CosyVoice3 | Spanish | two samples | 188 | 186 |
+    | CosyVoice3 | Japanese | none | 55 | 10 |
+
+    The female Japanese sample as FLEURS has it, at -64.6 dBFS, gave 42 of 55 with
+    Qwen3-TTS and 8 silent pieces. Raised to -28 dBFS it gave 54. CosyVoice3 said other
+    words in most Japanese pieces (the speech model heard a median of 0.54 of the units
+    wrong), so it does not speak Japanese translations, and Orra says so, see
+    VoiceEngineKind.speaks. With the wrong tag, Spanish with the English one and Japanese
+    with the Chinese one, Qwen3-TTS still said the words of 44 of 48 Spanish and 14 of 23
+    Japanese pieces, and the word check failed the rest. Orra always passes the right tag.
 - SpeechCorpusEvaluationTests runs Orra's speech recognition on the 392 clips Voxt checks
     its runtime on (LibriSpeech test-clean, FLEURS Chinese, ASCEND and 8 synthetic clips),
     only with TEST_RUNNER_ORRA_SPEECH_EVAL=1. It takes a dictation's path up to the
@@ -2554,6 +2674,31 @@ translations on, both voice downloads in place, and cleanup and translation on:
   shows only waits over 100 ms, each with its access, whether the gate was reserved and
   its length, never text.
 - [ ] On any hang, run `sample Orra 5` and keep the output.
+
+Translation into and out of Japanese and Spanish, added on 2026-10-18, not verified in the
+app yet:
+
+- [ ] With 日本語 + English, Translate into in Settings shows Automatic, English and
+  Japanese, with the Japanese explanation, and with Español + English Automatic, English
+  and Spanish. A choice of Chinese made with 中文 + English shows as Automatic there, and
+  comes back when 中文 + English is picked again.
+- [ ] With 日本語 + English, hold the translation key and say a short sentence in kana
+  only: English is pasted and the badge shows 訳. Say an English sentence: Japanese is
+  pasted. Paste Original Text pastes the Japanese as heard, fillers included.
+- [ ] With Español + English, the badge shows ⇄, Spanish is pasted in English and English
+  in Spanish.
+- [ ] With Translate into set to Japanese, a Japanese sentence is pasted as said, at once,
+  and the badge shows 日. With Spanish, the badge shows ES.
+- [ ] Change the dictation language while translation is on. The log shows the prompts of
+  the new language read ahead, and never more than two translation prefix caches:
+  `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`.
+- [ ] Live Captions with Español + English: a video in English shows Spanish captions, one
+  in Spanish English captions.
+- [ ] Speak Translations to Others speaks a Japanese and a Spanish translation with
+  Qwen3-TTS, with and without a voice sample, and the voice sample sheet offers the
+  Japanese or Spanish script. In a build with CosyVoice3, it speaks the Spanish one and
+  says that it does not speak Japanese.
+- [ ] The welcome window's translation line names the dictation language.
 
 ## Not implemented
 
