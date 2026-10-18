@@ -25,3 +25,6 @@ xcuserdata/
 # Swift Package Manager
 .build/
 .swiftpm/
+
+# Python, such as the modules the release scripts and their tests import
+__pycache__/

@@ -35,6 +35,11 @@ jobs:
       - name: Test the release gate comparer
         run: python3 -m unittest discover -s Tools/release-gate -p 'test_*.py' -v
 
+      # The release notes in each language and the Sparkle feed made from them, standard
+      # library only. -I as make-release.sh runs the scripts.
+      - name: Test the release scripts
+        run: python3 -I -m unittest discover -s Tools/release -p 'test_*.py' -v
+
   test:
     name: Build and test
     # The only GitHub hosted image with Xcode 27 so far. It is an arm64 Mac in public

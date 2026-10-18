@@ -1771,6 +1771,17 @@ Updates from inside the app, added on 2026-10-10, not verified yet:
   The menu offers Install Orra with its version, and the update window shows once you
   switch to Orra. There is no checkbox to install updates automatically.
 
+Release notes in the interface language, added on 2026-10-18, not verified yet. They need
+the first release after 0.4.2, whose notes come in one file for each language:
+
+- [ ] The update window shows the notes in the language Orra shows: English on a Mac in
+  English or French, 简体中文 on a Mac in Simplified Chinese. With 简体中文 chosen as the
+  interface language in Settings on a Mac in English, the notes are in Chinese too.
+- [ ] Once Orra has Japanese and Spanish, a Mac in Japanese or Spanish gets the notes in
+  that language. An Orra without them shows English notes there, like the rest of Orra.
+- [ ] On the newest release, Check for Updates says Orra is up to date and offers Version
+  History, which opens https://github.com/db-ol/Orra/releases in the browser.
+
 Interface language, added on 2026-10-10, not verified yet:
 
 - [ ] Interface language under System in Settings, General offers Same as the Mac, English
