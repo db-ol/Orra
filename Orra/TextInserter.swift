@@ -254,7 +254,7 @@ nonisolated enum FocusedField {
 
     /// The focused element of the app, with `timeout` set on it, or nil when there is none
     /// or it did not answer in time.
-    static func focusedElement(inApp pid: pid_t) -> AXUIElement? {
+    static func focusedElement(inApp pid: pid_t, timeout: Float = Self.timeout) -> AXUIElement? {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, timeout)
         var focused: CFTypeRef?
