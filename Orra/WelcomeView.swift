@@ -264,7 +264,8 @@ extension WelcomeSuggestion.Kind {
     /// The page of Settings that the row's button opens, where the feature is set up.
     var settingsTab: SettingsTab {
         switch self {
-        case .cleanup, .translation: .general
+        case .cleanup: .dictation
+        case .translation: .translation
         case .meeting: .meeting
         }
     }
@@ -303,7 +304,7 @@ private struct LanguageRow: View {
                 Label("Dictation language", systemImage: "character.bubble")
             }
             .fixedSize()
-            Text("You can change this later in Settings, under General.")
+            Text("You can change this later in Settings, under Dictation.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

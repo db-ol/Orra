@@ -54,21 +54,21 @@ enum SettingsWindow {
         return name == id || name.hasPrefix(id + "-")
     }
 
-    /// A tab of the window, and a sheet of General to open over it.
+    /// A tab of the window, and a part of it to scroll to.
     struct Request: Equatable {
         var tab = SettingsTab.general
-        var sheet: SettingsSheet?
+        var section: SettingsSection?
     }
 
     /// What the window shows when it appears or gets the notification. Back to General
     /// alone once a window took it, so Settings… opens on General.
     private static var opening = Request()
 
-    /// Turns the settings window to `tab`, such as General, where the keys are chosen, and
-    /// opens `sheet` over General, such as the options of cleanup. Called before the
-    /// window opens, the window opens that way.
-    static func show(_ tab: SettingsTab = .general, sheet: SettingsSheet? = nil) {
-        opening = Request(tab: sheet == nil ? tab : .general, sheet: sheet)
+    /// Turns the settings window to `tab`, such as Dictation, where Clean Up Text is
+    /// turned on, and scrolls to `section`, such as Keys at the bottom of General. Called
+    /// before the window opens, the window opens that way.
+    static func show(_ tab: SettingsTab = .general, section: SettingsSection? = nil) {
+        opening = Request(tab: tab, section: section)
         NotificationCenter.default.post(name: showNotification, object: nil)
     }
 

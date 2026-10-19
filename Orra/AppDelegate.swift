@@ -328,11 +328,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         captions.showWindow = { [captionWindow] in captionWindow.show() }
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
-        // A new user's talk key stays in Press to start and stop once Orra is set up, and an
-        // earlier user's in Hold, see TriggerModePreference. The dictation language stays
-        // the same way, see DictationLanguagePreference.
-        TriggerModePreference.keepTalkMode(pushToTalk.talkMode)
-        DictationLanguagePreference.keep(pushToTalk.dictationLanguage)
+        // The steps that keep a user's settings across versions. A version that changes
+        // what a setting starts as adds its step inside, not here.
+        LaunchMigrations.run(pushToTalk)
         // Before the tap is installed, so it watches the translation key from the start.
         followTranslation()
         pushToTalk.start()
@@ -374,5 +372,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             externalKeyboards.start()
             followKeyboardTip()
         }
+    }
+}
+
+/// The steps at launch that save or move settings, so a user keeps what they had when a
+/// version changes what a setting starts as. Each such change adds its step here. They run
+/// before the tap is installed, and each runs again at every launch, so each step must
+/// leave alone what it already saved.
+enum LaunchMigrations {
+    static func run(_ pushToTalk: PushToTalkController, in defaults: UserDefaults = .standard) {
+        // A new user's talk key stays in Press to start and stop once Orra is set up, and an
+        // earlier user's in Hold, see TriggerModePreference.
+        TriggerModePreference.keepTalkMode(pushToTalk.talkMode, in: defaults)
+        // The dictation language stays the same way, see DictationLanguagePreference.
+        DictationLanguagePreference.keep(pushToTalk.dictationLanguage, in: defaults)
     }
 }
