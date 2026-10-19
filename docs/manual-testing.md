@@ -1113,9 +1113,14 @@ got worse than the baseline, see docs/release-gate.md.
     such a user is reported for learning from corrections, and that picking the language
     saves it. DictationLanguageTests checks the names, the passes, that only
     Chinese simplifies and takes the digits of the pass without the vocabulary, the
-    language a new user starts with from the Mac's first language, that a user who set
-    Orra up before keeps Chinese, that the first launch saves the language and that a
-    saved choice wins. CaptionPipelineTests and EngineTurnsTests check that captions
+    language a new user starts with from their own language, that a user who set Orra
+    up before keeps Chinese, that the first launch saves the language, that a saved
+    choice wins, and that only a Mac not set up before follows the welcome window until
+    a pick. OwnLanguageTests checks the own language from Orra's language and the Mac's
+    languages. DictationLanguageFollowTests checks that the dictation language follows
+    the language picked for Orra in the welcome window, that a pick ends the follow at
+    this launch and the next, that the follow is not saved as a pick, and that a Mac set
+    up before never follows. CaptionPipelineTests and EngineTurnsTests check that captions
     take the dictation language of each sentence's moment and keep Japanese Han
     characters, and RecordingPiecesTests that pieces keep them too.
   - ContextNumbersTests checks which transcripts may hold a number in Chinese characters,
@@ -2154,7 +2159,7 @@ Transcripts in a third language, added on 2026-10-13, not verified yet:
 
 Dictation language, added on 2026-10-18, not verified yet. Each check of a new user needs
 a first launch prepared as in Welcome window above, and also
-`defaults delete io.github.db-ol.Orra dictationLanguage`:
+`defaults delete io.github.db-ol.Orra dictationLanguage` and `dictationLanguagePicked`:
 
 - [ ] Settings, Dictation starts with Dictation language (听写语言) under Language, with the
   choices 中文（普通话和粤语）+ English, 日本語 + English (Beta) and Español + English
@@ -2166,9 +2171,26 @@ a first launch prepared as in Welcome window above, and also
   Picking one there changes Settings at once, and
   `defaults read io.github.db-ol.Orra dictationLanguage` prints its name.
 - [ ] A new user with Japanese first in System Settings, Language & Region gets 日本語 +
-  English, with Spanish first Español + English, and with English or Chinese first 中文
-  + English. A user who set Orra up before keeps 中文 + English after the update, also
-  with Japanese first.
+  English, with Spanish first Español + English, and with English only or Chinese first
+  中文 + English. A user who set Orra up before keeps 中文 + English after the update,
+  also with Japanese first.
+- [ ] Since 2026-10-19 a new user starts with their own language. With English first and
+  Japanese second, Orra shows English and the welcome window's dictation language is
+  日本語 + English. With English first and Chinese second it is 中文 + English. With
+  German first and Japanese second Orra shows Japanese and dictates 日本語 + English.
+- [ ] On that first launch, picking 日本語, Español and 简体中文 under Language in the welcome
+  window moves Dictation language right below to 日本語 + English, Español + English and
+  中文 + English. English moves it to 中文 + English on a Mac with English only, and to
+  日本語 + English on a Mac with Japanese in its languages.
+  `defaults read io.github.db-ol.Orra dictationLanguage` prints the name each time, and
+  `defaults read io.github.db-ol.Orra dictationLanguagePicked` finds nothing.
+- [ ] After a pick of a dictation language in the welcome window or in Settings, a later
+  pick under Language leaves it alone, at this launch and at the next launches.
+  `defaults read io.github.db-ol.Orra dictationLanguagePicked` prints 1.
+- [ ] At a launch after setup is done, open the welcome window from Getting Started… in
+  the menu and pick another language under Language: the dictation language stays. The
+  same after allowing only the microphone, quitting, and launching again with setup
+  incomplete. Changing Orra's language in Settings never moves it.
 - [ ] With Japanese chosen, `say -v Kyoko "これはパンとオリーブオイルの簡単な夕食です。"` near
   the microphone is pasted in Japanese, and the log shows no line starting "Transcript was
   in another language". A short sentence in kanji only, such as 東京駅, keeps its kanji.
