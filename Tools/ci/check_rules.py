@@ -506,8 +506,9 @@ SKIPPED_FILES = frozenset({".DS_Store"})
 
 SOURCE_RULES = {
     1: "Code in Orra/Projects never types, uses Accessibility or the pasteboard, runs a process, "
-       "loads code by name, shows web content or Markdown, opens a URL, connects to the network, "
-       "quits an app or removes a file with a C call.",
+       "loads code by name, shows web content, Markdown or remote images, opens a URL, connects "
+       "to the network, quits an app or removes a file with a C call. No member there may be "
+       "named html or webArchive, the document types that read through WebKit.",
     2: "In Orra/Projects only Index/FileText.swift makes an NSAttributedString, from data with the "
        "documentType named in the same call, never from a URL, a path or HTML.",
     3: "In Orra only the files in APPLE_EVENT_FILES build or send an Apple Event. Reading the launch event is fine.",
@@ -534,6 +535,20 @@ def _system_call(code, match):
         return True
     owner = re.search(r"(\w+)\s*$", before[:-1])
     return owner is not None and owner.group(1) in ("Darwin", "Foundation", "Glibc")
+
+
+def _c_call(code, match):
+    """remove(, rename( and kill( count as the C calls, as system( does, unless they declare
+    a function or pass no argument or a labeled one, which no C call does. So
+    projects.remove(at: 0), func remove(_ id: UUID) and remove(project: id) pass."""
+    if not _system_call(code, match):
+        return False
+    if re.search(r"\bfunc\s*$", code[max(0, match.start() - 200):match.start()]):
+        return False
+    arguments = _arguments(code, match.end() - 1)
+    if arguments is None:
+        return True
+    return bool(arguments.strip()) and all(label is None for label in _labels(arguments))
 
 
 def _rule(*patterns, flags=0):
@@ -570,21 +585,37 @@ PROJECTS_BANNED = _rule(
     r"\bSelector\s*\(",
     r"\.\s*perform\s*\(",
     r"\bperformSelector\w*",
+    # The Objective-C runtime and Bundle find a class by its name, and these attributes bind
+    # a C function by its name.
+    r"\bobjc_\w+",
+    r"\bclassNamed\b",
+    r"@_silgen_name\b",
+    r"@_extern\b",
     r"\bWKWebView\b",
     _import("WebKit"),
     r"\bURLSession\b",
     _import("Network"),
     r"\bNWConnection\b",
+    r"\bAsyncImage\b",
     r"\bLink\s*\(",
     r"\bopenURL\b",
     r"\bOpenURLAction\b",
+    r"\bLSOpen\w*",
     r"\b(?:NS)?AttributedString\s*(?:\.\s*init\s*)?\(\s*markdown\b",
-    # The HTML document type, which reads through WebKit. ".html" in a string literal is fine.
+    # The HTML and web archive document types, which read through WebKit, also when a
+    # value of the type comes from another file. ".html" in a string literal is fine. A
+    # document type made from its raw value could be either.
     r"\.\s*html\b",
+    r"\.\s*webArchive\b",
+    r"\bDocumentType\s*(?:\.\s*init\s*)?\(",
     r"\bterminate\s*\(",
     r"\bforceTerminate\b",
-    r"\bunlink\b",
+    (r"\bkill(?:pg)?\s*\(", _c_call),
+    r"\bunlink(?:at)?\b",
     r"\brmdir\b",
+    (r"\b(?:remove|rename)\s*\(", _c_call),
+    r"\brename(?:at|x_np|atx_np)\b",
+    r"\bremovefile\b",
 )
 
 # Rule 2, in the code of Orra/Projects.
@@ -595,24 +626,32 @@ ATTRIBUTED_STRING = re.compile(r"\bNS(?:Mutable)?AttributedString\s*(?:\.\s*init
 ATTRIBUTED_STRING_LABELS = frozenset({"data", "string", "attributedString", None})
 ARGUMENT_LABEL = re.compile(r"\s*(\w+)\s*:")
 
+# Scripting Bridge sends an Apple Event for each call on its objects. A sendEvent that is
+# not called right away, such as let send = event.sendEvent, could be called later with
+# any options. An NSEvent's sendEvent(_:) is always called and stays fine.
+SENDING = (
+    r"\bsendEvent\s*\(\s*options\b",
+    r"\bsendEvent\b(?!\s*\()",
+    _import("ScriptingBridge"),
+    r"\bSB(?:Application|Object|ElementArray)\b",
+    r"\bAESendMessage\b",
+    r"\bAESend\b",
+)
+
 # Rule 3, in the code of Orra/.
 APPLE_EVENT_BUILDING = _rule(
     r"\bNSAppleEventDescriptor\s*\.\s*appleEvent\b",
     r"\bappleEvent\s*\(\s*withEventClass\b",
     r"\bNSAppleEventDescriptor\s*(?:\.\s*init\s*)?\(\s*eventClass\b",
-    r"\bsendEvent\s*\(\s*options\b",
-    r"\bAESendMessage\b",
-    r"\bAESend\b",
+    *SENDING,
     r"\bAECreateAppleEvent\b",
     r"\bAEBuildAppleEvent\b",
     r"\bAEDeterminePermissionToAutomateTarget\b",
 )
 
-# Rule 4, in the code of OrraTests/. An NSEvent's sendEvent(_:) is fine.
+# Rule 4, in the code of OrraTests/.
 APPLE_EVENT_SENDING = _rule(
-    r"\bsendEvent\s*\(\s*options\b",
-    r"\bAESendMessage\b",
-    r"\bAESend\b",
+    *SENDING,
     r"\bAEDeterminePermissionToAutomateTarget\b",
     r"\bMailBridge\s*\.\s*live\b",
     r"\bMailEvents\s*\.\s*live\b",
@@ -622,6 +661,8 @@ APPLE_EVENT_SENDING = _rule(
 SCRIPT_TEXT = _rule(
     r"\bNSAppleScript\b",
     r"\bOSAScript\b",
+    _import("OSAKit"),
+    r"\bosacompile\b",
     r"\btell\s+application\b",
     r"\bNSUser(?:AppleScript|Unix|Automator|Script)Task\b",
     flags=re.IGNORECASE,
@@ -633,8 +674,9 @@ SQLITE = _rule(_import("SQLite3"), r"\bsqlite3_\w*")
 # Rule 7, in the code of Orra/Projects.
 FILE_REMOVAL = _rule(r"\bremoveItem\b", r"\bmoveItem\b", r"\breplaceItem\w*", r"\btrashItem\b")
 
-# Rule 8, in the code of Orra/Projects. @AppStorage keeps its value in UserDefaults too.
-DEFAULTS = _rule(r"\bUserDefaults\b", r"\bAppStorage\b")
+# Rule 8, in the code of Orra/Projects. @AppStorage, CFPreferences and
+# NSUserDefaultsController reach the same values.
+DEFAULTS = _rule(r"\bUserDefaults\b", r"\bAppStorage\b", r"\bCFPreferences\w*", r"\bNSUserDefaults\w*")
 
 SourceProblem = namedtuple("SourceProblem", "path line rule name")
 
@@ -648,9 +690,10 @@ class SwiftLexError(Exception):
 
 # Where the lexer stops in code, in the code of an interpolation, in a block comment and in
 # a literal. #" starts a raw string and #/ a regex literal, each with any number of #. A
-# slash alone may start a /.../ regex literal.
-_CODE_STOP = re.compile(r'//|/\*|#+["/]|"|/')
-_INTERPOLATION_STOP = re.compile(r'//|/\*|#+["/]|"|[()/]')
+# slash alone may start a /.../ regex literal. A backtick starts a name such as `default`
+# or a raw identifier such as `drops https:// links`, which may hold //, /* and quotes.
+_CODE_STOP = re.compile(r'//|/\*|#+["/]|"|[/`]')
+_INTERPOLATION_STOP = re.compile(r'//|/\*|#+["/]|"|[()/`]')
 _COMMENT_STOP = re.compile(r"/\*|\*/")
 _STRING_STOP = re.compile(r'[\\"\n]')
 _MULTILINE_STRING_STOP = re.compile(r'[\\"]')
@@ -664,6 +707,15 @@ _OPERATOR_CHARACTERS = frozenset("/=-+!*%<>&|^~?")
 # end, as Swift binds operators.
 _BEFORE_PREFIX = frozenset(" \t\r\n([{,;:") | _OPERATOR_CHARACTERS
 _AFTER_OPERATOR_END = frozenset(" \t\r\n)]},;:")
+# Keywords after which an expression starts, so a slash right after one starts a regex
+# literal, as in return/"/. Words such as then and yield are names outside a few places,
+# and a slash after a name divides.
+_KEYWORDS_BEFORE_EXPRESSION = frozenset(
+    {"return", "throw", "try", "await", "case", "in", "where", "if", "guard", "while", "switch", "repeat", "else"}
+)
+# What may end an expression right before a postfix ! or ?, as in a!/2, where the slash
+# divides.
+_EXPRESSION_END = frozenset(')]}"`')
 
 
 def swift_views(text):
@@ -675,7 +727,8 @@ def swift_views(text):
     raises SwiftLexError, so the lexer can never be led to skip code. A #/.../# regex literal
     is a literal. A /.../ regex literal stays in the code view, since telling it from a
     division takes Swift's rules for operators, see _bare_regex_end. The lexer only steps
-    over it, so a quote in it starts no string.
+    over it, so a quote in it starts no string. A name in backticks stays in the code view
+    too, and the lexer steps over it the same way.
     """
     comments = []
     literals = []
@@ -713,6 +766,8 @@ def swift_views(text):
             if interpolation:
                 open_strings.append((hashes, multiline, depth))
                 depth = 0
+        elif token == "`":
+            pos = _backtick_name_end(text, start)
         elif token == "/":
             pos = _bare_regex_end(text, start) or start + 1
         elif token.endswith("/"):
@@ -803,6 +858,30 @@ def _regex_end(text, start, hashes, literals):
             pos = index + 1
 
 
+def _backtick_name_end(text, start):
+    """The position after a name in backticks at start. Swift ends it at the next backtick
+    on the same line."""
+    end = text.find("`", start + 1)
+    if end < 0 or "\n" in text[start + 1:end]:
+        raise SwiftLexError(start, "name in backticks without an end")
+    return end + 1
+
+
+def _word_before(text, end):
+    """The word that ends at end, and where it starts."""
+    start = end
+    while start > 0 and (text[start - 1].isalnum() or text[start - 1] == "_"):
+        start -= 1
+    return text[start:end], start
+
+
+def _is_keyword_before(text, end):
+    """Whether a keyword that starts an expression ends at end. After a dot, as in
+    .return, it is a member name."""
+    word, start = _word_before(text, end)
+    return word in _KEYWORDS_BEFORE_EXPRESSION and (start == 0 or text[start - 1] not in ".$#@`")
+
+
 def _bare_regex_end(text, start):
     """The position after a /.../ regex literal at start, or None where the slash is an
     operator.
@@ -810,11 +889,19 @@ def _bare_regex_end(text, start):
     As in Swift, the slash starts a regex literal only where an operator would be a prefix
     operator: nothing that ends an expression right before it, such as a name, a number or
     a closing bracket, and no white space or closing punctuation right after the operator
-    it starts, such as /= in x /= y. The literal ends at the next slash without a backslash
-    before it, on the same line.
+    it starts, such as /= in x /= y. A keyword such as return does not end an expression,
+    while a postfix ! or ?, as in a!/2, does. The literal ends at the next slash without a
+    backslash before it, on the same line.
     """
-    if start > 0 and text[start - 1] not in _BEFORE_PREFIX:
+    if start > 0 and text[start - 1] not in _BEFORE_PREFIX and not _is_keyword_before(text, start):
         return None
+    postfix = start
+    while postfix > 0 and text[postfix - 1] in "!?":
+        postfix -= 1
+    if 0 < postfix < start:
+        before = text[postfix - 1]
+        if (before.isalnum() or before == "_" or before in _EXPRESSION_END) and not _is_keyword_before(text, postfix):
+            return None
     operator_end = start + 1
     while operator_end < len(text) and text[operator_end] in _OPERATOR_CHARACTERS:
         operator_end += 1

@@ -94,6 +94,32 @@ class LexerTests(SourceCheckTestCase):
         self.assert_fails(self.PATH, 'x /= "a/b".count; Process(); let e = "f"\n', 1, "Process")
         self.assert_fails(self.PATH, 'let x = (a) / 2 + "a/b".count; Process(); let e = "f"\n', 1, "Process")
 
+    def test_a_slash_after_a_postfix_operator_divides(self):
+        self.assert_fails(self.PATH, 'let r = a!/2; let s = "x/y"; let task = Process(); let t = "\\""\n', 1, "Process")
+        self.assert_fails(self.PATH, 'let r = f()?/2; let s = "x/y"; let task = Process(); let t = "\\""\n', 1, "Process")
+
+    def test_a_slash_after_a_keyword_starts_a_regex(self):
+        self.assert_fails(
+            self.PATH,
+            'func f() -> Regex<Substring> { return/"/ }; let s = "a"; let task = Process(); let t = "\\""\n',
+            1, "Process",
+        )
+        self.assert_fails(self.PATH, 'let m = a.map { v in/"/ }; let s = "a"; let task = Process(); let t = "\\""\n', 1, "Process")
+        self.assert_fails(self.PATH, 'let r = try!/"/; let s = "a"; let task = Process(); let t = "\\""\n', 1, "Process")
+
+    def test_a_slash_after_a_word_that_is_a_name_divides(self):
+        self.assert_fails(self.PATH, 'let y = then/2; let s = "a/b"; let task = Process(); let t = "c"\n', 1, "Process")
+        self.assert_fails(self.PATH, 'let y = item.in/2; let s = "a/b"; let task = Process(); let t = "c"\n', 1, "Process")
+
+    def test_names_in_backticks(self):
+        self.assert_fails(self.PATH, "let x = `a // b`(); let task = Process()\n", 1, "Process")
+        self.assert_fails(self.PATH, "func `e /* f`() {}\nlet task = Process()\nfunc `g */ h`() {}\n", 1, "Process")
+        self.assert_passes(self.PATH, 'func `c " d`() {}\nlet a = 1\n')
+        self.assert_passes(self.PATH, "let `default` = 1\nlet b = `default` + 1\n")
+        self.assert_fails(self.PATH, 'let a = "\\(`b // c`) d"; let task = Process()\n', 1, "Process")
+        # The name stays in the code view.
+        self.assert_fails(self.PATH, "func `runs Process`() {}\n", 1, "Process")
+
     def test_a_banned_name_inside_an_interpolation_fails(self):
         self.assert_fails(self.PATH, 'let a = "files: \\(Process().arguments)"\n', 1, "Process")
         self.assert_fails(self.PATH, 'let a = "a \\(f("b \\(Process())")) c"\n', 1, "Process")
@@ -113,6 +139,8 @@ class LexerTests(SourceCheckTestCase):
             'let a = "\\(f(1)"\n',
             "let a = #/abc\n/#\n",
             'let a = """abc"""\n',
+            "let a = `abc\n",
+            "let a = `abc\nd`\n",
         ]
         for text in cases:
             with self.subTest(text=text):
@@ -170,6 +198,10 @@ class ProjectsCodeTests(SourceCheckTestCase):
             'let action = Selector("send")': "Selector(",
             "object.perform(action)": ".perform(",
             "object.performSelector(onMainThread: action, with: nil, waitUntilDone: false)": "performSelector",
+            'let type: AnyClass? = objc_getClass("Helper") as? AnyClass': "objc_getClass",
+            'let type = Bundle.main.classNamed("Helper")': "classNamed",
+            '@_silgen_name("system") func run(_ command: UnsafePointer<CChar>) -> Int32': "@_silgen_name",
+            '@_extern(c, "system") func run(_ command: UnsafePointer<CChar>) -> Int32': "@_extern",
             "let view = WKWebView()": "WKWebView",
             "import WebKit": "import WebKit",
             "@preconcurrency import WebKit": "import WebKit",
@@ -177,21 +209,39 @@ class ProjectsCodeTests(SourceCheckTestCase):
             "let session = URLSession.shared": "URLSession",
             "import Network": "import Network",
             "let connection = NWConnection(host: host, port: port, using: .tcp)": "NWConnection",
+            "AsyncImage(url: url)": "AsyncImage",
             'Link("Site", destination: url)': "Link(",
             "@Environment(\\.openURL) private var openURL": "openURL",
             "let action = OpenURLAction { _ in .handled }": "OpenURLAction",
+            "LSOpenCFURLRef(url as CFURL, nil)": "LSOpenCFURLRef",
             "let text = try AttributedString(markdown: answer)": "AttributedString(markdown",
             "let text = try NSAttributedString(markdown: answer)": "NSAttributedString(markdown",
             "let type = NSAttributedString.DocumentType.html": ".html",
             "options[.documentType] = .html": ".html",
+            "let type = NSAttributedString.DocumentType.webArchive": ".webArchive",
+            'let type = NSAttributedString.DocumentType(rawValue: "NSHTML")': "DocumentType(",
             "mail.terminate()": "terminate(",
             "mail.forceTerminate()": "forceTerminate",
+            "kill(pid, SIGTERM)": "kill(",
+            "killpg(group, SIGTERM)": "killpg(",
             "unlink(path)": "unlink",
+            "unlinkat(folder, name, 0)": "unlinkat",
             "rmdir(path)": "rmdir",
+            "remove(path)": "remove(",
+            "Darwin.remove(path)": "remove(",
+            "rename(old, new)": "rename(",
+            "renameat(a, old, b, new)": "renameat",
+            "renamex_np(old, new, 0)": "renamex_np",
+            "removefile(path, nil, 0)": "removefile",
         }
         for code, name in cases.items():
             with self.subTest(code=code):
                 self.assert_fails(self.PATH, code + "\n", 1, name)
+
+    def test_a_member_named_html_fails(self):
+        # Only a name can tell the HTML document type, so no member in Orra/Projects is
+        # named html, not even a case of an enum of its own.
+        self.assert_fails(self.PATH, "enum Part { case plain, html }\nlet part = Part.html\n", 1, ".html")
 
     def test_names_that_only_look_alike_pass(self):
         self.assert_passes(self.PATH, """\
@@ -206,6 +256,10 @@ class ProjectsCodeTests(SourceCheckTestCase):
                         .font(.system(.body))
                 }
                 func processText(_ text: String) -> String { text }
+                func remove(_ id: UUID) { projects.remove(at: 0); ids.remove(id); remove(project: id); remove(); items.removeAll() }
+                func rename(to name: String) { title = name }
+                @objc func refresh() {}
+                let killed = skillCount
                 let extensions = [".html", ".htm"]
                 let kind = ProjectsWarning.link
                 let mailLink = "x"
@@ -282,6 +336,12 @@ class AppleEventTests(SourceCheckTestCase):
             "AECreateAppleEvent(a, b, target, r, x, event)": "AECreateAppleEvent",
             "AEBuildAppleEvent(a, b, type, target, size, r, x, event, nil, format)": "AEBuildAppleEvent",
             "let status = AEDeterminePermissionToAutomateTarget(target, a, b, false)": "AEDeterminePermissionToAutomateTarget",
+            "let send = event.sendEvent": "sendEvent",
+            "import ScriptingBridge": "import ScriptingBridge",
+            "@preconcurrency import ScriptingBridge": "import ScriptingBridge",
+            'let mail = SBApplication(bundleIdentifier: "com.apple.mail")': "SBApplication",
+            "let message: SBObject = messages[0]": "SBObject",
+            "let messages: SBElementArray = inbox.messages()": "SBElementArray",
         }
         for path in ("Orra/Other.swift", "Orra/Projects/Mail/MailBridge.swift"):
             for code, name in cases.items():
@@ -298,7 +358,10 @@ class AppleEventTests(SourceCheckTestCase):
             """)
 
     def test_an_nsevent_send_event_passes(self):
-        text = "override func sendEvent(_ event: NSEvent) {\n    super.sendEvent(event)\n}\nwindow.sendEvent(event)\n"
+        text = (
+            "override func sendEvent(_ event: NSEvent) {\n    super.sendEvent(event)\n}\nwindow.sendEvent(event)\n"
+            "let action = #selector(NSApplication.sendEvent(_:))\n"
+        )
         self.assert_passes("Orra/Window.swift", text)
         self.assert_passes("OrraTests/WindowTests.swift", text)
 
@@ -326,6 +389,9 @@ class AppleEventTests(SourceCheckTestCase):
             "AESendMessage(event, reply, mode, timeout)": "AESendMessage",
             "AESend(event, reply, mode, priority, timeout, nil, nil)": "AESend",
             "AEDeterminePermissionToAutomateTarget(target, a, b, false)": "AEDeterminePermissionToAutomateTarget",
+            "let send = event.sendEvent": "sendEvent",
+            "import ScriptingBridge": "import ScriptingBridge",
+            'let mail = SBApplication(bundleIdentifier: "com.apple.mail")': "SBApplication",
             "let bridge = MailBridge.live": "MailBridge.live",
             "let events = MailEvents.live": "MailEvents.live",
         }
@@ -350,6 +416,8 @@ class ScriptTextTests(SourceCheckTestCase):
             "let task = try NSUserAppleScriptTask(url: url)": "NSUserAppleScriptTask",
             "let task = try NSUserUnixTask(url: url)": "NSUserUnixTask",
             "let task = try NSUserScriptTask(url: url)": "NSUserScriptTask",
+            "import OSAKit": "import OSAKit",
+            'let tool = "/usr/bin/osacompile"': "osacompile",
         }
         for path in ("Orra/Other.swift", "OrraTests/OtherTests.swift", "Orra/Projects/Mail/MailEvents.swift"):
             for code, name in cases.items():
@@ -408,6 +476,14 @@ class StorageRulesTests(SourceCheckTestCase):
                 self.assert_passes(path, 'let on = UserDefaults.standard.bool(forKey: "projectsOn")\n')
         self.assert_fails("Orra/Projects/Window/ProjectsWindow.swift", "let defaults = UserDefaults.standard\n", 8, "UserDefaults")
         self.assert_fails("Orra/Projects/Window/ProjectsWindow.swift", '@AppStorage("width") var width = 300.0\n', 8, "AppStorage")
+        self.assert_fails(
+            "Orra/Projects/Window/ProjectsWindow.swift",
+            "let value = CFPreferencesCopyAppValue(key, kCFPreferencesCurrentApplication)\n",
+            8, "CFPreferencesCopyAppValue",
+        )
+        self.assert_fails(
+            "Orra/Projects/Window/ProjectsWindow.swift", "let controller = NSUserDefaultsController.shared\n", 8, "NSUserDefaultsController"
+        )
 
 
 class FolderTests(SourceCheckTestCase):

@@ -18,7 +18,7 @@ struct ProjectsSharedTypesTests {
 
     @Test func hiddenTextKindsKeepTheirNames() {
         #expect(ProjectsHiddenText.allCases.map(\.rawValue) == [
-            "hiddenStyle", "tinyFont", "sameColor", "transparent", "htmlComment",
+            "hiddenStyle", "tinyFont", "sameColor", "transparent", "htmlComment", "imageText",
             "invisibleCharacters", "tagCharacters", "bidiControls", "chatTemplateTokens", "afterBlankLines",
         ])
     }
@@ -48,6 +48,8 @@ struct ProjectsSharedTypesTests {
         "下周三开会",
         "这个 PR 先 merge 一下",
         "附件是 v2 版的报价单，请查收。",
+        "请把报价单发给安娜・林，谢谢。",
+        "大家好ー明天上午十点开会。",
     ])
     func chineseReadsAsChinese(_ text: String) {
         #expect(ProjectsLanguage.reading(text) == .zh)
@@ -59,6 +61,9 @@ struct ProjectsSharedTypesTests {
         "Can we move the call to 3 pm?",
         "The draft for 合同 is attached.",
         "Thanks, see you at the café.",
+        "Hi Mei, please confirm the booking for the harbor venue by Friday. Thanks, Lu",
+        "Hi Lu, please loop in Budi Santoso and Siti Rahayu from the harbor team on the quote.",
+        "Hi Mei, danke für die Unterlagen, see you Friday.",
     ])
     func englishReadsAsEnglish(_ text: String) {
         #expect(ProjectsLanguage.reading(text) == .en)
@@ -74,6 +79,18 @@ struct ProjectsSharedTypesTests {
         "2026-10-18 15:00",
     ])
     func otherScriptsAndTextWithoutLettersReadAsOther(_ text: String) {
+        #expect(ProjectsLanguage.reading(text) == .other)
+    }
+
+    /// Phase 1 drafts only in Chinese and English, so a draft or a mail in German or
+    /// Spanish must not read as English.
+    @Test(arguments: [
+        "Hallo Mei, kannst du die Buchung für Freitag bestätigen? Danke, Lu",
+        "Sehr geehrte Frau Tan, anbei die Rechnung für Oktober und der neue Zeitplan.",
+        "Hola Mei, gracias por el presupuesto. Lo reviso mañana y te escribo.",
+        "Bonjour Mei, pouvez-vous confirmer la réservation de la salle pour vendredi ?",
+    ])
+    func otherLanguagesInLatinLettersReadAsOther(_ text: String) {
         #expect(ProjectsLanguage.reading(text) == .other)
     }
 
@@ -101,6 +118,15 @@ struct ProjectsSharedTypesTests {
         #expect(ProjectsAddress.normalized("\"Tan, Mei\" <mei.tan@harbor.example>") == "mei.tan@harbor.example")
         #expect(ProjectsAddress.normalized("谭梅 < mei+orders@harbor.example >") == "mei+orders@harbor.example")
         #expect(ProjectsAddress.normalized("mei@港湾.example") == "mei@港湾.example")
+        #expect(ProjectsAddress.normalized("Tan, Mei <mei.tan@harbor.example>") == "mei.tan@harbor.example")
+        #expect(ProjectsAddress.normalized("mei@harbor.example <Mei@Harbor.example>") == "mei@harbor.example")
+        #expect(ProjectsAddress.normalized("\"Lu <sales>, Mei@x\" <mei@harbor.example>") == "mei@harbor.example")
+    }
+
+    /// The same address keeps the same bytes, whether its letters come composed or not.
+    @Test func addressesAreComposed() {
+        let decomposed = ProjectsAddress.normalized("Jose\u{301}@Harbor.example")
+        #expect(decomposed.map { Array($0.utf8) } == Array("josé@harbor.example".precomposedStringWithCanonicalMapping.utf8))
     }
 
     @Test(arguments: [
@@ -116,6 +142,10 @@ struct ProjectsSharedTypesTests {
         "mei@harbor..example",
         "mei tan@harbor.example",
         "mei@harbor.example, lu@harbor.example",
+        "Mei <mei@harbor.example>, Lu <lu@harbor.example>",
+        "lu@harbor.example, Mei <mei@harbor.example>",
+        "Mei <mei@harbor.example> <lu@harbor.example>",
+        "\"Mei <mei@harbor.example>",
         "Mei Tan mei@harbor.example",
         "<mei@harbor.example",
         "mailto:mei@harbor.example",

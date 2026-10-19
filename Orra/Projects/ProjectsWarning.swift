@@ -45,7 +45,8 @@ nonisolated enum ProjectsWarning: String, CaseIterable, Sendable, Codable {
 /// How an email or a file hides text. A finding of each kind shows as the `hiddenText`
 /// warning, and the hidden text itself never reaches the model.
 nonisolated enum ProjectsHiddenText: String, CaseIterable, Sendable, Codable {
-    /// Styles that hide text, such as display none and visibility hidden.
+    /// Styles that hide text: display none, visibility hidden, a position off screen or
+    /// clipped to nothing, or a class whose style does one of these.
     case hiddenStyle
     /// A font size of zero or close to it.
     case tinyFont
@@ -55,6 +56,9 @@ nonisolated enum ProjectsHiddenText: String, CaseIterable, Sendable, Codable {
     case transparent
     /// An HTML comment.
     case htmlComment
+    /// Text in an image's alt or title text, which the reader does not see, as on an image
+    /// one pixel wide.
+    case imageText
     /// Zero width and other invisible characters.
     case invisibleCharacters
     /// Unicode tag characters, which can spell text no one sees.

@@ -152,11 +152,12 @@ docs/privacy.md, as docs/website.md describes.
   .xcconfig file and when docs/dependencies.md does not name a pinned package. It covers the
   settings it lists, not every way to change signing, so review signing changes by hand too.
   It also checks the Projects source rules of Runtime rules: the names code in Orra/Projects
-  must not use, Apple Events built or sent in Orra outside the files it allows or sent from
-  tests, script text in any file under Orra, OrraTests or Tools, and where SQLite, removing
-  files and UserDefaults may appear. It reads names in code, not every way around them, so
-  review Projects changes by hand too. The same job runs the tests of the rules check in
-  Tools/ci and of the speech evaluation scorer in Tools/speech-eval.
+  must not use, where NSAttributedString may appear, that Orra/Projects holds Swift files
+  only, Apple Events built or sent in Orra outside the files it allows or sent from tests,
+  script text in any file under Orra, OrraTests or Tools, and where SQLite, removing files
+  and UserDefaults may appear. It reads names in code, not every way around them, so review
+  Projects changes by hand too. The same job runs the tests of the rules check in Tools/ci
+  and of the speech evaluation scorer in Tools/speech-eval.
 - Build and test, on the xcode-27 runner, a GitHub hosted Mac with Xcode 27.0. It runs the test
   command above with code signing off and plugin validation skipped, downloads the Metal Toolchain
   when the runner lacks it, and skips RealModelTests, which need the model. The wired input test

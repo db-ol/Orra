@@ -23,8 +23,9 @@ jobs:
         with:
           persist-credentials: false
 
-      # Fails when a value under Needs maintainer approval in AGENTS.md changes.
-      - name: Check the values that need the maintainer's approval
+      # Fails when a value under Needs maintainer approval in AGENTS.md changes, or when code
+      # breaks a Projects source rule.
+      - name: Check the approved values and the Projects source rules
         run: python3 Tools/ci/check_rules.py
 
       # The rules check itself, with the Projects source rules, standard library only.
