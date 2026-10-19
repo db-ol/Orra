@@ -122,25 +122,20 @@ struct StatusMenu: View {
             if let second = pushToTalk.secondTalkKey {
                 Text("Second Key: \(second.fullName())")
             }
+            // The keys are at the bottom of General, so the window scrolls to them.
             Button("Change Talk Key…") {
                 NSApplication.shared.activate()
-                SettingsWindow.show(.general)
+                SettingsWindow.show(.general, section: .keys)
                 openWindow(id: SettingsWindow.id)
             }
             if pushToTalk.translationKeyIsOn {
                 Text("Translation Key: \(pushToTalk.translationKey.fullName())")
                 Button("Change Translation Key…") {
                     NSApplication.shared.activate()
-                    SettingsWindow.show(.general)
+                    SettingsWindow.show(.general, section: .keys)
                     openWindow(id: SettingsWindow.id)
                 }
             }
-            Divider()
-            Toggle("Double Press for Hands Free", isOn: Binding(
-                get: { pushToTalk.handsFreeOn },
-                set: { pushToTalk.setHandsFreeOn($0) }
-            ))
-            .disabled(!pushToTalk.handsFreeApplies)
         }
         Menu("Microphone") {
             MicrophoneToggles(inputs: inputs, chosen: pushToTalk.microphone, choose: pushToTalk.setMicrophone)

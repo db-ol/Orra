@@ -191,7 +191,7 @@ private struct SpeakTranslationRows: View {
             if !speech.canSpeak {
                 note(Text("This build of Orra has no voice model."))
             } else if !translationIsOn {
-                note(Text("Turn on Translation in General to use this."))
+                note(Text("Turn on Translation on the Translation page to use this."))
             }
             if !speech.engineChoices.isEmpty {
                 Picker(selection: Binding(

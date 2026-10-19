@@ -4,8 +4,8 @@ import SwiftUI
 import Testing
 @testable import Orra
 
-/// The tabs of the settings window, the sheets of General, and how the window is turned
-/// to one. Serialized, since the request is shared.
+/// The tabs of the settings window and how the window is turned to one. Serialized, since
+/// the request is shared.
 @MainActor
 @Suite(.serialized)
 struct SettingsPageTests {
@@ -14,35 +14,34 @@ struct SettingsPageTests {
     let inserter = FakeInserter()
     let temporary = TemporaryModelFolders()
 
-    @Test func theSidebarHasGeneralMeetingInterpretationVocabularyAndAbout() {
-        #expect(SettingsTab.allCases == [.general, .meeting, .vocabulary, .about])
-        #expect(SettingsSheet.allCases == [.cleanup])
+    @Test func theSidebarHasSixPagesWithGeneralFirst() {
+        #expect(SettingsTab.allCases == [.general, .dictation, .translation, .meeting, .vocabulary, .about])
         // Each page has its own icon in its own color.
         #expect(Set(SettingsTab.allCases.map(\.symbol)).count == SettingsTab.allCases.count)
         #expect(Set(SettingsTab.allCases.map(\.tint)).count == SettingsTab.allCases.count)
+        // The titles are the ones the catalog translates.
+        #expect(SettingsTab.allCases.map { "\($0.title)" }.allSatisfy { !$0.isEmpty })
     }
 
     @Test func aTabAskedForOpensOnceAndSettingsOpensGeneral() {
         SettingsWindow.show(.vocabulary)
-        #expect(SettingsWindow.takeRequest() == .init(tab: .vocabulary, sheet: nil))
+        #expect(SettingsWindow.takeRequest() == .init(tab: .vocabulary, section: nil))
         // Settings… after that opens on General alone.
-        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: nil))
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, section: nil))
         // As Set Up in Settings… in the welcome window asks for it.
         SettingsWindow.show(.meeting)
-        #expect(SettingsWindow.takeRequest() == .init(tab: .meeting, sheet: nil))
-        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: nil))
+        #expect(SettingsWindow.takeRequest() == .init(tab: .meeting, section: nil))
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, section: nil))
+        SettingsWindow.show(.translation)
+        #expect(SettingsWindow.takeRequest() == .init(tab: .translation, section: nil))
     }
 
-    @Test func aSheetOpensOverGeneral() {
-        SettingsWindow.show(.about, sheet: .cleanup)
-        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: .cleanup))
-    }
-
-    @Test func changeTalkKeyOpensGeneralAlone() {
-        SettingsWindow.show(sheet: .cleanup)
-        // Change Talk Key… closes a sheet that is open, since the keys are on General.
-        SettingsWindow.show(.general)
-        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: nil))
+    /// Change Talk Key… and Change Translation Key… in the menu open General scrolled to
+    /// Keys, which sit below the fold of the window's first size. Once.
+    @Test func changeTalkKeyOpensGeneralAtTheKeys() {
+        SettingsWindow.show(.general, section: .keys)
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, section: .keys))
+        #expect(SettingsWindow.takeRequest() == .init(tab: .general, section: nil))
     }
 
     @Test func anOpenWindowIsToldToTurn() {
@@ -52,22 +51,28 @@ struct SettingsPageTests {
             MainActor.assumeIsolated { received.count += 1 }
         }
         defer { NotificationCenter.default.removeObserver(observer) }
-        SettingsWindow.show(sheet: .cleanup)
+        SettingsWindow.show(.dictation)
         #expect(received.count == 1)
-        #expect(SettingsWindow.takeRequest() == .init(tab: .general, sheet: .cleanup))
+        #expect(SettingsWindow.takeRequest() == .init(tab: .dictation, section: nil))
     }
 
-    /// A sheet opens at its own height in a tall window, and no taller than the window in
-    /// a short one, but never shorter than the form needs to scroll.
-    @Test func aSheetFitsInTheWindow() {
-        #expect(SettingsSheetLimits.height(560, limit: 700) == 560)
-        #expect(SettingsSheetLimits.height(560, limit: 376) == 376)
-        #expect(SettingsSheetLimits.height(560, limit: 100) == SettingsSheetLimits.minimumHeight)
-        #expect(SettingsSheetLimits.height(560, limit: .infinity) == 560)
+    /// The row of double press for hands free shows in Keys only while a key it works on is
+    /// in Hold: the talk key, or the translation key while Translation is on.
+    @Test func theHandsFreeRowShowsOnlyWhileAKeyIsInHold() {
+        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkMode: .toggle, translationMode: .hold)
+        #expect(!pushToTalk.handsFreeApplies)
+        pushToTalk.setTranslationKeyOn(true)
+        #expect(pushToTalk.handsFreeApplies)
+        pushToTalk.setTriggerMode(.toggle, for: .translation)
+        #expect(!pushToTalk.handsFreeApplies)
+        pushToTalk.setTriggerMode(.hold, for: .talk)
+        #expect(pushToTalk.handsFreeApplies)
+        pushToTalk.setTriggerMode(.doubleTap, for: .talk)
+        #expect(!pushToTalk.handsFreeApplies)
     }
 
-    /// The line under Clean Up Text on the page: nothing while cleanup has its model
-    /// ready, and where the model stands otherwise.
+    /// The status row under the switch of Clean Up Text: nothing while cleanup has its
+    /// model ready, and where the model stands otherwise.
     @Test func theCleanupRowSaysWhereTheModelStands() {
         #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .ready, total: 100, use: .cleanup) == nil)
         #expect(CleanupLabels.status(.installed(URL(fileURLWithPath: "/")), engine: .loading, total: 100, use: .cleanup) == "Loading the cleanup model…")
@@ -76,8 +81,9 @@ struct SettingsPageTests {
         #expect(CleanupLabels.status(.downloading(bytes: 50, source: nil), engine: .unloaded, total: 100, use: .cleanup)?.hasPrefix("Downloading the cleanup model: 50%") == true)
     }
 
-    /// The target picker under Translation shows each direction with its explanation, and
-    /// the row under the switch says where the model stands in the words of translation.
+    /// The target picker on the Translation page shows each direction with its
+    /// explanation, and the row under it says where the model stands in the words of
+    /// translation.
     @Test func everyDirectionHasATitleAndAnExplanation() {
         #expect(TranslationDirection.choices(for: .chinese) == [.automatic, .english, .chinese])
         let details = TranslationDirection.choices(for: .chinese).map { "\($0.detail)" }
@@ -107,45 +113,41 @@ struct SettingsPageTests {
         var count = 0
     }
 
-    /// Renders each tab of the settings window and each sheet to a PNG, for a look at the
-    /// layout without running the app. Off unless ORRA_SETTINGS_SNAPSHOTS names a folder to
-    /// write to, which the test command passes as TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS. CI
-    /// never sets it. Run with -testLanguage zh-Hans for the Chinese text.
+    /// Renders each tab of the settings window to a PNG, for a look at the layout without
+    /// running the app. Off unless ORRA_SETTINGS_SNAPSHOTS names a folder to write to, which
+    /// the test command passes as TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS. CI never sets it. Run
+    /// with -testLanguage zh-Hans for the Chinese text.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
-    func renderEveryTabAndSheet() async throws {
+    func renderEveryTab() async throws {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let language = Bundle.main.preferredLocalizations.first ?? "en"
-        try await render(.tab(.general), name: "\(language)-0-general")
-        try await render(.tab(.general), cleanupOn: true, name: "\(language)-0-general-cleanup-on")
-        try await render(.tab(.general), translationOn: true, name: "\(language)-0-general-translation-on")
-        try await render(.tab(.general), translationOn: true, swapped: true, name: "\(language)-0-general-translation-swapped")
-        try await render(.tab(.general), cleanupOn: true, translationOn: true, height: 1400, name: "\(language)-0-general-full-height")
-        try await render(.tab(.general), dictating: .japanese, height: 1400, name: "\(language)-0-general-japanese")
-        try await render(.tab(.meeting), meeting: true, name: "\(language)-1-meeting-interpretation")
-        try await render(.tab(.meeting), translationOn: true, meeting: true, height: 1200, name: "\(language)-1-meeting-interpretation-full-height")
-        try await render(.tab(.vocabulary), name: "\(language)-2-vocabulary")
-        try await render(.tab(.about), name: "\(language)-3-about")
-        try await render(.tab(.about), height: 900, name: "\(language)-3-about-full-height")
-        try await render(.sheet(.cleanup), name: "\(language)-4-cleanup-options")
-        try await render(.sheet(.cleanup), cleanupOn: true, name: "\(language)-4-cleanup-options-on")
+        try await render(.general, name: "\(language)-0-general")
+        try await render(.general, scrollingTo: .keys, name: "\(language)-0-general-keys")
+        try await render(.general, translationOn: true, swapped: true, scrollingTo: .keys, name: "\(language)-0-general-translation-swapped")
+        try await render(.general, talkMode: .toggle, scrollingTo: .keys, name: "\(language)-0-general-keys-without-hold")
+        try await render(.general, translationOn: true, height: 1200, name: "\(language)-0-general-full-height")
+        try await render(.dictation, name: "\(language)-1-dictation")
+        try await render(.dictation, cleanupOn: true, height: 1000, name: "\(language)-1-dictation-cleanup-on")
+        try await render(.dictation, dictating: .japanese, height: 1000, name: "\(language)-1-dictation-japanese")
+        try await render(.translation, name: "\(language)-2-translation")
+        try await render(.translation, translationOn: true, name: "\(language)-2-translation-on")
+        try await render(.translation, translationOn: true, dictating: .spanish, name: "\(language)-2-translation-spanish")
+        try await render(.meeting, meeting: true, name: "\(language)-3-meeting-interpretation")
+        try await render(.meeting, translationOn: true, meeting: true, height: 1200, name: "\(language)-3-meeting-interpretation-full-height")
+        try await render(.vocabulary, name: "\(language)-4-vocabulary")
+        try await render(.about, name: "\(language)-5-about")
+        try await render(.about, height: 900, name: "\(language)-5-about-full-height")
     }
 
     private var folder: URL {
         URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
     }
 
-    private enum Shown {
-        case tab(SettingsTab)
-        case sheet(SettingsSheet)
-    }
-
-    /// A tab in the whole window, at the window's first size or `height`, or a sheet alone
-    /// at the size it opens at over that window, since a sheet does not draw outside a
-    /// window on screen.
-    /// With `meeting`, the Meeting Interpretation page has its parts, with captions that hear
-    /// nothing and a voice model that is not downloaded. `dictating` is the dictation
-    /// language picked.
-    private func render(_ shown: Shown, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, height: CGFloat? = nil, name: String) async throws {
+    /// A tab in the whole window, at the window's first size or `height`. With `meeting`,
+    /// the Meeting Interpretation page has its parts, with captions that hear nothing and a
+    /// voice model that is not downloaded. `dictating` is the dictation language picked,
+    /// `talkMode` the talk key's mode, and `section` the part the page scrolls to.
+    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkMode: TriggerMode = .hold, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -161,7 +163,7 @@ struct SettingsPageTests {
             models: models,
             engine: CleanupEngine(load: { _ in }, unload: {}, complete: { $0 })
         )
-        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, dictationLanguage: dictating)
+        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkMode: talkMode, dictationLanguage: dictating)
         for word in ["Orra", "Qwen3-ASR", "克劳德"] {
             pushToTalk.addToVocabulary(word)
         }
@@ -189,38 +191,26 @@ struct SettingsPageTests {
                 ModelInstaller(manifest: manifest, folders: temporary.folders, environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in nil }, sleep: { _ in }))
             } : nil
         )
-        // The window's first size, and each sheet at the size it opens at over that window.
-        let window = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)
-        let limit = window.height - SettingsSheetLimits.margin
-        let content: AnyView
-        let size: NSSize
-        switch shown {
-        case .tab(let tab):
-            // The sidebar's list does not draw outside a window on screen, so its rows
-            // stand next to the page in a plain column, at the sidebar's width.
-            content = AnyView(HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(SettingsTab.allCases) { row in
-                        SettingsTabLabel(tab: row)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(row == tab ? Color.secondary.opacity(0.2) : .clear))
-                    }
-                    Spacer()
+        // The window's first size.
+        let size = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)
+        // The sidebar's list does not draw outside a window on screen, so its rows stand
+        // next to the page in a plain column, at the sidebar's width.
+        let content = HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(SettingsTab.allCases) { row in
+                    SettingsTabLabel(tab: row)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(row == tab ? Color.secondary.opacity(0.2) : .clear))
                 }
-                .padding(10)
-                .frame(width: 180)
-                .background(Color(nsColor: .windowBackgroundColor))
-                Divider()
-                view.page(for: tab)
-            })
-            size = window
-        case .sheet(let sheet):
-            content = AnyView(view.content(for: sheet).environment(\.settingsSheetHeightLimit, limit))
-            size = switch sheet {
-            case .cleanup: NSSize(width: 540, height: SettingsSheetLimits.height(560, limit: limit))
+                Spacer()
             }
+            .padding(10)
+            .frame(width: 180)
+            .background(Color(nsColor: .windowBackgroundColor))
+            Divider()
+            view.page(for: tab, scrollingTo: .constant(section))
         }
         let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
         hosting.frame = NSRect(origin: .zero, size: size)
