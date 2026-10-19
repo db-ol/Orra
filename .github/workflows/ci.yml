@@ -27,6 +27,10 @@ jobs:
       - name: Check the values that need the maintainer's approval
         run: python3 Tools/ci/check_rules.py
 
+      # The rules check itself, with the Projects source rules, standard library only.
+      - name: Test the rules check
+        run: python3 -I -m unittest discover -s Tools/ci -p 'test_*.py' -v
+
       # The scorer of the speech corpus evaluation, which needs only the standard library.
       - name: Test the speech evaluation scorer
         run: python3 -m unittest discover -s Tools/speech-eval -p 'test_*.py' -v
