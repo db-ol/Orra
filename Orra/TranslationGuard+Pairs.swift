@@ -167,7 +167,7 @@ nonisolated extension TranslationGuard {
     /// words and as many as English ones, or for 20 letters and more a text with more
     /// Spanish than English words that NLLanguageRecognizer finds Spanish rather than
     /// English. `words` are the output's, see TranslationDirection.latinWords.
-    static func isSpanishLeft(_ output: String, words: [String]) -> Bool {
+    private static func isSpanishLeft(_ output: String, words: [String]) -> Bool {
         if output.contains("¿") || output.contains("¡") {
             return true
         }
@@ -182,7 +182,7 @@ nonisolated extension TranslationGuard {
     /// more than the Spanish ones, or for 20 letters and more a text with more English than
     /// Spanish words that NLLanguageRecognizer finds English rather than Spanish. `words`
     /// are the output's, see TranslationDirection.latinWords.
-    static func isEnglishLeft(output: String, words: [String]) -> Bool {
+    private static func isEnglishLeft(output: String, words: [String]) -> Bool {
         let counts = TranslationDirection.SpanishCounts(output, words: words)
         if counts.english >= 4, counts.english > counts.spanish {
             return true
@@ -311,7 +311,7 @@ nonisolated extension TranslationGuard {
     /// be read with a comma or a point for thousands, and passes when either reading is
     /// explained. `corrects` says whether the source has a correction cue, see
     /// `pairCorrectionCue`.
-    static func newPairNumbers(source: String, output: String, target: TranslationTarget, corrects: Bool) -> [String] {
+    private static func newPairNumbers(source: String, output: String, target: TranslationTarget, corrects: Bool) -> [String] {
         let have = pairSourceValues(source)
         // The minutes of a full hour, as in 12:00, bring no number.
         let folded = asciiDigits(output.replacingOccurrences(of: ":00", with: ""))
