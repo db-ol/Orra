@@ -1,18 +1,18 @@
 import SwiftUI
 
 /// Meeting Interpretation, its own page in Settings: a meeting where each side speaks
-/// another language. Live captions show what the other side says, translated. Speak
-/// translations to others speaks what the translation key translated, so the other side
-/// hears it, in the voice of a sample the user recorded if they like. Each part shows
-/// only where the page has it.
+/// another language. Live captions show what the other side says, translated into the
+/// caption target. Speak translations to others speaks what the translation key
+/// translated, so the other side hears it, in the voice of a sample the user recorded if
+/// they like. Each part shows only where the page has it.
 struct MeetingInterpretationSettings: View {
     let pushToTalk: PushToTalkController
     let captions: MeetingCaptions?
     let speech: TranslationSpeech?
     let voiceModels: VoiceModels?
-    let translationIsOn: Bool
-    /// The language the voice sample's script is in at first, see VoiceScript.
-    let translationDirection: TranslationDirection
+    /// Whether translation is on, the caption target, and the translation key's direction,
+    /// which sets the language the voice sample's script is in at first, see VoiceScript.
+    let cleanup: TextCleanup
     /// Watches the devices only while Settings shows this page.
     @State private var outputList = AudioOutputList.live()
     /// The voice sample sheet's recording while the sheet is open.
@@ -22,7 +22,7 @@ struct MeetingInterpretationSettings: View {
         Form {
             Section {
                 if let captions {
-                    LiveCaptionRows(captions: captions, shortcut: pushToTalk.liveCaptionsShortcut)
+                    LiveCaptionRows(captions: captions, cleanup: cleanup, language: pushToTalk.dictationLanguage, shortcut: pushToTalk.liveCaptionsShortcut)
                 }
             } header: {
                 Text("For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice.")
@@ -33,7 +33,7 @@ struct MeetingInterpretationSettings: View {
             }
             if let speech, let voiceModels {
                 Section {
-                    SpeakTranslationRows(speech: speech, models: voiceModels, translationIsOn: translationIsOn, outputs: outputList.outputs, record: openRecording)
+                    SpeakTranslationRows(speech: speech, models: voiceModels, translationIsOn: cleanup.translationIsOn, outputs: outputList.outputs, record: openRecording)
                 } footer: {
                     Group {
                         if speech.remembersVoice {
@@ -79,7 +79,7 @@ struct MeetingInterpretationSettings: View {
             recorder: .live(pushToTalk),
             playback: SpeechPlayer(),
             output: { AudioOutput.systemDefault() },
-            scriptLanguage: VoiceScript.language(direction: translationDirection, language: pushToTalk.dictationLanguage),
+            scriptLanguage: VoiceScript.language(direction: cleanup.translationDirection, language: pushToTalk.dictationLanguage),
             scriptLanguages: pushToTalk.dictationLanguage.translationTargets
         )
     }
@@ -132,10 +132,13 @@ struct MeetingInterpretationSettings: View {
     }
 }
 
-/// Live captions: the switch and what the caption window shows. The window has the same
-/// three choices.
+/// Live captions: the switch, what the caption window shows and the language it
+/// translates into. The window has the same choices.
 private struct LiveCaptionRows: View {
     let captions: MeetingCaptions
+    let cleanup: TextCleanup
+    /// The dictation language, whose choices the caption target offers.
+    let language: DictationLanguage
     /// The Live Captions shortcut, which the switch's help names, or nil for none.
     let shortcut: KeyCombination?
 
@@ -169,6 +172,24 @@ private struct LiveCaptionRows: View {
         } label: {
             Label("Captions show", systemImage: "text.bubble")
         }
+        // A target saved for another dictation language shows as the one it acts as, and
+        // comes back with its language.
+        Picker(selection: Binding(
+            get: { CaptionTarget.effective(cleanup.captionTarget, for: language) },
+            set: { cleanup.setCaptionTarget($0) }
+        )) {
+            ForEach(CaptionTarget.choices(for: language), id: \.self) { target in
+                Text(target.title).tag(target)
+            }
+        } label: {
+            DescribedLabel(
+                title: "Translate captions into",
+                detail: "The language you read in the caption window. The translation key has its own setting, on the Translation page.",
+                systemImage: "translate"
+            )
+        }
+        // Original does not translate.
+        .disabled(!captions.displayMode.translates)
     }
 }
 
@@ -189,10 +210,13 @@ private struct SpeakTranslationRows: View {
                 get: { speech.isOn },
                 set: { speech.setOn($0) }
             )) {
+                // The caption target shows right above, so the line says which language the
+                // voice speaks.
                 DescribedLabel(
                     title: "Speak translations to others",
                     detail: "Orra speaks your translations through the device below.",
-                    systemImage: "speaker.wave.2.bubble"
+                    systemImage: "speaker.wave.2.bubble",
+                    note: "Speaks in the language the translation key translates into (Translate into, on the Translation page)."
                 )
             }
             // Stays usable while on, so it can be turned off after Translation was.

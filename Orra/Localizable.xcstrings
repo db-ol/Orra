@@ -4106,6 +4106,28 @@
         }
       }
     },
+    "Live Captions have their own language, on the Meeting Interpretation page." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los subtítulos en vivo tienen su propio idioma, en la página Interpretación en reuniones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブキャプションの言語は、“会議通訳”ページで別に設定します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕的语言在“会议同传”页面单独设置。"
+          }
+        }
+      }
+    },
     "Live Captions off" : {
       "localizations" : {
         "es-419" : {
@@ -4146,28 +4168,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "实时字幕已打开"
-          }
-        }
-      }
-    },
-    "Live Captions on the Meeting Interpretation page translate the same way." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Los subtítulos en vivo de la página Interpretación en reuniones se traducen de la misma forma."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“会議通訳”ページのライブキャプションも同じように翻訳されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“会议同传”页面的实时字幕也按这里的设置翻译。"
           }
         }
       }
@@ -7882,6 +7882,28 @@
         }
       }
     },
+    "Speaks in the language the translation key translates into (Translate into, on the Translation page)." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lee en el idioma al que traduce la tecla de traducción (Traducir a, en la página Traducción)."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻訳キーの翻訳先の言語で読み上げます（“翻訳”ページの“翻訳先”で設定）。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用翻译键的目标语言朗读（在“翻译”页面的“翻译成”中设置）。"
+          }
+        }
+      }
+    },
     "Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the speech model or the cleanup model when you ask it to, and to check for updates when you allow it." : {
       "localizations" : {
         "es-419" : {
@@ -8391,6 +8413,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 的菜单和窗口所用的语言。"
+          }
+        }
+      }
+    },
+    "The language you read in the caption window. The translation key has its own setting, on the Translation page." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El idioma que lees en la ventana de subtítulos. La tecla de traducción tiene su propia configuración, en la página Traducción."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャプションウインドウに表示する言語です。翻訳キーの翻訳先は、“翻訳”ページで別に設定します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕窗口里显示的语言。翻译键在“翻译”页面里单独设置。"
           }
         }
       }
@@ -9387,6 +9431,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在转写…"
+          }
+        }
+      }
+    },
+    "Translate captions into" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Traducir subtítulos a"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャプションの翻訳先"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字幕翻译成"
           }
         }
       }

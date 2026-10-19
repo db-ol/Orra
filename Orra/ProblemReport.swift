@@ -27,6 +27,14 @@ nonisolated enum ProblemReport {
         var talkKeyActive: Bool
         var talkKey: String
         var microphone: String
+        /// The dictation language, by its English name.
+        var dictationLanguage: String
+        /// Translate into of the translation key, see `describe(_:for:)`.
+        var translateInto: String
+        /// What the caption window shows, as the log names the display mode.
+        var captionsShow: String
+        /// The caption target, see `describe(captionTarget:picked:for:)`.
+        var translateCaptionsInto: String
         var settings: [Setting]
         /// The cleanup model's download and loading, as the speech model's state reads.
         var cleanupModelState: String
@@ -143,6 +151,10 @@ nonisolated enum ProblemReport {
         lines.append("## Settings")
         lines.append("Talk key: \(facts.talkKey)")
         lines.append("Microphone: \(facts.microphone)")
+        lines.append("Dictation language: \(facts.dictationLanguage)")
+        lines.append("Translate into: \(facts.translateInto)")
+        lines.append("Live Captions show: \(facts.captionsShow)")
+        lines.append("Translate captions into: \(facts.translateCaptionsInto)")
         for setting in facts.settings {
             lines.append("\(setting.name): \(setting.on ? "on" : "off")")
         }
@@ -171,6 +183,23 @@ nonisolated enum ProblemReport {
         }
         lines.append("")
         return lines.joined(separator: "\n")
+    }
+
+    /// Translate into as saved, and what it acts as for the dictation language when that
+    /// differs, such as "Japanese, acts as Automatic".
+    static func describe(_ direction: TranslationDirection, for language: DictationLanguage) -> String {
+        let effective = direction.effective(for: language)
+        let name = direction.rawValue.capitalized
+        return effective == direction ? name : "\(name), acts as \(effective.rawValue.capitalized)"
+    }
+
+    /// The caption target, "(default)" while the user has not picked one, and what it acts
+    /// as for the dictation language when that differs, such as "Japanese, acts as
+    /// Chinese".
+    static func describe(captionTarget target: TranslationTarget, picked: Bool, for language: DictationLanguage) -> String {
+        let effective = CaptionTarget.effective(target, for: language)
+        let name = picked ? target.logName : "\(target.logName) (default)"
+        return effective == target ? name : "\(name), acts as \(effective.logName)"
     }
 
     /// One log entry as a line.

@@ -22,7 +22,7 @@ import Testing
 ///
 /// - ORRA_CAPTION_SETTINGS: a JSON object that changes CaptionSegmenter.Settings, such as
 ///   {"pause": 0.5, "startLevel": 0.01}, for tuning.
-/// - ORRA_CAPTION_DIRECTION: automatic (the default), english or chinese.
+/// - ORRA_CAPTION_TARGET: the caption target, zh (the default) or en, see TranslationTarget.
 /// - ORRA_CAPTION_TRANSLATE=0: transcripts only, without loading the cleanup model.
 /// - ORRA_CAPTION_REALTIME=1: feeds the audio at the pace it plays, so the latency of each
 ///   caption is measured as the live captions would see it.
@@ -51,7 +51,7 @@ struct CaptionPipelineMeasurementTests {
         let files = try Self.audioFiles(at: URL(fileURLWithPath: audio))
         try #require(!files.isEmpty, "No audio files")
         let settings = try Self.settings()
-        let direction = Self.environment["ORRA_CAPTION_DIRECTION"].flatMap(TranslationDirection.init(rawValue:)) ?? .automatic
+        let target = Self.environment["ORRA_CAPTION_TARGET"].flatMap(TranslationTarget.init(rawValue:)) ?? .chinese
         let realtime = Self.environment["ORRA_CAPTION_REALTIME"] == "1"
         let translates = Self.environment["ORRA_CAPTION_TRANSLATE"] != "0"
         let interimInterval = Self.environment["ORRA_CAPTION_INTERIM"].flatMap(Double.init).flatMap { $0 > 0 ? $0 : nil }
@@ -62,15 +62,13 @@ struct CaptionPipelineMeasurementTests {
         if translates {
             let folder = try #require(RewriteTestModel.folder, "The cleanup model is not on this Mac. Set TEST_RUNNER_ORRA_CAPTION_TRANSLATE=0 or TEST_RUNNER_ORRA_REWRITE_MODEL_DIR")
             try await rewrite.load(from: folder)
-            for target in TextCleanup.preparedTargets(direction) {
-                try await rewrite.prepareTranslation(into: target)
-            }
+            try await rewrite.prepareTranslation(into: CaptionTarget.route(target, in: .chinese))
         }
         var engines = CaptionEngines.shared(
             transcription: .qwen3(speech),
             isSpeechReady: { true },
             canTranslate: { translates },
-            direction: { direction },
+            target: { target },
             complete: { try await rewrite.translate($0, into: $1).answer },
             turns: EngineTurns()
         )
@@ -87,9 +85,9 @@ struct CaptionPipelineMeasurementTests {
             calls.interim += 1
             return try await transcribeInterim(samples, language)
         }
-        engines.translate = { text, target in
+        engines.translate = { text, route in
             calls.translation += 1
-            return try await translate(text, target)
+            return try await translate(text, route)
         }
 
         let output = URL(fileURLWithPath: outputPath)

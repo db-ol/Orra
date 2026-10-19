@@ -40,7 +40,7 @@ struct TranslationSettings: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it.")
-                    Text("Live Captions on the Meeting Interpretation page translate the same way.")
+                    Text("Live Captions have their own language, on the Meeting Interpretation page.")
                 }
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

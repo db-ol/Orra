@@ -85,11 +85,13 @@ struct SettingsTabLabel: View {
 }
 
 /// A setting's name with what it does in smaller text right under it, as System Settings
-/// shows them, so the explanation sits next to its switch.
+/// shows them, so the explanation sits next to its switch. A note, when there is one, is a
+/// line of its own under the explanation.
 struct DescribedLabel: View {
     let title: LocalizedStringKey
     let detail: LocalizedStringKey
     let systemImage: String
+    var note: LocalizedStringKey? = nil
 
     var body: some View {
         Label {
@@ -99,6 +101,12 @@ struct DescribedLabel: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let note {
+                    Text(note)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         } icon: {
             Image(systemName: systemImage)
@@ -177,7 +185,7 @@ struct SettingsView: View {
         case .translation:
             TranslationSettings(pushToTalk: pushToTalk, cleanup: cleanup)
         case .meeting:
-            MeetingInterpretationSettings(pushToTalk: pushToTalk, captions: captions, speech: speech, voiceModels: voiceModels, translationIsOn: cleanup.translationIsOn, translationDirection: cleanup.translationDirection)
+            MeetingInterpretationSettings(pushToTalk: pushToTalk, captions: captions, speech: speech, voiceModels: voiceModels, cleanup: cleanup)
         case .vocabulary:
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .about:

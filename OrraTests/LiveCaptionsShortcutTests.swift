@@ -229,14 +229,14 @@ struct LiveCaptionsShortcutTests {
         try withTestDefaults("LiveCaptionsShortcut.launch") { defaults in
             var saved: [KeyCombination?] = []
             let controller = controller(talkKey: Self.controlOption, shortcut: Self.controlOptionCommandC) { saved.append($0) }
-            LaunchMigrations.run(controller, in: defaults)
+            LaunchMigrations.run(controller, cleanup: launchCleanup(), setUpBefore: true, ownLanguage: nil, in: defaults)
             #expect(controller.liveCaptionsShortcut == nil)
             #expect(saved == [nil])
             #expect(defaults.string(forKey: "liveCaptionsShortcut") == "none")
         }
         try withTestDefaults("LiveCaptionsShortcut.launch") { defaults in
             let controller = controller(shortcut: Self.controlOptionCommandC)
-            LaunchMigrations.run(controller, in: defaults)
+            LaunchMigrations.run(controller, cleanup: launchCleanup(), setUpBefore: true, ownLanguage: nil, in: defaults)
             #expect(controller.liveCaptionsShortcut == Self.controlOptionCommandC)
             #expect(defaults.string(forKey: "liveCaptionsShortcut") == "control+option+command|8|C")
         }

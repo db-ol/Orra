@@ -197,7 +197,7 @@ struct SettingsPageTests {
             updater: AppUpdater(),
             captions: meeting ? MeetingCaptions(
                 source: SystemAudioSource(start: { _ in }, stop: {}),
-                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
             ) : nil,
             speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,
             voiceModels: meeting ? VoiceModels(kind: .qwen3) { [temporary] manifest in

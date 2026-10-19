@@ -11,15 +11,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let transcription = Transcription.qwen3()
     /// How captions give way to dictation on the shared models, see EngineTurns.
     let turns = EngineTurns()
+    /// Whether Orra was set up on this Mac before this launch, read once, see
+    /// TriggerModePreference.wasSetUpBefore. Reading either permission never shows a
+    /// prompt.
+    lazy var setUpBefore = TriggerModePreference.wasSetUpBefore(
+        talkKeySaved: TalkKeyPreference.isSaved(),
+        microphone: MicrophoneAccess.current(),
+        accessibilityAllowed: AXIsProcessTrusted()
+    )
     lazy var pushToTalk: PushToTalkController = { [self] in
         let talkKey = TalkKeyPreference.loadHotkey()
         let translationKey = TranslationKeyPreference.loadHotkey(talkKey: talkKey)
-        // Reading either permission never shows a prompt.
-        let setUpBefore = TriggerModePreference.wasSetUpBefore(
-            talkKeySaved: TalkKeyPreference.isSaved(),
-            microphone: MicrophoneAccess.current(),
-            accessibilityAllowed: AXIsProcessTrusted()
-        )
+        let setUpBefore = self.setUpBefore
         let controller = PushToTalkController(
             capture: .live(),
             transcription: transcription,
@@ -134,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dockIcon: dockIcon,
         learning: learning,
         cleanup: cleanup,
+        captions: captions,
         updater: updater
     ))
     lazy var learnedNotice: LearnedNoticePanel = LearnedNoticePanel(
@@ -351,7 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.onLiveCaptionsShortcut = { [weak self] in self?.toggleCaptionsFromShortcut() }
         // The steps that keep a user's settings across versions. A version that changes
         // what a setting starts as adds its step inside, not here.
-        LaunchMigrations.run(pushToTalk)
+        LaunchMigrations.run(pushToTalk, cleanup: cleanup, setUpBefore: setUpBefore)
         // Before the tap is installed, so it watches the translation key from the start.
         followTranslation()
         pushToTalk.start()
@@ -401,7 +405,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// before the tap is installed, and each runs again at every launch, so each step must
 /// leave alone what it already saved.
 enum LaunchMigrations {
-    static func run(_ pushToTalk: PushToTalkController, in defaults: UserDefaults = .standard) {
+    /// `setUpBefore` says whether Orra was set up on this Mac before this launch, see
+    /// TriggerModePreference.wasSetUpBefore, and `ownLanguage` is the user's own language,
+    /// see OwnLanguage.
+    static func run(_ pushToTalk: PushToTalkController, cleanup: TextCleanup, setUpBefore: Bool, ownLanguage: DictationLanguage? = OwnLanguage.current(), in defaults: UserDefaults = .standard) {
         // A new user's talk key stays in Press to start and stop once Orra is set up, and an
         // earlier user's in Hold, see TriggerModePreference.
         TriggerModePreference.keepTalkMode(pushToTalk.talkMode, in: defaults)
@@ -418,5 +425,17 @@ enum LaunchMigrations {
             beside: [pushToTalk.talkKey, pushToTalk.translationKey],
             in: defaults
         ))
+        // An earlier user's captions keep translating into the language they did when
+        // they followed Translate into, once. A new user's follow their own language until
+        // they pick one, see CaptionTargetPreference.
+        if let target = CaptionTargetPreference.migrate(
+            setUpBefore: setUpBefore,
+            direction: cleanup.translationDirection,
+            language: pushToTalk.dictationLanguage,
+            ownLanguage: ownLanguage,
+            in: defaults
+        ) {
+            cleanup.setCaptionTarget(target)
+        }
     }
 }

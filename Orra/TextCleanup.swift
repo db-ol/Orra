@@ -38,6 +38,10 @@ final class TextCleanup {
     /// The user's dictation language, which translation goes between with English, see
     /// `setDictationLanguage(_:)`. AppDelegate keeps it in step with PushToTalkController.
     private(set) var dictationLanguage: DictationLanguage = .chinese
+    /// The language Live Captions translate into as the user picked it, nil until they
+    /// pick one, see CaptionTargetPreference. Saved through `saveCaptionTarget` whenever it
+    /// changes.
+    private(set) var pickedCaptionTarget: TranslationTarget?
     /// True while the Clean Up Text page asks whether to download the model.
     var isConfirmingDownload = false
     /// True while Settings asks whether to download the model for translation.
@@ -55,6 +59,10 @@ final class TextCleanup {
     @ObservationIgnored private let save: (Bool) -> Void
     @ObservationIgnored private let saveTranslation: (Bool) -> Void
     @ObservationIgnored private let saveDirection: (TranslationDirection) -> Void
+    @ObservationIgnored private let saveCaptionTarget: (TranslationTarget) -> Void
+    /// The caption target while none is picked, read each time, so it follows the user's
+    /// own language, see CaptionTargetPreference.defaultTarget(ownLanguage:).
+    @ObservationIgnored private let defaultCaptionTarget: () -> TranslationTarget
     /// The latest load or unload. Each waits for the one before it, so they never overlap
     /// and never swap order.
     @ObservationIgnored private var engineWork: Task<Void, Never>?
@@ -88,6 +96,10 @@ final class TextCleanup {
     ///   - saveTranslation: Saves that setting after the user changes it.
     ///   - translationDirection: Which way to translate, as saved.
     ///   - saveDirection: Saves the direction after the user changes it.
+    ///   - captionTarget: The language Live Captions translate into, as saved, nil for
+    ///     none.
+    ///   - saveCaptionTarget: Saves the caption target after the user picks one.
+    ///   - defaultCaptionTarget: The caption target while none is picked.
     ///   - models: The installer for the cleanup model. Tests pass one with temporary
     ///     folders and a stand in network.
     ///   - engine: Loads and runs the model. Tests pass a stand in.
@@ -102,6 +114,9 @@ final class TextCleanup {
         saveTranslation: @escaping (Bool) -> Void = { _ in },
         translationDirection: TranslationDirection = .automatic,
         saveDirection: @escaping (TranslationDirection) -> Void = { _ in },
+        captionTarget: TranslationTarget? = nil,
+        saveCaptionTarget: @escaping (TranslationTarget) -> Void = { _ in },
+        defaultCaptionTarget: @escaping () -> TranslationTarget = { CaptionTargetPreference.defaultTarget(ownLanguage: nil) },
         models: ModelInstaller,
         engine: CleanupEngine = .live(),
         idleUnloadDelay: Duration? = CleanupIdlePreference.defaultDelay,
@@ -114,6 +129,9 @@ final class TextCleanup {
         self.saveTranslation = saveTranslation
         self.translationDirection = translationDirection
         self.saveDirection = saveDirection
+        pickedCaptionTarget = captionTarget
+        self.saveCaptionTarget = saveCaptionTarget
+        self.defaultCaptionTarget = defaultCaptionTarget
         self.models = models
         self.engine = engine
         self.idleUnloadDelay = idleUnloadDelay
@@ -134,6 +152,11 @@ final class TextCleanup {
             saveTranslation: { TranslationPreference.save($0) },
             translationDirection: TranslationDirection.load(),
             saveDirection: { $0.save() },
+            captionTarget: CaptionTargetPreference.saved(),
+            saveCaptionTarget: { CaptionTargetPreference.save($0) },
+            // Reads Orra's language as saved, so one picked in the welcome window counts
+            // at once.
+            defaultCaptionTarget: { CaptionTargetPreference.defaultTarget(ownLanguage: OwnLanguage.current()) },
             models: ModelInstaller(
                 manifest: .qwen35Cleanup,
                 folders: .liveCleanup,
@@ -383,12 +406,34 @@ final class TextCleanup {
     }
 
     /// The user picked which way to translate. Reads the prompt for the new target ahead
-    /// while translation is on and the model is loaded.
+    /// while translation is on and the model is loaded. Captions have their own target.
     func setTranslationDirection(_ direction: TranslationDirection) {
         guard direction != translationDirection else { return }
         translationDirection = direction
         saveDirection(direction)
-        if translationIsOn || captionsNeedModel, isLoaded {
+        if translationIsOn, isLoaded {
+            prepareTranslation()
+        }
+    }
+
+    /// The language Live Captions translate into: the one the user picked, or while there
+    /// is none the default from their own language. Each sentence goes into it as it acts
+    /// for the dictation language, see CaptionTarget.effective(_:for:).
+    var captionTarget: TranslationTarget {
+        pickedCaptionTarget ?? defaultCaptionTarget()
+    }
+
+    /// The user picked the language captions translate into, in the caption window or in
+    /// Settings, or the launch step saved one for an earlier user, see LaunchMigrations.
+    /// It counts from the next sentence. Reads its prompt ahead while captions run and the
+    /// model is loaded.
+    func setCaptionTarget(_ target: TranslationTarget) {
+        guard target != pickedCaptionTarget else { return }
+        pickedCaptionTarget = target
+        saveCaptionTarget(target)
+        guard captionsNeedModel else { return }
+        Logger.captions.notice("Meeting captions now translate into \(CaptionTarget.effective(target, for: self.dictationLanguage).logName, privacy: .public)")
+        if isLoaded {
             prepareTranslation()
         }
     }
@@ -518,6 +563,19 @@ final class TextCleanup {
         }
     }
 
+    /// The routes whose prompts are read ahead for the translation key's direction while
+    /// translation is on and the caption target while captions run, nil for either one
+    /// that is not wanted: the caption route first, since captions translate without
+    /// waiting, then those of the direction, each once. All are routes of the dictation
+    /// language, so they stay within TranslationPrefixSlots.limit.
+    nonisolated static func preparedRoutes(direction: TranslationDirection?, captionTarget: TranslationTarget?, _ language: DictationLanguage) -> [TranslationRoute] {
+        var routes = captionTarget.map { [CaptionTarget.route($0, in: language)] } ?? []
+        for route in direction.map({ preparedRoutes($0, language) }) ?? [] where !routes.contains(route) {
+            routes.append(route)
+        }
+        return routes
+    }
+
     /// Reads the translation prompts ahead after the work queued before, see
     /// RewriteEngine.prepareTranslation.
     private func prepareTranslation() {
@@ -529,14 +587,19 @@ final class TextCleanup {
         }
     }
 
-    /// Drops the prompts of other dictation languages, and reads those of the user's
-    /// direction ahead. The other target of the same language stays when it is in memory,
-    /// as it did before the dictation language.
+    /// Drops the prompts of other dictation languages, and reads those of the caption
+    /// target and the user's direction ahead. The other target of the same language stays
+    /// when it is in memory, as it did before the dictation language.
     private func fillTranslationPrefixes() async {
         guard translationIsOn || captionsNeedModel, isLoaded else { return }
         let language = dictationLanguage
         await engine.keepTranslationPrefixes(Set(language.translationRoutes))
-        for route in Self.preparedRoutes(translationDirection, language) {
+        let routes = Self.preparedRoutes(
+            direction: translationIsOn ? translationDirection : nil,
+            captionTarget: captionsNeedModel ? captionTarget : nil,
+            language
+        )
+        for route in routes {
             do {
                 try await engine.prepareTranslation(route)
             } catch {
