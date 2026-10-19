@@ -114,8 +114,9 @@ nonisolated extension TranslationPrompt {
         language == .japanese ? japaneseOpeningFiller : spanishOpeningFiller
     }
 
-    /// A filler that opens a text, before a comma.
-    private static let japaneseOpeningFiller = TranslationGuard.regex(#"^\s*(?:えーっと|えーと|えっと|ええと|えと|えー+|あのー*|あのう|うーん|うーむ|んー+)\s*[、，,…]"#)
+    /// A filler that opens a text, before a comma. その and あの only before a comma, since
+    /// その本 or あの人 mean that book or that person.
+    private static let japaneseOpeningFiller = TranslationGuard.regex(#"^\s*(?:えーっと|えーと|えっと|ええと|えと|えー+|あのー*|あのう|うーん|うーむ|んー+|その)\s*[、，,…]"#)
     private static let spanishOpeningFiller = TranslationGuard.regex(#"^\s*(?:eh+|em+|ehm+|mm+|hmm+|ah+|este)\s*[,…]"#, .caseInsensitive)
     /// Mr., Ms., Mrs. or Miss before a name that starts with a capital.
     private static let titleBeforeName = TranslationGuard.regex(#"\b(?:Mr|Ms|Mrs|Miss)\.? ([A-Z][A-Za-z]+)\b(?!-)"#)
