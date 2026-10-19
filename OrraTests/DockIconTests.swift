@@ -47,6 +47,29 @@ struct DockIconTests {
         #expect(fakes.policies == [.accessory, .regular, .accessory])
     }
 
+    /// A window that macOS shows without making Orra active never becomes key, so only the
+    /// update after its close runs.
+    @Test func whileOffAWindowAboutToShowGetsTheIconAtOnceAndLosesItAfterClosing() {
+        let fakes = Fakes()
+        let dock = makeDockIcon(fakes, showsInDock: false)
+        dock.update()
+        dock.willShowWindow()
+        #expect(fakes.policies == [.accessory, .regular])
+        dock.willShowWindow()
+        #expect(fakes.policies == [.accessory, .regular])
+        dock.update()
+        #expect(fakes.policies == [.accessory, .regular, .accessory])
+    }
+
+    @Test func whileOnAWindowAboutToShowChangesNothing() {
+        let fakes = Fakes()
+        let dock = makeDockIcon(fakes, showsInDock: true)
+        dock.update()
+        dock.willShowWindow()
+        dock.update()
+        #expect(fakes.policies == [.regular])
+    }
+
     @Test func turningItOffWithSettingsOpenKeepsTheIconUntilTheWindowCloses() {
         let fakes = Fakes()
         fakes.windowOpen = true

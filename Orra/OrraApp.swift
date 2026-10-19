@@ -15,13 +15,16 @@ import SwiftUI
         }
 
         // A plain window rather than SwiftUI's Settings scene, whose window cannot be
-        // resized. It opens only when asked for, never at launch.
+        // resized. SwiftUI never opens it at launch and never restores it, also not after
+        // a restart or at login. AppDelegate opens it at launch when the user opened Orra,
+        // see LaunchWindow.
         Window("Orra Settings", id: SettingsWindow.id) {
             SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater, captions: appDelegate.captions, speech: appDelegate.speech, voiceModels: appDelegate.voiceModels)
         }
         .windowResizability(.contentMinSize)
         .defaultSize(SettingsWindow.defaultSize)
         .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 SettingsMenuItem()
@@ -43,6 +46,13 @@ enum SettingsWindow {
     static let defaultSize = CGSize(width: 720, height: 560)
     /// Posted to turn an open settings window to what `show` asked for.
     static let showNotification = Notification.Name("io.github.db-ol.Orra.showSettings")
+
+    /// Whether `window` is the settings window. SwiftUI names a scene's window after its
+    /// id, with or without a suffix such as "-AppWindow-1".
+    static func isSettings(_ window: NSWindow) -> Bool {
+        guard let name = window.identifier?.rawValue else { return false }
+        return name == id || name.hasPrefix(id + "-")
+    }
 
     /// A tab of the window, and a sheet of General to open over it.
     struct Request: Equatable {

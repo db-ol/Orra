@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 /// Orra lives in the menu bar, and in the Dock too unless the user turns that off, see
 /// DockIcon. The policy is set here at launch rather than through LSUIElement, so it can
@@ -106,7 +107,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     /// The welcome window's one download of the speech model and the cleanup model.
     lazy var setup = SetupDownload(speech: models, cleanup: cleanup)
-    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup)
+    lazy var welcome = WelcomeWindow(pushToTalk: pushToTalk, setup: setup) { [dockIcon] in
+        dockIcon.willShowWindow()
+    }
     lazy var clipboard = ClipboardWord(
         isDictating: { [pushToTalk] in pushToTalk.state != .idle },
         vocabulary: { [pushToTalk] in pushToTalk.vocabulary.map(\.text) }
@@ -254,7 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if SetupChecklist(pushToTalk, models).needsUser {
             welcome.show()
         } else {
-            DockIcon.openSettings()
+            LaunchWindow.openSettings(dockIcon: dockIcon)
         }
         return false
     }
@@ -272,6 +275,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Xcode runs this app to host unit tests and SwiftUI previews. Those
         // copies must not install the keyboard tap or show the welcome window.
         guard !Self.isHostedByXcode else { return }
+        // The Apple event that launched Orra is current only now, see LaunchWindow. Whether
+        // the launch was a default one is logged for the login test, nothing reads it yet.
+        let launchedAtLogin = LaunchWindow.isLoginLaunch(NSAppleEventManager.shared().currentAppleEvent)
+        let defaultLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool
         // Checks only once the user allowed it, so launching stays offline until then.
         updater.start()
         // The installer is what loads the speech model: at launch when the model is in
@@ -333,15 +340,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshWhenMenusOpen()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
-        Task { [models, pushToTalk, welcome, cleanup, setup, speech, voiceModels] in
+        // After that, a launch by the user opens Settings, see LaunchWindow.
+        Task { [models, pushToTalk, welcome, cleanup, setup, speech, voiceModels, openAtLogin, dockIcon] in
             await models.prepare()
             // Loads the cleanup model when cleanup or translation is on and the model is in
             // place. Before the welcome window, so its download step knows what is on disk.
             await cleanup.start()
             // Whether the welcome window's download includes the cleanup model.
             setup.lookAtLaunch()
-            if SetupChecklist(pushToTalk, models).needsUser {
-                welcome.show()
+            openAtLogin.refresh()
+            let window = LaunchWindow.choose(
+                needsUser: SetupChecklist(pushToTalk, models).needsUser,
+                launchedAtLogin: launchedAtLogin,
+                openAtLogin: openAtLogin.isOn
+            )
+            let defaultName = defaultLaunch.map { String($0) } ?? "unknown"
+            Logger.launch.notice("Launch window: \(String(describing: window), privacy: .public), login item launch: \(launchedAtLogin, privacy: .public), default launch: \(defaultName, privacy: .public), open at login: \(openAtLogin.isOn, privacy: .public)")
+            switch window {
+            case .welcome: welcome.show()
+            case .settings: LaunchWindow.openSettings(dockIcon: dockIcon)
+            case .noWindow: break
             }
             // Local files only. Loads the voice model when Speak Translation is on.
             if speech.canSpeak {
