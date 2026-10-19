@@ -6,9 +6,12 @@ import UniformTypeIdentifiers
 // Renders the README animations into docs/images/readme/<language>/<name>.gif.
 //
 //     readme-media <repository root>                     every GIF
-//     readme-media <repository root> <name>              one GIF, in both languages
+//     readme-media <repository root> <name>              one GIF, in every language
+//     readme-media <repository root> <name> <lang>       one GIF, in one language
 //     readme-media <repository root> <name> <lang> <t>   one frame as a PNG in the
 //                                                        current folder, to check a layout
+//
+// The name all stands for every scene, so readme-media . all ja writes every Japanese GIF.
 
 let framesPerSecond = 10.0
 
@@ -74,27 +77,39 @@ func writePNG(_ image: CGImage, to url: URL) {
 func main() throws {
     let arguments = CommandLine.arguments
     guard arguments.count >= 2 else {
-        print("usage: readme-media <repository root> [name [lang t]]")
+        print("usage: readme-media <repository root> [name [lang [t]]]")
         exit(2)
     }
     let root = URL(fileURLWithPath: arguments[1])
     let icon = NSImage(contentsOf: root.appendingPathComponent("site/icon.png"))
     var scenes = allScenes(icon: icon)
-    if arguments.count >= 3 {
+    if arguments.count >= 3, arguments[2] != "all" {
         scenes = scenes.filter { $0.name == arguments[2] }
         guard !scenes.isEmpty else {
             print("no scene named \(arguments[2])")
             exit(2)
         }
     }
-    if arguments.count >= 5, let lang = Lang(rawValue: arguments[3]), let t = Double(arguments[4]) {
-        guard let image = render(scenes[0], lang, at: t) else { exit(1) }
-        let url = URL(fileURLWithPath: "\(scenes[0].name)-\(lang.rawValue)-\(arguments[4]).png")
+    var langs = Lang.allCases
+    if arguments.count >= 4 {
+        guard let lang = Lang(rawValue: arguments[3]) else {
+            print("no language \(arguments[3]), use en, zh, ja or es")
+            exit(2)
+        }
+        langs = [lang]
+    }
+    if arguments.count >= 5 {
+        guard let t = Double(arguments[4]), scenes.count == 1 else {
+            print("a frame needs one scene and a time in seconds")
+            exit(2)
+        }
+        guard let image = render(scenes[0], langs[0], at: t) else { exit(1) }
+        let url = URL(fileURLWithPath: "\(scenes[0].name)-\(langs[0].rawValue)-\(arguments[4]).png")
         writePNG(image, to: url)
         print(url.path)
         return
     }
-    for lang in Lang.allCases {
+    for lang in langs {
         let folder = root.appendingPathComponent("docs/images/readme/\(lang.rawValue)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for scene in scenes {

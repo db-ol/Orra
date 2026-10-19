@@ -31,27 +31,27 @@
 Habla en chino (mandarín y cantonés), en inglés o en los dos mezclados en la misma oración. En Idioma de dictado, en Configuración, puedes elegir en su lugar japonés o español con inglés, en beta. El modelo Qwen3-ASR 1.7B lo transcribe en tu Mac y Orra lo pega donde está el cursor. Las muletillas como 呃, um y uh desaparecen, y los números dichos en chino, como fechas, precios y porcentajes, se escriben con cifras.
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/dictation.gif" alt="Con la tecla para hablar presionada, alguien dice “Um, I’ll post Wednesday’s meeting notes this afternoon.” Las barras de la cápsula de Orra se mueven con la voz, y la oración aparece en una nota sin el um." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/dictation.gif" alt="Con la tecla para hablar presionada, alguien dice “Esta tarde comparto las notas de la reunión del miércoles”. Las barras de la cápsula de Orra se mueven con la voz, y la oración aparece en una nota tal como se dijo." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
 
 ### Tus palabras, como tú las escribes
 
-Un vocabulario personal de hasta 5,000 nombres y términos, para que Orra los escriba como tú. Si activas el aprendizaje, Orra aprende de las palabras que corriges justo después de un dictado y la próxima vez las escribe bien.
+Un vocabulario personal de hasta 5,000 nombres y términos, para que Orra los escriba como tú. Si activas el aprendizaje, Orra aprende de las palabras que corriges justo después de un dictado y la próxima vez las escribe bien. Con japonés o español como idioma de dictado, por ahora el aprendizaje solo funciona con oraciones en inglés.
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/vocabulary.gif" alt="Una nota dice “We tested Ora on the new build.” Alguien cambia Ora por Orra, y Orra muestra un aviso: Se agregó “Orra” al Vocabulario, Se oyó como “Ora”, con Deshacer. El siguiente dictado escribe Orra." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/vocabulary.gif" alt="Una nota dice en inglés “We tested Ora on the new build.” Alguien cambia Ora por Orra, y Orra muestra un aviso: Se agregó “Orra” al Vocabulario, Se oyó como “Ora”, con Deshacer y un botón para cerrarlo. Con el puntero encima, la cuenta regresiva se pausa, y un clic en el botón cierra el aviso. Luego alguien dice en español “Orra sale el viernes”, y el dictado escribe Orra." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
 
 ### Limpieza con un modelo local
 
-Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dejan pasar y aplica las rectificaciones que haces al hablar, así que “at three, oh wait, four” queda como “at four”. Pegar texto original siempre recupera lo que dijiste.
+Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dejan pasar y aplica las rectificaciones que haces al hablar, así que “at three, oh wait, four” queda como “at four”. Pegar texto original siempre recupera lo que dijiste. Con japonés o español como idioma de dictado, por ahora la limpieza solo funciona con oraciones en inglés.
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/cleanup.gif" alt="Con Limpiar texto activado, alguien dice “Let’s go over the quote at three, oh wait, four tomorrow.” En el correo queda “Let’s go over the quote at four tomorrow.”" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/cleanup.gif" alt="Con Limpiar texto activado, alguien dice en inglés “Let’s go over the quote at three, oh wait, four tomorrow.” En el correo queda “Let’s go over the quote at four tomorrow.”" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -61,7 +61,7 @@ Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dej
 Opcional. Mantén presionada una segunda tecla y Orra pega lo que dices traducido entre el inglés y tu idioma de dictado, chino, japonés o español, con el mismo modelo en tu Mac. Una pequeña marca indica que ese dictado se va a traducir: 译 con chino, 訳 con japonés y ⇄ con español.
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/translation.gif" alt="En un chat, Sam pregunta “When can I see the designs?” Con la tecla de traducción presionada, alguien dice 我这边周五之前能把设计稿发给你. La cápsula muestra la marca 译, y “I can send you the designs before Friday.” aparece en el campo del mensaje." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/translation.gif" alt="En un chat, Sam pregunta “When can I see the designs?” Con la tecla de traducción presionada, alguien dice “Te puedo mandar los diseños antes del viernes”. La cápsula muestra la marca ⇄, y “I can send you the designs before Friday.” aparece en el campo del mensaje." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -73,7 +73,7 @@ Para reuniones en distintos idiomas. Lee en tu idioma lo que dicen los demás y 
 Novedad de la versión 0.4.0.
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/meeting.gif" alt="En una videollamada, Alex habla en inglés y la ventana de Subtítulos en vivo muestra cada oración con su traducción al chino. Luego, el usuario mantiene presionada la tecla de traducción y dice 可以，我周三之前把测试做完, y en la llamada se escucha “Sure, I’ll finish testing by Wednesday.” desde Orra Microphone." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/meeting.gif" alt="En una videollamada, Alex habla en inglés y la ventana de Subtítulos en vivo muestra cada oración con su traducción al español. Luego, el usuario mantiene presionada la tecla de traducción y dice “Claro, termino las pruebas para el miércoles”, y en la llamada se escucha “Sure, I’ll finish testing by Wednesday.” desde Orra Microphone." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -83,7 +83,7 @@ Novedad de la versión 0.4.0.
 Orra solo busca una versión nueva después de que se lo permites, y solo la instala cuando tú lo decides. Todas las actualizaciones están firmadas.
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/updates.gif" alt="El menú de Orra en la barra de menús, con Buscar actualizaciones seleccionado. Una ventana ofrece la versión nueva, la descarga y ofrece Instalar y volver a abrir." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/updates.gif" alt="El menú de Orra en la barra de menús, con Buscar actualizaciones seleccionado. Una ventana ofrece la versión nueva, la descarga y luego muestra Instalar y volver a abrir." width="100%"></td>
 </tr>
 </table>
 

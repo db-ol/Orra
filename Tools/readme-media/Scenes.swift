@@ -86,14 +86,28 @@ struct PastedLine: View {
     }
 }
 
-let talkKey = (symbol: "⌃", name: "control", caption: L("Hold to talk", "按住说话"))
-let translationKey = (symbol: "⌥", name: "option", caption: L("Hold to translate", "按住翻译"))
+// The captions are Hold %@ to talk and Hold %@ to translate without the key's name, which is
+// on the key. The Spanish ones are Orra's names of the keys, since “Mantén presionada %@ para
+// hablar” does not fit under the key on one line.
+let talkKey = (symbol: "⌃", name: "control", caption: L("Hold to talk", "按住说话", "押したまま話す", "Tecla para hablar"))
+let translationKey = (symbol: "⌥", name: "option", caption: L("Hold to translate", "按住翻译", "押したまま翻訳", "Tecla de traducción"))
+
+/// The badge of the translation key with Automatic, as TranslationCue.badge draws it for
+/// each dictation language.
+let translationBadge = L("译", "译", "訳", "⇄")
+
+/// The window of the Notes app, as macOS names it in each language.
+let notesTitle = L("Notes", "备忘录", "メモ", "Notas")
 
 // MARK: - Dictation
 
+// The filler rule knows Chinese and English fillers only, and it does not run on a Japanese
+// or Spanish sentence, so those say none and are pasted as they are said.
 let dictationSaid: [Lang: [(text: String, dropped: Bool)]] = [
     .en: [("Um, ", true), ("I’ll post Wednesday’s meeting notes this afternoon.", false)],
     .zh: [("呃，", true), ("周三的 meeting notes 我整理好了，下午发到群里。", false)],
+    .ja: [("水曜日の議事録は、今日の午後に共有します。", false)],
+    .es: [("Esta tarde comparto las notas de la reunión del miércoles.", false)],
 ]
 
 func dictation(_ lang: Lang) -> Dictation {
@@ -109,9 +123,9 @@ let dictationScene = Scene(
         let pasted = d.said.filter { !$0.dropped }.map(\.text).joined()
         return AnyView(
             DictationStage(key: (talkKey.symbol, talkKey.name, talkKey.caption(lang)), dictation: d, t: t) {
-                AppWindow(title: L("Notes", "备忘录")(lang), width: 540, height: 170) {
+                AppWindow(title: notesTitle(lang), width: 540, height: 170) {
                     VStack(alignment: .leading, spacing: 10) {
-                        T(L("Project update", "项目进展")(lang))
+                        T(L("Project update", "项目进展", "プロジェクトの進捗", "Avances del proyecto")(lang))
                             .font(.system(size: 18, weight: .bold))
                             .foregroundStyle(Palette.ink)
                         PastedLine(text: pasted, shown: d.pasted(t))
@@ -125,11 +139,19 @@ let dictationScene = Scene(
 
 // MARK: - Cleanup
 
+// With Japanese or Spanish as the dictation language, the cleanup model and the filler rule
+// take English sentences only, so those GIFs say the English sentence.
+let cleanupEnglish: [(text: String, dropped: Bool)] = [("Let’s go over the quote at ", false), ("three, oh wait, ", true), ("four tomorrow.", false)]
 let cleanupSaid: [Lang: [(text: String, dropped: Bool)]] = [
-    .en: [("Let’s go over the quote at ", false), ("three, oh wait, ", true), ("four tomorrow.", false)],
+    .en: cleanupEnglish,
     .zh: [("明天下午", false), ("三点，哦不对，", true), ("四点，跟客户过一下报价。", false)],
+    .ja: cleanupEnglish,
+    .es: cleanupEnglish,
 ]
-let cleanupPasted = L("Let’s go over the quote at four tomorrow.", "明天下午四点跟客户过一下报价。")
+let cleanupEnglishPasted = "Let’s go over the quote at four tomorrow."
+let cleanupPasted = L(cleanupEnglishPasted, "明天下午四点跟客户过一下报价。", cleanupEnglishPasted, cleanupEnglishPasted)
+// The email is in English when the sentence is.
+let cleanupSubject = L("Quote", "报价", "Quote", "Quote")
 
 func cleanup(_ lang: Lang) -> Dictation {
     Dictation(said: cleanupSaid[lang]!, start: 0.8, processing: 0.9)
@@ -146,13 +168,13 @@ let cleanupScene = Scene(
                 key: (talkKey.symbol, talkKey.name, talkKey.caption(lang)),
                 dictation: d,
                 t: t,
-                corner: AnyView(SwitchPill(label: L("Clean Up Text", "整理文字")(lang)))
+                corner: AnyView(SwitchPill(label: L("Clean Up Text", "整理文字", "テキストを整える", "Limpiar texto")(lang)))
             ) {
-                AppWindow(title: L("New Message", "新邮件")(lang), width: 540, height: 170) {
+                AppWindow(title: L("New Message", "新邮件", "新規メッセージ", "Nuevo mensaje")(lang), width: 540, height: 170) {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 10) {
-                            T(L("Subject:", "主题：")(lang)).foregroundStyle(Palette.muted)
-                            T(L("Quote", "报价")(lang)).foregroundStyle(Palette.ink)
+                            T(L("Subject:", "主题：", "件名:", "Asunto:")(lang)).foregroundStyle(Palette.muted)
+                            T(cleanupSubject(lang)).foregroundStyle(Palette.ink)
                         }
                         .font(.system(size: 13))
                         .padding(.horizontal, 18)
@@ -169,10 +191,23 @@ let cleanupScene = Scene(
 
 // MARK: - Translation
 
-let translationSaid: [(text: String, dropped: Bool)] = [("我这边周五之前能把设计稿发给你。", false)]
+// The English GIF shows the Chinese speaker. The translation key with Automatic turns a
+// Japanese or Spanish sentence into English.
+let translationSaid: [Lang: [(text: String, dropped: Bool)]] = [
+    .en: [("我这边周五之前能把设计稿发给你。", false)],
+    .zh: [("我这边周五之前能把设计稿发给你。", false)],
+    .ja: [("デザインは金曜日までにお送りできます。", false)],
+    .es: [("Te puedo mandar los diseños antes del viernes.", false)],
+]
+let translationPasted = L(
+    "I can send you the designs before Friday.",
+    "I can send you the designs before Friday.",
+    "I can send you the designs by Friday.",
+    "I can send you the designs before Friday."
+)
 
 func translation(_ lang: Lang) -> Dictation {
-    Dictation(said: translationSaid, start: 0.8, processing: 0.8)
+    Dictation(said: translationSaid[lang]!, start: 0.8, processing: 0.8)
 }
 
 @MainActor
@@ -186,7 +221,7 @@ let translationScene = Scene(
                 key: (translationKey.symbol, translationKey.name, translationKey.caption(lang)),
                 dictation: d,
                 t: t,
-                badge: "译"
+                badge: translationBadge(lang)
             ) {
                 AppWindow(width: 540, height: 170) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -202,7 +237,7 @@ let translationScene = Scene(
                             .padding(.vertical, 7)
                             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(red: 0.91, green: 0.91, blue: 0.93)))
                         Spacer(minLength: 0)
-                        PastedLine(text: "I can send you the designs before Friday.", shown: d.pasted(t))
+                        PastedLine(text: translationPasted(lang), shown: d.pasted(t))
                             .padding(.horizontal, 12)
                             .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.black.opacity(0.15), lineWidth: 1))
@@ -216,16 +251,26 @@ let translationScene = Scene(
 
 // MARK: - Vocabulary and learning from corrections
 
-let heard = L("Ora", "奥拉")
-let firstLine = L(("We tested ", " on the new build."), ("这次用", "测了新版本。"))
+// With Japanese or Spanish as the dictation language, Orra learns from corrections of
+// English sentences only, so those GIFs fix an English sentence. The vocabulary reaches the
+// speech model in every language, and a learned word replaces its heard spelling in every
+// language too, so the next dictation, in the GIF's language, writes the word.
+let englishHeard = "Ora"
+let englishFirstLine = ("We tested ", " on the new build.")
+let heard = L(englishHeard, "奥拉", englishHeard, englishHeard)
+let firstLine = L(englishFirstLine, ("这次用", "测了新版本。"), englishFirstLine, englishFirstLine)
 let vocabularySaid: [Lang: [(text: String, dropped: Bool)]] = [
     .en: [("Orra ships on Friday.", false)],
     .zh: [("Orra 周五上线。", false)],
+    .ja: [("Orraは金曜日にリリースします。", false)],
+    .es: [("Orra sale el viernes.", false)],
 ]
+let addedWord = L("Added “Orra” to Vocabulary", "已把“Orra”加入个人词库", "“Orra”を用語集に追加しました", "Se agregó “Orra” al Vocabulario")
+let heardAs = L("Heard as “%@”", "原来听成了“%@”", "“%@”と認識されていました", "Se oyó como “%@”")
 
 extension L {
-    init(_ en: (String, String), _ zh: (String, String)) {
-        self.init(en.0 + "\u{1}" + en.1, zh.0 + "\u{1}" + zh.1)
+    init(_ en: (String, String), _ zh: (String, String), _ ja: (String, String), _ es: (String, String)) {
+        self.init(en.0 + "\u{1}" + en.1, zh.0 + "\u{1}" + zh.1, ja.0 + "\u{1}" + ja.1, es.0 + "\u{1}" + es.1)
     }
 
     func parts(_ lang: Lang) -> (String, String) {
@@ -252,7 +297,28 @@ let vocabularyScene = Scene(
         let selected = t >= 0.8 && t < typingStart
         let (before, after) = firstLine.parts(lang)
         let noticeShown = t >= 2.5 && t < 5.4
-        let secondsLeft = max(1, Int((5.4 - t).rounded(.up)))
+        // The seconds the notice has left, and the part of its ring. Nil seconds is the
+        // pause sign.
+        let secondsLeft: Int?
+        let ringLeft: Double
+        let pointerLeft = pointerWay(t)
+        if lang.keepsFirstDrawing {
+            let seconds = max(1, Int((5.4 - t).rounded(.up)))
+            secondsLeft = seconds
+            ringLeft = Double(seconds) / 3
+        } else if let pointerLeft, pointerLeft < pointerOverNotice {
+            // The pointer over the notice holds it, as in the app: a full ring with a
+            // pause sign. Then it clicks the close button before the next dictation.
+            secondsLeft = nil
+            ringLeft = 1
+        } else {
+            // The app's 10 seconds, in a ring that empties smoothly.
+            let left = 10 - (t - 2.5)
+            secondsLeft = Int(left.rounded(.up))
+            ringLeft = left / 10
+        }
+        // Kept in place after it closes, unseen, so the pointer stays where it clicked.
+        let noticeKept = lang.keepsFirstDrawing ? noticeShown : t >= 2.5
         return AnyView(
             ZStack {
                 Palette.wallpaper
@@ -263,9 +329,9 @@ let vocabularyScene = Scene(
                         .frame(width: 440, height: 60, alignment: .topLeading)
                         .position(x: 360, y: 58)
                 }
-                AppWindow(title: L("Notes", "备忘录")(lang), width: 540, height: 170) {
+                AppWindow(title: notesTitle(lang), width: 540, height: 170) {
                     VStack(alignment: .leading, spacing: 10) {
-                        T(L("Test notes", "测试记录")(lang))
+                        T(L("Test notes", "测试记录", "テスト記録", "Registro de pruebas")(lang))
                             .font(.system(size: 18, weight: .bold))
                             .foregroundStyle(Palette.ink)
                         HStack(spacing: 0) {
@@ -286,19 +352,19 @@ let vocabularyScene = Scene(
                     .padding(18)
                 }
                 .position(x: 300, y: 204)
-                if noticeShown {
+                if noticeKept {
                     HUDBox {
                         HStack(spacing: 12) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 18))
                                 .foregroundStyle(Palette.green)
                             VStack(alignment: .leading, spacing: 2) {
-                                T(L("Added “Orra” to Vocabulary", "已把“Orra”加入个人词库")(lang))
-                                T(lang == .en ? "Heard as “\(heard(lang))”" : "原来听成了“\(heard(lang))”")
+                                T(addedWord(lang))
+                                T(heardAs(lang).replacingOccurrences(of: "%@", with: heard(lang)))
                                     .font(.system(size: 11))
                                     .foregroundStyle(Color.white.opacity(0.6))
                             }
-                            T(L("Undo", "撤销")(lang))
+                            T(L("Undo", "撤销", "取り消す", "Deshacer")(lang))
                                 .font(.system(size: 12))
                                 .padding(.horizontal, 9)
                                 .padding(.vertical, 3)
@@ -306,40 +372,138 @@ let vocabularyScene = Scene(
                             ZStack {
                                 Circle().stroke(Color.white.opacity(0.2), lineWidth: 2)
                                 Circle()
-                                    .trim(from: 0, to: Double(secondsLeft) / 3)
+                                    .trim(from: 0, to: ringLeft)
                                     .stroke(Color.white.opacity(0.75), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                                     .rotationEffect(.degrees(-90))
-                                T("\(secondsLeft)").font(.system(size: 9)).foregroundStyle(Color.white.opacity(0.6))
+                                Group {
+                                    if let secondsLeft {
+                                        T("\(secondsLeft)").font(.system(size: 9))
+                                    } else {
+                                        Image(systemName: "pause.fill").font(.system(size: 7))
+                                    }
+                                }
+                                .foregroundStyle(Color.white.opacity(0.6))
                             }
                             .frame(width: 20, height: 20)
+                            if !lang.keepsFirstDrawing {
+                                // A borderless button, as in the app.
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color.white.opacity(0.6))
+                                    .frame(width: 18, height: 18)
+                                    .anchorPreference(key: CloseButton.self, value: .center) { $0 }
+                            }
                         }
                     }
+                    .opacity(noticeShown ? 1 : 0)
                     .position(x: 330, y: 56)
                 }
                 OrraCapsule(state: t < d.keyDown ? .idle : d.capsule(t))
                     .position(x: 300, y: 350)
             }
+            .overlayPreferenceValue(CloseButton.self) { button in
+                if let button, let pointerLeft {
+                    GeometryReader { proxy in
+                        let target = proxy[button]
+                        Pointer().offset(x: target.x + 60 * pointerLeft, y: target.y + 120 * pointerLeft)
+                    }
+                }
+            }
         )
     }
 )
+
+/// The part of the way the pointer still has to go to the close button of the notice, nil
+/// before it shows. It shows at 4.3 s and slows down to reach the button at 4.8 s, where it
+/// stays.
+func pointerWay(_ t: Double) -> Double? {
+    guard t >= 4.3 else { return nil }
+    let done = min(1, (t - 4.3) / 0.5)
+    return pow(1 - done, 3)
+}
+
+/// The pointer comes from below and to the right of the close button, 60 and 120 points
+/// away. The notice reaches about 25 points below its close button, so the pointer is over
+/// it from this part of the way on.
+let pointerOverNotice = 0.2
+
+/// Where the close button of the notice is, for the pointer.
+struct CloseButton: PreferenceKey {
+    static var defaultValue: Anchor<CGPoint>? { nil }
+
+    static func reduce(value: inout Anchor<CGPoint>?, nextValue: () -> Anchor<CGPoint>?) {
+        value = value ?? nextValue()
+    }
+}
+
+/// The Mac's arrow pointer, its tip at the top left.
+struct Pointer: View {
+    var body: some View {
+        let arrow = Path { path in
+            path.move(to: .zero)
+            path.addLine(to: CGPoint(x: 0, y: 17))
+            path.addLine(to: CGPoint(x: 4, y: 13))
+            path.addLine(to: CGPoint(x: 7, y: 19.5))
+            path.addLine(to: CGPoint(x: 9.5, y: 18.5))
+            path.addLine(to: CGPoint(x: 6.6, y: 12.3))
+            path.addLine(to: CGPoint(x: 12, y: 12.3))
+            path.closeSubpath()
+        }
+        return ZStack(alignment: .topLeading) {
+            arrow.stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+            arrow.fill(Color.black)
+        }
+        .frame(width: 13, height: 20, alignment: .topLeading)
+        .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+    }
+}
 
 // MARK: - Meeting Interpretation
 
 struct Caption {
     let original: String
-    let translation: String
+    let translation: L
     let originalAt: Double
     let translationAt: Double
 }
 
+// Alex speaks English, which Live Captions translate into the dictation language. The
+// English GIF shows the Chinese captions and reply.
 let meetingCaptions = [
-    Caption(original: "Can we move the launch to next Thursday?", translation: "我们能把发布挪到下周四吗？", originalAt: 2.4, translationAt: 2.9),
-    Caption(original: "The test report isn’t ready yet.", translation: "测试报告还没准备好。", originalAt: 5.0, translationAt: 5.5),
+    Caption(
+        original: "Can we move the launch to next Thursday?",
+        translation: L("我们能把发布挪到下周四吗？", "我们能把发布挪到下周四吗？", "リリースを来週の木曜日にずらせますか？", "¿Podemos mover el lanzamiento al próximo jueves?"),
+        originalAt: 2.4,
+        translationAt: 2.9
+    ),
+    Caption(
+        original: "The test report isn’t ready yet.",
+        translation: L("测试报告还没准备好。", "测试报告还没准备好。", "テストレポートはまだできていません。", "El reporte de pruebas todavía no está listo."),
+        originalAt: 5.0,
+        translationAt: 5.5
+    ),
 ]
-let meetingReply = Dictation(said: [("可以，我周三之前把测试做完。", false)], start: 6.6, processing: 0.7)
+let meetingReplySaid: [Lang: [(text: String, dropped: Bool)]] = [
+    .en: [("可以，我周三之前把测试做完。", false)],
+    .zh: [("可以，我周三之前把测试做完。", false)],
+    .ja: [("いいですよ、水曜日までにテストを終わらせます。", false)],
+    .es: [("Claro, termino las pruebas para el miércoles.", false)],
+]
 let spokenReply = "Sure, I’ll finish testing by Wednesday."
-let voiceStart = meetingReply.pasteAt + 0.2
-let voiceEnd = voiceStart + 2.4
+
+func meetingReply(_ lang: Lang) -> Dictation {
+    Dictation(said: meetingReplySaid[lang]!, start: 6.6, processing: 0.7)
+}
+
+/// The voice speaks the translation of the reply from just after its paste, so its times
+/// follow the length of the reply in each language.
+func voiceStart(_ lang: Lang) -> Double {
+    meetingReply(lang).pasteAt + 0.2
+}
+
+func voiceEnd(_ lang: Lang) -> Double {
+    voiceStart(lang) + 2.4
+}
 
 /// A person in the call.
 struct Tile<Footer: View>: View {
@@ -377,20 +541,21 @@ struct Tile<Footer: View>: View {
 let meetingScene = Scene(
     name: "meeting",
     size: CGSize(width: 600, height: 420),
-    duration: { _ in voiceEnd + 2.6 },
+    duration: { voiceEnd($0) + 2.6 },
     frame: { t, lang in
+        let reply = meetingReply(lang)
         let alexSpeaks = (t >= 0.3 && t < 2.1) || (t >= 3.1 && t < 4.7)
-        let voicePlays = t >= voiceStart && t < voiceEnd
+        let voicePlays = t >= voiceStart(lang) && t < voiceEnd(lang)
         let shown = meetingCaptions.filter { t >= $0.originalAt }
         return AnyView(
             ZStack {
                 Palette.wallpaper
-                AppWindow(title: L("Video Call", "视频会议")(lang), width: 568, height: 200, dark: true) {
+                AppWindow(title: L("Video Call", "视频会议", "ビデオ通話", "Videollamada")(lang), width: 568, height: 200, dark: true) {
                     HStack(spacing: 12) {
                         Tile(initial: "A", name: "Alex", color: Color(red: 0.85, green: 0.45, blue: 0.3), speaking: alexSpeaks) {
                             EmptyView()
                         }
-                        Tile(initial: L("Y", "我")(lang), name: L("You", "我")(lang), color: Color(red: 0.3, green: 0.55, blue: 0.85), speaking: voicePlays) {
+                        Tile(initial: L("Y", "我", "あ", "T")(lang), name: L("You", "我", "あなた", "Tú")(lang), color: Color(red: 0.3, green: 0.55, blue: 0.85), speaking: voicePlays) {
                             HStack(spacing: 4) {
                                 if voicePlays {
                                     Bars(heights: Bars.heights(level: voiceLevel(t)).map { $0 * 0.6 }, color: Palette.green)
@@ -418,14 +583,14 @@ let meetingScene = Scene(
                 }
                 captionPanel(lang: lang, captions: shown, t: t)
                     .position(x: 300, y: 268)
-                KeyCap(symbol: translationKey.symbol, name: translationKey.name, caption: translationKey.caption(lang), pressed: meetingReply.pressed(t))
+                KeyCap(symbol: translationKey.symbol, name: translationKey.name, caption: translationKey.caption(lang), pressed: reply.pressed(t))
                     .position(x: 62, y: 380)
-                if t >= meetingReply.keyDown {
-                    SaidLine(segments: meetingReply.said, shown: meetingReply.shown(t), strike: false)
+                if t >= reply.keyDown {
+                    SaidLine(segments: reply.said, shown: reply.shown(t), strike: false)
                         .frame(width: 440, height: 24, alignment: .topLeading)
                         .position(x: 360, y: 368)
                 }
-                OrraCapsule(state: t < meetingReply.keyDown || t >= meetingReply.pasteAt ? .idle : meetingReply.capsule(t), badge: "译")
+                OrraCapsule(state: t < reply.keyDown || t >= reply.pasteAt ? .idle : reply.capsule(t), badge: translationBadge(lang))
                     .position(x: 300, y: 400)
             }
         )
@@ -435,15 +600,15 @@ let meetingScene = Scene(
 @MainActor
 func captionPanel(lang: Lang, captions: [Caption], t: Double) -> some View {
     VStack(spacing: 8) {
-        T(L("Live Captions", "实时字幕")(lang))
+        T(L("Live Captions", "实时字幕", "ライブキャプション", "Subtítulos en vivo")(lang))
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(Color.white.opacity(0.7))
         HStack(spacing: 0) {
-            T(L("Translation only", "只显示译文")(lang))
+            T(L("Translation only", "只显示译文", "訳文のみ", "Solo traducción")(lang))
                 .foregroundStyle(Color.white.opacity(0.75))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 3)
-            T(L("Original and translation", "原文和译文逐句对照")(lang))
+            T(L("Original and translation", "原文和译文逐句对照", "原文と訳文", "Original y traducción")(lang))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 3)
@@ -454,7 +619,12 @@ func captionPanel(lang: Lang, captions: [Caption], t: Double) -> some View {
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.08)))
         VStack(alignment: .leading, spacing: 8) {
             if captions.isEmpty {
-                T(L("Captions appear here when someone speaks.", "有人说话时，字幕会显示在这里。")(lang))
+                T(L(
+                    "Captions appear here when someone speaks.",
+                    "有人说话时，字幕会显示在这里。",
+                    "誰かが話すと、ここにキャプションが表示されます。",
+                    "Los subtítulos aparecen aquí cuando alguien habla."
+                )(lang))
                     .font(.system(size: 13))
                     .foregroundStyle(Color.white.opacity(0.55))
             }
@@ -463,7 +633,11 @@ func captionPanel(lang: Lang, captions: [Caption], t: Double) -> some View {
                 VStack(alignment: .leading, spacing: 1) {
                     if t >= caption.translationAt {
                         T(caption.original).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.55))
-                        T(caption.translation).font(.system(size: 16)).foregroundStyle(.white)
+                        T(caption.translation(lang)).font(.system(size: 16)).foregroundStyle(.white)
+                    } else if !lang.keepsFirstDrawing {
+                        // The app shows an original in the small style while its translation
+                        // is pending.
+                        T(caption.original).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.55))
                     } else {
                         T(caption.original).font(.system(size: 16)).foregroundStyle(.white)
                     }
@@ -515,15 +689,16 @@ func updatesScene(icon: NSImage?) -> Scene {
                             .background(RoundedRectangle(cornerRadius: 4).fill(menuOpen ? Color.black.opacity(0.12) : .clear))
                         Image(systemName: "wifi").font(.system(size: 13))
                         Image(systemName: "battery.75percent").font(.system(size: 13))
-                        T(L("Thu 9:41", "周四 9:41")(lang)).font(.system(size: 13))
+                        T(L("Thu 9:41", "周四 9:41", "木 9:41", "jue 9:41")(lang)).font(.system(size: 13))
                     }
                     .foregroundStyle(Palette.ink)
                     .padding(.horizontal, 14)
                     .frame(width: 600, height: 26)
                     .background(Color.white.opacity(0.8))
                     if menuOpen {
-                        menu(lang: lang, hover: hover)
-                            .position(x: 400, y: 112)
+                        // The top of the menu meets the menu bar.
+                        menu(menuItems(lang), hover: hover)
+                            .offset(x: 275, y: 26)
                     }
                     if dialog {
                         updateDialog(lang: lang, icon: iconView(56), pressed: t >= 4.1 && t < 4.4, installing: installing, progress: progress, ready: ready)
@@ -535,27 +710,48 @@ func updatesScene(icon: NSImage?) -> Scene {
     )
 }
 
+/// An item of Orra's menu: its title, whether the scene picks it and whether it opens a
+/// submenu. Nil is a divider.
+typealias MenuItem = (title: String, isTarget: Bool, submenu: Bool)?
+
+/// A few items of Orra's menu, the others left out.
+func menuItems(_ lang: Lang) -> [MenuItem] {
+    let copy: MenuItem = (L("Copy Last Dictation", "拷贝上次听写", "最後の音声入力をコピー", "Copiar último dictado")(lang), false, false)
+    let check: MenuItem = (L("Check for Updates…", "检查更新…", "アップデートを確認…", "Buscar actualizaciones…")(lang), true, false)
+    let report: MenuItem = (L("Report a Problem…", "报告问题…", "問題を報告…", "Reportar un problema…")(lang), false, false)
+    let settings: MenuItem = (L("Settings…", "设置…", "設定…", "Configuración…")(lang), false, false)
+    let quit: MenuItem = (L("Quit Orra", "退出 Orra", "Orraを終了", "Salir de Orra")(lang), false, false)
+    if lang.keepsFirstDrawing {
+        // The line of the Talk Key submenu, at the top level.
+        let talkKeyLine: MenuItem = (lang == .en ? "Talk Key: ⌃ Right Control" : "说话键：⌃ 右侧 Control 键", false, false)
+        return [copy, talkKeyLine, nil, check, report, nil, settings, quit]
+    }
+    // The Talk Key submenu and the dividers where StatusMenu.swift puts them.
+    let talkKey: MenuItem = (L("Talk Key", "说话键", "音声入力キー", "Tecla para hablar")(lang), false, true)
+    return [copy, nil, talkKey, nil, check, report, settings, nil, quit]
+}
+
 @MainActor
-private func menu(lang: Lang, hover: Bool) -> some View {
-    let items: [(String, Bool)] = [
-        (L("Copy Last Dictation", "拷贝上次听写")(lang), false),
-        (L("Talk Key: ⌃ Right Control", "说话键：⌃ 右侧 Control 键")(lang), false),
-        (L("Check for Updates…", "检查更新…")(lang), true),
-        (L("Report a Problem…", "报告问题…")(lang), false),
-        (L("Settings…", "设置…")(lang), false),
-        (L("Quit Orra", "退出 Orra")(lang), false),
-    ]
-    return VStack(alignment: .leading, spacing: 0) {
+private func menu(_ items: [MenuItem], hover: Bool) -> some View {
+    VStack(alignment: .leading, spacing: 0) {
         ForEach(items.indices, id: \.self) { index in
-            let (title, isTarget) = items[index]
-            let lit = isTarget && hover
-            T(title)
-                .font(.system(size: 13))
-                .foregroundStyle(lit ? .white : Palette.ink)
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 5).fill(lit ? Palette.accent : .clear))
-            if index == 1 || index == 3 {
+            if let item = items[index] {
+                let lit = item.isTarget && hover
+                T(item.title)
+                    .font(.system(size: 13))
+                    .foregroundStyle(lit ? .white : Palette.ink)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                    .overlay(alignment: .trailing) {
+                        if item.submenu {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Palette.muted)
+                                .padding(.trailing, 10)
+                        }
+                    }
+                    .background(RoundedRectangle(cornerRadius: 5).fill(lit ? Palette.accent : .clear))
+            } else {
                 Rectangle().fill(Palette.line).frame(height: 1).padding(.vertical, 4).padding(.horizontal, 10)
             }
         }
@@ -581,46 +777,57 @@ private func updateDialog(lang: Lang, icon: AnyView, pressed: Bool, installing: 
             )
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.black.opacity(primary ? 0 : 0.15), lineWidth: 1))
     }
-    return AppWindow(width: 460, height: 190) {
+    func bar(_ progress: Double) -> some View {
+        ZStack(alignment: .leading) {
+            Capsule().fill(Palette.line)
+            Capsule().fill(Palette.accent).frame(width: max(6, 300 * (progress * 10).rounded() / 10))
+        }
+        .frame(width: 300, height: 6)
+    }
+    // The Japanese and Spanish texts are Sparkle's own, as Orra shows them. Their buttons
+    // are longer, so the window is wider.
+    let width: CGFloat = lang == .ja || lang == .es ? 580 : 460
+    return AppWindow(width: width, height: 190) {
         HStack(alignment: .top, spacing: 16) {
             icon
             VStack(alignment: .leading, spacing: 8) {
                 if !installing {
-                    T(L("A new version of Orra is available.", "Orra 有新版本了。")(lang))
+                    T(L("A new version of Orra is available.", "Orra 有新版本了。", "新しいバージョンのOrraが入手できます!", "¡Una nueva versión de Orra está disponible!")(lang))
                         .font(.system(size: 14, weight: .bold))
-                    T(L("Would you like to install it now?", "现在要安装吗？")(lang))
+                    T(L("Would you like to install it now?", "现在要安装吗？", "今すぐダウンロードしますか?", "¿Querrías descargarla ahora?")(lang))
                         .font(.system(size: 13))
                         .foregroundStyle(Palette.muted)
                     Spacer(minLength: 0)
                     HStack(spacing: 8) {
-                        button(L("Skip This Version", "跳过这个版本")(lang), primary: false)
+                        button(L("Skip This Version", "跳过这个版本", "このバージョンはスキップ", "No instalar esta versión")(lang), primary: false)
                         Spacer(minLength: 0)
-                        button(L("Remind Me Later", "以后提醒我")(lang), primary: false)
-                        button(L("Install Update", "安装更新")(lang), primary: true, down: pressed)
+                        button(L("Remind Me Later", "以后提醒我", "あとで通知", "Recordármelo")(lang), primary: false)
+                        button(L("Install Update", "安装更新", "アップデートをインストール", "Instalar actualización")(lang), primary: true, down: pressed)
                     }
                 } else if !ready {
-                    T(L("Downloading update…", "正在下载更新…")(lang))
+                    T(L("Downloading update…", "正在下载更新…", "アップデートをダウンロードしています…", "Descargando actualización…")(lang))
                         .font(.system(size: 14, weight: .bold))
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Palette.line)
-                        Capsule().fill(Palette.accent).frame(width: max(6, 300 * (progress * 10).rounded() / 10))
-                    }
-                    .frame(width: 300, height: 6)
+                    bar(progress)
                     Spacer(minLength: 0)
                     HStack {
                         Spacer()
-                        button(L("Cancel", "取消")(lang), primary: false)
+                        button(L("Cancel", "取消", "キャンセル", "Cancelar")(lang), primary: false)
                     }
                 } else {
-                    T(L("Ready to Install", "可以安装了")(lang))
+                    T(L("Ready to Install", "可以安装了", "インストールできます", "Lista para instalarse")(lang))
                         .font(.system(size: 14, weight: .bold))
-                    T(L("Orra restarts with the new version.", "Orra 会以新版本重新打开。")(lang))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Palette.muted)
+                    if lang.keepsFirstDrawing {
+                        T(lang == .en ? "Orra restarts with the new version." : "Orra 会以新版本重新打开。")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Palette.muted)
+                    } else {
+                        // Sparkle shows no text here, only the full bar.
+                        bar(1)
+                    }
                     Spacer(minLength: 0)
                     HStack {
                         Spacer()
-                        button(L("Install and Relaunch", "安装并重新启动")(lang), primary: true)
+                        button(L("Install and Relaunch", "安装并重新启动", "インストールして再起動", "Instalar y volver a abrir")(lang), primary: true)
                     }
                 }
             }

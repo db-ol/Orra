@@ -31,27 +31,27 @@
 中国語（普通話と広東語）でも英語でも、1つの文の中で両方を混ぜて話しても大丈夫です。設定の“音声入力の言語”では、代わりに日本語またはスペイン語を英語と組み合わせて選ぶこともできます（ベータ版）。お使いのMac上でQwen3-ASR 1.7Bモデルが文字に起こし、Orraがカーソルの位置にペーストします。“呃”、“um”、“uh”などのフィラーは取り除かれ、日付、価格、パーセンテージなど中国語で話した数字は算用数字になります。
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/dictation.gif" alt="音声入力キーを押したまま、誰かが“Um, I’ll post Wednesday’s meeting notes this afternoon.”と話します。Orraのカプセルの音量バーが声に合わせて動き、umを除いた文がメモに入力されます。" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/ja/dictation.gif" alt="音声入力キーを押したまま、誰かが“水曜日の議事録は、今日の午後に共有します”と話します。Orraのカプセルの音量バーが声に合わせて動き、話したとおりの文がメモに入力されます。" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
 
 ### あなたの言葉を、あなたの表記で
 
-名前や用語を最大5,000個まで登録できる自分専用の用語集があり、Orraはそれらをあなたの表記で書きます。学習機能をオンにすると、音声入力の直後に修正した単語からOrraが学習し、次からは正しく書きます。
+名前や用語を最大5,000個まで登録できる自分専用の用語集があり、Orraはそれらをあなたの表記で書きます。学習機能をオンにすると、音声入力の直後に修正した単語からOrraが学習し、次からは正しく書きます。音声入力の言語に日本語やスペイン語を選んだ場合、学習機能は今のところ英語の文にのみ対応しています。
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/vocabulary.gif" alt="メモに“We tested Ora on the new build.”と書かれています。誰かがOraをOrraに直すと、Orraが通知を表示し、“Orra”を用語集に追加したこと、“Ora”と認識されていたことを知らせます。通知には取り消しのボタンもあります。次の音声入力ではOrraと書かれます。" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/ja/vocabulary.gif" alt="メモに英語の文“We tested Ora on the new build.”が書かれています。誰かがOraをOrraに直すと、Orraが通知を表示し、“Orra”を用語集に追加したこと、“Ora”と認識されていたことを知らせます。通知には“取り消す”ボタンと閉じるボタンもあります。通知にポインタを重ねるとカウントダウンが止まり、閉じるボタンで通知を閉じます。次に日本語で“Orraは金曜日にリリースします”と話すと、Orraと書かれます。" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
 
 ### ローカルモデルで整文
 
-オプションです。お使いのMac上のテキストモデルが、ルールで取り切れなかったフィラーを取り除き、話しながらの言い直しを反映します。たとえば“at three, oh wait, four”は“at four”になります。“原文をペースト”を使えば、話したとおりのテキストにいつでも戻せます。
+オプションです。お使いのMac上のテキストモデルが、ルールで取り切れなかったフィラーを取り除き、話しながらの言い直しを反映します。たとえば“at three, oh wait, four”は“at four”になります。“原文をペースト”を使えば、話したとおりのテキストにいつでも戻せます。音声入力の言語に日本語やスペイン語を選んだ場合、整文は今のところ英語の文にのみ対応しています。
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/cleanup.gif" alt="“テキストを整える”がオンの状態で、誰かが“Let’s go over the quote at three, oh wait, four tomorrow.”と話します。メールには“Let’s go over the quote at four tomorrow.”と入力されます。" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/ja/cleanup.gif" alt="“テキストを整える”がオンの状態で、誰かが英語で“Let’s go over the quote at three, oh wait, four tomorrow.”と話します。メールには“Let’s go over the quote at four tomorrow.”と入力されます。" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -61,7 +61,7 @@
 オプションです。もう1つのキーを押したまま話すと、Orraは同じモデルを使ってお使いのMac上で、英語と音声入力の言語（中国語、日本語、スペイン語）の間で翻訳し、訳文をペーストします。小さなバッジは、その音声入力が翻訳されることを示します。中国語では“译”、日本語では“訳”、スペイン語では“⇄”です。
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/translation.gif" alt="チャットでSamが“When can I see the designs?”と尋ねます。誰かが翻訳キーを押したまま“我这边周五之前能把设计稿发给你”と話します。カプセルに“译”バッジが表示され、メッセージ入力欄に“I can send you the designs before Friday.”と入力されます。" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/ja/translation.gif" alt="チャットでSamが“When can I see the designs?”と尋ねます。誰かが翻訳キーを押したまま“デザインは金曜日までにお送りできます”と話します。カプセルに“訳”バッジが表示され、メッセージ入力欄に“I can send you the designs by Friday.”と入力されます。" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -73,7 +73,7 @@
 0.4.0の新機能です。
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/meeting.gif" alt="ビデオ通話でAlexが英語で話し、ライブキャプションのウインドウに各文とその中国語訳が表示されます。続いてユーザが翻訳キーを押したまま“可以，我周三之前把测试做完”と話すと、通話にはOrra Microphoneから“Sure, I’ll finish testing by Wednesday.”と聞こえます。" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/ja/meeting.gif" alt="ビデオ通話でAlexが英語で話し、ライブキャプションのウインドウに各文とその日本語訳が表示されます。続いてユーザが翻訳キーを押したまま“いいですよ、水曜日までにテストを終わらせます”と話すと、通話にはOrra Microphoneから“Sure, I’ll finish testing by Wednesday.”と聞こえます。" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -83,7 +83,7 @@
 Orraが新しいバージョンを確認するのは許可したあとだけで、インストールするのも選択したときだけです。アップデートにはすべて署名が付いています。
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/updates.gif" alt="メニューバーのOrraメニューで“アップデートを確認”が選択されています。ウインドウに新しいバージョンが表示され、ダウンロードが終わると“インストールして再起動”が表示されます。" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/ja/updates.gif" alt="メニューバーのOrraメニューで“アップデートを確認”が選択されています。ウインドウに新しいバージョンが表示され、ダウンロードが終わると“インストールして再起動”が表示されます。" width="100%"></td>
 </tr>
 </table>
 
