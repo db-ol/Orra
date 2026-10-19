@@ -111,7 +111,10 @@ The translation files have `id`, `kind`, `input`, `label` and `ref`, as
 `translation-probes.jsonl` does. `label` is ja or es, en, either when both are fair, and
 none when there is nothing to translate. `ref` is a translation in the automatic
 direction: Japanese or Spanish into English, English into Japanese or Spanish, English for
-either, and the input for none. The long cases have no `ref`. The kinds:
+either, and the input for none. The long cases have no `ref`. English with Japanese or
+Spanish words, such as "The new office is near 品川." or "I'll call you mañana.", also has
+`ref_en`, its translation into English for a target fixed to English (7 Japanese and 2
+Spanish cases). The kinds:
 
 - Japanese: casual and polite speech, kana only, memo style text in kanji, Japanese with
   English names and terms, English with Japanese names and places in Japanese script or in

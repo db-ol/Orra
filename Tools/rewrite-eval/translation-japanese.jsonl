@@ -57,16 +57,16 @@
 {"id": "tja057", "kind": "en", "input": "I think we should wait until the client replies.", "label": "en", "ref": "クライアントから返事が来るまで待ったほうがいいと思います。"}
 {"id": "tja058", "kind": "en", "input": "Hey, are you still at the office?", "label": "en", "ref": "ねえ、まだ会社にいる？"}
 {"id": "tja059", "kind": "en", "input": "Please don't forget to bring your passport.", "label": "en", "ref": "パスポートを持ってくるのを忘れないでください。"}
-{"id": "tja060", "kind": "en_name", "input": "Send the file to 田中さん.", "label": "en", "ref": "ファイルを田中さんに送ってください。"}
-{"id": "tja061", "kind": "en_name", "input": "Let's meet in front of 渋谷 station at seven.", "label": "en", "ref": "7時に渋谷駅の前で会いましょう。"}
+{"id": "tja060", "kind": "en_name", "input": "Send the file to 田中さん.", "label": "en", "ref": "ファイルを田中さんに送ってください。", "ref_en": "Send the file to Tanaka-san."}
+{"id": "tja061", "kind": "en_name", "input": "Let's meet in front of 渋谷 station at seven.", "label": "en", "ref": "7時に渋谷駅の前で会いましょう。", "ref_en": "Let's meet in front of Shibuya Station at seven."}
 {"id": "tja062", "kind": "en_name", "input": "I'm flying to Osaka next Tuesday.", "label": "en", "ref": "来週の火曜日に飛行機で大阪に行きます。"}
-{"id": "tja063", "kind": "en_name", "input": "Did 佐藤部長 approve the budget?", "label": "en", "ref": "佐藤部長は予算を承認しましたか？"}
+{"id": "tja063", "kind": "en_name", "input": "Did 佐藤部長 approve the budget?", "label": "en", "ref": "佐藤部長は予算を承認しましたか？", "ref_en": "Did department head Sato approve the budget?"}
 {"id": "tja064", "kind": "en_name", "input": "We had dinner at a ramen shop in Shinjuku.", "label": "en", "ref": "新宿のラーメン屋で夕食を食べました。"}
 {"id": "tja065", "kind": "en_name", "input": "Please ask Suzuki-san to call me back.", "label": "en", "ref": "鈴木さんに折り返し電話をくれるよう伝えてください。"}
 {"id": "tja066", "kind": "en_name", "input": "My friend works at Toyota in Nagoya.", "label": "en", "ref": "友達は名古屋のトヨタで働いています。"}
-{"id": "tja067", "kind": "en_name", "input": "Thank you, 山本先生.", "label": "en", "ref": "ありがとうございます、山本先生。"}
-{"id": "tja068", "kind": "en_name", "input": "The new office is near 品川.", "label": "en", "ref": "新しいオフィスは品川の近くです。"}
-{"id": "tja069", "kind": "en_name", "input": "We should try the 抹茶 latte at that café in Kyoto.", "label": "en", "ref": "京都のあのカフェで抹茶ラテを飲んでみましょう。"}
+{"id": "tja067", "kind": "en_name", "input": "Thank you, 山本先生.", "label": "en", "ref": "ありがとうございます、山本先生。", "ref_en": "Thank you, Yamamoto-sensei."}
+{"id": "tja068", "kind": "en_name", "input": "The new office is near 品川.", "label": "en", "ref": "新しいオフィスは品川の近くです。", "ref_en": "The new office is near Shinagawa."}
+{"id": "tja069", "kind": "en_name", "input": "We should try the 抹茶 latte at that café in Kyoto.", "label": "en", "ref": "京都のあのカフェで抹茶ラテを飲んでみましょう。", "ref_en": "We should try the matcha latte at that café in Kyoto."}
 {"id": "tja070", "kind": "short", "input": "はい", "label": "ja", "ref": "Yes"}
 {"id": "tja071", "kind": "short", "input": "はい。", "label": "ja", "ref": "Yes."}
 {"id": "tja072", "kind": "short", "input": "うん", "label": "ja", "ref": "Yeah"}
@@ -89,7 +89,7 @@
 {"id": "tja089", "kind": "matrix", "input": "Can you これ見てもらえる？", "label": "either", "ref": "Can you take a look at this?"}
 {"id": "tja090", "kind": "matrix", "input": "Thank you、助かりました。", "label": "ja", "ref": "Thank you, that really helped."}
 {"id": "tja091", "kind": "matrix", "input": "明日のmeeting、onlineでもいい？", "label": "ja", "ref": "Is it OK if tomorrow's meeting is online?"}
-{"id": "tja092", "kind": "matrix", "input": "I'll send it 明日の朝。", "label": "en", "ref": "明日の朝送ります。"}
+{"id": "tja092", "kind": "matrix", "input": "I'll send it 明日の朝。", "label": "en", "ref": "明日の朝送ります。", "ref_en": "I'll send it tomorrow morning."}
 {"id": "tja093", "kind": "matrix", "input": "Please 確認してください。", "label": "either", "ref": "Please check it."}
 {"id": "tja094", "kind": "matrix", "input": "I think これでいいと思う。", "label": "either", "ref": "I think this is fine."}
 {"id": "tja095", "kind": "en_num", "input": "The meeting is on March 15 at 2:30 PM.", "label": "en", "ref": "会議は3月15日の午後2時30分からです。"}

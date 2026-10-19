@@ -83,9 +83,9 @@
 {"id": "tes083", "kind": "matrix", "input": "Ya está ready el documento.", "label": "es", "ref": "The document is ready."}
 {"id": "tes084", "kind": "matrix", "input": "Let's go a comer.", "label": "either", "ref": "Let's go eat."}
 {"id": "tes085", "kind": "matrix", "input": "¿Me puedes hacer un favor? Can you check the numbers?", "label": "either", "ref": "Can you do me a favor? Can you check the numbers?"}
-{"id": "tes086", "kind": "matrix", "input": "Thank you, amiga.", "label": "en", "ref": "Gracias, amiga."}
+{"id": "tes086", "kind": "matrix", "input": "Thank you, amiga.", "label": "en", "ref": "Gracias, amiga.", "ref_en": "Thank you, my friend."}
 {"id": "tes087", "kind": "matrix", "input": "Estoy super busy hoy.", "label": "es", "ref": "I'm super busy today."}
-{"id": "tes088", "kind": "matrix", "input": "I'll call you mañana.", "label": "en", "ref": "Te llamo mañana."}
+{"id": "tes088", "kind": "matrix", "input": "I'll call you mañana.", "label": "en", "ref": "Te llamo mañana.", "ref_en": "I'll call you tomorrow."}
 {"id": "tes089", "kind": "en_num", "input": "The meeting is on March 15 at 2:30 PM.", "label": "en", "ref": "La reunión es el 15 de marzo a las 2:30 de la tarde."}
 {"id": "tes090", "kind": "en_num", "input": "It costs $45.99 plus tax.", "label": "en", "ref": "Cuesta $45.99 más impuestos."}
 {"id": "tes091", "kind": "en_num", "input": "Our budget for Q3 is 50K.", "label": "en", "ref": "Nuestro presupuesto para el tercer trimestre es de 50 mil."}

@@ -96,6 +96,11 @@ struct TranslationPairEvaluationTests {
                     expected[own] = reference
                 }
             }
+            // English with words of the dictation language, such as 品川 or mañana, into
+            // English, for a target fixed to English.
+            if let english = object["ref_en"] as? String {
+                expected[.english] = english
+            }
             cases.append(Case(set: kind == "long" ? "long" : "probes", id: try #require(object["id"] as? String), input: input, label: label, kind: kind, expected: expected))
         }
         // More cases from a file, such as fillers and corrections for comparing prompts.

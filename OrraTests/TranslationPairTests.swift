@@ -24,7 +24,7 @@ struct TranslationPairTests {
         for file in ["cases.jsonl", "adversarial.jsonl", "meaning.jsonl", "translation-probes.jsonl", "translation-japanese.jsonl", "translation-spanish.jsonl", "adversarial-japanese.jsonl", "adversarial-spanish.jsonl"] {
             for line in try String(contentsOf: tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
                 let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
-                for (key, value) in object where ["input", "ref"].contains(key) || key.hasPrefix("expected") || key.hasPrefix("translate") {
+                for (key, value) in object where key == "input" || key.hasPrefix("ref") || key.hasPrefix("expected") || key.hasPrefix("translate") {
                     if let text = value as? String, !text.isEmpty {
                         texts.append(text)
                     }
@@ -138,6 +138,12 @@ struct TranslationPairTests {
             for line in try String(contentsOf: Self.tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
                 let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
                 let input = try #require(object["input"] as? String)
+                if let english = object["ref_en"] as? String {
+                    checked += 1
+                    if let failure = TranslationGuard.check(source: input, output: english, route: TranslationRoute(language, into: .english)) {
+                        held.append("\(object["id"] ?? "")->en \(failure)")
+                    }
+                }
                 guard let reference = object["ref"] as? String, !reference.isEmpty, reference != input,
                       let target = TranslationDirection.automatic.target(for: input, in: language) else { continue }
                 checked += 1
