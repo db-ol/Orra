@@ -32,7 +32,7 @@ nonisolated enum InsertionResult: Equatable, Sendable {
 /// the app that holds secure input itself. The pasteboard is then left alone, and the text
 /// stays under Copy Last Dictation.
 final class TextInserter {
-    static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+    nonisolated static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
 
     private let pasteboard: NSPasteboard
     private let postCommandShortcut: (CGKeyCode) -> Void
@@ -188,8 +188,18 @@ nonisolated struct PasteboardSnapshot: Sendable {
         return PasteboardSnapshot(changeCount: changeCount, items: items)
     }
 
+    /// How the restore prepares the pasteboard. Concealed contents, such as a copy from
+    /// Copy Last Dictation or Live Captions, go back kept on this Mac, so a paste does not
+    /// let Universal Clipboard offer them to other devices afterwards. Internal for tests,
+    /// since a pasteboard does not tell whether it is kept on this Mac.
+    var restoreOptions: NSPasteboard.ContentsOptions {
+        let concealed = items.contains { $0.contains { $0.type == TextInserter.concealedType.rawValue } }
+        return concealed ? .currentHostOnly : []
+    }
+
     func restore(to pasteboard: NSPasteboard) {
-        pasteboard.clearContents()
+        // With no options, the same as clearContents.
+        pasteboard.prepareForNewContents(with: restoreOptions)
         let restored = items.map { entries in
             let item = NSPasteboardItem()
             for entry in entries {
