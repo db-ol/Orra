@@ -82,6 +82,8 @@ nonisolated struct SetupChecklist: Equatable, Sendable {
 final class WelcomeWindow {
     private let pushToTalk: PushToTalkController
     private let setup: SetupDownload
+    /// Called before the window shows, see DockIcon.willShowWindow().
+    private let willShow: () -> Void
     private var window: NSWindow?
     private var refresh: Task<Void, Never>?
     private var closeObserver: (any NSObjectProtocol)?
@@ -98,15 +100,17 @@ final class WelcomeWindow {
         window?.isVisible ?? false
     }
 
-    init(pushToTalk: PushToTalkController, setup: SetupDownload) {
+    init(pushToTalk: PushToTalkController, setup: SetupDownload, willShow: @escaping () -> Void) {
         self.pushToTalk = pushToTalk
         self.setup = setup
+        self.willShow = willShow
     }
 
     /// Brings the window to the front, from behind the app the user is in too.
     func show() {
         let window = self.window ?? makeWindow()
         self.window = window
+        willShow()
         NSApplication.shared.activate()
         window.makeKeyAndOrderFront(nil)
         // macOS may decline the activation, for example at login, and the window still

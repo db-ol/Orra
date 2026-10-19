@@ -62,6 +62,16 @@ final class DockIcon {
         setPolicy(wanted)
     }
 
+    /// Shows the icon before a window opens, not once the window becomes key. An accessory
+    /// app cannot open a SwiftUI window at launch, and a window that macOS shows without
+    /// making Orra active never becomes key. The update after the window closes hides the
+    /// icon again while the choice is off.
+    func willShowWindow() {
+        guard policy != .regular else { return }
+        policy = .regular
+        setPolicy(.regular)
+    }
+
     /// Updates whenever one of Orra's windows opens or closes.
     func followWindows() {
         guard observers.isEmpty else { return }
@@ -79,8 +89,9 @@ final class DockIcon {
         })
     }
 
-    /// Opens the settings window from AppKit, such as for a click on the Dock icon. Uses the
-    /// Settings… item in the app menu, since only SwiftUI views can call openWindow.
+    /// Opens the settings window from AppKit, such as for a click on the Dock icon or at
+    /// launch. Uses the Settings… item in the app menu, since only SwiftUI views can call
+    /// openWindow.
     static func openSettings() {
         NSApplication.shared.activate()
         guard let appMenu = NSApplication.shared.mainMenu?.items.first?.submenu,

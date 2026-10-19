@@ -305,6 +305,16 @@ got worse than the baseline, see docs/release-gate.md.
     menu item that opens the window reads Setup Guide… or Getting Started…, in English
     and in Chinese, and that a model that is still loading needs nothing from the user,
     which decides whether launch opens the window.
+  - LaunchWindowTests checks which window launch opens: the welcome window whenever
+    setup needs the user, at login too, and once it does not, Settings for a launch with
+    no login mark while Open at Login is off, and no window for a launch marked as a
+    login item's or while Open at Login is on. An open application event with the
+    login item mark, in either of the two places macOS may put it, reads as a launch at
+    login. One without it, one with another value there, a reopen event with the mark
+    and no event do not. It also checks how the settings window is found among Orra's
+    windows by its scene ID. DockIconTests checks that a window about to show gets the
+    Dock icon at once while the icon is switched off, and that the update after the
+    window closes removes the icon again, also when the window never became key.
   - VocabularyTests checks how the vocabulary text becomes terms (trimmed, once each
     ignoring case, cut at 40 characters, capped only at 5,000 against runaway data), the
     context string the model gets, and the choice of the 200 words added or used most
@@ -1204,7 +1214,8 @@ got worse than the baseline, see docs/release-gate.md.
 - The built app launches from the terminal, finishes launching, and reports the
   accessory activation policy through NSRunningApplication. LaunchServices lists it as
   type UIElement. It exits cleanly on SIGTERM. This was a one off smoke run from the
-  terminal, not part of the test suite.
+  terminal, not part of the test suite. It describes the launch before #13, which put
+  Orra in the Dock by default.
 - Orra/ and OrraTests/ are synchronized folder groups, so the new Swift files were
   picked up with no project file edits.
 - SecondTalkKeyTests cover the second talk key: it is saved under `secondTalkKey` and
@@ -1225,9 +1236,12 @@ date, running the app from
 Xcode 27.0 on macOS 26.6.2 on a MacBook with a notch. Unchecked items are still open.
 
 - [x] No Dock icon at launch, and no flash was noticed. The policy is set in
-  applicationWillFinishLaunching rather than through LSUIElement.
+  applicationWillFinishLaunching rather than through LSUIElement. This was the launch
+  before #13, which put Orra in the Dock by default.
 - [x] Once the model and both permissions are in place, no window opens at launch. Only the
   mic icon appears in the menu bar. Since 2026-10-07 the welcome window opens until then.
+  Since #13 Orra is in the Dock too. Since 2026-10-19 a launch by the user opens Settings
+  while Open at Login is off, see Window at launch below.
 - [x] The menu shows "Settings…" and "Quit Orra". Since 2026-10-04 a hotkey status line
   sits above them, see the fn hotkey list below.
 - [x] "Settings…" opens the placeholder window and brings it to the front while another
@@ -1665,11 +1679,40 @@ setup:
 - [ ] With an existing setup, as after an update from 0.3, Getting Started… opens the
   welcome window in front with the first three steps checked, "Orra is ready" and Try
   next. Step 4 has its check mark only if a talk key was ever chosen. Done closes it.
-- [ ] Launching Orra with setup complete still opens no window, and a click on the Dock
-  icon still opens Settings. While the model loads after launch the item reads Setup
-  Guide…, then Getting Started….
+- [ ] Launching Orra with setup complete opens Settings while Open at Login is off and no
+  window while it is on, see Window at launch below. A click on the Dock icon still
+  opens Settings. While the model loads after launch the item reads Setup Guide…, then
+  Getting Started….
 - [ ] Quit Orra, turn it off under Microphone in System Settings > Privacy & Security, and
   launch it: the welcome window opens, and the menu item reads Setup Guide… again.
+
+Window at launch, added on 2026-10-19, not verified yet. With setup complete, a launch by
+the user opens Settings, so it shows more than a Dock icon. Until a real log out and log
+in shows how macOS marks a launch at login, Orra opens no window at launch while Open at
+Login is on, also when the user opens it. Each launch logs one line with the window, the
+login item mark, the default launch flag and Open at Login:
+`log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" && category == "launch"'`.
+
+- [ ] Setup complete and Open at Login off: quit Orra and open it from Finder, Spotlight
+  and Launchpad. Each time Settings opens on General, in front and key. Note how long it
+  takes after the Dock icon appears.
+- [ ] Open Orra and click another app at once: Settings still ends up in front, even if
+  it is not key.
+- [ ] Open at Login on: open Orra from Finder. No window opens, as before. A click on the
+  Dock icon opens Settings. Note the logged login item mark and default launch flag.
+- [ ] Open at Login on, log out and in: no window opens. Note the logged login item mark
+  and default launch flag. If the mark reads true here and false for the launch from
+  Finder above, a later change can open Settings for a launch by the user while Open at
+  Login is on too.
+- [ ] Quit Orra with Settings open and open it again with Open at Login on: Settings does
+  not come back. With "Reopen windows when logging back in" checked and Orra running, log
+  out and in: note what opens.
+- [ ] Show Orra in the Dock off: the welcome window at launch, while setup needs you, and
+  Settings at launch get a Dock icon and become key, and the icon goes when they close.
+  Also when you click another app while Orra starts and the window does not become key.
+- [ ] With Open at Login off, Done in the welcome window after a language pick, Restart
+  Orra in Settings, and Install and Relaunch of an update each open Settings in front, in
+  the language Orra restarted with.
 
 Card beside System Settings, added on 2026-10-15, not verified yet. Orra never resets a
 permission itself. To see both pictures, quit Orra and run
