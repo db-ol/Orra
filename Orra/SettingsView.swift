@@ -2,13 +2,15 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// The tabs in the sidebar of the settings window, in their order.
+/// The tabs in the sidebar of the settings window, in their order. Projects shows only in
+/// builds that show it, see `visible(projectsVisible:)`.
 enum SettingsTab: String, CaseIterable, Identifiable {
     case general
     case dictation
     case translation
     case meeting
     case vocabulary
+    case projects
     case about
 
     var id: String { rawValue }
@@ -21,6 +23,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .translation: "Translation"
         case .meeting: "Meeting Interpretation"
         case .vocabulary: "Vocabulary"
+        case .projects: "Projects"
         case .about: "About"
         }
     }
@@ -32,6 +35,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .translation: "translate"
         case .meeting: "captions.bubble.fill"
         case .vocabulary: "character.book.closed.fill"
+        case .projects: "briefcase.fill"
         case .about: "info.circle.fill"
         }
     }
@@ -44,8 +48,25 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .translation: .green
         case .meeting: .orange
         case .vocabulary: .blue
+        case .projects: .teal
         case .about: .indigo
         }
+    }
+
+    /// Whether the sidebar marks the tab as a preview, which may still change.
+    var isPreview: Bool {
+        self == .projects
+    }
+
+    /// The tabs the sidebar shows, in their order: Projects only where the build shows it.
+    static func visible(projectsVisible: Bool = ProjectsAvailability.isVisible) -> [SettingsTab] {
+        allCases.filter { $0 != .projects || projectsVisible }
+    }
+
+    /// The tab the window turns to when asked for this one: General in place of a tab the
+    /// sidebar does not show.
+    func shown(projectsVisible: Bool = ProjectsAvailability.isVisible) -> SettingsTab {
+        Self.visible(projectsVisible: projectsVisible).contains(self) ? self : .general
     }
 }
 
@@ -77,7 +98,18 @@ struct SettingsTabLabel: View {
 
     var body: some View {
         Label {
-            Text(tab.title)
+            if tab.isPreview {
+                // Under the name, since a label beside it leaves no room in Japanese or
+                // Spanish.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(tab.title)
+                    Text("Preview")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text(tab.title)
+            }
         } icon: {
             SettingsIcon(symbol: tab.symbol, tint: tab.tint)
         }
@@ -115,10 +147,11 @@ struct DescribedLabel: View {
 }
 
 /// The settings window: a sidebar with General, Dictation, Translation, Meeting
-/// Interpretation, Vocabulary and About, like System Settings. General holds the system,
-/// the microphone and the keys. Dictation holds the dictation language, Clean Up Text and
-/// what helps recognition. Translation holds the translation key's switch and its target.
-/// Meeting Interpretation holds live captions and speaking translations to others.
+/// Interpretation, Vocabulary, Projects and About, like System Settings. General holds the
+/// system, the microphone and the keys. Dictation holds the dictation language, Clean Up
+/// Text and what helps recognition. Translation holds the translation key's switch and its
+/// target. Meeting Interpretation holds live captions and speaking translations to others.
+/// Projects holds its switch and its data, in builds that show it.
 struct SettingsView: View {
     let pushToTalk: PushToTalkController
     let inputs: AudioInputList
@@ -133,6 +166,8 @@ struct SettingsView: View {
     var captions: MeetingCaptions? = nil
     var speech: TranslationSpeech? = nil
     var voiceModels: VoiceModels? = nil
+    /// The Projects switch, nil where the page is shown without it, which hides its tab.
+    var projects: ProjectsSwitch? = nil
     @State private var tab = SettingsTab.general
     /// The part of the page to scroll to, until the page has scrolled there.
     @State private var scrollTarget: SettingsSection?
@@ -143,7 +178,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
             // A click on the empty part of the sidebar keeps the tab that is shown.
-            List(SettingsTab.allCases, selection: Binding<SettingsTab?>(
+            List(SettingsTab.visible(projectsVisible: projectsVisible), selection: Binding<SettingsTab?>(
                 get: { tab },
                 set: { if let new = $0 { tab = new } }
             )) { tab in
@@ -167,9 +202,14 @@ struct SettingsView: View {
         .frame(minWidth: 680, idealWidth: SettingsWindow.defaultSize.width, maxWidth: .infinity, minHeight: 440, idealHeight: SettingsWindow.defaultSize.height, maxHeight: .infinity)
     }
 
+    /// Whether the sidebar shows Projects: in builds that show it, with its switch at hand.
+    private var projectsVisible: Bool {
+        projects?.isVisible ?? false
+    }
+
     private func takeRequest() {
         let request = SettingsWindow.takeRequest()
-        tab = request.tab
+        tab = request.tab.shown(projectsVisible: projectsVisible)
         scrollTarget = request.section
     }
 
@@ -188,6 +228,10 @@ struct SettingsView: View {
             MeetingInterpretationSettings(pushToTalk: pushToTalk, captions: captions, speech: speech, voiceModels: voiceModels, cleanup: cleanup)
         case .vocabulary:
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
+        case .projects:
+            if let projects {
+                ProjectsSettings(projects: projects, cleanup: cleanup)
+            }
         case .about:
             AboutSettings(models: models, pushToTalk: pushToTalk, updater: updater)
         }
@@ -1208,6 +1252,7 @@ private struct LiveCaptionsShortcutRecorder: View {
         cleanup: .live(),
         learning: CorrectionLearning(isOn: false, store: CorrectionStore(), watcher: CorrectionWatcher(), saveSetting: { _ in }, saveStore: { _ in }, addToVocabulary: { _ in .added }, removeFromVocabulary: { _ in }),
         dockIcon: DockIcon(showsInDock: true, save: { _ in }, setPolicy: { _ in }, hasOpenWindow: { true }),
-        updater: AppUpdater()
+        updater: AppUpdater(),
+        projects: ProjectsSwitch()
     )
 }
