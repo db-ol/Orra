@@ -43,9 +43,10 @@ nonisolated enum SpeechWordCheck {
     static let leastWrongUnits = 2
 
     /// The words and characters of `text` the check compares, see `units(of:characters:)`.
-    /// Empty for text with nothing to compare, such as a number alone.
-    static func units(of text: String) -> [String] {
-        units(of: text, characters: usesCharacters(text))
+    /// Empty for text with nothing to compare, such as a number alone. `language` is the
+    /// language of the piece, see `Words`.
+    static func units(of text: String, in language: TranslationTarget = .english) -> [String] {
+        units(of: text, characters: usesCharacters(text), in: language)
     }
 
     /// When both tries of a piece fail only this check, the one with fewer wrong units
@@ -73,24 +74,52 @@ nonisolated enum SpeechWordCheck {
         }
     }
 
-    /// Whether `heard` is close enough to `text`. Text with nothing to compare passes.
-    static func passes(text: String, heard: String) -> Bool {
-        errors(text: text, heard: heard).passes
+    /// Whether `heard` is close enough to `text`, a piece in `language`. Text with nothing
+    /// to compare passes.
+    static func passes(text: String, heard: String, in language: TranslationTarget = .english) -> Bool {
+        errors(text: text, heard: heard, in: language).passes
     }
 
-    /// How far `heard` is from `text`.
-    static func errors(text: String, heard: String) -> Errors {
-        let errors = wrongUnits(text: text, heard: heard)
+    /// How far `heard` is from `text`, a piece in `language`.
+    static func errors(text: String, heard: String, in language: TranslationTarget = .english) -> Errors {
+        let errors = wrongUnits(text: text, heard: heard, in: language)
         return Errors(wrong: errors.wrong, length: errors.length)
     }
 
     /// The edits that turn the units of `text` into those of `heard`, and how many units
-    /// `text` has.
-    static func wrongUnits(text: String, heard: String) -> (wrong: Int, length: Int) {
+    /// `text` has. In Spanish, two words in a row on one side that the other side writes
+    /// as one count as that one, see `joiningSplitWords`.
+    static func wrongUnits(text: String, heard: String, in language: TranslationTarget = .english) -> (wrong: Int, length: Int) {
         let characters = usesCharacters(text)
-        let expected = units(of: text, characters: characters)
+        var expected = units(of: text, characters: characters, in: language)
         guard !expected.isEmpty else { return (0, 0) }
-        return (editDistance(expected, units(of: heard, characters: characters)), expected.count)
+        let length = expected.count
+        var written = units(of: heard, characters: characters, in: language)
+        if language == .spanish, !characters {
+            expected = joiningSplitWords(expected, as: written)
+            written = joiningSplitWords(written, as: expected)
+        }
+        return (editDistance(expected, written), length)
+    }
+
+    /// `units` with each two in a row joined where `other` has them as one word, as the
+    /// speech model may write "en frente" as "enfrente", "tal vez" as "talvez" or "por
+    /// tanto" as "portanto". Such a split alone failed a correct Spanish piece in the voice
+    /// round trip of 2026-10-18 with every voice.
+    static func joiningSplitWords(_ units: [String], as other: [String]) -> [String] {
+        let words = Set(other)
+        var joined: [String] = []
+        var index = 0
+        while index < units.count {
+            if index + 1 < units.count, words.contains(units[index] + units[index + 1]) {
+                joined.append(units[index] + units[index + 1])
+                index += 2
+            } else {
+                joined.append(units[index])
+                index += 1
+            }
+        }
+        return joined
     }
 
     /// The language the speech model is told to write for a piece in `language`, nil for
@@ -118,9 +147,9 @@ nonisolated enum SpeechWordCheck {
     /// as "ok", and single letters in a row as one word, so "O.K." and "A P I" match "OK"
     /// and "API". With `characters`, words of letters are split into their letters, as
     /// Qwen3-ASR may write a Chinese word it misheard in letters.
-    static func units(of text: String, characters: Bool) -> [String] {
+    static func units(of text: String, characters: Bool, in language: TranslationTarget = .english) -> [String] {
         var words: [String] = []
-        for token in numberParts(of: tokens(of: expandingContractions(ChineseText.simplifiedCharacters(text).lowercased()))) {
+        for token in numberParts(of: tokens(of: expandingContractions(ChineseText.simplifiedCharacters(text).lowercased()), in: language), in: language) {
             if case .word(let word) = token {
                 words.append(word == "okay" ? "ok" : word)
             }
@@ -156,7 +185,8 @@ nonisolated enum SpeechWordCheck {
     /// The words, characters and numbers of lowercased `text`. A word with digits in it,
     /// such as "v2", keeps its letters, and one that is a number with an ordinal ending,
     /// such as "1st", is a number.
-    static func tokens(of text: String) -> [Token] {
+    static func tokens(of text: String, in language: TranslationTarget = .english) -> [Token] {
+        let words = Words.of(language)
         var tokens: [Token] = []
         var word = String.UnicodeScalarView()
         var hasDigits = false
@@ -165,9 +195,10 @@ nonisolated enum SpeechWordCheck {
                 word = String.UnicodeScalarView()
                 hasDigits = false
             }
-            // Accents do not count, since the speech model may leave them out: qué is que.
-            let text = String(word).folding(options: .diacriticInsensitive, locale: nil)
-            if numberWords.contains(text) || (hasDigits && (text.isEmpty || ordinalEndings.contains(text))) {
+            // In Spanish accents do not count, since the speech model may leave them out:
+            // qué is que.
+            let text = language == .spanish ? String(word).folding(options: .diacriticInsensitive, locale: nil) : String(word)
+            if words.numbers.contains(text) || (hasDigits && (text.isEmpty || ordinalEndings.contains(text))) {
                 tokens.append(.number)
             } else if !text.isEmpty {
                 tokens.append(.word(text))
@@ -176,7 +207,7 @@ nonisolated enum SpeechWordCheck {
         for scalar in text.unicodeScalars {
             if isCharacterScript(scalar) {
                 endWord()
-                tokens.append(chineseNumerals.contains(scalar) ? .number : .word(String(scalar)))
+                tokens.append(words.numerals.contains(scalar) ? .number : .word(String(scalar)))
             } else if CharacterSet.decimalDigits.contains(scalar) {
                 hasDigits = true
             } else if CharacterSet.alphanumerics.contains(scalar) {
@@ -197,7 +228,8 @@ nonisolated enum SpeechWordCheck {
     /// between numbers, "half past" and "quarter to" before one, and 点, 分, 之, 半 and 刻
     /// after a Chinese number, so "10%" matches "百分之十" and "2:30" matches "两点半" and
     /// "half past two".
-    static func numberParts(of tokens: [Token]) -> [Token] {
+    static func numberParts(of tokens: [Token], in language: TranslationTarget = .english) -> [Token] {
+        let words = Words.of(language)
         var kept: [Token] = []
         var afterNumber = false
         var index = 0
@@ -212,7 +244,7 @@ nonisolated enum SpeechWordCheck {
                 afterNumber = true
                 continue
             }
-            if afterNumber, wordsAfterNumbers.contains(word) || (isNumber(index) && wordsBetweenNumbers.contains(word)) {
+            if afterNumber, words.afterNumbers.contains(word) || (isNumber(index) && words.betweenNumbers.contains(word)) {
                 continue
             }
             if ["half", "quarter"].contains(word), index < tokens.count, [.word("past"), .word("to")].contains(tokens[index]), isNumber(index + 1) {
@@ -254,35 +286,68 @@ nonisolated enum SpeechWordCheck {
     /// Ordinal endings of a number written in digits, such as "1st".
     static let ordinalEndings: Set<String> = ["st", "nd", "rd", "th"]
 
-    /// Words that go with the number before them, see `numberParts`, in English, Chinese,
-    /// Japanese (時) and Spanish (y media, por ciento, pesos), with their accents left out.
-    static let wordsAfterNumbers: Set<String> = [
-        "percent", "dollar", "dollars", "oclock", "点", "分", "之", "半", "刻", "時", "时",
-        "y", "media", "cuarto", "por", "pesos", "dolares", "euros",
-    ]
+    /// The words of numbers for a piece in `language`. English and Chinese pieces get
+    /// those the limits were measured with. Japanese pieces add 時 and the numerals 億 and
+    /// 兆, and Spanish pieces the Spanish number words and the words that go with a number,
+    /// so these never change what an English or Chinese piece compares.
+    struct Words {
+        /// Words that go with the number before them, see `numberParts`.
+        let afterNumbers: Set<String>
+        /// Words that go between two numbers, see `numberParts`.
+        let betweenNumbers: Set<String>
+        /// Number words, which a number may be read as.
+        let numbers: Set<String>
+        /// Numerals in Han characters, which a number may be read as.
+        let numerals: Set<Unicode.Scalar>
+
+        static func of(_ language: TranslationTarget) -> Words {
+            switch language {
+            case .english, .chinese: base
+            case .japanese: japanese
+            case .spanish: spanish
+            }
+        }
+
+        static let base = Words(afterNumbers: wordsAfterNumbers, betweenNumbers: wordsBetweenNumbers, numbers: numberWords, numerals: chineseNumerals)
+        static let japanese = Words(
+            afterNumbers: wordsAfterNumbers.union(["時", "时"]),
+            betweenNumbers: wordsBetweenNumbers,
+            numbers: numberWords,
+            numerals: chineseNumerals.union("億兆".unicodeScalars)
+        )
+        /// The Spanish words without accents, as Spanish units are compared.
+        static let spanish = Words(
+            afterNumbers: wordsAfterNumbers.union(["y", "media", "cuarto", "por", "pesos", "dolares", "euros"]),
+            betweenNumbers: wordsBetweenNumbers.union(["punto", "coma", "y"]),
+            numbers: numberWords.union([
+                "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez",
+                "once", "doce", "trece", "catorce", "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve",
+                "veinte", "veintiuno", "veintidos", "veintitres", "veinticuatro", "veinticinco", "veintiseis",
+                "veintisiete", "veintiocho", "veintinueve", "treinta", "cuarenta", "cincuenta", "sesenta",
+                "setenta", "ochenta", "noventa", "cien", "ciento", "doscientos", "trescientos", "cuatrocientos",
+                "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos", "mil", "millon", "millones",
+            ]),
+            numerals: chineseNumerals
+        )
+    }
+
+    /// Words that go with the number before them, see `numberParts`.
+    static let wordsAfterNumbers: Set<String> = ["percent", "dollar", "dollars", "oclock", "点", "分", "之", "半", "刻"]
 
     /// Words that go between two numbers, see `numberParts`.
-    static let wordsBetweenNumbers: Set<String> = ["point", "and", "punto", "coma", "y"]
+    static let wordsBetweenNumbers: Set<String> = ["point", "and"]
 
-    /// English and Spanish number words, which a number may be read as. The Spanish ones
-    /// without accents, as the units are compared.
+    /// English number words, which a number may be read as.
     static let numberWords: Set<String> = [
         "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
         "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
         "hundred", "thousand", "million", "billion",
         "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
-        "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez",
-        "once", "doce", "trece", "catorce", "quince", "dieciseis", "diecisiete", "dieciocho", "diecinueve",
-        "veinte", "veintiuno", "veintidos", "veintitres", "veinticuatro", "veinticinco", "veintiseis",
-        "veintisiete", "veintiocho", "veintinueve", "treinta", "cuarenta", "cincuenta", "sesenta",
-        "setenta", "ochenta", "noventa", "cien", "ciento", "doscientos", "trescientos", "cuatrocientos",
-        "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos", "mil", "millon", "millones",
     ]
 
-    /// Chinese and Japanese numerals, which a number may be read as. 幺 is one in a phone
-    /// number.
-    static let chineseNumerals: Set<Unicode.Scalar> = Set("零〇一二两三四五六七八九十百千万亿億兆幺".unicodeScalars)
+    /// Chinese numerals, which a number may be read as. 幺 is one in a phone number.
+    static let chineseNumerals: Set<Unicode.Scalar> = Set("零〇一二两三四五六七八九十百千万亿幺".unicodeScalars)
 
     private static func isCharacterScript(_ scalar: Unicode.Scalar) -> Bool {
         SpeechCheck.isCharacterScript(scalar)

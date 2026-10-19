@@ -790,7 +790,7 @@ final class TranslationSpeech {
             guard generation == self.generation else { return .stopped }
             let whole = SpokenAudio(samples: parts.flatMap(\.samples), sampleRate: parts.first?.sampleRate ?? 24_000)
             var verdict = SpeechCheck.verdict(for: whole, text: piece)
-            if verdict == .good, checksWords, !SpeechWordCheck.units(of: piece).isEmpty {
+            if verdict == .good, checksWords, !SpeechWordCheck.units(of: piece, in: language).isEmpty {
                 guard let words = await checkWords(of: whole, against: piece, in: language, generation: generation, tally: &tally) else { return .stopped }
                 verdict = words.verdict
                 if verdict == .wrongWords, let errors = words.errors, errors.wrong < (closest?.errors.wrong ?? .max) {
@@ -835,7 +835,7 @@ final class TranslationSpeech {
         tally.wordChecks += 1
         tally.wordCheckTime += started.duration(to: .now)
         guard generation == self.generation else { return nil }
-        let errors = SpeechWordCheck.errors(text: piece, heard: heard)
+        let errors = SpeechWordCheck.errors(text: piece, heard: heard, in: language)
         return (errors.passes ? .good : .wrongWords, errors)
     }
 
