@@ -202,4 +202,12 @@ nonisolated enum TranslationPreference {
     static func save(_ on: Bool, to defaults: UserDefaults = .standard) {
         defaults.set(on, forKey: defaultsKey)
     }
+
+    /// Whether the user turned translation on at least once. The switch starts off and is
+    /// saved only when it changes, so a saved value, on or off, says so. Only such a user
+    /// could use the translation key, whose mode follows from it, see
+    /// TriggerModePreference.
+    static func wasTurnedOn(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: defaultsKey) != nil
+    }
 }

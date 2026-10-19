@@ -28,7 +28,7 @@ struct WelcomeSuggestionTests {
         #expect(rows.map(\.title) == ["Cleanup", "Translation", "Meeting interpretation"])
         #expect(rows.map(\.line) == [
             "Removes fillers and fixes what you correct while speaking.",
-            "Hold the translation key and speak. Chinese becomes English, and English becomes Chinese.",
+            "Press right Option to translate, and again to finish. Chinese becomes English, and English becomes Chinese.",
             "Read what others say in your language, and let them hear you in theirs, even in your own voice.",
         ])
         #expect(rows.map(\.button) == ["Turn On in Settings…", "Turn On in Settings…", "Set Up in Settings…"])
@@ -73,7 +73,7 @@ struct WelcomeSuggestionTests {
         #expect(rows.map(\.title) == ["整理", "翻译", "会议同传"])
         #expect(rows.map(\.line) == [
             "说完自动去掉语气词，并按你的改口改好。",
-            "按住翻译键说话，中文变成英文，英文变成中文。",
+            "按右侧 Option 键翻译，再按一下结束。中文变成英文，英文变成中文。",
             "对方说的话，你看到自己语言的字幕。你说自己的语言，对方听到他们的语言，还可以是你的音色。",
         ])
         #expect(rows.map(\.button) == ["在设置中打开…", "在设置中打开…", "前往设置…"])
@@ -89,11 +89,25 @@ struct WelcomeSuggestionTests {
         let line = { (language: DictationLanguage, locale: Locale) in
             WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, language: language, locale: locale)[1].line
         }
-        #expect(line(.chinese, english) == "Hold the translation key and speak. Chinese becomes English, and English becomes Chinese.")
-        #expect(line(.japanese, english) == "Hold the translation key and speak. Japanese becomes English, and English becomes Japanese.")
-        #expect(line(.spanish, english) == "Hold the translation key and speak. Spanish becomes English, and English becomes Spanish.")
-        #expect(line(.japanese, Locale(identifier: "ja")) == "翻訳キーを押したまま話します。日本語は英語に、英語は日本語になります。")
-        #expect(line(.spanish, Locale(identifier: "es-419")) == "Mantén presionada la tecla de traducción y habla. El español pasa a inglés y el inglés, a español.")
-        #expect(line(.spanish, chinese) == "按住翻译键说话，西班牙文变成英文，英文变成西班牙文。")
+        #expect(line(.chinese, english) == "Press right Option to translate, and again to finish. Chinese becomes English, and English becomes Chinese.")
+        #expect(line(.japanese, english) == "Press right Option to translate, and again to finish. Japanese becomes English, and English becomes Japanese.")
+        #expect(line(.spanish, english) == "Press right Option to translate, and again to finish. Spanish becomes English, and English becomes Spanish.")
+        #expect(line(.japanese, Locale(identifier: "ja")) == "右Optionキーを押して翻訳し、もう一度押して終了。日本語は英語に、英語は日本語になります。")
+        #expect(line(.spanish, Locale(identifier: "es-419")) == "Presiona la tecla Opción derecha para traducir y otra vez para terminar. El español pasa a inglés y el inglés, a español.")
+        #expect(line(.spanish, chinese) == "按右侧 Option 键翻译，再按一下结束。西班牙文变成英文，英文变成西班牙文。")
+    }
+
+    /// The translation line says how to use the user's translation key in its mode, as the
+    /// Orra menu does, so a user who kept Hold reads Hold.
+    @Test func theTranslationLineFollowsTheKeyAndItsMode() {
+        let line = { (key: Hotkey, mode: TriggerMode, locale: Locale) in
+            WelcomeSuggestion.all(cleanupOn: false, cleanupModelInstalled: false, translationOn: false, translationKey: key, translationMode: mode, locale: locale)[1].line
+        }
+        #expect(line(.rightOption, .hold, english) == "Hold right Option to translate. Chinese becomes English, and English becomes Chinese.")
+        #expect(line(.rightControl, .doubleTap, english) == "Press right Control twice to translate, and once more to finish. Chinese becomes English, and English becomes Chinese.")
+        #expect(line(.rightOption, .hold, chinese) == "按住右侧 Option 键翻译。中文变成英文，英文变成中文。")
+        for mode in TriggerMode.allCases {
+            #expect(line(.rightOption, mode, english).hasPrefix(Hotkey.rightOption.translateHint(mode: mode, in: english)))
+        }
     }
 }

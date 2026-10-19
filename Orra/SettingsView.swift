@@ -211,6 +211,20 @@ private struct GeneralSettings: View {
         }
     }
 
+    /// The translation key's help in its mode. A press in Double press records nothing, so
+    /// only the other modes start recording at the press. Double press for hands free works
+    /// only in Hold, so only then does the help name it.
+    private var translationKeyHelp: Text {
+        var help = Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("Use the translation key on its own. A press together with another key is a shortcut and records nothing, so its shortcuts and the characters Option types keep working.")
+        if pushToTalk.translationMode != .doubleTap {
+            help = help + Text(verbatim: "\n") + Text("As fn or a right Control, Option or Command key, the translation key starts recording when you press it.")
+        }
+        if pushToTalk.translationMode == .hold {
+            help = help + Text(verbatim: "\n") + Text("With Double press in Hold to keep recording on, press the translation key twice quickly and it keeps recording after you let go.")
+        }
+        return help
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             Form {
@@ -292,7 +306,7 @@ private struct GeneralSettings: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    .help(Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key counts as a dictation only after you hold it alone for a moment, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it. With Double press in Hold to keep recording on, press it twice quickly and it keeps recording after you let go."))
+                    .help(translationKeyHelp)
                     TriggerModePicker(pushToTalk: pushToTalk, slot: .translation)
                         .disabled(!cleanup.translationIsOn)
                     // An option of Hold, so it shows only while a key it works on is in Hold,
