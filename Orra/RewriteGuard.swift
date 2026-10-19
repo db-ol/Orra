@@ -119,12 +119,7 @@ nonisolated enum RewriteGuard {
             return failure
         }
 
-        // Shouting: the output turned to capitals.
-        let upper = count(output, where: { ("A"..."Z").contains($0) })
-        let letters = count(output, where: isLatinLetter)
-        let sourceLetters = max(count(source, where: isLatinLetter), 1)
-        let sourceUpper = count(source, where: { ("A"..."Z").contains($0) })
-        if letters >= 10, Double(upper) / Double(letters) > 0.6, Double(sourceUpper) / Double(sourceLetters) < 0.3 {
+        if isShouting(source: source, output: output) {
             return .caseChanged
         }
 
@@ -175,6 +170,13 @@ nonisolated enum RewriteGuard {
     // MARK: Openers and phrases
 
     static func checkOpeners(source: String, output: String) -> Failure? {
+        checkOpeners(source: source, output: output, openers: openers, excuses: excuses, anywhere: anywhere)
+    }
+
+    /// The opener and phrase checks with other tables, for the translations of Japanese
+    /// and Spanish, see TranslationGuard. With `latinBoundaries`, an English word of the
+    /// source ends where its Latin letters end, so "Sorryね" holds "sorry".
+    static func checkOpeners(source: String, output: String, openers: [[String]], excuses: [String: [String]], anywhere: [[String]], latinBoundaries: Bool = false) -> Failure? {
         let outputText = normalized(output)
         let head = Array(outputText.unicodeScalars.prefix(24))
         let sourceText = normalized(source)
@@ -187,7 +189,7 @@ nonisolated enum RewriteGuard {
             guard let hit else { continue }
             let allowed = group + (excuses[group[0]] ?? [])
             let excused = allowed.contains { phrase in
-                isASCII(phrase) ? containsWord(phrase, in: sourceText) : sourceText.contains(phrase)
+                isASCII(phrase) ? containsWord(phrase, in: sourceText, latinBoundaries: latinBoundaries) : sourceText.contains(phrase)
             }
             if !excused {
                 return .assistantOpener(hit)
@@ -203,6 +205,16 @@ nonisolated enum RewriteGuard {
             }
         }
         return nil
+    }
+
+    /// Shouting: the output turned to capitals, from 10 Latin letters on, and the source
+    /// was not in capitals.
+    static func isShouting(source: String, output: String) -> Bool {
+        let upper = count(output, where: { ("A"..."Z").contains($0) })
+        let letters = count(output, where: isLatinLetter)
+        let sourceLetters = max(count(source, where: isLatinLetter), 1)
+        let sourceUpper = count(source, where: { ("A"..."Z").contains($0) })
+        return letters >= 10 && Double(upper) / Double(letters) > 0.6 && Double(sourceUpper) / Double(sourceLetters) < 0.3
     }
 
     // MARK: Measures
@@ -273,10 +285,11 @@ nonisolated enum RewriteGuard {
         text.unicodeScalars.allSatisfy(\.isASCII)
     }
 
-    /// Kana, Hangul and Cyrillic, which a cleanup should never produce on its own.
-    static func hasForeignScript(_ text: String) -> Bool {
+    /// Kana, Hangul and Cyrillic, which a cleanup should never produce on its own. With
+    /// `allowingKana`, Hangul and Cyrillic only, for a translation that may hold kana.
+    static func hasForeignScript(_ text: String, allowingKana: Bool = false) -> Bool {
         text.unicodeScalars.contains { scalar in
-            (0x3040...0x30FF).contains(scalar.value) || (0xAC00...0xD7AF).contains(scalar.value) || (0x0400...0x04FF).contains(scalar.value)
+            (!allowingKana && (0x3040...0x30FF).contains(scalar.value)) || (0xAC00...0xD7AF).contains(scalar.value) || (0x0400...0x04FF).contains(scalar.value)
         }
     }
 
@@ -298,10 +311,12 @@ nonisolated enum RewriteGuard {
         text.lowercased().replacing(nonWord, with: "")
     }
 
-    /// Whether an ASCII phrase occurs in the text between word boundaries.
-    private static func containsWord(_ phrase: String, in text: String) -> Bool {
+    /// Whether an ASCII phrase occurs in the text between word boundaries, or with
+    /// `latinBoundaries` between characters that are not Latin letters.
+    private static func containsWord(_ phrase: String, in text: String, latinBoundaries: Bool = false) -> Bool {
         let escaped = NSRegularExpression.escapedPattern(for: phrase)
-        guard let regex = try? NSRegularExpression(pattern: "\\b" + escaped + "\\b") else { return false }
+        let pattern = latinBoundaries ? "(?<![A-Za-z])" + escaped + "(?![A-Za-z])" : "\\b" + escaped + "\\b"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
         return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 

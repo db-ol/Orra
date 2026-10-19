@@ -193,7 +193,7 @@ struct WelcomeView: View {
             }
             if WelcomeSuggestion.shows(checklist: checklist) {
                 SuggestionsBlock(
-                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, locale: Locale(identifier: localization)),
+                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, language: pushToTalk.dictationLanguage, locale: Locale(identifier: localization)),
                     locale: Locale(identifier: localization),
                     open: { openSettings($0.settingsTab) }
                 )

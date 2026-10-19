@@ -72,18 +72,33 @@ actor RewriteEngine {
     /// model.
     private var prefix: Prefix?
 
-    /// The prefix caches of the translation prompts, one per target, each filled on the
-    /// first translation into its target, see `translate`. Dropped with the model.
-    private var translationPrefixes: [TranslationTarget: Prefix] = [:]
+    /// The prefix caches of the translation prompts, one per route, each filled on the
+    /// first translation on its route, see `translate`. At most
+    /// TranslationPrefixSlots.limit, so a user who changes the dictation language never
+    /// holds more than before. Dropped with the model.
+    private var translationPrefixes: [TranslationRoute: Prefix] = [:]
+    /// Which routes have a prefix cache, in the order they were used.
+    private var prefixSlots = TranslationPrefixSlots()
 
     /// The bytes the cleanup prefix cache holds, 0 without one.
     var prefixCacheBytes: Int {
         Self.bytes(prefix)
     }
 
-    /// The bytes the prefix cache of a translation target holds, 0 before it is filled.
+    /// The bytes the prefix cache of a translation target of Chinese holds, 0 before it is
+    /// filled.
     func translationPrefixCacheBytes(_ target: TranslationTarget) -> Int {
-        Self.bytes(translationPrefixes[target])
+        translationPrefixCacheBytes(.chinese(target))
+    }
+
+    /// The bytes the prefix cache of a route holds, 0 before it is filled.
+    func translationPrefixCacheBytes(_ route: TranslationRoute) -> Int {
+        Self.bytes(translationPrefixes[route])
+    }
+
+    /// The routes whose prefix cache is filled.
+    var translationPrefixRoutes: Set<TranslationRoute> {
+        Set(translationPrefixes.keys)
     }
 
     private static func bytes(_ prefix: Prefix?) -> Int {
@@ -116,6 +131,7 @@ actor RewriteEngine {
         guard context != nil else { return }
         prefix = nil
         translationPrefixes = [:]
+        prefixSlots = TranslationPrefixSlots()
         context = nil
         Memory.clearCache()
         let returned = malloc_zone_pressure_relief(nil, 0)
@@ -139,27 +155,63 @@ actor RewriteEngine {
     /// load would make every load wait about 1.4 s longer and keep their memory for
     /// dictations that are never translated. `prepareTranslation` fills one ahead.
     func translate(_ text: String, into target: TranslationTarget, usingPrefixCache: Bool = true) throws -> Completion {
+        try translate(text, into: .chinese(target), usingPrefixCache: usingPrefixCache)
+    }
+
+    /// Runs the translation prompt of a route on a transcript, the same way.
+    func translate(_ text: String, into route: TranslationRoute, usingPrefixCache: Bool = true) throws -> Completion {
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
-        let prefix = usingPrefixCache ? try translationPrefix(target) : nil
-        return try generate(TranslationPrompt.text(for: text, into: target), maximumTokens: TranslationPrompt.maximumTokens(inputTokens: inputTokens), prefix: prefix, task: "Translation into \(target.logName)")
+        let prefix = usingPrefixCache ? try translationPrefix(route) : nil
+        return try generate(TranslationPrompt.text(for: text, into: route), maximumTokens: TranslationPrompt.maximumTokens(inputTokens: inputTokens), prefix: prefix, task: "Translation into \(route.logName)")
     }
 
-    /// Fills the prefix cache of a target, if it is not filled yet, so the first
+    /// Fills the prefix cache of a target of Chinese, if it is not filled yet, so the first
     /// translation into it does not wait for that.
     func prepareTranslation(into target: TranslationTarget) throws {
-        _ = try translationPrefix(target)
+        try prepareTranslation(into: .chinese(target))
     }
 
-    private func translationPrefix(_ target: TranslationTarget) throws -> Prefix? {
+    /// Fills the prefix cache of a route, if it is not filled yet.
+    func prepareTranslation(into route: TranslationRoute) throws {
+        _ = try translationPrefix(route)
+    }
+
+    /// Drops the prefix caches of every route outside `routes`, and drops those first when
+    /// more caches than the limit would be filled. TextCleanup passes the routes of the
+    /// user's dictation language and direction, so a change of language gives the memory of
+    /// the old ones back at once.
+    func keepTranslationPrefixes(_ routes: Set<TranslationRoute>) {
+        let dropped = prefixSlots.keep(routes)
+        drop(dropped)
+    }
+
+    private func translationPrefix(_ route: TranslationRoute) throws -> Prefix? {
         guard let context else { throw RewriteError.notLoaded }
-        if let cached = translationPrefixes[target] {
+        if let cached = translationPrefixes[route] {
+            _ = prefixSlots.use(route)
             return cached
         }
-        let tokens = PromptPrefix.translationPrompt(into: target) { context.tokenizer.encode(text: $0, addSpecialTokens: false) }
-        let filled = try fillPrefixCache(tokens, for: "translation into \(target.logName)")
-        translationPrefixes[target] = filled
-        return filled
+        // Drops a cache before filling one more, so no more than the limit are in memory.
+        drop(prefixSlots.use(route))
+        let tokens = PromptPrefix.translationPrompt(into: route) { context.tokenizer.encode(text: $0, addSpecialTokens: false) }
+        do {
+            let filled = try fillPrefixCache(tokens, for: "translation into \(route.logName)")
+            translationPrefixes[route] = filled
+            return filled
+        } catch {
+            prefixSlots.remove(route)
+            throw error
+        }
+    }
+
+    private func drop(_ routes: [TranslationRoute]) {
+        guard !routes.isEmpty else { return }
+        for route in routes {
+            translationPrefixes[route] = nil
+        }
+        Memory.clearCache()
+        Logger.rewrite.notice("Dropped \(routes.count, privacy: .public) translation prefix caches")
     }
 
     /// Runs the model on the start of a prompt that every transcript shares and returns its

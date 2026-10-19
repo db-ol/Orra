@@ -1,0 +1,130 @@
+{"id": "tja001", "kind": "ja_casual", "input": "今日ちょっと遅れるかも。先に始めてて。", "label": "ja", "ref": "I might be a little late today. Go ahead and start without me."}
+{"id": "tja002", "kind": "ja_casual", "input": "え、マジで？それ知らなかった。", "label": "ja", "ref": "Wait, seriously? I didn't know that."}
+{"id": "tja003", "kind": "ja_casual", "input": "明日って空いてる？ご飯行こうよ。", "label": "ja", "ref": "Are you free tomorrow? Let's go get something to eat."}
+{"id": "tja004", "kind": "ja_casual", "input": "ごめん、さっきの電話気づかなかった。", "label": "ja", "ref": "Sorry, I didn't notice your call earlier."}
+{"id": "tja005", "kind": "ja_casual", "input": "駅着いたら連絡して。迎えに行くから。", "label": "ja", "ref": "Let me know when you get to the station. I'll come pick you up."}
+{"id": "tja006", "kind": "ja_casual", "input": "それ、来週でもいい？今週ちょっとバタバタしてて。", "label": "ja", "ref": "Can that wait until next week? Things are a bit hectic this week."}
+{"id": "tja007", "kind": "ja_casual", "input": "傘持ってったほうがいいよ、夕方から雨だって。", "label": "ja", "ref": "You should take an umbrella. They say it's going to start raining in the evening."}
+{"id": "tja008", "kind": "ja_casual", "input": "えーと、あれどこに置いたっけ？", "label": "ja", "ref": "Where did I put that again?"}
+{"id": "tja009", "kind": "ja_casual", "input": "今から出るね。十五分くらいで着くと思う。", "label": "ja", "ref": "I'm leaving now. I think I'll get there in about 15 minutes."}
+{"id": "tja010", "kind": "ja_casual", "input": "お疲れ！今日はほんと助かったよ、ありがとね。", "label": "ja", "ref": "Good work today! You really helped me out, thanks."}
+{"id": "tja011", "kind": "ja_polite", "input": "お世話になっております。資料を添付しましたので、ご確認ください。", "label": "ja", "ref": "Thank you for your continued support. I've attached the materials, so please take a look."}
+{"id": "tja012", "kind": "ja_polite", "input": "明日の会議は午後からに変更になりました。", "label": "ja", "ref": "Tomorrow's meeting has been moved to the afternoon."}
+{"id": "tja013", "kind": "ja_polite", "input": "申し訳ございませんが、本日は早めに失礼させていただきます。", "label": "ja", "ref": "I'm sorry, but I'll be leaving early today."}
+{"id": "tja014", "kind": "ja_polite", "input": "ご都合のよい日時を教えていただけますか？", "label": "ja", "ref": "Could you let me know a date and time that works for you?"}
+{"id": "tja015", "kind": "ja_polite", "input": "先日はお忙しいところありがとうございました。", "label": "ja", "ref": "Thank you for taking time out of your busy schedule the other day."}
+{"id": "tja016", "kind": "ja_polite", "input": "確認してから、改めてご連絡いたします。", "label": "ja", "ref": "I'll check and get back to you."}
+{"id": "tja017", "kind": "ja_polite", "input": "この件につきましては、担当の者からご説明いたします。", "label": "ja", "ref": "The person in charge will explain this matter to you."}
+{"id": "tja018", "kind": "ja_polite", "input": "少々お待ちいただけますでしょうか。", "label": "ja", "ref": "Could you please wait a moment?"}
+{"id": "tja019", "kind": "ja_polite", "input": "来週の打ち合わせですが、オンラインでも大丈夫でしょうか？", "label": "ja", "ref": "About next week's meeting, would it be all right to hold it online?"}
+{"id": "tja020", "kind": "ja_polite", "input": "山田さんは本日お休みをいただいております。", "label": "ja", "ref": "Yamada-san is off today."}
+{"id": "tja021", "kind": "ja_polite", "input": "今後ともよろしくお願いいたします。", "label": "ja", "ref": "I look forward to continuing to work with you."}
+{"id": "tja022", "kind": "ja_kana", "input": "ありがとう、たすかった！", "label": "ja", "ref": "Thanks, you saved me!"}
+{"id": "tja023", "kind": "ja_kana", "input": "いまどこ？もうついた？", "label": "ja", "ref": "Where are you now? Are you there yet?"}
+{"id": "tja024", "kind": "ja_kana", "input": "ちょっとまってて、すぐいくね。", "label": "ja", "ref": "Wait a moment, I'll be right there."}
+{"id": "tja025", "kind": "ja_kana", "input": "コンビニでアイスかってきて。", "label": "ja", "ref": "Pick up some ice cream at the convenience store."}
+{"id": "tja026", "kind": "ja_kana", "input": "ミーティングはキャンセルになりました。", "label": "ja", "ref": "The meeting has been canceled."}
+{"id": "tja027", "kind": "ja_kana", "input": "よろしくおねがいします。", "label": "ja", "ref": "Thank you in advance."}
+{"id": "tja028", "kind": "ja_kana", "input": "あした、なんじにする？", "label": "ja", "ref": "What time should we make it tomorrow?"}
+{"id": "tja029", "kind": "ja_kana", "input": "おやすみ、またあしたね。", "label": "ja", "ref": "Good night, see you tomorrow."}
+{"id": "tja030", "kind": "ja_kana", "input": "はい、わかりました。", "label": "ja", "ref": "Yes, got it."}
+{"id": "tja031", "kind": "ja_kana", "input": "すみません、ちょっとおくれます。", "label": "ja", "ref": "Sorry, I'll be a little late."}
+{"id": "tja032", "kind": "ja_kanji", "input": "品川駅集合。", "label": "ja", "ref": "Meet at Shinagawa Station."}
+{"id": "tja033", "kind": "ja_kanji", "input": "予算案承認済。", "label": "ja", "ref": "Budget proposal approved."}
+{"id": "tja034", "kind": "ja_kanji", "input": "来週月曜午前十時、本社会議室。", "label": "ja", "ref": "Next Monday at 10 AM, in the head office meeting room."}
+{"id": "tja035", "kind": "ja_kanji", "input": "新規顧客対応の件、至急検討願います。", "label": "ja", "ref": "Regarding how to handle the new client, please look into it urgently."}
+{"id": "tja036", "kind": "ja_kanji", "input": "契約書最終確認後、署名予定。", "label": "ja", "ref": "We plan to sign after a final check of the contract."}
+{"id": "tja037", "kind": "ja_kanji", "input": "経費精算期限は月末厳守。", "label": "ja", "ref": "The deadline for expense claims is the end of the month, strictly."}
+{"id": "tja038", "kind": "ja_kanji", "input": "先方担当者変更の為、再度日程調整が必要です。", "label": "ja", "ref": "Because their contact person has changed, we need to reschedule again."}
+{"id": "tja039", "kind": "ja_kanji", "input": "社内規定改定に伴い、申請手続一部変更。", "label": "ja", "ref": "With the revision of the internal rules, part of the application procedure has changed."}
+{"id": "tja040", "kind": "ja_term", "input": "iPhoneで撮った写真送るね。", "label": "ja", "ref": "I'll send you the photos I took with my iPhone."}
+{"id": "tja041", "kind": "ja_term", "input": "Slackで共有しておきました。", "label": "ja", "ref": "I've shared it on Slack."}
+{"id": "tja042", "kind": "ja_term", "input": "午後のZoomのリンク、送ってもらえますか？", "label": "ja", "ref": "Could you send me the link for the afternoon Zoom?"}
+{"id": "tja043", "kind": "ja_term", "input": "このPR、レビューお願いします。", "label": "ja", "ref": "Please review this PR."}
+{"id": "tja044", "kind": "ja_term", "input": "Googleドキュメントにコメント残しておきました。", "label": "ja", "ref": "I left comments in the Google Doc."}
+{"id": "tja045", "kind": "ja_term", "input": "MacBook Proのバッテリーがすぐ切れる。", "label": "ja", "ref": "The MacBook Pro's battery runs out quickly."}
+{"id": "tja046", "kind": "ja_term", "input": "来週ニューヨーク行くんだけど、Uberって使える？", "label": "ja", "ref": "I'm going to New York next week, can I use Uber there?"}
+{"id": "tja047", "kind": "ja_term", "input": "Emilyさんに確認してもらえますか？", "label": "ja", "ref": "Could you check with Emily?"}
+{"id": "tja048", "kind": "ja_term", "input": "Q3のKPI、まだ共有されてないよね？", "label": "ja", "ref": "The Q3 KPIs haven't been shared yet, have they?"}
+{"id": "tja049", "kind": "ja_term", "input": "Amazonで頼んだやつ、今日届くって。", "label": "ja", "ref": "The thing I ordered on Amazon is supposed to arrive today."}
+{"id": "tja050", "kind": "ja_term", "input": "Excelのファイル、Teamsに上げといて。", "label": "ja", "ref": "Upload the Excel file to Teams."}
+{"id": "tja051", "kind": "ja_term", "input": "Davidさんのオフィス、Starbucksの隣だよね？", "label": "ja", "ref": "David's office is next to Starbucks, right?"}
+{"id": "tja052", "kind": "en", "input": "I'll be working from home tomorrow.", "label": "en", "ref": "明日は在宅勤務します。"}
+{"id": "tja053", "kind": "en", "input": "Can you send me the slides before the meeting?", "label": "en", "ref": "会議の前にスライドを送ってもらえますか？"}
+{"id": "tja054", "kind": "en", "input": "Sorry, I missed your message.", "label": "en", "ref": "すみません、メッセージを見逃していました。"}
+{"id": "tja055", "kind": "en", "input": "Let's grab lunch next week.", "label": "en", "ref": "来週ランチに行きましょう。"}
+{"id": "tja056", "kind": "en", "input": "The printer on the second floor is broken again.", "label": "en", "ref": "2階のプリンターがまた壊れています。"}
+{"id": "tja057", "kind": "en", "input": "I think we should wait until the client replies.", "label": "en", "ref": "クライアントから返事が来るまで待ったほうがいいと思います。"}
+{"id": "tja058", "kind": "en", "input": "Hey, are you still at the office?", "label": "en", "ref": "ねえ、まだ会社にいる？"}
+{"id": "tja059", "kind": "en", "input": "Please don't forget to bring your passport.", "label": "en", "ref": "パスポートを持ってくるのを忘れないでください。"}
+{"id": "tja060", "kind": "en_name", "input": "Send the file to 田中さん.", "label": "en", "ref": "ファイルを田中さんに送ってください。", "ref_en": "Send the file to Tanaka-san."}
+{"id": "tja061", "kind": "en_name", "input": "Let's meet in front of 渋谷 station at seven.", "label": "en", "ref": "7時に渋谷駅の前で会いましょう。", "ref_en": "Let's meet in front of Shibuya Station at seven."}
+{"id": "tja062", "kind": "en_name", "input": "I'm flying to Osaka next Tuesday.", "label": "en", "ref": "来週の火曜日に飛行機で大阪に行きます。"}
+{"id": "tja063", "kind": "en_name", "input": "Did 佐藤部長 approve the budget?", "label": "en", "ref": "佐藤部長は予算を承認しましたか？", "ref_en": "Did department head Sato approve the budget?"}
+{"id": "tja064", "kind": "en_name", "input": "We had dinner at a ramen shop in Shinjuku.", "label": "en", "ref": "新宿のラーメン屋で夕食を食べました。"}
+{"id": "tja065", "kind": "en_name", "input": "Please ask Suzuki-san to call me back.", "label": "en", "ref": "鈴木さんに折り返し電話をくれるよう伝えてください。"}
+{"id": "tja066", "kind": "en_name", "input": "My friend works at Toyota in Nagoya.", "label": "en", "ref": "友達は名古屋のトヨタで働いています。"}
+{"id": "tja067", "kind": "en_name", "input": "Thank you, 山本先生.", "label": "en", "ref": "ありがとうございます、山本先生。", "ref_en": "Thank you, Yamamoto-sensei."}
+{"id": "tja068", "kind": "en_name", "input": "The new office is near 品川.", "label": "en", "ref": "新しいオフィスは品川の近くです。", "ref_en": "The new office is near Shinagawa."}
+{"id": "tja069", "kind": "en_name", "input": "We should try the 抹茶 latte at that café in Kyoto.", "label": "en", "ref": "京都のあのカフェで抹茶ラテを飲んでみましょう。", "ref_en": "We should try the matcha latte at that café in Kyoto."}
+{"id": "tja070", "kind": "short", "input": "はい", "label": "ja", "ref": "Yes"}
+{"id": "tja071", "kind": "short", "input": "はい。", "label": "ja", "ref": "Yes."}
+{"id": "tja072", "kind": "short", "input": "うん", "label": "ja", "ref": "Yeah"}
+{"id": "tja073", "kind": "short", "input": "そうですね", "label": "ja", "ref": "That's right"}
+{"id": "tja074", "kind": "short", "input": "そうですね。", "label": "ja", "ref": "That's right."}
+{"id": "tja075", "kind": "short", "input": "なるほど。", "label": "ja", "ref": "I see."}
+{"id": "tja076", "kind": "short", "input": "了解です。", "label": "ja", "ref": "Got it."}
+{"id": "tja077", "kind": "short", "input": "承知しました。", "label": "ja", "ref": "Understood."}
+{"id": "tja078", "kind": "short", "input": "ありがとうございます！", "label": "ja", "ref": "Thank you!"}
+{"id": "tja079", "kind": "short", "input": "OK", "label": "en", "ref": "わかりました"}
+{"id": "tja080", "kind": "short", "input": "Sure.", "label": "en", "ref": "いいですよ。"}
+{"id": "tja081", "kind": "short", "input": "Thanks!", "label": "en", "ref": "ありがとう！"}
+{"id": "tja082", "kind": "number", "input": "123", "label": "none", "ref": "123"}
+{"id": "tja083", "kind": "number", "input": "090-1234-5678", "label": "none", "ref": "090-1234-5678"}
+{"id": "tja084", "kind": "number", "input": "14:30", "label": "none", "ref": "14:30"}
+{"id": "tja085", "kind": "number", "input": "50%", "label": "none", "ref": "50%"}
+{"id": "tja086", "kind": "number", "input": "2026年", "label": "ja", "ref": "2026"}
+{"id": "tja087", "kind": "matrix", "input": "Sorryね、ちょっと遅れる。", "label": "ja", "ref": "Sorry, I'll be a little late."}
+{"id": "tja088", "kind": "matrix", "input": "それはgood ideaだと思う。", "label": "ja", "ref": "I think that's a good idea."}
+{"id": "tja089", "kind": "matrix", "input": "Can you これ見てもらえる？", "label": "either", "ref": "Can you take a look at this?"}
+{"id": "tja090", "kind": "matrix", "input": "Thank you、助かりました。", "label": "ja", "ref": "Thank you, that really helped."}
+{"id": "tja091", "kind": "matrix", "input": "明日のmeeting、onlineでもいい？", "label": "ja", "ref": "Is it OK if tomorrow's meeting is online?"}
+{"id": "tja092", "kind": "matrix", "input": "I'll send it 明日の朝。", "label": "en", "ref": "明日の朝送ります。", "ref_en": "I'll send it tomorrow morning."}
+{"id": "tja093", "kind": "matrix", "input": "Please 確認してください。", "label": "either", "ref": "Please check it."}
+{"id": "tja094", "kind": "matrix", "input": "I think これでいいと思う。", "label": "either", "ref": "I think this is fine."}
+{"id": "tja095", "kind": "en_num", "input": "The meeting is on March 15 at 2:30 PM.", "label": "en", "ref": "会議は3月15日の午後2時30分からです。"}
+{"id": "tja096", "kind": "en_num", "input": "It costs $45.99 plus tax.", "label": "en", "ref": "税別で45.99ドルです。"}
+{"id": "tja097", "kind": "en_num", "input": "Our budget for Q3 is 50K.", "label": "en", "ref": "第3四半期の予算は5万です。"}
+{"id": "tja098", "kind": "en_num", "input": "The train leaves at 6:45 tomorrow morning.", "label": "en", "ref": "電車は明日の朝6時45分に出発します。"}
+{"id": "tja099", "kind": "en_num", "input": "We raised 3 million dollars last year.", "label": "en", "ref": "去年は300万ドルを調達しました。"}
+{"id": "tja100", "kind": "en_num", "input": "The rent is 120,000 yen a month.", "label": "en", "ref": "家賃は月12万円です。"}
+{"id": "tja101", "kind": "en_num", "input": "About 1.5 billion people use it.", "label": "en", "ref": "約15億人が使っています。"}
+{"id": "tja102", "kind": "en_num", "input": "See you at 8 tonight.", "label": "en", "ref": "今夜8時に会いましょう。"}
+{"id": "tja103", "kind": "en_num", "input": "The conference runs from June 2 to June 5.", "label": "en", "ref": "カンファレンスは6月2日から6月5日までです。"}
+{"id": "tja104", "kind": "en_num", "input": "It's 30 degrees today.", "label": "en", "ref": "今日は30度です。"}
+{"id": "tja105", "kind": "ja_num", "input": "午後三時半に三階の会議室で。", "label": "ja", "ref": "At 3:30 PM in the meeting room on the third floor."}
+{"id": "tja106", "kind": "ja_num", "input": "予算は二十万円くらいです。", "label": "ja", "ref": "The budget is about 200,000 yen."}
+{"id": "tja107", "kind": "ja_num", "input": "十月一日から値上げします。", "label": "ja", "ref": "Prices will go up from October 1."}
+{"id": "tja108", "kind": "ja_num", "input": "家賃は月八万五千円です。", "label": "ja", "ref": "The rent is 85,000 yen a month."}
+{"id": "tja109", "kind": "ja_num", "input": "2026年10月18日に発売予定です。", "label": "ja", "ref": "It's scheduled to go on sale on October 18, 2026."}
+{"id": "tja110", "kind": "ja_num", "input": "明日の朝7時に駅で待ち合わせね。", "label": "ja", "ref": "Let's meet at the station at 7 tomorrow morning."}
+{"id": "tja111", "kind": "ja_num", "input": "参加者は約1500人でした。", "label": "ja", "ref": "There were about 1,500 participants."}
+{"id": "tja112", "kind": "ja_num", "input": "3万5千円でどう？", "label": "ja", "ref": "How about 35,000 yen?"}
+{"id": "tja113", "kind": "ja_num", "input": "締め切りは25日です。", "label": "ja", "ref": "The deadline is the 25th."}
+{"id": "tja114", "kind": "ja_num", "input": "令和8年4月1日から施行されます。", "label": "ja", "ref": "It takes effect on April 1, 2026."}
+{"id": "tja115", "kind": "ja_num", "input": "売上は前年比120%でした。", "label": "ja", "ref": "Sales were 120% of the previous year."}
+{"id": "tja116", "kind": "ja_num", "input": "1.5億円の赤字です。", "label": "ja", "ref": "It's a loss of 150 million yen."}
+{"id": "tja117", "kind": "colon", "input": "お知らせ：明日は休館日です。", "label": "ja", "ref": "Notice: we're closed tomorrow."}
+{"id": "tja118", "kind": "colon", "input": "注意：会議は四時に変更になりました。", "label": "ja", "ref": "Note: the meeting has been moved to 4 o'clock."}
+{"id": "tja119", "kind": "colon", "input": "部長から一言：お疲れさまでした。", "label": "ja", "ref": "A word from the manager: thank you for your hard work."}
+{"id": "tja120", "kind": "colon", "input": "彼の返事：明日なら大丈夫とのことです。", "label": "ja", "ref": "His reply: he says tomorrow works."}
+{"id": "tja121", "kind": "colon", "input": "Quick update: the build passed.", "label": "en", "ref": "簡単な報告です：ビルドが通りました。"}
+{"id": "tja122", "kind": "colon", "input": "The sign says: no smoking.", "label": "en", "ref": "看板にはこう書いてあります：禁煙。"}
+{"id": "tja123", "kind": "colon", "input": "Agenda: budget, hiring, and the office move.", "label": "en", "ref": "議題：予算、採用、オフィスの移転。"}
+{"id": "tja124", "kind": "long", "input": "お世話になっております。先日ご相談いただいた新しい予約システムの件で、スケジュールについてご連絡いたします。当初は十一月末の公開を予定しておりましたが、決済サービスとの連携部分で追加の確認が必要になり、二週間ほど後ろ倒しにさせていただきたいと考えております。具体的には、十二月八日の週にテスト環境をご用意し、御社で操作を確認していただいたうえで、十二月十五日の公開を目指します。費用につきましては、今回の延長分を追加でご請求することはございませんので、ご安心ください。また、前回の打ち合わせでご要望のあった、管理画面からキャンセル待ちの一覧を出力する機能ですが、こちらは公開後の改修として、年明けに対応させていただければと思います。見積もりは来週中にお送りいたします。ご不明な点がございましたら、私宛てにメールか、お電話でご連絡ください。お手数をおかけしますが、ご検討のほどよろしくお願いいたします。", "label": "ja", "ref": ""}
+{"id": "tja125", "kind": "long", "input": "えっと、今週の土曜日のバーベキューなんだけど、場所が河川敷じゃなくてKenの家の庭になったから。駅からちょっと歩くけど、Googleマップで場所送っとくね。肉はKenのお兄さんがCostcoでまとめて買ってくれるって。飲み物は各自で持ってきてほしいみたい。あと、雨だったら中止だから、金曜の夜にLINEで連絡するね。じゃあね。", "label": "ja", "ref": ""}
+{"id": "tja126", "kind": "long", "input": "Hi everyone, here's a quick summary of where we are with the office move. The new space in Shinagawa will be ready on November 10, and the movers are booked for the weekend of the 15th. Please pack your desk into the boxes by Thursday afternoon and label each box with your name and team. IT will disconnect the monitors and docking stations on Friday, so plan to work from home that day. Parking at the new building is limited, so if you need a spot, send your request to the facilities team by the end of this week. We'll share the new seating chart on Monday. Thanks for your patience.", "label": "en", "ref": ""}
+{"id": "tja127", "kind": "long", "input": "今日の定例会議の内容をまとめておきます。まず売上ですが、九月は前年同月比で八パーセント増えて、およそ三千二百万円でした。特にオンラインの注文が伸びていて、全体の四割を超えています。一方で、店舗のほうは来客数が少し減っていて、とくに平日の午後が弱いという話がありました。これについては、平日限定のセットメニューを試してみる案が出ています。次に、新しい物流センターの件です。千葉の倉庫は契約が済んで、来年の二月から稼働する予定です。これで配送にかかる日数が平均で一日短くなる見込みです。ただし、立ち上げの時期は人手が足りなくなりそうなので、派遣スタッフを二十人ほど追加で手配する方向で調整しています。それから採用についてです。エンジニアの中途採用は今のところ三人に内定が出ていて、あと二人を年内に決めたいと考えています。面接官が足りていないので、各チームから一人ずつ協力をお願いすることになりました。あわせて、新しく入る人のために、パソコンの手配と社内アカウントの準備を情報システム部に早めに依頼しておいてください。それから、来月から会議室の予約方法が変わります。これまでの共有カレンダーではなく、総務が用意する新しい予約フォームから申し込む形になるそうです。最後に、年末の繁忙期に向けて、十二月の休暇の申請は今月中に出してほしいとのことでした。申請が重なった場合は、先に出した人を優先するそうです。次回の会議は十一月四日の午前十時からです。資料は前日までに共有フォルダに入れておいてください。よろしくお願いします。", "label": "ja", "ref": ""}
+{"id": "tja128", "kind": "long", "input": "お世話になっております。先日ご相談いただいた新しい予約システムの件で、スケジュールについてご連絡いたします。当初は十一月末の公開を予定しておりましたが、決済サービスとの連携部分で追加の確認が必要になり、二週間ほど後ろ倒しにさせていただきたいと考えております。具体的には、十二月八日の週にテスト環境をご用", "label": "ja", "ref": ""}
+{"id": "tja129", "kind": "long", "input": "Hi everyone, here's a quick summary of where we are with the office move. The new space in Shinagawa will be ready on November 10, and the movers are booked for the weekend of the 15th. Please pack your desk into the bo", "label": "en", "ref": ""}
+{"id": "tja130", "kind": "long", "input": "今日のスタンドアップです。昨日はcheckoutのバグを直して、PRを出しました。レビューはSarahさんにお願いしています。今日はダッシュボードのグラフを新しいライブラリに置き換える作業をやります。ブロッカーとしては、ステージング環境のDBがまだ古いままなので、マイグレーションを流してもらえると助かります。あと、金曜のリリースは予定通りで大丈夫そうです。", "label": "ja", "ref": ""}

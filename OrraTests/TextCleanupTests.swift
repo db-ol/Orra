@@ -43,7 +43,13 @@ struct TextCleanupTests {
         private(set) var mostRunning = 0
         private(set) var isLoaded = false
         /// The targets whose translation prompts were read ahead, in order.
-        private(set) var prepared: [TranslationTarget] = []
+        var prepared: [TranslationTarget] {
+            preparedRoutes.map(\.target)
+        }
+        /// The routes whose translation prompts were read ahead, in order.
+        private(set) var preparedRoutes: [TranslationRoute] = []
+        /// The routes each call to keep the translation prompts named, in order.
+        private(set) var kept: [Set<TranslationRoute>] = []
         private var held: [CheckedContinuation<Void, Never>] = []
 
         var engine: CleanupEngine {
@@ -52,12 +58,17 @@ struct TextCleanupTests {
                 unload: { [self] in await unload() },
                 complete: { _ in #"{"cleaned": ""}"# },
                 translate: { _, _ in #"{"cleaned": "", "translation": ""}"# },
-                prepareTranslation: { [self] target in await prepare(target) }
+                prepareTranslation: { [self] route in await prepare(route) },
+                keepTranslationPrefixes: { [self] routes in await keep(routes) }
             )
         }
 
-        private func prepare(_ target: TranslationTarget) {
-            prepared.append(target)
+        private func prepare(_ route: TranslationRoute) {
+            preparedRoutes.append(route)
+        }
+
+        private func keep(_ routes: Set<TranslationRoute>) {
+            kept.append(routes)
         }
 
         private func load() async throws {
@@ -396,5 +407,81 @@ struct TextCleanupTests {
         #expect(await cleanup.model.waitUntilLoaded() == false)
         #expect(TextCleanup.preparedTargets(.automatic) == [.english, .chinese])
         #expect(TextCleanup.preparedTargets(.english) == [.english])
+    }
+
+    /// The prompts read ahead are those of the dictation language: both of its routes for
+    /// Automatic, and the route of a fixed direction as it acts for that language. For
+    /// Chinese they are the targets they always were.
+    @Test func thePromptsReadAheadAreThoseOfTheDictationLanguage() {
+        let japanese = [TranslationRoute(.japanese, into: .english), TranslationRoute(.japanese, into: .japanese)]
+        #expect(TextCleanup.preparedRoutes(.automatic, .japanese) == japanese)
+        #expect(TextCleanup.preparedRoutes(.japanese, .japanese) == [TranslationRoute(.japanese, into: .japanese)])
+        #expect(TextCleanup.preparedRoutes(.spanish, .spanish) == [TranslationRoute(.spanish, into: .spanish)])
+        #expect(TextCleanup.preparedRoutes(.english, .spanish) == [TranslationRoute(.spanish, into: .english)])
+        // A choice saved for Chinese acts as Automatic for Japanese, and the other way round.
+        #expect(TextCleanup.preparedRoutes(.chinese, .japanese) == japanese)
+        #expect(TextCleanup.preparedRoutes(.japanese, .chinese) == TextCleanup.preparedRoutes(.automatic, .chinese))
+        for direction in TranslationDirection.choices(for: .chinese) {
+            #expect(TextCleanup.preparedRoutes(direction, .chinese).map(\.target) == TextCleanup.preparedTargets(direction))
+        }
+        for language in DictationLanguage.allCases {
+            for direction in TranslationDirection.allCases {
+                #expect((1...TranslationPrefixSlots.limit).contains(TextCleanup.preparedRoutes(direction, language).count))
+            }
+        }
+    }
+
+    /// A change of dictation language keeps only the prompts of the new language and reads
+    /// them ahead, while translation is on and the model is loaded. Otherwise the next
+    /// load reads them.
+    @Test func aChangeOfLanguageReadsItsPromptsAhead() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = FakeEngine()
+        let cleanup = makeCleanup(translationIsOn: true, fetch: FileFetch { _, _, _, _, _, _ in }, engine: fake.engine)
+        await cleanup.start()
+        await cleanup.waitForLoad()
+        let chinese = DictationLanguage.chinese.translationTargets.map(TranslationRoute.chinese)
+        #expect(fake.preparedRoutes == chinese)
+        #expect(fake.kept == [Set(chinese)])
+        cleanup.setDictationLanguage(.spanish)
+        #expect(cleanup.dictationLanguage == .spanish)
+        await cleanup.waitForLoad()
+        let spanish = [TranslationRoute(.spanish, into: .english), TranslationRoute(.spanish, into: .spanish)]
+        #expect(fake.kept.last == Set(spanish))
+        #expect(Array(fake.preparedRoutes.dropFirst(2)) == spanish)
+        // The same language reads nothing more.
+        cleanup.setDictationLanguage(.spanish)
+        await cleanup.waitForLoad()
+        #expect(fake.preparedRoutes.count == 4)
+        // A fixed direction reads its route only.
+        cleanup.setTranslationDirection(.spanish)
+        await cleanup.waitForLoad()
+        #expect(fake.preparedRoutes.last == TranslationRoute(.spanish, into: .spanish))
+        // With translation off, nothing is read until translation is on again.
+        cleanup.turnOffTranslation()
+        await cleanup.waitForLoad()
+        let count = fake.preparedRoutes.count
+        cleanup.setDictationLanguage(.japanese)
+        await cleanup.waitForLoad()
+        #expect(fake.preparedRoutes.count == count)
+    }
+
+    /// A direction saved for Chinese reads the prompts of Automatic for Spanish, and its own
+    /// again when the user goes back to Chinese.
+    @Test func aChoiceOfAnotherLanguageReadsTheAutomaticPrompts() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = FakeEngine()
+        let cleanup = makeCleanup(translationIsOn: true, fetch: FileFetch { _, _, _, _, _, _ in }, engine: fake.engine)
+        cleanup.setTranslationDirection(.chinese)
+        cleanup.setDictationLanguage(.spanish)
+        await cleanup.start()
+        await cleanup.waitForLoad()
+        #expect(fake.preparedRoutes == [TranslationRoute(.spanish, into: .english), TranslationRoute(.spanish, into: .spanish)])
+        #expect(cleanup.translationDirection == .chinese)
+        cleanup.setDictationLanguage(.chinese)
+        await cleanup.waitForLoad()
+        #expect(fake.preparedRoutes.last == .chinese(.chinese))
     }
 }

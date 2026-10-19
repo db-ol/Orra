@@ -2209,7 +2209,8 @@ struct PushToTalkControllerTests {
         /// What the model closure reads and writes off the main actor.
         final class Shared: Sendable {
             let answer: Mutex<String>
-            let received = Mutex<[String]>([])
+            /// The text and the route of each translation.
+            let received = Mutex<[(text: String, route: TranslationRoute)]>([])
             let fails = Mutex(false)
 
             init(answer: String) {
@@ -2229,16 +2230,21 @@ struct PushToTalkControllerTests {
             TranslationModel(
                 isReady: { self.ready },
                 direction: { self.direction },
-                complete: { [shared] text, target in
-                    shared.received.withLock { $0.append("\(target.rawValue) \(text)") }
+                complete: { [shared] text, route in
+                    shared.received.withLock { $0.append((text, route)) }
                     if shared.fails.withLock({ $0 }) { throw TestError() }
                     return shared.answer.withLock { $0 }
                 }
             )
         }
 
+        /// Each translation as its target and its text, such as "en 我们开会。".
         var received: [String] {
-            shared.received.withLock { $0 }
+            shared.received.withLock { $0 }.map { "\($0.route.target.rawValue) \($0.text)" }
+        }
+
+        var routes: [TranslationRoute] {
+            shared.received.withLock { $0 }.map(\.route)
         }
 
         var calls: Int {
@@ -2321,16 +2327,68 @@ struct PushToTalkControllerTests {
     /// never stands in for the text before translation, since the cleanup checks know
     /// Chinese and English only.
     @Test func spanishIsTranslatedWithoutItsCleanup() async throws {
-        let translation = FakeTranslation(answer: #"{"cleaned": "Mañana tenemos una reunión.", "translation": "不，明天我们和销售团队开会。"}"#)
+        let translation = FakeTranslation(answer: #"{"cleaned": "Mañana tenemos una reunión.", "translation": "No, tomorrow we have a meeting with the sales team."}"#)
         let controller = await controller(translation: translation, cleanup: CleanupModel(waitUntilLoaded: { true }, complete: { _ in
             #"{"cleaned": "x"}"#
         }), language: .spanish)
         speech.reply = LanguageGuardTests.spanish
         try await dictate(controller, with: .rightOption)
         #expect(speech.receivedLanguages == [nil])
-        #expect(translation.received == ["zh \(LanguageGuardTests.spanish)"])
-        #expect(inserter.inserted == ["不，明天我们和销售团队开会。"])
+        #expect(translation.received == ["en \(LanguageGuardTests.spanish)"])
+        #expect(translation.routes == [TranslationRoute(.spanish, into: .english)])
+        #expect(inserter.inserted == ["No, tomorrow we have a meeting with the sales team."])
         #expect(controller.originalText == LanguageGuardTests.spanish)
+    }
+
+    /// For a user who dictates in Japanese, kana only Japanese goes into English and
+    /// English into Japanese, each on the route of the pair. Paste Original Text pastes the
+    /// text as heard.
+    @Test func japaneseAndEnglishAreTranslatedBothWays() async throws {
+        let translation = FakeTranslation(answer: #"{"cleaned": "ありがとうございます", "translation": "Thank you very much."}"#)
+        let controller = await controller(translation: translation, language: .japanese)
+        speech.reply = "ありがとうございます"
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.routes == [TranslationRoute(.japanese, into: .english)])
+        #expect(inserter.inserted == ["Thank you very much."])
+        #expect(controller.originalText == "ありがとうございます")
+        translation.shared.answer.withLock { $0 = #"{"cleaned": "Can you send me the file?", "translation": "ファイルを送ってもらえますか？"}"# }
+        speech.reply = "Can you send me the file?"
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.routes.last == TranslationRoute(.japanese, into: .japanese))
+        #expect(inserter.inserted.last == "ファイルを送ってもらえますか？")
+        await controller.pasteOriginal()
+        #expect(inserter.inserted.last == "Can you send me the file?")
+    }
+
+    /// For a user who dictates in Spanish, English goes into Spanish. A direction saved for
+    /// Chinese acts as Automatic, and the cue says so, with the language.
+    @Test func spanishAndEnglishAreTranslatedBothWays() async throws {
+        let translation = FakeTranslation(answer: #"{"cleaned": "Can you send me the report today?", "translation": "¿Me puedes mandar el reporte hoy?"}"#)
+        translation.direction = .chinese
+        let controller = await controller(translation: translation, language: .spanish)
+        let cues = CueRecorder(controller)
+        speech.reply = "Can you send me the report today?"
+        try await dictate(controller, with: .rightOption)
+        #expect(cues.list.first == .listening(translation: TranslationCue(direction: .automatic, language: .spanish)))
+        #expect(translation.routes == [TranslationRoute(.spanish, into: .spanish)])
+        #expect(inserter.inserted == ["¿Me puedes mandar el reporte hoy?"])
+        #expect(controller.notice == nil)
+    }
+
+    /// With the target fixed to Japanese, Japanese text is pasted as heard, quietly, and
+    /// the model does not run.
+    @Test func japaneseIntoJapaneseIsPastedAsHeard() async throws {
+        let translation = FakeTranslation(answer: #"{"cleaned": "明日の会議は10時からです。", "translation": "明日の会議は10時からです。"}"#)
+        translation.direction = .japanese
+        let controller = await controller(translation: translation, language: .japanese)
+        let cues = CueRecorder(controller)
+        speech.reply = "えーと、明日の会議は10時からです。"
+        try await dictate(controller, with: .rightOption)
+        #expect(cues.list.first == .listening(translation: TranslationCue(direction: .japanese, language: .japanese)))
+        #expect(translation.calls == 0)
+        #expect(inserter.inserted == ["えーと、明日の会議は10時からです。"])
+        #expect(controller.notice == nil)
+        #expect(controller.originalText == nil)
     }
 
     /// The talk key never translates, also while translation is on.

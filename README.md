@@ -58,7 +58,7 @@ Optional. A text model on your Mac removes the fillers the rules leave and appli
 
 ### Translation key
 
-Optional. Hold a second key and Orra pastes what you say translated between Chinese and English, with the same model on your Mac. A small 译 badge shows that this dictation will be translated.
+Optional. Hold a second key and Orra pastes what you say translated between English and your dictation language, Chinese, Japanese or Spanish, with the same model on your Mac. A small badge shows that this dictation will be translated: 译 with Chinese, 訳 with Japanese and ⇄ with Spanish.
 
 </td>
 <td width="50%"><img src="docs/images/readme/en/translation.gif" alt="In a chat, Sam asks “When can I see the designs?” Holding the translation key, someone says 我这边周五之前能把设计稿发给你. The capsule shows a 译 badge, and “I can send you the designs before Friday.” appears in the message field." width="100%"></td>

@@ -143,7 +143,8 @@ nonisolated enum LanguageGuard {
     }
 }
 
-private extension Unicode.GeneralCategory {
+extension Unicode.GeneralCategory {
+    /// A letter of any script.
     nonisolated var isLetter: Bool {
         switch self {
         case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter: true

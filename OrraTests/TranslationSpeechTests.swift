@@ -194,14 +194,26 @@ struct TranslationSpeechTests {
     @Test func aTranslationThatCannotBeSpokenIsStillPasted() {
         let ready = makeSpeech()
         ready.setAlsoPastes(false)
-        #expect(!ready.voiceForDictation.alsoPastes())
+        #expect(!ready.voiceForDictation.alsoPastes(.english))
         let noModel = makeSpeech(folders: nil)
         noModel.setAlsoPastes(false)
-        #expect(noModel.voiceForDictation.alsoPastes())
+        #expect(noModel.voiceForDictation.alsoPastes(.english))
         let noDevice = makeSpeech(outputs: [Self.speakers])
         noDevice.setAlsoPastes(false)
-        #expect(noDevice.voiceForDictation.alsoPastes())
-        #expect(makeSpeech().voiceForDictation.alsoPastes())
+        #expect(noDevice.voiceForDictation.alsoPastes(.english))
+        #expect(makeSpeech().voiceForDictation.alsoPastes(.english))
+        // CosyVoice3 does not speak Japanese, so a Japanese translation is pasted.
+        let cosyVoice = TranslationSpeech(
+            engines: .only(synthesizer, as: .cosyVoice),
+            playback: playback,
+            outputs: { [Self.orraMicrophone] },
+            folders: { Self.folders },
+            settings: TranslationSpeech.Settings(isOn: true, alsoPastes: false, output: nil)
+        )
+        #expect(cosyVoice.voiceForDictation.alsoPastes(.japanese))
+        #expect(!cosyVoice.voiceForDictation.alsoPastes(.spanish))
+        #expect(!cosyVoice.voiceForDictation.alsoPastes(.english))
+        #expect(!ready.voiceForDictation.alsoPastes(.japanese))
     }
 
     /// Dictation first: nothing is synthesized while the user dictates.
@@ -426,7 +438,7 @@ struct TranslationSpeechTests {
             }
         }
         let speech = makeSpeech()
-        #expect(speech.voiceForDictation.alsoPastes())
+        #expect(speech.voiceForDictation.alsoPastes(.english))
         speech.speak("好的，我们开始吧。今天先看一下上周的进度。", in: .chinese)
         await speech.waitUntilDone()
         #expect(spoken == ["zh 好的，我们开始吧。", "zh 好的，我们开始吧。", "zh 今天先看一下上周的进度。"])
@@ -434,7 +446,7 @@ struct TranslationSpeechTests {
         #expect(playback.calls == ["start Orra Microphone", "play \(played)", "finish", "stop"])
         #expect(speech.problem == "The voice model failed twice on a sentence, so Orra skipped it.")
         #expect(speech.state == .idle)
-        #expect(speech.voiceForDictation.alsoPastes())
+        #expect(speech.voiceForDictation.alsoPastes(.english))
     }
 
     /// The word check: a whole piece whose length passes is written down by the speech
@@ -715,6 +727,32 @@ struct TranslationSpeechTests {
         await speech.waitUntilDone()
         #expect(calls.withLock { $0 } == 0)
         #expect(playback.calls == ["start Orra Microphone", "play 240", "play 480", "finish", "stop"])
+    }
+
+    /// CosyVoice3 does not speak Japanese, so a Japanese translation is not spoken and
+    /// Settings says why. Spanish is spoken, and Qwen3-TTS speaks Japanese.
+    @Test func cosyVoiceDoesNotSpeakJapanese() async {
+        let speech = TranslationSpeech(
+            engines: .only(synthesizer, as: .cosyVoice),
+            playback: playback,
+            outputs: { [Self.orraMicrophone] },
+            folders: { Self.folders },
+            settings: TranslationSpeech.Settings(isOn: true, alsoPastes: true, output: nil),
+            dictationPoll: .milliseconds(1)
+        )
+        speech.speak("明日は雨です。", in: .japanese)
+        await speech.waitUntilDone()
+        #expect(spoken.isEmpty)
+        #expect(playback.calls.isEmpty)
+        #expect(speech.problem == "CosyVoice3 does not speak Japanese, so the translation was not spoken. Qwen3-TTS does.")
+        speech.speak("Mañana llueve.", in: .spanish)
+        await speech.waitUntilDone()
+        #expect(spoken == ["es Mañana llueve."])
+        #expect(VoiceEngineKind.qwen3.speaks(.japanese))
+        #expect(!VoiceEngineKind.cosyVoice.speaks(.japanese))
+        for target in TranslationTarget.allCases where target != .japanese {
+            #expect(VoiceEngineKind.cosyVoice.speaks(target))
+        }
     }
 
     /// The switch is saved, on by default.

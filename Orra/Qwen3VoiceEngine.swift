@@ -115,9 +115,9 @@ actor Qwen3VoiceEngine: SpeechSynthesizer {
     private func run(_ text: String, language: TranslationTarget, voice: VoiceSample?, continuation: AsyncThrowingStream<SpokenAudio, any Error>.Continuation) async throws {
         await settle()
         guard let model, let encoder else { throw TranscriptionError.modelMissing }
-        // The language tags Qwen3-TTS takes are the English names in lowercase, "english"
-        // and "chinese".
-        let name = language.logName.lowercased()
+        // The language tags Qwen3-TTS takes are the English names in lowercase, such as
+        // "english", "chinese", "japanese" and "spanish".
+        let name = language.voiceTag
         // See VoiceCacheLimit.
         VoiceCacheLimit.begin()
         defer { VoiceCacheLimit.end() }

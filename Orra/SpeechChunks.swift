@@ -23,9 +23,9 @@ nonisolated enum SpeechChunks {
         return joiningShort(pieces)
     }
 
-    /// Ends of a sentence in Chinese and English text. A period counts only before white
-    /// space, a closing quote or the end, so 3.5 stays whole, and not after an abbreviation
-    /// such as Dr. or e.g.
+    /// Ends of a sentence in Chinese, Japanese, English and Spanish text. A period counts
+    /// only before white space, a closing quote or the end, so 3.5 stays whole, and not
+    /// after an abbreviation such as Dr., Sra. or e.g.
     private static let strongEnds: Set<Character> = ["。", "！", "？", "!", "?", "；", ";", "\n", "…"]
     private static let weakEnds: Set<Character> = ["，", ",", "、", "：", ":"]
     /// Closing quotes and brackets, which stay with the sentence they end.
@@ -57,7 +57,7 @@ nonisolated enum SpeechChunks {
     }
 
     /// Titles that come before a name and end with a period.
-    private static let titles: Set<String> = ["Mr", "Mrs", "Ms", "Dr", "Prof", "St", "vs"]
+    private static let titles: Set<String> = ["Mr", "Mrs", "Ms", "Dr", "Prof", "St", "vs", "Sr", "Sra", "Srta", "Dra", "Lic", "Ing", "Ud", "Uds"]
 
     /// Whether the word at the end of `text`, just before a period, is an abbreviation:
     /// a title such as Dr, or letters with periods between them such as e.g, U.S or p.m.
