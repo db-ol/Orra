@@ -91,12 +91,13 @@ final class DockIcon {
 
     /// Opens the settings window from AppKit, such as for a click on the Dock icon or at
     /// launch. Uses the Settings… item in the app menu, since only SwiftUI views can call
-    /// openWindow.
-    static func openSettings() {
+    /// openWindow. Returns false when the item is not there.
+    @discardableResult static func openSettings() -> Bool {
         NSApplication.shared.activate()
         guard let appMenu = NSApplication.shared.mainMenu?.items.first?.submenu,
               let index = appMenu.items.firstIndex(where: { $0.keyEquivalent == "," && $0.keyEquivalentModifierMask == .command })
-        else { return }
+        else { return false }
         appMenu.performActionForItem(at: index)
+        return true
     }
 }

@@ -37,15 +37,27 @@ nonisolated enum LaunchWindow: Equatable, Sendable {
             || event.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
     }
 
-    /// Opens Settings at launch, the way a click on the Dock icon does. It comes to the
-    /// front even when macOS declines to make Orra active, as the welcome window does, for
-    /// example when the user clicked another app while Orra was starting.
+    /// Opens Settings at launch, and for a click on the Dock icon or a second open while
+    /// Orra runs. It comes to the front even when macOS declines to make Orra active, as
+    /// the welcome window does, for example when the user clicked another app while Orra
+    /// was starting.
     @MainActor static func openSettings(dockIcon: DockIcon) {
         dockIcon.willShowWindow()
-        DockIcon.openSettings()
-        // SwiftUI may add the window after the menu item's action returns.
-        DispatchQueue.main.async {
-            NSApplication.shared.windows.first(where: SettingsWindow.isSettings)?.orderFrontRegardless()
+        guard DockIcon.openSettings() else {
+            // No window opens, so the Dock icon follows the choice again.
+            dockIcon.update()
+            return
+        }
+        // SwiftUI may add the window after the menu item's action returns, so this looks
+        // for it for up to a second.
+        Task {
+            for _ in 0..<10 {
+                if let window = NSApplication.shared.windows.first(where: { SettingsWindow.isSettings($0) && $0.isVisible }) {
+                    window.orderFrontRegardless()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
         }
     }
 }

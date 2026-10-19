@@ -257,7 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if SetupChecklist(pushToTalk, models).needsUser {
             welcome.show()
         } else {
-            DockIcon.openSettings()
+            LaunchWindow.openSettings(dockIcon: dockIcon)
         }
         return false
     }
