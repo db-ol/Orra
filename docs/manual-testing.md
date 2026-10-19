@@ -2231,8 +2231,8 @@ Unloading the cleanup model when idle, added on 2026-10-12 and for translation o
 - [ ] Paste Original Text after an unload still pastes the text from before the cleanup.
 - [ ] Turn cleanup off and on again during the unload or the load after it: cleanup works
   on the next dictation.
-- [ ] With translation on and cleanup off, the model is unloaded after a minute too. Then
-  hold the translation key and say "我们下周二开会": the rewrite log shows "Loading the
+- [ ] With translation on and cleanup off, the model is unloaded after a minute too. Then,
+  with Translation key mode set to Hold, hold the translation key and say "我们下周二开会": the rewrite log shows "Loading the
   cleanup model again for a dictation" and "Prefix cache for translation into English"
   again, and the translation is pasted. A very short hold is translated, or pasted untranslated with the
   notice that the local model is not ready when it is not loaded within 3 seconds.
@@ -2352,7 +2352,8 @@ before, see below. For the checks here that hold right Option, pick Hold under T
 key mode first:
 
 - [ ] Settings, Translation shows the Translation (翻译) switch, off, and Translate into
-  (翻译成) right under it with Automatic, English and Chinese as choices and the explanation
+  (翻译成) below it, after the Translation key row (since 2026-10-19), with Automatic,
+  English and Chinese as choices and the explanation
   of the chosen one, dimmed while translation is off. The footer says what the model
   needs. Under Keys on General the translation key field is dimmed with "Turn on
   Translation on the Translation page to use this key." until translation is on. Pointing
@@ -2361,7 +2362,7 @@ key mode first:
   keys can be the translation key, that the two keys swap, that a press with another key
   is a shortcut and records nothing (a press counted only after a moment until
   2026-10-19), and since 2026-10-16 that fn and the right hand keys start recording when
-  pressed. Turning it on without the model asks "Download the model for translation?", and
+  pressed (left out in Double press since 2026-10-19). Turning it on without the model asks "Download the model for translation?", and
   Cancel leaves it off. With cleanup on and the model in place it turns on at once, and
   with cleanup on and the model downloading it turns on without asking.
 - [ ] While translation is on and the model is not ready, a row under Translate into,
@@ -2556,8 +2557,8 @@ when nothing is saved there. For a user who never turned Translation on, quit Or
   on General shows Press to start and stop, and after a restart it still does.
 - [ ] Settings, Translation shows "Orra pastes what you said in another language." under
   the Translation switch, and right under it a Translation key row with "Press right
-  Option to translate, and again to finish" and Change…. The row is dimmed while
-  Translation is off. Change… turns the window to General scrolled to Keys. With the key
+  Option to translate, and again to finish" and Change…. Change… is dimmed while
+  Translation is off, and the row's text is not. Change… turns the window to General scrolled to Keys. With the key
   in Hold the row says "Hold right Option to translate", and with another key it names
   that key.
 - [ ] The Orra menu says "Press right Option to translate, and again to finish" while
@@ -2573,17 +2574,21 @@ when nothing is saved there. For a user who never turned Translation on, quit Or
 - [ ] Option E then E types é and records nothing, Option Command Escape opens Force
   Quit, and neither plays a sound.
 - [ ] Pointing at the translation key field shows "Use the translation key on its own…"
-  with no line about double pressing. With the key in Hold, the line "With Double press
-  in Hold to keep recording on, press the translation key twice quickly…" follows.
+  and "As fn or a right Control, Option or Command key, the translation key starts
+  recording when you press it.", with no line about double pressing. With the key in
+  Hold, the line "With Double press in Hold to keep recording on, press the translation
+  key twice quickly…" follows. In Double press, the line about fn and the right hand keys
+  is left out too.
 - [ ] An update from 0.5.0 with Translation never turned on (`defaults read
   io.github.db-ol.Orra translatesWithTranslationKey` finds nothing) and no translation
   key mode saved: the key is in Press to start and stop, and `translationKeyMode` reads
   toggle.
 - [ ] An update with Translation turned on before, on or off now (`defaults read
   io.github.db-ol.Orra translatesWithTranslationKey` prints 1 or 0), and no translation
-  key mode saved: the key stays in Hold, holding it translates as before, a double press
-  still starts hands free, Keys shows Double press in Hold to keep recording, and
-  `translationKeyMode` reads hold.
+  key mode saved: `translationKeyMode` reads hold, and Translation key mode under Keys
+  shows Hold. With 0, Translation is off and the key is not watched, so turn Translation
+  on first. Then holding the key translates as before, a double press still starts hands
+  free, and Keys shows Double press in Hold to keep recording.
 - [ ] An update with a translation key mode saved, such as Double press, keeps that mode.
 - [ ] In 简体中文, 日本語 and Español the Translation page, the menu line, the welcome line and
   the help read well, with nothing cut off.
@@ -2818,7 +2823,9 @@ Capture start, added on 2026-10-16, not verified yet. A key that waits records f
 press, the start sound waits for sound from the microphone, a chosen microphone's unit
 stays set up between holds, the engine is prepared again after each hold, and each hold
 logs one timing line. Speak right at the press for the first checks, a short Chinese
-sentence such as "今天下午开会" works well:
+sentence such as "今天下午开会" works well. The checks that hold right Option need
+Translation key mode set to Hold, since the key starts in Press to start and stop for a
+user who never turned Translation on before 2026-10-19:
 
 - [ ] fn as the talk key: the first character is in the text.
 - [ ] Right Control as the talk key: the first character is in the text.
@@ -2930,7 +2937,8 @@ translations on, both voice downloads in place, and cleanup and translation on:
 - [ ] On any hang, run `sample Orra 5` and keep the output.
 
 Translation into and out of Japanese and Spanish, added on 2026-10-18, not verified in the
-app yet:
+app yet. The checks hold the translation key, so set Translation key mode to Hold first,
+or press the key to start and again to finish where they say hold:
 
 - [ ] With 日本語 + English, Translate into in Settings shows Automatic, English and
   Japanese, with the Japanese explanation, and with Español + English Automatic, English

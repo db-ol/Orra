@@ -296,8 +296,8 @@ user can change. Implemented in `Orra/TalkKey.swift`, `Orra/TalkKeyDetector.swif
   The notes about a press that cannot be the key name the translation key while it is
   recorded. Recording one key stops a recording of the other.
 - The menu's Talk Key submenu shows the translation key with Change Translation Key…,
-  and the menu says "Hold right Option to translate" under the hold hint, while
-  translation is on.
+  and the menu says how to translate in the key's mode, such as "Press right Option to
+  translate, and again to finish", under the talk key's hint, while translation is on.
 - On 2026-10-19 the maintainer chose Press to start and stop as the mode the translation
   key starts in, as a new user's talk key does, for everyone who never turned Translation
   on. `TriggerModePreference.load` tells them apart by `translatesWithTranslationKey`:
