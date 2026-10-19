@@ -1559,23 +1559,21 @@ final class PushToTalkController {
             addNotice(String(localized: "The local model is not ready, so the text was pasted without translation."))
             return nil
         }
-        let direction = cue.direction.effective(for: spoken)
-        let target = spoken == .chinese ? direction.target(for: text) : await Self.translationTarget(of: text, direction: direction, language: spoken)
-        guard let target else { return nil }
+        guard let plan = await cue.direction.plan(for: text, in: spoken) else { return nil }
         guard text.count <= TranslationStep.maximumLength else {
             addNotice(String(localized: "Dictations over \(TranslationStep.maximumLength) characters are pasted without translation."))
             return nil
         }
         // The model is loaded by now, so this does not wait.
         let cleansUp = await cleanup.waitUntilLoaded() && cleansUp
-        let result = await TranslationStep.run(text, into: TranslationRoute(spoken, into: target), cleansUp: cleansUp, complete: translation.complete)
+        let result = await TranslationStep.run(text, into: plan.route, source: plan.source, cleansUp: cleansUp, complete: translation.complete)
         switch result.outcome {
         case .translated, .unchanged:
             break
         case .unreadable, .heldBack, .timedOut, .failed:
             addNotice(String(localized: "This dictation was pasted without translation."))
         }
-        return (result, target)
+        return (result, plan.route.target)
     }
 
     /// Adds a note for the menu and the indicator after those the dictation has already, so
@@ -1583,12 +1581,6 @@ final class PushToTalkController {
     /// translation.
     private func addNotice(_ note: String) {
         notices.append(note)
-    }
-
-    /// Off the main actor, since the Spanish rule may run NLLanguageRecognizer.
-    @concurrent
-    nonisolated private static func translationTarget(of text: String, direction: TranslationDirection, language: DictationLanguage) async -> TranslationTarget? {
-        direction.target(for: text, in: language)
     }
 
     /// Off the main actor, since NLLanguageRecognizer reads the whole text.

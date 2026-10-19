@@ -22,7 +22,8 @@ nonisolated extension TranslationDirection {
     /// (田中さん, 山田様, Emilyさん) does not count, so "Thanks, 山田さん" is English. Nil
     /// without a letter.
     static func japaneseSource(of text: String) -> Source? {
-        let scalars = Array(text.precomposedStringWithCompatibilityMapping.unicodeScalars)
+        let folded = text.precomposedStringWithCompatibilityMapping
+        let scalars = Array(folded.unicodeScalars)
         var han = 0
         var kana = 0
         var latin = 0
@@ -54,7 +55,7 @@ nonisolated extension TranslationDirection {
         guard han + kana + latin + other > 0 else { return nil }
         let japanese = Double(han) + kanaWeight * Double(kana)
         // English function words, and words with an apostrophe inside, such as I'll.
-        let englishFunction = words(String(String.UnicodeScalarView(scalars))).filter { englishFunction.contains($0) || $0.contains("'") || $0.contains("’") }.count
+        let englishFunction = words(folded).filter { englishFunction.contains($0) || $0.contains("'") || $0.contains("’") }.count
         let english = Double(latin) / 5 + Double(2 * englishFunction)
         let others = Double(other)
         if japanese > 0, japanese >= english, japanese >= others {

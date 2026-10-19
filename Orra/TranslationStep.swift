@@ -70,12 +70,11 @@ nonisolated enum TranslationStep {
     /// any script for Japanese and Spanish, kana only Japanese among them, and the rule
     /// above for Chinese.
     static func isWorthTranslating(_ text: String, in language: DictationLanguage) -> Bool {
-        guard language != .chinese else { return isWorthTranslating(text) }
-        return isWorthTranslating(text, source: TranslationDirection.source(of: text, in: language))
+        isWorthTranslating(text, source: TranslationDirection.source(of: text, in: language))
     }
 
-    /// The same for Japanese or Spanish text whose language the caller read already, see
-    /// TranslationDirection.source(of:in:).
+    /// The same for text whose language the caller read already, see
+    /// TranslationDirection.plan(for:in:).
     static func isWorthTranslating(_ text: String, source: TranslationDirection.Source?) -> Bool {
         text.count <= maximumLength && source != nil
     }
@@ -91,20 +90,14 @@ nonisolated enum TranslationStep {
         return answer.translation == text ? .unchanged : .translated
     }
 
-    /// The outcome on a route, the same way. The Chinese routes get the verdict above. On
-    /// the others, for text in the target language already, a translation that only
-    /// repeats the model's cleanup is unchanged too, so the model's cleanup never pastes
-    /// as a translation. Text in the other language keeps a translation that the model also
-    /// wrote into "cleaned", which it sometimes does, and so does English text with words
-    /// of the dictation language, such as "I'll send it 明日の朝。", whose translation
-    /// translates them, see TranslationDirection.holdsWords(of:in:).
-    static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into route: TranslationRoute) -> Outcome {
-        guard route.language != .chinese else { return verdict(on: answer, for: text, into: route.target) }
-        return verdict(on: answer, for: text, into: route, source: TranslationDirection.source(of: text, in: route.language))
-    }
-
-    /// The same for Japanese or Spanish text whose language the caller read already, see
-    /// TranslationDirection.source(of:in:).
+    /// The outcome on a route, the same way, for text whose language `source` the caller
+    /// read, see TranslationDirection.plan(for:in:). The Chinese routes get the verdict
+    /// above. On the others, for text in the target language already, a translation that
+    /// only repeats the model's cleanup is unchanged too, so the model's cleanup never
+    /// pastes as a translation. Text in the other language keeps a translation that the
+    /// model also wrote into "cleaned", which it sometimes does, and so does English text
+    /// with words of the dictation language, such as "I'll send it 明日の朝。", whose
+    /// translation translates them, see TranslationDirection.holdsWords(of:in:).
     static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into route: TranslationRoute, source: TranslationDirection.Source?) -> Outcome {
         guard route.language != .chinese else { return verdict(on: answer, for: text, into: route.target) }
         guard let answer else { return .unreadable }
@@ -144,7 +137,7 @@ nonisolated enum TranslationStep {
     }
 
     /// The same for text whose language the caller read already, see
-    /// TranslationDirection.source(of:in:).
+    /// TranslationDirection.plan(for:in:).
     static func isInItsLanguage(source: TranslationDirection.Source?, on route: TranslationRoute) -> Bool {
         route.language != .chinese && route.target != .english && source == .partner
     }
@@ -152,10 +145,10 @@ nonisolated enum TranslationStep {
     /// The text to paste and what happened, on any route, the same way. On a route of
     /// Japanese or Spanish, text in the target language already is pasted as it is, see
     /// `isInItsLanguage(_:on:)`, and a translation that only repeats the model's cleanup
-    /// pastes the text the step got unless cleanup stands in, see `verdict(on:for:into:)`.
-    /// The model's cleanup never stands in for text with words of the dictation language,
-    /// such as "The new office is near 品川.", whose cleanup may translate them, so Paste
-    /// Original Text brings back 品川.
+    /// pastes the text the step got unless cleanup stands in, see
+    /// `verdict(on:for:into:source:)`. The model's cleanup never stands in for text with
+    /// words of the dictation language, such as "The new office is near 品川.", whose
+    /// cleanup may translate them, so Paste Original Text brings back 品川.
     @concurrent
     static func run(
         _ text: String,
@@ -164,8 +157,20 @@ nonisolated enum TranslationStep {
         timeout: Duration? = nil,
         complete: @escaping @Sendable (String, TranslationRoute) async throws -> String
     ) async -> Result {
-        // The language of the text, read once, on the routes of Japanese and Spanish.
-        let source = route.language == .chinese ? nil : TranslationDirection.source(of: text, in: route.language)
+        await run(text, into: route, source: TranslationDirection.source(of: text, in: route.language), cleansUp: cleansUp, timeout: timeout, complete: complete)
+    }
+
+    /// The same for text whose language `source` the caller read already, see
+    /// TranslationDirection.plan(for:in:).
+    @concurrent
+    static func run(
+        _ text: String,
+        into route: TranslationRoute,
+        source: TranslationDirection.Source?,
+        cleansUp: Bool,
+        timeout: Duration? = nil,
+        complete: @escaping @Sendable (String, TranslationRoute) async throws -> String
+    ) async -> Result {
         if isInItsLanguage(source: source, on: route) {
             Logger.rewrite.notice("Translation into \(route.logName, privacy: .public) not needed, the text is in that language")
             return Result(text: text, untranslated: text, outcome: .unchanged)
@@ -214,8 +219,8 @@ struct TranslationModel {
     /// Whether the model can translate now, after waiting a bounded time for a load the
     /// press of the key started, see TextCleanup.waitUntilLoadedForTranslation.
     var waitUntilLoaded: () async -> Bool
-    /// Which way to translate, as the user set it. PushToTalkController makes it
-    /// effective for the dictation language, see TranslationDirection.effective(for:).
+    /// Which way to translate, as the user set it. Each dictation translates the way it
+    /// acts for the dictation language, see TranslationDirection.effective(for:).
     var direction: () -> TranslationDirection
     /// The model's answer for a transcript and a route, see RewriteEngine.translate.
     var complete: @Sendable (String, TranslationRoute) async throws -> String

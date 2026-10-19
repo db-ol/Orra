@@ -80,6 +80,16 @@ nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
         }
     }
 
+    /// The route for a text of a user who dictates in `language` and the language of the
+    /// text, read once, or nil when it has no letter to translate. Off the main actor,
+    /// since the Spanish rule may run NLLanguageRecognizer. A dictation and a caption pass
+    /// the language on to the steps after it, see TranslationStep.
+    @concurrent
+    func plan(for text: String, in language: DictationLanguage) async -> (route: TranslationRoute, source: Source)? {
+        guard let source = Self.source(of: text, in: language), let target = target(source: source, in: language) else { return nil }
+        return (TranslationRoute(language, into: target), source)
+    }
+
     /// Whether the choice belongs to `language`: Automatic and English to every dictation
     /// language, each other choice to its own.
     func fits(_ language: DictationLanguage) -> Bool {
