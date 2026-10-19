@@ -184,7 +184,7 @@ nonisolated enum TranslationGuard {
         }
 
         switch target {
-        case .chinese, .japanese, .spanish:
+        case .chinese:
             let letters = RewriteGuard.count(output, where: RewriteGuard.isLatinLetter)
             let han = RewriteGuard.han(output).count
             let script = letters + han
@@ -201,6 +201,8 @@ nonisolated enum TranslationGuard {
             if hasRunsLeft(hanRun, source: source, output: output) {
                 return .hanInEnglish
             }
+        case .japanese, .spanish:
+            preconditionFailure("Japanese and Spanish have checks of their own, see check(source:output:route:)")
         }
 
         if target == .english, matches(accent, output), !matches(accent, source) {
@@ -520,30 +522,30 @@ nonisolated enum TranslationGuard {
         try! NSRegularExpression(pattern: pattern, options: options)
     }
 
-    static let thousandsSeparator = regex(#"(?<=\d),(?=\d{3})"#)
-    static let digitsWithMultiplier = regex(#"(\d+(?:\.\d+)?)\s*(百万|千万|万|亿|千|[kKmMbB]n?\b|thousand|million|billion|hundred|dozen)?"#)
-    static let chineseNumeral = regex("[零〇一二两三四五六七八九十百千万亿幺]+")
+    private static let thousandsSeparator = regex(#"(?<=\d),(?=\d{3})"#)
+    private static let digitsWithMultiplier = regex(#"(\d+(?:\.\d+)?)\s*(百万|千万|万|亿|千|[kKmMbB]n?\b|thousand|million|billion|hundred|dozen)?"#)
+    private static let chineseNumeral = regex("[零〇一二两三四五六七八九十百千万亿幺]+")
     /// A run of Chinese numerals with no unit inside or around it, and not the decimals of
     /// a number such as 三点一四一五九, which `chineseDecimal` reads.
-    static let chineseDigitRun = regex("(?<![零〇一二两三四五六七八九幺十百千万亿])(?<![零〇一二两三四五六七八九十百千万亿]点)[零〇一二两三四五六七八九幺]++(?![十百千万亿])")
-    static let chineseDecimal = regex("([零一二两三四五六七八九十]+)点([零一二三四五六七八九]+)(万|亿)?")
-    static let tenThousandsAndThousands = regex(#"(\d+)\s*万\s*(\d)\s*千"#)
-    static let tenThousandsAndDigit = regex(#"(\d+)\s*万\s*(\d)(?![\d.])"#)
+    private static let chineseDigitRun = regex("(?<![零〇一二两三四五六七八九幺十百千万亿])(?<![零〇一二两三四五六七八九十百千万亿]点)[零〇一二两三四五六七八九幺]++(?![十百千万亿])")
+    private static let chineseDecimal = regex("([零一二两三四五六七八九十]+)点([零一二三四五六七八九]+)(万|亿)?")
+    private static let tenThousandsAndThousands = regex(#"(\d+)\s*万\s*(\d)\s*千"#)
+    private static let tenThousandsAndDigit = regex(#"(\d+)\s*万\s*(\d)(?![\d.])"#)
     static let decimal = regex(#"\d+(?:\.\d+)?"#)
     static let lowercaseWord = regex("[a-z]+")
     /// A month's name or its first three letters, in lowercase text.
-    static let monthPatterns = months.map { month in regex("\\b(\(month)|\(month.prefix(3)))\\b") }
+    private static let monthPatterns = months.map { month in regex("\\b(\(month)|\(month.prefix(3)))\\b") }
     /// 周一 to 周日 and 周天, also with 星期 or 礼拜.
-    static let chineseWeekdays = "一二三四五六日天".map { regex("(周|星期|礼拜)" + String($0)) }
-    static let noon = regex(#"\bnoon\b|中午"#, .caseInsensitive)
-    static let midnight = regex(#"\bmidnight\b|午夜|半夜|凌晨"#, .caseInsensitive)
-    static let half = regex(#"\bhalf\b"#, .caseInsensitive)
-    static let quarter = regex(#"\bquarter\b"#, .caseInsensitive)
+    private static let chineseWeekdays = "一二三四五六日天".map { regex("(周|星期|礼拜)" + String($0)) }
+    private static let noon = regex(#"\bnoon\b|中午"#, .caseInsensitive)
+    private static let midnight = regex(#"\bmidnight\b|午夜|半夜|凌晨"#, .caseInsensitive)
+    private static let half = regex(#"\bhalf\b"#, .caseInsensitive)
+    private static let quarter = regex(#"\bquarter\b"#, .caseInsensitive)
     static let hanRun = regex("[\u{3400}-\u{9FFF}\u{F900}-\u{FAFF}]+")
     static let accent = regex("[\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{24F}]")
     static let colon = regex("[:：]")
     static let timeColon = regex(#"\d[:：]\d"#)
-    static let acronym = regex("(?<![A-Za-z])[A-Z]{2,}(?=s?(?![A-Za-z]))")
+    private static let acronym = regex("(?<![A-Za-z])[A-Z]{2,}(?=s?(?![A-Za-z]))")
     /// Words that signal a spoken correction, which can make a translation much shorter.
     static let correctionCue = regex(#"不对|不是|我是说|说错了|应该是|删掉|算了|撤回|i mean|sorry|actually|scratch that|no wait|\bwait\b|never mind|rather"#, .caseInsensitive)
     /// Words of an instruction before a colon: translate, answer, 翻译, 用英文说.
@@ -583,12 +585,12 @@ nonisolated enum TranslationGuard {
     }
 
     /// The digits times 1000 without leading zeros, as Python's str(int(digits) * 1000).
-    static func thousands(_ digits: String) -> String {
+    private static func thousands(_ digits: String) -> String {
         let trimmed = digits.drop { $0 == "0" }
         return trimmed.isEmpty ? "0" : trimmed + "000"
     }
 
-    static func removingThousandsSeparators(_ text: String) -> String {
+    private static func removingThousandsSeparators(_ text: String) -> String {
         thousandsSeparator.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: "")
     }
 

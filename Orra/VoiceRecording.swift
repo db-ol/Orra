@@ -19,13 +19,7 @@ nonisolated enum VoiceScript {
         case .english: return own
         case .chinese, .japanese, .spanish: return .english
         case .automatic:
-            let shown: Locale.LanguageCode? = switch own {
-            case .chinese: .chinese
-            case .japanese: .japanese
-            case .spanish: .spanish
-            case .english: .english
-            }
-            return interface.language.languageCode == shown ? own : .english
+            return interface.language.languageCode == Locale.LanguageCode(own.rawValue) ? own : .english
         }
     }
 

@@ -21,12 +21,7 @@ nonisolated enum TranslationTarget: String, CaseIterable, Sendable {
     /// The language tag the voice models take, the English name in lowercase, see
     /// Qwen3VoiceEngine.
     var voiceTag: String {
-        switch self {
-        case .english: "english"
-        case .chinese: "chinese"
-        case .japanese: "japanese"
-        case .spanish: "spanish"
-        }
+        logName.lowercased()
     }
 }
 
@@ -93,12 +88,7 @@ nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
     /// Whether the choice belongs to `language`: Automatic and English to every dictation
     /// language, each other choice to its own.
     func fits(_ language: DictationLanguage) -> Bool {
-        switch self {
-        case .automatic, .english: true
-        case .chinese: language == .chinese
-        case .japanese: language == .japanese
-        case .spanish: language == .spanish
-        }
+        self == .automatic || self == .english || self == language.translationDirection
     }
 
     /// What the choice does for a user who dictates in `language`: itself when it fits,

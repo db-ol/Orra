@@ -77,6 +77,11 @@ nonisolated enum DictationLanguage: String, CaseIterable, Identifiable, Sendable
         [.english, translationLanguage]
     }
 
+    /// The routes into those targets, in the same order.
+    var translationRoutes: [TranslationRoute] {
+        translationTargets.map { TranslationRoute(self, into: $0) }
+    }
+
     /// The fixed direction into this language.
     var translationDirection: TranslationDirection {
         switch self {

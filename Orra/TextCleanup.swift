@@ -511,7 +511,7 @@ final class TextCleanup {
     /// TranslationDirection.effective(for:), or both of the language for Automatic.
     nonisolated static func preparedRoutes(_ direction: TranslationDirection, _ language: DictationLanguage) -> [TranslationRoute] {
         switch direction.effective(for: language) {
-        case .automatic: language.translationTargets.map { TranslationRoute(language, into: $0) }
+        case .automatic: language.translationRoutes
         case .english: [TranslationRoute(language, into: .english)]
         case .chinese, .japanese, .spanish: [TranslationRoute(language, into: language.translationLanguage)]
         }
@@ -534,7 +534,7 @@ final class TextCleanup {
     private func fillTranslationPrefixes() async {
         guard translationIsOn || captionsNeedModel, isLoaded else { return }
         let language = dictationLanguage
-        await engine.keepTranslationPrefixes(Set(language.translationTargets.map { TranslationRoute(language, into: $0) }))
+        await engine.keepTranslationPrefixes(Set(language.translationRoutes))
         for route in Self.preparedRoutes(translationDirection, language) {
             do {
                 try await engine.prepareTranslation(route)
