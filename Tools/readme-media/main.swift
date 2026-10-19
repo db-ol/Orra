@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 // Renders the README animations into docs/images/readme/<language>/<name>.gif.
 //
 //     readme-media <repository root>                     every GIF
-//     readme-media <repository root> <name>              one GIF, in both languages
+//     readme-media <repository root> <name>              one GIF, in every language
 //     readme-media <repository root> <name> <lang> <t>   one frame as a PNG in the
 //                                                        current folder, to check a layout
 

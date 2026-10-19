@@ -7,25 +7,45 @@ import SwiftUI
 // backgrounds, and the app's views need the app's state.
 
 enum Lang: String, CaseIterable {
-    case en, zh
+    case en, zh, ja, es
+
+    /// Whether the GIF keeps the details it was first drawn with. The Japanese and Spanish
+    /// GIFs were checked against Orra 0.5.0 and draw a few things closer to the app: the
+    /// Talk Key submenu, the close button and the 10 second countdown of a learned word's
+    /// notice, a caption in the small style while its translation is pending, and the update
+    /// window when it is ready, with a full bar and no line of text. The English and Chinese
+    /// GIFs keep their first drawing, and their files stay the same, until they are made
+    /// again with these details.
+    var keepsFirstDrawing: Bool {
+        self == .en || self == .zh
+    }
 }
 
-/// A text in both languages.
+/// A text in each language.
 struct L {
     let en: String
     let zh: String
+    let ja: String
+    let es: String
 
-    init(_ en: String, _ zh: String) {
+    init(_ en: String, _ zh: String, _ ja: String, _ es: String) {
         self.en = en
         self.zh = zh
+        self.ja = ja
+        self.es = es
     }
 
-    init(_ both: String) {
-        self.init(both, both)
+    init(_ every: String) {
+        self.init(every, every, every, every)
     }
 
     func callAsFunction(_ lang: Lang) -> String {
-        lang == .en ? en : zh
+        switch lang {
+        case .en: en
+        case .zh: zh
+        case .ja: ja
+        case .es: es
+        }
     }
 }
 
@@ -43,15 +63,19 @@ func T(_ string: String) -> Text {
     Text(verbatim: string)
 }
 
-/// Whether a text is mostly Chinese, which sets how fast it is spoken.
-func isChinese(_ string: String) -> Bool {
-    let han = string.unicodeScalars.filter { (0x4E00...0x9FFF).contains($0.value) }.count
-    return han * 3 > string.count
+/// Whether a text is mostly Chinese or Japanese characters, kana among them, which sets how
+/// fast it is spoken.
+func isInCharacters(_ string: String) -> Bool {
+    let characters = string.unicodeScalars.filter {
+        (0x4E00...0x9FFF).contains($0.value) || (0x3040...0x30FF).contains($0.value)
+    }.count
+    return characters * 3 > string.count
 }
 
 /// Characters a second: about 8.5 Chinese characters or 3 English words, as on the website.
+/// Japanese is spoken at the rate of Chinese, and Spanish at the rate of English.
 func speakingRate(_ string: String) -> Double {
-    isChinese(string) ? 8.5 : 15
+    isInCharacters(string) ? 8.5 : 15
 }
 
 /// A voice level that moves like speech, from 0 to 1.
