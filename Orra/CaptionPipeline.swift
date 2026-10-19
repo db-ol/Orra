@@ -356,8 +356,8 @@ final class CaptionPipeline {
         // the sentence is read once, off the main actor.
         let plan = await engines.direction().plan(for: text, in: language)
         guard !isStopped, !Task.isCancelled else { return }
-        let inItsLanguage = plan.map { TranslationStep.isInItsLanguage(source: $0.source, on: $0.route) } ?? false
-        let translates = plan != nil && !inItsLanguage && TranslationStep.isWorthTranslating(text, source: plan?.source) && waiting <= backlogLimit && engines.canTranslate()
+        let needsTranslation = plan.map { !TranslationStep.isInItsLanguage(source: $0.source, on: $0.route) } ?? false
+        let translates = needsTranslation && text.count <= TranslationStep.maximumLength && waiting <= backlogLimit && engines.canTranslate()
         let id: Int
         if let interimID {
             id = interimID

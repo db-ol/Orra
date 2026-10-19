@@ -70,13 +70,7 @@ nonisolated enum TranslationStep {
     /// any script for Japanese and Spanish, kana only Japanese among them, and the rule
     /// above for Chinese.
     static func isWorthTranslating(_ text: String, in language: DictationLanguage) -> Bool {
-        isWorthTranslating(text, source: TranslationDirection.source(of: text, in: language))
-    }
-
-    /// The same for text whose language the caller read already, see
-    /// TranslationDirection.plan(for:in:).
-    static func isWorthTranslating(_ text: String, source: TranslationDirection.Source?) -> Bool {
-        text.count <= maximumLength && source != nil
+        text.count <= maximumLength && TranslationDirection.source(of: text, in: language) != nil
     }
 
     /// The outcome for the model's answer for `text`, as TranslationPrompt.parse read it:
