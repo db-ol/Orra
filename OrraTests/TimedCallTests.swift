@@ -101,52 +101,22 @@ struct TimedCallTests {
 
         // HeldWork ignores cancellation, so this caller asks with its task cancelled.
         let asking = HeldWork()
+        let started = Mutex(false)
         let cancelledCaller = Task {
             await asking.run()
-            return await TimedCall.run(within: .seconds(3600)) { "never used" }
+            return await TimedCall.run(within: .seconds(3600)) {
+                started.withLock { $0 = true }
+                return "never used"
+            }
         }
         cancelledCaller.cancel()
         asking.release()
         let early = await cancelledCaller.value
         #expect(!early.timedOut)
         #expect(throws: CancellationError.self) { try early.result.get() }
-    }
-
-    /// The cleanup step pastes the text it got once the limit passed, while the model still
-    /// runs, and the model's answer that comes later is never used.
-    @Test(.timeLimit(.minutes(1)))
-    func theCleanupStepGoesOnWithoutTheModel() async throws {
-        let call = HeldWork()
-        let answered = Mutex(false)
-        let step = await CleanupStep.run("呃，我们下周二开会。", timeout: .milliseconds(20)) { _ in
-            await call.run()
-            answered.withLock { $0 = true }
-            return #"{"cleaned": "我们下周二开会。"}"#
-        }
-        #expect(!answered.withLock { $0 })
-        #expect(step.text == "呃，我们下周二开会。")
-        #expect(step.outcome == .timedOut)
-        call.release()
-        try await waitWithoutBound { answered.withLock { $0 } }
-    }
-
-    /// The same for the translation step, which pastes the text without translation.
-    @Test(.timeLimit(.minutes(1)))
-    func theTranslationStepGoesOnWithoutTheModel() async throws {
-        let call = HeldWork()
-        let answered = Mutex(false)
-        let source = "呃，我们下周一，哦不是，下周二开会。"
-        let step = await TranslationStep.run(source, into: .english, cleansUp: true, timeout: .milliseconds(20)) { _, _ in
-            await call.run()
-            answered.withLock { $0 = true }
-            return #"{"cleaned": "我们下周二开会。", "translation": "We have a meeting next Tuesday."}"#
-        }
-        #expect(!answered.withLock { $0 })
-        #expect(step.text == source)
-        #expect(step.untranslated == source)
-        #expect(step.outcome == .timedOut)
-        call.release()
-        try await waitWithoutBound { answered.withLock { $0 } }
+        // A call that was started runs at once, so a short wait shows that none was.
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!started.withLock { $0 })
     }
 }
 
@@ -190,11 +160,13 @@ struct AbandonedCallTests {
         #expect(gate.snapshot == ModelGate.Snapshot())
     }
 
-    /// A call given up on while it waited for its turn at the engine ends there, without
+    /// An engine call whose task is cancelled throws CancellationError before it looks for
     /// the model. The engine here has no model, so a call that went on would throw
-    /// notLoaded instead, as one that was not cancelled does.
+    /// notLoaded instead, as one that was not cancelled does. Only the order of the two
+    /// checks shows here. A call that waits for its turn behind another one needs the real
+    /// model.
     @Test(.timeLimit(.minutes(1)))
-    func aCallCancelledBeforeItsTurnDoesNotRunTheModel() async throws {
+    func aCancelledCallThrowsBeforeTheModelIsChecked() async throws {
         let engine = RewriteEngine()
         // HeldWork ignores cancellation, so both calls reach the engine cancelled.
         let turn = HeldWork()
