@@ -18,15 +18,8 @@ struct DictationSettings: View {
             }
             Section {
                 CleanupToggle(cleanup: cleanup, language: pushToTalk.dictationLanguage)
-                // Where the model stands while cleanup is on, with its buttons. Its text
-                // starts where the names of the rows do.
-                if cleanup.isOn, CleanupLabels.status(cleanup.models.state, engine: cleanup.engineState, total: cleanup.models.manifest.totalBytes, use: .cleanup) != nil {
-                    Label {
-                        LocalModelStatus(cleanup: cleanup, use: .cleanup)
-                    } icon: {
-                        Image(systemName: "wand.and.sparkles")
-                            .hidden()
-                    }
+                if cleanup.isOn {
+                    ModelStatusRow(cleanup: cleanup, use: .cleanup, symbol: "wand.and.sparkles")
                 }
                 Toggle(isOn: Binding(
                     get: { pushToTalk.removesFillerWords },

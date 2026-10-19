@@ -6146,7 +6146,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "認識"
+            "value" : "音声認識"
           }
         },
         "zh-Hans" : {
@@ -8415,24 +8415,24 @@
         }
       }
     },
-    "The translation key counts as a dictation only after you hold it alone for a moment, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it. With Double press for hands free on, press it twice quickly to translate hands free." : {
+    "The translation key counts as a dictation only after you hold it alone for a moment, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it. With Double press in Hold to keep recording on, press it twice quickly and it keeps recording after you let go." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La tecla de traducción cuenta como dictado solo después de mantenerla presionada sola un momento, así que sus funciones rápidas de teclado y los caracteres que escribe la tecla Opción siguen funcionando. Si es la tecla fn o una tecla Control, Opción o Comando derecha, empieza a grabar en cuanto la presionas. Con Presionar dos veces para manos libres activado, presiónala rápido dos veces para traducir en modo manos libres."
+            "value" : "La tecla de traducción cuenta como dictado solo después de mantenerla presionada sola un momento, así que sus funciones rápidas de teclado y los caracteres que escribe la tecla Opción siguen funcionando. Si es la tecla fn o una tecla Control, Opción o Comando derecha, empieza a grabar en cuanto la presionas. Con la opción de presionar dos veces en modo Mantener presionada activada, presiónala rápido dos veces y Orra sigue grabando después de que la sueltas."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "翻訳キーは、単独で少しの間押し続けたときにだけ音声入力として扱われるため、そのキーのショートカットやOptionキーで入力する文字はそのまま使えます。fnキーまたは右のControl、Option、Commandキーの場合は、押すとすぐに録音を開始します。“2回押してハンズフリー”がオンのときは、すばやく2回押すとハンズフリーで翻訳できます。"
+            "value" : "翻訳キーは、単独で少しの間押し続けたときにだけ音声入力として扱われるため、そのキーのショートカットやOptionキーで入力する文字はそのまま使えます。fnキーまたは右のControl、Option、Commandキーの場合は、押すとすぐに録音を開始します。“押したまま”で2回押す設定がオンのときは、すばやく2回押すと、指を離しても録音が続きます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "翻译键要单独按住片刻才算一次听写，所以它的快捷键和 Option 键输入的字符照常可用。翻译键是 fn 键或右侧的 Control、Option、Command 键时，按下就开始录音。打开“连按两下进入免手持模式”后，快速连按两下翻译键，就能免手持翻译。"
+            "value" : "翻译键要单独按住片刻才算一次听写，所以它的快捷键和 Option 键输入的字符照常可用。翻译键是 fn 键或右侧的 Control、Option、Command 键时，按下就开始录音。“按住”用法下，打开连按两下的开关后，快速连按两下翻译键，松开后会继续录音。"
           }
         }
       }

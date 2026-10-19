@@ -321,6 +321,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         captions.showWindow = { [captionWindow] in captionWindow.show() }
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
+        // The steps that keep a user's settings across versions. A version that changes
+        // what a setting starts as adds its step inside, not here.
         LaunchMigrations.run(pushToTalk)
         // Before the tap is installed, so it watches the translation key from the start.
         followTranslation()

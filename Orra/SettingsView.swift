@@ -292,7 +292,7 @@ private struct GeneralSettings: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-                    .help(Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key counts as a dictation only after you hold it alone for a moment, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it. With Double press for hands free on, press it twice quickly to translate hands free."))
+                    .help(Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("The translation key counts as a dictation only after you hold it alone for a moment, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it. With Double press in Hold to keep recording on, press it twice quickly and it keeps recording after you let go."))
                     TriggerModePicker(pushToTalk: pushToTalk, slot: .translation)
                         .disabled(!cleanup.translationIsOn)
                     // An option of Hold, so it shows only while a key it works on is in Hold,
@@ -306,20 +306,20 @@ private struct GeneralSettings: View {
                 .id(SettingsSection.keys)
             }
             .formStyle(.grouped)
-            .onAppear { scroll(proxy) }
-            .onChange(of: scrollTarget) { scroll(proxy) }
+            // A window that just opened, or a page that just turned, may not have laid out
+            // its rows yet. So the page scrolls once now and once more a moment later, and
+            // only then forgets the target.
+            .task(id: scrollTarget) {
+                guard let target = scrollTarget else { return }
+                await Task.yield()
+                proxy.scrollTo(target, anchor: .top)
+                try? await Task.sleep(for: .milliseconds(150))
+                proxy.scrollTo(target, anchor: .top)
+                scrollTarget = nil
+            }
         }
         .navigationTitle("General")
         .onAppear { inputs.refresh() }
-    }
-
-    /// Scrolls to the part asked for, once the form has laid out its rows.
-    private func scroll(_ proxy: ScrollViewProxy) {
-        guard let target = scrollTarget else { return }
-        scrollTarget = nil
-        Task { @MainActor in
-            proxy.scrollTo(target, anchor: .top)
-        }
     }
 
     /// The choice for a UID from the picker. The empty tag is the system default.
@@ -352,9 +352,29 @@ private struct HandsFreeToggle: View {
     }
 }
 
+/// The row under the switch of cleanup or of translation, while that switch is on and the
+/// model is not ready: where the model stands, with its buttons. Its text starts where the
+/// names of the rows do, behind the hidden `symbol` of the switch.
+struct ModelStatusRow: View {
+    let cleanup: TextCleanup
+    let use: CleanupLabels.Use
+    let symbol: String
+
+    var body: some View {
+        if CleanupLabels.status(cleanup.models.state, engine: cleanup.engineState, total: cleanup.models.manifest.totalBytes, use: use) != nil {
+            Label {
+                LocalModelStatus(cleanup: cleanup, use: use)
+            } icon: {
+                Image(systemName: symbol)
+                    .hidden()
+            }
+        }
+    }
+}
+
 /// The model's download and loading under the switch of cleanup or of translation, while
 /// that switch is on: progress, Download or Try Again, or nothing once the model is ready.
-struct LocalModelStatus: View {
+private struct LocalModelStatus: View {
     let cleanup: TextCleanup
     let use: CleanupLabels.Use
 

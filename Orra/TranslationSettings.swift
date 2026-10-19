@@ -29,15 +29,8 @@ struct TranslationSettings: View {
                 }
                 .pickerStyle(.radioGroup)
                 .disabled(!cleanup.translationIsOn)
-                // Where the model stands while translation is on, with its buttons. Its text
-                // starts where the names of the rows above do.
-                if cleanup.translationIsOn, CleanupLabels.status(cleanup.models.state, engine: cleanup.engineState, total: cleanup.models.manifest.totalBytes, use: .translation) != nil {
-                    Label {
-                        LocalModelStatus(cleanup: cleanup, use: .translation)
-                    } icon: {
-                        Image(systemName: "translate")
-                            .hidden()
-                    }
+                if cleanup.translationIsOn {
+                    ModelStatusRow(cleanup: cleanup, use: .translation, symbol: "translate")
                 }
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {

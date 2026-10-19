@@ -172,7 +172,10 @@ the right hand is on the mouse. Implemented in `Orra/TalkKey.swift`,
   transcribed, so Escape is never kept from the app by mistake.
 - The Dictation block of Settings, General (Advanced… before 2026-10-13, the Dictation page
   before that, General at first) and the Talk Key menu have a switch "Double press for
-  hands free", on by default. While it is off, a short press is a hold as before.
+  hands free", on by default. While it is off, a short press is a hold as before. Since
+  2026-10-19 the switch is named "Double press in Hold to keep recording". It sits under
+  Keys in Settings, General, right after the mode pickers, and shows only while a key is in
+  Hold. The Talk Key menu no longer has it. What it does and its saved value stay the same.
 - Hold to talk is unchanged for the right modifiers and fn. A quick tap still records
   nothing that reaches the model.
 
@@ -286,7 +289,10 @@ user can change. Implemented in `Orra/TalkKey.swift`, `Orra/TalkKeyDetector.swif
 - Settings, General has a recorder field for the translation key under Keys, right after
   the talk key's. It is always shown and dimmed with "Turn on Translation under Features
   to use this key." while translation is off (a Translation page until 2026-10-13, then a
-  row under the Translation switch until the sidebar came back).
+  row under the Translation switch until the sidebar came back). Since 2026-10-19 the
+  switch has its own Translation page again, and the note reads "Turn on Translation on
+  the Translation page to use this key." Change Talk Key… and Change Translation Key… in
+  the menu open General scrolled to Keys.
   The notes about a press that cannot be the key name the translation key while it is
   recorded. Recording one key stops a recording of the other.
 - The menu's Talk Key submenu shows the translation key with Change Translation Key…,
