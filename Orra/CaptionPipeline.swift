@@ -352,12 +352,20 @@ final class CaptionPipeline {
         let text = Self.text(raw, seconds: segment.duration, language: language)
         guard !text.isEmpty else { return }
         // The direction and the language of the dictation, so a user who dictates in Spanish
-        // reads an English meeting in Spanish and a Spanish one in English.
+        // reads an English meeting in Spanish and a Spanish one in English. For Japanese and
+        // Spanish the language of the sentence is read once, off the main actor.
         let direction = engines.direction()
-        let target = language == .chinese ? direction.target(for: text) : await Self.translationTarget(of: text, direction: direction, language: language)
+        var target: TranslationTarget?
+        var source: TranslationDirection.Source?
+        if language == .chinese {
+            target = direction.target(for: text)
+        } else {
+            (target, source) = await Self.translationTarget(of: text, direction: direction, language: language)
+        }
         guard !isStopped, !Task.isCancelled else { return }
-        let inItsLanguage = target.map { TranslationStep.isInItsLanguage(text, on: TranslationRoute(language, into: $0)) } ?? false
-        let translates = target != nil && !inItsLanguage && TranslationStep.isWorthTranslating(text, in: language) && waiting <= backlogLimit && engines.canTranslate()
+        let inItsLanguage = target.map { TranslationStep.isInItsLanguage(source: source, on: TranslationRoute(language, into: $0)) } ?? false
+        let worthTranslating = language == .chinese ? TranslationStep.isWorthTranslating(text) : TranslationStep.isWorthTranslating(text, source: source)
+        let translates = target != nil && !inItsLanguage && worthTranslating && waiting <= backlogLimit && engines.canTranslate()
         let id: Int
         if let interimID {
             id = interimID
@@ -377,7 +385,7 @@ final class CaptionPipeline {
         report(sentence)
         guard translates, let target else { return }
         let translationStarted = ContinuousClock.now
-        let translation = await translate(text, into: TranslationRoute(language, into: target))
+        let translation = await translate(text, into: TranslationRoute(language, into: target), source: source)
         guard !isStopped, !Task.isCancelled else { return }
         sentence.translation = translation.map { .done($0) } ?? .none
         sentence.translationSeconds = Self.seconds(translationStarted.duration(to: .now))
@@ -386,7 +394,9 @@ final class CaptionPipeline {
 
     /// The translation when it passes TranslationGuard, as for a dictation, nil otherwise.
     /// The cleanup part of the answer is not used, since captions show what was said.
-    private func translate(_ text: String, into route: TranslationRoute) async -> String? {
+    /// `source` is the language of a Japanese or Spanish sentence, and its checks run off
+    /// the main actor, since the Spanish ones may run NLLanguageRecognizer.
+    private func translate(_ text: String, into route: TranslationRoute, source: TranslationDirection.Source?) async -> String? {
         let answer: String
         do {
             answer = try await engines.translate(text, route)
@@ -396,8 +406,9 @@ final class CaptionPipeline {
             }
             return nil
         }
-        let parsed = TranslationPrompt.parse(answer)
-        switch TranslationStep.verdict(on: parsed, for: text, into: route) {
+        let parsed = TranslationPrompt.parse(answer, for: text, on: route)
+        let verdict = route.language == .chinese ? TranslationStep.verdict(on: parsed, for: text, into: route.target) : await Self.verdict(on: parsed, for: text, into: route, source: source)
+        switch verdict {
         case .translated:
             return parsed?.translation
         case .unreadable:
@@ -410,10 +421,17 @@ final class CaptionPipeline {
         return nil
     }
 
-    /// Off the main actor, since the Spanish rule may run NLLanguageRecognizer.
+    /// The target of a Japanese or Spanish sentence and its language, off the main actor,
+    /// since the Spanish rule may run NLLanguageRecognizer.
     @concurrent
-    nonisolated private static func translationTarget(of text: String, direction: TranslationDirection, language: DictationLanguage) async -> TranslationTarget? {
-        direction.target(for: text, in: language)
+    nonisolated private static func translationTarget(of text: String, direction: TranslationDirection, language: DictationLanguage) async -> (TranslationTarget?, TranslationDirection.Source?) {
+        let source = TranslationDirection.source(of: text, in: language)
+        return (direction.target(source: source, in: language), source)
+    }
+
+    @concurrent
+    nonisolated private static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into route: TranslationRoute, source: TranslationDirection.Source?) async -> TranslationStep.Outcome {
+        TranslationStep.verdict(on: answer, for: text, into: route, source: source)
     }
 
     private static func seconds(_ duration: Duration) -> Double {
