@@ -2515,10 +2515,22 @@ it shows starts, stops, counts and failures, never text.
   while no sentence has a translation) and Copy Original and Translation. Check that this
   menu with a primary action works in the panel, which does not activate Orra: a click on
   the icon copies, a click on the arrow opens the menu, and the call app keeps the focus.
+- [ ] The top row with Copy, at 520 pt and at the narrowest width, in all four languages.
+  The picker sits centered in the space left of the button, so slightly left of the
+  window's center. The picker and the button set the narrowest width, which is wider than
+  300 pt in English and Spanish (about 344 and 328 pt, from the picker's measured width).
+  A window saved narrower opens that wide. The menu fallback for narrow windows comes with
+  the three display modes.
 - [ ] Paste a copy into Notes on the Mac: plain text, no header, no times. A clipboard
   manager does not keep it, and Universal Clipboard does not offer it to another device.
   The log shows "Captions copied, 12 sentences, translation" with the count and the kind,
   never text.
+- [ ] Copy captions, then dictate once into another app. After the paste the caption copy
+  comes back on the clipboard, and Universal Clipboard still does not offer it to another
+  device, since the restore keeps concealed contents on this Mac.
+- [ ] Select one caption line and press Command C. This is an ordinary copy, so a clipboard
+  manager keeps it, as docs/privacy.md says. If it skips it, change that sentence in the
+  four privacy pages.
 - [ ] Turning captions off while a sentence is still being heard and another waits for its
   translation: the heard line stays as a final line, the waiting one shows its original,
   and a copy has both.
