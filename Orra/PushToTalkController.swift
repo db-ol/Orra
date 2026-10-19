@@ -208,7 +208,10 @@ final class PushToTalkController {
     @ObservationIgnored private let lidIsClosed: @MainActor () -> Bool
     @ObservationIgnored private let isTrusted: @MainActor () -> Bool
     @ObservationIgnored private let installTap: HotkeyTap.Install
-    @ObservationIgnored private let maximumRecordingDuration: Duration
+    /// A hold longer than this is processed as if the key had been released. Each hold
+    /// reads it as it starts the microphone. Internal so tests can lengthen it after a stop
+    /// at the limit.
+    @ObservationIgnored var maximumRecordingDuration: Duration
     @ObservationIgnored private let countdown: Duration
     @ObservationIgnored private let limitNoticeWindow: Duration
     @ObservationIgnored private let minimumHold: Duration
