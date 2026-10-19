@@ -10,8 +10,9 @@ They are drawings, not screen recordings, so they need no permission and no runn
 
 - Kit.swift: the shared pieces, drawn with plain shapes, since ImageRenderer cannot draw
   AppKit controls or blurred backgrounds.
-- Scenes.swift: the six scenes and their timing. Speech appears at about 8.5 Chinese or
-  Japanese characters or 15 Latin characters a second, as on the website.
+- Scenes.swift: the six scenes and their timing. Speech appears at about 8.5 Chinese
+  characters or 3 English words a second, as on the website. Japanese goes at the rate of
+  Chinese and Spanish at the rate of English.
 - main.swift: renders the frames, merges identical frames in a row and writes the GIFs.
 
 ## Make the GIFs again
@@ -23,6 +24,11 @@ From the repository root:
 
 It writes docs/images/readme/en, zh, ja and es, one GIF of each scene in each, 600 pixels
 wide at 10 frames a second, and prints the size of each. Each one is well under 100 KB.
+
+To make the GIFs of one language, or one GIF in one language:
+
+    /tmp/readme-media . all ja
+    /tmp/readme-media . vocabulary es
 
 A run can write a scene that did not change with other bytes, since the text of a few frames
 can come out slightly different while the fonts load. Put back the GIFs you did not mean to
@@ -41,15 +47,17 @@ languages are en, zh, ja and es.
   interface and of what is said. The English GIFs of translation and meeting show the
   Chinese speaker.
 - Show only what Orra does with the dictation language of the GIF. The Japanese and Spanish
-  GIFs say their own language, except where a step works on English sentences only:
+  GIFs have their interface in Japanese or Latin American Spanish, with Orra's own strings
+  and Sparkle's own texts in the update window. Their speech is in their own language, with
+  these limits:
   - dictation says no filler, since the filler rule knows Chinese and English fillers and
     does not run on a Japanese or Spanish sentence. The sentence is pasted as it is said.
-  - vocabulary corrects an English sentence and then says one, since with Japanese or
-    Spanish Orra learns from corrections of English sentences only.
+  - vocabulary corrects an English sentence, since with Japanese or Spanish Orra learns
+    from corrections of English sentences only. The next dictation is in the GIF's
+    language, since the vocabulary and the learned word work in every language.
   - cleanup says an English sentence, since with Japanese or Spanish Clean Up Text works on
     English sentences only.
-  - Their interface is in Japanese or Latin American Spanish, with Orra's own strings and
-    Sparkle's own texts in the update window.
+- Japanese speech is quoted with 「」, any other with “”.
 - The Japanese and Spanish GIFs draw a few details closer to the app than the English and
   Chinese ones (see Lang.keepsFirstDrawing in Kit.swift). Give the English and Chinese GIFs
   these details the next time they are made.

@@ -38,17 +38,17 @@ Habla en chino (mandarín y cantonés), en inglés o en los dos mezclados en la 
 
 ### Tus palabras, como tú las escribes
 
-Un vocabulario personal de hasta 5,000 nombres y términos, para que Orra los escriba como tú. Si activas el aprendizaje, Orra aprende de las palabras que corriges justo después de un dictado y la próxima vez las escribe bien.
+Un vocabulario personal de hasta 5,000 nombres y términos, para que Orra los escriba como tú. Si activas el aprendizaje, Orra aprende de las palabras que corriges justo después de un dictado y la próxima vez las escribe bien. Con japonés o español como idioma de dictado, por ahora el aprendizaje solo funciona con oraciones en inglés.
 
 </td>
-<td width="50%"><img src="docs/images/readme/es/vocabulary.gif" alt="Una nota dice en inglés “We tested Ora on the new build.” Alguien cambia Ora por Orra, y Orra muestra un aviso: Se agregó “Orra” al Vocabulario, Se oyó como “Ora”, con Deshacer y un botón para cerrarlo. El siguiente dictado en inglés escribe Orra." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/vocabulary.gif" alt="Una nota dice en inglés “We tested Ora on the new build.” Alguien cambia Ora por Orra, y Orra muestra un aviso: Se agregó “Orra” al Vocabulario, Se oyó como “Ora”, con Deshacer y un botón para cerrarlo. Con el puntero encima, la cuenta regresiva se pausa, y un clic en el botón cierra el aviso. Luego alguien dice en español “Orra sale el viernes”, y el dictado escribe Orra." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
 
 ### Limpieza con un modelo local
 
-Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dejan pasar y aplica las rectificaciones que haces al hablar, así que “at three, oh wait, four” queda como “at four”. Pegar texto original siempre recupera lo que dijiste.
+Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dejan pasar y aplica las rectificaciones que haces al hablar, así que “at three, oh wait, four” queda como “at four”. Pegar texto original siempre recupera lo que dijiste. Con japonés o español como idioma de dictado, por ahora la limpieza solo funciona con oraciones en inglés.
 
 </td>
 <td width="50%"><img src="docs/images/readme/es/cleanup.gif" alt="Con Limpiar texto activado, alguien dice en inglés “Let’s go over the quote at three, oh wait, four tomorrow.” En el correo queda “Let’s go over the quote at four tomorrow.”" width="100%"></td>

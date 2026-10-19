@@ -12,10 +12,10 @@ enum Lang: String, CaseIterable {
     /// Whether the GIF keeps the details it was first drawn with. The Japanese and Spanish
     /// GIFs were checked against Orra 0.5.0 and draw a few things closer to the app: the
     /// Talk Key submenu, the close button and the 10 second countdown of a learned word's
-    /// notice, a caption in the small style while its translation is pending, and the update
-    /// window when it is ready, with a full bar and no line of text. The English and Chinese
-    /// GIFs keep their first drawing, and their files stay the same, until they are made
-    /// again with these details.
+    /// notice, which the pointer pauses and closes, a caption in the small style while its
+    /// translation is pending, and the update window when it is ready, with a full bar and no
+    /// line of text. The English and Chinese GIFs keep their first drawing, and their files
+    /// stay the same, until they are made again with these details.
     var keepsFirstDrawing: Bool {
         self == .en || self == .zh
     }
@@ -227,17 +227,26 @@ struct SaidLine: View {
             .overlay(alignment: .topLeading) { text }
     }
 
+    /// 「」 around Japanese speech, which has kana, as Japanese quotes speech, and “” around
+    /// any other.
+    private var quotes: (open: String, close: String) {
+        let japanese = segments.contains { segment in
+            segment.text.unicodeScalars.contains { (0x3040...0x30FF).contains($0.value) }
+        }
+        return japanese ? ("「", "」") : ("“", "”")
+    }
+
     private var text: some View {
         var result = AttributedString()
         var left = shown
-        var all: [(String, Bool, Bool)] = [("“", false, false)]
+        var all: [(String, Bool, Bool)] = [(quotes.open, false, false)]
         for segment in segments {
             for character in segment.text {
                 all.append((String(character), segment.dropped, left > 0))
                 left -= 1
             }
         }
-        all.append(("”", false, shown >= segments.reduce(0) { $0 + $1.text.count }))
+        all.append((quotes.close, false, shown >= segments.reduce(0) { $0 + $1.text.count }))
         all[0].2 = shown > 0
         for (character, dropped, visible) in all {
             var piece = AttributedString(character)

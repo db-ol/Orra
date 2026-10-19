@@ -148,12 +148,10 @@ let cleanupSaid: [Lang: [(text: String, dropped: Bool)]] = [
     .ja: cleanupEnglish,
     .es: cleanupEnglish,
 ]
-let cleanupPasted = L(
-    "Let’s go over the quote at four tomorrow.",
-    "明天下午四点跟客户过一下报价。",
-    "Let’s go over the quote at four tomorrow.",
-    "Let’s go over the quote at four tomorrow."
-)
+let cleanupEnglishPasted = "Let’s go over the quote at four tomorrow."
+let cleanupPasted = L(cleanupEnglishPasted, "明天下午四点跟客户过一下报价。", cleanupEnglishPasted, cleanupEnglishPasted)
+// The email is in English when the sentence is.
+let cleanupSubject = L("Quote", "报价", "Quote", "Quote")
 
 func cleanup(_ lang: Lang) -> Dictation {
     Dictation(said: cleanupSaid[lang]!, start: 0.8, processing: 0.9)
@@ -176,8 +174,7 @@ let cleanupScene = Scene(
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 10) {
                             T(L("Subject:", "主题：", "件名:", "Asunto:")(lang)).foregroundStyle(Palette.muted)
-                            // The email is in English when the sentence is.
-                            T(L("Quote", "报价", "Quote", "Quote")(lang)).foregroundStyle(Palette.ink)
+                            T(cleanupSubject(lang)).foregroundStyle(Palette.ink)
                         }
                         .font(.system(size: 13))
                         .padding(.horizontal, 18)
@@ -256,19 +253,17 @@ let translationScene = Scene(
 
 // With Japanese or Spanish as the dictation language, Orra learns from corrections of
 // English sentences only, so those GIFs fix an English sentence. The vocabulary reaches the
-// speech model in every language, so the next dictation writes the word.
-let heard = L("Ora", "奥拉", "Ora", "Ora")
-let firstLine = L(
-    ("We tested ", " on the new build."),
-    ("这次用", "测了新版本。"),
-    ("We tested ", " on the new build."),
-    ("We tested ", " on the new build.")
-)
+// speech model in every language, and a learned word replaces its heard spelling in every
+// language too, so the next dictation, in the GIF's language, writes the word.
+let englishHeard = "Ora"
+let englishFirstLine = ("We tested ", " on the new build.")
+let heard = L(englishHeard, "奥拉", englishHeard, englishHeard)
+let firstLine = L(englishFirstLine, ("这次用", "测了新版本。"), englishFirstLine, englishFirstLine)
 let vocabularySaid: [Lang: [(text: String, dropped: Bool)]] = [
     .en: [("Orra ships on Friday.", false)],
     .zh: [("Orra 周五上线。", false)],
-    .ja: [("Orra ships on Friday.", false)],
-    .es: [("Orra ships on Friday.", false)],
+    .ja: [("Orraは金曜日にリリースします。", false)],
+    .es: [("Orra sale el viernes.", false)],
 ]
 let addedWord = L("Added “Orra” to Vocabulary", "已把“Orra”加入个人词库", "“Orra”を用語集に追加しました", "Se agregó “Orra” al Vocabulario")
 let heardAs = L("Heard as “%@”", "原来听成了“%@”", "“%@”と認識されていました", "Se oyó como “%@”")
@@ -302,20 +297,28 @@ let vocabularyScene = Scene(
         let selected = t >= 0.8 && t < typingStart
         let (before, after) = firstLine.parts(lang)
         let noticeShown = t >= 2.5 && t < 5.4
-        // The seconds the notice has left, and the part of its ring.
-        let secondsLeft: Int
+        // The seconds the notice has left, and the part of its ring. Nil seconds is the
+        // pause sign.
+        let secondsLeft: Int?
         let ringLeft: Double
+        let pointerLeft = pointerWay(t)
         if lang.keepsFirstDrawing {
-            secondsLeft = max(1, Int((5.4 - t).rounded(.up)))
-            ringLeft = Double(secondsLeft) / 3
+            let seconds = max(1, Int((5.4 - t).rounded(.up)))
+            secondsLeft = seconds
+            ringLeft = Double(seconds) / 3
+        } else if let pointerLeft, pointerLeft < pointerOverNotice {
+            // The pointer over the notice holds it, as in the app: a full ring with a
+            // pause sign. Then it clicks the close button before the next dictation.
+            secondsLeft = nil
+            ringLeft = 1
         } else {
-            // The app's 10 seconds, in a ring that empties smoothly. The close button
-            // closes the notice before the next dictation.
+            // The app's 10 seconds, in a ring that empties smoothly.
             let left = 10 - (t - 2.5)
             secondsLeft = Int(left.rounded(.up))
             ringLeft = left / 10
         }
-        let closePressed = t >= 5.1
+        // Kept in place after it closes, unseen, so the pointer stays where it clicked.
+        let noticeKept = lang.keepsFirstDrawing ? noticeShown : t >= 2.5
         return AnyView(
             ZStack {
                 Palette.wallpaper
@@ -349,7 +352,7 @@ let vocabularyScene = Scene(
                     .padding(18)
                 }
                 .position(x: 300, y: 204)
-                if noticeShown {
+                if noticeKept {
                     HUDBox {
                         HStack(spacing: 12) {
                             Image(systemName: "checkmark.circle.fill")
@@ -372,26 +375,88 @@ let vocabularyScene = Scene(
                                     .trim(from: 0, to: ringLeft)
                                     .stroke(Color.white.opacity(0.75), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                                     .rotationEffect(.degrees(-90))
-                                T("\(secondsLeft)").font(.system(size: 9)).foregroundStyle(Color.white.opacity(0.6))
+                                Group {
+                                    if let secondsLeft {
+                                        T("\(secondsLeft)").font(.system(size: 9))
+                                    } else {
+                                        Image(systemName: "pause.fill").font(.system(size: 7))
+                                    }
+                                }
+                                .foregroundStyle(Color.white.opacity(0.6))
                             }
                             .frame(width: 20, height: 20)
                             if !lang.keepsFirstDrawing {
+                                // A borderless button, as in the app.
                                 Image(systemName: "xmark")
                                     .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(Color.white.opacity(closePressed ? 1 : 0.6))
+                                    .foregroundStyle(Color.white.opacity(0.6))
                                     .frame(width: 18, height: 18)
-                                    .background(Circle().fill(Color.white.opacity(closePressed ? 0.25 : 0)))
+                                    .anchorPreference(key: CloseButton.self, value: .center) { $0 }
                             }
                         }
                     }
+                    .opacity(noticeShown ? 1 : 0)
                     .position(x: 330, y: 56)
                 }
                 OrraCapsule(state: t < d.keyDown ? .idle : d.capsule(t))
                     .position(x: 300, y: 350)
             }
+            .overlayPreferenceValue(CloseButton.self) { button in
+                if let button, let pointerLeft {
+                    GeometryReader { proxy in
+                        let target = proxy[button]
+                        Pointer().offset(x: target.x + 60 * pointerLeft, y: target.y + 120 * pointerLeft)
+                    }
+                }
+            }
         )
     }
 )
+
+/// The part of the way the pointer still has to go to the close button of the notice, nil
+/// before it shows. It shows at 4.3 s and slows down to reach the button at 4.8 s, where it
+/// stays.
+func pointerWay(_ t: Double) -> Double? {
+    guard t >= 4.3 else { return nil }
+    let done = min(1, (t - 4.3) / 0.5)
+    return pow(1 - done, 3)
+}
+
+/// The pointer comes from below and to the right of the close button, 60 and 120 points
+/// away. The notice reaches about 25 points below its close button, so the pointer is over
+/// it from this part of the way on.
+let pointerOverNotice = 0.2
+
+/// Where the close button of the notice is, for the pointer.
+struct CloseButton: PreferenceKey {
+    static var defaultValue: Anchor<CGPoint>? { nil }
+
+    static func reduce(value: inout Anchor<CGPoint>?, nextValue: () -> Anchor<CGPoint>?) {
+        value = value ?? nextValue()
+    }
+}
+
+/// The Mac's arrow pointer, its tip at the top left.
+struct Pointer: View {
+    var body: some View {
+        let arrow = Path { path in
+            path.move(to: .zero)
+            path.addLine(to: CGPoint(x: 0, y: 17))
+            path.addLine(to: CGPoint(x: 4, y: 13))
+            path.addLine(to: CGPoint(x: 7, y: 19.5))
+            path.addLine(to: CGPoint(x: 9.5, y: 18.5))
+            path.addLine(to: CGPoint(x: 6.6, y: 12.3))
+            path.addLine(to: CGPoint(x: 12, y: 12.3))
+            path.closeSubpath()
+        }
+        return ZStack(alignment: .topLeading) {
+            arrow.stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+            arrow.fill(Color.black)
+        }
+        .frame(width: 13, height: 20, alignment: .topLeading)
+        .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+    }
+}
 
 // MARK: - Meeting Interpretation
 
@@ -413,7 +478,7 @@ let meetingCaptions = [
     ),
     Caption(
         original: "The test report isn’t ready yet.",
-        translation: L("测试报告还没准备好。", "测试报告还没准备好。", "テストレポートはまだ準備できていません。", "El reporte de pruebas todavía no está listo."),
+        translation: L("测试报告还没准备好。", "测试报告还没准备好。", "テストレポートはまだできていません。", "El reporte de pruebas todavía no está listo."),
         originalAt: 5.0,
         translationAt: 5.5
     ),
@@ -631,10 +696,9 @@ func updatesScene(icon: NSImage?) -> Scene {
                     .frame(width: 600, height: 26)
                     .background(Color.white.opacity(0.8))
                     if menuOpen {
-                        let items = menuItems(lang)
                         // The top of the menu meets the menu bar.
-                        menu(items, hover: hover)
-                            .position(x: 400, y: 26 + menuHeight(items) / 2)
+                        menu(menuItems(lang), hover: hover)
+                            .offset(x: 275, y: 26)
                     }
                     if dialog {
                         updateDialog(lang: lang, icon: iconView(56), pressed: t >= 4.1 && t < 4.4, installing: installing, progress: progress, ready: ready)
@@ -665,11 +729,6 @@ func menuItems(_ lang: Lang) -> [MenuItem] {
     // The Talk Key submenu and the dividers where StatusMenu.swift puts them.
     let talkKey: MenuItem = (L("Talk Key", "说话键", "音声入力キー", "Tecla para hablar")(lang), false, true)
     return [copy, nil, talkKey, nil, check, report, settings, nil, quit]
-}
-
-/// The height of the menu: 24 for an item, 9 for a divider and 10 for the padding.
-func menuHeight(_ items: [MenuItem]) -> CGFloat {
-    items.reduce(10) { $0 + ($1 == nil ? 9 : 24) }
 }
 
 @MainActor
