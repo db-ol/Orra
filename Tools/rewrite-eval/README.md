@@ -95,7 +95,9 @@ on the regular cases and on the adversarial ones, see docs/manual-testing.md.
 Cases for translation between Japanese and English and between Spanish and English, for a
 user who dictates in Japanese or Spanish, see Orra/DictationLanguage.swift. They were
 written on 2026-10-18, before the prompts of these pairs existed, and none of them is a
-prompt example. Like the other cases they are synthetic and hold no one's dictation, and
+prompt example. After a review, one example of the Japanese prompt took the stock phrases
+お世話になっております and よろしくお願いいたします, which tja011, tja021, tja027 and tja128
+hold too, so those four no longer measure text the model never saw. Like the other cases they are synthetic and hold no one's dictation, and
 no text of a dataset.
 
 | File | Cases | What it holds |
