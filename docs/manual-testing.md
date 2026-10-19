@@ -479,7 +479,10 @@ got worse than the baseline, see docs/release-gate.md.
     that such a call keeps its access to the model gate until it ends, so a voice
     request after the dictation's reservation ended waits for it, also through a whole
     dictation with PushToTalkController, and that a call cancelled before its turn at the
-    cleanup model's engine ends there without the model.
+    cleanup model's engine ends there without the model. The evaluations that run the
+    real model time a step until its paste, as in the app. After a time out they wait for
+    the call to end before the next case, see StepModelCall, so they keep its cut off
+    completion and the next case's time leaves it out.
   - PromptPrefixTests checks with stand in token IDs that the cached start of the prompt
     stops two tokens before the first token two prompts differ in, that a prompt reads
     only the tokens after it, and that a prompt that does not start with it, or has
