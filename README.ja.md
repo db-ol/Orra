@@ -1,10 +1,10 @@
 <h1 align="center">
-  <a href="https://db-ol.github.io/Orra/"><img src="site/icon.png" alt="Orra" width="64" valign="middle"></a> Orra
+  <a href="https://db-ol.github.io/Orra/ja/"><img src="site/icon.png" alt="Orra" width="64" valign="middle"></a> Orra
 </h1>
 
 <p align="center">
   <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-Orra.dmg-0A84FF?logo=apple&logoColor=white" alt="Orra.dmgをダウンロード"></a>
-  <a href="https://db-ol.github.io/Orra/"><img src="https://img.shields.io/badge/%E5%85%AC%E5%BC%8F%E3%82%B5%E3%82%A4%E3%83%88-db--ol.github.io%2FOrra-555555?logo=safari&logoColor=white" alt="Orra公式サイト"></a>
+  <a href="https://db-ol.github.io/Orra/ja/"><img src="https://img.shields.io/badge/%E5%85%AC%E5%BC%8F%E3%82%B5%E3%82%A4%E3%83%88-db--ol.github.io%2FOrra-555555?logo=safari&logoColor=white" alt="Orra公式サイト"></a>
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=%E3%83%AA%E3%83%AA%E3%83%BC%E3%82%B9&color=0A84FF" alt="最新リリース"></a>
 </p>
 
