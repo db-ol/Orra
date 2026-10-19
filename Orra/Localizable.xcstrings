@@ -7353,7 +7353,7 @@
       }
     },
     "Shows what was said, without translating it." : {
-      "comment" : "The help of the Original display mode of the caption window",
+      "comment" : "The help of the Original display mode, in the caption window and in Settings",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {

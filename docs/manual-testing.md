@@ -2608,12 +2608,12 @@ it shows starts, stops, counts and failures, never text.
   window shows it. With "Original" that is the originals, one sentence per line. With
   "Translated" that is the translations, and the original where there is none. With
   "Both" each original has its translation on the next line, with a blank line between
-  sentences. The line still
-  being heard is left out. After a copy the icon shows a checkmark for about 1.5 s, and
-  VoiceOver says "Copied". The arrow opens Copy Original Text, Copy Translation (disabled
-  while no sentence has a translation) and Copy Original and Translation. Check that this
-  menu with a primary action works in the panel, which does not activate Orra: a click on
-  the icon copies, a click on the arrow opens the menu, and the call app keeps the focus.
+  sentences. The line still being heard is left out. After a copy the icon shows a
+  checkmark for about 1.5 s, and VoiceOver says "Copied". The arrow opens Copy Original
+  Text, Copy Translation (disabled while no sentence has a translation) and Copy Original
+  and Translation. Check that this menu with a primary action works in the panel, which
+  does not activate Orra: a click on the icon copies, a click on the arrow opens the
+  menu, and the call app keeps the focus.
 - [ ] The top row with Copy, at 520 pt and at the narrowest width, in all four languages,
   since 2026-10-19 not verified yet in the running app. The three segments sit at the
   left, Copy at the right. When the window is too narrow for the segments they turn into
@@ -2642,20 +2642,20 @@ it shows starts, stops, counts and failures, never text.
 - [ ] A meeting of more than 500 sentences: the window draws the last 500, and a copy has
   them all. Past 10,000 the oldest drop, and the Copy menu shows "Orra keeps the last
   10,000 sentences." as a line that cannot be clicked.
-- [ ] Without the local model: the window says "The local model is not on this Mac yet.
-  Until it is, captions show what was said without translation." with a Download
-  button. The button asks "Download the model for translation?" first, and the download
-  shows its progress in the window. Once it is in place and loaded, new sentences are
-  translated. Turning captions off stops the download.
+- [ ] In Translated or Both, without the local model: the window says "The local model is
+  not on this Mac yet. Until it is, captions show what was said without translation."
+  with a Download button. The button asks "Download the model for translation?" first,
+  and the download shows its progress in the window. Once it is in place and loaded, new
+  sentences are translated. Turning captions off stops the download.
 - [ ] While the speech model is still loading at launch, the window says "The speech
   model is not ready. Captions start once it is loaded."
-- [ ] With cleanup and translation off, the local model loads when captions start and
-  is unloaded when they stop (Activity Monitor shows the memory fall).
+- [ ] In Translated or Both, with cleanup and translation off, the local model loads when
+  captions start and is unloaded when they stop (Activity Monitor shows the memory fall).
 - [ ] With the interface in Chinese: the menu's heading reads 会议同传 with 实时字幕 under
-  it, the window's title reads 实时字幕, the picker reads 原文, 译文 and
-  双语, and every note in the window is in Chinese. The Copy button's help
-  reads 拷贝全部字幕, its menu 拷贝原文, 拷贝译文 and 拷贝原文和译文, and the Orra menu
-  shows 拷贝字幕 and 拷贝上一次的字幕.
+  it, the window's title reads 实时字幕, the picker reads 原文, 译文 and 双语, and every
+  note in the window is in Chinese. The Copy button's help reads 拷贝全部字幕, its menu
+  拷贝原文, 拷贝译文 and 拷贝原文和译文, and the Orra menu shows 拷贝字幕 and
+  拷贝上一次的字幕.
 - [ ] Meeting Interpretation groups both parts, since 2026-10-15. In the menu they stand
   under a Meeting Interpretation heading at the top level since 2026-10-17, in place of
   the submenu, see below. Settings has a Meeting Interpretation page (会议同传), a

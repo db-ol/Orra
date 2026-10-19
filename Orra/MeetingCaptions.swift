@@ -321,6 +321,11 @@ final class MeetingCaptions {
         guard mode != displayMode else { return }
         displayMode = mode
         saveDisplayMode(mode)
+        // Logged while captions are on, so a model load in the middle of a run has its
+        // cause in the log.
+        if isOn {
+            Logger.captions.notice("Meeting captions now showing \(mode.rawValue, privacy: .public)")
+        }
         // A switch to a mode that translates while captions run loads the model now. A
         // switch back keeps it until captions stop, so it does not load and unload.
         if capture == .listening {
