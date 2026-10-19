@@ -33,7 +33,7 @@
     },
     "NSAudioCaptureUsageDescription" : {
       "comment" : "Privacy - Audio Capture Usage Description",
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

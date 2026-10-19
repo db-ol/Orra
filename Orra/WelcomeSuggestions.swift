@@ -43,7 +43,9 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
     ///     On only with both, so the row never says On while step 1 offers the download.
     ///   - translationOn: Whether Translation is on.
     ///   - language: The dictation language, which translation goes between with English.
-    static func all(cleanupOn: Bool, cleanupModelInstalled: Bool, translationOn: Bool, language: DictationLanguage = .chinese, locale: Locale = .interface) -> [WelcomeSuggestion] {
+    ///   - translationKey: The translation key, which the translation line names.
+    ///   - translationMode: How the translation key works, which the translation line says.
+    static func all(cleanupOn: Bool, cleanupModelInstalled: Bool, translationOn: Bool, language: DictationLanguage = .chinese, translationKey: Hotkey = .rightOption, translationMode: TriggerMode = .newTranslationKeyMode, locale: Locale = .interface) -> [WelcomeSuggestion] {
         Kind.allCases.map { kind in
             let isOn: Bool = switch kind {
             case .cleanup: cleanupOn && cleanupModelInstalled
@@ -51,11 +53,11 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
             case .meeting: false
             }
             let waitsForModel = kind == .cleanup && cleanupOn && !cleanupModelInstalled
-            return WelcomeSuggestion(kind: kind, isOn: isOn, waitsForModel: waitsForModel, language: language, locale: locale)
+            return WelcomeSuggestion(kind: kind, isOn: isOn, waitsForModel: waitsForModel, language: language, translateHint: translationKey.translateHint(mode: translationMode, in: locale), locale: locale)
         }
     }
 
-    private init(kind: Kind, isOn: Bool, waitsForModel: Bool, language: DictationLanguage, locale: Locale) {
+    private init(kind: Kind, isOn: Bool, waitsForModel: Bool, language: DictationLanguage, translateHint: String, locale: Locale) {
         self.kind = kind
         self.isOn = isOn
         func text(_ resource: LocalizedStringResource) -> String {
@@ -69,10 +71,12 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
             line = text("Removes fillers and fixes what you correct while speaking.")
         case .translation:
             title = text("Translation")
+            // How to use the key in its mode, such as "Press right Option to translate, and
+            // again to finish", then what comes out.
             line = switch language {
-            case .chinese: text("Hold the translation key and speak. Chinese becomes English, and English becomes Chinese.")
-            case .japanese: text("Hold the translation key and speak. Japanese becomes English, and English becomes Japanese.")
-            case .spanish: text("Hold the translation key and speak. Spanish becomes English, and English becomes Spanish.")
+            case .chinese: text("\(translateHint). Chinese becomes English, and English becomes Chinese.")
+            case .japanese: text("\(translateHint). Japanese becomes English, and English becomes Japanese.")
+            case .spanish: text("\(translateHint). Spanish becomes English, and English becomes Spanish.")
             }
         case .meeting:
             title = text("Meeting interpretation")

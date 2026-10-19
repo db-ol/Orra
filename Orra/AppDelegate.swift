@@ -384,6 +384,9 @@ enum LaunchMigrations {
         // A new user's talk key stays in Press to start and stop once Orra is set up, and an
         // earlier user's in Hold, see TriggerModePreference.
         TriggerModePreference.keepTalkMode(pushToTalk.talkMode, in: defaults)
+        // The translation key stays in Press to start and stop once Translation is turned on,
+        // and in Hold for a user who turned it on before, see TriggerModePreference.
+        TriggerModePreference.keepTranslationMode(pushToTalk.translationMode, in: defaults)
         // The dictation language stays the same way, see DictationLanguagePreference.
         DictationLanguagePreference.keep(pushToTalk.dictationLanguage, in: defaults)
     }

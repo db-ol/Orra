@@ -300,6 +300,7 @@ struct TriggerModeTests {
         #expect(TriggerMode.allCases.map(\.rawValue) == ["hold", "toggle", "doubleTap"])
         #expect(TriggerMode.defaultMode == .hold)
         #expect(TriggerMode.newTalkKeyMode == .toggle)
+        #expect(TriggerMode.newTranslationKeyMode == .toggle)
     }
 }
 
@@ -365,13 +366,56 @@ struct HotkeyPreferenceTests {
             #expect(!setUpBefore)
             let mode = TriggerModePreference.load(for: .talk, setUpBefore: setUpBefore, from: defaults)
             #expect(mode == .toggle)
-            // The translation key starts in Hold for everyone.
-            #expect(TriggerModePreference.load(for: .translation, setUpBefore: setUpBefore, from: defaults) == .hold)
             TriggerModePreference.keepTalkMode(mode, in: defaults)
             #expect(TriggerModePreference.saved(for: .talk, in: defaults) == .toggle)
             #expect(TriggerModePreference.saved(for: .translation, in: defaults) == nil)
             // The next launch, once the user has given both permissions.
             #expect(TriggerModePreference.load(for: .talk, setUpBefore: true, from: defaults) == .toggle)
+        }
+    }
+
+    /// Translation was never turned on, so the translation key was never used: it starts in
+    /// Press to start and stop, for a new user and for one who set Orra up before.
+    @Test func aTranslationKeyStartsInPressToStartAndStopUnlessTranslationWasTurnedOn() throws {
+        try withTestDefaults("HotkeyPreference.translationNew") { defaults in
+            #expect(!TranslationPreference.wasTurnedOn(in: defaults))
+            #expect(TriggerModePreference.load(for: .translation, setUpBefore: false, from: defaults) == .toggle)
+            #expect(TriggerModePreference.load(for: .translation, setUpBefore: true, from: defaults) == .toggle)
+            // A saved mode wins.
+            TriggerModePreference.save(.doubleTap, for: .translation, to: defaults)
+            #expect(TriggerModePreference.load(for: .translation, setUpBefore: true, from: defaults) == .doubleTap)
+        }
+    }
+
+    /// The switch is saved only when it changes, so a saved value, on or off, means the
+    /// user turned Translation on before and may have learned the key in Hold.
+    @Test(arguments: [true, false])
+    func translationTurnedOnBeforeKeepsHold(_ translationIsOn: Bool) throws {
+        try withTestDefaults("HotkeyPreference.translationBefore") { defaults in
+            TranslationPreference.save(translationIsOn, to: defaults)
+            #expect(TranslationPreference.wasTurnedOn(in: defaults))
+            let mode = TriggerModePreference.load(for: .translation, setUpBefore: true, from: defaults)
+            #expect(mode == .hold)
+            TriggerModePreference.keepTranslationMode(mode, in: defaults)
+            #expect(TriggerModePreference.saved(for: .translation, in: defaults) == .hold)
+            // The talk key's mode does not depend on it.
+            #expect(TriggerModePreference.load(for: .talk, setUpBefore: false, from: defaults) == .toggle)
+        }
+    }
+
+    /// The keep step saves the mode the translation key started in, so turning Translation
+    /// on later does not move the key to Hold at the next launch.
+    @Test func theTranslationKeysModeStaysOnceTranslationIsTurnedOn() throws {
+        try withTestDefaults("HotkeyPreference.translationKeep") { defaults in
+            let mode = TriggerModePreference.load(for: .translation, setUpBefore: true, from: defaults)
+            TriggerModePreference.keepTranslationMode(mode, in: defaults)
+            #expect(TriggerModePreference.saved(for: .translation, in: defaults) == .toggle)
+            TranslationPreference.save(true, to: defaults)
+            #expect(TriggerModePreference.load(for: .translation, setUpBefore: true, from: defaults) == .toggle)
+            // A mode the user picked stays too.
+            TriggerModePreference.save(.hold, for: .translation, to: defaults)
+            TriggerModePreference.keepTranslationMode(.toggle, in: defaults)
+            #expect(TriggerModePreference.saved(for: .translation, in: defaults) == .hold)
         }
     }
 

@@ -15,14 +15,19 @@ nonisolated enum TriggerMode: String, CaseIterable, Identifiable, Sendable {
     /// hold does nothing.
     case doubleTap
 
-    /// The mode of a key with nothing saved: the translation key, and the talk key of a
-    /// user who set Orra up before new users started in `newTalkKeyMode`, see
+    /// The mode of a key with nothing saved: the talk key of a user who set Orra up before
+    /// new users started in `newTalkKeyMode`, and the translation key of a user who turned
+    /// Translation on before it started in `newTranslationKeyMode`, see
     /// TriggerModePreference.
     static let defaultMode: TriggerMode = .hold
 
     /// The mode a new user's talk key starts in, which the maintainer chose on 2026-10-17.
     /// The welcome window offers the other two.
     static let newTalkKeyMode: TriggerMode = .toggle
+
+    /// The mode the translation key starts in for everyone who never turned Translation
+    /// on, new or not, which the maintainer chose on 2026-10-19.
+    static let newTranslationKeyMode: TriggerMode = .toggle
 
     var id: String { rawValue }
 
@@ -383,11 +388,18 @@ nonisolated enum Hotkey: Hashable, Sendable {
 
 /// Keeps how each key starts a dictation in UserDefaults.
 ///
-/// A new user's talk key starts in Press to start and stop, and the translation key in
-/// Hold. Earlier versions of Orra started the talk key in Hold too and saved no mode until
-/// the user picked one, so a user who set Orra up with one of them has nothing saved and
-/// keeps Hold, see `wasSetUpBefore`. A launch with no mode saved saves the one the talk key
-/// started in, see `keepTalkMode`, since a new user looks set up from the next launch on.
+/// A new user's talk key starts in Press to start and stop. Earlier versions of Orra
+/// started it in Hold and saved no mode until the user picked one, so a user who set Orra
+/// up with one of them has nothing saved and keeps Hold, see `wasSetUpBefore`.
+///
+/// The translation key starts in Press to start and stop too, unless the user turned
+/// Translation on before, see `TranslationPreference.wasTurnedOn`. Earlier versions started
+/// it in Hold, and only a user who turned Translation on could use it, so only those users
+/// keep Hold.
+///
+/// A launch with no mode saved saves the one each key started in, see `keepTalkMode` and
+/// `keepTranslationMode`, since a new user looks set up from the next launch on, and turning
+/// Translation on later must not move the translation key to Hold.
 nonisolated enum TriggerModePreference {
     static func defaultsKey(for slot: KeySlot) -> String {
         slot == .talk ? "talkKeyMode" : "translationKeyMode"
@@ -398,10 +410,16 @@ nonisolated enum TriggerModePreference {
         defaults.string(forKey: defaultsKey(for: slot)).flatMap(TriggerMode.init(rawValue:))
     }
 
-    /// The saved mode, or the one the key starts in: `TriggerMode.newTalkKeyMode` for the
-    /// talk key of a user who never set Orra up, Hold otherwise.
+    /// The saved mode, or the one the key starts in: for the talk key
+    /// `TriggerMode.newTalkKeyMode` when the user never set Orra up, and for the translation
+    /// key `TriggerMode.newTranslationKeyMode` when the user never turned Translation on.
+    /// Hold otherwise.
     static func load(for slot: KeySlot, setUpBefore: Bool, from defaults: UserDefaults = .standard) -> TriggerMode {
-        saved(for: slot, in: defaults) ?? (slot == .talk && !setUpBefore ? .newTalkKeyMode : .defaultMode)
+        if let saved = saved(for: slot, in: defaults) { return saved }
+        return switch slot {
+        case .talk: setUpBefore ? .defaultMode : .newTalkKeyMode
+        case .translation: TranslationPreference.wasTurnedOn(in: defaults) ? .defaultMode : .newTranslationKeyMode
+        }
     }
 
     static func save(_ mode: TriggerMode, for slot: KeySlot, to defaults: UserDefaults = .standard) {
@@ -420,7 +438,17 @@ nonisolated enum TriggerModePreference {
     /// Saves the mode the talk key started in, unless a mode is saved, so it stays once
     /// the user has set Orra up. LaunchMigrations runs it at launch.
     static func keepTalkMode(_ mode: TriggerMode, in defaults: UserDefaults = .standard) {
-        guard saved(for: .talk, in: defaults) == nil else { return }
-        save(mode, for: .talk, to: defaults)
+        keep(mode, for: .talk, in: defaults)
+    }
+
+    /// Saves the mode the translation key started in, unless a mode is saved, so it stays
+    /// once the user turns Translation on. LaunchMigrations runs it at launch.
+    static func keepTranslationMode(_ mode: TriggerMode, in defaults: UserDefaults = .standard) {
+        keep(mode, for: .translation, in: defaults)
+    }
+
+    private static func keep(_ mode: TriggerMode, for slot: KeySlot, in defaults: UserDefaults) {
+        guard saved(for: slot, in: defaults) == nil else { return }
+        save(mode, for: slot, to: defaults)
     }
 }

@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Translation, a page of Settings: the switch of the translation key, what it translates
-/// into, and where the model stands while it downloads or loads. The key itself is chosen
-/// under Keys on General, next to the talk key, since picking one can swap the two.
+/// Translation, a page of Settings: the switch of the translation key, how the key works
+/// in its mode, what it translates into, and where the model stands while it downloads or
+/// loads. The key itself is chosen under Keys on General, next to the talk key, since
+/// picking one can swap the two. Change… here leads there.
 struct TranslationSettings: View {
     let pushToTalk: PushToTalkController
     let cleanup: TextCleanup
@@ -11,6 +12,10 @@ struct TranslationSettings: View {
         Form {
             Section {
                 TranslationRow(cleanup: cleanup)
+                TranslationKeyRow(pushToTalk: pushToTalk)
+                    // The key does nothing while translation is off, and its field under Keys
+                    // is off too.
+                    .disabled(!cleanup.translationIsOn)
                 // The choices of the dictation language. A choice saved for another language
                 // shows as Automatic, which is what it does, and comes back with its language.
                 Picker(selection: Binding(
@@ -60,7 +65,7 @@ private struct TranslationRow: View {
         )) {
             DescribedLabel(
                 title: "Translation",
-                detail: "Hold the translation key, speak, and let go. Orra pastes what you said in another language.",
+                detail: "Orra pastes what you said in another language.",
                 systemImage: "translate"
             )
         }
@@ -75,6 +80,42 @@ private struct TranslationRow: View {
         } message: {
             Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
         }
+    }
+}
+
+/// The translation key with how it works in its mode, such as "Press right Option to
+/// translate, and again to finish", and Change…, which opens General at Keys, where the
+/// key and its mode are set.
+private struct TranslationKeyRow: View {
+    let pushToTalk: PushToTalkController
+    @Environment(\.interfaceLocale) private var interfaceLocale
+
+    var body: some View {
+        LabeledContent {
+            Button("Change…") {
+                TranslationSettings.showKeys()
+            }
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Translation key")
+                    Text(verbatim: pushToTalk.translateHint(in: interfaceLocale))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "character.bubble")
+            }
+        }
+    }
+}
+
+extension TranslationSettings {
+    /// Turns the open settings window to General, scrolled to Keys, for Change… beside the
+    /// translation key.
+    static func showKeys() {
+        SettingsWindow.show(.general, section: .keys)
     }
 }
 

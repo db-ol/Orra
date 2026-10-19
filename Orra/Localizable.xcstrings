@@ -340,6 +340,72 @@
         }
       }
     },
+    "%@. Chinese becomes English, and English becomes Chinese." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. El chino pasa a inglés y el inglés, a chino."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。中国語は英語に、英語は中国語になります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。中文变成英文，英文变成中文。"
+          }
+        }
+      }
+    },
+    "%@. Japanese becomes English, and English becomes Japanese." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. El japonés pasa a inglés y el inglés, a japonés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。日本語は英語に、英語は日本語になります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。日文变成英文，英文变成日文。"
+          }
+        }
+      }
+    },
+    "%@. Spanish becomes English, and English becomes Spanish." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@. El español pasa a inglés y el inglés, a español."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。スペイン語は英語に、英語はスペイン語になります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@。西班牙文变成英文，英文变成西班牙文。"
+          }
+        }
+      }
+    },
     "%lld seconds, in memory until Orra quits." : {
       "localizations" : {
         "es-419" : {
@@ -3285,94 +3351,6 @@
         }
       }
     },
-    "Hold the translation key and speak. Chinese becomes English, and English becomes Chinese." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mantén presionada la tecla de traducción y habla. El chino pasa a inglés y el inglés, a chino."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳キーを押したまま話します。中国語は英語に、英語は中国語になります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住翻译键说话，中文变成英文，英文变成中文。"
-          }
-        }
-      }
-    },
-    "Hold the translation key and speak. Japanese becomes English, and English becomes Japanese." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mantén presionada la tecla de traducción y habla. El japonés pasa a inglés y el inglés, a japonés."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳キーを押したまま話します。日本語は英語に、英語は日本語になります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住翻译键说话，日文变成英文，英文变成日文。"
-          }
-        }
-      }
-    },
-    "Hold the translation key and speak. Spanish becomes English, and English becomes Spanish." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mantén presionada la tecla de traducción y habla. El español pasa a inglés y el inglés, a español."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳キーを押したまま話します。スペイン語は英語に、英語はスペイン語になります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住翻译键说话，西班牙文变成英文，英文变成西班牙文。"
-          }
-        }
-      }
-    },
-    "Hold the translation key, speak, and let go. Orra pastes what you said in another language." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mantén presionada la tecla de traducción, habla y suéltala. Orra pega lo que dijiste en otro idioma."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳キーを押したまま話して、指を離します。話した内容を、Orraが別の言語でペーストします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "按住翻译键说话，松开后 Orra 会粘贴译文。"
-          }
-        }
-      }
-    },
     "Home" : {
       "comment" : "A key name",
       "localizations" : {
@@ -5403,6 +5381,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 会打开报告文件所在的文件夹，请把文件拖进 GitHub 页面。"
+          }
+        }
+      }
+    },
+    "Orra pastes what you said in another language." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra pega lo que dijiste en otro idioma."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容を、Orraが別の言語でペーストします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 会粘贴译文。"
           }
         }
       }
@@ -8637,28 +8637,6 @@
         }
       }
     },
-    "The translation key counts as a dictation only after you hold it alone for a moment, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it. With Double press in Hold to keep recording on, press it twice quickly and it keeps recording after you let go." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La tecla de traducción cuenta como dictado solo después de mantenerla presionada sola un momento, así que sus funciones rápidas de teclado y los caracteres que escribe la tecla Opción siguen funcionando. Si es la tecla fn o una tecla Control, Opción o Comando derecha, empieza a grabar en cuanto la presionas. Con la opción de presionar dos veces en modo Mantener presionada activada, presiónala rápido dos veces y Orra sigue grabando después de que la sueltas."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳キーは、単独で少しの間押し続けたときにだけ音声入力として扱われるため、そのキーのショートカットやOptionキーで入力する文字はそのまま使えます。fnキーまたは右のControl、Option、Commandキーの場合は、押すとすぐに録音を開始します。“押したまま”で2回押す設定がオンのときは、すばやく2回押すと、指を離しても録音が続きます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻译键要单独按住片刻才算一次听写，所以它的快捷键和 Option 键输入的字符照常可用。翻译键是 fn 键或右侧的 Control、Option、Command 键时，按下就开始录音。“按住”用法下，打开连按两下的开关后，快速连按两下翻译键，松开后会继续录音。"
-          }
-        }
-      }
-    },
     "The two keys swapped. The talk key is now %@ and the translation key %@." : {
       "localizations" : {
         "en" : {
@@ -9657,6 +9635,28 @@
         }
       }
     },
+    "Use the translation key on its own. A press together with another key is a shortcut and records nothing, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa la tecla de traducción sin otras teclas. Si la presionas junto con otra tecla, es una función rápida de teclado y no graba nada, así que sus funciones rápidas de teclado y los caracteres que escribe la tecla Opción siguen funcionando. Si es la tecla fn o una tecla Control, Opción o Comando derecha, empieza a grabar en cuanto la presionas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻訳キーは単独で使います。ほかのキーと一緒に押した場合はショートカットとして扱われて録音されないため、そのキーのショートカットやOptionキーで入力する文字はそのまま使えます。fnキーまたは右のControl、Option、Commandキーの場合は、押すとすぐに録音を開始します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "单独使用翻译键。和其他键一起按下时算作快捷键，不会录音，所以它的快捷键和 Option 键输入的字符照常可用。翻译键是 fn 键或右侧的 Control、Option、Command 键时，按下就开始录音。"
+          }
+        }
+      }
+    },
     "Use This Recording" : {
       "localizations" : {
         "es-419" : {
@@ -10028,6 +10028,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用声音样本时，每句话播放前 Orra 会先用语音模型听一遍，听到的字词不对就重新合成，所以每句话会稍晚一点开始。"
+          }
+        }
+      }
+    },
+    "With Double press in Hold to keep recording on, press the translation key twice quickly and it keeps recording after you let go." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Con la opción de presionar dos veces en modo Mantener presionada activada, presiona rápido dos veces la tecla de traducción y Orra sigue grabando después de que la sueltas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“押したまま”で2回押す設定がオンのときは、翻訳キーをすばやく2回押すと、指を離しても録音が続きます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“按住”用法下，打开连按两下的开关后，快速连按两下翻译键，松开后会继续录音。"
           }
         }
       }
