@@ -62,20 +62,28 @@ got worse than the baseline, see docs/release-gate.md.
   on 2026-10-14 in 50 s, the real model tests included. With long dictations in pieces,
   it ended in TEST SUCCEEDED with 2998 test cases passed and 21 skipped on 2026-10-17 in
   92 s, the real model tests included.
-  - SettingsPageTests checks the four tabs, each with its own icon and color, and the
-    sheet of General, that a tab or sheet asked for, such as Vocabulary or Meeting
-    Interpretation, opens once while Settings… afterwards opens General alone, that a
-    sheet opens over General, that Change Talk Key… asks for General alone, that an open
-    window is told, the line under Clean Up Text for each state of the model, and the
-    texts of the model's status for translation. With
-    TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab and sheet
-    to a PNG there, General also with translation on and after a swap of the keys, and
-    Meeting Interpretation with translation off and on, which CI never does.
+  - SettingsPageTests checks the six tabs since 2026-10-19 (General, Dictation,
+    Translation, Meeting Interpretation, Vocabulary and About), each with its own icon and
+    color, that a tab asked for, such as Vocabulary or Meeting Interpretation, opens once
+    while Settings… afterwards opens General alone, that Change Talk Key… asks for General
+    scrolled to Keys once, that an open window is told, that the hands free row applies
+    only while a key is in Hold, the line under Clean Up Text for each state of the model,
+    and the texts of the model's status for translation. With
+    TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab to a PNG
+    there, General also scrolled to Keys, with translation on and after a swap of the keys,
+    and with the talk key in Press to start and stop, Dictation with cleanup on and in
+    Japanese, Translation off, on and in Spanish, and Meeting Interpretation with
+    translation off and on, which CI never does.
   - StatusMenuTests reads the top level of the menu SwiftUI makes of the menu bar menu,
     without showing it: Live Captions, off, right under the Meeting Interpretation
     heading with a divider above and below and no submenu, no two dividers next to each
     other, and Speak Translations to Others only in a build with a voice model, while
-    translation is on or while it is on itself.
+    translation is on or while it is on itself. Since 2026-10-19 it also checks that the
+    Talk Key submenu has no hands free switch.
+  - LaunchMigrationsTests, added on 2026-10-19, checks the steps that run at every launch
+    in temporary defaults: a first launch saves the talk key's mode and the dictation
+    language it started with and leaves the translation key's mode unsaved, a saved value
+    stays, and running twice gives what running once gives.
   - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
     for each translation direction and interface language, recording and stopping, too
     short, the stop at the time limit, a microphone that fails to start, a cancel while
@@ -2181,12 +2189,12 @@ a first launch prepared as in Welcome window above, and also
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 
 - [ ] Settings shows Clean Up Text off. Since 2026-10-19 the switch "Clean up with a local
-  model" sits on Dictation with its explanation, where an Options… sheet showed it before. Turning the switch on asks "Download the cleanup model?" with Download (3.05 GB) and Cancel.
-  Cancel leaves the switch off and nothing is downloaded.
-- [ ] Download shows the progress with the server in the status row under the switch
-  (in the Options… sheet before 2026-10-19). Cancel Download
-  stops it and turns the switch off. Turning it on again offers Resume Download with what
-  is left.
+  model" sits on Dictation with its explanation, where an Options… sheet showed it before.
+  Turning the switch on asks "Download the cleanup model?" with Download (3.05 GB) and
+  Cancel. Cancel leaves the switch off and nothing is downloaded.
+- [ ] Download shows the progress with the server in the status row under the switch (in
+  the Options… sheet before 2026-10-19). Cancel Download stops it and turns the switch
+  off. Turning it on again offers Resume Download with what is left.
 - [ ] After the download, "Loading the cleanup model…" shows for a few seconds and then
   goes. Activity Monitor shows Orra's memory about 4 GB higher.
 - [ ] On a Mac where a build of the local-rewrite branch downloaded the Qwen3 4B Instruct
@@ -2334,20 +2342,21 @@ running app:
   afterwards opens General.
 
 Translation key, added on 2026-10-13, not verified yet. The translation rows (on General
-until 2026-10-19, on the Translation page since) and the badge were rendered to PNG by the opt in tests, in English and in Chinese, but not seen
-in the running app:
+until 2026-10-19, on the Translation page since) and the badge were rendered to PNG by the
+opt in tests, in English and in Chinese, but not seen in the running app:
 
 - [ ] Settings, Translation shows the Translation (翻译) switch, off, and Translate into
-  (翻译成) right under it with Automatic, English and Chinese as choices and the
-  explanation of the chosen one, dimmed while translation is off. The footer says what
-  the model needs. Under Keys on General the translation key field is dimmed with "Turn
-  on Translation on the Translation page to use this key." until translation is on. Pointing at the Translation switch shows the length limit, Paste Original Text
-  and that Orra never learns from a translated paste. Pointing at the translation key
-  field shows which keys can be the translation key, that the two keys
-  swap, that a press counts only after a moment, and since 2026-10-16 that fn and the
-  right hand keys start recording when pressed. Turning it on without the model asks "Download the model for
-  translation?", and Cancel leaves it off. With cleanup on and the model in place it turns
-  on at once, and with cleanup on and the model downloading it turns on without asking.
+  (翻译成) right under it with Automatic, English and Chinese as choices and the explanation
+  of the chosen one, dimmed while translation is off. The footer says what the model
+  needs. Under Keys on General the translation key field is dimmed with "Turn on
+  Translation on the Translation page to use this key." until translation is on. Pointing
+  at the Translation switch shows the length limit, Paste Original Text and that Orra
+  never learns from a translated paste. Pointing at the translation key field shows which
+  keys can be the translation key, that the two keys swap, that a press counts only after
+  a moment, and since 2026-10-16 that fn and the right hand keys start recording when
+  pressed. Turning it on without the model asks "Download the model for translation?", and
+  Cancel leaves it off. With cleanup on and the model in place it turns on at once, and
+  with cleanup on and the model downloading it turns on without asking.
 - [ ] While translation is on and the model is not ready, a row under Translate into,
   lined up with the names above it, shows the progress with Cancel Download, or Download,
   Resume Download, loading and Try Again, also while cleanup is off. With cleanup on as
@@ -2512,8 +2521,10 @@ the same way. Put them back afterwards:
 - [ ] Settings, General, with the talk key in Press to start and stop and translation off:
   Keys has no hands free row (it was dimmed before 2026-10-19). With translation on and
   its key in Hold, Double press in Hold to keep recording shows with "Press a key in Hold
-  mode twice quickly to keep recording after you let go." under it, and works. The talk key's help reads "Use the talk key on its own…", and
-  "Hold the talk key on its own…" in Hold.
+  mode twice quickly to keep recording after you let go." under it, and works. The talk
+  key's help reads "Use the talk key on its own…", and "Hold the talk key on its own…" in
+  Hold. The translation key's help ends with "With Double press in Hold to keep recording
+  on, press it twice quickly and it keeps recording after you let go."
 - [ ] A new user who turns on Translation finds the translation key in Hold, and holding
   it translates as before.
 - [ ] Update from an earlier version keeping Hold: on a Mac where 0.4.1 is set up with

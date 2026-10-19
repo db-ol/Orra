@@ -418,7 +418,7 @@ nonisolated enum TriggerModePreference {
     }
 
     /// Saves the mode the talk key started in, unless a mode is saved, so it stays once
-    /// the user has set Orra up. AppDelegate calls it at launch.
+    /// the user has set Orra up. LaunchMigrations runs it at launch.
     static func keepTalkMode(_ mode: TriggerMode, in defaults: UserDefaults = .standard) {
         guard saved(for: .talk, in: defaults) == nil else { return }
         save(mode, for: .talk, to: defaults)

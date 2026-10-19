@@ -1,7 +1,7 @@
 import Foundation
 
 /// The language a user dictates in besides English, from Dictation language in Settings,
-/// General, and in the welcome window. English is always the other one, so a user can mix
+/// Dictation, and in the welcome window. English is always the other one, so a user can mix
 /// the two in one sentence, and there is no third.
 ///
 /// Chinese, Mandarin and Cantonese, is how Orra has always worked. Japanese and Spanish are
@@ -129,7 +129,7 @@ nonisolated enum DictationLanguagePreference {
     }
 
     /// Saves the language the user started with, unless one is saved, so it stays once
-    /// the user has set Orra up. AppDelegate calls it at launch.
+    /// the user has set Orra up. LaunchMigrations runs it at launch.
     static func keep(_ language: DictationLanguage, in defaults: UserDefaults = .standard) {
         guard saved(in: defaults) == nil else { return }
         save(language, to: defaults)

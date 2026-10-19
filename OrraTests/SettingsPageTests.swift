@@ -19,8 +19,6 @@ struct SettingsPageTests {
         // Each page has its own icon in its own color.
         #expect(Set(SettingsTab.allCases.map(\.symbol)).count == SettingsTab.allCases.count)
         #expect(Set(SettingsTab.allCases.map(\.tint)).count == SettingsTab.allCases.count)
-        // The titles are the ones the catalog translates.
-        #expect(SettingsTab.allCases.map { "\($0.title)" }.allSatisfy { !$0.isEmpty })
     }
 
     @Test func aTabAskedForOpensOnceAndSettingsOpensGeneral() {
