@@ -190,6 +190,31 @@ struct AbandonedCallTests {
         #expect(gate.snapshot == ModelGate.Snapshot())
     }
 
+    /// A call given up on while it waited for its turn at the engine ends there, without
+    /// the model. The engine here has no model, so a call that went on would throw
+    /// notLoaded instead, as one that was not cancelled does.
+    @Test(.timeLimit(.minutes(1)))
+    func aCallCancelledBeforeItsTurnDoesNotRunTheModel() async throws {
+        let engine = RewriteEngine()
+        // HeldWork ignores cancellation, so both calls reach the engine cancelled.
+        let turn = HeldWork()
+        let cleaning = Task {
+            await turn.run()
+            return try await engine.cleanUp("Hello.")
+        }
+        let translating = Task {
+            await turn.run()
+            return try await engine.translate("Hello.", into: TranslationRoute.chinese(.english))
+        }
+        cleaning.cancel()
+        translating.cancel()
+        turn.release()
+        await #expect(throws: CancellationError.self) { try await cleaning.value }
+        await #expect(throws: CancellationError.self) { try await translating.value }
+        await #expect(throws: RewriteError.notLoaded) { try await engine.cleanUp("Hello.") }
+        await #expect(throws: RewriteError.notLoaded) { try await engine.translate("Hello.", into: TranslationRoute.chinese(.english)) }
+    }
+
     /// The whole dictation: the text is pasted without the cleanup at the limit, while the
     /// cleanup call still runs, and a voice request after the paste waits for that call.
     /// The limit is CleanupStep's own, about 2 s for this text.

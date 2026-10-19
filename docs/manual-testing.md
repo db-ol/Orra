@@ -478,7 +478,8 @@ got worse than the baseline, see docs/release-gate.md.
     translation steps paste the text they got at the limit. AbandonedCallTests checks
     that such a call keeps its access to the model gate until it ends, so a voice
     request after the dictation's reservation ended waits for it, also through a whole
-    dictation with PushToTalkController.
+    dictation with PushToTalkController, and that a call cancelled before its turn at the
+    cleanup model's engine ends there without the model.
   - PromptPrefixTests checks with stand in token IDs that the cached start of the prompt
     stops two tokens before the first token two prompts differ in, that a prompt reads
     only the tokens after it, and that a prompt that does not start with it, or has

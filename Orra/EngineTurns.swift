@@ -85,9 +85,11 @@ final class EngineTurns {
 
 extension EngineTurns {
     /// A caption call on the cleanup model, through `captionTurn`. When its task is
-    /// cancelled, the model stops early but returns what it wrote so far instead of
-    /// throwing, see RewriteEngine.generate. Such a cut off answer is never used here. It
-    /// counts as cancelled, so the call runs again after the dictation.
+    /// cancelled while the model runs, the model stops early but returns what it wrote so
+    /// far instead of throwing, see RewriteEngine.generate. Such a cut off answer is never
+    /// used here. It counts as cancelled, so the call runs again after the dictation. A
+    /// call cancelled before the model started throws CancellationError, and runs again
+    /// the same way.
     func captionTranslationTurn<T: Sendable>(retries: Int = 3, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
         try await captionTurn(retries: retries) {
             let value = try await work()

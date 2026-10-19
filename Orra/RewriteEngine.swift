@@ -141,7 +141,11 @@ actor RewriteEngine {
     /// Runs the cleanup prompt on a transcript. Greedy, so the same text always gets the
     /// same answer. Stops early when the task is cancelled, see CleanupStep. Without the
     /// prefix cache it runs the model on the whole prompt, which the evaluation compares.
+    /// A call whose task was cancelled before its turn, such as one TimedCall gave up on
+    /// while it waited behind another call, throws CancellationError and never runs the
+    /// model, so nobody waits for work whose answer is dropped.
     func cleanUp(_ text: String, usingPrefixCache: Bool = true) throws -> Completion {
+        try Task.checkCancellation()
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
         return try generate(RewritePrompt.text(for: text), maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens), prefix: usingPrefixCache ? prefix : nil, lookingUp: true, task: "Cleanup")
@@ -158,8 +162,10 @@ actor RewriteEngine {
         try translate(text, into: .chinese(target), usingPrefixCache: usingPrefixCache)
     }
 
-    /// Runs the translation prompt of a route on a transcript, the same way.
+    /// Runs the translation prompt of a route on a transcript, the same way. A call
+    /// cancelled before its turn throws before it fills a prefix cache too.
     func translate(_ text: String, into route: TranslationRoute, usingPrefixCache: Bool = true) throws -> Completion {
+        try Task.checkCancellation()
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
         let prefix = usingPrefixCache ? try translationPrefix(route) : nil
