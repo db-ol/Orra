@@ -140,6 +140,10 @@ final class PushToTalkController {
     /// The language the user dictates in besides English, see DictationLanguage. Read once
     /// per dictation. Saved through `saveDictationLanguage` whenever it changes.
     private(set) var dictationLanguage: DictationLanguage
+    /// Whether a language picked for Orra in the welcome window sets the dictation language
+    /// too, see `followAppLanguage(_:macLanguages:)`. Off for good once the user picks a
+    /// dictation language.
+    @ObservationIgnored private(set) var dictationLanguageFollows: Bool
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
     /// True while Settings records a voice sample with the microphone. A press of the talk
@@ -287,6 +291,7 @@ final class PushToTalkController {
     @ObservationIgnored private let saveWritesNumbersAsDigits: (Bool) -> Void
     @ObservationIgnored private let saveUsesScreenNames: (Bool) -> Void
     @ObservationIgnored private let saveDictationLanguage: (DictationLanguage) -> Void
+    @ObservationIgnored private let saveDictationLanguagePicked: () -> Void
     /// Reads the names on the screen of an app for the speech model, until a time limit
     /// after the press it gets, see ScreenNames.
     @ObservationIgnored private let readScreenNames: @Sendable (pid_t, ContinuousClock.Instant) async -> [String]
@@ -357,7 +362,12 @@ final class PushToTalkController {
     ///   - dictationLanguage: The language the user dictates in besides English, as saved,
     ///     or as it starts for this user while nothing is saved, see
     ///     DictationLanguagePreference.
-    ///   - saveDictationLanguage: Saves the language after the user changes it.
+    ///   - dictationLanguageFollows: Whether a language picked for Orra in the welcome
+    ///     window sets the dictation language too, see `DictationLanguagePreference.follows`.
+    ///   - saveDictationLanguage: Saves the language after the user changes it, or after it
+    ///     follows the welcome window.
+    ///   - saveDictationLanguagePicked: Saves that the user picked a dictation language, so
+    ///     it no longer follows at later launches either.
     ///   - now: The time, for the dates of the vocabulary. Tests pass fakes.
     init(
         capture: AudioCapture,
@@ -402,7 +412,9 @@ final class PushToTalkController {
         saveUsesScreenNames: @escaping (Bool) -> Void = { _ in },
         readScreenNames: @escaping @Sendable (pid_t, ContinuousClock.Instant) async -> [String] = { await ScreenNames.read(inApp: $0, pressedAt: $1) },
         dictationLanguage: DictationLanguage = .chinese,
+        dictationLanguageFollows: Bool = false,
         saveDictationLanguage: @escaping (DictationLanguage) -> Void = { _ in },
+        saveDictationLanguagePicked: @escaping () -> Void = {},
         now: @escaping () -> Date = { Date() }
     ) {
         self.capture = capture
@@ -450,7 +462,9 @@ final class PushToTalkController {
         self.saveUsesScreenNames = saveUsesScreenNames
         self.readScreenNames = readScreenNames
         self.dictationLanguage = dictationLanguage
+        self.dictationLanguageFollows = dictationLanguageFollows
         self.saveDictationLanguage = saveDictationLanguage
+        self.saveDictationLanguagePicked = saveDictationLanguagePicked
         self.now = now
     }
 
@@ -564,8 +578,24 @@ final class PushToTalkController {
 
     /// Chooses the language the user dictates in besides English for the next dictations,
     /// and for the next sentence of Live Captions, and saves the choice. Settings and the
-    /// welcome window both call it.
+    /// welcome window both call it. A pick, also of the language already chosen, ends the
+    /// follow of the welcome window's language for good.
     func setDictationLanguage(_ language: DictationLanguage) {
+        dictationLanguageFollows = false
+        saveDictationLanguagePicked()
+        guard language != dictationLanguage else { return }
+        dictationLanguage = language
+        saveDictationLanguage(language)
+    }
+
+    /// Sets the dictation language to the one `appLanguage` gives a new user, see
+    /// `DictationLanguage.preferred`, while the dictation language follows. The welcome
+    /// window calls it when the user picks Orra's language there, right above the dictation
+    /// language, so the user sees it change. Saved as the language, not as the user's pick,
+    /// so the next language picked there is followed too.
+    func followAppLanguage(_ appLanguage: AppLanguage, macLanguages: [String] = AppLanguage.macLanguages()) {
+        guard dictationLanguageFollows else { return }
+        let language = DictationLanguage.preferred(appLanguage: appLanguage, macLanguages: macLanguages)
         guard language != dictationLanguage else { return }
         dictationLanguage = language
         saveDictationLanguage(language)

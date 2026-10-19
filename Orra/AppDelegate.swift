@@ -50,12 +50,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             usesScreenNames: ScreenNamesPreference.load(),
             saveUsesScreenNames: { ScreenNamesPreference.save($0) },
             dictationLanguage: DictationLanguagePreference.load(setUpBefore: setUpBefore),
+            dictationLanguageFollows: DictationLanguagePreference.follows(setUpBefore: setUpBefore),
             // Translation goes between English and the dictation language, so the model
             // reads the prompts of the new language ahead.
             saveDictationLanguage: { [cleanup] in
                 DictationLanguagePreference.save($0)
                 cleanup.setDictationLanguage($0)
-            }
+            },
+            saveDictationLanguagePicked: { DictationLanguagePreference.savePicked() }
         )
         cleanup.setDictationLanguage(controller.dictationLanguage)
         return controller

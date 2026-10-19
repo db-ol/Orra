@@ -91,37 +91,39 @@ nonisolated enum DictationLanguage: String, CaseIterable, Identifiable, Sendable
         }
     }
 
-    /// The choice for a new user, from the Mac's first language: Japanese for Japanese,
-    /// Spanish for Spanish, and Chinese for any other, such as English or Chinese.
-    static func preferred(macLanguages: [String]) -> DictationLanguage {
-        guard let first = macLanguages.first else { return .chinese }
-        switch Locale.Language(identifier: first).languageCode {
-        case .japanese: return .japanese
-        case .spanish: return .spanish
-        default: return .chinese
-        }
+    /// The choice for a new user, from their own language, see OwnLanguage: Japanese for
+    /// Japanese, Spanish for Spanish, and Chinese for Chinese or none of the three, such as
+    /// on a Mac in English or French only.
+    static func preferred(appLanguage: AppLanguage = .load(), macLanguages: [String] = AppLanguage.macLanguages()) -> DictationLanguage {
+        OwnLanguage.current(appLanguage: appLanguage, macLanguages: macLanguages) ?? .chinese
     }
 }
 
 /// Keeps the dictation language in UserDefaults, by name.
 ///
-/// A new user starts with the language of the Mac, see `DictationLanguage.preferred`. A
-/// user who set Orra up before the choice existed dictated in Chinese and English, so
-/// keeps Chinese until they pick another, see `TriggerModePreference.wasSetUpBefore`. A
-/// launch with nothing saved saves the language the user started with, see `keep`, since
-/// a new user looks set up from the next launch on.
+/// A new user starts with their own language, see `DictationLanguage.preferred`. A user
+/// who set Orra up before the choice existed dictated in Chinese and English, so keeps
+/// Chinese until they pick another, see `TriggerModePreference.wasSetUpBefore`. A launch
+/// with nothing saved saves the language the user started with, see `keep`, since a new
+/// user looks set up from the next launch on.
+///
+/// Until setup is done the dictation language follows a language picked for Orra in the
+/// welcome window, see `follows`. After that it never changes by itself, since a wrong
+/// dictation language costs recognition quality.
 nonisolated enum DictationLanguagePreference {
     static let defaultsKey = "dictationLanguage"
+    /// Set once the user picks a dictation language, in Settings or in the welcome window.
+    static let pickedKey = "dictationLanguagePicked"
 
     /// The saved language, or nil when none is saved or the saved one is unknown.
     static func saved(in defaults: UserDefaults = .standard) -> DictationLanguage? {
         defaults.string(forKey: defaultsKey).flatMap(DictationLanguage.init(rawValue:))
     }
 
-    /// The saved language, or the one the user starts with: from the Mac's languages for a
-    /// user who never set Orra up, Chinese otherwise.
-    static func load(setUpBefore: Bool, macLanguages: [String] = AppLanguage.macLanguages(), from defaults: UserDefaults = .standard) -> DictationLanguage {
-        saved(in: defaults) ?? (setUpBefore ? .chinese : .preferred(macLanguages: macLanguages))
+    /// The saved language, or the one the user starts with: their own language for a user
+    /// who never set Orra up, Chinese otherwise.
+    static func load(setUpBefore: Bool, appLanguage: AppLanguage = .load(), macLanguages: [String] = AppLanguage.macLanguages(), from defaults: UserDefaults = .standard) -> DictationLanguage {
+        saved(in: defaults) ?? (setUpBefore ? .chinese : .preferred(appLanguage: appLanguage, macLanguages: macLanguages))
     }
 
     static func save(_ language: DictationLanguage, to defaults: UserDefaults = .standard) {
@@ -133,5 +135,24 @@ nonisolated enum DictationLanguagePreference {
     static func keep(_ language: DictationLanguage, in defaults: UserDefaults = .standard) {
         guard saved(in: defaults) == nil else { return }
         save(language, to: defaults)
+    }
+
+    /// Whether the user picked a dictation language. A language Orra saved for them, at
+    /// launch or following the welcome window, does not count.
+    static func isPicked(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: pickedKey)
+    }
+
+    static func savePicked(to defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: pickedKey)
+    }
+
+    /// Whether a language picked for Orra in the welcome window sets the dictation language
+    /// too, see `PushToTalkController.followAppLanguage(_:macLanguages:)`. Only on a Mac
+    /// not set up at this launch, since the welcome window comes back at launch whenever
+    /// setup is incomplete, and a user who lost a permission keeps their language. And
+    /// only until the user picks a dictation language.
+    static func follows(setUpBefore: Bool, in defaults: UserDefaults = .standard) -> Bool {
+        !setUpBefore && !isPicked(in: defaults)
     }
 }
