@@ -94,7 +94,7 @@ nonisolated enum DictationLanguage: String, CaseIterable, Identifiable, Sendable
     /// The choice for a new user, from their own language, see OwnLanguage: Japanese for
     /// Japanese, Spanish for Spanish, and Chinese for Chinese or none of the three, such as
     /// on a Mac in English or French only.
-    static func preferred(appLanguage: AppLanguage = .load(), macLanguages: [String] = AppLanguage.macLanguages()) -> DictationLanguage {
+    static func preferred(appLanguage: AppLanguage, macLanguages: [String]) -> DictationLanguage {
         OwnLanguage.current(appLanguage: appLanguage, macLanguages: macLanguages) ?? .chinese
     }
 }
@@ -107,13 +107,17 @@ nonisolated enum DictationLanguage: String, CaseIterable, Identifiable, Sendable
 /// with nothing saved saves the language the user started with, see `keep`, since a new
 /// user looks set up from the next launch on.
 ///
-/// Until setup is done the dictation language follows a language picked for Orra in the
-/// welcome window, see `follows`. After that it never changes by itself, since a wrong
-/// dictation language costs recognition quality.
+/// A new user's dictation language follows a language picked for Orra in the welcome
+/// window, until they pick a dictation language or setup is done, see `follows`. After
+/// that it never changes by itself, since a wrong dictation language costs recognition
+/// quality.
 nonisolated enum DictationLanguagePreference {
     static let defaultsKey = "dictationLanguage"
     /// Set once the user picks a dictation language, in Settings or in the welcome window.
     static let pickedKey = "dictationLanguagePicked"
+    /// Set by the launch that saves a new user's first dictation language, see `keep`, so
+    /// a language an earlier user saved never follows, also when they look new at a launch.
+    static let newUserKey = "dictationLanguageNewUser"
 
     /// The saved language, or nil when none is saved or the saved one is unknown.
     static func saved(in defaults: UserDefaults = .standard) -> DictationLanguage? {
@@ -131,10 +135,14 @@ nonisolated enum DictationLanguagePreference {
     }
 
     /// Saves the language the user started with, unless one is saved, so it stays once
-    /// the user has set Orra up. LaunchMigrations runs it at launch.
-    static func keep(_ language: DictationLanguage, in defaults: UserDefaults = .standard) {
+    /// the user has set Orra up. LaunchMigrations runs it at launch. With `follows`, which
+    /// is true only for a new user then, it also notes the new user, see `follows`.
+    static func keep(_ language: DictationLanguage, follows: Bool, in defaults: UserDefaults = .standard) {
         guard saved(in: defaults) == nil else { return }
         save(language, to: defaults)
+        if follows {
+            defaults.set(true, forKey: newUserKey)
+        }
     }
 
     /// Whether the user picked a dictation language. A language Orra saved for them, at
@@ -148,11 +156,14 @@ nonisolated enum DictationLanguagePreference {
     }
 
     /// Whether a language picked for Orra in the welcome window sets the dictation language
-    /// too, see `PushToTalkController.followAppLanguage(_:macLanguages:)`. Only on a Mac
-    /// not set up at this launch, since the welcome window comes back at launch whenever
-    /// setup is incomplete, and a user who lost a permission keeps their language. And
-    /// only until the user picks a dictation language.
+    /// too, see `PushToTalkController.followAppLanguage(_:setupComplete:macLanguages:)`.
+    /// Only for a new user: at the first launch, with nothing saved, and at later launches
+    /// once `keep` noted them. Only on a Mac not set up at this launch, since the
+    /// welcome window comes back at launch whenever setup is incomplete, and a user who
+    /// lost a permission keeps their language. And only until the user picks a dictation
+    /// language.
     static func follows(setUpBefore: Bool, in defaults: UserDefaults = .standard) -> Bool {
-        !setUpBefore && !isPicked(in: defaults)
+        let newUser = saved(in: defaults) == nil || defaults.bool(forKey: newUserKey)
+        return newUser && !setUpBefore && !isPicked(in: defaults)
     }
 }

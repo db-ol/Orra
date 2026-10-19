@@ -141,8 +141,8 @@ final class PushToTalkController {
     /// per dictation. Saved through `saveDictationLanguage` whenever it changes.
     private(set) var dictationLanguage: DictationLanguage
     /// Whether a language picked for Orra in the welcome window sets the dictation language
-    /// too, see `followAppLanguage(_:macLanguages:)`. Off for good once the user picks a
-    /// dictation language.
+    /// too, see `followAppLanguage(_:setupComplete:macLanguages:)`. Off for good once the
+    /// user picks a dictation language or setup is done.
     @ObservationIgnored private(set) var dictationLanguageFollows: Bool
     /// True while the keyboard tap is installed, which needs Accessibility access.
     private(set) var isHotkeyActive = false
@@ -583,19 +583,25 @@ final class PushToTalkController {
     func setDictationLanguage(_ language: DictationLanguage) {
         dictationLanguageFollows = false
         saveDictationLanguagePicked()
-        guard language != dictationLanguage else { return }
-        dictationLanguage = language
-        saveDictationLanguage(language)
+        changeDictationLanguage(to: language)
     }
 
     /// Sets the dictation language to the one `appLanguage` gives a new user, see
     /// `DictationLanguage.preferred`, while the dictation language follows. The welcome
     /// window calls it when the user picks Orra's language there, right above the dictation
     /// language, so the user sees it change. Saved as the language, not as the user's pick,
-    /// so the next language picked there is followed too.
-    func followAppLanguage(_ appLanguage: AppLanguage, macLanguages: [String] = AppLanguage.macLanguages()) {
+    /// so the next language picked there is followed too. With `setupComplete` the follow
+    /// ends for good instead, so once Orra is set up, as when the welcome window opens again
+    /// from Getting Started…, the dictation language stays.
+    func followAppLanguage(_ appLanguage: AppLanguage, setupComplete: Bool, macLanguages: [String] = AppLanguage.macLanguages()) {
+        if setupComplete {
+            dictationLanguageFollows = false
+        }
         guard dictationLanguageFollows else { return }
-        let language = DictationLanguage.preferred(appLanguage: appLanguage, macLanguages: macLanguages)
+        changeDictationLanguage(to: DictationLanguage.preferred(appLanguage: appLanguage, macLanguages: macLanguages))
+    }
+
+    private func changeDictationLanguage(to language: DictationLanguage) {
         guard language != dictationLanguage else { return }
         dictationLanguage = language
         saveDictationLanguage(language)

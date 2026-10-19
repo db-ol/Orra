@@ -82,9 +82,10 @@ got worse than the baseline, see docs/release-gate.md.
     Talk Key submenu has no hands free switch.
   - LaunchMigrationsTests, added on 2026-10-19, checks the steps that run at every launch
     in temporary defaults: a first launch saves the modes of both keys and the dictation
-    language they started with, an update keeps the translation key in Hold for a user who
-    turned Translation on before, a saved value stays, and running twice gives what running
-    once gives.
+    language they started with, only a new user's first launch notes that the dictation
+    language follows the welcome window, an update keeps the translation key in Hold for a
+    user who turned Translation on before, a saved value stays, and running twice gives
+    what running once gives.
   - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
     for each translation direction and interface language, recording and stopping, too
     short, the stop at the time limit, a microphone that fails to start, a cancel while
@@ -1115,12 +1116,13 @@ got worse than the baseline, see docs/release-gate.md.
     Chinese simplifies and takes the digits of the pass without the vocabulary, the
     language a new user starts with from their own language, that a user who set Orra
     up before keeps Chinese, that the first launch saves the language, that a saved
-    choice wins, and that only a Mac not set up before follows the welcome window until
-    a pick. OwnLanguageTests checks the own language from Orra's language and the Mac's
+    choice wins, that only a new user on a Mac not set up before follows the welcome
+    window until a pick, and that a language an earlier user saved never follows.
+    OwnLanguageTests checks the own language from Orra's language and the Mac's
     languages. DictationLanguageFollowTests checks that the dictation language follows
     the language picked for Orra in the welcome window, that a pick ends the follow at
-    this launch and the next, that the follow is not saved as a pick, and that a Mac set
-    up before never follows. CaptionPipelineTests and EngineTurnsTests check that captions
+    this launch and the next, that the follow is not saved as a pick, that a Mac set up
+    before never follows, and that the follow ends once setup is done. CaptionPipelineTests and EngineTurnsTests check that captions
     take the dictation language of each sentence's moment and keep Japanese Han
     characters, and RecordingPiecesTests that pieces keep them too.
   - ContextNumbersTests checks which transcripts may hold a number in Chinese characters,
@@ -2158,8 +2160,11 @@ Transcripts in a third language, added on 2026-10-13, not verified yet:
   `log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "push-to-talk"'`.
 
 Dictation language, added on 2026-10-18, not verified yet. Each check of a new user needs
-a first launch prepared as in Welcome window above, and also
-`defaults delete io.github.db-ol.Orra dictationLanguage` and `dictationLanguagePicked`:
+a first launch prepared as in Welcome window above, with no saved talk key as in Press to
+start and stop for new users below, and also
+`defaults delete io.github.db-ol.Orra dictationLanguage`,
+`defaults delete io.github.db-ol.Orra dictationLanguagePicked` and
+`defaults delete io.github.db-ol.Orra dictationLanguageNewUser`:
 
 - [ ] Settings, Dictation starts with Dictation language (听写语言) under Language, with the
   choices 中文（普通话和粤语）+ English, 日本語 + English (Beta) and Español + English
@@ -2181,16 +2186,26 @@ a first launch prepared as in Welcome window above, and also
 - [ ] On that first launch, picking 日本語, Español and 简体中文 under Language in the welcome
   window moves Dictation language right below to 日本語 + English, Español + English and
   中文 + English. English moves it to 中文 + English on a Mac with English only, and to
-  日本語 + English on a Mac with Japanese in its languages.
-  `defaults read io.github.db-ol.Orra dictationLanguage` prints the name each time, and
-  `defaults read io.github.db-ol.Orra dictationLanguagePicked` finds nothing.
+  日本語 + English on a Mac with English first and Japanese second.
+  `defaults read io.github.db-ol.Orra dictationLanguage` prints the name each time,
+  `defaults read io.github.db-ol.Orra dictationLanguagePicked` finds nothing, and
+  `defaults read io.github.db-ol.Orra dictationLanguageNewUser` prints 1. Quit with setup
+  incomplete and launch again: the pick under Language still moves it.
 - [ ] After a pick of a dictation language in the welcome window or in Settings, a later
   pick under Language leaves it alone, at this launch and at the next launches.
   `defaults read io.github.db-ol.Orra dictationLanguagePicked` prints 1.
+- [ ] At the same launch, once setup is done and the window shows Orra is ready, a pick
+  under Language leaves the dictation language alone. Close the window with Done without
+  a pick, dictate once, then open the window again from Getting Started… and pick another
+  language under Language: the dictation language stays.
 - [ ] At a launch after setup is done, open the welcome window from Getting Started… in
   the menu and pick another language under Language: the dictation language stays. The
   same after allowing only the microphone, quitting, and launching again with setup
   incomplete. Changing Orra's language in Settings never moves it.
+- [ ] An earlier user who looks new, as on a new Mac: prepare the first launch as above,
+  then run `defaults write io.github.db-ol.Orra dictationLanguage Spanish` before
+  launching. The welcome window shows Español + English, and picking 日本語 or 简体中文
+  under Language leaves it.
 - [ ] With Japanese chosen, `say -v Kyoko "これはパンとオリーブオイルの簡単な夕食です。"` near
   the microphone is pasted in Japanese, and the log shows no line starting "Transcript was
   in another language". A short sentence in kanji only, such as 東京駅, keeps its kanji.

@@ -89,35 +89,61 @@ struct DictationLanguageTests {
     @Test func aNewUsersLanguageStaysOnceSetUp() throws {
         try withTestDefaults("dictationLanguage") { defaults in
             let first = DictationLanguagePreference.load(setUpBefore: false, appLanguage: .system, macLanguages: ["en-US", "ja-JP"], from: defaults)
-            DictationLanguagePreference.keep(first, in: defaults)
+            DictationLanguagePreference.keep(first, follows: true, in: defaults)
             #expect(DictationLanguagePreference.load(setUpBefore: true, appLanguage: .system, macLanguages: ["en-US", "ja-JP"], from: defaults) == .japanese)
             #expect(DictationLanguagePreference.load(setUpBefore: true, appLanguage: .chinese, macLanguages: ["zh-Hans-CN"], from: defaults) == .japanese)
-            DictationLanguagePreference.keep(.chinese, in: defaults)
+            DictationLanguagePreference.keep(.chinese, follows: false, in: defaults)
             #expect(DictationLanguagePreference.saved(in: defaults) == .japanese)
         }
         // A user who set Orra up before keeps Chinese, also after the Mac changes language.
         try withTestDefaults("dictationLanguage") { defaults in
-            DictationLanguagePreference.keep(DictationLanguagePreference.load(setUpBefore: true, appLanguage: .system, macLanguages: ["es-ES"], from: defaults), in: defaults)
+            DictationLanguagePreference.keep(DictationLanguagePreference.load(setUpBefore: true, appLanguage: .system, macLanguages: ["es-ES"], from: defaults), follows: false, in: defaults)
             #expect(DictationLanguagePreference.load(setUpBefore: true, appLanguage: .system, macLanguages: ["ja-JP"], from: defaults) == .chinese)
         }
     }
 
-    /// Orra's language picked in the welcome window sets the dictation language only on a
-    /// Mac not set up at this launch, and only until the user picks a dictation language.
-    @Test func onlyANewMacFollowsUntilAPick() throws {
+    /// Orra's language picked in the welcome window sets the dictation language only for a
+    /// new user on a Mac not set up at this launch, and only until the user picks a
+    /// dictation language.
+    @Test func onlyANewUserFollowsUntilAPick() throws {
         try withTestDefaults("dictationLanguage") { defaults in
+            // The first launch, with nothing saved.
             #expect(!DictationLanguagePreference.isPicked(in: defaults))
             #expect(DictationLanguagePreference.follows(setUpBefore: false, in: defaults))
             #expect(!DictationLanguagePreference.follows(setUpBefore: true, in: defaults))
-            // A language Orra saved, at launch or following the welcome window, is no pick.
-            DictationLanguagePreference.keep(.japanese, in: defaults)
+            // It notes the new user, so the next launches follow too until setup is done.
+            DictationLanguagePreference.keep(.japanese, follows: true, in: defaults)
+            #expect(defaults.bool(forKey: DictationLanguagePreference.newUserKey))
+            #expect(DictationLanguagePreference.follows(setUpBefore: false, in: defaults))
+            #expect(!DictationLanguagePreference.follows(setUpBefore: true, in: defaults))
+            // A language Orra saved following the welcome window is no pick.
             DictationLanguagePreference.save(.spanish, to: defaults)
+            DictationLanguagePreference.keep(.chinese, follows: true, in: defaults)
             #expect(DictationLanguagePreference.follows(setUpBefore: false, in: defaults))
             DictationLanguagePreference.savePicked(to: defaults)
             #expect(DictationLanguagePreference.isPicked(in: defaults))
             #expect(defaults.bool(forKey: DictationLanguagePreference.pickedKey))
             #expect(!DictationLanguagePreference.follows(setUpBefore: false, in: defaults))
             #expect(DictationLanguagePreference.saved(in: defaults) == .spanish)
+        }
+    }
+
+    /// A user who saved a dictation language with an earlier version, or who set Orra up
+    /// before, keeps it, also at a launch where they look new, as on a new Mac without
+    /// the permissions and with the talk key Orra starts with.
+    @Test func anEarlierUsersLanguageNeverFollows() throws {
+        try withTestDefaults("dictationLanguage.earlier") { defaults in
+            DictationLanguagePreference.save(.spanish, to: defaults)
+            #expect(!DictationLanguagePreference.follows(setUpBefore: false, in: defaults))
+            DictationLanguagePreference.keep(.spanish, follows: false, in: defaults)
+            #expect(!DictationLanguagePreference.follows(setUpBefore: false, in: defaults))
+            #expect(!defaults.bool(forKey: DictationLanguagePreference.newUserKey))
+        }
+        // The first launch of a user who set Orra up before notes no new user.
+        try withTestDefaults("dictationLanguage.setUpBefore") { defaults in
+            DictationLanguagePreference.keep(.chinese, follows: DictationLanguagePreference.follows(setUpBefore: true, in: defaults), in: defaults)
+            #expect(!defaults.bool(forKey: DictationLanguagePreference.newUserKey))
+            #expect(!DictationLanguagePreference.follows(setUpBefore: false, in: defaults))
         }
     }
 }
@@ -151,18 +177,20 @@ struct DictationLanguageFollowTests {
     @Test func theDictationLanguageFollowsOrrasLanguage() throws {
         try withTestDefaults("dictationLanguage.follow") { defaults in
             var saved: [DictationLanguage] = []
-            let controller = controller(follows: true, in: defaults) { saved.append($0) }
-            controller.followAppLanguage(.japanese, macLanguages: ["en-US"])
+            let controller = controller(follows: DictationLanguagePreference.follows(setUpBefore: false, in: defaults), in: defaults) { saved.append($0) }
+            // The first launch saves the language and notes the new user.
+            LaunchMigrations.run(controller, in: defaults)
+            controller.followAppLanguage(.japanese, setupComplete: false, macLanguages: ["en-US"])
             #expect(controller.dictationLanguage == .japanese)
-            controller.followAppLanguage(.spanish, macLanguages: ["en-US"])
+            controller.followAppLanguage(.spanish, setupComplete: false, macLanguages: ["en-US"])
             #expect(controller.dictationLanguage == .spanish)
-            controller.followAppLanguage(.english, macLanguages: ["en-US"])
+            controller.followAppLanguage(.english, setupComplete: false, macLanguages: ["en-US"])
             #expect(controller.dictationLanguage == .chinese)
             // English picked on a Mac with Japanese keeps Japanese.
-            controller.followAppLanguage(.english, macLanguages: ["ja-JP", "en-US"])
+            controller.followAppLanguage(.english, setupComplete: false, macLanguages: ["ja-JP", "en-US"])
             #expect(controller.dictationLanguage == .japanese)
-            controller.followAppLanguage(.system, macLanguages: ["ja-JP", "en-US"])
-            controller.followAppLanguage(.chinese, macLanguages: ["ja-JP", "en-US"])
+            controller.followAppLanguage(.system, setupComplete: false, macLanguages: ["ja-JP", "en-US"])
+            controller.followAppLanguage(.chinese, setupComplete: false, macLanguages: ["ja-JP", "en-US"])
             #expect(controller.dictationLanguage == .chinese)
             // A change is saved once, through the same path as a pick.
             #expect(saved == [.japanese, .spanish, .chinese, .japanese, .chinese])
@@ -178,16 +206,16 @@ struct DictationLanguageFollowTests {
     @Test func aPickStopsTheFollow() throws {
         try withTestDefaults("dictationLanguage.pick") { defaults in
             let controller = controller(follows: true, in: defaults)
-            controller.followAppLanguage(.japanese, macLanguages: ["en-US"])
+            controller.followAppLanguage(.japanese, setupComplete: false, macLanguages: ["en-US"])
             controller.setDictationLanguage(.spanish)
-            controller.followAppLanguage(.chinese, macLanguages: ["en-US"])
+            controller.followAppLanguage(.chinese, setupComplete: false, macLanguages: ["en-US"])
             #expect(controller.dictationLanguage == .spanish)
             #expect(!controller.dictationLanguageFollows)
             #expect(DictationLanguagePreference.saved(in: defaults) == .spanish)
             #expect(DictationLanguagePreference.isPicked(in: defaults))
             #expect(!DictationLanguagePreference.follows(setUpBefore: false, in: defaults))
             let nextLaunch = self.controller(follows: DictationLanguagePreference.follows(setUpBefore: false, in: defaults), in: defaults)
-            nextLaunch.followAppLanguage(.japanese, macLanguages: ["en-US"])
+            nextLaunch.followAppLanguage(.japanese, setupComplete: false, macLanguages: ["en-US"])
             #expect(nextLaunch.dictationLanguage == .spanish)
         }
         // Picking the language already shown counts as a pick too.
@@ -195,7 +223,7 @@ struct DictationLanguageFollowTests {
             var saved: [DictationLanguage] = []
             let controller = controller(follows: true, in: defaults) { saved.append($0) }
             controller.setDictationLanguage(.chinese)
-            controller.followAppLanguage(.japanese, macLanguages: ["en-US"])
+            controller.followAppLanguage(.japanese, setupComplete: false, macLanguages: ["en-US"])
             #expect(controller.dictationLanguage == .chinese)
             #expect(saved.isEmpty)
             #expect(DictationLanguagePreference.isPicked(in: defaults))
@@ -207,15 +235,34 @@ struct DictationLanguageFollowTests {
     /// dictation language.
     @Test func aMacSetUpBeforeNeverFollows() throws {
         try withTestDefaults("dictationLanguage.setUp") { defaults in
-            DictationLanguagePreference.keep(.chinese, in: defaults)
+            DictationLanguagePreference.keep(.chinese, follows: true, in: defaults)
             var saved: [DictationLanguage] = []
             let controller = controller(follows: DictationLanguagePreference.follows(setUpBefore: true, in: defaults), in: defaults) { saved.append($0) }
             #expect(!controller.dictationLanguageFollows)
-            controller.followAppLanguage(.japanese, macLanguages: ["ja-JP"])
-            controller.followAppLanguage(.spanish, macLanguages: ["en-US"])
+            controller.followAppLanguage(.japanese, setupComplete: false, macLanguages: ["ja-JP"])
+            controller.followAppLanguage(.spanish, setupComplete: false, macLanguages: ["en-US"])
             #expect(controller.dictationLanguage == .chinese)
             #expect(saved.isEmpty)
             #expect(DictationLanguagePreference.saved(in: defaults) == .chinese)
+        }
+    }
+
+    /// Once setup is done the dictation language stays for the rest of the launch too, as
+    /// when the user opens the welcome window again from Getting Started… and picks another
+    /// language for Orra. That is not a pick of the dictation language.
+    @Test func theFollowEndsOnceSetupIsDone() throws {
+        try withTestDefaults("dictationLanguage.done") { defaults in
+            var saved: [DictationLanguage] = []
+            let controller = controller(follows: true, in: defaults) { saved.append($0) }
+            controller.followAppLanguage(.japanese, setupComplete: false, macLanguages: ["en-US"])
+            controller.followAppLanguage(.spanish, setupComplete: true, macLanguages: ["en-US"])
+            #expect(controller.dictationLanguage == .japanese)
+            #expect(!controller.dictationLanguageFollows)
+            // Also when setup is incomplete again later at this launch.
+            controller.followAppLanguage(.spanish, setupComplete: false, macLanguages: ["en-US"])
+            #expect(controller.dictationLanguage == .japanese)
+            #expect(saved == [.japanese])
+            #expect(!DictationLanguagePreference.isPicked(in: defaults))
         }
     }
 }
