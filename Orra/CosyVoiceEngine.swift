@@ -117,7 +117,7 @@ actor CosyVoiceEngine: SpeechSynthesizer {
         defer { VoiceCacheLimit.end() }
         // CosyVoice3 reads the language from the text. The tag only keeps the call the same
         // as Qwen3-TTS's, see Qwen3VoiceEngine.
-        let name = language.logName.lowercased()
+        let name = language.voiceTag
         let samples: [Float]
         if let voice {
             guard !voice.transcript.isEmpty else { throw EngineError.noTranscript }

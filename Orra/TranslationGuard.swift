@@ -43,6 +43,22 @@ nonisolated enum TranslationGuard {
         case lostInstruction
         /// Acronyms of the source missing from an English translation.
         case acronymLost([String])
+        /// A Japanese translation that is mostly Latin letters.
+        case notJapanese
+        /// Chinese in a Japanese translation, see TranslationGuard.isChineseInJapanese.
+        case chineseInJapanese
+        /// English left in a Japanese translation, see TranslationGuard.isEnglishInJapanese.
+        case englishInJapanese
+        /// Kana in an English translation, other than a short name of the source.
+        case kanaInEnglish
+        /// Spanish left in an English translation.
+        case notEnglish
+        /// English left in a Spanish translation.
+        case notSpanish
+        /// Accented letters in Spanish that Spanish does not write: another language.
+        case foreignLatin
+        /// Han characters in a Spanish translation, other than a short name of the source.
+        case hanInSpanish
 
         /// The reason in the words of guards2.py, for the tests. It may hold numbers and
         /// acronyms from the text, so it is never logged.
@@ -66,6 +82,14 @@ nonisolated enum TranslationGuard {
             case .json: "JSON in output"
             case .lostInstruction: "lost the instruction before a colon"
             case .acronymLost(let acronyms): "acronym lost " + acronyms.joined(separator: ",")
+            case .notJapanese: "not Japanese"
+            case .chineseInJapanese: "Chinese in Japanese output"
+            case .englishInJapanese: "English in Japanese output"
+            case .kanaInEnglish: "kana in English output"
+            case .notEnglish: "Spanish in English output"
+            case .notSpanish: "English in Spanish output"
+            case .foreignLatin: "foreign accented Latin"
+            case .hanInSpanish: "Han in Spanish output"
             }
         }
 
@@ -90,6 +114,14 @@ nonisolated enum TranslationGuard {
             case .json: "JSON"
             case .lostInstruction: "lost instruction"
             case .acronymLost: "acronym"
+            case .notJapanese: "not Japanese"
+            case .chineseInJapanese: "Chinese in Japanese"
+            case .englishInJapanese: "English in Japanese"
+            case .kanaInEnglish: "kana in English"
+            case .notEnglish: "not English"
+            case .notSpanish: "not Spanish"
+            case .foreignLatin: "foreign accent"
+            case .hanInSpanish: "Han in Spanish"
             }
         }
 
@@ -103,6 +135,7 @@ nonisolated enum TranslationGuard {
     /// RewriteGuard.units.
     static let longest = 2.6
     /// And at least this many times, for English and for Chinese, which is more compact.
+    /// The routes of Japanese and Spanish take them too, see `shortest(_:)`.
     static let shortestEnglish = 0.4
     static let shortestChinese = 0.3
 
@@ -117,12 +150,7 @@ nonisolated enum TranslationGuard {
         default: break
         }
 
-        // Shouting: the output turned to capitals.
-        let upper = RewriteGuard.count(output, where: { ("A"..."Z").contains($0) })
-        let letters = RewriteGuard.count(output, where: RewriteGuard.isLatinLetter)
-        let sourceLetters = max(RewriteGuard.count(source, where: RewriteGuard.isLatinLetter), 1)
-        let sourceUpper = RewriteGuard.count(source, where: { ("A"..."Z").contains($0) })
-        if letters >= 10, Double(upper) / Double(letters) > 0.6, Double(sourceUpper) / Double(sourceLetters) < 0.3 {
+        if RewriteGuard.isShouting(source: source, output: output) {
             return .caseChanged
         }
         if RewriteGuard.hasForeignScript(output), !RewriteGuard.hasForeignScript(source) {
@@ -158,6 +186,7 @@ nonisolated enum TranslationGuard {
 
         switch target {
         case .chinese:
+            let letters = RewriteGuard.count(output, where: RewriteGuard.isLatinLetter)
             let han = RewriteGuard.han(output).count
             let script = letters + han
             if script > 0, Double(letters) / Double(script) > 0.6, han < 2 {
@@ -170,10 +199,11 @@ nonisolated enum TranslationGuard {
             }
         case .english:
             // Han may stay only as a short name copied from the source.
-            let runs = all(hanRun, in: output)
-            if !runs.isEmpty, runs.contains(where: { !contains(source, $0) }) || runs.reduce(0, { $0 + $1.unicodeScalars.count }) > 4 {
+            if hasRunsLeft(hanRun, source: source, output: output) {
                 return .hanInEnglish
             }
+        case .japanese, .spanish:
+            preconditionFailure("Japanese and Spanish have checks of their own, see check(source:output:route:)")
         }
 
         if target == .english, matches(accent, output), !matches(accent, source) {
@@ -200,6 +230,13 @@ nonisolated enum TranslationGuard {
             }
         }
         return nil
+    }
+
+    /// Whether `output` holds runs of `regex`, such as Han characters, other than a short
+    /// name copied from the source: a run the source lacks, or more than 4 characters in all.
+    static func hasRunsLeft(_ regex: NSRegularExpression, source: String, output: String) -> Bool {
+        let runs = all(regex, in: output)
+        return !runs.isEmpty && (runs.contains(where: { !contains(source, $0) }) || runs.reduce(0, { $0 + $1.unicodeScalars.count }) > 4)
     }
 
     // MARK: Acronyms
@@ -234,10 +271,7 @@ nonisolated enum TranslationGuard {
     static func newNumbers(source: String, output: String) -> [String] {
         let have = sourceValues(source)
         let exact = !matches(correctionCue, source)
-        var text = removingThousandsSeparators(asciiDigits(output))
-        // 1万2千 and 1万2 are one number, 12000.
-        text = replacing(tenThousandsAndThousands, in: text) { groups in thousands(groups[1] + groups[2]) }
-        text = replacing(tenThousandsAndDigit, in: text) { groups in thousands(groups[1] + groups[2]) }
+        let text = joinedNumbers(asciiDigits(output))
         var added: [String] = []
         for number in all(decimal, in: text) {
             let value = Double(number) ?? .nan
@@ -247,6 +281,13 @@ nonisolated enum TranslationGuard {
             }
         }
         return added
+    }
+
+    /// Text with ASCII digits, see `asciiDigits`, without thousands separators, and with
+    /// 1万2千 and 1万2 as one number, 12000.
+    static func joinedNumbers(_ text: String) -> String {
+        let joined = replacing(tenThousandsAndThousands, in: removingThousandsSeparators(text)) { groups in thousands(groups[1] + groups[2]) }
+        return replacing(tenThousandsAndDigit, in: joined) { groups in thousands(groups[1] + groups[2]) }
     }
 
     /// Every value a number in the source can stand for: digits with their multipliers
@@ -299,9 +340,15 @@ nonisolated enum TranslationGuard {
                 values.formUnion([Double(min(index + 1, 7)), index >= 6 ? 0 : Double(index + 1)])
             }
         }
+        return expanded(values, dividedBy: [1e3, 1e4, 1e6, 1e8, 1e9], times: [1000])
+    }
+
+    /// The values, each also divided by every divisor, multiplied by every multiplier, and
+    /// a whole hour moved by 12 hours.
+    static func expanded(_ values: Set<Double>, dividedBy divisors: [Double], times multipliers: [Double]) -> Set<Double> {
         var more: Set<Double> = []
         for value in values {
-            for divisor in [1e3, 1e4, 1e6, 1e8, 1e9] {
+            for divisor in divisors {
                 more.insert(value / divisor)
             }
             if value >= 1, value <= 12, value == value.rounded(.towardZero) {
@@ -310,7 +357,9 @@ nonisolated enum TranslationGuard {
             if value >= 13, value <= 24, value == value.rounded(.towardZero) {
                 more.insert(value - 12)
             }
-            more.insert(value * 1000)
+            for multiplier in multipliers {
+                more.insert(value * multiplier)
+            }
         }
         return values.union(more)
     }
@@ -470,7 +519,7 @@ nonisolated enum TranslationGuard {
     // MARK: Patterns
 
     // NSRegularExpression, which reads code points as Python does and has lookbehind.
-    private static func regex(_ pattern: String, _ options: NSRegularExpression.Options = []) -> NSRegularExpression {
+    static func regex(_ pattern: String, _ options: NSRegularExpression.Options = []) -> NSRegularExpression {
         try! NSRegularExpression(pattern: pattern, options: options)
     }
 
@@ -483,8 +532,8 @@ nonisolated enum TranslationGuard {
     private static let chineseDecimal = regex("([零一二两三四五六七八九十]+)点([零一二三四五六七八九]+)(万|亿)?")
     private static let tenThousandsAndThousands = regex(#"(\d+)\s*万\s*(\d)\s*千"#)
     private static let tenThousandsAndDigit = regex(#"(\d+)\s*万\s*(\d)(?![\d.])"#)
-    private static let decimal = regex(#"\d+(?:\.\d+)?"#)
-    private static let lowercaseWord = regex("[a-z]+")
+    static let decimal = regex(#"\d+(?:\.\d+)?"#)
+    static let lowercaseWord = regex("[a-z]+")
     /// A month's name or its first three letters, in lowercase text.
     private static let monthPatterns = months.map { month in regex("\\b(\(month)|\(month.prefix(3)))\\b") }
     /// 周一 to 周日 and 周天, also with 星期 or 礼拜.
@@ -493,10 +542,10 @@ nonisolated enum TranslationGuard {
     private static let midnight = regex(#"\bmidnight\b|午夜|半夜|凌晨"#, .caseInsensitive)
     private static let half = regex(#"\bhalf\b"#, .caseInsensitive)
     private static let quarter = regex(#"\bquarter\b"#, .caseInsensitive)
-    private static let hanRun = regex("[\u{3400}-\u{9FFF}\u{F900}-\u{FAFF}]+")
-    private static let accent = regex("[\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{24F}]")
-    private static let colon = regex("[:：]")
-    private static let timeColon = regex(#"\d[:：]\d"#)
+    static let hanRun = regex("[\u{3400}-\u{9FFF}\u{F900}-\u{FAFF}]+")
+    static let accent = regex("[\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{24F}]")
+    static let colon = regex("[:：]")
+    static let timeColon = regex(#"\d[:：]\d"#)
     private static let acronym = regex("(?<![A-Za-z])[A-Z]{2,}(?=s?(?![A-Za-z]))")
     /// Words that signal a spoken correction, which can make a translation much shorter.
     static let correctionCue = regex(#"不对|不是|我是说|说错了|应该是|删掉|算了|撤回|i mean|sorry|actually|scratch that|no wait|\bwait\b|never mind|rather"#, .caseInsensitive)
@@ -505,22 +554,22 @@ nonisolated enum TranslationGuard {
 
     // MARK: Helpers
 
-    private static func matches(_ regex: NSRegularExpression, _ text: String) -> Bool {
+    static func matches(_ regex: NSRegularExpression, _ text: String) -> Bool {
         regex.firstMatch(in: text, range: NSRange(location: 0, length: (text as NSString).length)) != nil
     }
 
-    private static func all(_ regex: NSRegularExpression, in text: String) -> [String] {
+    static func all(_ regex: NSRegularExpression, in text: String) -> [String] {
         let ns = text as NSString
         return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range) }
     }
 
     /// Whether `text` holds `part`, code point for code point, as Python's `in` compares.
-    private static func contains(_ text: String, _ part: String) -> Bool {
+    static func contains(_ text: String, _ part: String) -> Bool {
         (text as NSString).range(of: part, options: .literal).location != NSNotFound
     }
 
     /// Every match replaced by what `replacement` makes of its groups.
-    private static func replacing(_ regex: NSRegularExpression, in text: String, with replacement: ([String]) -> String) -> String {
+    static func replacing(_ regex: NSRegularExpression, in text: String, with replacement: ([String]) -> String) -> String {
         let ns = text as NSString
         var result = ""
         var last = 0
@@ -548,7 +597,7 @@ nonisolated enum TranslationGuard {
 
     /// Decimal digits of any script, full width ones among them, as ASCII digits, so
     /// Double reads them as Python's float does.
-    private static func asciiDigits(_ text: String) -> String {
+    static func asciiDigits(_ text: String) -> String {
         var result = String.UnicodeScalarView()
         for scalar in text.unicodeScalars {
             if scalar.properties.numericType == .decimal, let value = scalar.properties.numericValue, !scalar.isASCII {

@@ -8,7 +8,7 @@
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=release&color=0A84FF" alt="Latest release"></a>
 </p>
 
-<p align="center"><sub>English · <a href="README.zh-CN.md">简体中文</a></sub></p>
+<p align="center"><sub>English · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a></sub></p>
 
 <p align="center">
   <strong>Open source voice input for the Mac.</strong><br>
@@ -28,7 +28,7 @@
 
 ### Dictation into any app
 
-Speak Chinese, English, or both mixed in one sentence. The Qwen3-ASR 1.7B model writes it down on your Mac and Orra pastes it where your cursor is. Fillers such as 呃, um and uh go away, and numbers spoken in Chinese, such as dates, prices and percentages, become digits.
+Speak Chinese (Mandarin and Cantonese), English, or both mixed in one sentence. Under Dictation language in Settings you can pick Japanese or Spanish with English instead, as a beta. The Qwen3-ASR 1.7B model writes it down on your Mac and Orra pastes it where your cursor is. Fillers such as 呃, um and uh go away, and numbers spoken in Chinese, such as dates, prices and percentages, become digits.
 
 </td>
 <td width="50%"><img src="docs/images/readme/en/dictation.gif" alt="Holding the talk key, someone says “Um, I’ll post Wednesday’s meeting notes this afternoon.” The bars in Orra’s capsule move with the voice, and the sentence appears in a note without the um." width="100%"></td>
@@ -58,7 +58,7 @@ Optional. A text model on your Mac removes the fillers the rules leave and appli
 
 ### Translation key
 
-Optional. Hold a second key and Orra pastes what you say translated between Chinese and English, with the same model on your Mac. A small 译 badge shows that this dictation will be translated.
+Optional. Hold a second key and Orra pastes what you say translated between English and your dictation language, Chinese, Japanese or Spanish, with the same model on your Mac. A small badge shows that this dictation will be translated: 译 with Chinese, 訳 with Japanese and ⇄ with Spanish.
 
 </td>
 <td width="50%"><img src="docs/images/readme/en/translation.gif" alt="In a chat, Sam asks “When can I see the designs?” Holding the translation key, someone says 我这边周五之前能把设计稿发给你. The capsule shows a 译 badge, and “I can send you the designs before Friday.” appears in the message field." width="100%"></td>

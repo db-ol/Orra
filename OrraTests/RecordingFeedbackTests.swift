@@ -415,6 +415,27 @@ struct RecordingFeedbackTests {
         #expect(TranslationDirection.chinese.badgeDescription() == "This dictation will be translated into Chinese.")
     }
 
+    /// Japanese and Spanish have badges of their own: 訳 and ⇄ for Automatic, 日 and ES
+    /// for their language, EN for English. A choice saved for another language shows as
+    /// Automatic. Chinese keeps 译, EN and 中.
+    @Test func eachDictationLanguageHasItsBadges() {
+        #expect(TranslationCue.automatic.badge == "译")
+        #expect(TranslationCue.english.badge == "EN")
+        #expect(TranslationCue.chinese.badge == "中")
+        #expect(TranslationCue(direction: .automatic, language: .japanese).badge == "訳")
+        #expect(TranslationCue(direction: .japanese, language: .japanese).badge == "日")
+        #expect(TranslationCue(direction: .english, language: .japanese).badge == "EN")
+        #expect(TranslationCue(direction: .automatic, language: .spanish).badge == "⇄")
+        #expect(TranslationCue(direction: .spanish, language: .spanish).badge == "ES")
+        #expect(TranslationCue(direction: .english, language: .spanish).badge == "EN")
+        #expect(TranslationCue(direction: .chinese, language: .spanish) == TranslationCue(direction: .automatic, language: .spanish))
+        #expect(TranslationCue(direction: .spanish, language: .chinese) == .automatic)
+        #expect(TranslationCue(direction: .japanese, language: .japanese).badgeDescription() == "This dictation will be translated into Japanese.")
+        #expect(TranslationCue(direction: .spanish, language: .spanish).badgeDescription() == "This dictation will be translated into Spanish.")
+        #expect(TranslationCue(direction: .automatic, language: .spanish).badgeDescription() == "This dictation will be translated.")
+        #expect(RecordingIndicatorView.accessibilityLabel("Listening", translation: TranslationCue(direction: .japanese, language: .japanese)) == "Listening This dictation will be translated into Japanese.")
+    }
+
     /// The pixels of the indicator that are not clear.
     private func drawnPixels(_ feedback: RecordingFeedback) throws -> Int {
         let view = NSHostingView(rootView: RecordingIndicatorView(feedback: feedback))
@@ -487,6 +508,10 @@ struct RecordingFeedbackTests {
             ("listening-automatic", [.listening(translation: .automatic)]),
             ("listening-english", [.listening(translation: .english)]),
             ("listening-chinese", [.listening(translation: .chinese)]),
+            ("listening-japanese-automatic", [.listening(translation: TranslationCue(direction: .automatic, language: .japanese))]),
+            ("listening-japanese", [.listening(translation: TranslationCue(direction: .japanese, language: .japanese))]),
+            ("listening-spanish-automatic", [.listening(translation: TranslationCue(direction: .automatic, language: .spanish))]),
+            ("listening-spanish", [.listening(translation: TranslationCue(direction: .spanish, language: .spanish))]),
             ("listening-talk-key", [.listening]),
             ("hands-free-automatic", [.handsFree(finishHint: hint, translation: .automatic)]),
             ("transcribing-english", [.listening(translation: .english), .transcribing]),

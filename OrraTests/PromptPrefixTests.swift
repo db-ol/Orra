@@ -54,7 +54,7 @@ struct PromptPrefixTests {
     @Test func eachTranslationPromptHasItsOwnPrefix() throws {
         let encode = { (text: String) in text.unicodeScalars.map { Int($0.value) } }
         var prefixes: [[Int]] = []
-        for target in TranslationTarget.allCases {
+        for target in DictationLanguage.chinese.translationTargets {
             let prefix = PromptPrefix.translationPrompt(into: target, encode: encode)
             let start = TranslationPrompt.text(for: "X", into: target).components(separatedBy: "X")[0]
             #expect(start.hasSuffix(#"{"transcript": ""#))

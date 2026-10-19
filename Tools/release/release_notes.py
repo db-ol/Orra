@@ -19,15 +19,17 @@ import sys
 from collections import namedtuple
 
 # The localizations of Orra's interface, English first. Sparkle shows the notes whose
-# xml:lang it picks from these codes for the user's languages, and limits that pick to the
-# localizations of Orra itself, so the codes must be the localization names exactly. The
+# xml:lang it picks from these codes for the user's languages, and macOS limits that pick to
+# the localizations of Orra itself, so the codes must be the localization names exactly. That
+# limit holds while Orra leaves out CFBundleAllowMixedLocalizations, which a test checks. The
 # heading names the language in its own words, for the GitHub release.
 Language = namedtuple("Language", "code heading")
 LANGUAGES = (
     Language("en", "English"),
     Language("zh-Hans", "简体中文"),
     Language("ja", "日本語"),
-    Language("es", "Español"),
+    # Latin American Spanish, which a Mac in any Spanish falls back to.
+    Language("es-419", "Español"),
 )
 
 # The last version whose notes are one file in English and Chinese.

@@ -242,17 +242,19 @@ private struct GeneralSettings: View {
             Section {
                 CleanupRow(cleanup: cleanup) { open(.cleanup) }
                 TranslationRow(cleanup: cleanup)
+                // The choices of the dictation language. A choice saved for another language
+                // shows as Automatic, which is what it does, and comes back with its language.
                 Picker(selection: Binding(
-                    get: { cleanup.translationDirection },
+                    get: { cleanup.translationDirection.effective(for: pushToTalk.dictationLanguage) },
                     set: { cleanup.setTranslationDirection($0) }
                 )) {
-                    ForEach(TranslationDirection.allCases, id: \.self) { direction in
+                    ForEach(TranslationDirection.choices(for: pushToTalk.dictationLanguage), id: \.self) { direction in
                         Text(direction.title).tag(direction)
                     }
                 } label: {
                     DescribedLabel(
                         title: "Translate into",
-                        detail: cleanup.translationDirection.detail,
+                        detail: cleanup.translationDirection.effective(for: pushToTalk.dictationLanguage).detail(for: pushToTalk.dictationLanguage),
                         systemImage: "arrow.left.arrow.right"
                     )
                 }
@@ -275,6 +277,7 @@ private struct GeneralSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section {
+                DictationLanguageRow(pushToTalk: pushToTalk)
                 Toggle(isOn: Binding(
                     get: { pushToTalk.handsFreeOn },
                     set: { pushToTalk.setHandsFreeOn($0) }
@@ -735,15 +738,26 @@ extension TranslationDirection {
         case .automatic: "Automatic"
         case .english: "English"
         case .chinese: "Chinese"
+        case .japanese: "Japanese"
+        case .spanish: "Spanish"
         }
     }
 
-    /// What the choice does, under the picker.
+    /// What the choice does for a user who dictates in Chinese, under the picker.
     var detail: LocalizedStringKey {
-        switch self {
-        case .automatic: "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in."
-        case .english: "Everything you say is pasted in English."
-        case .chinese: "Everything you say is pasted in Chinese. Common English terms, such as PR or iPhone, may stay in English."
+        detail(for: .chinese)
+    }
+
+    /// What the choice does for a user who dictates in `language`, under the picker.
+    func detail(for language: DictationLanguage) -> LocalizedStringKey {
+        switch (self, language) {
+        case (.automatic, .japanese): "Japanese is translated into English, and English into Japanese. Mixed text goes by the language most of it is in, and text in another script, such as Korean, is translated into English."
+        case (.automatic, .spanish): "Spanish is translated into English, and English into Spanish. Mixed text goes by the language most of it is in, and text in another script, such as Korean, is translated into English."
+        case (.automatic, _): "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in."
+        case (.english, _): "Everything you say is pasted in English."
+        case (.chinese, _): "Everything you say is pasted in Chinese. Common English terms, such as PR or iPhone, may stay in English."
+        case (.japanese, _): "Everything you say is pasted in Japanese. Common English terms, such as PR or iPhone, may stay in English."
+        case (.spanish, _): "Everything you say is pasted in Spanish. Common English terms, such as PR or iPhone, may stay in English."
         }
     }
 }
@@ -791,6 +805,49 @@ private struct VocabularySettings: View {
         defer { fieldFocused = true }
         pushToTalk.addToVocabulary(newTerm)
         newTerm = ""
+    }
+}
+
+/// Dictation language: Chinese, Japanese or Spanish, each with English. The line under the
+/// name says the two mix, and for Japanese and Spanish that Clean Up Text, the rules and the
+/// cleanup model, takes English only.
+private struct DictationLanguageRow: View {
+    let pushToTalk: PushToTalkController
+
+    var body: some View {
+        Picker(selection: Binding(
+            get: { pushToTalk.dictationLanguage },
+            set: { pushToTalk.setDictationLanguage($0) }
+        )) {
+            ForEach(DictationLanguage.allCases) { language in
+                language.title.tag(language)
+            }
+        } label: {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Dictation language")
+                    Group {
+                        Text("You can mix the two languages in one sentence.")
+                        if pushToTalk.dictationLanguage != .chinese {
+                            Text("Clean Up Text works on English sentences only for now.")
+                        }
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            } icon: {
+                Image(systemName: "character.bubble")
+            }
+        }
+    }
+}
+
+extension DictationLanguage {
+    /// The choice as Settings and the welcome window show it: its own name, which is never
+    /// translated, and for a beta the word Beta in the interface language.
+    var title: Text {
+        isBeta ? Text("\(name) (Beta)") : Text(verbatim: name)
     }
 }
 

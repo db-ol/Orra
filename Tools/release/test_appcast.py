@@ -46,17 +46,17 @@ class AppcastTests(unittest.TestCase):
         return result.stdout, ElementTree.fromstring(result.stdout.encode("utf-8")).find("channel/item")
 
     def test_one_description_for_each_language_english_first(self):
-        english = write_notes(self.folder, "0.5.0", ["en", "zh-Hans", "ja", "es"])
+        english = write_notes(self.folder, "0.5.0", ["en", "zh-Hans", "ja", "es-419"])
         _, item = self.feed("0.5.0", english)
         descriptions = item.findall("description")
-        self.assertEqual([element.get(XML_LANG) for element in descriptions], ["en", "zh-Hans", "ja", "es"])
-        self.assertEqual([language.code for language in release_notes.LANGUAGES], ["en", "zh-Hans", "ja", "es"])
+        self.assertEqual([element.get(XML_LANG) for element in descriptions], ["en", "zh-Hans", "ja", "es-419"])
+        self.assertEqual([language.code for language in release_notes.LANGUAGES], ["en", "zh-Hans", "ja", "es-419"])
         for element in descriptions:
             self.assertEqual(element.get(f"{SPARKLE}format"), "markdown")
             self.assertEqual(element.text, NOTES[element.get(XML_LANG)])
 
     def test_the_rest_of_the_item(self):
-        english = write_notes(self.folder, "0.5.0", ["en", "zh-Hans", "ja", "es"])
+        english = write_notes(self.folder, "0.5.0", ["en", "zh-Hans", "ja", "es-419"])
         _, item = self.feed("0.5.0", english)
         self.assertEqual(item.findtext("title"), "Orra 0.5.0")
         self.assertEqual(item.findtext(f"{SPARKLE}version"), "42")
@@ -70,12 +70,12 @@ class AppcastTests(unittest.TestCase):
 
     def test_notes_that_hold_the_end_of_cdata(self):
         texts = dict(NOTES, ja="「]]>」と書いても、そのまま表示されます。")
-        english = write_notes(self.folder, "0.5.0", ["en", "zh-Hans", "ja", "es"], texts)
+        english = write_notes(self.folder, "0.5.0", ["en", "zh-Hans", "ja", "es-419"], texts)
         _, item = self.feed("0.5.0", english)
         self.assertEqual(item.findall("description")[2].text, texts["ja"])
 
     def test_a_missing_translation_writes_no_feed(self):
-        english = write_notes(self.folder, "0.5.0", ["en", "zh-Hans", "es"])
+        english = write_notes(self.folder, "0.5.0", ["en", "zh-Hans", "es-419"])
         result = self.run_appcast("0.5.0", english)
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, "")

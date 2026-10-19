@@ -1,7 +1,8 @@
 # README animations
 
-This tool draws the animations in the Features table of README.md and README.zh-CN.md. It is
-not part of the app and the Xcode project does not see it.
+This tool draws the animations in the Features table of README.md and README.zh-CN.md.
+README.ja.md and README.es.md show the English ones. It is not part of the app and the Xcode
+project does not see it.
 
 Each animation is a small SwiftUI scene, styled like Orra's own interface (the dark capsule
 with white bars, the 译 badge, the notice after a learned word, the caption window). The tool

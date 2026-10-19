@@ -8,7 +8,7 @@
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=%E7%89%88%E6%9C%AC&color=0A84FF" alt="最新版本"></a>
 </p>
 
-<p align="center"><sub><a href="README.md">English</a> · 简体中文</sub></p>
+<p align="center"><sub><a href="README.md">English</a> · 简体中文 · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a></sub></p>
 
 <p align="center">
   <strong>开源的 Mac 语音输入 App。</strong><br>
@@ -28,7 +28,7 @@
 
 ### 在任何 App 里听写
 
-说中文、英文，或者一句话里中英混说。Qwen3-ASR 1.7B 模型在你的 Mac 上把它写成文字，Orra 再粘贴到光标所在的位置。“呃”“um”“uh”这类语气词会去掉，说出来的中文数字，比如日期、价格和百分比，会写成阿拉伯数字。
+说中文（普通话和粤语）、英文，或者一句话里中英混说。也可以在设置的“听写语言”里改选日语或西班牙语加英文（测试版）。Qwen3-ASR 1.7B 模型在你的 Mac 上把它写成文字，Orra 再粘贴到光标所在的位置。“呃”“um”“uh”这类语气词会去掉，说出来的中文数字，比如日期、价格和百分比，会写成阿拉伯数字。
 
 </td>
 <td width="50%"><img src="docs/images/readme/zh/dictation.gif" alt="按住说话键，有人说“呃，周三的 meeting notes 我整理好了，下午发到群里。”Orra 胶囊里的音量条随声音跳动，随后这句话出现在笔记里，“呃”已经去掉。" width="100%"></td>
@@ -58,7 +58,7 @@
 
 ### 翻译键
 
-可选功能。按住第二个键说话，Orra 会用同一个模型在你的 Mac 上把中文翻译成英文、英文翻译成中文后粘贴。小小的“译”字标记表示这次听写会被翻译。
+可选功能。按住第二个键说话，Orra 会用同一个模型在你的 Mac 上，把你说的话在英文和你的听写语言（中文、日语或西班牙语）之间翻译后粘贴。小小的标记表示这次听写会被翻译：中文是“译”，日语是“訳”，西班牙语是“⇄”。
 
 </td>
 <td width="50%"><img src="docs/images/readme/zh/translation.gif" alt="在聊天窗口里，Sam 问“When can I see the designs?”。有人按住翻译键说“我这边周五之前能把设计稿发给你。”胶囊里显示“译”字标记，输入框里出现“I can send you the designs before Friday.”" width="100%"></td>

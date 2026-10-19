@@ -46,18 +46,12 @@ final class InserterFixture {
     func release() {
         pasteboard.releaseGlobally()
     }
-
-    /// Waits until the pasteboard holds `string`, for up to 5 seconds. The restore runs on
-    /// the main actor, which other tests running at the same time can keep busy, so a fixed
-    /// wait fails on a loaded machine.
-    func waitForString(_ string: String) async throws {
-        let deadline = ContinuousClock.now + .seconds(5)
-        while pasteboard.string(forType: .string) != string, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-    }
 }
 
+/// Tests that check the restore await `waitForRestore()` rather than a deadline. The
+/// restore runs on the main actor, which the other tests of a full run can keep busy for
+/// many seconds on a CI runner. The time limits only fail a test whose restore is very
+/// late. They cannot end the wait.
 @MainActor
 struct TextInserterTests {
     @Test func pastesWithCommandV() async {
@@ -70,29 +64,32 @@ struct TextInserterTests {
         #expect(fixture.postedKeyCodes == [9])
     }
 
-    @Test func restoresThePreviousPasteboard() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func restoresThePreviousPasteboard() async {
         let fixture = InserterFixture()
         defer { fixture.release() }
         fixture.put("old")
         let inserter = fixture.makeInserter()
         await inserter.insert("new")
-        try await fixture.waitForString("old")
+        await inserter.waitForRestore()
         #expect(fixture.pasteboard.string(forType: .string) == "old")
         #expect(fixture.pasteboard.types?.contains(TextInserter.concealedType) == false)
     }
 
-    @Test func keepsWhatTheUserCopiedAfterwards() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func keepsWhatTheUserCopiedAfterwards() async {
         let fixture = InserterFixture()
         defer { fixture.release() }
         fixture.put("old")
         let inserter = fixture.makeInserter()
         await inserter.insert("new")
         fixture.put("copied by the user")
-        try await Task.sleep(for: .milliseconds(250))
+        await inserter.waitForRestore()
         #expect(fixture.pasteboard.string(forType: .string) == "copied by the user")
     }
 
-    @Test func secureInputHeldInTheBackgroundStillPastesAndRestores() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func secureInputHeldInTheBackgroundStillPastesAndRestores() async {
         let fixture = InserterFixture()
         defer { fixture.release() }
         fixture.put("old")
@@ -103,11 +100,12 @@ struct TextInserterTests {
         #expect(await inserter.insert("new") == .pasted)
         #expect(fixture.postedKeyCodes == [9])
         #expect(fixture.fieldChecks == 1)
-        try await fixture.waitForString("old")
+        await inserter.waitForRestore()
         #expect(fixture.pasteboard.string(forType: .string) == "old")
     }
 
-    @Test func aPasswordFieldGetsNothingAndThePasteboardStays() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func aPasswordFieldGetsNothingAndThePasteboardStays() async {
         let fixture = InserterFixture()
         defer { fixture.release() }
         fixture.put("old")
@@ -116,7 +114,7 @@ struct TextInserterTests {
         fixture.field = .password
         let inserter = fixture.makeInserter()
         #expect(await inserter.insert("new") == .skippedPasswordField)
-        try await Task.sleep(for: .milliseconds(250))
+        await inserter.waitForRestore()
         #expect(fixture.postedKeyCodes.isEmpty)
         #expect(fixture.pasteboard.string(forType: .string) == "old")
         #expect(fixture.pasteboard.changeCount == changeCount)
@@ -171,7 +169,8 @@ struct TextInserterTests {
         #expect(fixture.pasteboard.string(forType: .string) == "old")
     }
 
-    @Test func aSkippedPasswordFieldLetsAnEarlierRestoreFinish() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func aSkippedPasswordFieldLetsAnEarlierRestoreFinish() async {
         let fixture = InserterFixture()
         defer { fixture.release() }
         fixture.put("old")
@@ -180,7 +179,7 @@ struct TextInserterTests {
         fixture.secureInputHolder = fixture.frontmost
         fixture.field = .password
         #expect(await inserter.insert("second") == .skippedPasswordField)
-        try await fixture.waitForString("old")
+        await inserter.waitForRestore()
         #expect(fixture.pasteboard.string(forType: .string) == "old")
     }
 
@@ -206,7 +205,8 @@ struct TextInserterTests {
         #expect(fixture.pasteboard.string(forType: .string) == "old")
     }
 
-    @Test func secondDictationBeforeTheRestoreKeepsTheOriginalPasteboard() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func secondDictationBeforeTheRestoreKeepsTheOriginalPasteboard() async {
         let fixture = InserterFixture()
         defer { fixture.release() }
         fixture.put("old")
@@ -214,12 +214,13 @@ struct TextInserterTests {
         await inserter.insert("one")
         await inserter.insert("two")
         #expect(fixture.pasteboard.string(forType: .string) == "two")
-        try await fixture.waitForString("old")
+        await inserter.waitForRestore()
         #expect(fixture.pasteboard.string(forType: .string) == "old")
         #expect(fixture.postedKeyCodes == [9, 9])
     }
 
-    @Test func restoresEveryTypeOfEveryItem() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func restoresEveryTypeOfEveryItem() async {
         let fixture = InserterFixture()
         defer { fixture.release() }
         let custom = NSPasteboard.PasteboardType("io.github.db-ol.Orra.tests.custom")
@@ -232,7 +233,7 @@ struct TextInserterTests {
         fixture.pasteboard.writeObjects([first, second])
         let inserter = fixture.makeInserter()
         await inserter.insert("new")
-        try await fixture.waitForString("rich text stand in")
+        await inserter.waitForRestore()
         let items = fixture.pasteboard.pasteboardItems ?? []
         #expect(items.count == 2)
         #expect(items.first?.string(forType: .string) == "rich text stand in")

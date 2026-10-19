@@ -37,31 +37,38 @@ nonisolated struct CaptionSentence: Identifiable, Equatable, Sendable {
 struct CaptionEngines {
     /// Whether the speech model is loaded.
     var isSpeechReady: () -> Bool
-    /// The speech model's text for 16 kHz mono samples.
-    var transcribe: (_ samples: [Float]) async throws -> String
+    /// The speech model's text for 16 kHz mono samples, with the language check for the
+    /// dictation language.
+    var transcribe: (_ samples: [Float], _ language: DictationLanguage) async throws -> String
     /// Whether the models are free for an interim caption, which is when no dictation
     /// is under way.
     var isFree: () -> Bool = { true }
     /// The speech model's text for a sentence still being heard. Unlike `transcribe`, it
     /// does not run again after a dictation that cancelled it, since the sentence has
     /// moved on by then. Nil uses `transcribe`.
-    var transcribeInterim: ((_ samples: [Float]) async throws -> String)?
+    var transcribeInterim: ((_ samples: [Float], _ language: DictationLanguage) async throws -> String)?
     /// Whether the cleanup model can translate now, without waiting for a load.
     var canTranslate: () -> Bool
-    /// Which way to translate, the user's translation setting.
+    /// Which way to translate, the user's translation setting. Each sentence translates
+    /// the way it acts for the dictation language, see TranslationDirection.effective(for:).
     var direction: () -> TranslationDirection
-    /// The model's answer for a sentence and a target, see RewriteEngine.translate.
-    var translate: (_ text: String, _ target: TranslationTarget) async throws -> String
+    /// The model's answer for a sentence and a route, see RewriteEngine.translate.
+    var translate: (_ text: String, _ route: TranslationRoute) async throws -> String
+    /// The user's dictation language at this moment, see DictationLanguage. Each sentence
+    /// is checked with the one chosen when it is transcribed.
+    var language: () -> DictationLanguage = { .chinese }
 }
 
 extension CaptionEngines {
     /// The app's models, shared with dictation through `turns`. The transcript gets the
-    /// language check dictation has, see Transcription.checkingLanguage, but no vocabulary,
-    /// since a transcript of only vocabulary terms costs extra passes.
-    static func live(transcription: Transcription, isSpeechReady: @escaping () -> Bool, cleanup: TextCleanup, turns: EngineTurns) -> CaptionEngines {
+    /// language check dictation has, with the user's dictation language, see
+    /// Transcription.checkingLanguage, but no vocabulary, since a transcript of only
+    /// vocabulary terms costs extra passes.
+    static func live(transcription: Transcription, isSpeechReady: @escaping () -> Bool, language: @escaping () -> DictationLanguage, cleanup: TextCleanup, turns: EngineTurns) -> CaptionEngines {
         shared(
             transcription: transcription,
             isSpeechReady: isSpeechReady,
+            language: language,
             canTranslate: { cleanup.isReadyForCaptions },
             direction: { cleanup.translationDirection },
             complete: cleanup.translation.complete,
@@ -74,29 +81,31 @@ extension CaptionEngines {
     static func shared(
         transcription: Transcription,
         isSpeechReady: @escaping () -> Bool,
+        language: @escaping () -> DictationLanguage = { .chinese },
         canTranslate: @escaping () -> Bool,
         direction: @escaping () -> TranslationDirection,
-        complete: @escaping @Sendable (String, TranslationTarget) async throws -> String,
+        complete: @escaping @Sendable (String, TranslationRoute) async throws -> String,
         turns: EngineTurns
     ) -> CaptionEngines {
-        let transcribe: @Sendable ([Float]) async throws -> String = { samples in
+        let transcribe: @Sendable ([Float], DictationLanguage) async throws -> String = { samples, language in
             let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
-            return try await transcription.transcribe(samples, vocabulary: [], audioSeconds: seconds, takingDigits: false)
+            return try await transcription.transcribe(samples, vocabulary: [], audioSeconds: seconds, takingDigits: false, language: language)
         }
         return CaptionEngines(
             isSpeechReady: isSpeechReady,
-            transcribe: { samples in
-                try await turns.captionTurn { try await transcribe(samples) }
+            transcribe: { samples, language in
+                try await turns.captionTurn { try await transcribe(samples, language) }
             },
             isFree: { !turns.isDictating },
-            transcribeInterim: { samples in
-                try await turns.captionTurn(retries: 0) { try await transcribe(samples) }
+            transcribeInterim: { samples, language in
+                try await turns.captionTurn(retries: 0) { try await transcribe(samples, language) }
             },
             canTranslate: canTranslate,
             direction: direction,
-            translate: { text, target in
-                try await turns.captionTranslationTurn { try await complete(text, target) }
-            }
+            translate: { text, route in
+                try await turns.captionTranslationTurn { try await complete(text, route) }
+            },
+            language: language
         )
     }
 }
@@ -274,10 +283,11 @@ final class CaptionPipeline {
         guard waiting == 0, engines.isSpeechReady(), engines.isFree(), let open = segmenter.openSentence else { return }
         let number = cutCount
         lastInterim = (number, segmenter.openSeconds)
+        let language = engines.language()
         let recognitionStarted = ContinuousClock.now
         let raw: String
         do {
-            raw = try await (engines.transcribeInterim ?? engines.transcribe)(open.samples)
+            raw = try await (engines.transcribeInterim ?? engines.transcribe)(open.samples, language)
         } catch {
             if !(error is CancellationError) {
                 Logger.captions.error("Transcribing an interim caption failed with \(String(reflecting: type(of: error)), privacy: .public)")
@@ -286,7 +296,7 @@ final class CaptionPipeline {
         }
         // A sentence that ended meanwhile gets its final text next.
         guard !isStopped, !Task.isCancelled, cutCount == number else { return }
-        let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: open.duration))
+        let text = Self.text(raw, seconds: open.duration, language: language)
         guard !text.isEmpty else { return }
         let id: Int
         if let line = interimLine, line.number == number {
@@ -326,10 +336,11 @@ final class CaptionPipeline {
             speechNotReady()
             return
         }
+        let language = engines.language()
         let recognitionStarted = ContinuousClock.now
         let raw: String
         do {
-            raw = try await engines.transcribe(segment.samples)
+            raw = try await engines.transcribe(segment.samples, language)
         } catch {
             if !(error is CancellationError) {
                 Logger.captions.error("Transcribing a caption failed with \(String(reflecting: type(of: error)), privacy: .public)")
@@ -338,10 +349,15 @@ final class CaptionPipeline {
         }
         guard !isStopped, !Task.isCancelled else { return }
         let recognitionSeconds = Self.seconds(recognitionStarted.duration(to: .now))
-        let text = ChineseText.simplified(TranscriptGuard.clean(raw, audioSeconds: segment.duration))
+        let text = Self.text(raw, seconds: segment.duration, language: language)
         guard !text.isEmpty else { return }
-        let target = engines.direction().target(for: text)
-        let translates = target != nil && TranslationStep.isWorthTranslating(text) && waiting <= backlogLimit && engines.canTranslate()
+        // The direction and the language of the dictation, so a user who dictates in Spanish
+        // reads an English meeting in Spanish and a Spanish one in English. The language of
+        // the sentence is read once, off the main actor.
+        let plan = await engines.direction().plan(for: text, in: language)
+        guard !isStopped, !Task.isCancelled else { return }
+        let needsTranslation = plan.map { !TranslationStep.isInItsLanguage(source: $0.source, on: $0.route) } ?? false
+        let translates = needsTranslation && text.count <= TranslationStep.maximumLength && waiting <= backlogLimit && engines.canTranslate()
         let id: Int
         if let interimID {
             id = interimID
@@ -359,9 +375,9 @@ final class CaptionPipeline {
             recognitionSeconds: recognitionSeconds
         )
         report(sentence)
-        guard translates, let target else { return }
+        guard translates, let plan else { return }
         let translationStarted = ContinuousClock.now
-        let translation = await translate(text, into: target)
+        let translation = await translate(text, into: plan.route, source: plan.source)
         guard !isStopped, !Task.isCancelled else { return }
         sentence.translation = translation.map { .done($0) } ?? .none
         sentence.translationSeconds = Self.seconds(translationStarted.duration(to: .now))
@@ -370,18 +386,19 @@ final class CaptionPipeline {
 
     /// The translation when it passes TranslationGuard, as for a dictation, nil otherwise.
     /// The cleanup part of the answer is not used, since captions show what was said.
-    private func translate(_ text: String, into target: TranslationTarget) async -> String? {
+    /// `source` is the language of the sentence, see TranslationDirection.plan(for:in:).
+    private func translate(_ text: String, into route: TranslationRoute, source: TranslationDirection.Source) async -> String? {
         let answer: String
         do {
-            answer = try await engines.translate(text, target)
+            answer = try await engines.translate(text, route)
         } catch {
             if !(error is CancellationError) {
                 Logger.captions.error("Translating a caption failed with \(String(reflecting: type(of: error)), privacy: .public)")
             }
             return nil
         }
-        let parsed = TranslationPrompt.parse(answer)
-        switch TranslationStep.verdict(on: parsed, for: text, into: target) {
+        let (parsed, verdict) = await Self.check(answer, for: text, on: route, source: source)
+        switch verdict {
         case .translated:
             return parsed?.translation
         case .unreadable:
@@ -394,7 +411,22 @@ final class CaptionPipeline {
         return nil
     }
 
+    /// The answer read and checked, off the main actor, since the checks of Japanese and
+    /// Spanish may run NLLanguageRecognizer.
+    @concurrent
+    nonisolated private static func check(_ answer: String, for text: String, on route: TranslationRoute, source: TranslationDirection.Source) async -> (TranslationPrompt.Answer?, TranslationStep.Outcome) {
+        let parsed = TranslationPrompt.parse(answer, for: text, on: route)
+        return (parsed, TranslationStep.verdict(on: parsed, for: text, into: route, source: source))
+    }
+
     private static func seconds(_ duration: Duration) -> Double {
         Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+    }
+
+    /// A caption's text as a dictation's: through TranscriptGuard, and into simplified
+    /// characters for a user who dictates in Chinese, see DictationLanguage.
+    private static func text(_ raw: String, seconds: Double, language: DictationLanguage) -> String {
+        let guarded = TranscriptGuard.clean(raw, audioSeconds: seconds)
+        return language.simplifiesCharacters ? ChineseText.simplified(guarded) : guarded
     }
 }

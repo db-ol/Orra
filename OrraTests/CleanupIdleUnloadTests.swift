@@ -98,7 +98,7 @@ final class HoldingEngine {
             unload: { [self] in await unload() },
             complete: { [self] _ in await answer },
             translate: { [self] _, _ in try await translate() },
-            prepareTranslation: { [self] target in try await prepare(target) }
+            prepareTranslation: { [self] route in try await prepare(route.target) }
         )
     }
 

@@ -99,6 +99,14 @@ Orra's runs, decode time and real time factor (decode time over audio time).
    With `TEST_RUNNER_ORRA_SPEECH_EVAL_HINTS=1` the test also writes `text_chinese` and
    `text_english`, each clip transcribed with that language as the hint, and their times.
 
+   `TEST_RUNNER_ORRA_DICTATION_LANGUAGE` picks the dictation language as a user picks it
+   in Settings: `Chinese`, the default, `Japanese` or `Spanish`. With `Japanese` or
+   `Spanish`, LanguageGuard accepts that language and English, its passes are that
+   language and then English, into `text_pass_japanese` or `text_pass_spanish`, Han
+   characters stay as written, and `ruled_text` has the rules only where
+   `language_verdict` is `chineseOrEnglish`, as in a dictation. `language_verdict` holds
+   LanguageGuard's verdict on `text`.
+
    Optional: `TEST_RUNNER_ORRA_SPEECH_MODEL_DIR` for another model folder,
    `TEST_RUNNER_ORRA_SPEECH_MODEL_ID` for the Hugging Face ID that speech-swift reads the
    size and the bits from (it knows 4, 5 and 8 bit at commit 1f54e56), and
@@ -123,16 +131,16 @@ The test never logs them. Keep results outside the repository.
 The test and score.py also take a corpus of Japanese or Spanish clips in the same layout,
 such as 200 clips each of the FLEURS ja_jp and es_419 test sets (CC BY 4.0): a folder with
 `clips/<id>.wav` and `manifest.jsonl`, one line per clip with `id`, `stratum`, `lang` (`ja`
-or `es`), `duration` and `reference`. Orra never gives the model either language as the
-hint, so these clips show what a Japanese or Spanish speaker gets today: `text_unhinted`
-for what the model chose, and `text` and `language_pass` for what LanguageGuard made of
-it. The 392 clip check is skipped for such a corpus.
+or `es`), `duration` and `reference`. Orra's first pass has no language hint, so these
+clips show what a Japanese or Spanish speaker gets: `text_unhinted` for what the model
+chose, and `text` and `language_pass` for what LanguageGuard made of it, with Chinese as
+the dictation language by default, or with `TEST_RUNNER_ORRA_DICTATION_LANGUAGE` set to
+the clips' language, as for a user who picked it. The 392 clip check is skipped for such
+a corpus.
 
-The test also transcribes each such clip with its own language as the hint, into
-`text_japanese` or `text_spanish` with its time, for what the model can do once Orra knows
-the language. SpeechLanguage has no case for either language, so that no path of the app
-can pick one, and this pass runs on a second copy of the model that the test loads with
-Orra's decoding options.
+The test also transcribes each such clip with its own language as the hint, straight from
+the engine, into `text_japanese` or `text_spanish` with its time, for what the model can
+do when told the language.
 
 Score each text with the corpus's manifest:
 

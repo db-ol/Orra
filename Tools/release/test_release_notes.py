@@ -19,7 +19,7 @@ NOTES = {
     "en": "Captions start faster.\n\n- One click turns them on.",
     "zh-Hans": "字幕启动更快。\n\n- 点一下就能打开。",
     "ja": "字幕がすばやく始まります。\n\n- クリック一回でオンになります。",
-    "es": "Los subtítulos empiezan antes.\n\n- Un clic los activa.",
+    "es-419": "Los subtítulos empiezan antes.\n\n- Un clic los activa.",
 }
 
 
@@ -42,12 +42,12 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(release_notes.path_for(english, "en"), english)
         self.assertEqual(release_notes.path_for(english, "zh-Hans"), os.path.join("docs", "release-notes", "0.5.0.zh-Hans.md"))
         self.assertEqual(release_notes.path_for(english, "ja"), os.path.join("docs", "release-notes", "0.5.0.ja.md"))
-        self.assertEqual(release_notes.path_for(english, "es"), os.path.join("docs", "release-notes", "0.5.0.es.md"))
+        self.assertEqual(release_notes.path_for(english, "es-419"), os.path.join("docs", "release-notes", "0.5.0.es-419.md"))
 
     def test_a_new_version_has_every_language_english_first(self):
-        english = write_notes(self.folder.name, "0.5.0", ["es", "ja", "zh-Hans", "en"])
+        english = write_notes(self.folder.name, "0.5.0", ["es-419", "ja", "zh-Hans", "en"])
         notes = release_notes.load("0.5.0", english)
-        self.assertEqual([code for code, _ in notes], ["en", "zh-Hans", "ja", "es"])
+        self.assertEqual([code for code, _ in notes], ["en", "zh-Hans", "ja", "es-419"])
         self.assertEqual(dict(notes), NOTES)
 
     def test_a_new_version_names_every_missing_file(self):
@@ -56,7 +56,7 @@ class LoadTests(unittest.TestCase):
             release_notes.load("0.5.0", english)
         message = str(raised.exception)
         self.assertIn(f"{self.folder.name}/0.5.0.zh-Hans.md is missing", message)
-        self.assertIn(f"{self.folder.name}/0.5.0.es.md is missing", message)
+        self.assertIn(f"{self.folder.name}/0.5.0.es-419.md is missing", message)
         self.assertNotIn("0.5.0.ja.md", message)
 
     def test_a_new_version_needs_more_than_the_english_file(self):
@@ -66,12 +66,12 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(str(raised.exception).count(" is missing"), 3)
 
     def test_an_empty_or_blank_file_counts_as_missing(self):
-        english = write_notes(self.folder.name, "1.0.0", ["en", "zh-Hans", "ja", "es"], dict(NOTES, ja="", es=" \n\n "))
+        english = write_notes(self.folder.name, "1.0.0", ["en", "zh-Hans", "ja", "es-419"], dict(NOTES, **{"ja": "", "es-419": " \n\n "}))
         with self.assertRaises(release_notes.NotesError) as raised:
             release_notes.load("1.0.0", english)
         message = str(raised.exception)
         self.assertIn("1.0.0.ja.md is empty", message)
-        self.assertIn("1.0.0.es.md is empty", message)
+        self.assertIn("1.0.0.es-419.md is empty", message)
 
     def test_an_old_version_keeps_its_single_file(self):
         both = "Captions start faster.\n\n字幕启动更快。"
@@ -107,13 +107,13 @@ class BodyTests(unittest.TestCase):
         self.addCleanup(self.folder.cleanup)
 
     def test_each_language_under_a_heading_in_its_own_language(self):
-        english = write_notes(self.folder.name, "0.5.0", ["en", "zh-Hans", "ja", "es"])
+        english = write_notes(self.folder.name, "0.5.0", ["en", "zh-Hans", "ja", "es-419"])
         self.assertEqual(
             release_notes.release_body("0.5.0", english),
             "## English\n\n" + NOTES["en"] + "\n\n"
             "## 简体中文\n\n" + NOTES["zh-Hans"] + "\n\n"
             "## 日本語\n\n" + NOTES["ja"] + "\n\n"
-            "## Español\n\n" + NOTES["es"] + "\n",
+            "## Español\n\n" + NOTES["es-419"] + "\n",
         )
 
     def test_an_old_version_is_its_file_as_it_is(self):
@@ -122,7 +122,7 @@ class BodyTests(unittest.TestCase):
         self.assertEqual(release_notes.release_body("0.4.2", english), both + "\n")
 
     def test_the_command_line(self):
-        english = write_notes(self.folder.name, "0.5.0", ["en", "zh-Hans", "ja", "es"])
+        english = write_notes(self.folder.name, "0.5.0", ["en", "zh-Hans", "ja", "es-419"])
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             self.assertEqual(release_notes.main(["release_notes.py", "check", "0.5.0", english]), 0)
@@ -131,12 +131,12 @@ class BodyTests(unittest.TestCase):
             self.assertEqual(release_notes.main(["release_notes.py", "body", "0.5.0", english]), 0)
         self.assertEqual(output.getvalue(), release_notes.release_body("0.5.0", english))
 
-        os.remove(release_notes.path_for(english, "es"))
+        os.remove(release_notes.path_for(english, "es-419"))
         errors = io.StringIO()
         with contextlib.redirect_stderr(errors):
             self.assertEqual(release_notes.main(["release_notes.py", "check", "0.5.0", english]), 1)
             self.assertEqual(release_notes.main(["release_notes.py", "publish", "0.5.0", english]), 1)
-        self.assertIn("0.5.0.es.md is missing", errors.getvalue())
+        self.assertIn("0.5.0.es-419.md is missing", errors.getvalue())
 
 
 class RepositoryTests(unittest.TestCase):
@@ -162,6 +162,15 @@ class RepositoryTests(unittest.TestCase):
             for entry in strings["strings"].values():
                 languages.update(entry.get("localizations", {}))
             self.assertLessEqual(languages, codes, catalog)
+
+    def test_sparkle_picks_among_orras_own_localizations(self):
+        # macOS limits Sparkle's pick of the notes, and of its own buttons, to Orra's
+        # localizations. This key lifts that limit, so an Orra without Japanese would show
+        # Japanese notes around an English interface. It can come from Info.plist or from an
+        # INFOPLIST_KEY_ build setting.
+        for path in ("Orra/Info.plist", "Orra.xcodeproj/project.pbxproj"):
+            with open(REPOSITORY / path, encoding="utf-8") as file:
+                self.assertNotIn("CFBundleAllowMixedLocalizations", file.read(), path)
 
 
 if __name__ == "__main__":

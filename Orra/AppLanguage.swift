@@ -1,14 +1,18 @@
 import AppKit
 import SwiftUI
 
-/// The language of Orra's interface: the Mac's own choice, or English or Simplified Chinese
-/// for Orra alone. Kept as AppleLanguages in Orra's own defaults, the same setting System
-/// Settings writes under Language & Region, Applications. macOS reads it at launch, so a
-/// change shows after Orra restarts.
+/// The language of Orra's interface: the Mac's own choice, or English, Simplified Chinese,
+/// Japanese or Spanish for Orra alone. Kept as AppleLanguages in Orra's own defaults, the
+/// same setting System Settings writes under Language & Region, Applications. macOS reads
+/// it at launch, so a change shows after Orra restarts.
 nonisolated enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     case system
     case english = "en"
     case chinese = "zh-Hans"
+    case japanese = "ja"
+    /// Latin American Spanish. A Mac in any Spanish, such as Spain's, falls back to it, and
+    /// its wording matches the menu items SwiftUI adds, which come from SwiftUI's es_419.
+    case spanish = "es-419"
 
     var id: String { rawValue }
 
@@ -20,6 +24,8 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
         case .system: nil
         case .english: "English"
         case .chinese: "简体中文"
+        case .japanese: "日本語"
+        case .spanish: "Español"
         }
     }
 
@@ -29,12 +35,15 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
               let first = languages.first else { return .system }
         if first.hasPrefix("zh") { return .chinese }
         if first.hasPrefix("en") { return .english }
+        if first.hasPrefix("ja") { return .japanese }
+        if first.hasPrefix("es") { return .spanish }
         return .system
     }
 
-    /// The localization this choice shows, "en" or "zh-Hans". For the Mac's choice it is the
-    /// one macOS picks from the Mac's languages at launch, so Chinese only when it comes
-    /// before English. Another language first, such as French, shows English.
+    /// The localization this choice shows, such as "en" or "zh-Hans". For the Mac's choice it
+    /// is the one macOS picks from the Mac's languages at launch, so Chinese only when it
+    /// comes before English. A language Orra does not have is passed over, and with none of
+    /// Orra's languages, such as French alone, Orra shows English.
     func localization(macLanguages: [String] = Self.macLanguages(), available: [String] = Bundle.main.localizations) -> String {
         let preferences = self == .system ? macLanguages : [rawValue]
         let chosen = Bundle.preferredLocalizations(from: available, forPreferences: preferences).first

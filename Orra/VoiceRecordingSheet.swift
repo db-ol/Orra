@@ -54,7 +54,7 @@ struct VoiceRecordingSheet: View {
                 get: { recording.scriptLanguage },
                 set: { recording.scriptLanguage = $0 }
             )) {
-                ForEach(TranslationTarget.allCases, id: \.self) { language in
+                ForEach(recording.scriptLanguages, id: \.self) { language in
                     Text(verbatim: VoiceScript.name(of: language)).tag(language)
                 }
             }

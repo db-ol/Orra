@@ -1,25 +1,44 @@
 import Foundation
 
-/// The language a dictation is translated into.
+/// The language a dictation is translated into: English, or the user's dictation language,
+/// see DictationLanguage.translationLanguage.
 nonisolated enum TranslationTarget: String, CaseIterable, Sendable {
     case english = "en"
     case chinese = "zh"
+    case japanese = "ja"
+    case spanish = "es"
 
     /// For the log.
     var logName: String {
         switch self {
         case .english: "English"
         case .chinese: "Chinese"
+        case .japanese: "Japanese"
+        case .spanish: "Spanish"
         }
+    }
+
+    /// The language tag the voice models take, the English name in lowercase, see
+    /// Qwen3VoiceEngine.
+    var voiceTag: String {
+        logName.lowercased()
     }
 }
 
 /// Which way a dictation is translated: chosen from the text by default, or fixed to one
 /// target by a setting.
+///
+/// Translation goes between English and the user's dictation language. Settings offers
+/// Automatic, English and that language, see `choices(for:)`. A fixed choice of another
+/// dictation language stays saved, so going back to that language brings it back, and
+/// meanwhile acts and shows as Automatic, see `effective(for:)`. The functions without a
+/// dictation language are those of Chinese, as before the choice.
 nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
     case automatic
     case english
     case chinese
+    case japanese
+    case spanish
 
     static let defaultsKey = "translationDirection"
 
@@ -31,14 +50,78 @@ nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
         defaults.set(rawValue, forKey: Self.defaultsKey)
     }
 
-    /// The target for a text, or nil when it has no Han character and no Latin letter, so
-    /// there is nothing to translate and the model is not run.
+    /// The target for a text of a user who dictates in Chinese, or nil when it has no Han
+    /// character and no Latin letter, so there is nothing to translate and the model is not
+    /// run.
     func target(for text: String) -> TranslationTarget? {
-        guard let source = Self.sourceLanguage(of: text) else { return nil }
-        switch self {
-        case .automatic: return source == .chinese ? .english : .chinese
+        target(for: text, in: .chinese)
+    }
+
+    /// The target for a text of a user who dictates in `language`, or nil when it has no
+    /// letter to translate, see `source(of:in:)`. Automatic sends English to the dictation
+    /// language and everything else to English, the dictation language and text in neither
+    /// language alike.
+    func target(for text: String, in language: DictationLanguage) -> TranslationTarget? {
+        target(source: Self.source(of: text, in: language), in: language)
+    }
+
+    /// The same for a text whose language the caller read already.
+    func target(source: Source?, in language: DictationLanguage) -> TranslationTarget? {
+        guard let source else { return nil }
+        switch effective(for: language) {
+        case .automatic: return source == .english ? language.translationLanguage : .english
         case .english: return .english
-        case .chinese: return .chinese
+        case .chinese, .japanese, .spanish: return language.translationLanguage
+        }
+    }
+
+    /// The route for a text of a user who dictates in `language` and the language of the
+    /// text, read once, or nil when it has no letter to translate. Off the main actor,
+    /// since the Spanish rule may run NLLanguageRecognizer. A dictation and a caption pass
+    /// the language on to the steps after it, see TranslationStep.
+    @concurrent
+    func plan(for text: String, in language: DictationLanguage) async -> (route: TranslationRoute, source: Source)? {
+        guard let source = Self.source(of: text, in: language), let target = target(source: source, in: language) else { return nil }
+        return (TranslationRoute(language, into: target), source)
+    }
+
+    /// Whether the choice belongs to `language`: Automatic and English to every dictation
+    /// language, each other choice to its own.
+    func fits(_ language: DictationLanguage) -> Bool {
+        self == .automatic || self == .english || self == language.translationDirection
+    }
+
+    /// What the choice does for a user who dictates in `language`: itself when it fits,
+    /// Automatic otherwise. The badge, the paste, Live Captions, the prompts read ahead and
+    /// Settings all follow it.
+    func effective(for language: DictationLanguage) -> TranslationDirection {
+        fits(language) ? self : .automatic
+    }
+
+    /// The choices Settings offers for `language`: Automatic, English and the language.
+    /// For Chinese the three there always were.
+    static func choices(for language: DictationLanguage) -> [TranslationDirection] {
+        [.automatic, .english, language.translationDirection]
+    }
+
+    /// The language a text is in, for a user who dictates in `language`.
+    nonisolated enum Source: Equatable, Sendable {
+        case english
+        /// The dictation language.
+        case partner
+        /// Neither, such as Korean, or Chinese for a user who dictates in Spanish.
+        case other
+    }
+
+    /// The language of a text for the rule of `language`, or nil when the text has no letter
+    /// of any script, such as digits or symbols alone. Chinese keeps the rule of
+    /// `sourceLanguage(of:)`. Japanese and Spanish have rules of their own, see
+    /// `japaneseSource(of:)` and `spanishSource(of:)`.
+    static func source(of text: String, in language: DictationLanguage) -> Source? {
+        switch language {
+        case .chinese: sourceLanguage(of: text).map { $0 == .chinese ? .partner : .english }
+        case .japanese: japaneseSource(of: text)
+        case .spanish: spanishSource(of: text)
         }
     }
 

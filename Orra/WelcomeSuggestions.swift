@@ -42,7 +42,8 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
     ///   - cleanupModelInstalled: Whether the cleanup model is on this Mac. Cleanup shows
     ///     On only with both, so the row never says On while step 1 offers the download.
     ///   - translationOn: Whether Translation is on.
-    static func all(cleanupOn: Bool, cleanupModelInstalled: Bool, translationOn: Bool, locale: Locale = .interface) -> [WelcomeSuggestion] {
+    ///   - language: The dictation language, which translation goes between with English.
+    static func all(cleanupOn: Bool, cleanupModelInstalled: Bool, translationOn: Bool, language: DictationLanguage = .chinese, locale: Locale = .interface) -> [WelcomeSuggestion] {
         Kind.allCases.map { kind in
             let isOn: Bool = switch kind {
             case .cleanup: cleanupOn && cleanupModelInstalled
@@ -50,11 +51,11 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
             case .meeting: false
             }
             let waitsForModel = kind == .cleanup && cleanupOn && !cleanupModelInstalled
-            return WelcomeSuggestion(kind: kind, isOn: isOn, waitsForModel: waitsForModel, locale: locale)
+            return WelcomeSuggestion(kind: kind, isOn: isOn, waitsForModel: waitsForModel, language: language, locale: locale)
         }
     }
 
-    private init(kind: Kind, isOn: Bool, waitsForModel: Bool, locale: Locale) {
+    private init(kind: Kind, isOn: Bool, waitsForModel: Bool, language: DictationLanguage, locale: Locale) {
         self.kind = kind
         self.isOn = isOn
         func text(_ resource: LocalizedStringResource) -> String {
@@ -68,7 +69,11 @@ nonisolated struct WelcomeSuggestion: Equatable, Sendable, Identifiable {
             line = text("Removes fillers and fixes what you correct while speaking.")
         case .translation:
             title = text("Translation")
-            line = text("Hold the translation key and speak. Chinese becomes English, and English becomes Chinese.")
+            line = switch language {
+            case .chinese: text("Hold the translation key and speak. Chinese becomes English, and English becomes Chinese.")
+            case .japanese: text("Hold the translation key and speak. Japanese becomes English, and English becomes Japanese.")
+            case .spanish: text("Hold the translation key and speak. Spanish becomes English, and English becomes Spanish.")
+            }
         case .meeting:
             title = text("Meeting interpretation")
             line = text("Read what others say in your language, and let them hear you in theirs, even in your own voice.")

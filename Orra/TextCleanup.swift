@@ -35,6 +35,9 @@ final class TextCleanup {
     /// Which way dictations are translated. Saved through `saveDirection` whenever it
     /// changes.
     private(set) var translationDirection: TranslationDirection
+    /// The user's dictation language, which translation goes between with English, see
+    /// `setDictationLanguage(_:)`. AppDelegate keeps it in step with PushToTalkController.
+    private(set) var dictationLanguage: DictationLanguage = .chinese
     /// True while the Clean Up Text page asks whether to download the model.
     var isConfirmingDownload = false
     /// True while Settings asks whether to download the model for translation.
@@ -389,6 +392,17 @@ final class TextCleanup {
         }
     }
 
+    /// The user's dictation language changed, or is known at launch. Drops the prompts of
+    /// the language before and reads those of the new one ahead while translation or
+    /// captions need the model and it is loaded. Otherwise the next load reads them.
+    func setDictationLanguage(_ language: DictationLanguage) {
+        guard language != dictationLanguage else { return }
+        dictationLanguage = language
+        if translationIsOn || captionsNeedModel, isLoaded {
+            prepareTranslation()
+        }
+    }
+
     /// False while Orra looks for the model on disk, at launch or after Try Again, since
     /// only then does it know whether a download is needed.
     var canTurnOn: Bool {
@@ -484,15 +498,22 @@ final class TextCleanup {
         saveTranslation(on)
     }
 
-    /// The targets whose translation prompts are read ahead for a direction: the fixed
-    /// one, or both for the automatic direction, which picks one per dictation. English
-    /// first, since most dictations into Orra are Chinese. Each takes about 0.8 s on the
-    /// GPU and keeps about 110 MB, see docs/manual-testing.md.
+    /// The targets whose translation prompts are read ahead for a direction of a user who
+    /// dictates in Chinese: the fixed one, or both for the automatic direction, which picks
+    /// one per dictation. English first, since most dictations into Orra are Chinese. Each
+    /// takes about 0.8 s on the GPU and keeps about 110 MB, see docs/manual-testing.md.
     nonisolated static func preparedTargets(_ direction: TranslationDirection) -> [TranslationTarget] {
-        switch direction {
-        case .automatic: [.english, .chinese]
-        case .english: [.english]
-        case .chinese: [.chinese]
+        preparedRoutes(direction, .chinese).map(\.target)
+    }
+
+    /// The routes whose prompts are read ahead for a direction and a dictation language:
+    /// the route of the direction as it acts for that language, see
+    /// TranslationDirection.effective(for:), or both of the language for Automatic.
+    nonisolated static func preparedRoutes(_ direction: TranslationDirection, _ language: DictationLanguage) -> [TranslationRoute] {
+        switch direction.effective(for: language) {
+        case .automatic: language.translationRoutes
+        case .english: [TranslationRoute(language, into: .english)]
+        case .chinese, .japanese, .spanish: [TranslationRoute(language, into: language.translationLanguage)]
         }
     }
 
@@ -507,11 +528,16 @@ final class TextCleanup {
         }
     }
 
+    /// Drops the prompts of other dictation languages, and reads those of the user's
+    /// direction ahead. The other target of the same language stays when it is in memory,
+    /// as it did before the dictation language.
     private func fillTranslationPrefixes() async {
         guard translationIsOn || captionsNeedModel, isLoaded else { return }
-        for target in Self.preparedTargets(translationDirection) {
+        let language = dictationLanguage
+        await engine.keepTranslationPrefixes(Set(language.translationRoutes))
+        for route in Self.preparedRoutes(translationDirection, language) {
             do {
-                try await engine.prepareTranslation(target)
+                try await engine.prepareTranslation(route)
             } catch {
                 Logger.rewrite.error("Reading the translation prompt ahead failed with \(String(reflecting: type(of: error)), privacy: .public)")
             }
@@ -598,11 +624,14 @@ struct CleanupEngine {
     var unload: @Sendable () async -> Void
     /// The model's answer for a transcript, see RewriteEngine.cleanUp.
     var complete: @Sendable (String) async throws -> String
-    /// The model's answer for a transcript and a target, see RewriteEngine.translate.
-    var translate: @Sendable (String, TranslationTarget) async throws -> String = { _, _ in throw RewriteError.notLoaded }
-    /// Reads the translation prompt for a target ahead, see
+    /// The model's answer for a transcript and a route, see RewriteEngine.translate.
+    var translate: @Sendable (String, TranslationRoute) async throws -> String = { _, _ in throw RewriteError.notLoaded }
+    /// Reads the translation prompt for a route ahead, see
     /// RewriteEngine.prepareTranslation.
-    var prepareTranslation: @Sendable (TranslationTarget) async throws -> Void = { _ in }
+    var prepareTranslation: @Sendable (TranslationRoute) async throws -> Void = { _ in }
+    /// Drops the translation prompts of routes outside a set, see
+    /// RewriteEngine.keepTranslationPrefixes.
+    var keepTranslationPrefixes: @Sendable (Set<TranslationRoute>) async -> Void = { _ in }
     /// The model gate the cleanup model runs at, see `gated`. Nil when it runs at none, as
     /// a test's stand in does. A load reserves it, see TextCleanup.
     var gate: ModelGate? = nil
@@ -614,7 +643,8 @@ struct CleanupEngine {
             unload: { await engine.unload() },
             complete: { try await engine.cleanUp($0).answer },
             translate: { try await engine.translate($0, into: $1).answer },
-            prepareTranslation: { try await engine.prepareTranslation(into: $0) }
+            prepareTranslation: { try await engine.prepareTranslation(into: $0) },
+            keepTranslationPrefixes: { await engine.keepTranslationPrefixes($0) }
         ).gated(gate)
     }
 }

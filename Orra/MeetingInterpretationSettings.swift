@@ -79,7 +79,8 @@ struct MeetingInterpretationSettings: View {
             recorder: .live(pushToTalk),
             playback: SpeechPlayer(),
             output: { AudioOutput.systemDefault() },
-            scriptLanguage: VoiceScript.language(direction: translationDirection)
+            scriptLanguage: VoiceScript.language(direction: translationDirection, language: pushToTalk.dictationLanguage),
+            scriptLanguages: pushToTalk.dictationLanguage.translationTargets
         )
     }
 

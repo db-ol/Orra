@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             microphone: MicrophoneAccess.current(),
             accessibilityAllowed: AXIsProcessTrusted()
         )
-        return PushToTalkController(
+        let controller = PushToTalkController(
             capture: .live(),
             transcription: transcription,
             cleanup: cleanup.model.sharing(turns),
@@ -47,8 +47,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             writesNumbersAsDigits: NumberPreference.load(),
             saveWritesNumbersAsDigits: { NumberPreference.save($0) },
             usesScreenNames: ScreenNamesPreference.load(),
-            saveUsesScreenNames: { ScreenNamesPreference.save($0) }
+            saveUsesScreenNames: { ScreenNamesPreference.save($0) },
+            dictationLanguage: DictationLanguagePreference.load(setUpBefore: setUpBefore),
+            // Translation goes between English and the dictation language, so the model
+            // reads the prompts of the new language ahead.
+            saveDictationLanguage: { [cleanup] in
+                DictationLanguagePreference.save($0)
+                cleanup.setDictationLanguage($0)
+            }
         )
+        cleanup.setDictationLanguage(controller.dictationLanguage)
+        return controller
     }()
     /// The voice models this build links, see VoiceEngines.
     let voiceEngines = VoiceEngines.live
@@ -74,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engines: .live(
             transcription: transcription,
             isSpeechReady: { [pushToTalk] in pushToTalk.modelState == .ready },
+            language: { [pushToTalk] in pushToTalk.dictationLanguage },
             cleanup: cleanup,
             turns: turns
         ),
@@ -312,8 +322,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         captions.showWindow = { [captionWindow] in captionWindow.show() }
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
         // A new user's talk key stays in Press to start and stop once Orra is set up, and an
-        // earlier user's in Hold, see TriggerModePreference.
+        // earlier user's in Hold, see TriggerModePreference. The dictation language stays
+        // the same way, see DictationLanguagePreference.
         TriggerModePreference.keepTalkMode(pushToTalk.talkMode)
+        DictationLanguagePreference.keep(pushToTalk.dictationLanguage)
         // Before the tap is installed, so it watches the translation key from the start.
         followTranslation()
         pushToTalk.start()

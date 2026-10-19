@@ -2,7 +2,7 @@ import Combine
 import SwiftUI
 
 /// The welcome window's content: the guide with its line for the step the user is on, the
-/// language, the three steps that make Orra ready, in any order, the choice of the talk
+/// languages, the three steps that make Orra ready, in any order, the choice of the talk
 /// key, then how to dictate. The download step asks nothing: on a Mac with enough memory
 /// a new user's one download includes the cleanup model, see CleanupDefault. The download
 /// comes before the permissions because it takes longest, and it goes on while the user
@@ -162,7 +162,7 @@ struct WelcomeView: View {
             } set: { picked in
                 language = picked
                 languagePicked(picked)
-            })
+            }, pushToTalk: pushToTalk)
             SetupStepRow(number: 1, status: downloadingCleanup ? .inProgress : checklist.model, title: setup.namesBothModels ? "Download the models" : "Download the speech model", isCurrent: step == .download || step == .downloading) {
                 ModelStepDetail(setup: setup, summary: summary, pushToTalk: pushToTalk)
             }
@@ -193,7 +193,7 @@ struct WelcomeView: View {
             }
             if WelcomeSuggestion.shows(checklist: checklist) {
                 SuggestionsBlock(
-                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, locale: Locale(identifier: localization)),
+                    suggestions: WelcomeSuggestion.all(cleanupOn: setup.cleanup.isOn, cleanupModelInstalled: setup.cleanup.models.state.isInstalled, translationOn: setup.cleanup.translationIsOn, language: pushToTalk.dictationLanguage, locale: Locale(identifier: localization)),
                     locale: Locale(identifier: localization),
                     open: { openSettings($0.settingsTab) }
                 )
@@ -270,10 +270,13 @@ extension WelcomeSuggestion.Kind {
     }
 }
 
-/// The language of Orra, with the same choices as in Settings. Each language reads in its
-/// own name, so a user who cannot read the window's language still finds theirs.
+/// The language of Orra and the dictation language, with the same choices as in Settings.
+/// Each language reads in its own name, so a user who cannot read the window's language
+/// still finds theirs. A new user's dictation language starts as the Mac's, see
+/// DictationLanguagePreference, and a pick here is saved as in Settings.
 private struct LanguageRow: View {
     @Binding var language: AppLanguage
+    let pushToTalk: PushToTalkController
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -287,6 +290,17 @@ private struct LanguageRow: View {
                 }
             } label: {
                 Label("Language", systemImage: "globe")
+            }
+            .fixedSize()
+            Picker(selection: Binding(
+                get: { pushToTalk.dictationLanguage },
+                set: { pushToTalk.setDictationLanguage($0) }
+            )) {
+                ForEach(DictationLanguage.allCases) { language in
+                    language.title.tag(language)
+                }
+            } label: {
+                Label("Dictation language", systemImage: "character.bubble")
             }
             .fixedSize()
             Text("You can change this later in Settings, under General.")

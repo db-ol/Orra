@@ -42,7 +42,7 @@ final class RecordingFeedback {
     /// The direction of the dictation on screen when the translation key started it, so
     /// the indicator shows the badge, from its listening cue until it finishes. Nil for a
     /// dictation of the talk key.
-    private(set) var translation: TranslationDirection?
+    private(set) var translation: TranslationCue?
     /// The microphone level for the meter, from 0 to 1, falling slowly after a peak.
     private(set) var level = 0.0
     /// The whole seconds left before the recording limit stops the dictation on screen,
@@ -283,15 +283,17 @@ final class RecordingFeedback {
     }
 }
 
-extension TranslationDirection {
-    /// The badge next to the bars: 译 when the language is picked per dictation, and the
-    /// target, EN or 中, when it is fixed. The same in both interface languages, like a
-    /// keycap.
+nonisolated extension TranslationDirection {
+    /// The badge next to the bars for a user who dictates in Chinese: 译 when the language
+    /// is picked per dictation, and the target, EN or 中, when it is fixed. 日 and ES for a
+    /// fixed Japanese or Spanish. The same in every interface language, like a keycap.
     var badge: String {
         switch self {
         case .automatic: "译"
         case .english: "EN"
         case .chinese: "中"
+        case .japanese: "日"
+        case .spanish: "ES"
         }
     }
 
@@ -301,7 +303,42 @@ extension TranslationDirection {
         case .automatic: String(localized: LocalizedStringResource("This dictation will be translated.", locale: locale))
         case .english: String(localized: LocalizedStringResource("This dictation will be translated into English.", locale: locale))
         case .chinese: String(localized: LocalizedStringResource("This dictation will be translated into Chinese.", locale: locale))
+        case .japanese: String(localized: LocalizedStringResource("This dictation will be translated into Japanese.", locale: locale))
+        case .spanish: String(localized: LocalizedStringResource("This dictation will be translated into Spanish.", locale: locale))
         }
+    }
+}
+
+/// A dictation of the translation key, for the recording indicator: the direction as it
+/// acts for the dictation language, see TranslationDirection.effective(for:), and that
+/// language.
+nonisolated struct TranslationCue: Equatable, Sendable {
+    let direction: TranslationDirection
+    let language: DictationLanguage
+
+    init(direction: TranslationDirection, language: DictationLanguage) {
+        self.direction = direction.effective(for: language)
+        self.language = language
+    }
+
+    /// The cues of a user who dictates in Chinese.
+    static let automatic = TranslationCue(direction: .automatic, language: .chinese)
+    static let english = TranslationCue(direction: .english, language: .chinese)
+    static let chinese = TranslationCue(direction: .chinese, language: .chinese)
+
+    /// The badge: the one of the direction, with 訳 for Automatic in Japanese, which writes
+    /// that character in place of 译, and ⇄ in Spanish, whose speakers read neither.
+    var badge: String {
+        switch (language, direction) {
+        case (.japanese, .automatic): "訳"
+        case (.spanish, .automatic): "⇄"
+        default: direction.badge
+        }
+    }
+
+    /// What VoiceOver says about the badge.
+    func badgeDescription(in locale: Locale = .interface) -> String {
+        direction.badgeDescription(in: locale)
     }
 }
 
