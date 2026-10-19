@@ -307,7 +307,7 @@ nonisolated struct DownloadSummary: Equatable, Sendable {
                 }
             case .missing:
                 if let gigabytes = memoryKeepsCleanupOff {
-                    lines = [text("Cleanup stays off on this Mac because it has \(gigabytes) GB of memory. You can turn it on later in Settings, General.")]
+                    lines = [text("Cleanup stays off on this Mac because it has \(gigabytes) GB of memory. You can turn it on later in Settings, Dictation.")]
                 } else {
                     lines = Array(speech.menuLines(total: speechTotal, locale: locale).prefix(1))
                 }

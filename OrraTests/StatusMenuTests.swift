@@ -4,9 +4,9 @@ import SwiftUI
 import Testing
 @testable import Orra
 
-/// The top level of the menu bar menu, read from the menu SwiftUI makes of StatusMenu:
-/// Live Captions under a Meeting Interpretation heading, and when the copy items and
-/// Speak Translations to Others show.
+/// The menu bar menu, read from the menu SwiftUI makes of StatusMenu: Live Captions under
+/// a Meeting Interpretation heading, when the copy items and Speak Translations to Others
+/// show, and what the Talk Key submenu holds.
 @MainActor
 struct StatusMenuTests {
     let mic = FakeMicrophone()
@@ -55,6 +55,18 @@ struct StatusMenuTests {
         #expect(shown() == ["Live Captions", "Copy Captions", "Copy Previous Captions"])
     }
 
+    /// Double press for hands free left the menu. Settings shows it under Keys, and only
+    /// while a key is in Hold.
+    @Test func talkKeyHasNoHandsFreeSwitch() throws {
+        let talkKey = try #require(menu(translationOn: true, speakingOn: false).items.first { $0.title == "Talk Key" }?.submenu)
+        let lines = Self.lines(of: talkKey)
+        #expect(lines.contains("Change Talk Key…"))
+        #expect(lines.contains("Change Translation Key…"))
+        #expect(!lines.contains { $0.localizedCaseInsensitiveContains("hands free") })
+        // Nothing follows the last button, not even a divider.
+        #expect(lines.last == "Change Translation Key…")
+    }
+
     /// The lines under the Meeting Interpretation heading, up to the divider after them.
     private func meetingLines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore()) -> [String] {
         let lines = lines(translationOn: translationOn, speakingOn: speakingOn, voiceModel: voiceModel, store: store)
@@ -62,10 +74,25 @@ struct StatusMenuTests {
         return Array(lines[(heading + 1)...].prefix { $0 != "---" })
     }
 
-    /// The menu's top level, one line for each item: "# " starts a section heading, " >"
-    /// ends a submenu, " (on)" ends an item that is on, and "---" is a divider. Without
+    /// The menu's top level, one line for each item, see `lines(of:)`. Without
     /// Accessibility access and with the speech model not downloaded, as in a test.
     private func lines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore()) -> [String] {
+        Self.lines(of: menu(translationOn: translationOn, speakingOn: speakingOn, voiceModel: voiceModel, store: store))
+    }
+
+    /// One line for each item: "# " starts a section heading, " >" ends a submenu, " (on)"
+    /// ends an item that is on, and "---" is a divider.
+    private static func lines(of menu: NSMenu) -> [String] {
+        menu.items.map { item in
+            if item.isSeparatorItem { return "---" }
+            if item.isSectionHeader { return "# " + item.title }
+            if item.submenu != nil { return item.title + " >" }
+            return item.state == .on ? item.title + " (on)" : item.title
+        }
+    }
+
+    /// The menu SwiftUI makes of StatusMenu.
+    private func menu(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore()) -> NSMenu {
         let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert)
         pushToTalk.setTranslationKeyOn(translationOn)
         let speech = TranslationSpeech(
@@ -97,11 +124,6 @@ struct StatusMenuTests {
         )
         let menu = NSHostingMenu(rootView: view)
         menu.update()
-        return menu.items.map { item in
-            if item.isSeparatorItem { return "---" }
-            if item.isSectionHeader { return "# " + item.title }
-            if item.submenu != nil { return item.title + " >" }
-            return item.state == .on ? item.title + " (on)" : item.title
-        }
+        return menu
     }
 }
