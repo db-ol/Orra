@@ -1,40 +1,110 @@
+import AppKit
 import Foundation
 import Observation
 import os
 
-/// The caption sentences the window shows, the newest last. In memory only, and at most
-/// `limit`, so a long meeting does not grow without end.
+/// The caption sentences of the meeting, the newest last, and the last meeting's. In
+/// memory only, until Orra quits, so they can still be copied after captions stop. At
+/// most `limit` sentences, so a long meeting does not grow without end, of which the
+/// window draws the last `shownLimit`.
 @Observable
 final class CaptionStore {
-    /// About two hours of a busy call.
-    static let limit = 500
+    /// About 40 hours of a busy call, a few MB with translations.
+    static let limit = 10_000
+    /// About two hours of a busy call. The window draws no more, so a long meeting does
+    /// not make each new sentence redraw thousands.
+    static let shownLimit = 500
 
     private(set) var sentences: [CaptionSentence] = []
+    /// The final sentences of the last meeting, moved here when captions start again, so
+    /// a stray start does not lose a meeting before it was copied.
+    private(set) var previous = CaptionTranscript([])
+    /// Whether a sentence is final, so there is something to copy. Kept here, so the menu
+    /// does not follow every caption line.
+    private(set) var hasFinalSentences = false
+    /// Whether a sentence has its translation, so Copy Translation copies more than the
+    /// originals.
+    private(set) var hasTranslation = false
+    /// True once the oldest sentences were dropped to stay within `limit`, until captions
+    /// start again.
+    private(set) var droppedOldest = false
+    /// Whether the captions reported a final sentence since they started. A line that only
+    /// became final when they stopped does not count, so a short stray start does not
+    /// replace the previous meeting.
+    private var reportedFinal = false
     let limit: Int
 
     init(limit: Int = CaptionStore.limit) {
         self.limit = limit
     }
 
+    /// The sentences the window draws, the latest `shownLimit`. An array of its own, so
+    /// the window does not hold on to the store's array, and a new caption line changes
+    /// it in place instead of copying up to `limit` sentences.
+    var shown: [CaptionSentence] {
+        Array(sentences.suffix(Self.shownLimit))
+    }
+
+    /// The final sentences, for a copy.
+    var transcript: CaptionTranscript {
+        CaptionTranscript(sentences)
+    }
+
     /// A new sentence goes at the end, a known one is replaced where it is.
     func apply(_ sentence: CaptionSentence) {
         if let index = sentences.lastIndex(where: { $0.id == sentence.id }) {
             sentences[index] = sentence
-            return
+        } else {
+            sentences.append(sentence)
+            if sentences.count > limit {
+                sentences.removeFirst(sentences.count - limit)
+                if !droppedOldest { droppedOldest = true }
+            }
         }
-        sentences.append(sentence)
-        if sentences.count > limit {
-            sentences.removeFirst(sentences.count - limit)
-        }
+        if !sentence.isInterim { reportedFinal = true }
+        noteContents()
     }
 
     /// Removes a sentence, such as an interim line whose sentence got no final text.
     func remove(id: Int) {
         sentences.removeAll { $0.id == id }
+        noteContents()
     }
 
-    func clear() {
+    /// Captions stopped, so nothing reports anymore. The line still being heard keeps its
+    /// last text as a final sentence without translation, so the last words are not
+    /// lost, and a pending translation becomes none, so it never waits forever.
+    func settle() {
+        for index in sentences.indices where sentences[index].isInterim || sentences[index].translation == .pending {
+            sentences[index].isInterim = false
+            sentences[index].translation = .none
+        }
+        noteContents()
+    }
+
+    /// Captions start again: the final sentences become the previous transcript and the
+    /// window starts empty, so a meeting never shows in the next one's window. Unless the
+    /// captions reported a final sentence, the previous transcript stays as it is. A line
+    /// that was still being heard at the stop alone is not a meeting to keep.
+    func startOver() {
+        if reportedFinal {
+            let transcript = transcript
+            if !transcript.isEmpty {
+                previous = transcript
+            }
+        }
         sentences = []
+        droppedOldest = false
+        reportedFinal = false
+        noteContents()
+    }
+
+    /// Sets the flags only when they change, since every set notifies the views.
+    private func noteContents() {
+        let final = sentences.contains { !$0.isInterim }
+        if final != hasFinalSentences { hasFinalSentences = final }
+        let translated = sentences.contains { $0.translatedText != nil }
+        if translated != hasTranslation { hasTranslation = translated }
     }
 }
 
@@ -152,8 +222,9 @@ nonisolated struct CaptionFollow: Equatable, Sendable {
 /// translated as they come, shown in a floating window. Off at every launch, turned on
 /// from the menu.
 ///
-/// Turning it off stops the capture, drops every sentence and closes the window. Nothing
-/// is logged or saved but counts and timings.
+/// Turning it off stops the capture and closes the window. The sentences stay in memory
+/// until Orra quits, so they can still be copied, and the next start keeps them as the
+/// previous transcript. Nothing is logged or saved but counts and timings.
 @Observable
 final class MeetingCaptions {
     nonisolated enum CaptureState: Equatable, Sendable {
@@ -186,6 +257,7 @@ final class MeetingCaptions {
     @ObservationIgnored private let started: () -> Void
     @ObservationIgnored private let stopped: () -> Void
     @ObservationIgnored private let saveDisplayMode: (CaptionDisplayMode) -> Void
+    @ObservationIgnored private let copyText: (String) -> Void
     @ObservationIgnored private let silenceHint: Double
     @ObservationIgnored private var pipeline: CaptionPipeline?
     /// Starts and stops the capture, one after the other, off the main actor. Since it is
@@ -202,6 +274,7 @@ final class MeetingCaptions {
     ///   - started: Called when captions start, so the cleanup model loads, see
     ///     TextCleanup.captionsStarted.
     ///   - stopped: Called when they stop.
+    ///   - copyText: Puts a copy on the clipboard. Tests pass a fake.
     ///   - silenceHint: Seconds of only zeros before the window suggests the permission.
     init(
         source: SystemAudioSource,
@@ -211,6 +284,7 @@ final class MeetingCaptions {
         displayMode: CaptionDisplayMode = .translationOnly,
         saveDisplayMode: @escaping (CaptionDisplayMode) -> Void = { _ in },
         store: CaptionStore = CaptionStore(),
+        copyText: @escaping (String) -> Void = { TextInserter.copy($0, to: .general) },
         silenceHint: Double = 8
     ) {
         self.source = source
@@ -220,6 +294,7 @@ final class MeetingCaptions {
         self.displayMode = displayMode
         self.saveDisplayMode = saveDisplayMode
         self.store = store
+        self.copyText = copyText
         self.silenceHint = silenceHint
     }
 
@@ -234,9 +309,23 @@ final class MeetingCaptions {
         saveDisplayMode(mode)
     }
 
+    /// Copies a transcript, such as `store.transcript` or `store.previous`, the way the
+    /// window shows it unless `content` says otherwise. Concealed and kept on this Mac,
+    /// as Copy Last Dictation, see TextInserter.copy, since captions are other people's
+    /// words. Returns false when there is nothing to copy. Logs the count, never the text.
+    @discardableResult
+    func copy(_ transcript: CaptionTranscript, as content: CaptionTranscript.Content? = nil) -> Bool {
+        guard !transcript.isEmpty else { return false }
+        let content = content ?? displayMode.copyContent
+        copyText(transcript.text(content))
+        Logger.captions.notice("Captions copied, \(transcript.sentences.count, privacy: .public) sentences, \(content.logName, privacy: .public)")
+        return true
+    }
+
     private func start() {
         isOn = true
         run += 1
+        store.startOver()
         follow = CaptionFollow()
         hearsOnlySilence = false
         speechModelMissing = false
@@ -302,7 +391,9 @@ final class MeetingCaptions {
         }
         pipeline?.stop()
         pipeline = nil
-        store.clear()
+        // Kept for a copy after the meeting. Sentences still waiting to be transcribed
+        // are dropped, since transcribing them would keep the GPU busy after the stop.
+        store.settle()
         capture = .off
         hearsOnlySilence = false
         speechModelMissing = false

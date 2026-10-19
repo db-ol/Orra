@@ -241,6 +241,24 @@ struct TextInserterTests {
         #expect(items.last?.string(forType: .string) == "second item")
     }
 
+    @Test(.timeLimit(.minutes(1)))
+    func aConcealedCopyGoesBackKeptOnThisMac() async {
+        let fixture = InserterFixture()
+        defer { fixture.release() }
+        fixture.put("old")
+        let plain = await PasteboardSnapshot.read(pasteboardNamed: fixture.pasteboard.name.rawValue)
+        #expect(plain.restoreOptions == [])
+        // As Copy Last Dictation and the copy of Live Captions put it there.
+        TextInserter.copy("Hello everyone.", to: fixture.pasteboard)
+        let concealed = await PasteboardSnapshot.read(pasteboardNamed: fixture.pasteboard.name.rawValue)
+        #expect(concealed.restoreOptions == .currentHostOnly)
+        let inserter = fixture.makeInserter()
+        await inserter.insert("new")
+        await inserter.waitForRestore()
+        #expect(fixture.pasteboard.string(forType: .string) == "Hello everyone.")
+        #expect(fixture.pasteboard.types?.contains(TextInserter.concealedType) == true)
+    }
+
     @Test func currentLayoutHasAKeyForV() throws {
         // Reads the real keyboard layout but posts nothing.
         let code = try #require(KeyboardLayout.keyCode(for: "v"))

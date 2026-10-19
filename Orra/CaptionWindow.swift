@@ -89,8 +89,8 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
     }
 }
 
-/// The captions, newest at the bottom, with what is in the way above them and the display
-/// mode at the top.
+/// The captions, newest at the bottom, with what is in the way above them, and the display
+/// mode and Copy at the top.
 struct CaptionView: View {
     @Bindable var captions: MeetingCaptions
     let pushToTalk: PushToTalkController
@@ -110,15 +110,18 @@ struct CaptionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Show", selection: Binding(get: { captions.displayMode }, set: { captions.setDisplayMode($0) })) {
-                ForEach(CaptionDisplayMode.allCases, id: \.self) { mode in
-                    Text(mode.title)
+            HStack(spacing: 8) {
+                Picker("Show", selection: Binding(get: { captions.displayMode }, set: { captions.setDisplayMode($0) })) {
+                    ForEach(CaptionDisplayMode.allCases, id: \.self) { mode in
+                        Text(mode.title)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .frame(maxWidth: .infinity)
+                CaptionCopyButton(captions: captions)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .frame(maxWidth: .infinity)
             CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
@@ -126,7 +129,7 @@ struct CaptionView: View {
                         Text("Captions appear here when someone speaks.")
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(captions.store.sentences) { sentence in
+                    ForEach(captions.store.shown) { sentence in
                         CaptionSentenceView(lines: captions.displayMode.lines(for: sentence))
                             .id(sentence.id)
                     }
@@ -170,6 +173,60 @@ struct CaptionView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
+        }
+    }
+}
+
+/// Copy at the top right. A click copies every final sentence the way the window shows
+/// it, and the arrow opens a menu for the originals, the translations or both. After a
+/// copy the icon shows a checkmark for a moment and VoiceOver hears "Copied".
+private struct CaptionCopyButton: View {
+    let captions: MeetingCaptions
+
+    @State private var copied = false
+    @State private var reset: Task<Void, Never>?
+
+    var body: some View {
+        Menu {
+            Button("Copy Original Text") {
+                copy(.original)
+            }
+            Button("Copy Translation") {
+                copy(.translation)
+            }
+            .disabled(!captions.store.hasTranslation)
+            Button("Copy Original and Translation") {
+                copy(.originalAndTranslation)
+            }
+            if captions.store.droppedOldest {
+                Divider()
+                Text("Orra keeps the last \(captions.store.limit) sentences.")
+            }
+        } label: {
+            Label("Copy All Captions", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .labelStyle(.iconOnly)
+        } primaryAction: {
+            copy(nil)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.borderless)
+        .menuIndicator(.visible)
+        .fixedSize()
+        .help("Copy All Captions")
+        .disabled(!captions.store.hasFinalSentences)
+    }
+
+    /// Nil copies the way the window shows the sentences.
+    private func copy(_ content: CaptionTranscript.Content?) {
+        guard captions.copy(captions.store.transcript, as: content) else { return }
+        copied = true
+        AccessibilityNotification.Announcement(String(localized: "Copied")).post()
+        reset?.cancel()
+        reset = Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            if !Task.isCancelled {
+                copied = false
+            }
         }
     }
 }

@@ -106,6 +106,19 @@ struct StatusMenu: View {
                 get: { captions.isOn },
                 set: { captions.setOn($0) }
             ))
+            // The whole meeting the way the window shows it, also after the window is
+            // closed, and the meeting before the last start. Each only when it has a
+            // final sentence.
+            if captions.store.hasFinalSentences {
+                Button("Copy Captions") {
+                    captions.copy(captions.store.transcript)
+                }
+            }
+            if !captions.store.previous.isEmpty {
+                Button("Copy Previous Captions") {
+                    captions.copy(captions.store.previous)
+                }
+            }
             // Also while on after Translation was turned off, so the menu can turn it off.
             if speech.canSpeak, pushToTalk.translationKeyIsOn || speech.isOn {
                 Toggle("Speak Translations to Others", isOn: Binding(

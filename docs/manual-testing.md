@@ -2550,8 +2550,48 @@ it shows starts, stops, counts and failures, never text.
   screen Meet or Chrome window, can be dragged by its background and resized, and opens
   where it was left. It does not take the focus from the app in front when it opens.
 - [ ] Turning Live Captions off in the menu or in Settings, or closing the window, stops the
-  capture (the recording indicator macOS shows in the menu bar goes away), closes the window
-  and drops every sentence: turning it on again shows an empty window.
+  capture (the recording indicator macOS shows in the menu bar goes away) and closes the
+  window. Since 2026-10-19 the sentences stay in memory until Orra quits, and Copy Captions
+  shows under Live Captions in the menu. Turning it on again shows an empty window, and the
+  last meeting moves to Copy Previous Captions.
+- [ ] Copy, added on 2026-10-19, not verified yet in the running app. The button at the top
+  right of the window shows the doc.on.doc icon, its help reads "Copy All Captions", and it
+  is disabled until a sentence is final. A click copies every final sentence the way the
+  window shows it. With "Translation only" that is the translations, and the original where
+  there is none, one sentence per line. With "Original and translation" each original has
+  its translation on the next line, with a blank line between sentences. The line still
+  being heard is left out. After a copy the icon shows a checkmark for about 1.5 s, and
+  VoiceOver says "Copied". The arrow opens Copy Original Text, Copy Translation (disabled
+  while no sentence has a translation) and Copy Original and Translation. Check that this
+  menu with a primary action works in the panel, which does not activate Orra: a click on
+  the icon copies, a click on the arrow opens the menu, and the call app keeps the focus.
+- [ ] The top row with Copy, at 520 pt and at the narrowest width, in all four languages.
+  The picker sits centered in the space left of the button, so slightly left of the
+  window's center. The picker and the button set the narrowest width, which is wider than
+  300 pt in English and Spanish (about 344 and 328 pt, from the picker's measured width).
+  A window saved narrower opens that wide. The menu fallback for narrow windows comes with
+  the three display modes.
+- [ ] Paste a copy into Notes on the Mac: plain text, no header, no times. A clipboard
+  manager does not keep it, and Universal Clipboard does not offer it to another device.
+  The log shows "Captions copied, 12 sentences, translation" with the count and the kind,
+  never text.
+- [ ] Copy captions, then dictate once into another app. After the paste the caption copy
+  comes back on the clipboard, and Universal Clipboard still does not offer it to another
+  device, since the restore keeps concealed contents on this Mac.
+- [ ] Select one caption line and press Command C. This is an ordinary copy, so a clipboard
+  manager keeps it, as docs/privacy.md says. If it skips it, change that sentence in the
+  four privacy pages.
+- [ ] Turning captions off while a sentence is still being heard and another waits for its
+  translation: the heard line stays as a final line, the waiting one shows its original,
+  and a copy has both.
+- [ ] After the window is closed, Copy Captions in the menu copies the meeting in the
+  display mode chosen in the window. Turning captions on again starts an empty window,
+  Copy Captions leaves the menu until the first final sentence, and Copy Previous Captions
+  copies the last meeting. Turning captions on and off with nothing said keeps that
+  previous meeting.
+- [ ] A meeting of more than 500 sentences: the window draws the last 500, and a copy has
+  them all. Past 10,000 the oldest drop, and the Copy menu shows "Orra keeps the last
+  10,000 sentences." as a line that cannot be clicked.
 - [ ] Without the local model: the window says "The local model is not on this Mac yet.
   Until it is, captions show what was said without translation." with a Download
   button. The button asks "Download the model for translation?" first, and the download
@@ -2563,7 +2603,9 @@ it shows starts, stops, counts and failures, never text.
   is unloaded when they stop (Activity Monitor shows the memory fall).
 - [ ] With the interface in Chinese: the menu's heading reads 会议同传 with 实时字幕 under
   it, the window's title reads 实时字幕, the picker reads 只显示译文 and
-  原文和译文逐句对照, and every note in the window is in Chinese.
+  原文和译文逐句对照, and every note in the window is in Chinese. The Copy button's help
+  reads 拷贝全部字幕, its menu 拷贝原文, 拷贝译文 and 拷贝原文和译文, and the Orra menu
+  shows 拷贝字幕 and 拷贝上一次的字幕.
 - [ ] Meeting Interpretation groups both parts, since 2026-10-15. In the menu they stand
   under a Meeting Interpretation heading at the top level since 2026-10-17, in place of
   the submenu, see below. Settings has a Meeting Interpretation page (会议同传), a
