@@ -50,12 +50,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             usesScreenNames: ScreenNamesPreference.load(),
             saveUsesScreenNames: { ScreenNamesPreference.save($0) },
             dictationLanguage: DictationLanguagePreference.load(setUpBefore: setUpBefore),
+            dictationLanguageFollows: DictationLanguagePreference.follows(setUpBefore: setUpBefore),
             // Translation goes between English and the dictation language, so the model
             // reads the prompts of the new language ahead.
             saveDictationLanguage: { [cleanup] in
                 DictationLanguagePreference.save($0)
                 cleanup.setDictationLanguage($0)
-            }
+            },
+            saveDictationLanguagePicked: { DictationLanguagePreference.savePicked() }
         )
         cleanup.setDictationLanguage(controller.dictationLanguage)
         return controller
@@ -387,7 +389,8 @@ enum LaunchMigrations {
         // The translation key stays in Press to start and stop once Translation is turned on,
         // and in Hold for a user who turned it on before, see TriggerModePreference.
         TriggerModePreference.keepTranslationMode(pushToTalk.translationMode, in: defaults)
-        // The dictation language stays the same way, see DictationLanguagePreference.
-        DictationLanguagePreference.keep(pushToTalk.dictationLanguage, in: defaults)
+        // The dictation language stays the same way, see DictationLanguagePreference, and a
+        // new user's follows the welcome window until it is picked or setup is done.
+        DictationLanguagePreference.keep(pushToTalk.dictationLanguage, follows: pushToTalk.dictationLanguageFollows, in: defaults)
     }
 }

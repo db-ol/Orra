@@ -11,8 +11,8 @@ struct LaunchMigrationsTests {
     let speech = FakeSpeech()
     let inserter = FakeInserter()
 
-    private func controller(talkMode: TriggerMode, translationMode: TriggerMode = .newTranslationKeyMode, dictationLanguage: DictationLanguage) -> PushToTalkController {
-        PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkMode: talkMode, translationMode: translationMode, dictationLanguage: dictationLanguage)
+    private func controller(talkMode: TriggerMode, translationMode: TriggerMode = .newTranslationKeyMode, dictationLanguage: DictationLanguage, dictationLanguageFollows: Bool = false) -> PushToTalkController {
+        PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkMode: talkMode, translationMode: translationMode, dictationLanguage: dictationLanguage, dictationLanguageFollows: dictationLanguageFollows)
     }
 
     /// A first launch has nothing saved, and saves the modes of both keys and the dictation
@@ -23,6 +23,14 @@ struct LaunchMigrationsTests {
             #expect(TriggerModePreference.saved(for: .talk, in: defaults) == .toggle)
             #expect(TriggerModePreference.saved(for: .translation, in: defaults) == .toggle)
             #expect(DictationLanguagePreference.saved(in: defaults) == .japanese)
+            #expect(!defaults.bool(forKey: DictationLanguagePreference.newUserKey))
+        }
+        // A new user's dictation language follows the welcome window, and the first launch
+        // notes it for the next launches.
+        try withTestDefaults("LaunchMigrations.newUser") { defaults in
+            LaunchMigrations.run(controller(talkMode: .toggle, dictationLanguage: .japanese, dictationLanguageFollows: true), in: defaults)
+            #expect(DictationLanguagePreference.saved(in: defaults) == .japanese)
+            #expect(defaults.bool(forKey: DictationLanguagePreference.newUserKey))
         }
     }
 
@@ -47,6 +55,12 @@ struct LaunchMigrationsTests {
             #expect(TriggerModePreference.saved(for: .talk, in: defaults) == .doubleTap)
             #expect(TriggerModePreference.saved(for: .translation, in: defaults) == .hold)
             #expect(DictationLanguagePreference.saved(in: defaults) == .spanish)
+        }
+        // A user who saved a language before is never noted as new.
+        try withTestDefaults("LaunchMigrations.savedFollows") { defaults in
+            DictationLanguagePreference.save(.spanish, to: defaults)
+            LaunchMigrations.run(controller(talkMode: .hold, dictationLanguage: .spanish, dictationLanguageFollows: true), in: defaults)
+            #expect(!defaults.bool(forKey: DictationLanguagePreference.newUserKey))
         }
     }
 

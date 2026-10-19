@@ -162,6 +162,9 @@ struct WelcomeView: View {
             } set: { picked in
                 language = picked
                 languagePicked(picked)
+                // For a new user the dictation language right below follows, until they
+                // pick one or setup is done.
+                pushToTalk.followAppLanguage(picked, setupComplete: checklist.isComplete)
             }, pushToTalk: pushToTalk)
             SetupStepRow(number: 1, status: downloadingCleanup ? .inProgress : checklist.model, title: setup.namesBothModels ? "Download the models" : "Download the speech model", isCurrent: step == .download || step == .downloading) {
                 ModelStepDetail(setup: setup, summary: summary, pushToTalk: pushToTalk)
@@ -273,7 +276,8 @@ extension WelcomeSuggestion.Kind {
 
 /// The language of Orra and the dictation language, with the same choices as in Settings.
 /// Each language reads in its own name, so a user who cannot read the window's language
-/// still finds theirs. A new user's dictation language starts as the Mac's, see
+/// still finds theirs. A new user's dictation language starts as their own language and
+/// follows Orra's language picked here until they pick one or setup is done, see
 /// DictationLanguagePreference, and a pick here is saved as in Settings.
 private struct LanguageRow: View {
     @Binding var language: AppLanguage
