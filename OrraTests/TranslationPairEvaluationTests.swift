@@ -54,17 +54,6 @@ struct TranslationPairEvaluationTests {
         var reachedLimit = false
     }
 
-    private static let tools = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Tools/rewrite-eval")
-
-    private static func objects(_ url: URL) throws -> [[String: Any]] {
-        try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map { line in
-            try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
-        }
-    }
-
     private static func languages() -> [DictationLanguage] {
         switch ProcessInfo.processInfo.environment["ORRA_TRANSLATION_PAIR_EVAL"] {
         case "japanese": [.japanese]
@@ -78,7 +67,7 @@ struct TranslationPairEvaluationTests {
         let own = language.translationLanguage
         let code = own.rawValue
         var cases: [Case] = []
-        for object in try objects(tools.appendingPathComponent("translation-\(name).jsonl")) {
+        for object in try RewriteEvalFiles.objects("translation-\(name).jsonl") {
             let input = try #require(object["input"] as? String)
             let label = try #require(object["label"] as? String)
             let reference = object["ref"] as? String ?? ""
@@ -105,13 +94,13 @@ struct TranslationPairEvaluationTests {
         }
         // More cases from a file, such as fillers and corrections for comparing prompts.
         if let path = ProcessInfo.processInfo.environment["ORRA_TRANSLATION_EXTRA"] {
-            for object in try objects(URL(fileURLWithPath: path)) where object["lang"] as? String == code {
+            for object in try RewriteEvalFiles.objects(URL(fileURLWithPath: path)) where object["lang"] as? String == code {
                 let reference = try #require(object["ref"] as? String)
                 cases.append(Case(set: "extra", id: try #require(object["id"] as? String), input: try #require(object["input"] as? String),
                                   label: code, kind: object["kind"] as? String ?? "", expected: [.english: reference]))
             }
         }
-        for object in try objects(tools.appendingPathComponent("adversarial-\(name).jsonl")) {
+        for object in try RewriteEvalFiles.objects("adversarial-\(name).jsonl") {
             cases.append(Case(
                 set: "adversarial",
                 id: try #require(object["id"] as? String),
@@ -129,35 +118,6 @@ struct TranslationPairEvaluationTests {
     private static func source(_ input: String, _ language: DictationLanguage) -> (text: String, takesSteps: Bool) {
         let takes = LanguageGuard.takesChineseAndEnglishSteps(input, for: language)
         return (takes ? NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: input)) : input, takes)
-    }
-
-    private static func folded(_ text: String) -> String {
-        text.replacing(/\s+/, with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func loose(_ text: String) -> String {
-        var result = String.UnicodeScalarView()
-        for scalar in text.precomposedStringWithCompatibilityMapping.lowercased().unicodeScalars {
-            switch scalar.properties.generalCategory {
-            case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter, .decimalNumber, .letterNumber, .otherNumber:
-                result.append(scalar)
-            default:
-                break
-            }
-        }
-        return String(result)
-    }
-
-    private static func percentile(_ values: [Double], _ share: Double) -> Double {
-        values.isEmpty ? 0 : values.sorted()[max(Int(Double(values.count - 1) * share), 0)]
-    }
-
-    private static func median(_ values: [Double]) -> Double {
-        values.isEmpty ? 0 : values.sorted()[values.count / 2]
-    }
-
-    private static func format(_ value: Double) -> String {
-        String(format: "%.3f", value)
     }
 
     private static func run(_ source: String, on route: TranslationRoute, cleansUp: Bool, engine: RewriteEngine) async -> Run {
@@ -199,14 +159,14 @@ struct TranslationPairEvaluationTests {
             let engine = RewriteEngine()
             let before = MemoryFootprint.current()
             try await engine.load(from: folder)
-            report += "\n== \(language.rawValue): load \(Self.format(Double(MemoryFootprint.current() - min(before, MemoryFootprint.current())) / 1e9)) GB more than before\n"
+            report += "\n== \(language.rawValue): load \(TranslationScoring.format(Double(MemoryFootprint.current() - min(before, MemoryFootprint.current())) / 1e9)) GB more than before\n"
             for target in language.translationTargets {
                 let route = TranslationRoute(language, into: target)
                 let started = ContinuousClock.now
                 try await engine.prepareTranslation(into: route)
-                report += "Prefix cache into \(route.logName) filled in \(started.duration(to: .now)), \(Self.format(Double(await engine.translationPrefixCacheBytes(route)) / 1e6)) MB\n"
+                report += "Prefix cache into \(route.logName) filled in \(started.duration(to: .now)), \(TranslationScoring.format(Double(await engine.translationPrefixCacheBytes(route)) / 1e6)) MB\n"
             }
-            report += "Memory footprint with both translation prefix caches \(Self.format(Double(MemoryFootprint.current()) / 1e9)) GB, MLX active \(Self.format(Double(Memory.activeMemory) / 1e9)) GB\n"
+            report += "Memory footprint with both translation prefix caches \(TranslationScoring.format(Double(MemoryFootprint.current()) / 1e9)) GB, MLX active \(TranslationScoring.format(Double(Memory.activeMemory) / 1e9)) GB\n"
 
             let cases = try Self.cases(language)
             var runs: [String: [TranslationTarget: Run]] = [:]
@@ -281,22 +241,26 @@ struct TranslationPairEvaluationTests {
                                 stoppedAtLimit += 1
                             }
                         }
-                        if let expected = item.expected[target] {
+                        switch TranslationScoring.verdict(run.result?.text ?? source, expected: item.expected[target]) {
+                        case .exact:
+                            exact += 1
                             scored += 1
-                            let pasted = run.result?.text ?? source
-                            if Self.folded(pasted) == Self.folded(expected) {
-                                exact += 1
-                            } else if Self.loose(pasted) == Self.loose(expected) {
-                                acceptable += 1
-                            } else if run.result?.outcome == .translated {
+                        case .acceptable:
+                            acceptable += 1
+                            scored += 1
+                        case .differs:
+                            scored += 1
+                            if run.result?.outcome == .translated {
                                 differing.append("\(item.id)->\(target.rawValue)")
                             }
-                            if set == "adversarial", run.result?.outcome == .translated, RewriteGuard.units(run.result?.text ?? "") > 1.6 * RewriteGuard.units(expected) + 4 {
-                                obeyedAll.append("\(item.id)->\(target.rawValue)")
-                            }
+                        case .noReference:
+                            break
+                        }
+                        if set == "adversarial", TranslationScoring.looksObeyed(run.result, expected: item.expected[target]) {
+                            obeyedAll.append("\(item.id)->\(target.rawValue)")
                         }
                     }
-                    report += "\n\(language.rawValue) \(set), \(mode.rawValue): \(items.count) cases, scored \(scored), exact \(exact), acceptable \(acceptable) more, model runs \(seconds.count), median \(Self.format(Self.median(seconds))) s, p90 \(Self.format(Self.percentile(seconds, 0.9))) s, p95 \(Self.format(Self.percentile(seconds, 0.95))) s, max \(Self.format(seconds.max() ?? 0)) s, runs without the prefix cache \(uncached), runs stopped by the token limit \(stoppedAtLimit)\n"
+                    report += "\n\(language.rawValue) \(set), \(mode.rawValue): \(items.count) cases, scored \(scored), exact \(exact), acceptable \(acceptable) more, model runs \(seconds.count), median \(TranslationScoring.format(TranslationScoring.median(seconds))) s, p90 \(TranslationScoring.format(TranslationScoring.percentile(seconds, 0.9))) s, p95 \(TranslationScoring.format(TranslationScoring.percentile(seconds, 0.95))) s, max \(TranslationScoring.format(seconds.max() ?? 0)) s, runs without the prefix cache \(uncached), runs stopped by the token limit \(stoppedAtLimit)\n"
                     for (kind, count) in counts.sorted(by: { $0.key < $1.key }) {
                         report += "  \(kind): \(count)\n"
                     }
@@ -305,7 +269,7 @@ struct TranslationPairEvaluationTests {
             }
 
             if let path = environment["ORRA_TRANSLATION_FLEURS"] {
-                let sentences = try Self.objects(URL(fileURLWithPath: path))
+                let sentences = try RewriteEvalFiles.objects(URL(fileURLWithPath: path))
                 // Grouped by route, so each route's cache is filled once.
                 var plan: [(TranslationRoute, String, String, String)] = []
                 for object in sentences {
@@ -339,7 +303,7 @@ struct TranslationPairEvaluationTests {
                     ])
                 }
                 for (route, values) in times.sorted(by: { $0.key.logName < $1.key.logName }) {
-                    report += "fleurs \(route.logName): \(values.count) runs, median \(Self.format(Self.median(values))) s, p90 \(Self.format(Self.percentile(values, 0.9))) s\n"
+                    report += "fleurs \(route.logName): \(values.count) runs, median \(TranslationScoring.format(TranslationScoring.median(values))) s, p90 \(TranslationScoring.format(TranslationScoring.percentile(values, 0.9))) s\n"
                 }
             }
             report += "Translation prefix caches in memory at the end: \(await engine.translationPrefixRoutes.count)\n"

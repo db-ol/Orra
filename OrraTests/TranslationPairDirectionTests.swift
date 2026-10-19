@@ -85,16 +85,12 @@ struct TranslationPairDirectionTests {
         code.flatMap(TranslationTarget.init(rawValue:))
     }
 
-    @Test func japaneseGoesIntoEnglishAndEnglishIntoJapanese() {
-        let wrong = Self.japanese.filter { TranslationDirection.automatic.target(for: $0.0, in: .japanese) != Self.target($0.1) }.map(\.0)
+    @Test(arguments: [DictationLanguage.japanese, .spanish])
+    func theLanguageGoesIntoEnglishAndEnglishIntoIt(_ language: DictationLanguage) {
+        let texts = language == .japanese ? Self.japanese : Self.spanish
+        let wrong = texts.filter { TranslationDirection.automatic.target(for: $0.0, in: language) != Self.target($0.1) }.map(\.0)
         #expect(wrong.isEmpty, "\(wrong)")
-        #expect(Self.japanese.count >= 80)
-    }
-
-    @Test func spanishGoesIntoEnglishAndEnglishIntoSpanish() {
-        let wrong = Self.spanish.filter { TranslationDirection.automatic.target(for: $0.0, in: .spanish) != Self.target($0.1) }.map(\.0)
-        #expect(wrong.isEmpty, "\(wrong)")
-        #expect(Self.spanish.count >= 80)
+        #expect(texts.count >= 80)
     }
 
     /// The sources behind the targets: text in neither language counts as other, and goes

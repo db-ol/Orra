@@ -13,17 +13,11 @@ struct TranslationPairTests {
         TranslationRoute(.spanish, into: .english), TranslationRoute(.spanish, into: .spanish),
     ]
 
-    private static let tools = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Tools/rewrite-eval")
-
     /// Every text of an evaluation file: inputs, references and expected translations.
     private static func evaluationTexts() throws -> [String] {
         var texts: [String] = []
         for file in ["cases.jsonl", "adversarial.jsonl", "meaning.jsonl", "translation-probes.jsonl", "translation-japanese.jsonl", "translation-spanish.jsonl", "adversarial-japanese.jsonl", "adversarial-spanish.jsonl"] {
-            for line in try String(contentsOf: tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
-                let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+            for object in try RewriteEvalFiles.objects(file) {
                 for (key, value) in object where key == "input" || key.hasPrefix("ref") || key.hasPrefix("expected") || key.hasPrefix("translate") {
                     if let text = value as? String, !text.isEmpty {
                         texts.append(text)
@@ -49,8 +43,7 @@ struct TranslationPairTests {
         var count = 0
         var hasher = SHA256()
         for file in ["cases.jsonl", "adversarial.jsonl", "translation-probes.jsonl"] {
-            for line in try String(contentsOf: Self.tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
-                let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+            for object in try RewriteEvalFiles.objects(file) {
                 let input = try #require(object["input"] as? String)
                 for text in [input, NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: input))] {
                     for target in DictationLanguage.chinese.translationTargets {
@@ -129,14 +122,30 @@ struct TranslationPairTests {
 
     // MARK: Checks
 
+    private static let probeFiles = [("translation-japanese.jsonl", DictationLanguage.japanese), ("translation-spanish.jsonl", .spanish)]
+
+    /// The probes of the Japanese and Spanish sets with a reference other than the input,
+    /// each on the route Automatic gives it.
+    private static func references() throws -> [(id: String, input: String, reference: String, route: TranslationRoute)] {
+        var references: [(id: String, input: String, reference: String, route: TranslationRoute)] = []
+        for (file, language) in probeFiles {
+            for object in try RewriteEvalFiles.objects(file) {
+                let input = try #require(object["input"] as? String)
+                guard let reference = object["ref"] as? String, !reference.isEmpty, reference != input,
+                      let target = TranslationDirection.automatic.target(for: input, in: language) else { continue }
+                references.append(("\(object["id"] ?? "")", input, reference, TranslationRoute(language, into: target)))
+            }
+        }
+        return references
+    }
+
     /// The hand written references of the Japanese and Spanish sets pass the checks of
     /// their route, so a faithful translation is not held back.
     @Test func theReferencesPass() throws {
         var checked = 0
         var held: [String] = []
-        for (file, language) in [("translation-japanese.jsonl", DictationLanguage.japanese), ("translation-spanish.jsonl", .spanish)] {
-            for line in try String(contentsOf: Self.tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
-                let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        for (file, language) in Self.probeFiles {
+            for object in try RewriteEvalFiles.objects(file) {
                 let input = try #require(object["input"] as? String)
                 if let english = object["ref_en"] as? String {
                     checked += 1
@@ -144,17 +153,16 @@ struct TranslationPairTests {
                         held.append("\(object["id"] ?? "")->en \(failure)")
                     }
                 }
-                guard let reference = object["ref"] as? String, !reference.isEmpty, reference != input,
-                      let target = TranslationDirection.automatic.target(for: input, in: language) else { continue }
-                checked += 1
-                if let failure = TranslationGuard.check(source: input, output: reference, route: TranslationRoute(language, into: target)) {
-                    held.append("\(object["id"] ?? "") \(failure)")
-                }
+            }
+        }
+        for reference in try Self.references() {
+            checked += 1
+            if let failure = TranslationGuard.check(source: reference.input, output: reference.reference, route: reference.route) {
+                held.append("\(reference.id) \(failure)")
             }
         }
         for (file, language) in [("adversarial-japanese.jsonl", DictationLanguage.japanese), ("adversarial-spanish.jsonl", .spanish)] {
-            for line in try String(contentsOf: Self.tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
-                let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+            for object in try RewriteEvalFiles.objects(file) {
                 let input = try #require(object["input"] as? String)
                 for target in language.translationTargets {
                     let key = target == .english ? "expected_en" : "expected_\(language.translationLanguage.rawValue)"
@@ -259,22 +267,16 @@ struct TranslationPairTests {
     @Test func aChangedDigitIsHeldBack() throws {
         var mutated = 0
         var missed: [String] = []
-        for (file, language) in [("translation-japanese.jsonl", DictationLanguage.japanese), ("translation-spanish.jsonl", .spanish)] {
-            for line in try String(contentsOf: Self.tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n") {
-                let object = try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
-                let input = try #require(object["input"] as? String)
-                guard let reference = object["ref"] as? String, !reference.isEmpty, reference != input,
-                      let target = TranslationDirection.automatic.target(for: input, in: language),
-                      let digit = reference.firstIndex(where: { $0.isASCII && $0.isNumber }) else { continue }
-                // Never a zero, which the tiny values a source number gives when divided
-                // explain, for Chinese as well.
-                var changed = reference
-                let value = Int(String(reference[digit]))!
-                changed.replaceSubrange(digit...digit, with: String(value % 9 + 1))
-                mutated += 1
-                if TranslationGuard.check(source: input, output: changed, route: TranslationRoute(language, into: target)) == nil {
-                    missed.append("\(object["id"] ?? "")")
-                }
+        for reference in try Self.references() {
+            guard let digit = reference.reference.firstIndex(where: { $0.isASCII && $0.isNumber }) else { continue }
+            // Never a zero, which the tiny values a source number gives when divided
+            // explain, for Chinese as well.
+            var changed = reference.reference
+            let value = Int(String(reference.reference[digit]))!
+            changed.replaceSubrange(digit...digit, with: String(value % 9 + 1))
+            mutated += 1
+            if TranslationGuard.check(source: reference.input, output: changed, route: reference.route) == nil {
+                missed.append(reference.id)
             }
         }
         #expect(mutated > 40)

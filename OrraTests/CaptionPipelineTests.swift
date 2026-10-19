@@ -23,9 +23,8 @@ final class FakeCaptionModels {
     private(set) var languages: [DictationLanguage] = []
     /// The dictation language the engines report, as the user's setting.
     var language = DictationLanguage.chinese
-    private(set) var translated: [(String, TranslationTarget)] = []
-    /// The route of each translation, with its dictation language.
-    private(set) var routes: [TranslationRoute] = []
+    /// The text and the route of each translation.
+    private(set) var translated: [(text: String, route: TranslationRoute)] = []
     private(set) var running = 0
     private(set) var mostRunning = 0
     private var held: [CheckedContinuation<Void, Never>] = []
@@ -80,8 +79,7 @@ final class FakeCaptionModels {
     }
 
     private func translate(_ text: String, _ route: TranslationRoute) async throws -> String {
-        translated.append((text, route.target))
-        routes.append(route)
+        translated.append((text, route))
         running += 1
         mostRunning = max(mostRunning, running)
         defer { running -= 1 }
@@ -163,7 +161,7 @@ struct CaptionPipelineTests {
         pipeline.feed(FakeCaptionModels.audio(sentences: 2))
         await pipeline.finish()
         // English into English gives the text back, which is no translation.
-        #expect(models.translated.map(\.1) == [.english, .english])
+        #expect(models.translated.map(\.route.target) == [.english, .english])
         #expect(reports[1].translation == CaptionSentence.Translation.none)
         #expect(reports.last?.translation == .done("Let's get started."))
     }
@@ -220,7 +218,7 @@ struct CaptionPipelineTests {
         let pipeline = CaptionPipeline(engines: models.engines()) { reports.append($0) }
         pipeline.feed(FakeCaptionModels.audio(sentences: 2))
         await pipeline.finish()
-        #expect(models.routes == [TranslationRoute(.spanish, into: .spanish), TranslationRoute(.spanish, into: .english)])
+        #expect(models.translated.map(\.route) == [TranslationRoute(.spanish, into: .spanish), TranslationRoute(.spanish, into: .english)])
         #expect(reports.compactMap(\.translatedText) == ["Buenos días a todos.", "Thanks, everyone."])
 
         let japanese = FakeCaptionModels(["ありがとうございます"])
@@ -229,7 +227,7 @@ struct CaptionPipelineTests {
         let japanesePipeline = CaptionPipeline(engines: japanese.engines()) { japaneseReports.append($0) }
         japanesePipeline.feed(FakeCaptionModels.audio(sentences: 1))
         await japanesePipeline.finish()
-        #expect(japanese.routes == [TranslationRoute(.japanese, into: .english)])
+        #expect(japanese.translated.map(\.route) == [TranslationRoute(.japanese, into: .english)])
         #expect(japaneseReports.last?.translation == .done("Thank you very much."))
     }
 
@@ -293,7 +291,7 @@ struct CaptionPipelineTests {
         // and went without translation, the last three were translated.
         #expect(final.count == 8)
         #expect((1...5).allSatisfy { final[$0] == CaptionSentence.Translation.none })
-        #expect(models.translated.map(\.0) == ["Sentence 6.", "Sentence 7.", "Sentence 8."])
+        #expect(models.translated.map(\.text) == ["Sentence 6.", "Sentence 7.", "Sentence 8."])
     }
 }
 

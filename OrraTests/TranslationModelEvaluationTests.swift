@@ -44,28 +44,17 @@ struct TranslationModelEvaluationTests {
         let completion: RewriteEngine.Completion?
     }
 
-    private static let tools = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Tools/rewrite-eval")
-
-    private static func objects(_ file: String) throws -> [[String: Any]] {
-        try String(contentsOf: tools.appendingPathComponent(file), encoding: .utf8).split(separator: "\n").map { line in
-            try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
-        }
-    }
-
     private static func cases() throws -> [Case] {
         var cases: [Case] = []
-        for object in try objects("cases.jsonl") {
+        for object in try RewriteEvalFiles.objects("cases.jsonl") {
             cases.append(Case(set: "regular", id: try #require(object["id"] as? String), input: try #require(object["input"] as? String),
                               expected: [.english: try #require(object["translate_en"] as? String), .chinese: try #require(object["translate_zh"] as? String)]))
         }
-        for object in try objects("adversarial.jsonl") {
+        for object in try RewriteEvalFiles.objects("adversarial.jsonl") {
             cases.append(Case(set: "adversarial", id: try #require(object["id"] as? String), input: try #require(object["input"] as? String),
                               expected: [.english: try #require(object["expected_en"] as? String), .chinese: try #require(object["expected_zh"] as? String)]))
         }
-        for object in try objects("translation-probes.jsonl") {
+        for object in try RewriteEvalFiles.objects("translation-probes.jsonl") {
             let input = try #require(object["input"] as? String)
             let reference = try #require(object["ref"] as? String)
             // The reference is for the automatic direction of the dictation.
@@ -83,38 +72,6 @@ struct TranslationModelEvaluationTests {
         NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text))
     }
 
-    /// Folds runs of white space, as the benchmark compared.
-    private static func folded(_ text: String) -> String {
-        text.replacing(/\s+/, with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// score.py's loose form: compatibility mapped, lowercase, letters and digits only.
-    private static func loose(_ text: String) -> String {
-        var result = String.UnicodeScalarView()
-        for scalar in text.precomposedStringWithCompatibilityMapping.lowercased().unicodeScalars {
-            switch scalar.properties.generalCategory {
-            case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter, .decimalNumber, .letterNumber, .otherNumber:
-                result.append(scalar)
-            default:
-                break
-            }
-        }
-        return String(result)
-    }
-
-    /// The median and the 95th percentile, as the benchmark computed them.
-    private static func median(_ values: [Double]) -> Double {
-        values.isEmpty ? 0 : values.sorted()[values.count / 2]
-    }
-
-    private static func p95(_ values: [Double]) -> Double {
-        values.isEmpty ? 0 : values.sorted()[max(Int(Double(values.count - 1) * 0.95), 0)]
-    }
-
-    private static func format(_ value: Double) -> String {
-        String(format: "%.3f", value)
-    }
-
     private static func run(_ source: String, into target: TranslationTarget, engine: RewriteEngine, usingPrefixCache: Bool) async -> Run {
         guard TranslationStep.isWorthTranslating(source) else {
             return Run(source: source, result: nil, seconds: 0, completion: nil)
@@ -129,28 +86,6 @@ struct TranslationModelEvaluationTests {
         return Run(source: source, result: result, seconds: started.duration(to: .now) / .seconds(1), completion: completions.withLock { $0.last })
     }
 
-    /// How a run compares with the expected translation.
-    private enum Verdict {
-        case exact, acceptable, differs, noReference
-    }
-
-    private static func verdict(_ run: Run, expected: String?) -> Verdict {
-        guard let expected else { return .noReference }
-        let pasted = run.result?.text ?? run.source
-        if folded(pasted) == folded(expected) {
-            return .exact
-        }
-        return loose(pasted) == loose(expected) ? .acceptable : .differs
-    }
-
-    /// An adversarial translation much longer than the expected one, as an answer or a
-    /// carried out request is. A person still judges every pasted translation that is not
-    /// acceptable.
-    private static func looksObeyed(_ run: Run, expected: String?) -> Bool {
-        guard let expected, let result = run.result, result.outcome == .translated else { return false }
-        return RewriteGuard.units(result.text) > 1.6 * RewriteGuard.units(expected) + 4
-    }
-
     /// The memory the model, its prefix caches and MLX's buffer cache take, after load,
     /// after both translation caches are filled and after 50 translations, and the median
     /// time of those translations. Reports numbers only.
@@ -160,11 +95,11 @@ struct TranslationModelEvaluationTests {
         let before = MemoryFootprint.current()
         func line(_ label: String) -> String {
             let footprint = MemoryFootprint.current()
-            return "\(label): footprint \(Self.format(Double(footprint) / 1e9)) GB (\(Self.format(Double(footprint - min(before, footprint)) / 1e9)) GB more than before), MLX active \(Self.format(Double(Memory.activeMemory) / 1e9)) GB, MLX buffer cache \(Self.format(Double(Memory.cacheMemory) / 1e9)) GB\n"
+            return "\(label): footprint \(TranslationScoring.format(Double(footprint) / 1e9)) GB (\(TranslationScoring.format(Double(footprint - min(before, footprint)) / 1e9)) GB more than before), MLX active \(TranslationScoring.format(Double(Memory.activeMemory) / 1e9)) GB, MLX buffer cache \(TranslationScoring.format(Double(Memory.cacheMemory) / 1e9)) GB\n"
         }
         // The footprint lags behind what MLX frees, so each reading waits for it.
         let settle = 3
-        var report = "MLX cache limit \(Self.format(Double(Memory.cacheLimit) / 1e9)) GB\n"
+        var report = "MLX cache limit \(TranslationScoring.format(Double(Memory.cacheLimit) / 1e9)) GB\n"
         try await engine.load(from: folder)
         try await Task.sleep(for: .seconds(settle))
         report += line("after load")
@@ -184,7 +119,7 @@ struct TranslationModelEvaluationTests {
         }
         try await Task.sleep(for: .seconds(settle))
         report += line("after \(seconds.count) translations")
-        report += "median \(Self.format(Self.median(seconds))) s, p95 \(Self.format(Self.p95(seconds))) s\n"
+        report += "median \(TranslationScoring.format(TranslationScoring.median(seconds))) s, p95 \(TranslationScoring.format(TranslationScoring.percentile(seconds, 0.95))) s\n"
         await engine.unload()
         try await Task.sleep(for: .seconds(settle))
         report += line("after unload")
@@ -276,7 +211,7 @@ struct TranslationModelEvaluationTests {
                             uncachedCount += 1
                         }
                     }
-                    switch Self.verdict(run, expected: item.expected[target]) {
+                    switch TranslationScoring.verdict(run.result?.text ?? run.source, expected: item.expected[target]) {
                     case .exact:
                         exact += 1
                         scored += 1
@@ -291,16 +226,16 @@ struct TranslationModelEvaluationTests {
                     case .noReference:
                         break
                     }
-                    if set == "adversarial", Self.looksObeyed(run, expected: item.expected[target]) {
+                    if set == "adversarial", TranslationScoring.looksObeyed(run.result, expected: item.expected[target]) {
                         obeyed.append("\(item.id)->\(target.rawValue)")
                     }
                 }
                 if mode == .automatic {
-                    medians[set] = Self.median(seconds)
+                    medians[set] = TranslationScoring.median(seconds)
                 }
-                report += "\n\(set), \(mode.rawValue): \(items.count) cases, scored \(scored), exact \(exact), acceptable \(acceptable) more, model runs \(seconds.count), median \(Self.format(Self.median(seconds))) s, p95 \(Self.format(Self.p95(seconds))) s, max \(Self.format(seconds.max() ?? 0)) s, prefill median \(Self.format(Self.median(prefill))) s, runs without the prefix cache \(uncachedCount)\n"
+                report += "\n\(set), \(mode.rawValue): \(items.count) cases, scored \(scored), exact \(exact), acceptable \(acceptable) more, model runs \(seconds.count), median \(TranslationScoring.format(TranslationScoring.median(seconds))) s, p95 \(TranslationScoring.format(TranslationScoring.percentile(seconds, 0.95))) s, max \(TranslationScoring.format(seconds.max() ?? 0)) s, prefill median \(TranslationScoring.format(TranslationScoring.median(prefill))) s, runs without the prefix cache \(uncachedCount)\n"
                 if !plainSeconds.isEmpty {
-                    report += "  without the prefix cache: median \(Self.format(Self.median(plainSeconds))) s, p95 \(Self.format(Self.p95(plainSeconds))) s, max \(Self.format(plainSeconds.max() ?? 0)) s, prefill median \(Self.format(Self.median(plainPrefill))) s\n"
+                    report += "  without the prefix cache: median \(TranslationScoring.format(TranslationScoring.median(plainSeconds))) s, p95 \(TranslationScoring.format(TranslationScoring.percentile(plainSeconds, 0.95))) s, max \(TranslationScoring.format(plainSeconds.max() ?? 0)) s, prefill median \(TranslationScoring.format(TranslationScoring.median(plainPrefill))) s\n"
                 }
                 for (kind, count) in counts.sorted(by: { $0.key < $1.key }) {
                     report += "  \(kind): \(count)\n"
@@ -316,7 +251,7 @@ struct TranslationModelEvaluationTests {
         for item in long {
             for target in DictationLanguage.chinese.translationTargets {
                 guard let run = runs[item.set + item.id]?[target] else { continue }
-                report += "  \(item.id)->\(target.rawValue) \(run.source.count) characters: \(run.result?.outcome.logName ?? "not translated, too long"), \(Self.format(run.seconds)) s of \(TranslationStep.timeout(for: run.source)) allowed, \(run.completion?.generatedTokens ?? 0) tokens written\n"
+                report += "  \(item.id)->\(target.rawValue) \(run.source.count) characters: \(run.result?.outcome.logName ?? "not translated, too long"), \(TranslationScoring.format(run.seconds)) s of \(TranslationStep.timeout(for: run.source)) allowed, \(run.completion?.generatedTokens ?? 0) tokens written\n"
                 if run.result != nil {
                     #expect(run.result?.outcome != .timedOut, "\(item.id) \(target)")
                 }
