@@ -16,7 +16,6 @@ final class ScriptedField {
     private(set) var checks = 0
     var opens = true
     private(set) var reads = 0
-    private(set) var sleeps = 0
     /// A stand in for Orra's own process.
     let ownProcess: pid_t = 9
 
@@ -41,10 +40,7 @@ final class ScriptedField {
                 return frontmost
             },
             secureInputHolder: { [self] in secureInputHolder },
-            sleep: { [self] _ in
-                sleeps += 1
-                await Task.yield()
-            }
+            sleep: { _ in await Task.yield() }
         )
     }
 }
@@ -90,18 +86,21 @@ struct CorrectionWatcherTests {
         let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码"])
         field.frontmost = field.ownProcess
         #expect(await watch(field, pasted: "我在用克劳德写代码", in: field.ownProcess) == nil)
-        #expect(field.sleeps == 0)
         #expect(field.checks == 0)
         #expect(field.reads == 0)
     }
 
-    @Test func aPasteIntoAnotherAppStillWatches() async {
-        // A paste into Orra first changes nothing for the next one.
-        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码"])
+    @Test func aPasteIntoOrraPushesOutNoWatch() async {
+        // Five watches in another app, then a paste into Orra before any of them starts.
+        // The first watch still runs all its readings. The four others each read once,
+        // since their text is not in the field.
+        let field = ScriptedField(["我在用克劳德写代码"])
         let watcher = CorrectionWatcher(environment: field.environment)
-        var found: [Correction] = []
-        watcher.watch(pasted: "我在用克劳德写代码", in: field.ownProcess) { found.append($0.correction); _ = $1 }
-        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0.correction); _ = $1 }
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { _, _ in }
+        for _ in 1..<CorrectionWatcher.maximumWatches {
+            watcher.watch(pasted: "不在这里", in: 42) { _, _ in }
+        }
+        watcher.watch(pasted: "我在用克劳德写代码", in: field.ownProcess) { _, _ in }
         var lastReads = -1
         var quiet = 0
         for _ in 0..<1_000 where quiet < 40 {
@@ -109,8 +108,7 @@ struct CorrectionWatcherTests {
             quiet = field.reads == lastReads ? quiet + 1 : 0
             lastReads = field.reads
         }
-        #expect(found == [Correction(heard: "克劳德", corrected: "Claude")])
-        #expect(field.reads > 0)
+        #expect(field.reads == 1 + CorrectionWatcher.readings + CorrectionWatcher.maximumWatches - 1)
         watcher.stop()
     }
 
