@@ -1690,8 +1690,9 @@ Window at launch, added on 2026-10-19, not verified yet. With setup complete, a 
 the user opens Settings, so it shows more than a Dock icon. Until a real log out and log
 in shows how macOS marks a launch at login, Orra opens no window at launch while Open at
 Login is on, also when the user opens it. Each launch logs one line with the window, the
-login item mark, the default launch flag and Open at Login:
-`log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" && category == "launch"'`.
+login item mark, the default launch flag and Open at Login. In zsh, `log` is a shell
+command, so give the full path:
+`/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "launch"'`.
 
 - [ ] Setup complete and Open at Login off: quit Orra and open it from Finder, Spotlight
   and Launchpad. Each time Settings opens on General, in front and key. Note how long it
@@ -1704,15 +1705,21 @@ login item mark, the default launch flag and Open at Login:
   and default launch flag. If the mark reads true here and false for the launch from
   Finder above, a later change can open Settings for a launch by the user while Open at
   Login is on too.
-- [ ] Quit Orra with Settings open and open it again with Open at Login on: Settings does
-  not come back. With "Reopen windows when logging back in" checked and Orra running, log
-  out and in: note what opens.
+- [ ] Open at Login off, Orra running, and "Reopen windows when logging back in" checked
+  in the log out dialog: log out and in. Note whether Settings opens, and the logged
+  login item mark and default launch flag. If Settings opens and the mark reads false,
+  macOS does not mark this relaunch. Then compare its default launch flag with the ones
+  logged for the restarts below.
+- [ ] Turn off "Close windows when quitting an application" in System Settings > Desktop &
+  Dock and turn Open at Login on. Quit Orra with Settings open and open it again:
+  Settings does not come back. Turn the setting back on afterwards if it was on.
 - [ ] Show Orra in the Dock off: the welcome window at launch, while setup needs you, and
   Settings at launch get a Dock icon and become key, and the icon goes when they close.
   Also when you click another app while Orra starts and the window does not become key.
+  The same for Settings after a second open from Finder while Orra runs with no window.
 - [ ] With Open at Login off, Done in the welcome window after a language pick, Restart
   Orra in Settings, and Install and Relaunch of an update each open Settings in front, in
-  the language Orra restarted with.
+  the language Orra restarted with. Note the logged default launch flag each time.
 
 Card beside System Settings, added on 2026-10-15, not verified yet. Orra never resets a
 permission itself. To see both pictures, quit Orra and run
