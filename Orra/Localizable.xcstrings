@@ -3395,24 +3395,24 @@
         }
       }
     },
-    "Japanese is translated into English, and English into Japanese. Mixed text goes by the language most of it is in, and text in another language is translated into English." : {
+    "Japanese is translated into English, and English into Japanese. Mixed text goes by the language most of it is in, and text in another script, such as Korean, is translated into English." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El japonés se traduce al inglés y el inglés, al japonés. Un texto mixto se traduce según el idioma que predomina, y un texto en otro idioma se traduce al inglés."
+            "value" : "El japonés se traduce al inglés y el inglés, al japonés. Un texto mixto se traduce según el idioma que predomina, y un texto en otro sistema de escritura, como el coreano, se traduce al inglés."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日本語は英語に、英語は日本語に翻訳されます。日本語と英語が混在したテキストは、多く含まれている方の言語として扱われます。ほかの言語のテキストは英語に翻訳されます。"
+            "value" : "日本語は英語に、英語は日本語に翻訳されます。日本語と英語が混在したテキストは、多く含まれている方の言語として扱われます。韓国語など、ほかの文字で書かれたテキストは英語に翻訳されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日文翻译成英文，英文翻译成日文。日英混说时，按说得多的那种语言来判断，其他语言翻译成英文。"
+            "value" : "日文翻译成英文，英文翻译成日文。日英混说时，按说得多的那种语言来判断，韩文等用其他文字写的内容翻译成英文。"
           }
         }
       }
@@ -7352,24 +7352,24 @@
         }
       }
     },
-    "Spanish is translated into English, and English into Spanish. Mixed text goes by the language most of it is in, and text in another language is translated into English." : {
+    "Spanish is translated into English, and English into Spanish. Mixed text goes by the language most of it is in, and text in another script, such as Korean, is translated into English." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El español se traduce al inglés y el inglés, al español. Un texto mixto se traduce según el idioma que predomina, y un texto en otro idioma se traduce al inglés."
+            "value" : "El español se traduce al inglés y el inglés, al español. Un texto mixto se traduce según el idioma que predomina, y un texto en otro sistema de escritura, como el coreano, se traduce al inglés."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "スペイン語は英語に、英語はスペイン語に翻訳されます。スペイン語と英語が混在したテキストは、多く含まれている方の言語として扱われます。ほかの言語のテキストは英語に翻訳されます。"
+            "value" : "スペイン語は英語に、英語はスペイン語に翻訳されます。スペイン語と英語が混在したテキストは、多く含まれている方の言語として扱われます。韓国語など、ほかの文字で書かれたテキストは英語に翻訳されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "西班牙文翻译成英文，英文翻译成西班牙文。西英混说时，按说得多的那种语言来判断，其他语言翻译成英文。"
+            "value" : "西班牙文翻译成英文，英文翻译成西班牙文。西英混说时，按说得多的那种语言来判断，韩文等用其他文字写的内容翻译成英文。"
           }
         }
       }
