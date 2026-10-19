@@ -200,7 +200,7 @@ private struct CaptionCopyButton: View {
             }
             if captions.store.droppedOldest {
                 Divider()
-                Text("Orra keeps the last \(CaptionStore.limit) sentences.")
+                Text("Orra keeps the last \(captions.store.limit) sentences.")
             }
         } label: {
             Label("Copy All Captions", systemImage: copied ? "checkmark" : "doc.on.doc")

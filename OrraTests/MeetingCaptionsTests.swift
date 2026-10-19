@@ -162,6 +162,31 @@ struct MeetingCaptionsTests {
         captions.setOn(false)
     }
 
+    @Test func aShortStrayStartKeepsThePreviousMeeting() async throws {
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone.", "Hmm"]), source: FakeSource(), events: Box())
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
+        captions.setOn(false)
+        // A stray start hears the start of a sentence, and stops before it ends.
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        let audio = CaptionAudio.silence(0.5) + CaptionAudio.tone(1.5)
+        let chunk = RecordingLimits.sampleRate / 10
+        for start in stride(from: 0, to: audio.count, by: chunk) {
+            captions.receive(Array(audio[start..<min(audio.count, start + chunk)]), run: captions.currentRun)
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try await eventually { captions.store.sentences.first?.isInterim == true }
+        captions.setOn(false)
+        // The heard line can still be copied until the next start.
+        #expect(captions.store.transcript.sentences.map(\.original) == ["Hmm"])
+        captions.setOn(true)
+        #expect(captions.store.previous.sentences.map(\.original) == ["Hello everyone."])
+        captions.setOn(false)
+    }
+
     @Test func aStopEndsAPendingTranslationWithoutOne() async throws {
         let models = FakeCaptionModels(["Hello everyone."])
         models.holdsTranslations = true
@@ -406,9 +431,15 @@ struct CaptionDisplayTests {
         #expect(!store.hasFinalSentences)
         // Only the final sentence, as a copy has it.
         #expect(store.previous.sentences.map(\.original) == ["Hello everyone."])
-        // An interim line alone is nothing to keep, so the previous meeting stays.
+        // An interim line alone is nothing to keep, so the previous meeting stays. Also
+        // when the stop made it final.
         store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hmm", translation: .none, isInterim: true))
         #expect(!store.hasFinalSentences)
+        store.startOver()
+        #expect(store.previous.sentences.map(\.original) == ["Hello everyone."])
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hmm", translation: .none, isInterim: true))
+        store.settle()
+        #expect(store.hasFinalSentences)
         store.startOver()
         #expect(store.previous.sentences.map(\.original) == ["Hello everyone."])
         // A later meeting with final sentences replaces it.

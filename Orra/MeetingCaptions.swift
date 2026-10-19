@@ -28,17 +28,21 @@ final class CaptionStore {
     /// True once the oldest sentences were dropped to stay within `limit`, until captions
     /// start again.
     private(set) var droppedOldest = false
+    /// Whether the captions reported a final sentence since they started. A line that only
+    /// became final when they stopped does not count, so a short stray start does not
+    /// replace the previous meeting.
+    private var reportedFinal = false
     let limit: Int
-    let shownLimit: Int
 
-    init(limit: Int = CaptionStore.limit, shownLimit: Int = CaptionStore.shownLimit) {
+    init(limit: Int = CaptionStore.limit) {
         self.limit = limit
-        self.shownLimit = shownLimit
     }
 
-    /// The sentences the window draws, the latest `shownLimit`.
-    var shown: ArraySlice<CaptionSentence> {
-        sentences.suffix(shownLimit)
+    /// The sentences the window draws, the latest `shownLimit`. An array of its own, so
+    /// the window does not hold on to the store's array, and a new caption line changes
+    /// it in place instead of copying up to `limit` sentences.
+    var shown: [CaptionSentence] {
+        Array(sentences.suffix(Self.shownLimit))
     }
 
     /// The final sentences, for a copy.
@@ -57,6 +61,7 @@ final class CaptionStore {
                 if !droppedOldest { droppedOldest = true }
             }
         }
+        if !sentence.isInterim { reportedFinal = true }
         noteContents()
     }
 
@@ -78,15 +83,19 @@ final class CaptionStore {
     }
 
     /// Captions start again: the final sentences become the previous transcript and the
-    /// window starts empty, so a meeting never shows in the next one's window. Without a
-    /// final sentence the previous transcript stays as it is.
+    /// window starts empty, so a meeting never shows in the next one's window. Unless the
+    /// captions reported a final sentence, the previous transcript stays as it is. A line
+    /// that was still being heard at the stop alone is not a meeting to keep.
     func startOver() {
-        let transcript = transcript
-        if !transcript.isEmpty {
-            previous = transcript
+        if reportedFinal {
+            let transcript = transcript
+            if !transcript.isEmpty {
+                previous = transcript
+            }
         }
         sentences = []
         droppedOldest = false
+        reportedFinal = false
         noteContents()
     }
 
