@@ -62,11 +62,14 @@ nonisolated enum FieldReader {
 /// fix over the same span replaces the earlier one, so a word the user typed past without
 /// a pause is never learned. When the user changes the same span again, as when finishing a half
 /// typed word, the new correction is reported as replacing the earlier one. Offered words are reported before
-/// learned ones, and the notice shows them in turn. Logs states only,
-/// never text.
+/// learned ones, and the notice shows them in turn. A paste into Orra's own windows is never
+/// followed. Logs states only, never text.
 @MainActor
 final class CorrectionWatcher {
     struct Environment {
+        /// Orra's own process. A paste into it starts no watch, so learning never reads Orra's
+        /// own windows.
+        var ownProcess: pid_t
         /// Opens the focused text field of the app, giving a function that reads it.
         var open: @MainActor (pid_t) async -> (@MainActor () async -> String?)?
         var frontmost: @MainActor () -> pid_t?
@@ -75,6 +78,7 @@ final class CorrectionWatcher {
 
         static func live() -> Environment {
             Environment(
+                ownProcess: getpid(),
                 open: { pid in
                     guard let field = await FieldReader.focusedTextField(inApp: pid) else { return nil }
                     return { await FieldReader.text(of: field, inApp: pid) }
@@ -106,8 +110,9 @@ final class CorrectionWatcher {
         self.environment = environment
     }
 
-    /// Starts following a paste. The oldest watch ends and reports when five are running.
-    /// `onCorrection` gets each finding and the earlier one it replaces, if any.
+    /// Starts following a paste, unless it went into Orra's own process. The oldest watch
+    /// ends and reports when five are running. `onCorrection` gets each finding and the
+    /// earlier one it replaces, if any.
     ///
     /// `replacements` are the words Orra replaced in the pasted text. A fix that touches
     /// one is reported in terms of what the speech model wrote, see
@@ -120,6 +125,11 @@ final class CorrectionWatcher {
         onCorrection: @escaping (Finding, Finding?) -> Void,
         onRevert: @escaping ([Correction]) -> Void = { _ in }
     ) {
+        // Before the oldest watch is pushed out, so a paste into Orra ends no other watch.
+        guard pid != environment.ownProcess else {
+            logger.notice("Learning: the paste went into Orra's own window")
+            return
+        }
         if watches.count >= Self.maximumWatches {
             watches.removeFirst().control.finish = true
         }

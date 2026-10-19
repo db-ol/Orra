@@ -360,8 +360,9 @@ got worse than the baseline, see docs/release-gate.md.
     They also cover separate fixes in one sentence judged one by one, a Chinese name
     widened to its unchanged characters, and the cap of 8 Chinese characters.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
-    reported fix, and no reading after leaving the app, under secure input, or in a field
-    without the pasted text. CorrectionLearningTests checks that nothing is read while
+    reported fix, no watch at all after a paste into Orra's own process, and no reading
+    after leaving the app, under secure input, or in a field without the pasted text.
+    CorrectionLearningTests checks that nothing is read while
     learning is off, that the first fix adds the word and tells the user, a quiet new
     mishearing, Undo, that a learned word removed from the vocabulary is learned
     again, that after a cleanup only a fix of a word the speech model wrote is learned,
@@ -1949,6 +1950,10 @@ corrections under Recognition in Settings, Dictation first:
   counts. Click into another field during the watch: nothing is read from it.
 - [ ] Dictating into a password field, or switching apps right after the paste, records
   nothing.
+- [ ] Dictate into a text field in Orra's own Settings window, such as the new word field
+  under Vocabulary, and fix a word: no notice appears, and
+  `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "learning"'`
+  says the paste went into Orra's own window.
 - [ ] With the setting off, nothing is recorded. Forget Learned Corrections deletes the
   pairs and keeps the vocabulary.
 - [ ] Typing feels the same in the app you dictated into while Orra watches the field.
