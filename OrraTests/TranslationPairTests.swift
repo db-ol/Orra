@@ -378,6 +378,45 @@ struct TranslationPairTests {
         #expect(translation("嗯，我们开会吧。", "Um, let's have a meeting.", .chinese(.english)) == "Um, let's have a meeting.")
     }
 
+    /// Into English, the model gets the text without the fillers that open it, and the
+    /// text before translation keeps them. Other routes get the text as it is.
+    @Test func theModelDoesNotSeeAnOpeningFiller() async {
+        let jaEn = TranslationRoute(.japanese, into: .english)
+        let esEn = TranslationRoute(.spanish, into: .english)
+        #expect(TranslationPrompt.transcript("えーと、資料は明日送ります。", on: jaEn) == "資料は明日送ります。")
+        #expect(TranslationPrompt.transcript("あのー、えっと、ちょっと聞いてもいいですか？", on: jaEn) == "ちょっと聞いてもいいですか？")
+        #expect(TranslationPrompt.transcript("Eh, este, mañana trabajo desde casa.", on: esEn) == "Mañana trabajo desde casa.")
+        #expect(TranslationPrompt.transcript("Este libro es muy bueno.", on: esEn) == "Este libro es muy bueno.")
+        #expect(TranslationPrompt.transcript("えーと、", on: jaEn) == "えーと、")
+        #expect(TranslationPrompt.transcript("Eh, ¿me repites la pregunta?", on: TranslationRoute(.spanish, into: .spanish)) == "Eh, ¿me repites la pregunta?")
+        #expect(TranslationPrompt.transcript("嗯，我们开会吧。", on: .chinese(.english)) == "嗯，我们开会吧。")
+        let prompt = TranslationPrompt.text(for: "えーと、資料は明日送ります。", into: jaEn)
+        #expect(prompt.hasSuffix(TranslationPrompt.text(for: "資料は明日送ります。", into: jaEn).components(separatedBy: "<|im_start|>user\n").last!))
+        let received = Mutex<[String]>([])
+        let heard = "えーと、資料は明日送ります。"
+        let result = await TranslationStep.run(heard, into: jaEn, cleansUp: false, complete: { text, route in
+            received.withLock { $0.append(TranslationPrompt.text(for: text, into: route)) }
+            return #"{"cleaned": "資料は明日送ります。", "translation": "I'll send the materials tomorrow."}"#
+        })
+        #expect(result.text == "I'll send the materials tomorrow.")
+        #expect(result.untranslated == heard)
+        #expect(received.withLock { $0 }.first?.components(separatedBy: "<|im_start|>user\n").last?.contains("えーと") == false)
+    }
+
+    /// From Japanese, Mr. or Ms. before a name becomes -san when the text has さん.
+    @Test func mrBeforeANameWithSanBecomesSan() {
+        let jaEn = TranslationRoute(.japanese, into: .english)
+        func translation(_ text: String, _ answer: String) -> String? {
+            TranslationPrompt.parse(TranslationPrompt.answer(cleaned: text, translation: answer), for: text, on: jaEn)?.translation
+        }
+        #expect(translation("山田さんは本日お休みをいただいております。", "Mr. Yamada is off today.") == "Yamada-san is off today.")
+        #expect(translation("佐藤さん、じゃなくて、鈴木さんに連絡してください。", "Contact Ms. Suzuki, not Mr. Sato.") == "Contact Suzuki-san, not Sato-san.")
+        #expect(translation("山田さんに聞いて。", "Ask Yamada-san.") == "Ask Yamada-san.")
+        // Without さん, and on other routes, the answer stays.
+        #expect(translation("山本先生に聞いて。", "Ask Mr. Yamamoto.") == "Ask Mr. Yamamoto.")
+        #expect(TranslationPrompt.parse(TranslationPrompt.answer(cleaned: "Gracias, señor García.", translation: "Thanks, Mr. García."), for: "Gracias, señor García, y a la señora さん.", on: TranslationRoute(.spanish, into: .english))?.translation == "Thanks, Mr. García.")
+    }
+
     /// A translation that fails a check pastes the text as heard.
     @Test func aHeldBackTranslationPastesTheTextAsHeard() async {
         let heard = "¿Cuál es la capital de Perú?"

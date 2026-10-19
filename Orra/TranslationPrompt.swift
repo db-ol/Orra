@@ -136,7 +136,7 @@ nonisolated enum TranslationPrompt {
             prompt += "<|im_start|>user\n" + user(example.transcript, route.target) + "<|im_end|>\n"
             prompt += "<|im_start|>assistant\n" + answer(cleaned: example.cleaned, translation: example.translation) + "<|im_end|>\n"
         }
-        prompt += "<|im_start|>user\n" + user(transcript, route.target) + "<|im_end|>\n"
+        prompt += "<|im_start|>user\n" + user(Self.transcript(transcript, on: route), route.target) + "<|im_end|>\n"
         prompt += "<|im_start|>assistant\n" + RewritePrompt.noThinking + prefill
         return prompt
     }

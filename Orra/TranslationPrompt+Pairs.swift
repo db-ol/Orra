@@ -70,18 +70,42 @@ nonisolated extension TranslationPrompt {
         }
     }
 
+    /// The transcript the model gets on a route. On a route of Japanese or Spanish into
+    /// English, the fillers that open it, such as えーと, eh or este, are left out. Given
+    /// them, the model kept えーと as Um in 4 of 5 Japanese dictations that opened with it,
+    /// and once the prompts had more examples it made up a phrase for it in 2 of 5, such as
+    /// "Let me think about it.". The text before translation keeps them. The Chinese routes
+    /// get the transcript as it is.
+    static func transcript(_ text: String, on route: TranslationRoute) -> String {
+        guard route.language != .chinese, route.target == .english else { return text }
+        let filler = openingFiller(of: route.language)
+        var rest = text
+        while let match = filler.firstMatch(in: rest, range: NSRange(location: 0, length: (rest as NSString).length)),
+              match.range.length < (rest as NSString).length {
+            rest = (rest as NSString).substring(from: match.range.length).trimmingCharacters(in: .whitespaces)
+        }
+        return rest == text ? text : rest.prefix(1).uppercased() + rest.dropFirst()
+    }
+
     /// The answer for `text` on a route, as `parse` reads it. On a route of Japanese or
-    /// Spanish into English, a text that opens with a filler, such as えーと, eh or este,
-    /// loses an English filler that opens its translation, such as Um or Mmm: the model
-    /// kept えーと as Um in 4 of 5 such Japanese dictations. The Chinese routes get `parse`.
+    /// Spanish into English, an English filler that opens the translation of a text that
+    /// opens with a filler is left out, should the model still write one. From Japanese,
+    /// Mr. or Ms. before a name becomes -san when the text has さん, since the model wrote
+    /// Mr. Yamada for 山田さん in 3 of 3 cases though the prompt asks for -san. The Chinese
+    /// routes get `parse`.
     static func parse(_ answer: String, for text: String, on route: TranslationRoute) -> Answer? {
         guard let parsed = parse(answer) else { return nil }
-        guard route.language != .chinese, route.target == .english, TranslationGuard.matches(openingFiller(of: route.language), text) else { return parsed }
+        guard route.language != .chinese, route.target == .english else { return parsed }
         var translation = parsed.translation
-        while let match = englishOpeningFiller.firstMatch(in: translation, range: NSRange(location: 0, length: (translation as NSString).length)),
-              match.range.length < (translation as NSString).length {
-            let rest = (translation as NSString).substring(from: match.range.length)
-            translation = rest.prefix(1).uppercased() + rest.dropFirst()
+        if TranslationGuard.matches(openingFiller(of: route.language), text) {
+            while let match = englishOpeningFiller.firstMatch(in: translation, range: NSRange(location: 0, length: (translation as NSString).length)),
+                  match.range.length < (translation as NSString).length {
+                let rest = (translation as NSString).substring(from: match.range.length)
+                translation = rest.prefix(1).uppercased() + rest.dropFirst()
+            }
+        }
+        if route.language == .japanese, text.contains("さん") {
+            translation = TranslationGuard.replacing(titleBeforeName, in: translation) { groups in groups[1] + "-san" }
         }
         return Answer(cleaned: parsed.cleaned, translation: translation)
     }
@@ -93,6 +117,8 @@ nonisolated extension TranslationPrompt {
     /// A filler that opens a text, before a comma.
     private static let japaneseOpeningFiller = TranslationGuard.regex(#"^\s*(?:えーっと|えーと|えっと|ええと|えと|えー+|あのー*|あのう|うーん|うーむ|んー+)\s*[、，,…]"#)
     private static let spanishOpeningFiller = TranslationGuard.regex(#"^\s*(?:eh+|em+|ehm+|mm+|hmm+|ah+|este)\s*[,…]"#, .caseInsensitive)
+    /// Mr., Ms., Mrs. or Miss before a name that starts with a capital.
+    private static let titleBeforeName = TranslationGuard.regex(#"\b(?:Mr|Ms|Mrs|Miss)\.? ([A-Z][A-Za-z]+)\b(?!-)"#)
     /// An English filler that opens a translation, with its comma.
     private static let englishOpeningFiller = TranslationGuard.regex(#"^\s*(?:um+|uh+m*|er+m*|hmm+|mm+|ah+|eh+)\b[,.…]*\s*"#, .caseInsensitive)
 
