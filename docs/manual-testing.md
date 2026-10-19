@@ -469,6 +469,16 @@ got worse than the baseline, see docs/release-gate.md.
     checks the pins of the
     cleanup model, its server addresses and its folder, and that neither model's leftover
     cleanup removes the other's folder.
+  - TimedCallTests checks the time limit of the cleanup and translation calls with stand
+    in calls that ignore cancellation and end only when the test lets them, so it shows
+    the order of events and needs no bound on the time taken. At the limit the caller
+    gets the time out at once while the call still runs, the call is cancelled and its
+    late answer is never used, a call that ends in time gives its answer or its error,
+    and a caller whose task is cancelled stops waiting at once. The cleanup and
+    translation steps paste the text they got at the limit. AbandonedCallTests checks
+    that such a call keeps its access to the model gate until it ends, so a voice
+    request after the dictation's reservation ended waits for it, also through a whole
+    dictation with PushToTalkController.
   - PromptPrefixTests checks with stand in token IDs that the cached start of the prompt
     stops two tokens before the first token two prompts differ in, that a prompt reads
     only the tokens after it, and that a prompt that does not start with it, or has
