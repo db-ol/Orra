@@ -119,12 +119,7 @@ nonisolated enum RewriteGuard {
             return failure
         }
 
-        // Shouting: the output turned to capitals.
-        let upper = count(output, where: { ("A"..."Z").contains($0) })
-        let letters = count(output, where: isLatinLetter)
-        let sourceLetters = max(count(source, where: isLatinLetter), 1)
-        let sourceUpper = count(source, where: { ("A"..."Z").contains($0) })
-        if letters >= 10, Double(upper) / Double(letters) > 0.6, Double(sourceUpper) / Double(sourceLetters) < 0.3 {
+        if isShouting(source: source, output: output) {
             return .caseChanged
         }
 
@@ -212,6 +207,16 @@ nonisolated enum RewriteGuard {
         return nil
     }
 
+    /// Shouting: the output turned to capitals, from 10 Latin letters on, and the source
+    /// was not in capitals.
+    static func isShouting(source: String, output: String) -> Bool {
+        let upper = count(output, where: { ("A"..."Z").contains($0) })
+        let letters = count(output, where: isLatinLetter)
+        let sourceLetters = max(count(source, where: isLatinLetter), 1)
+        let sourceUpper = count(source, where: { ("A"..."Z").contains($0) })
+        return letters >= 10 && Double(upper) / Double(letters) > 0.6 && Double(sourceUpper) / Double(sourceLetters) < 0.3
+    }
+
     // MARK: Measures
 
     /// A rough size that compares Chinese and English: one Han character is one unit, an
@@ -280,10 +285,11 @@ nonisolated enum RewriteGuard {
         text.unicodeScalars.allSatisfy(\.isASCII)
     }
 
-    /// Kana, Hangul and Cyrillic, which a cleanup should never produce on its own.
-    static func hasForeignScript(_ text: String) -> Bool {
+    /// Kana, Hangul and Cyrillic, which a cleanup should never produce on its own. With
+    /// `allowingKana`, Hangul and Cyrillic only, for a translation that may hold kana.
+    static func hasForeignScript(_ text: String, allowingKana: Bool = false) -> Bool {
         text.unicodeScalars.contains { scalar in
-            (0x3040...0x30FF).contains(scalar.value) || (0xAC00...0xD7AF).contains(scalar.value) || (0x0400...0x04FF).contains(scalar.value)
+            (!allowingKana && (0x3040...0x30FF).contains(scalar.value)) || (0xAC00...0xD7AF).contains(scalar.value) || (0x0400...0x04FF).contains(scalar.value)
         }
     }
 

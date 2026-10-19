@@ -149,12 +149,7 @@ nonisolated enum TranslationGuard {
         default: break
         }
 
-        // Shouting: the output turned to capitals.
-        let upper = RewriteGuard.count(output, where: { ("A"..."Z").contains($0) })
-        let letters = RewriteGuard.count(output, where: RewriteGuard.isLatinLetter)
-        let sourceLetters = max(RewriteGuard.count(source, where: RewriteGuard.isLatinLetter), 1)
-        let sourceUpper = RewriteGuard.count(source, where: { ("A"..."Z").contains($0) })
-        if letters >= 10, Double(upper) / Double(letters) > 0.6, Double(sourceUpper) / Double(sourceLetters) < 0.3 {
+        if RewriteGuard.isShouting(source: source, output: output) {
             return .caseChanged
         }
         if RewriteGuard.hasForeignScript(output), !RewriteGuard.hasForeignScript(source) {
@@ -190,6 +185,7 @@ nonisolated enum TranslationGuard {
 
         switch target {
         case .chinese, .japanese, .spanish:
+            let letters = RewriteGuard.count(output, where: RewriteGuard.isLatinLetter)
             let han = RewriteGuard.han(output).count
             let script = letters + han
             if script > 0, Double(letters) / Double(script) > 0.6, han < 2 {
@@ -202,8 +198,7 @@ nonisolated enum TranslationGuard {
             }
         case .english:
             // Han may stay only as a short name copied from the source.
-            let runs = all(hanRun, in: output)
-            if !runs.isEmpty, runs.contains(where: { !contains(source, $0) }) || runs.reduce(0, { $0 + $1.unicodeScalars.count }) > 4 {
+            if hasRunsLeft(hanRun, source: source, output: output) {
                 return .hanInEnglish
             }
         }
@@ -232,6 +227,13 @@ nonisolated enum TranslationGuard {
             }
         }
         return nil
+    }
+
+    /// Whether `output` holds runs of `regex`, such as Han characters, other than a short
+    /// name copied from the source: a run the source lacks, or more than 4 characters in all.
+    static func hasRunsLeft(_ regex: NSRegularExpression, source: String, output: String) -> Bool {
+        let runs = all(regex, in: output)
+        return !runs.isEmpty && (runs.contains(where: { !contains(source, $0) }) || runs.reduce(0, { $0 + $1.unicodeScalars.count }) > 4)
     }
 
     // MARK: Acronyms
@@ -266,10 +268,7 @@ nonisolated enum TranslationGuard {
     static func newNumbers(source: String, output: String) -> [String] {
         let have = sourceValues(source)
         let exact = !matches(correctionCue, source)
-        var text = removingThousandsSeparators(asciiDigits(output))
-        // 1万2千 and 1万2 are one number, 12000.
-        text = replacing(tenThousandsAndThousands, in: text) { groups in thousands(groups[1] + groups[2]) }
-        text = replacing(tenThousandsAndDigit, in: text) { groups in thousands(groups[1] + groups[2]) }
+        let text = joinedNumbers(asciiDigits(output))
         var added: [String] = []
         for number in all(decimal, in: text) {
             let value = Double(number) ?? .nan
@@ -279,6 +278,13 @@ nonisolated enum TranslationGuard {
             }
         }
         return added
+    }
+
+    /// Text with ASCII digits, see `asciiDigits`, without thousands separators, and with
+    /// 1万2千 and 1万2 as one number, 12000.
+    static func joinedNumbers(_ text: String) -> String {
+        let joined = replacing(tenThousandsAndThousands, in: removingThousandsSeparators(text)) { groups in thousands(groups[1] + groups[2]) }
+        return replacing(tenThousandsAndDigit, in: joined) { groups in thousands(groups[1] + groups[2]) }
     }
 
     /// Every value a number in the source can stand for: digits with their multipliers
@@ -331,9 +337,15 @@ nonisolated enum TranslationGuard {
                 values.formUnion([Double(min(index + 1, 7)), index >= 6 ? 0 : Double(index + 1)])
             }
         }
+        return expanded(values, dividedBy: [1e3, 1e4, 1e6, 1e8, 1e9], times: [1000])
+    }
+
+    /// The values, each also divided by every divisor, multiplied by every multiplier, and
+    /// a whole hour moved by 12 hours.
+    static func expanded(_ values: Set<Double>, dividedBy divisors: [Double], times multipliers: [Double]) -> Set<Double> {
         var more: Set<Double> = []
         for value in values {
-            for divisor in [1e3, 1e4, 1e6, 1e8, 1e9] {
+            for divisor in divisors {
                 more.insert(value / divisor)
             }
             if value >= 1, value <= 12, value == value.rounded(.towardZero) {
@@ -342,7 +354,9 @@ nonisolated enum TranslationGuard {
             if value >= 13, value <= 24, value == value.rounded(.towardZero) {
                 more.insert(value - 12)
             }
-            more.insert(value * 1000)
+            for multiplier in multipliers {
+                more.insert(value * multiplier)
+            }
         }
         return values.union(more)
     }

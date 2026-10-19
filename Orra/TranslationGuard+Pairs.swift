@@ -24,7 +24,7 @@ nonisolated extension TranslationGuard {
     /// and at least this many times from 6 units on. Japanese is more compact than
     /// English, and Spanish a little longer.
     static func shortest(_ route: TranslationRoute) -> Double {
-        route.target == .japanese ? 0.3 : 0.4
+        route.target == .japanese ? shortestChinese : shortestEnglish
     }
 
     private static func checkPair(source: String, output: String, route: TranslationRoute) -> Failure? {
@@ -37,17 +37,12 @@ nonisolated extension TranslationGuard {
         default: break
         }
 
-        // Shouting: the output turned to capitals.
-        let upper = RewriteGuard.count(output, where: { ("A"..."Z").contains($0) })
-        let letters = RewriteGuard.count(output, where: RewriteGuard.isLatinLetter)
-        let sourceLetters = max(RewriteGuard.count(source, where: RewriteGuard.isLatinLetter), 1)
-        let sourceUpper = RewriteGuard.count(source, where: { ("A"..."Z").contains($0) })
-        if letters >= 10, Double(upper) / Double(letters) > 0.6, Double(sourceUpper) / Double(sourceLetters) < 0.3 {
+        if RewriteGuard.isShouting(source: source, output: output) {
             return .caseChanged
         }
         // Kana is Japanese, so only a Japanese translation or one of a source with kana may
         // hold it. Hangul and Cyrillic never.
-        if hasPairForeignScript(output, allowingKana: route.target == .japanese || hasKana(source)), !hasPairForeignScript(source, allowingKana: false) {
+        if RewriteGuard.hasForeignScript(output, allowingKana: route.target == .japanese || hasKana(source)), !RewriteGuard.hasForeignScript(source) {
             return .foreignScript
         }
 
@@ -84,6 +79,7 @@ nonisolated extension TranslationGuard {
                 return failure
             }
         case .japanese:
+            let letters = RewriteGuard.count(output, where: RewriteGuard.isLatinLetter)
             let script = letters + han + kana
             if script > 0, Double(letters) / Double(script) > 0.6, han + kana < 2 {
                 return .notJapanese
@@ -103,7 +99,7 @@ nonisolated extension TranslationGuard {
             if isEnglishLeft(output: output) {
                 return .notSpanish
             }
-            if hasHanLeft(source: source, output: output) {
+            if hasRunsLeft(hanRun, source: source, output: output) {
                 return .hanInSpanish
             }
             let foreign = Set(lowercaseWords(output).flatMap { $0.unicodeScalars.filter(isForeignAccent) }).subtracting(source.unicodeScalars)
@@ -143,11 +139,10 @@ nonisolated extension TranslationGuard {
     /// name copied from the source, no accented letters the source lacks, and no Spanish
     /// left.
     private static func checkEnglish(source: String, output: String, language: DictationLanguage) -> Failure? {
-        if hasHanLeft(source: source, output: output) {
+        if hasRunsLeft(hanRun, source: source, output: output) {
             return .hanInEnglish
         }
-        let kanaRuns = all(kanaRun, in: output)
-        if !kanaRuns.isEmpty, kanaRuns.contains(where: { !contains(source, $0) }) || kanaRuns.reduce(0, { $0 + $1.unicodeScalars.count }) > 4 {
+        if hasRunsLeft(kanaRun, source: source, output: output) {
             return .kanaInEnglish
         }
         // Names keep their accents, such as Chișinău or Fernández, so only a word in
@@ -163,13 +158,6 @@ nonisolated extension TranslationGuard {
 
     // MARK: Language left in the translation
 
-    /// Han characters in a translation into English or Spanish, other than a short name
-    /// copied from the source, as for Chinese.
-    private static func hasHanLeft(source: String, output: String) -> Bool {
-        let runs = all(hanRun, in: output)
-        return !runs.isEmpty && (runs.contains(where: { !contains(source, $0) }) || runs.reduce(0, { $0 + $1.unicodeScalars.count }) > 4)
-    }
-
     /// Spanish left in an English translation: ¿ or ¡, or at least two Spanish function
     /// words and as many as English ones, or for 20 letters and more a text with more
     /// Spanish than English words that NLLanguageRecognizer finds Spanish rather than
@@ -182,7 +170,7 @@ nonisolated extension TranslationGuard {
         if counts.spanish >= 4, counts.spanish >= counts.english {
             return true
         }
-        return latinLetterCount(output) >= 20 && counts.spanish > counts.english && dominantLanguage(output) == .spanish
+        return latinLetterCount(output) >= LanguageGuard.minimumLatinLetters && counts.spanish > counts.english && TranslationDirection.englishOrSpanish(output) == .spanish
     }
 
     /// English left in a Spanish translation: at least two English function words and
@@ -193,7 +181,7 @@ nonisolated extension TranslationGuard {
         if counts.english >= 4, counts.english > counts.spanish {
             return true
         }
-        return latinLetterCount(output) >= 20 && counts.english > counts.spanish && dominantLanguage(output) == .english
+        return latinLetterCount(output) >= LanguageGuard.minimumLatinLetters && counts.english > counts.spanish && TranslationDirection.englishOrSpanish(output) == .english
     }
 
     /// Chinese in a Japanese translation: two or more characters that only simplified
@@ -244,13 +232,6 @@ nonisolated extension TranslationGuard {
     /// Words that join a sentence, which a name in lowercase does not hold.
     static let englishLeftWords: Set<String> = ["plus", "minus", "per", "than", "then", "also", "very", "really", "only", "even", "still", "maybe"]
 
-    private static func dominantLanguage(_ text: String) -> NLLanguage? {
-        let recognizer = NLLanguageRecognizer()
-        recognizer.languageConstraints = [.english, .spanish]
-        recognizer.processString(text)
-        return recognizer.dominantLanguage
-    }
-
     private static func latinLetterCount(_ text: String) -> Int {
         text.unicodeScalars.filter(LanguageGuard.isLatin).count
     }
@@ -258,10 +239,8 @@ nonisolated extension TranslationGuard {
     /// Letters with an accent that Spanish does not write, such as à, ç or ö: another
     /// language.
     private static func isForeignAccent(_ scalar: Unicode.Scalar) -> Bool {
-        LanguageGuard.isLatin(scalar) && !scalar.isASCII && !spanishLetters.contains(scalar)
+        LanguageGuard.isLatin(scalar) && !scalar.isASCII && !TranslationDirection.spanishAccents.contains(scalar)
     }
-
-    private static let spanishLetters = Set("áéíóúüñÁÉÍÓÚÜÑ".unicodeScalars)
 
     // MARK: Measures
 
@@ -289,13 +268,6 @@ nonisolated extension TranslationGuard {
     /// Hiragana and katakana, without the marks ・ and ー that other text may hold.
     private static func isKanaLetter(_ scalar: Unicode.Scalar) -> Bool {
         (0x3041...0x3096).contains(scalar.value) || (0x30A1...0x30FA).contains(scalar.value) || (0x31F0...0x31FF).contains(scalar.value)
-    }
-
-    /// Kana, unless allowed, Hangul and Cyrillic.
-    private static func hasPairForeignScript(_ text: String, allowingKana: Bool) -> Bool {
-        text.unicodeScalars.contains { scalar in
-            (!allowingKana && (0x3040...0x30FF).contains(scalar.value)) || (0xAC00...0xD7AF).contains(scalar.value) || (0x0400...0x04FF).contains(scalar.value)
-        }
     }
 
     // MARK: Acronyms
@@ -360,7 +332,6 @@ nonisolated extension TranslationGuard {
     /// Spanish number words, times, months and weekdays, and both readings of Spanish
     /// formats, each also divided and multiplied as `sourceValues` does.
     static func pairSourceValues(_ text: String) -> Set<Double> {
-        var values = sourceValues(text)
         var base: Set<Double> = []
         let folded = asciiDigits(text)
         // 1.5億, 3兆, 2 millones.
@@ -373,9 +344,7 @@ nonisolated extension TranslationGuard {
             }
         }
         // 3万5千, 2 mil 500.
-        var joined = replacing(tenThousandsAndThousands, in: removingThousandsSeparators(folded)) { groups in thousands(groups[1] + groups[2]) }
-        joined = replacing(tenThousandsAndDigit, in: joined) { groups in thousands(groups[1] + groups[2]) }
-        joined = replacing(thousandAndDigits, in: joined) { groups in String((Int(groups[1]) ?? 0) * 1000 + (Int(groups[2]) ?? 0)) }
+        let joined = replacing(thousandAndDigits, in: joinedNumbers(folded)) { groups in String((Int(groups[1]) ?? 0) * 1000 + (Int(groups[2]) ?? 0)) }
         for number in all(decimal, in: joined) {
             if let value = Double(number) {
                 base.insert(value)
@@ -396,22 +365,7 @@ nonisolated extension TranslationGuard {
         }
         base.formUnion(spanishValues(text))
         base.formUnion(japaneseWordValues(text))
-        var more: Set<Double> = []
-        for value in base {
-            for divisor in [1e3, 1e4, 1e6, 1e8, 1e9, 1e12] {
-                more.insert(value / divisor)
-            }
-            if value >= 1, value <= 12, value == value.rounded(.towardZero) {
-                more.insert(value + 12)
-            }
-            if value >= 13, value <= 24, value == value.rounded(.towardZero) {
-                more.insert(value - 12)
-            }
-            more.formUnion([value * 1000, value * 1e4, value * 1e8])
-        }
-        values.formUnion(base)
-        values.formUnion(more)
-        return values
+        return sourceValues(text).union(expanded(base, dividedBy: [1e3, 1e4, 1e6, 1e8, 1e9, 1e12], times: [1000, 1e4, 1e8]))
     }
 
     /// The values a number written in Spanish may have: 2,500 and 2.500 are 2500 or 2.5,

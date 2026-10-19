@@ -48,7 +48,7 @@ nonisolated extension TranslationDirection {
             } else if LanguageGuard.isLatin(scalar) {
                 latin += 1
                 afterName = true
-            } else if isLetter(scalar) {
+            } else if scalar.properties.generalCategory.isLetter {
                 other += 1
             }
         }
@@ -102,7 +102,7 @@ nonisolated extension TranslationDirection {
         for scalar in folded.unicodeScalars where scalar.properties.isAlphabetic {
             if LanguageGuard.isLatin(scalar) {
                 latin += 1
-            } else if isLetter(scalar) {
+            } else if scalar.properties.generalCategory.isLetter {
                 foreign += 1
             }
         }
@@ -118,10 +118,16 @@ nonisolated extension TranslationDirection {
         if counts.english > counts.spanish + 1 {
             return .english
         }
+        return englishOrSpanish(folded) == .english ? .english : .partner
+    }
+
+    /// The language NLLanguageRecognizer, held to English and Spanish, finds most likely,
+    /// or nil without an answer.
+    static func englishOrSpanish(_ text: String) -> NLLanguage? {
         let recognizer = NLLanguageRecognizer()
         recognizer.languageConstraints = [.english, .spanish]
-        recognizer.processString(folded)
-        return recognizer.dominantLanguage == .english ? .english : .partner
+        recognizer.processString(text)
+        return recognizer.dominantLanguage
     }
 
     /// The scores of the Spanish rule.
@@ -181,8 +187,8 @@ nonisolated extension TranslationDirection {
     /// writes too: a, no, me, he, has, ok and okay.
     static let englishFunctionForSpanish = englishFunction.subtracting(["a", "no", "me", "he", "has", "ok", "okay"])
 
-    /// The letters with an accent that Spanish writes.
-    static let spanishAccents = Set("áéíóúüñ".unicodeScalars)
+    /// The letters with an accent that Spanish writes, in both cases.
+    static let spanishAccents = Set("áéíóúüñÁÉÍÓÚÜÑ".unicodeScalars)
 
     /// Words of Latin letters, accented ones too, in their case, with an apostrophe inside a
     /// word kept: don't, l’eau.
@@ -192,12 +198,4 @@ nonisolated extension TranslationDirection {
     }
 
     private static let latinWord = try! NSRegularExpression(pattern: "\\p{Latin}+(?:['’]\\p{Latin}+)*")
-
-    /// A letter of any script.
-    private static func isLetter(_ scalar: Unicode.Scalar) -> Bool {
-        switch scalar.properties.generalCategory {
-        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter: true
-        default: false
-        }
-    }
 }
