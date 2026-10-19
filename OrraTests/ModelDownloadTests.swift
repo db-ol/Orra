@@ -337,20 +337,35 @@ struct ModelDownloadTests {
     }
 
     @Test func cancelKeepsPartialFile() async throws {
-        // The server stops after 400 KB of the weights and holds the connection open, so the
-        // download cannot finish before the test sees it running, however slow the Mac is.
+        // The server stops after 400 KB of the weights and holds the connection open until the
+        // cancel or the 30 s idle timeout, so the download cannot finish before the test sees it.
         let servers = StubServers(behaviors: [.huggingFace: StubBehavior(dropAfter: 400_000, dropWhen: { false })])
         defer { servers.close() }
         let temporary = TemporaryModelFolders()
         defer { temporary.remove() }
         let weights = temporary.staging.appendingPathComponent("model.safetensors")
-        let task = Task { await download(servers, temporary) }
+        // The URLError code of each fetch that throws, or nil for another error.
+        let codes = Mutex<[URLError.Code?]>([])
+        let live = servers.fetch
+        let recording = FileFetch { url, destination, offset, size, idleTimeout, progress in
+            do {
+                try await live.fetch(url, destination, offset, size, idleTimeout, progress)
+            } catch {
+                codes.withLock { $0.append((error as? URLError)?.code) }
+                throw error
+            }
+        }
+        let task = Task { await download(servers, temporary, fetch: recording) }
         for _ in 0..<1_000 where (ModelDisk.size(weights) ?? 0) < 300_000 {
             try await Task.sleep(for: .milliseconds(10))
         }
         task.cancel()
         let outcome = await task.value
         #expect(throws: CancellationError.self) { try outcome.result.get() }
+        // The cancel stopped the held request. Had it not, the request would have ended at
+        // the idle timeout with .timedOut, and the download would still throw
+        // CancellationError and keep 400 KB.
+        #expect(codes.withLock { $0 } == [.cancelled])
         let partial = try #require(ModelDisk.size(weights))
         #expect(partial >= 300_000 && partial < TestModel.size("model.safetensors"))
         #expect(!FileManager.default.fileExists(atPath: temporary.installed.path))
