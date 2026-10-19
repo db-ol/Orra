@@ -21,8 +21,8 @@ nonisolated extension TranslationGuard {
     }
 
     /// A translation may be at most `longest` times as long as its source, in `pairUnits`,
-    /// and at least this many times from 6 units on. Japanese is more compact than
-    /// English, and Spanish a little longer.
+    /// and at least this many times from 6 units on. Japanese, more compact than English,
+    /// takes the minimum of Chinese, and Spanish, a little longer, the one of English.
     static func shortest(_ route: TranslationRoute) -> Double {
         route.target == .japanese ? shortestChinese : shortestEnglish
     }

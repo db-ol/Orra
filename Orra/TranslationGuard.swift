@@ -135,6 +135,7 @@ nonisolated enum TranslationGuard {
     /// RewriteGuard.units.
     static let longest = 2.6
     /// And at least this many times, for English and for Chinese, which is more compact.
+    /// The routes of Japanese and Spanish take them too, see `shortest(_:)`.
     static let shortestEnglish = 0.4
     static let shortestChinese = 0.3
 
