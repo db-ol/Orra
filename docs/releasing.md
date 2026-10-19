@@ -151,9 +151,8 @@ Do not mark it as a pre-release: GitHub leaves pre-releases out of releases/late
 installed Orra would see it. Once the release is out, every Orra that checks for updates
 offers it, so a mistake reaches users within a day.
 
-Then update the version the website shows next to the Download button, in site/index.html
-and site/zh/index.html, and merge it, as docs/website.md describes. The download link itself
-needs no change.
+Then update the version the website shows next to the Download button, in every page of
+site/, and merge it, as docs/website.md describes. The download link itself needs no change.
 
 ## Trying a release
 

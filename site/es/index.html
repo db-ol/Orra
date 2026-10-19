@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="es-419">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orra: dictado por voz para tu Mac</title>
+  <meta name="description" content="Orra es una app de dictado por voz de código abierto para macOS. Dicta en cualquier app y traduce entre el inglés y el chino, el japonés o el español mientras hablas, también en llamadas. Tu voz se convierte en texto en tu Mac, nunca en un servidor.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="canonical" href="https://db-ol.github.io/Orra/es/">
+  <link rel="alternate" hreflang="en" href="https://db-ol.github.io/Orra/">
+  <link rel="alternate" hreflang="zh-Hans" href="https://db-ol.github.io/Orra/zh/">
+  <link rel="alternate" hreflang="ja" href="https://db-ol.github.io/Orra/ja/">
+  <link rel="alternate" hreflang="es" href="https://db-ol.github.io/Orra/es/">
+  <link rel="icon" type="image/png" href="../favicon.png">
+  <link rel="apple-touch-icon" href="../icon.png">
+  <link rel="stylesheet" href="../style.css">
+  <script src="../site.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="./"><img src="../favicon.png" alt="" width="24" height="24">Orra</a>
+      <nav aria-label="Principal">
+        <a class="optional" href="#features">Funciones</a>
+        <a class="optional" href="#meetings">Reuniones</a>
+        <a class="optional" href="#privacy">Privacidad</a>
+        <a href="https://github.com/db-ol/Orra">GitHub</a>
+        <a href="../" hreflang="en" lang="en">English</a>
+        <a href="../zh/" hreflang="zh-Hans" lang="zh-Hans">中文</a>
+        <a href="../ja/" hreflang="ja" lang="ja">日本語</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap">
+        <img class="app-icon" src="../icon.png" alt="Ícono de la app Orra" width="96" height="96">
+        <p class="eyebrow">Orra</p>
+        <h1 id="hero-title">Habla<br>y queda escrito.</h1>
+        <p class="lede">Dicta y traduce en cualquier app, también en tus llamadas. Todo funciona en tu Mac.</p>
+        <div class="cta">
+          <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Descargar para Mac</a>
+          <p class="version">Versión 0.4.2 <span class="needs">Requiere una Mac con Apple Chip, macOS 15.6 o posterior y unos 6 GB de espacio disponible.</span></p>
+        </div>
+
+        <div class="demos">
+          <figure class="demo" data-demo="dictate">
+            <figcaption class="demo-name">Dictado</figcaption>
+            <div class="demo-stage" role="img" aria-label="Animación: alguien dice en inglés “Um, I’ll post Wednesday’s meeting notes this afternoon.” Las barras de la cápsula de Orra se mueven con la voz, y las palabras aparecen en una nota sin la muletilla um.">
+              <p class="demo-said" aria-hidden="true" lang="en">“<span class="filler">Um, </span><span class="said-words">I’ll post Wednesday’s meeting notes this afternoon.</span>”</p>
+              <div class="demo-window" aria-hidden="true" lang="en">
+                <div class="demo-chrome"><i></i><i></i><i></i></div>
+                <p class="doc-title">Project update</p>
+                <p class="demo-target"><span class="pasted">I’ll post Wednesday’s meeting notes this afternoon.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+
+          <figure class="demo" data-demo="cleanup">
+            <figcaption class="demo-name">Limpieza (opcional)</figcaption>
+            <div class="demo-stage" role="img" aria-label="Animación: alguien dice en inglés “Let’s go over the quote at three, oh wait, four tomorrow.” Las barras de la cápsula de Orra se mueven con la voz. Con la limpieza activada, Orra aplica la rectificación que se hizo al hablar, y “Let’s go over the quote at four tomorrow.” aparece en un correo.">
+              <p class="demo-said" aria-hidden="true" lang="en">“<span class="said-words">Let’s go over the quote at </span><span class="filler">three, oh wait, </span><span class="said-words">four tomorrow.</span>”</p>
+              <div class="demo-window" aria-hidden="true" lang="en">
+                <div class="demo-chrome"><i></i><i></i><i></i></div>
+                <p class="mail-subject"><span lang="es-419">Asunto</span>Quote</p>
+                <p class="demo-target"><span class="pasted">Let’s go over the quote at four tomorrow.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+
+          <figure class="demo" data-demo="translate">
+            <figcaption class="demo-name">Traducción</figcaption>
+            <div class="demo-stage" role="img" aria-label="Animación: en un chat, un amigo pregunta “When can I see the designs?” Alguien dice en chino 我这边周五之前能把设计稿发给你. La cápsula de Orra muestra una pequeña marca 译, y la traducción al inglés, I can send you the designs before Friday, aparece en el campo del mensaje.">
+              <p class="demo-said" aria-hidden="true" lang="zh-Hans">“<span class="said-words">我这边周五之前能把设计稿发给你。</span>”</p>
+              <div class="demo-window chat" aria-hidden="true" lang="en">
+                <div class="chat-head"><span class="avatar">S</span>Sam</div>
+                <p class="bubble">When can I see the designs?</p>
+                <p class="demo-target composer"><span class="pasted">I can send you the designs before Friday.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><span class="badge" lang="zh-Hans">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="band soft">
+      <div class="wrap">
+        <h2 class="reveal">Se adapta a cómo<br>hablas de verdad.</h2>
+        <div class="tiles">
+          <div class="tile reveal">
+            <h3>Tu vocabulario</h3>
+            <p>Agrega los nombres y términos que usas, y Orra los escribe como tú.</p>
+          </div>
+          <div class="tile reveal">
+            <h3>Aprende de tus correcciones</h3>
+            <p>Corrige una palabra mal oída después de un dictado, y Orra recuerda lo que escribió y cómo lo corregiste. La próxima vez, escribe la palabra como tú. Está desactivado de forma predeterminada. Nunca guarda oraciones completas.</p>
+          </div>
+          <div class="tile reveal">
+            <h3>Dos idiomas mezclados</h3>
+            <p>Habla en chino, en inglés o en los dos en la misma oración. En Idioma de dictado, en Configuración, puedes elegir en su lugar japonés o español con inglés, en beta.</p>
+          </div>
+          <div class="tile reveal">
+            <h3>Traducción</h3>
+            <p>Mantén presionada la tecla de traducción y habla, y Orra traduce entre el inglés y tu idioma de dictado, chino, japonés o español. Funciona en tu Mac.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="meetings" class="band">
+      <div class="wrap">
+        <h2 class="reveal">Interpretación en reuniones</h2>
+        <p class="statement reveal">Lee en tu idioma lo que dicen los demás y deja que te escuchen en el suyo, incluso con tu propia voz.</p>
+        <div class="meet">
+          <div class="meet-part reveal">
+            <div class="meet-stage" role="img" aria-label="Animación: la ventana de Subtítulos en vivo muestra dos oraciones en inglés de una llamada, “Can we move the launch to next Thursday?” y “The test report isn’t ready yet.”, cada una con su traducción al chino debajo, 我们能把发布挪到下周四吗？ y 测试报告还没准备好。">
+              <div class="captions" aria-hidden="true">
+                <p class="captions-title">Subtítulos en vivo</p>
+                <p class="captions-modes"><span>Solo traducción</span><span class="on">Original y traducción</span></p>
+                <div class="caption">
+                  <p class="caption-original" lang="en">Can we move the launch to next Thursday?</p>
+                  <p class="caption-translation" lang="zh-Hans">我们能把发布挪到下周四吗？</p>
+                </div>
+                <div class="caption">
+                  <p class="caption-original" lang="en">The test report isn’t ready yet.</p>
+                  <p class="caption-translation" lang="zh-Hans">测试报告还没准备好。</p>
+                </div>
+              </div>
+            </div>
+            <h3>Subtítulos en vivo</h3>
+            <p>Orra muestra lo que reproduce tu Mac, como una llamada, en forma de subtítulos traducidos en una ventana flotante. Traduce con el mismo modelo en tu Mac que usa la tecla de traducción. Nunca usa el micrófono, y los subtítulos solo se guardan en la memoria.</p>
+          </div>
+          <div class="meet-part reveal">
+            <div class="meet-stage" role="img" aria-label="Animación: con la tecla de traducción presionada, alguien dice en chino 可以，我周三之前把测试做完. La app de llamadas usa Orra Microphone como micrófono, y Alex, al otro lado de la llamada, escucha la traducción al inglés, “Sure, I’ll finish testing by Wednesday.”">
+              <p class="meet-said" aria-hidden="true" lang="zh-Hans">“可以，我周三之前把测试做完。”</p>
+              <div class="demo-window call" aria-hidden="true">
+                <div class="chat-head"><span class="avatar">A</span>Alex</div>
+                <p class="call-label">Alex escucha</p>
+                <p class="call-heard" lang="en"><span class="level"><i></i><i></i><i></i><i></i><i></i></span>“Sure, I’ll finish testing by Wednesday.”</p>
+                <p class="call-mic"><span>Micrófono</span> Orra Microphone</p>
+              </div>
+            </div>
+            <h3>Leer traducciones a los demás</h3>
+            <p>Con Traducción y Leer traducciones a los demás activados en Configuración, mantén presionada la tecla de traducción y habla. Un modelo de síntesis de voz en tu Mac lee la traducción y la envía a Orra Microphone. Elige Orra Microphone como micrófono en tu app de llamadas, y la otra persona escucha tus palabras en su idioma. Graba una muestra de voz corta y hablará con tu propia voz. Usa solo tu propia voz, y avisa a los demás que escuchan una voz sintetizada.</p>
+            <p>El modelo de síntesis de voz es una descarga de unos 2 GB. Orra Microphone se descarga por separado.</p>
+            <ul class="links">
+              <li><a href="https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg">Descargar Orra Microphone</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy" class="band soft">
+      <div class="wrap">
+        <h2 class="reveal">Privacidad</h2>
+        <p class="statement reveal">Lo que dices se queda en tu Mac.</p>
+        <div class="prose reveal">
+          <p>Solo necesitas Internet para descargar Orra y sus modelos. Aparte de eso, Orra solo se conecta para buscar actualizaciones, y solo si lo permites. Todo lo demás funciona en tu Mac, y Orra nunca guarda tus grabaciones ni lo que dijiste. La única excepción es el audio de tu muestra de voz, si activas Recordar mi voz. Orra nunca guarda sus palabras. Los <a href="https://github.com/db-ol/Orra/blob/main/docs/privacy.es.md">detalles de privacidad</a> están en GitHub.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="open-source" class="band">
+      <div class="wrap split">
+        <div class="reveal">
+          <h2>Código abierto</h2>
+          <p>El código de Orra está escrito en Swift y SwiftUI y se publica con la licencia MIT. Lee el código, compílalo por tu cuenta o ayuda a mejorarlo.</p>
+          <ul class="links">
+            <li><a href="https://github.com/db-ol/Orra">Código fuente en GitHub</a></li>
+            <li><a href="https://github.com/db-ol/Orra/releases">Todas las versiones</a></li>
+          </ul>
+        </div>
+        <div id="feedback" class="reveal">
+          <h2>Comentarios</h2>
+          <p>¿Encontraste un error o te falta algo? Selecciona Reportar un problema… en el menú de Orra, o cuéntanos en GitHub.</p>
+          <ul class="links">
+            <li><a href="https://github.com/db-ol/Orra/issues">Reportar un problema (Issues)</a></li>
+            <li><a href="https://github.com/db-ol/Orra/discussions">Participar en la conversación (Discussions)</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="band soft closing" aria-labelledby="closing-title">
+      <div class="wrap reveal">
+        <h2 id="closing-title">Prueba Orra.</h2>
+        <p class="lede">Gratis y de código abierto. App notariada por Apple.</p>
+        <div class="cta">
+          <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Descargar para Mac</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Orra es de código abierto con la <a href="https://github.com/db-ol/Orra/blob/main/LICENSE">licencia MIT</a>.</p>
+      <p><a href="../" hreflang="en" lang="en">English</a> · <a href="../zh/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a> · <a href="../ja/" hreflang="ja" lang="ja">日本語</a></p>
+    </div>
+  </footer>
+</body>
+</html>

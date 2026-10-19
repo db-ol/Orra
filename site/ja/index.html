@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orra: Mac用の音声入力</title>
+  <meta name="description" content="Orraは、macOS用のオープンソースの音声入力アプリです。どのアプリでも音声入力でき、話しながら英語と中国語、日本語、スペイン語のいずれかの間で翻訳もできます。通話中にも使えます。音声はサーバではなく、お使いのMac上でテキストに変換されます。">
+  <meta name="color-scheme" content="light dark">
+  <link rel="canonical" href="https://db-ol.github.io/Orra/ja/">
+  <link rel="alternate" hreflang="en" href="https://db-ol.github.io/Orra/">
+  <link rel="alternate" hreflang="zh-Hans" href="https://db-ol.github.io/Orra/zh/">
+  <link rel="alternate" hreflang="ja" href="https://db-ol.github.io/Orra/ja/">
+  <link rel="alternate" hreflang="es" href="https://db-ol.github.io/Orra/es/">
+  <link rel="icon" type="image/png" href="../favicon.png">
+  <link rel="apple-touch-icon" href="../icon.png">
+  <link rel="stylesheet" href="../style.css">
+  <script src="../site.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">本文へスキップ</a>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="./"><img src="../favicon.png" alt="" width="24" height="24">Orra</a>
+      <nav aria-label="メインナビゲーション">
+        <a class="optional" href="#features">機能</a>
+        <a class="optional" href="#meetings">会議通訳</a>
+        <a class="optional" href="#privacy">プライバシー</a>
+        <a href="https://github.com/db-ol/Orra">GitHub</a>
+        <a href="../" hreflang="en" lang="en">English</a>
+        <a href="../zh/" hreflang="zh-Hans" lang="zh-Hans">中文</a>
+        <a href="../es/" hreflang="es" lang="es">Español</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap">
+        <img class="app-icon" src="../icon.png" alt="Orraのアプリアイコン" width="96" height="96">
+        <p class="eyebrow">Orra</p>
+        <h1 id="hero-title">話せば、<br>文字になる。</h1>
+        <p class="lede">どのアプリでも、通話中でも、音声入力と翻訳ができます。すべてお使いのMac上で動作します。</p>
+        <div class="cta">
+          <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Mac版をダウンロード</a>
+          <p class="version">バージョン0.4.2 <span class="needs">Appleシリコンを搭載し、macOS 15.6以降を実行しているMacと、約6 GBの空き容量が必要です。</span></p>
+        </div>
+
+        <div class="demos">
+          <figure class="demo" data-demo="dictate">
+            <figcaption class="demo-name">音声入力</figcaption>
+            <div class="demo-stage" role="img" aria-label="アニメーション: 誰かが英語で“Um, I’ll post Wednesday’s meeting notes this afternoon.”と話します。Orraのカプセルの音量バーが声に合わせて動き、フィラーのumを除いた言葉がメモに入力されます。">
+              <p class="demo-said" aria-hidden="true" lang="en">“<span class="filler">Um, </span><span class="said-words">I’ll post Wednesday’s meeting notes this afternoon.</span>”</p>
+              <div class="demo-window" aria-hidden="true" lang="en">
+                <div class="demo-chrome"><i></i><i></i><i></i></div>
+                <p class="doc-title">Project update</p>
+                <p class="demo-target"><span class="pasted">I’ll post Wednesday’s meeting notes this afternoon.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+
+          <figure class="demo" data-demo="cleanup">
+            <figcaption class="demo-name">整文（オプション）</figcaption>
+            <div class="demo-stage" role="img" aria-label="アニメーション: 誰かが英語で“Let’s go over the quote at three, oh wait, four tomorrow.”と話します。Orraのカプセルの音量バーが声に合わせて動きます。整文がオンなので、Orraが話しながらの言い直しを反映し、メールに“Let’s go over the quote at four tomorrow.”と入力されます。">
+              <p class="demo-said" aria-hidden="true" lang="en">“<span class="said-words">Let’s go over the quote at </span><span class="filler">three, oh wait, </span><span class="said-words">four tomorrow.</span>”</p>
+              <div class="demo-window" aria-hidden="true">
+                <div class="demo-chrome"><i></i><i></i><i></i></div>
+                <p class="mail-subject" lang="en"><span lang="ja">件名</span>Quote</p>
+                <p class="demo-target" lang="en"><span class="pasted">Let’s go over the quote at four tomorrow.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+
+          <figure class="demo" data-demo="translate">
+            <figcaption class="demo-name">翻訳</figcaption>
+            <div class="demo-stage" role="img" aria-label="アニメーション: チャットで友人が英語で“When can I see the designs?”と尋ねます。誰かが中国語で“我这边周五之前能把设计稿发给你”と話すと、Orraのカプセルに小さな“译”バッジが表示され、英語の訳文“I can send you the designs before Friday.”がメッセージ入力欄に入力されます。">
+              <p class="demo-said" aria-hidden="true" lang="zh-Hans">“<span class="said-words">我这边周五之前能把设计稿发给你。</span>”</p>
+              <div class="demo-window chat" aria-hidden="true" lang="en">
+                <div class="chat-head"><span class="avatar">S</span>Sam</div>
+                <p class="bubble">When can I see the designs?</p>
+                <p class="demo-target composer"><span class="pasted">I can send you the designs before Friday.</span><span class="caret"></span></p>
+              </div>
+              <span class="capsule" aria-hidden="true"><span class="badge" lang="zh-Hans">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="band soft">
+      <div class="wrap">
+        <h2 class="reveal">いつもの話し方で、<br>そのまま使える。</h2>
+        <div class="tiles">
+          <div class="tile reveal">
+            <h3>自分専用の用語集</h3>
+            <p>よく使う名前や用語を追加しておけば、Orraがあなたの表記で書きます。</p>
+          </div>
+          <div class="tile reveal">
+            <h3>修正から学習</h3>
+            <p>音声入力のあとで誤認識された単語を修正すると、Orraは自分が書いた表記とあなたの直し方を覚え、次からはその単語をあなたの表記で書きます。初期設定ではオフです。文全体を保存することはありません。</p>
+          </div>
+          <div class="tile reveal">
+            <h3>2つの言語の混在</h3>
+            <p>中国語でも英語でも、1つの文の中で両方を混ぜて話しても大丈夫です。設定の“音声入力の言語”では、代わりに日本語またはスペイン語を英語と組み合わせて選ぶこともできます（ベータ版）。</p>
+          </div>
+          <div class="tile reveal">
+            <h3>翻訳</h3>
+            <p>翻訳キーを押したまま話すと、英語と音声入力の言語（中国語、日本語、スペイン語）の間で翻訳されます。処理はお使いのMac上で行われます。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="meetings" class="band">
+      <div class="wrap">
+        <h2 class="reveal">会議通訳</h2>
+        <p class="statement reveal">相手の話はあなたの言語で読めて、あなたの話は相手の言語で、あなた自身の声でも届けられます。</p>
+        <div class="meet">
+          <div class="meet-part reveal">
+            <div class="meet-stage" role="img" aria-label="アニメーション: ライブキャプションのウインドウに、通話の英語の2文“Can we move the launch to next Thursday?”と“The test report isn’t ready yet.”が表示され、それぞれの下に中国語の訳文“我们能把发布挪到下周四吗？”と“测试报告还没准备好。”が表示されます。">
+              <div class="captions" aria-hidden="true">
+                <p class="captions-title">ライブキャプション</p>
+                <p class="captions-modes"><span>訳文のみ</span><span class="on">原文と訳文</span></p>
+                <div class="caption">
+                  <p class="caption-original" lang="en">Can we move the launch to next Thursday?</p>
+                  <p class="caption-translation" lang="zh-Hans">我们能把发布挪到下周四吗？</p>
+                </div>
+                <div class="caption">
+                  <p class="caption-original" lang="en">The test report isn’t ready yet.</p>
+                  <p class="caption-translation" lang="zh-Hans">测试报告还没准备好。</p>
+                </div>
+              </div>
+            </div>
+            <h3>ライブキャプション</h3>
+            <p>通話などMacで再生される音声を、Orraが翻訳してフローティングウインドウにキャプションとして表示します。翻訳には、翻訳キーと同じお使いのMac上のモデルを使います。マイクは使わず、キャプションはメモリ上にだけ保持されます。</p>
+          </div>
+          <div class="meet-part reveal">
+            <div class="meet-stage" role="img" aria-label="アニメーション: 誰かが翻訳キーを押したまま、中国語で“可以，我周三之前把测试做完”と話します。通話アプリはマイクとしてOrra Microphoneを使っていて、通話の相手のAlexには英語の訳文“Sure, I’ll finish testing by Wednesday.”が聞こえます。">
+              <p class="meet-said" aria-hidden="true" lang="zh-Hans">“可以，我周三之前把测试做完。”</p>
+              <div class="demo-window call" aria-hidden="true">
+                <div class="chat-head"><span class="avatar">A</span>Alex</div>
+                <p class="call-label">Alexに聞こえる音声</p>
+                <p class="call-heard" lang="en"><span class="level"><i></i><i></i><i></i><i></i><i></i></span>“Sure, I’ll finish testing by Wednesday.”</p>
+                <p class="call-mic"><span>マイク</span> Orra Microphone</p>
+              </div>
+            </div>
+            <h3>翻訳を相手に読み上げる</h3>
+            <p>設定で“翻訳”と“翻訳を相手に読み上げる”をオンにし、翻訳キーを押したまま話します。お使いのMac上の音声合成モデルが訳文を読み上げ、Orra Microphoneに送ります。通話アプリでマイクとしてOrra Microphoneを選ぶと、相手にはあなたの言葉が相手の言語で聞こえます。短い音声サンプルを録音すれば、あなた自身の声で話します。使うのは自分の声だけにして、相手には合成音声が聞こえていることを伝えてください。</p>
+            <p>音声合成モデルのダウンロードは約2 GBです。Orra Microphoneは別途ダウンロードが必要です。</p>
+            <ul class="links">
+              <li><a href="https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg">Orra Microphoneをダウンロード</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy" class="band soft">
+      <div class="wrap">
+        <h2 class="reveal">プライバシー</h2>
+        <p class="statement reveal">話した内容は、あなたのMacの外に出ません。</p>
+        <div class="prose reveal">
+          <p>インターネットが必要なのは、Orraとそのモデルをダウンロードするときだけです。それ以外にOrraがインターネットに接続するのはアップデートを確認するときだけで、それも許可した場合に限ります。ほかの処理はすべてお使いのMac上で行われ、Orraが録音や話した内容を保存することはありません。唯一の例外は、“自分の声を記憶”をオンにした場合の音声サンプルの音声です。その場合も、サンプルで話した言葉は保存しません。<a href="https://github.com/db-ol/Orra/blob/main/docs/privacy.ja.md">プライバシーの詳細</a>はGitHubで公開しています。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="open-source" class="band">
+      <div class="wrap split">
+        <div class="reveal">
+          <h2>オープンソース</h2>
+          <p>OrraはSwiftとSwiftUIで書かれ、MITライセンスで公開されています。コードを読んだり、自分でビルドしたり、改善に協力したりできます。</p>
+          <ul class="links">
+            <li><a href="https://github.com/db-ol/Orra">GitHubのソースコード</a></li>
+            <li><a href="https://github.com/db-ol/Orra/releases">すべてのリリース</a></li>
+          </ul>
+        </div>
+        <div id="feedback" class="reveal">
+          <h2>フィードバック</h2>
+          <p>バグを見つけたときや、欲しい機能があるときは、Orraメニューで“問題を報告…”を選択するか、GitHubでお知らせください。</p>
+          <ul class="links">
+            <li><a href="https://github.com/db-ol/Orra/issues">Issueで報告する</a></li>
+            <li><a href="https://github.com/db-ol/Orra/discussions">Discussionsに参加する</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="band soft closing" aria-labelledby="closing-title">
+      <div class="wrap reveal">
+        <h2 id="closing-title">Orraを試してみよう。</h2>
+        <p class="lede">無料のオープンソースで、Appleの公証を受けています。</p>
+        <div class="cta">
+          <a class="button" href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg">Mac版をダウンロード</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Orraは<a href="https://github.com/db-ol/Orra/blob/main/LICENSE">MITライセンス</a>のオープンソースソフトウェアです。</p>
+      <p><a href="../" hreflang="en" lang="en">English</a> · <a href="../zh/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a> · <a href="../es/" hreflang="es" lang="es">Español</a></p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -7,13 +7,22 @@ https://db-ol.github.io/Orra/.
 
 - site/index.html is the English page.
 - site/zh/index.html is the Simplified Chinese page.
-- site/style.css is the one style sheet for both. It follows the system's light or dark mode.
+- site/ja/index.html is the Japanese page.
+- site/es/index.html is the Spanish page, in the Latin American Spanish of the interface
+  (es-419).
+- site/style.css is the one style sheet for every page. It follows the system's light or dark
+  mode. The Japanese page lists Japanese fonts first, or its kanji would take the Chinese
+  shapes of PingFang SC.
 - site/site.js plays the three demos at the top of the page, dictation, cleanup and then
   translation, and fades sections in as they scroll into view. Without it, or when the Mac asks
   for reduced motion, the page shows all demos in their last frame and every section at once.
   The spoken line of each demo appears at about 8.5 Chinese characters or 3 English words a
   second, so a longer line takes longer. Keep each line and each pasted text to two lines at
   375 pixels wide. The cleanup demo shows an optional feature, so its caption says so.
+- The Japanese and Spanish pages keep the English and Chinese demos and sentences, as
+  README.ja.md and README.es.md keep the English animations. Each of those lines carries its
+  own lang, which site.js reads for the timing above. Only the labels and descriptions are
+  translated.
 - The Meeting Interpretation section draws the Live Captions window and a call in HTML and
   CSS, with the sentences of the meeting animation in the README. style.css plays it once
   when each part scrolls into view, through the class that site.js adds. Without site.js,
@@ -27,12 +36,16 @@ from another server. Keep it that way.
 
 ## Editing
 
-1. Change both pages together, so the English and the Chinese page say the same thing.
+1. Change all four pages together, so they say the same thing.
 2. Keep every claim in line with README.md, the user guide in docs/user-guide.md and
    docs/privacy.md. Describe what the latest release does, not what is still in a pull
    request. Make up no numbers or quotes.
 3. English text uses no em dash, en dash or semicolon. Chinese text uses full width
    punctuation (，。：？！（）“”) and a space between Chinese and a Latin word or a number.
+   Japanese text uses 、。（）, “ ” around the names of settings and around quoted words, as
+   macOS does, and no space between Japanese and a Latin word or a number. Spanish text uses
+   tú, ¿? and ¡!, and the Latin American words of the interface, such as Configuración and
+   la Mac. Name menus and settings as Orra shows them in that language.
 4. Check the pages over HTTP, as GitHub Pages serves them. Run
    `python3 -m http.server -d site` and open http://localhost:8000/. The language and brand
    links point at folders, so they do not work when you open the files directly.
@@ -43,10 +56,10 @@ The Download button points to
 https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg, so every release must
 upload a copy of its DMG named Orra.dmg, as docs/releasing.md describes.
 
-The version under the top Download button is plain text, once in each page ("Version 0.4.2"
-and "版本 0.4.2"), next to the system requirements. After a release is published, change it
-in both pages and merge, so the site never names a version that is not out yet. To find
-every place:
+The version under the top Download button is plain text, once in each page ("Version 0.4.2",
+"版本 0.4.2", "バージョン0.4.2" and "Versión 0.4.2"), next to the system requirements. After a
+release is published, change it in all four pages and merge, so the site never names a
+version that is not out yet. To find every place:
 
     grep -rn "0\.4\.2" site
 
@@ -59,6 +72,20 @@ To export the icon again after the icon changes:
     "/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" Orra/AppIcon.icon --export-image --output-file /tmp/icon1024.png --platform macOS --rendition Default --width 1024 --height 1024 --scale 1
     sips -Z 512 /tmp/icon1024.png --out site/icon.png
     sips -Z 64 /tmp/icon1024.png --out site/favicon.png
+
+## Adding a language
+
+1. Copy site/index.html to site/<code>/index.html and translate it. Set lang on the html
+   element, point the canonical link at the new folder, and put ../ in front of the icons,
+   the style sheet and the script.
+2. Add an alternate link with the page's hreflang to the head of every page, and a link to
+   the page in the top bar and the footer of every other page, in the same order on each.
+3. Link the privacy details in that language, and give each English or Chinese line of the
+   demos its own lang.
+4. Add its version line to the list above. If the language needs its own fonts, add a :lang
+   rule to style.css, as the Japanese page has.
+5. Publish the page only once the interface in that language is released, so it names
+   menus and settings as Orra shows them.
 
 ## Turning on Pages
 
@@ -81,4 +108,4 @@ Until Pages uses GitHub Actions as its source, the deploy step of the workflow f
 3. Once the certificate is ready, turn on Enforce HTTPS.
 4. Verify the domain in your account's or organization's Settings > Pages (not the
    repository's), so nobody else can claim it.
-5. Update the canonical and alternate links at the top of both pages to the new address.
+5. Update the canonical and alternate links at the top of every page to the new address.
