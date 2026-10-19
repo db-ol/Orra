@@ -10,11 +10,12 @@ struct CaptionTargetTests {
     let temporary = TemporaryModelFolders()
 
     /// Cleanup and translation with a stand in model that never loads.
-    private func cleanup(captionTarget: TranslationTarget? = nil, defaultCaptionTarget: @escaping () -> TranslationTarget) -> TextCleanup {
+    private func cleanup(captionTarget: TranslationTarget? = nil, saveCaptionTarget: @escaping (TranslationTarget) -> Void = { _ in }, defaultCaptionTarget: @escaping () -> TranslationTarget) -> TextCleanup {
         TextCleanup(
             isOn: false,
             save: { _ in },
             captionTarget: captionTarget,
+            saveCaptionTarget: saveCaptionTarget,
             defaultCaptionTarget: defaultCaptionTarget,
             models: ModelInstaller(
                 manifest: temporary.manifest,
@@ -86,23 +87,50 @@ struct CaptionTargetTests {
         let cleanup = cleanup(captionTarget: .japanese) { .english }
         cleanup.setDictationLanguage(.chinese)
         #expect(cleanup.captionTarget == .japanese)
-        #expect(CaptionTarget.effective(cleanup.captionTarget, for: cleanup.dictationLanguage) == .chinese)
+        #expect(cleanup.effectiveCaptionTarget == .chinese)
         cleanup.setDictationLanguage(.japanese)
-        #expect(CaptionTarget.effective(cleanup.captionTarget, for: cleanup.dictationLanguage) == .japanese)
+        #expect(cleanup.effectiveCaptionTarget == .japanese)
+    }
+
+    /// Choosing the target the window or Settings shows already changes nothing: a target
+    /// saved for another dictation language stays, and a default does not become a pick.
+    @Test func choosingTheShownTargetKeepsWhatIsSaved() {
+        var saved: [TranslationTarget] = []
+        let picked = cleanup(captionTarget: .japanese, saveCaptionTarget: { saved.append($0) }) { .english }
+        picked.setDictationLanguage(.chinese)
+        #expect(picked.effectiveCaptionTarget == .chinese)
+        picked.pickCaptionTarget(.chinese)
+        #expect(picked.pickedCaptionTarget == .japanese)
+        #expect(saved.isEmpty)
+        picked.pickCaptionTarget(.english)
+        #expect(picked.pickedCaptionTarget == .english)
+        #expect(saved == [.english])
+
+        let unpicked = cleanup { .chinese }
+        unpicked.setDictationLanguage(.chinese)
+        unpicked.pickCaptionTarget(.chinese)
+        #expect(unpicked.pickedCaptionTarget == nil)
+        unpicked.pickCaptionTarget(.english)
+        #expect(unpicked.pickedCaptionTarget == .english)
     }
 
     /// Each sentence is read with the rule of the dictation language, except that kana make
-    /// a sentence the Chinese rule reads as Chinese Japanese, and that Han characters
-    /// without kana make a sentence the Japanese rule reads as Japanese not Japanese.
+    /// a sentence the Chinese rule reads as Chinese, or finds nothing to translate in,
+    /// Japanese, and that Han characters without kana make a sentence the Japanese rule
+    /// reads as Japanese not Japanese.
     @Test func captionsTellJapaneseAndChineseApart() {
         #expect(CaptionTarget.source(of: "我们开始吧。", in: .chinese) == .partner)
         #expect(CaptionTarget.source(of: "今日はありがとうございました。", in: .chinese) == .other)
         #expect(CaptionTarget.source(of: "明日の会議は十時からです。", in: .chinese) == .other)
         #expect(CaptionTarget.source(of: "Hello everyone.", in: .chinese) == .english)
+        // Kana only, which the Chinese rule finds nothing to translate in, is Japanese too.
+        #expect(CaptionTarget.source(of: "ありがとう", in: .chinese) == .other)
+        #expect(CaptionTarget.source(of: "そうですね。", in: .chinese) == .other)
         // Read as English, which kana do not change, and nothing to translate stays so.
         #expect(CaptionTarget.source(of: "Let's meet at the カフェ.", in: .chinese) == .english)
-        #expect(CaptionTarget.source(of: "ありがとう", in: .chinese) == nil)
         #expect(CaptionTarget.source(of: "2026", in: .chinese) == nil)
+        #expect(CaptionTarget.source(of: "！？", in: .chinese) == nil)
+        #expect(TranslationDirection.source(of: "ありがとう", in: .chinese) == nil)
         // The rule of the translation key is unchanged.
         #expect(TranslationDirection.source(of: "今日はありがとうございました。", in: .chinese) == .partner)
 
@@ -139,6 +167,8 @@ struct CaptionTargetTests {
         let japanese = await CaptionTarget.plan(for: "今日はありがとうございました。", into: .chinese, in: .chinese)
         #expect(japanese?.route == .chinese(.english))
         #expect(japanese?.source == .other)
+        let kana = await CaptionTarget.plan(for: "そうですね。", into: .chinese, in: .chinese)
+        #expect(kana?.route == .chinese(.english))
         #expect(await CaptionTarget.plan(for: "我们开始吧。", into: .chinese, in: .chinese) == nil)
         #expect(await CaptionTarget.plan(for: "Good morning, everyone.", into: .english, in: .spanish) == nil)
         let spanish = await CaptionTarget.plan(for: "Gracias a todos.", into: .english, in: .spanish)

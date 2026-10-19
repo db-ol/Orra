@@ -23,6 +23,9 @@ import Testing
 /// - ORRA_CAPTION_SETTINGS: a JSON object that changes CaptionSegmenter.Settings, such as
 ///   {"pause": 0.5, "startLevel": 0.01}, for tuning.
 /// - ORRA_CAPTION_TARGET: the caption target, zh (the default) or en, see TranslationTarget.
+///   Sentences in the target already are not translated, so Chinese audio needs en to
+///   measure translation, and English audio zh. Before 2026-10-19 the default translated
+///   both, so compare a run with one in the same target.
 /// - ORRA_CAPTION_TRANSLATE=0: transcripts only, without loading the cleanup model.
 /// - ORRA_CAPTION_REALTIME=1: feeds the audio at the pace it plays, so the latency of each
 ///   caption is measured as the live captions would see it.

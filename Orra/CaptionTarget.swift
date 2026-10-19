@@ -40,17 +40,18 @@ nonisolated enum CaptionTarget {
     /// for the dictation language still goes into English, as under Automatic before
     /// captions had their own target, instead of showing as said:
     /// - Under the Chinese rule, a sentence read as Chinese that holds kana is Japanese,
-    ///   since Japanese with kanji reads as Chinese.
+    ///   since Japanese with kanji reads as Chinese. So is one in kana only, which the rule
+    ///   finds nothing to translate in, so that all Japanese goes into English.
     /// - Under the Japanese rule, a sentence read as Japanese that holds Han characters and
     ///   no kana is not Japanese, since Chinese reads as Japanese. Japanese said without any
     ///   kana goes into English too, which is rare in speech.
     static func source(of text: String, in language: DictationLanguage) -> TranslationDirection.Source? {
-        guard let source = TranslationDirection.source(of: text, in: language) else { return nil }
-        guard source == .partner else { return source }
+        let source = TranslationDirection.source(of: text, in: language)
+        guard source == .partner || (source == nil && language == .chinese) else { return source }
         let letters = text.precomposedStringWithCompatibilityMapping.unicodeScalars.filter(\.properties.isAlphabetic)
         let kana = letters.contains(where: LanguageGuard.isKana)
         switch language {
-        case .chinese: return kana ? .other : .partner
+        case .chinese: return kana ? .other : source
         case .japanese: return !kana && letters.contains(where: LanguageGuard.isHan) ? .other : .partner
         case .spanish: return .partner
         }

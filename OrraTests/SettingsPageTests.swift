@@ -177,6 +177,8 @@ struct SettingsPageTests {
             liveCaptionsShortcut: LiveCaptionsShortcut.defaultShortcut(keyCodeForC: 0x08),
             dictationLanguage: dictating
         )
+        // As AppDelegate keeps them in step.
+        cleanup.setDictationLanguage(dictating)
         for word in ["Orra", "Qwen3-ASR", "克劳德"] {
             pushToTalk.addToVocabulary(word)
         }

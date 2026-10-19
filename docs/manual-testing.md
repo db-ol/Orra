@@ -102,16 +102,17 @@ got worse than the baseline, see docs/release-gate.md.
     once and the captions take it at once while a new user's is not saved, a saved value
     stays, and running twice gives what running once gives.
   - CaptionTargetTests, added on 2026-10-19, covers the language Live Captions translate
-    into: the default from the user's own language for interface and Mac languages (English
-    with none of Chinese, Japanese and Spanish), that it follows the own language until a
-    pick, the choices English and the dictation language, a target saved for another
-    dictation language acting as the dictation language and staying saved, kana making a
-    sentence the Chinese rule reads as Chinese Japanese and Han characters without kana
-    making one the Japanese rule reads as Japanese not Japanese, no translation for a
-    sentence in the target on every route and English for one in neither language, the
-    target an earlier user keeps for each Translate into, own language and dictation
-    language, and that the step at the update runs once and never for a new user, also at
-    the second launch.
+    into: the default from the user's own language for interface and Mac languages
+    (English with none of Chinese, Japanese and Spanish), that it follows the own language
+    until a pick, the choices English and the dictation language, a target saved for
+    another dictation language acting as the dictation language and staying saved,
+    choosing the target already shown keeping what is saved and leaving a default
+    unpicked, kana making a sentence the Chinese rule reads as Chinese Japanese, and one
+    in kana only too, and Han characters without kana making one the Japanese rule reads
+    as Japanese not Japanese, no translation for a sentence in the target on every route
+    and English for one in neither language, the target an earlier user keeps for each
+    Translate into, own language and dictation language, and that the step at the update
+    runs once and never for a new user, also at the second launch.
   - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
     for each translation direction and interface language, recording and stopping, too
     short, the stop at the time limit, a microphone that fails to start, a cancel while
@@ -946,15 +947,16 @@ got worse than the baseline, see docs/release-gate.md.
     Spanish and its own again back in Chinese. Since 2026-10-19 it also checks that while
     captions run the route into the caption target is read first, then those of the
     translation key, all within the two routes of the dictation language, and
-    CaptionCleanupTests that a new caption target is read ahead while captions run. PushToTalkControllerTests checks Japanese and
-    English both ways on their routes, Paste Original Text, a direction saved for Chinese
-    acting as Automatic for Spanish with its cue, and Japanese with Japanese fixed pasted as
-    heard without the model. CaptionPipelineTests checks that a Spanish user's English
-    meeting is shown in Spanish and a Spanish one as said with Spanish as the caption
-    target, and in English with English, kana only Japanese in English, and since
-    2026-10-19 that captions follow the caption target and never the translation key's
-    direction, and that a Chinese reader sees Japanese with kana in English and a Japanese
-    reader Chinese in English. RecordingFeedbackTests checks the badges 訳, 日, ⇄ and ES and what VoiceOver
+    CaptionCleanupTests that a new caption target is read ahead while captions run.
+    PushToTalkControllerTests checks Japanese and English both ways on their routes, Paste
+    Original Text, a direction saved for Chinese acting as Automatic for Spanish with its
+    cue, and Japanese with Japanese fixed pasted as heard without the model.
+    CaptionPipelineTests checks that a Spanish user's English meeting is shown in Spanish
+    and a Spanish one as said with Spanish as the caption target, and in English with
+    English, kana only Japanese in English, and since 2026-10-19 that captions follow the
+    caption target and never the translation key's direction, and that a Chinese reader
+    sees Japanese with kana in English and a Japanese reader Chinese in English.
+    RecordingFeedbackTests checks the badges 訳, 日, ⇄ and ES and what VoiceOver
     reads, SettingsPageTests the choices and explanations of each language,
     WelcomeSuggestionTests the translation line, VoiceRecordingTests the Japanese and
     Spanish scripts, SpeechWordCheckTests Spanish accents, numbers and words written joined
@@ -2986,6 +2988,13 @@ measure the delay of each caption, and `TEST_RUNNER_ORRA_CAPTION_SETTINGS='{"pau
 to try other segmenter settings. With `TEST_RUNNER_ORRA_CAPTION_INTERIM=1` the real time
 run shows interim text every second, as the app does, and records when the first text of
 each sentence showed. A summary of counts and times goes to out.summary.txt.
+Since 2026-10-19 the run translates into a caption target, zh unless
+`TEST_RUNNER_ORRA_CAPTION_TARGET=en`, and sentences in the target already are not
+translated. So Chinese audio, such as stream_zh.wav and the Chinese parts of
+stream_mixed.wav, gets no translation and no translation times with the default. Run
+Chinese audio with `TEST_RUNNER_ORRA_CAPTION_TARGET=en` and English audio with the
+default. Runs before that date translated both languages in one run, so compare each
+language with a run in the same target.
 The output holds the text of the audio, so it goes outside the repository.
 
 Capture start, added on 2026-10-16, not verified yet. A key that waits records from its

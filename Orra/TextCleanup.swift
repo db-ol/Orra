@@ -423,16 +423,31 @@ final class TextCleanup {
         pickedCaptionTarget ?? defaultCaptionTarget()
     }
 
-    /// The user picked the language captions translate into, in the caption window or in
-    /// Settings, or the launch step saved one for an earlier user, see LaunchMigrations.
-    /// It counts from the next sentence. Reads its prompt ahead while captions run and the
-    /// model is loaded.
+    /// What captions translate into for the dictation language now: `captionTarget`, or
+    /// the dictation language when that is no choice for it, see
+    /// CaptionTarget.effective(_:for:). The caption window and Settings show it.
+    var effectiveCaptionTarget: TranslationTarget {
+        CaptionTarget.effective(captionTarget, for: dictationLanguage)
+    }
+
+    /// The user chose a caption target in the caption window or in Settings. Choosing the
+    /// one they see already changes nothing, so a target saved for another dictation
+    /// language stays saved and a default does not turn into a pick.
+    func pickCaptionTarget(_ target: TranslationTarget) {
+        guard target != effectiveCaptionTarget else { return }
+        setCaptionTarget(target)
+    }
+
+    /// Saves the language captions translate into: one the user picked, see
+    /// `pickCaptionTarget`, or the one the launch step keeps for an earlier user, see
+    /// LaunchMigrations. It counts from the next sentence. Reads its prompt ahead while
+    /// captions run and the model is loaded.
     func setCaptionTarget(_ target: TranslationTarget) {
         guard target != pickedCaptionTarget else { return }
         pickedCaptionTarget = target
         saveCaptionTarget(target)
         guard captionsNeedModel else { return }
-        Logger.captions.notice("Meeting captions now translate into \(CaptionTarget.effective(target, for: self.dictationLanguage).logName, privacy: .public)")
+        Logger.captions.notice("Meeting captions now translate into \(self.effectiveCaptionTarget.logName, privacy: .public)")
         if isLoaded {
             prepareTranslation()
         }

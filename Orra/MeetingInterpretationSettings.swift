@@ -22,7 +22,7 @@ struct MeetingInterpretationSettings: View {
         Form {
             Section {
                 if let captions {
-                    LiveCaptionRows(captions: captions, cleanup: cleanup, language: pushToTalk.dictationLanguage, shortcut: pushToTalk.liveCaptionsShortcut)
+                    LiveCaptionRows(captions: captions, cleanup: cleanup, shortcut: pushToTalk.liveCaptionsShortcut)
                 }
             } header: {
                 Text("For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice.")
@@ -136,9 +136,8 @@ struct MeetingInterpretationSettings: View {
 /// translates into. The window has the same choices.
 private struct LiveCaptionRows: View {
     let captions: MeetingCaptions
+    /// The caption target and the dictation language, whose choices it offers.
     let cleanup: TextCleanup
-    /// The dictation language, whose choices the caption target offers.
-    let language: DictationLanguage
     /// The Live Captions shortcut, which the switch's help names, or nil for none.
     let shortcut: KeyCombination?
 
@@ -175,10 +174,10 @@ private struct LiveCaptionRows: View {
         // A target saved for another dictation language shows as the one it acts as, and
         // comes back with its language.
         Picker(selection: Binding(
-            get: { CaptionTarget.effective(cleanup.captionTarget, for: language) },
-            set: { cleanup.setCaptionTarget($0) }
+            get: { cleanup.effectiveCaptionTarget },
+            set: { cleanup.pickCaptionTarget($0) }
         )) {
-            ForEach(CaptionTarget.choices(for: language), id: \.self) { target in
+            ForEach(CaptionTarget.choices(for: cleanup.dictationLanguage), id: \.self) { target in
                 Text(target.title).tag(target)
             }
         } label: {

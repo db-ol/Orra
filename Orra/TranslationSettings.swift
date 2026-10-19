@@ -111,15 +111,28 @@ private struct TranslationKeyRow: View {
     }
 }
 
-extension TranslationDirection {
-    /// The name in the picker.
+extension TranslationTarget {
+    /// The name in the pickers of Translate into, of the caption window and of Translate
+    /// captions into.
     var title: LocalizedStringKey {
         switch self {
-        case .automatic: "Automatic"
         case .english: "English"
         case .chinese: "Chinese"
         case .japanese: "Japanese"
         case .spanish: "Spanish"
+        }
+    }
+}
+
+extension TranslationDirection {
+    /// The name in the picker, Automatic or the language, see TranslationTarget.title.
+    var title: LocalizedStringKey {
+        switch self {
+        case .automatic: "Automatic"
+        case .english: TranslationTarget.english.title
+        case .chinese: TranslationTarget.chinese.title
+        case .japanese: TranslationTarget.japanese.title
+        case .spanish: TranslationTarget.spanish.title
         }
     }
 

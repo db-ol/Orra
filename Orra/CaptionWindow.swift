@@ -119,7 +119,7 @@ struct CaptionView: View {
                         .pickerStyle(.menu)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                CaptionTargetMenu(captions: captions, cleanup: cleanup, language: pushToTalk.dictationLanguage)
+                CaptionTargetMenu(captions: captions, cleanup: cleanup)
                 CaptionCopyButton(captions: captions)
             }
             CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
@@ -198,14 +198,13 @@ private struct CaptionModePicker: View {
 private struct CaptionTargetMenu: View {
     let captions: MeetingCaptions
     let cleanup: TextCleanup
-    let language: DictationLanguage
 
     var body: some View {
         // A target saved for another dictation language shows as the one it acts as.
-        let target = CaptionTarget.effective(cleanup.captionTarget, for: language)
+        let target = cleanup.effectiveCaptionTarget
         Menu {
-            Picker("Translate captions into", selection: Binding(get: { target }, set: { cleanup.setCaptionTarget($0) })) {
-                ForEach(CaptionTarget.choices(for: language), id: \.self) { choice in
+            Picker("Translate captions into", selection: Binding(get: { target }, set: { cleanup.pickCaptionTarget($0) })) {
+                ForEach(CaptionTarget.choices(for: cleanup.dictationLanguage), id: \.self) { choice in
                     Text(choice.title).tag(choice)
                 }
             }
@@ -401,19 +400,6 @@ extension CaptionDisplayMode {
         switch self {
         case .originalOnly: "Shows what was said, without translating it."
         case .translationOnly, .originalAndTranslation: nil
-        }
-    }
-}
-
-extension TranslationTarget {
-    /// The name in the caption target pickers of the window and Settings, as Translate
-    /// into names the same languages.
-    var title: LocalizedStringKey {
-        switch self {
-        case .english: "English"
-        case .chinese: "Chinese"
-        case .japanese: "Japanese"
-        case .spanish: "Spanish"
         }
     }
 }
