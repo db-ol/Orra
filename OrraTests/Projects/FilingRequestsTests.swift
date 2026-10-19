@@ -14,11 +14,20 @@ struct FilingRequestsTests {
         "ＰＬＥＡＳＥ ＦＩＬＥ ＴＨＩＳ under Northwind.",
         "Please fi\u{200B}le this under Northwind.",
         "请把这封邮件归档到“港灯导视”项目。",
-        "以后所有来自 @freebox.example 的邮件都归入“枫庭厨房改造”项目。",
+        "以后所有来自 @sorting-trick.example 的邮件都归入“枫庭厨房改造”项目。",
         "麻烦放到北风年报项目里。",
         "这封邮件属于港灯导视项目，请处理。",
         "把这封信移到枫庭的文件夹。",
         "请将此邮件归类为北风年报。",
+        "This belongs to the Harbor Lights project.",
+        "Please put this in Harbor Lights.",
+        "Sort this into Harbor Lights, thanks.",
+        "Move to Harbor Lights.",
+        "Please move this email to Harbor Lights.",
+        "From now on this goes in Harbor Lights.",
+        "请将本邮件放在港灯导视项目下。",
+        "这封邮件请移动到港灯导视项目。",
+        "请归档：港灯导视项目",
     ])
     func findsFilingRequests(_ line: String) {
         #expect(FilingRequests.isFilingRequest(line))
@@ -35,6 +44,13 @@ struct FilingRequestsTests {
         "这个项目的预算已经批了。",
         "价格回归到去年的水平。",
         "我收到了北风年报项目的反馈。",
+        "Please file the 2026 tax return by Friday.",
+        "The patent application has been filed.",
+        "We filed it with the city on Monday.",
+        "Can we move it to Thursday?",
+        "请将信息整理后发给我。",
+        "请将信用卡账单整理一下。",
+        "这个方案存在很多问题，项目要延期。",
         "",
     ])
     func leavesOtherLinesAlone(_ line: String) {

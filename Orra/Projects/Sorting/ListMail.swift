@@ -5,12 +5,14 @@ import Foundation
 /// the wording of an unsubscribe footer.
 ///
 /// The caller passes the header values plain, unfolded and decoded. The senders and the
-/// footer wording follow the phase 0 prototype (match.py), which set aside all 9 list mails
-/// of the synthetic set and no project mail. Sorting sets list mail aside only when no
-/// project person is in it, see SortingPolicy.
+/// footer wording are adapted from the phase 0 prototype (match.py), which set aside all 9
+/// list mails of the synthetic set and no project mail. They leave out senders people
+/// write from, such as hello@ and bill@, and wording a person may write, so they catch
+/// fewer list mails without headers than match.py did. Sorting sets list mail aside only
+/// when no project person is in it, see SortingPolicy.
 nonisolated struct ListMail: Sendable, Equatable {
     /// Why an email counts as list mail, strongest first.
-    nonisolated enum Sign: String, Sendable, Codable, CaseIterable {
+    nonisolated enum Sign: String, Sendable, CaseIterable {
         case listID
         case listUnsubscribe
         case bulkPrecedence
@@ -30,15 +32,6 @@ nonisolated struct ListMail: Sendable, Equatable {
         self.listID = Self.present(listID)
         self.listUnsubscribe = Self.present(listUnsubscribe)
         self.precedence = Self.present(precedence)
-    }
-
-    /// The three headers from an email's headers as name and value pairs, with the names
-    /// in any case. The first header of each name counts.
-    init(headers: [(name: String, value: String)]) {
-        func first(_ name: String) -> String? {
-            headers.first { $0.name.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(name) == .orderedSame }?.value
-        }
-        self.init(listID: first("List-Id"), listUnsubscribe: first("List-Unsubscribe"), precedence: first("Precedence"))
     }
 
     /// The list's identifier from List-Id, the part in angle brackets, lowercased, or nil
@@ -88,19 +81,45 @@ nonisolated struct ListMail: Sendable, Equatable {
         if let plus = local.firstIndex(of: "+") {
             local = String(local[..<plus])
         }
-        if local.firstMatch(of: /^(no|do[-_.]?not)[-_.]?reply/) != nil {
+        if local.firstMatch(of: noReplyLocalPart) != nil {
             return true
         }
         return bulkSenders.contains(local)
     }
 
-    /// Whether the text holds the wording of an unsubscribe footer or of a message sent by
-    /// a system, in English or Chinese.
+    /// Whether the first or the last lines of the text hold the wording of an unsubscribe
+    /// footer or of a message a system sent, in English or Chinese. Only the lines where a
+    /// banner or a footer stands count, and only wording that a system writes, so a person
+    /// who mentions a newsletter they left is not list mail.
     static func hasUnsubscribeText(_ text: String) -> Bool {
-        let english = /\b(unsubscrib\w*|do[ -]not[ -]reply|automated (message|e-?mail|notification))\b/.ignoresCase()
-        let chinese = /退订|取消订阅|请勿(直接)?回复|(本|此|该)(邮件|信|消息)[^。\n]{0,8}自动(发送|生成)/
-        return text.firstMatch(of: english) != nil || text.firstMatch(of: chinese) != nil
+        let lines = text.split(whereSeparator: \.isNewline).filter { !$0.allSatisfy(\.isWhitespace) }
+        let edges = lines.count <= headLines + footerLines ? lines : Array(lines.prefix(headLines) + lines.suffix(footerLines))
+        return edges.contains { line in
+            footerWording.contains { line.firstMatch(of: $0) != nil }
+        }
     }
+
+    /// The lines at the top, where a banner such as "View in browser | Unsubscribe" stands.
+    private static let headLines = 3
+    /// The lines at the end, where the footer stands.
+    private static let footerLines = 10
+
+    // Built once rather than for every email.
+    nonisolated(unsafe) private static let noReplyLocalPart = /^(no|do[-_.]?not)[-_.]?reply/
+    nonisolated(unsafe) private static let footerWording: [Regex<Substring>] = [
+        // "unsubscribe here", but not "I unsubscribed".
+        /\bunsubscribe\b/.ignoresCase(),
+        // "Please do not reply to this email", but not "do not reply-all to this thread".
+        /\bdo(?:\s+not|n['’]?t)\s+reply\s+(?:directly\s+)?to\s+this\s+(?:e-?mail|message|notification|address)\b/.ignoresCase(),
+        // "This is an automated message", but not "This is not an automated message".
+        /\b(?:this|it)\s+(?:is|was)\s+an?\s+(?:automated|automatic|auto-generated|system-generated)\s+(?:e-?mail|message|notification|notice)\b/.ignoresCase(),
+        /\b(?:this|the)\s+(?:e-?mail|message|notification)\s+(?:is|was|has\s+been)\s+(?:sent\s+)?automatically\b/.ignoresCase(),
+        /退订|取消订阅/,
+        // 请勿回复, but not 请勿回复全部
+        /请勿(?:直接)?回复(?!全部|所有人)/,
+        // 本邮件由系统自动发送, but not 此邮件并非自动发送
+        /(?:本|此|该)(?:邮件|信|消息)[^。\n非不]{0,8}自动(?:发送|生成)/,
+    ]
 
     private static let bulkPrecedences: Set<String> = ["bulk", "list", "junk"]
 

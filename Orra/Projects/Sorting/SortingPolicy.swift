@@ -74,9 +74,14 @@ nonisolated struct SortingDecision: Sendable, Equatable, Codable {
 
 /// Rules first, the model as tie breaker (plan section 8, approved 2026-10-19).
 ///
-/// - A thread (unless the user moved the message it answers), a rule, person or domain the
-///   user set, or a linked Mail mailbox is sure, and the model is not asked.
-/// - Only the rules set mail aside: list mail with no project people.
+/// - A thread (unless the user moved the message it answers) is sure, and the model is not
+///   asked.
+/// - So is the user's own setting that names one project. The most exact kind that matches
+///   decides: a rule the user made or a linked Mail mailbox, then a person the user listed,
+///   then a domain. When the kind that decides names several projects, only those
+///   projects stay in the running.
+/// - Only the rules set mail aside: list mail with no project people, no setting of the
+///   user and no thread.
 /// - People seen before, an attachment name, the project's words, or a thread whose
 ///   message the user moved, vote. A project that has the only vote is likely, and the
 ///   model must agree before the mail is filed there.
@@ -84,8 +89,9 @@ nonisolated struct SortingDecision: Sendable, Equatable, Codable {
 ///   candidates.
 /// - The model's "none" sends the mail to Needs a Project, never out of the project.
 ///
-/// On the synthetic set of phase 0 this policy filed 91 of 105 mails right, sent 10 to
-/// Needs a Project and filed 4 wrong. Rules alone gave 85, 17 and 3.
+/// On the synthetic set of phase 0 the prototype of this policy (match.py) filed 91 of 105
+/// mails right, sent 10 to Needs a Project and filed 4 wrong. Rules alone gave 85, 17 and
+/// 3.
 nonisolated enum SortingPolicy {
     /// Whether the decision needs the model's answer.
     static func needsModel(_ signals: SortingSignals) -> Bool {
@@ -112,13 +118,16 @@ nonisolated enum SortingPolicy {
             case .project?, .invalid?:
                 return unsure([.modelAnswerInvalid])
             }
-        case .open(let why):
-            guard !top.isEmpty else { return unsure([why]) }
+        case .open(let why, let among):
+            let choices = among.isEmpty ? top : top.filter(among.contains)
+            guard !choices.isEmpty else { return unsure([why]) }
             switch model {
             case nil:
                 return unsure([.waitingForModel, why])
-            case .project(let chosen)? where top.contains(chosen):
+            case .project(let chosen)? where choices.contains(chosen):
                 return SortingDecision(project: chosen, level: .likely, reasons: support(chosen, signals) + [.model])
+            case .project(let chosen)? where top.contains(chosen):
+                return unsure([.modelDisagreed, why])
             case .noProject?:
                 return unsure([.modelSaidNone, why])
             case .project?, .invalid?:
@@ -129,12 +138,13 @@ nonisolated enum SortingPolicy {
 
     /// What the rules say on their own.
     private enum Outcome {
-        /// Sure or set aside, and the model is not asked.
+        /// Sure, set aside or unsure, and the model is not asked.
         case decided(SortingDecision)
         /// One project has the only vote, and the model must agree.
         case likely(UUID)
-        /// No single project, and the model may choose one.
-        case open(SortingReason)
+        /// No single project, and the model may choose one of the top candidates, or of
+        /// those among them in `among` when it is not empty.
+        case open(SortingReason, among: Set<UUID>)
     }
 
     /// The rules in the order of match.py.
@@ -142,46 +152,68 @@ nonisolated enum SortingPolicy {
         if let thread = signals.thread, !signals.threadMovedByUser {
             return .decided(SortingDecision(project: thread, level: .sure, reasons: [.thread]))
         }
-        // Sure only when every rule, person, domain and mailbox that matches names one
-        // project. When they name several, they still rank those projects first.
-        let sure = Set(signals.rules.keys).union(signals.mailboxes)
-        if sure.count == 1, let project = sure.first {
+        let ruled = userSettings(signals)
+        if ruled.count == 1, let project = ruled.first {
             let reasons: [SortingReason?] = [signals.rules[project], signals.mailboxes.contains(project) ? .mailbox : nil]
             return .decided(SortingDecision(project: project, level: .sure, reasons: reasons.compactMap { $0 }))
         }
-        if signals.listMail != nil, !signals.hasProjectPeople {
+        if ruled.isEmpty, signals.thread == nil, signals.listMail != nil, !signals.hasProjectPeople {
             return .decided(SortingDecision(project: nil, level: .setAside, reasons: [.listMail]))
         }
+        // When the user's settings name several projects, votes for other projects do not
+        // count.
+        func counts(_ project: UUID) -> Bool {
+            ruled.isEmpty || ruled.contains(project)
+        }
         var votes: [UUID] = []
-        if let thread = signals.thread {
+        if let thread = signals.thread, counts(thread) {
             votes.append(thread)
         }
-        if signals.peopleSeen.count > 1 {
-            return .open(.peopleInSeveralProjects)
+        let seen = signals.peopleSeen.keys.filter(counts)
+        if seen.count > 1 {
+            return .open(.peopleInSeveralProjects, among: ruled)
         }
-        if signals.peopleSeen.count == 1, let project = signals.peopleSeen.keys.first {
+        if let project = seen.first {
             votes.append(project)
         }
-        if signals.attachments.count == 1, let project = signals.attachments.first {
+        let attachments = signals.attachments.filter(counts)
+        if attachments.count == 1, let project = attachments.first {
             votes.append(project)
         }
-        if let project = wordsVote(signals) {
+        if let project = wordsVote(signals.words.filter { counts($0.key) }) {
             votes.append(project)
         }
         switch Set(votes).count {
         case 0:
-            return .open(.noSignal)
-        case 1 where signals.topCandidates.contains(votes[0]):
+            return .open(ruled.isEmpty ? .noSignal : .signalsDisagree, among: ruled)
+        case 1:
+            // The model sees only the top candidates, so it could never agree with a vote
+            // outside them.
+            guard signals.topCandidates.contains(votes[0]) else {
+                return .decided(unsure([.signalsDisagree]))
+            }
             return .likely(votes[0])
         default:
-            return .open(.signalsDisagree)
+            return .open(.signalsDisagree, among: ruled)
         }
+    }
+
+    /// The projects named by the most exact kind of the user's own settings that matches: a
+    /// rule or a linked mailbox, then a person, then a domain. Empty when none matches.
+    private static func userSettings(_ signals: SortingSignals) -> Set<UUID> {
+        let rules = signals.rules.filter { $0.value == .rule }.keys
+        let tiers: [Set<UUID>] = [
+            Set(rules).union(signals.mailboxes),
+            Set(signals.rules.filter { $0.value == .person }.keys),
+            Set(signals.rules.filter { $0.value == .domain }.keys),
+        ]
+        return tiers.first { !$0.isEmpty } ?? []
     }
 
     /// The project whose words the email holds, when no other project's words come within
     /// two of it.
-    private static func wordsVote(_ signals: SortingSignals) -> UUID? {
-        let counts = signals.words.map { (project: $0.key, count: $0.value.count) }
+    private static func wordsVote(_ words: [UUID: [String]]) -> UUID? {
+        let counts = words.map { (project: $0.key, count: $0.value.count) }
             .sorted { $0.count > $1.count }
         guard let best = counts.first else { return nil }
         if counts.count == 1 || best.count >= counts[1].count + 2 {

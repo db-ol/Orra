@@ -2,20 +2,6 @@ import Testing
 @testable import Orra
 
 struct ListMailTests {
-    @Test func readsTheHeadersWhateverTheCaseOfTheirNames() {
-        let list = ListMail(headers: [
-            (name: "Subject", value: "Weekly notes"),
-            (name: "list-id", value: "Paper Lantern Weekly <weekly.paperlantern.example>"),
-            (name: "LIST-UNSUBSCRIBE", value: "<mailto:leave@paperlantern.example>"),
-            (name: "Precedence", value: "bulk"),
-            (name: "List-Id", value: "<second.paperlantern.example>"),
-        ])
-        #expect(list.listID == "Paper Lantern Weekly <weekly.paperlantern.example>")
-        #expect(list.listUnsubscribe == "<mailto:leave@paperlantern.example>")
-        #expect(list.precedence == "bulk")
-        #expect(list.listIdentifier == "weekly.paperlantern.example")
-    }
-
     @Test func emptyHeadersCountAsNone() {
         let list = ListMail(listID: "  ", listUnsubscribe: "", precedence: nil)
         #expect(list == ListMail())
@@ -74,6 +60,8 @@ struct ListMailTests {
         "点击这里取消订阅。",
         "本邮件由系统自动发送，请勿直接回复。",
         "此邮件为系统自动生成。",
+        "Don't reply to this email.",
+        "This email was sent automatically by the booking system.",
     ])
     func footerWordingIsASign(_ text: String) {
         #expect(ListMail.hasUnsubscribeText(text))
@@ -85,8 +73,21 @@ struct ListMailTests {
         "I subscribed to the print shop's samples last week.",
         "请尽快回复，周五前要定稿。",
         "订阅的杂志到了。",
+        "Please do not reply-all to this thread.",
+        "I unsubscribed from their newsletter last week.",
+        "This is not an automated message, I wrote it myself.",
+        "请勿回复全部，只回我就行。",
+        "此邮件并非自动发送。",
     ])
     func ordinaryWordingIsNoSign(_ text: String) {
         #expect(!ListMail.hasUnsubscribeText(text))
+    }
+
+    @Test func onlyTheFirstAndTheLastLinesCount() {
+        let lines = (1...20).map { "Line \($0) of the letter." }
+        #expect(ListMail.hasUnsubscribeText((["View in browser | Unsubscribe"] + lines).joined(separator: "\n")))
+        #expect(ListMail.hasUnsubscribeText((lines + ["", "Unsubscribe from these emails."]).joined(separator: "\n")))
+        let middle = lines.prefix(5) + ["Please unsubscribe me from the old list."] + lines.suffix(12)
+        #expect(!ListMail.hasUnsubscribeText(middle.joined(separator: "\n")))
     }
 }

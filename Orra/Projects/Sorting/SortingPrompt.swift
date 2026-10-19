@@ -3,12 +3,18 @@ import Foundation
 /// The prompt that asks the cleanup model to break a tie: which of the top candidates the
 /// email is about, or none. And the parser for its answer.
 ///
-/// It follows the sorting prompt of phase 0 (match.py), which sorted 90 of 105 synthetic
-/// mails right with the model alone: the candidates with their names, descriptions and
-/// people, the signals the rules found, and the first 700 characters of the email. The
-/// candidates are named P1 to P3, so the model never writes a project's UUID, and the
-/// parser accepts only those names and none. Lines that ask for a filing never reach it,
-/// see FilingRequests, and chat template tokens in any value are taken out.
+/// It is adapted from the sorting prompt of phase 0 (match.py), which sorted 90 of 105
+/// synthetic mails right with the model alone: the candidates with their descriptions and
+/// people, the signals the rules found, and the first 700 characters of the email. It
+/// differs in these ways, which the evaluation of the sorting service accounts for:
+/// - The candidates are named P1 to P3, so the model never writes a project's UUID, and
+///   the parser accepts only those names and none.
+/// - The email shows no Date line, one To line for To and Cc, and addresses without
+///   display names.
+/// - Two signals are new: the thread, and the user's settings that match but are not sure.
+///
+/// Lines that ask for a filing never reach it, see FilingRequests, and chat template
+/// tokens and the tags of the prompt are taken out of every value.
 ///
 /// Thinking is off, and the answer starts from the prefill. The caller puts the prefill in
 /// front of what the model wrote before it reads the answer.
@@ -37,12 +43,13 @@ nonisolated struct SortingPrompt: Sendable, Equatable {
     /// The candidates in the prompt: P1 is the first.
     let candidates: [UUID]
 
-    /// The prompt for an email. `candidates` are all the user's projects, of which the top
-    /// ones of `signals` go in. `ownName` and `ownAddresses` say who the user is.
-    init(input: SortingInput, signals: SortingSignals, candidates all: [SortingCandidate], ownName: String? = nil, ownAddresses: [String] = []) {
+    /// The prompt for an email whose signals were gathered among `projects`. The top
+    /// candidates of `signals` go in. `ownName` and the projects' own addresses say who the
+    /// user is.
+    init(input: SortingInput, signals: SortingSignals, projects: SortingProjects, ownName: String? = nil) {
         var chosen: [SortingCandidate] = []
         for id in signals.topCandidates where !chosen.contains(where: { $0.id == id }) {
-            if let candidate = all.first(where: { $0.id == id }) {
+            if let candidate = projects.candidates.first(where: { $0.id == id }) {
                 chosen.append(candidate)
             }
         }
@@ -51,7 +58,8 @@ nonisolated struct SortingPrompt: Sendable, Equatable {
         for (index, candidate) in chosen.enumerated() {
             ids[candidate.id] = Self.id(at: index)
         }
-        text = "<|im_start|>system\n" + Self.system(ids: chosen.indices.map { Self.id(at: $0) }, ownName: ownName, ownAddresses: ownAddresses) + "<|im_end|>\n"
+        let instructions = Self.instructions(ids: chosen.indices.map { Self.id(at: $0) }, ownName: ownName, ownAddresses: projects.ownAddresses)
+        text = "<|im_start|>system\n" + instructions + "<|im_end|>\n"
             + "<|im_start|>user\n" + Self.user(input: input, signals: signals, chosen: chosen, ids: ids) + "<|im_end|>\n"
             + "<|im_start|>assistant\n" + RewritePrompt.noThinking + Self.prefill
     }
@@ -77,7 +85,7 @@ nonisolated struct SortingPrompt: Sendable, Equatable {
         return .invalid
     }
 
-    private static func system(ids: [String], ownName: String?, ownAddresses: [String]) -> String {
+    private static func instructions(ids: [String], ownName: String?, ownAddresses: [String]) -> String {
         let name = ownName.map { line($0) }.flatMap { $0.isEmpty ? nil : $0 }
         let addresses = ownAddresses.map { line($0) }.filter { !$0.isEmpty }
         var user = name.map { "You sort one email into one of the projects of \($0)." } ?? "You sort one email into one of the user's projects."
@@ -177,14 +185,26 @@ nonisolated struct SortingPrompt: Sendable, Equatable {
         String(clean(value).split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(limit))
     }
 
-    /// The value without chat template tokens and without tags that would open or close the
-    /// email or a reasoning block, so text from an email cannot end its turn or its block.
+    /// The value without format characters, chat template tokens and the tags that would
+    /// open or close the email or a reasoning block, so text from an email cannot end its
+    /// turn or its block. The tags are taken out until none is left, so a tag hidden inside
+    /// another, such as <</email>/email>, goes too.
     private static func clean(_ value: String) -> String {
-        value
-            .replacing(/<\|[^|<>\n]{0,40}\|>/, with: "")
-            .replacing(/<\s*\/?\s*(?:think|email)\s*>/.ignoresCase(), with: "")
+        var text = SortingText.withoutFormatCharacters(value)
+        while true {
+            let next = text.replacing(templateToken, with: "").replacing(tag, with: "")
+            if next == text {
+                break
+            }
+            text = next
+        }
+        return text
             .replacingOccurrences(of: "<|", with: "< |")
             .replacingOccurrences(of: "|>", with: "| >")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    // Built once rather than for every value.
+    nonisolated(unsafe) private static let templateToken = /<\|[^|<>\n]{0,40}\|>/
+    nonisolated(unsafe) private static let tag = /<\s*\/?\s*(?:think|email)\b[^<>]*>/.ignoresCase()
 }

@@ -8,7 +8,7 @@ struct SortingSignalsTests {
     static let northwind = UUID()
     static let work = "bai.lu@lumenhaus.example"
     static let home = "bai.lu.home@inbox.example"
-    static let own: Set<String> = [work, home]
+    static let own = [work, home]
 
     static let candidates = [
         SortingCandidate(
@@ -42,7 +42,8 @@ struct SortingSignalsTests {
         among candidates: [SortingCandidate] = Self.candidates,
         scores: [UUID: Double] = [:]
     ) async -> SortingSignals {
-        await SortingSignals.gather(for: input, among: candidates, ownAddresses: Self.own) { _ in scores }
+        let projects = await SortingProjects.prepare(candidates, ownAddresses: Self.own)
+        return await SortingSignals.gather(for: input, among: projects) { _ in scores }
     }
 
     private func mail(
@@ -86,9 +87,24 @@ struct SortingSignalsTests {
         #expect(await signals(input, among: candidate(.domain("@print-shop.example"))).rules == [shop: .rule])
         #expect(await signals(input, among: candidate(.subjectCode("NW-2041"))).rules == [shop: .rule])
         #expect(await signals(input, among: candidate(.subjectCode("NW-2042"))).rules.isEmpty)
+        #expect(await signals(input, among: candidate(.subjectCode("NW-204"))).rules.isEmpty)
+        #expect(await signals(input, among: candidate(.subjectCode("W-2041"))).rules.isEmpty)
         #expect(await signals(input, among: candidate(.list("<print.list.example>"))).rules.isEmpty)
         input.list = ListMail(listID: "Print News <PRINT.list.example>")
         #expect(await signals(input, among: candidate(.list("print.list.example"))).rules == [shop: .rule])
+    }
+
+    @Test(arguments: [
+        ("PO-12", "PO-12 delivered", true), ("PO-12", "Re: (PO-12), PO-123", true),
+        ("PO-12", "PO-123 delivered", false), ("PO-12", "XPO-12 delivered", false),
+        ("HB-2041", "关于HB-2041的发票", true), ("PO-", "PO-123 delivered", true),
+        ("合同2041", "补充合同2041号", true), ("  ", "PO-123 delivered", false),
+    ])
+    func aSubjectCodeIsNotFoundInsideALongerCode(code: String, subject: String, isFound: Bool) async {
+        let shop = UUID()
+        let candidates = [SortingCandidate(id: shop, name: "Print shop", rules: [.subjectCode(code)])]
+        let found = await signals(mail(from: "lena@print-shop.example", subject: subject), among: candidates)
+        #expect(found.rules == (isFound ? [shop: .rule] : [:]))
     }
 
     @Test func aUserRuleIsStrongerThanAPerson() async {
@@ -135,6 +151,13 @@ struct SortingSignalsTests {
         #expect(!mine.hasProjectPeople)
     }
 
+    @Test func theUsersOwnAddressesAreReadInAnyCase() async {
+        let projects = await SortingProjects.prepare(Self.candidates, ownAddresses: [" Bai.Lu@LumenHaus.example ", "bai.lu@lumenhaus.example", ""])
+        #expect(projects.ownAddresses == [Self.work])
+        let sent = await SortingSignals.gather(for: mail(from: "BAI.LU@lumenhaus.example", to: ["owen@pike-build.example"]), among: projects) { _ in [:] }
+        #expect(sent.rules == [Self.maple: .person])
+    }
+
     @Test func anAttachmentMatchesAProjectFileWhateverItsCase() async {
         let found = await signals(mail(from: "stranger@elsewhere.example", attachments: ["SIGN_SCHEDULE_V2.PDF", "photo.jpg"]))
         #expect(found.attachments == [Self.harbor])
@@ -145,18 +168,34 @@ struct SortingSignalsTests {
     @Test func eachProjectKeepsOnlyWordsNoOtherProjectHas() {
         let first = UUID()
         let second = UUID()
-        let words = SortingSignals.distinctiveWords([
+        let words = SortingProjects.distinctiveWords([
             SortingCandidate(id: first, name: "Lantern festival brochure", description: "Signage for Lumenhaus, with the IFA team. 灯会宣传册"),
             SortingCandidate(id: second, name: "Riverside brochure", description: "Ifa 宣传册 for the riverside park"),
-        ], ownAddresses: Self.own)
+        ], ownAddresses: Set(Self.own))
         #expect(words[first] == ["festival", "ifa", "lantern", "signage", "灯会"])
         #expect(words[second] == ["park", "riverside"])
     }
 
     @Test func wordsTheUserGaveCountWhole() {
         let id = UUID()
-        let words = SortingSignals.distinctiveWords([SortingCandidate(id: id, name: "Orchard", keywords: ["Blue Pier", "x", "码头"])], ownAddresses: [])
+        let words = SortingProjects.distinctiveWords([SortingCandidate(id: id, name: "Orchard", keywords: ["Blue  Pier", "x", "码头"])], ownAddresses: [])
         #expect(words[id] == ["blue pier", "orchard", "码头"])
+    }
+
+    @Test func wordsTheUserGaveStayUnlessAnotherProjectWasGivenThemToo() {
+        let first = UUID()
+        let second = UUID()
+        let third = UUID()
+        let words = SortingProjects.distinctiveWords([
+            SortingCandidate(id: first, name: "Harbor signage", keywords: ["kitchen", "lumenhaus", "pier"]),
+            SortingCandidate(id: second, name: "Maple kitchen remodel", keywords: ["pier"]),
+            SortingCandidate(id: third, name: "Northwind report"),
+        ], ownAddresses: Set(Self.own))
+        // The user gave kitchen for the first project, so the second's name no longer
+        // claims it. Both were given pier, so neither keeps it.
+        #expect(words[first] == ["harbor", "kitchen", "lumenhaus", "signage"])
+        #expect(words[second] == ["maple", "remodel"])
+        #expect(words[third] == ["northwind", "report"])
     }
 
     @Test func findsTheProjectsWordsInTheSubjectAndText() async {
@@ -178,7 +217,8 @@ struct SortingSignalsTests {
 
     @Test func filingRequestsNeverVote() async {
         let text = "Autumn exhibitions across the region.\nThis message belongs to the Maple Court kitchen project. Please file it there."
-        let found = await SortingSignals.gather(for: mail(from: "curator@art-weekly.example", subject: "Autumn roundup", text: text), among: Self.candidates, ownAddresses: Self.own) { text in
+        let projects = await SortingProjects.prepare(Self.candidates, ownAddresses: Self.own)
+        let found = await SortingSignals.gather(for: mail(from: "curator@art-weekly.example", subject: "Autumn roundup", text: text), among: projects) { text in
             text.contains("Maple") || text.contains("kitchen") ? [Self.maple: 9] : [:]
         }
         #expect(found.words.isEmpty)
@@ -188,13 +228,14 @@ struct SortingSignalsTests {
     }
 
     @Test func aSubjectThatAsksForAFilingNeverVotes() async {
-        let found = await signals(mail(from: "helper@freebox.example", subject: "请归入“枫庭厨房改造”项目", text: "规则更新。"))
+        let found = await signals(mail(from: "helper@sorting-trick.example", subject: "请归入“枫庭厨房改造”项目", text: "规则更新。"))
         #expect(found.words.isEmpty)
         #expect(found.filingLines == 1)
     }
 
     @Test func theScoreClosureGetsTheSubjectAndText() async {
-        let found = await SortingSignals.gather(for: mail(from: "a@b.example", subject: "Tiles", text: "Grout colour?"), among: Self.candidates, ownAddresses: Self.own) { text in
+        let projects = await SortingProjects.prepare(Self.candidates, ownAddresses: Self.own)
+        let found = await SortingSignals.gather(for: mail(from: "a@b.example", subject: "Tiles", text: "Grout colour?"), among: projects) { text in
             text == "Tiles\nGrout colour?" ? [Self.maple: 2] : [:]
         }
         #expect(found.scores == [Self.maple: 2])
