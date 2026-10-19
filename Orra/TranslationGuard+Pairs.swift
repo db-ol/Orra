@@ -550,43 +550,43 @@ nonisolated extension TranslationGuard {
 
     // MARK: Tables
 
-    /// RewriteGuard.openers with the Japanese and Spanish forms in the same groups, so a
+    /// RewriteGuard.openers with the Japanese and Spanish forms added to each group, so a
     /// translation that starts like its source passes.
-    static let pairOpeners: [[String]] = [
-        ["sure", "certainly", "of course", "no problem", "ok", "okay", "alright", "all right", "understood", "当然", "好的", "没问题", "もちろん", "かしこまりました", "承知しました", "承知いたしました", "了解", "わかりました", "分かりました", "claro", "por supuesto", "con gusto", "de acuerdo", "vale", "entendido"],
-        ["here is", "here's", "here are", "the following", "以下是", "以下は", "以下が", "aquí tienes", "aquí está", "a continuación"],
-        ["i'm sorry", "i am sorry", "sorry", "excuse me", "抱歉", "对不起", "很抱歉", "申し訳ありません", "申し訳ございません", "すみません", "ごめん", "lo siento", "perdón", "disculpa", "disculpe"],
-        ["i can't", "i cannot", "i can not", "i'm unable", "i am unable", "我无法", "我不能", "できません", "no puedo"],
-        ["hello", "hi", "hey", "good morning", "good afternoon", "good evening", "你好", "您好", "嗨", "こんにちは", "こんばんは", "おはよう", "hola", "buenas", "buenos días"],
-        ["great question", "好问题", "いい質問", "buena pregunta"],
-        ["as an ai", "as a", "as an", "作为一个", "作为ai", "作为人工智能", "作为一名", "aiとして", "como ia", "como modelo"],
-        ["ahoy", "arr"],
-    ]
+    static let pairOpeners: [[String]] = zip(RewriteGuard.openers, [
+        ["understood", "もちろん", "かしこまりました", "承知しました", "承知いたしました", "了解", "わかりました", "分かりました", "claro", "por supuesto", "con gusto", "de acuerdo", "vale", "entendido"],
+        ["以下は", "以下が", "aquí tienes", "aquí está", "a continuación"],
+        ["excuse me", "申し訳ありません", "申し訳ございません", "すみません", "ごめん", "lo siento", "perdón", "disculpa", "disculpe"],
+        ["できません", "no puedo"],
+        ["good morning", "good afternoon", "good evening", "こんにちは", "こんばんは", "おはよう", "hola", "buenas", "buenos días"],
+        ["いい質問", "buena pregunta"],
+        ["aiとして", "como ia", "como modelo"],
+        [],
+    ]).map(+)
 
     /// RewriteGuard.excuses with the Japanese and Spanish words that excuse a group, and a
     /// negation for "I can't", which Japanese and Spanish say in many ways.
-    static let pairExcuses: [String: [String]] = [
-        "sure": ["嗯", "哦", "呃", "额", "好", "um", "uh", "hmm", "mm", "yes", "got it", "はい", "ええ", "うん", "えーと", "えっと", "あの", "sí", "si", "eh", "em", "este", "bueno", "ok", "listo", "dale"],
-        "hello": ["嗯", "um", "uh", "えーと", "eh", "oye", "hey"],
+    static let pairExcuses: [String: [String]] = RewriteGuard.excuses.merging([
+        "sure": ["yes", "got it", "はい", "ええ", "うん", "えーと", "えっと", "あの", "sí", "si", "eh", "em", "este", "bueno", "ok", "listo", "dale"],
+        "hello": ["えーと", "eh", "oye", "hey"],
         "i can't": ["ない", "ません", "無理", "no", "can't", "cannot"],
         "as an ai": ["として", "como"],
-    ]
+    ], uniquingKeysWith: +)
 
-    /// RewriteGuard.anywhere with Japanese and Spanish forms.
-    static let pairAnywhere: [[String]] = [
-        ["as an ai", "作为一个ai", "作为一个人工智能", "作为人工智能", "aiとして", "como ia", "como una ia"],
-        ["language model", "语言模型", "言語モデル", "modelo de lenguaje"],
-        ["i'm an ai", "i am an ai", "我是一个ai", "我是一个人工智能", "我是人工智能", "私はai", "soy una ia"],
-        ["system prompt", "系统提示", "システムプロンプト", "prompt del sistema", "indicaciones del sistema"],
-        ["my instructions", "我的指令", "私の指示", "mis instrucciones"],
-        ["<transcript"], ["</transcript"], ["\"cleaned\""], ["\"translation\""], ["\"transcript\""],
-    ]
+    /// RewriteGuard.anywhere with Japanese and Spanish forms added to each group.
+    static let pairAnywhere: [[String]] = zip(RewriteGuard.anywhere, [
+        ["aiとして", "como ia", "como una ia"],
+        ["言語モデル", "modelo de lenguaje"],
+        ["私はai", "soy una ia"],
+        ["システムプロンプト", "prompt del sistema", "indicaciones del sistema"],
+        ["私の指示", "mis instrucciones"],
+        [], [], [], [], [],
+    ]).map(+)
 
     /// RewriteGuard.shortReplies with Japanese and Spanish ones.
     static let pairShortReplies: Set<String> = Set((RewriteGuard.shortReplies.union(["はい", "いいえ", "うん", "ええ", "了解", "了解です", "わかりました", "sí", "si", "vale", "claro", "hola", "de acuerdo", "listo"])).map(RewriteGuard.bare))
 
     /// `correctionCue` with Japanese and Spanish ones.
-    static let pairCorrectionCue = regex(#"不对|不是|我是说|说错了|应该是|删掉|算了|撤回|いや|じゃなくて|ではなく|間違えた|間違い|訂正|言い直|perd[oó]n|\bdigo\b|mejor dicho|quise decir|\bo sea\b|no,? espera|i mean|sorry|actually|scratch that|no wait|\bwait\b|never mind|rather"#, .caseInsensitive)
+    static let pairCorrectionCue = regex(correctionCue.pattern + #"|いや|じゃなくて|ではなく|間違えた|間違い|訂正|言い直|perd[oó]n|\bdigo\b|mejor dicho|quise decir|\bo sea\b|no,? espera"#, .caseInsensitive)
 
     /// Japanese and Spanish words of an instruction before a colon.
     static let pairInstruction = regex("翻訳|訳し|訳す|答え|返信|書いて|要約|言って|traduc|tradúc|contesta|responde|escribe|resume|dime", .caseInsensitive)
