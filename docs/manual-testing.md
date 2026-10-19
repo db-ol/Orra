@@ -1302,6 +1302,7 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
 
 - [ ] Talk Key in the menu shows the "Double Press for Hands Free" switch. Since the
   second change of 2026-10-10 the key itself is set in the recorder field, see below.
+  Since 2026-10-19 the switch is no longer in the menu, see Settings with six pages.
 - [ ] With left Command as the talk key, Command C, Command V and Command Tab work as
   before, play no sound and show no indicator. Holding left Command alone plays the sound
   after about 0.3 seconds, and the dictation works. Try left Control with a Control click
@@ -1331,7 +1332,8 @@ Left hand keys, choosing the key and hands free, added on 2026-10-10, not verifi
 - [ ] With Keyboard > Dictation > Shortcut set to "Press Control Key Twice", double press
   right Control. Note whether macOS Dictation starts as well.
 - [ ] Hands free stops at 5 minutes, pastes, and says why, see Long dictations below.
-- [ ] With "Double press for hands free" off, a double press does nothing.
+- [ ] With "Double press for hands free" off (since 2026-10-19 "Double press in Hold to
+  keep recording" under Keys), a double press does nothing.
 - [ ] In Chinese, the indicator says "按右侧 Control 键结束", and the welcome step and the
   Settings explanation read naturally.
 
@@ -1614,7 +1616,7 @@ choice. Put all of it back afterwards:
   "Once downloaded, everything runs on this Mac. What you say is never sent anywhere.", and
   the button Download Models (5.52 GB). There is no switch, no badge and no example.
 - [ ] On a Mac under 16 GB, step 1 is Download the speech model, with "Cleanup stays off on
-  this Mac because it has 8 GB of memory. You can turn it on later in Settings, General."
+  this Mac because it has 8 GB of memory. You can turn it on later in Settings, Dictation."
   (or its size) and the button Download Speech Model (2.47 GB). Clicking it fetches the
   speech model only, and Settings shows Clean Up Text off.
 - [ ] Nothing goes online before a click.
@@ -1648,7 +1650,8 @@ choice. Put all of it back afterwards:
   a button, and step 1 offers the download. The meeting row has a smaller line that says
   Live Captions and Speak Translations to Others are under Meeting Interpretation, in
   Settings and in the Orra menu, and that speaking translations needs Translation on.
-  Turn On in Settings… opens Settings on General and Set Up in Settings… opens it on
+  Turn On in Settings… opens Settings on Dictation for cleanup and on Translation for
+  translation (on General before 2026-10-19), and Set Up in Settings… opens it on
   Meeting Interpretation (since 2026-10-17), in front, also when Settings was open on
   another tab, and the welcome window stays open. Done still closes the window. Before
   the last step is done, the rows do not show. In 简体中文 the heading is "还可以试试" and
@@ -1737,7 +1740,7 @@ Recording indicator and sounds, added on 2026-10-07, not verified yet:
   off it shows "Microphone access is off". Dictating into a password field shows "Orra does
   not paste into password fields. Use Copy Last Dictation." Holding the key without
   speaking shows "No speech was recognized".
-- [ ] Under Dictation in Settings, General, setting the on screen hint to Off and turning
+- [ ] Under System in Settings, General, setting the on screen hint to Off and turning
   off "Play sounds when recording starts and stops" takes effect at the next hold, and both
   stay off after quitting and reopening Orra.
 
@@ -1826,7 +1829,7 @@ Vocabulary without the 100 word limit, added on 2026-10-10, not verified yet:
   200.
 
 Learning from corrections, added on 2026-10-08, not verified yet. Turn on Learn from my
-corrections under Dictation in Settings, General first:
+corrections under Recognition in Settings, Dictation first:
 
 - [ ] Dictate a sentence with a name Orra gets wrong into Notes and fix the name by hand: a
   second or two after you stop typing, a notice above the recording indicator says the
@@ -1885,7 +1888,7 @@ corrections on:
 - [ ] With cleanup on, the cleaned text and Paste Original Text both have Claude.
 
 Use names on screen, added on 2026-10-17, not verified yet. Turn on Use names on screen
-(Beta) under Dictation in Settings, General first:
+(Beta) under Recognition in Settings, Dictation first:
 
 - [ ] In Notes, write a few lines with an unusual name such as Quorvia or 甄若岚, put the
   cursor after them and dictate a sentence with the name: it is spelled as in the note.
@@ -1912,8 +1915,8 @@ Use names on screen, added on 2026-10-17, not verified yet. Turn on Use names on
   the log says the names came from another app.
 - [ ] With a note that holds Warrington, say Warrenton: note what comes out. This is the
   known risk the help text names.
-- [ ] Settings, General, Dictation shows the switch with its line, and its help text when
-  the pointer rests on it, in English and Chinese. Report a Problem lists the setting.
+- [ ] Settings, Dictation, Recognition shows the switch with its line, and its help text
+  when the pointer rests on it, in English and Chinese. Report a Problem lists the setting.
 
 App icon, added on 2026-10-07, not verified yet:
 
@@ -1955,7 +1958,7 @@ Filler removal, added on 2026-10-10, not verified yet:
   "呃，我明天下午要去趟医院" and "Um, I think we should push the launch". The pasted text
   has no 呃 and no Um, and the English sentence starts with a capital.
 - [ ] Dictate "好啊，那就这么定了" and a bare "嗯嗯". Both paste as said.
-- [ ] Turn the setting off in Settings, Clean Up Text, Options…: the same dictations keep their fillers.
+- [ ] Turn the setting off in Settings, Dictation, Clean Up Text: the same dictations keep their fillers.
   The choice stays after reopening Orra.
 
 Numbers as digits, added on 2026-10-10, not verified yet:
@@ -1964,7 +1967,7 @@ Numbers as digits, added on 2026-10-10, not verified yet:
   三五零" and "明天下午三点开会，预算三百五十块". The paste reads RX 350, 下午3点 and
   350块, with the space before 350 as the model wrote it.
 - [ ] Dictate "我们一起去，三五成群" and "我买了三本书". Both paste as said.
-- [ ] Turn the setting off in Settings, Clean Up Text, Options…: the numbers stay in Chinese characters.
+- [ ] Turn the setting off in Settings, Dictation, Clean Up Text: the numbers stay in Chinese characters.
   The choice stays after reopening Orra.
 
 Updates from inside the app, added on 2026-10-10, not verified yet:
@@ -2092,11 +2095,12 @@ Dictation language, added on 2026-10-18, not verified yet. Each check of a new u
 a first launch prepared as in Welcome window above, and also
 `defaults delete io.github.db-ol.Orra dictationLanguage`:
 
-- [ ] Settings, General, Dictation starts with Dictation language (听写语言), with the
+- [ ] Settings, Dictation starts with Dictation language (听写语言) under Language, with the
   choices 中文（普通话和粤语）+ English, 日本語 + English (Beta) and Español + English
   (Beta), the last two with （测试版） in Chinese. The line under it says "You can mix the
-  two languages in one sentence.", and for Japanese or Spanish also "Clean Up Text works on
-  English sentences only for now."
+  two languages in one sentence." For Japanese or Spanish, "Clean Up Text works on
+  English sentences only for now." shows under the cleanup switch below it (under the
+  language picker before 2026-10-19).
 - [ ] The welcome window shows Dictation language under Language with the same choices.
   Picking one there changes Settings at once, and
   `defaults read io.github.db-ol.Orra dictationLanguage` prints its name.
@@ -2126,11 +2130,11 @@ a first launch prepared as in Welcome window above, and also
 
 Cleanup with a local model, added on 2026-10-10, not verified yet:
 
-- [ ] Settings shows Clean Up Text off, and its Options… sheet shows "Clean up with a local
-  model" with its explanation. Turning the switch on asks "Download the cleanup model?" with Download (3.05 GB) and Cancel.
+- [ ] Settings shows Clean Up Text off. Since 2026-10-19 the switch "Clean up with a local
+  model" sits on Dictation with its explanation, where an Options… sheet showed it before. Turning the switch on asks "Download the cleanup model?" with Download (3.05 GB) and Cancel.
   Cancel leaves the switch off and nothing is downloaded.
-- [ ] Download shows the progress with the server in the Options… sheet, and one line with
-  the percentage under Clean Up Text on the page. Cancel Download
+- [ ] Download shows the progress with the server in the status row under the switch
+  (in the Options… sheet before 2026-10-19). Cancel Download
   stops it and turns the switch off. Turning it on again offers Resume Download with what
   is left.
 - [ ] After the download, "Loading the cleanup model…" shows for a few seconds and then
@@ -2182,47 +2186,68 @@ Unloading the cleanup model when idle, added on 2026-10-12 and for translation o
 
 Settings with a sidebar, added on 2026-10-12 as pages, changed to one page with sheets on
 2026-10-13, then to a sidebar with General, Vocabulary and About the same day, and then with
-the settings of Advanced… moved onto General, not verified yet. Rendered to PNG by the opt
-in test in SettingsPageTests, in English and in Chinese, but not seen in the running app:
+the settings of Advanced… moved onto General, and on 2026-10-19 to six pages, with
+Dictation and Translation on pages of their own and no sheet, not verified yet. Rendered
+to PNG by the opt in test in SettingsPageTests, in English, Chinese, Japanese and Spanish,
+but not seen in the running app:
 
-- [ ] Settings… opens on General (通用 in Chinese), with General, Meeting Interpretation,
-  Vocabulary and About (通用, 会议同传, 个人词库, 关于) in the sidebar and nothing else.
-  General shows five blocks with headers, in this order: Keys with the talk key and the
-  translation key, Features with Clean Up Text, its switch and Options…, then Translation
-  with its switch and Translate into right under it, Dictation (听写) with Double press
-  for hands free, the on screen hint, the sounds and Learn from my corrections with
-  Forget Learned Corrections, Microphone with the input device, and System with
-  Interface language (界面语言), Open at Login and Show Orra in the Dock. There is no
-  Advanced… button. The page scrolls when the window is short.
+- [ ] Settings… opens on General (通用 in Chinese), with General, Dictation, Translation,
+  Meeting Interpretation, Vocabulary and About (通用, 听写, 翻译, 会议同传, 个人词库, 关于) in
+  the sidebar and nothing else, each with its own icon and color. General shows three
+  blocks with headers, in this order: System with Interface language (界面语言), On screen
+  hint, Play sounds when recording starts and stops, Open at Login and Show Orra in the
+  Dock, then Microphone with the input device, then Keys with the talk key, Second key,
+  Talk key mode, the translation key, Translation key mode and, only while a key is in
+  Hold, Double press in Hold to keep recording (“按住”用法下，连按两下可松手继续录音).
+  There is no Advanced… button, no Features block and no Options… button. The page
+  scrolls when the window is short.
+- [ ] Dictation (听写) shows three blocks: Language with Dictation language, Clean Up Text
+  (整理文字) with "Clean up with a local model", its explanation, the filler and number
+  rules and the footer about the rules, and Recognition (识别) with Learn from my
+  corrections, Forget Learned Corrections while there are learned ones, and Use names on
+  screen (Beta).
+- [ ] Translation (翻译) shows the Translation switch with Translate into right under it,
+  and a footer that says what the model needs and that Live Captions on the Meeting
+  Interpretation page translate the same way.
+- [ ] Keys with the talk key in Press to start and stop or Double press and Translation
+  off has no hands free row. Setting the talk key to Hold, or turning Translation on with
+  its key in Hold, shows the row right after the mode pickers, with its switch as it was.
+  The Talk Key menu has no Double Press for Hands Free item.
 - [ ] The sidebar cannot be hidden. Dragging the divider to the left edge leaves it at its
   narrowest width, there is no sidebar button in the toolbar, and View > Hide Sidebar
   (Control Command S), where it shows, keeps it in place.
 - [ ] The talk key field and Change… work as before. The microphone picker works as it did
   on the Microphone page, also with a chosen microphone that is not connected, and its
   tooltip explains the system default.
-- [ ] Turning Clean Up Text on asks before the download. Options… opens a sheet with the
-  explanation, the progress, Cancel Download, Resume Download, loading and Try Again under
-  Local model, then the filler and number rules under Rules. Done closes it.
+- [ ] Turning "Clean up with a local model" on asks before the download. While it is on and
+  the model is not ready, a row under it shows the progress with Cancel Download, or
+  Download, Resume Download, loading and Try Again. With Translation on as well, the
+  Translation page shows its own row under Translate into.
 - [ ] Vocabulary shows the field, focused, and the table over the full height of the
   window. Type a word and press Return: the word is added, and the field is empty and
   focused again.
 - [ ] Pointing at the talk key field shows how to hold the key and the recommended keys.
-- [ ] The Options… sheet of Clean Up Text opens inside the window and never hangs below
-  its bottom edge, at the window's first size and after making the window as short as it
-  goes. It scrolls when more than fits, and it can be made larger.
-- [ ] Each row of Dictation and System shows one short line under its name at most.
-  Pointing at Double press for hands free, the on screen hint, Learn from my corrections
-  and Interface language shows the rest of what they do in a tooltip. The line under
-  Learn from my corrections says that Orra reads the field you dictated into for 3
-  minutes after a paste, without pointing at it. Choosing another interface language
-  brings up Restart Orra under the picker.
+- [ ] Each row of System, Keys, Dictation and Translation shows one short line under its
+  name at most, except the cleanup switch, which keeps the explanation the Options… sheet
+  had. Pointing at Double press in Hold to keep recording, the on screen hint, Learn from
+  my corrections and Interface language shows the rest of what they do in a tooltip. The
+  line under Learn from my corrections says that Orra reads the field you dictated into
+  for 3 minutes after a paste, without pointing at it. Choosing another interface
+  language brings up Restart Orra under the picker.
 - [ ] About shows the version, the speech model status, Updates with Check for updates
   automatically and Check for Updates…, and the privacy text with its link. Run from
   Xcode, the line under the version says "Development build, updates are off" and the
   update switch and button are off. In a release build both work.
-- [ ] Change Talk Key… in the menu opens Settings on General, from a closed window, from
-  one open on another tab, and from one open with a sheet, which closes. Settings…
-  afterwards opens General alone.
+- [ ] Change Talk Key… and Change Translation Key… in the menu open Settings on General
+  scrolled down to Keys, with the Keys header in view at the window's first size, from a
+  closed window, from one open on another page, and from one open on General at the top.
+  Settings… afterwards opens a closed window on General at the top.
+- [ ] Turn On in Settings… in the welcome window's Try next opens Dictation for cleanup and
+  Translation for translation. The line under the welcome window's dictation language
+  reads "You can change this later in Settings, under Dictation."
+- [ ] After an update, the talk key's mode and the dictation language stay as they were.
+  `defaults read io.github.db-ol.Orra talkKeyMode` and `dictationLanguage` print values
+  after the first launch of a new install too.
 - [ ] The on screen hint offers Always, Only while dictating and Off (始终显示, 仅在听写时显示,
   不显示). Always shows the indicator and the idle bar, Only while dictating only the
   indicator, Off neither, and the menu bar icon then shows listening and transcribing.
@@ -2238,16 +2263,17 @@ Meeting Interpretation page in Settings, added on 2026-10-17, not verified yet. 
 PNG by the opt in test in SettingsPageTests, in English and in Chinese, but not seen in the
 running app:
 
-- [ ] The sidebar shows Meeting Interpretation (会议同传) between General and Vocabulary,
+- [ ] The sidebar shows Meeting Interpretation (会议同传) between Translation and Vocabulary
+  (between General and Vocabulary before 2026-10-19),
   with a white captions bubble on orange. At the sidebar's first width the English name
   fits on one line or wraps to two, and is never cut off. Its page is titled Meeting
   Interpretation and shows the intro, then Live captions and Captions show in one block,
   then Speak translations to others with all its options in a second block, with the
   note about recording your own voice under it. General has no Meeting Interpretation
-  section and goes from Features to Dictation.
+  section.
 - [ ] With Translation off, Speak translations to others is disabled with "Turn on
-  Translation in General to use this." (在“通用”里打开“翻译”后才能使用。) under it. Turning
-  Translation on in General and coming back enables it.
+  Translation on the Translation page to use this." (在“翻译”页面打开“翻译”后才能使用。)
+  under it. Turning Translation on on the Translation page and coming back enables it.
 - [ ] Every control works as it did on General: Live captions and the menu item show the
   same state, Captions show changes with the picker in the caption window, Speak into
   lists Orra Microphone and a device connected while the page shows, and Record… opens
@@ -2257,16 +2283,15 @@ running app:
   Interpretation, from a closed window and from one open on another page. Settings…
   afterwards opens General.
 
-Translation key, added on 2026-10-13, not verified yet. The translation rows on General and
-the badge were rendered to PNG by the opt in tests, in English and in Chinese, but not seen
+Translation key, added on 2026-10-13, not verified yet. The translation rows (on General
+until 2026-10-19, on the Translation page since) and the badge were rendered to PNG by the opt in tests, in English and in Chinese, but not seen
 in the running app:
 
-- [ ] Settings, General shows Translation (翻译) after Clean Up Text under Features, with
-  its switch off, and Translate into (翻译成) right under it with Automatic, English and
-  Chinese as choices and the explanation of the chosen one, dimmed while translation is
-  off. The footer says what the model needs. Under Keys the translation key field is
-  dimmed with "Turn on Translation under Features to use this key." until translation is
-  on. Pointing at the Translation switch shows the length limit, Paste Original Text
+- [ ] Settings, Translation shows the Translation (翻译) switch, off, and Translate into
+  (翻译成) right under it with Automatic, English and Chinese as choices and the
+  explanation of the chosen one, dimmed while translation is off. The footer says what
+  the model needs. Under Keys on General the translation key field is dimmed with "Turn
+  on Translation on the Translation page to use this key." until translation is on. Pointing at the Translation switch shows the length limit, Paste Original Text
   and that Orra never learns from a translated paste. Pointing at the translation key
   field shows which keys can be the translation key, that the two keys
   swap, that a press counts only after a moment, and since 2026-10-16 that fn and the
@@ -2275,9 +2300,8 @@ in the running app:
   on at once, and with cleanup on and the model downloading it turns on without asking.
 - [ ] While translation is on and the model is not ready, a row under Translate into,
   lined up with the names above it, shows the progress with Cancel Download, or Download,
-  Resume Download, loading and Try Again, also while cleanup is off. With Clean Up Text
-  on as well, this row is the only status in the block, and no line shows under Clean Up
-  Text.
+  Resume Download, loading and Try Again, also while cleanup is off. With cleanup on as
+  well, the Dictation page shows its own row under the cleanup switch.
 - [ ] With translation on and cleanup off, the model loads ("Loading the local model…")
   and the menu says "Hold right Option to translate" under the hold hint. Cleanup stays
   off: the talk key pastes the text as the rules leave it.
@@ -2344,8 +2368,9 @@ modifiers with a regular key, such as ⇧ ⌘ D:
 - [ ] Double press with fn: a single press or a hold does nothing and plays no sound, two
   quick presses start a hands free dictation, one more press pastes. The "Press fn key
   to" action in Keyboard settings does not fire.
-- [ ] With both keys in Press to start and stop or Double press, Double press for hands
-  free is dimmed in Settings and in the menu. Back in Hold it works again.
+- [ ] With both keys in Press to start and stop or Double press, Keys in Settings has no
+  hands free row (dimmed, with a menu item, before 2026-10-19). Back in Hold the row shows
+  and works again.
 - [ ] Recording ⌃ ⌥: click the talk key field, hold Control, press Option, let go: the
   field shows ⌃ ⌥. Holding Control and Option records, letting go of either pastes.
   Control Option Space or an arrow during the hold cancels and reaches the app in front.
@@ -2435,9 +2460,9 @@ the same way. Put them back afterwards:
   them uses full width punctuation, and nothing is cut off. Switching the language at the
   top of the window switches them at once.
 - [ ] Settings, General, with the talk key in Press to start and stop and translation off:
-  Double press for hands free is dimmed and says "Press a key in Hold mode twice quickly
-  to keep recording after you let go." With translation on and its key in Hold, the
-  switch works again. The talk key's help reads "Use the talk key on its own…", and
+  Keys has no hands free row (it was dimmed before 2026-10-19). With translation on and
+  its key in Hold, Double press in Hold to keep recording shows with "Press a key in Hold
+  mode twice quickly to keep recording after you let go." under it, and works. The talk key's help reads "Use the talk key on its own…", and
   "Hold the talk key on its own…" in Hold.
 - [ ] A new user who turns on Translation finds the translation key in Hold, and holding
   it translates as before.
