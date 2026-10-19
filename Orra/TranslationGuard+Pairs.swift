@@ -59,7 +59,10 @@ nonisolated extension TranslationGuard {
             return .addedMarkup
         }
 
-        let added = newPairNumbers(source: source, output: output, target: route.target)
+        // A correction can make the translation much shorter than the source, and change
+        // a long number.
+        let corrects = matches(pairCorrectionCue, source)
+        let added = newPairNumbers(source: source, output: output, target: route.target, corrects: corrects)
         if !added.isEmpty {
             return .newNumber(added)
         }
@@ -67,12 +70,10 @@ nonisolated extension TranslationGuard {
         if outputUnits > max(sourceUnits * longest, sourceUnits + 8) {
             return .tooLong(output: outputUnits, source: sourceUnits)
         }
-        if sourceUnits >= 6, outputUnits < sourceUnits * shortest(route), !matches(pairCorrectionCue, source) {
+        if sourceUnits >= 6, outputUnits < sourceUnits * shortest(route), !corrects {
             return .tooShort(output: outputUnits, source: sourceUnits)
         }
 
-        let han = RewriteGuard.han(output).count
-        let kana = kanaCount(output)
         switch route.target {
         case .english:
             if let failure = checkEnglish(source: source, output: output, language: route.language) {
@@ -80,6 +81,8 @@ nonisolated extension TranslationGuard {
             }
         case .japanese:
             let letters = RewriteGuard.count(output, where: RewriteGuard.isLatinLetter)
+            let han = RewriteGuard.han(output).count
+            let kana = kanaCount(output)
             let script = letters + han + kana
             if script > 0, Double(letters) / Double(script) > 0.6, han + kana < 2 {
                 return .notJapanese
@@ -96,13 +99,14 @@ nonisolated extension TranslationGuard {
                 return .newLatinWords(newWords)
             }
         case .spanish:
-            if isEnglishLeft(output: output) {
+            let words = TranslationDirection.latinWords(output)
+            if isEnglishLeft(output: output, words: words) {
                 return .notSpanish
             }
             if hasRunsLeft(hanRun, source: source, output: output) {
                 return .hanInSpanish
             }
-            let foreign = Set(lowercaseWords(output).flatMap { $0.unicodeScalars.filter(isForeignAccent) }).subtracting(source.unicodeScalars)
+            let foreign = Set(lowercaseWords(words).flatMap { $0.unicodeScalars.filter(isForeignAccent) }).subtracting(source.unicodeScalars)
             if !foreign.isEmpty {
                 return .foreignLatin
             }
@@ -147,10 +151,11 @@ nonisolated extension TranslationGuard {
         }
         // Names keep their accents, such as Chișinău or Fernández, so only a word in
         // lowercase with an accent the source lacks is another language.
-        if lowercaseWords(output).contains(where: { matches(accent, $0) }), !matches(accent, source) {
+        let words = TranslationDirection.latinWords(output)
+        if lowercaseWords(words).contains(where: { matches(accent, $0) }), !matches(accent, source) {
             return .accentedLatin
         }
-        if language == .spanish, isSpanishLeft(output) {
+        if language == .spanish, isSpanishLeft(output, words: words) {
             return .notEnglish
         }
         return nil
@@ -161,12 +166,12 @@ nonisolated extension TranslationGuard {
     /// Spanish left in an English translation: ¿ or ¡, or at least two Spanish function
     /// words and as many as English ones, or for 20 letters and more a text with more
     /// Spanish than English words that NLLanguageRecognizer finds Spanish rather than
-    /// English.
-    static func isSpanishLeft(_ output: String) -> Bool {
+    /// English. `words` are the output's, see TranslationDirection.latinWords.
+    static func isSpanishLeft(_ output: String, words: [String]) -> Bool {
         if output.contains("¿") || output.contains("¡") {
             return true
         }
-        let counts = TranslationDirection.SpanishCounts(output)
+        let counts = TranslationDirection.SpanishCounts(output, words: words)
         if counts.spanish >= 4, counts.spanish >= counts.english {
             return true
         }
@@ -175,9 +180,10 @@ nonisolated extension TranslationGuard {
 
     /// English left in a Spanish translation: at least two English function words and
     /// more than the Spanish ones, or for 20 letters and more a text with more English than
-    /// Spanish words that NLLanguageRecognizer finds English rather than Spanish.
-    static func isEnglishLeft(output: String) -> Bool {
-        let counts = TranslationDirection.SpanishCounts(output)
+    /// Spanish words that NLLanguageRecognizer finds English rather than Spanish. `words`
+    /// are the output's, see TranslationDirection.latinWords.
+    static func isEnglishLeft(output: String, words: [String]) -> Bool {
+        let counts = TranslationDirection.SpanishCounts(output, words: words)
         if counts.english >= 4, counts.english > counts.spanish {
             return true
         }
@@ -292,9 +298,10 @@ nonisolated extension TranslationGuard {
         "NATO": ["OTAN"], "OTAN": ["NATO"],
     ]
 
-    /// The words of Latin letters that start in lowercase, which names do not.
-    private static func lowercaseWords(_ text: String) -> [String] {
-        TranslationDirection.latinWords(text).filter { $0.first?.isLowercase == true }
+    /// The words of Latin letters that start in lowercase, which names do not, of those
+    /// TranslationDirection.latinWords found.
+    private static func lowercaseWords(_ words: [String]) -> [String] {
+        words.filter { $0.first?.isLowercase == true }
     }
 
     // MARK: Numbers
@@ -302,22 +309,20 @@ nonisolated extension TranslationGuard {
     /// The numbers of the output that no value of the source explains, as `newNumbers`
     /// finds them, with the numbers of the pair. Into Spanish each number of the output may
     /// be read with a comma or a point for thousands, and passes when either reading is
-    /// explained.
-    static func newPairNumbers(source: String, output: String, target: TranslationTarget) -> [String] {
+    /// explained. `corrects` says whether the source has a correction cue, see
+    /// `pairCorrectionCue`.
+    static func newPairNumbers(source: String, output: String, target: TranslationTarget, corrects: Bool) -> [String] {
         let have = pairSourceValues(source)
-        let exact = !matches(pairCorrectionCue, source)
         // The minutes of a full hour, as in 12:00, bring no number.
-        let output = output.replacingOccurrences(of: ":00", with: "")
-        var text = removingThousandsSeparators(asciiDigits(output))
-        text = replacing(tenThousandsAndThousands, in: text) { groups in thousands(groups[1] + groups[2]) }
-        text = replacing(tenThousandsAndDigit, in: text) { groups in thousands(groups[1] + groups[2]) }
+        let folded = asciiDigits(output.replacingOccurrences(of: ":00", with: ""))
         var added: [String] = []
-        let tokens = target == .spanish ? all(spanishNumber, in: asciiDigits(output)) : all(decimal, in: text)
+        let tokens = target == .spanish ? all(spanishNumber, in: folded) : all(decimal, in: joinedNumbers(folded))
         for number in tokens {
             let readings = target == .spanish ? spanishReadings(number) : Double(number).map { [$0] } ?? []
             let explained = readings.contains { value in
-                // Seven digits or more before the point have to match exactly.
-                let long = exact && abs(value) >= 1e6
+                // Seven digits or more before the point have to match exactly, unless the
+                // source corrects itself.
+                let long = !corrects && abs(value) >= 1e6
                 return have.contains(where: { long ? abs(value - $0) < 0.001 : abs(value - $0) < 1e-6 * max(1, abs($0)) })
             }
             if !explained {

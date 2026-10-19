@@ -136,7 +136,12 @@ nonisolated extension TranslationDirection {
         var english = 0.0
 
         init(_ text: String) {
-            for word in TranslationDirection.latinWords(text) {
+            self.init(text, words: TranslationDirection.latinWords(text))
+        }
+
+        /// The same for text whose words `latinWords` found already.
+        init(_ text: String, words: [String]) {
+            for word in words {
                 let letters = word.filter(\.isLetter)
                 if letters.count >= 2, letters == letters.uppercased() {
                     continue
