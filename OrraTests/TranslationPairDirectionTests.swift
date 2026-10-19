@@ -123,14 +123,23 @@ struct TranslationPairDirectionTests {
         #expect(TranslationDirection.SpanishCounts("I don't know").english == 4)
     }
 
-    /// The Chinese rule is the one it always was: the functions without a dictation
-    /// language and those for Chinese give the same target for every labelled text.
+    /// The Chinese rule is the one it always was: Automatic sends what sourceLanguage(of:)
+    /// finds Chinese to English and the rest to Chinese, a fixed choice gives its target,
+    /// and text without a Han character or a Latin letter, kana only Japanese among it,
+    /// gets none.
     @Test func chineseKeepsItsRule() {
-        let texts = Self.japanese.map(\.0) + Self.spanish.map(\.0) + ["我们下周二开会。", "We meet next Tuesday.", "这个 PR 你帮我 review 一下。"]
-        for direction in TranslationDirection.choices(for: .chinese) {
-            for text in texts {
-                #expect(direction.target(for: text, in: .chinese) == direction.target(for: text), "\(direction) \(text)")
-            }
+        let fixed: [(String, TranslationTarget?)] = [
+            ("我们下周二开会。", .english), ("We meet next Tuesday.", .chinese), ("这个 PR 你帮我 review 一下。", .english),
+            ("Send it to 王小明.", .chinese), ("ありがとう", nil), ("123", nil), ("Hola a todos", .chinese),
+        ]
+        for (text, target) in fixed {
+            #expect(TranslationDirection.automatic.target(for: text, in: .chinese) == target, "\(text)")
+            #expect(TranslationDirection.english.target(for: text, in: .chinese) == target.map { _ in .english }, "\(text)")
+            #expect(TranslationDirection.chinese.target(for: text, in: .chinese) == target.map { _ in .chinese }, "\(text)")
+        }
+        for text in Self.japanese.map(\.0) + Self.spanish.map(\.0) {
+            let expected = TranslationDirection.sourceLanguage(of: text).map { $0 == .chinese ? TranslationTarget.english : .chinese }
+            #expect(TranslationDirection.automatic.target(for: text, in: .chinese) == expected, "\(text)")
         }
     }
 

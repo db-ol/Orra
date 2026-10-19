@@ -91,8 +91,8 @@ nonisolated extension TranslationDirection {
     /// ñ, and 2 for ¿ or ¡. E counts 2 for each English function word, leaving out a, no, me, he and has,
     /// which Spanish shares, and each word with an apostrophe inside, such as don't. A word
     /// in capitals only, such as LA or PR, counts for neither. The text is Spanish when
-    /// S > E + 1 and English when E > S + 1. A closer call, such as Perfecto or Sure, goes
-    /// to NLLanguageRecognizer, held to English and Spanish, and without an answer the text
+    /// S > E + 1 and English when E > S + 1. A closer call, such as Sure or Plan B, goes to
+    /// NLLanguageRecognizer, held to English and Spanish, and without an answer the text
     /// counts as Spanish, so it is translated into English. Nil without a letter.
     static func spanishSource(of text: String) -> Source? {
         let folded = text.precomposedStringWithCompatibilityMapping
