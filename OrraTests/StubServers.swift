@@ -185,6 +185,19 @@ struct RunLoopBox: @unchecked Sendable {
         CFRunLoopPerformBlock(loop, CFRunLoopMode.commonModes.rawValue, block)
         CFRunLoopWakeUp(loop)
     }
+
+    /// Runs `block` on the same run loop once `delay` has passed, from a timer of that run
+    /// loop. Not from DispatchQueue.global(): while the tests of a full run keep every
+    /// thread of the Swift concurrency pool busy at a higher QoS, GCD starts no thread for
+    /// that queue, so its blocks can wait longer than the request's idle timeout. The run
+    /// loop belongs to a thread of CFNetwork's own, com.apple.CFNetwork.CustomProtocols,
+    /// which GCD starts however busy the pool is.
+    func perform(after delay: Duration, _ block: @escaping @Sendable () -> Void) {
+        let timer = CFRunLoopTimerCreateWithHandler(nil, CFAbsoluteTimeGetCurrent() + delay / .seconds(1), 0, 0, 0) { _ in
+            block()
+        }
+        CFRunLoopAddTimer(loop, timer, .commonModes)
+    }
 }
 
 final class StubProtocol: URLProtocol, @unchecked Sendable {
@@ -230,7 +243,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
                 let again: @Sendable () -> Void = { [self] in
                     send(body, from: start, limit: limit, delay: delay, dropWhen: dropWhen, box: box)
                 }
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.01) { box.perform(again) }
+                box.perform(after: .milliseconds(10), again)
                 return
             }
             if limit < body.count {
@@ -246,8 +259,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
             send(body, from: end, limit: limit, delay: delay, dropWhen: dropWhen, box: box)
         }
         if delay > .zero {
-            let seconds = delay / .seconds(1)
-            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { box.perform(next) }
+            box.perform(after: delay, next)
         } else {
             box.perform(next)
         }
