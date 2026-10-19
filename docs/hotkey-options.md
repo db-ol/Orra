@@ -348,6 +348,47 @@ keyboards, such as the Logitech MX Keys, never send fn to the Mac. Implemented i
   IOServiceAddMatchingNotification and never opens a device, so it needs no permission
   and never sees a key. Which keyboard a key press came from is not asked.
 
+On 2026-10-19 the maintainer approved a shortcut that turns Live Captions on and off from
+any app, ⌃ ⌥ ⌘ C by default. It uses option 1 below. Implemented in
+`Orra/GlobalShortcut.swift`, `Orra/Hotkey.swift`, `Orra/PushToTalkController.swift`,
+`Orra/SettingsView.swift` and `Orra/AppDelegate.swift`:
+
+- The shortcut is a Carbon hot key, not a key of the tap. A toggle needs no hold logic,
+  and the tap runs on the main thread, where every key press on the Mac waits for it.
+  The hot key needs no permission. SDK: `RegisterEventHotKey` is not deprecated in the
+  macOS 27.0 SDK and is marked not thread safe, so Orra calls it on the main thread. It
+  registers without `kEventHotKeyExclusive`, so another app that registered the same
+  combination still gets its presses. The header describes that option two ways, around
+  lines 15410 to 15476 of CarbonEvents.h, so Orra does not use it to probe for other
+  apps either.
+- It can be a regular key with Control or Command, or a function key F1 to F20 alone or
+  with modifiers, which remapped keys and Stream Deck often send. Modifiers alone, Option
+  alone and Option with Shift are refused, since macOS 15 refuses the last two as hot
+  keys (reported), and so are Escape and the shortcuts of macOS that
+  `KeyCombination.isSystemShortcut` names. It is saved under `liveCaptionsShortcut`, as a
+  combination is saved, or as `none`.
+- The default's key code is the one that types C on the keyboard layout in use while
+  Command is down, so it reads C on Dvorak or AZERTY. It is saved at the first launch of
+  a version that has the shortcut, as None instead when the talk key or the translation
+  key is ⌃ ⌥ ⌘ C, whose C the tap swallows, or a combination of modifiers only within
+  ⌃ ⌥ ⌘, such as ⌃ ⌥, which records as soon as its modifiers are down. A key picked later
+  never clears it.
+- The shortcut and Orra's keys refuse each other and never swap. Settings warns, without
+  refusing, while a watched key is a combination of modifiers only, all of them in the
+  shortcut. The hot key is unregistered while any key is recorded in Settings, so its
+  press reaches the recorder.
+- A press while the shortcut is down counts only when the last one came 2.5 seconds or
+  more before, longer than the slowest key repeat Keyboard settings offer. So holding the
+  keys toggles captions once even if the system repeats hot key presses, which is not
+  tried yet.
+- The menu shows the shortcut as text after Live Captions, not as a key equivalent of
+  the item, which might toggle captions a second time while the menu is open.
+- Known limit: with right Control as the talk key, the default, pressing the shortcut
+  with right Control first starts a dictation, which the rest of the shortcut cancels as a
+  shortcut. Making right Control wait would slow the default talk key for everyone.
+- Not verified on hardware yet: key repeat, secure input, VoiceOver, whose keys are ⌃ ⌥,
+  and an app with its own menu shortcut on ⌃ ⌥ ⌘ C.
+
 ## What Orra needs
 
 - Press and release, not just press. `PushToTalkStateMachine` is driven by both.
