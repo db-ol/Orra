@@ -77,7 +77,7 @@ final class HoldingEngine {
     private(set) var prepared: [TranslationTarget] = []
     /// How many translations ran on a loaded model.
     private(set) var translations = 0
-    /// "load" and "unload" in the order they ran.
+    /// "load", "unload" and "clearCache" in the order they ran.
     private(set) var events: [String] = []
     private(set) var running = 0
     private(set) var mostRunning = 0
@@ -98,8 +98,13 @@ final class HoldingEngine {
             unload: { [self] in await unload() },
             complete: { [self] _ in await answer },
             translate: { [self] _, _ in try await translate() },
-            prepareTranslation: { [self] route in try await prepare(route.target) }
+            prepareTranslation: { [self] route in try await prepare(route.target) },
+            clearCache: { [self] in await clearCache() }
         )
+    }
+
+    private func clearCache() {
+        events.append("clearCache")
     }
 
     private func translate() throws -> String {
@@ -708,5 +713,175 @@ struct CleanupIdleUnloadTests {
         cleanup.dictationEnded()
         try await settle()
         #expect(clock.sleeping == 0)
+    }
+
+    // MARK: Projects
+
+    /// Cleanup and translation off unless asked, with or without the stand in model files,
+    /// started as at launch.
+    private func makeCleanupForProjects(isOn: Bool = false, installed: Bool = true) async throws -> TextCleanup {
+        if installed {
+            try temporary.writeAll(to: temporary.installed)
+        }
+        let cleanup = TextCleanup(
+            isOn: isOn,
+            save: { _ in },
+            models: ModelInstaller(
+                manifest: temporary.manifest,
+                folders: temporary.folders,
+                environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in }, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
+            ),
+            engine: fake.engine,
+            idleUnloadDelay: idle,
+            loadWait: loadWait,
+            sleep: { [clock] in try await clock.sleep(for: $0) }
+        )
+        await cleanup.start()
+        await cleanup.waitForLoad()
+        return cleanup
+    }
+
+    @Test func noIdleUnloadWhileProjectsHoldTheModel() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanup()
+        // The window opens and a request starts: two holders.
+        cleanup.projectsStarted()
+        cleanup.projectsStarted()
+        #expect(cleanup.projectsNeedModel)
+        try await settle()
+        #expect(clock.sleeping == 0)
+        // The end of a dictation does not start the idle time either.
+        cleanup.dictationStarted()
+        cleanup.dictationEnded()
+        try await settle()
+        #expect(clock.sleeping == 0)
+        clock.advance(by: idle * 2)
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load"])
+        #expect(await cleanup.waitUntilLoadedForProjects())
+        // The request ends, and the window still holds the model.
+        cleanup.projectsStopped()
+        try await settle()
+        #expect(clock.sleeping == 0)
+        #expect(await cleanup.waitUntilLoadedForProjects())
+        // The window closes. Cleanup is on, so the model stays until the idle time.
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load", "clearCache"])
+        #expect(!cleanup.projectsNeedModel)
+        #expect(await cleanup.waitUntilLoadedForProjects() == false)
+        try await unloadWhileIdle(cleanup)
+        #expect(fake.events == ["load", "clearCache", "unload"])
+        // A stop without a holder changes nothing.
+        cleanup.projectsStopped()
+        #expect(!cleanup.projectsNeedModel)
+    }
+
+    @Test func theFirstHolderLoadsTheModelAndTheLastUnloadsItAtOnce() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        #expect(fake.events.isEmpty)
+        // Without a holder Projects gets no model.
+        #expect(await cleanup.waitUntilLoadedForProjects() == false)
+        cleanup.projectsStarted()
+        #expect(cleanup.engineState == .loading)
+        #expect(await cleanup.waitUntilLoadedForProjects())
+        #expect(fake.events == ["load"])
+        try await settle()
+        #expect(clock.sleeping == 0)
+        // Turning cleanup on and off meanwhile keeps the model for Projects.
+        cleanup.turnOn()
+        cleanup.turnOff()
+        await cleanup.waitForLoad()
+        #expect(fake.isLoaded)
+        // Nothing else needs it, so the last holder unloads it at once.
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load", "unload"])
+        #expect(cleanup.engineState == .unloaded)
+        #expect(!fake.isLoaded)
+        try await settle()
+        #expect(clock.sleeping == 0)
+    }
+
+    @Test func theFirstHolderLoadsAModelUnloadedWhileIdle() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanup()
+        try await unloadWhileIdle(cleanup)
+        cleanup.projectsStarted()
+        #expect(cleanup.engineState == .loading)
+        #expect(await cleanup.waitUntilLoadedForProjects())
+        #expect(fake.events == ["load", "unload", "load"])
+    }
+
+    @Test func projectsWaitForALoadWithoutTheLimitOfADictation() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        fake.holdsLoads = true
+        cleanup.projectsStarted()
+        try await settle { fake.isHolding }
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.waitUntilLoadedForProjects()
+        }
+        try await settle()
+        // No time limit runs for it.
+        #expect(clock.sleeping == 0)
+        #expect(result == nil)
+        fake.letGo()
+        await waiting.value
+        #expect(result == true)
+    }
+
+    @Test func aLastHolderLeavingDuringALoadEndsTheWaitAndUnloads() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        fake.holdsLoads = true
+        cleanup.projectsStarted()
+        try await settle { fake.isHolding }
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.waitUntilLoadedForProjects()
+        }
+        try await settle()
+        cleanup.projectsStopped()
+        await waiting.value
+        #expect(result == false)
+        fake.letGo()
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load", "unload"])
+        #expect(!fake.isLoaded)
+        #expect(cleanup.engineState == .unloaded)
+    }
+
+    @Test func withoutTheModelProjectsLoadAndDownloadNothing() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects(installed: false)
+        cleanup.projectsStarted()
+        await cleanup.waitForLoad()
+        #expect(fake.events.isEmpty)
+        #expect(await cleanup.waitUntilLoadedForProjects() == false)
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+        guard case .missing = cleanup.models.state else {
+            Issue.record("Nothing should download for Projects, the state is \(cleanup.models.state)")
+            return
+        }
+        #expect(!cleanup.isConfirmingDownload)
+        #expect(!fake.isLoaded)
+    }
+
+    @Test func theProjectsEnvironmentWaitsForTheModelOfTheHolders() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        let environment = cleanup.projectsEnvironment(isDictating: { false }, captionsOn: { false }, memoryPressure: { .normal }, voiceLoaded: { false }, physicalMemory: 16 << 30)
+        #expect(environment.physicalMemory == 16 << 30)
+        #expect(await environment.waitUntilLoaded() == false)
+        cleanup.projectsStarted()
+        #expect(await environment.waitUntilLoaded())
+        // The stand in has no job calls.
+        await #expect(throws: RewriteError.notLoaded) { try await environment.startJob("Hello", 8) }
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
     }
 }

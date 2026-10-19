@@ -183,6 +183,14 @@ versions above:
 - Qwen3TTS builds such functions (Qwen3TTS.swift and SpeechTokenizerDecoder.swift), and so
   does CosyVoiceTTS. Both run alone at the gate.
 
+Projects jobs run on the cleanup model and share the gate one slice at a time. Each slice
+of a prompt and each burst of an answer is its own shared call, see
+Orra/Projects/ProjectsModelQueue.swift, so a voice request waits for the slice or burst
+under way and never for a whole job. The end of a job waits for its turn even when its
+task is cancelled, like an unload. Shared calls never wait for each other, so the gate
+does not keep a job from slowing a dictation. The queue does that by starting no slice
+from the press of the talk key or the translation key until the paste.
+
 Check this again on every update of speech-swift, mlx-swift-lm or mlx-swift, and before
 the speech or cleanup model changes: look for `compile(` in the code those models run,
 and for what each traced body calls. A mixture of experts cleanup model or a Gemma 4 model

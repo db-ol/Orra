@@ -339,6 +339,11 @@ extension CleanupEngine {
     /// The same cleanup model with every call shared at `gate`, see ModelGate. An unload
     /// waits for its turn even when its task is cancelled, so the memory is always given
     /// back. A load reserves `gate`, see TextCleanup.
+    ///
+    /// Each slice and each burst of a Projects job is a call of its own, so a voice request
+    /// that waits goes in after the one under way, never after a whole job. The end of a
+    /// job waits for its turn even when its task is cancelled, like an unload, so the job's
+    /// memory is always given back.
     func gated(_ gate: ModelGate) -> CleanupEngine {
         let load = load
         let unload = unload
@@ -346,6 +351,11 @@ extension CleanupEngine {
         let translate = translate
         let prepareTranslation = prepareTranslation
         let keepTranslationPrefixes = keepTranslationPrefixes
+        let startJob = startJob
+        let readSlice = readSlice
+        let writeBurst = writeBurst
+        let endJob = endJob
+        let clearCache = clearCache
         return CleanupEngine(
             load: { folder in try await gate.run(.shared) { try await load(folder) } },
             unload: { await gate.runEvenIfCancelled(.shared) { await unload() } },
@@ -353,6 +363,20 @@ extension CleanupEngine {
             translate: { text, route in try await gate.run(.shared) { try await translate(text, route) } },
             prepareTranslation: { route in try await gate.run(.shared) { try await prepareTranslation(route) } },
             keepTranslationPrefixes: { routes in await gate.runEvenIfCancelled(.shared) { await keepTranslationPrefixes(routes) } },
+            startJob: { prompt, maximumTokens in try await gate.run(.shared) { try await startJob(prompt, maximumTokens) } },
+            readSlice: { job, tokens in try await gate.run(.shared) { try await readSlice(job, tokens) } },
+            writeBurst: { job, tokens in try await gate.run(.shared) { try await writeBurst(job, tokens) } },
+            endJob: { job in
+                let ended: Result<String, any Error> = await gate.runEvenIfCancelled(.shared) {
+                    do {
+                        return .success(try await endJob(job))
+                    } catch {
+                        return .failure(error)
+                    }
+                }
+                return try ended.get()
+            },
+            clearCache: { await gate.runEvenIfCancelled(.shared) { await clearCache() } },
             gate: gate
         )
     }
