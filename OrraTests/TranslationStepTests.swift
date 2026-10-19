@@ -105,19 +105,24 @@ struct TranslationStepTests {
         #expect(result.outcome == .timedOut)
     }
 
-    /// A model that ignores cancellation and answers late is still not used. It answers
-    /// only once the timeout has cancelled it, so the test does not depend on how long a
-    /// busy Mac takes to run the timer.
+    /// A model that ignores cancellation is not waited for. The step pastes the text without
+    /// translation at the timeout while the model still runs, see TimedCall, and the answer
+    /// that comes later is never used. The model answers only when the test lets it, so the
+    /// test does not depend on how long a busy Mac takes to run the timer.
     @Test(.timeLimit(.minutes(1)))
     func aLateAnswerIsNotUsed() async {
+        let call = HeldWork()
+        let answered = Mutex(false)
         let result = await TranslationStep.run(Self.source, into: .english, cleansUp: true, timeout: .milliseconds(50), complete: { _, _ in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(5))
-            }
+            await call.run()
+            answered.withLock { $0 = true }
             return Self.good
         })
+        #expect(!answered.withLock { $0 })
         #expect(result.text == Self.source)
+        #expect(result.untranslated == Self.source)
         #expect(result.outcome == .timedOut)
+        call.release()
     }
 
     /// Any Han character or Latin letter is worth translating, even a word, but digits and

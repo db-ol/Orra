@@ -1,6 +1,7 @@
 import AVFoundation
 import Darwin
 import Foundation
+import Synchronization
 import Testing
 @testable import Orra
 
@@ -158,6 +159,39 @@ enum RewriteEvalFiles {
         try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map { line in
             try #require(try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
         }
+    }
+}
+
+/// The model call of one cleanup or translation step, for the evaluations that run the
+/// real model. At its time limit a step returns while its call still runs, see TimedCall.
+/// So after a time out `completion(timedOut:)` waits for the call to end. That keeps the
+/// cut off completion with its case, and keeps the rest of the call out of the time of the
+/// next case.
+final class StepModelCall: Sendable {
+    private let kept = Mutex<RewriteEngine.Completion?>(nil)
+    private let ends: AsyncStream<Void>
+    private let ended: AsyncStream<Void>.Continuation
+
+    init() {
+        (ends, ended) = AsyncStream.makeStream()
+    }
+
+    /// Runs `call` as the step's model call, keeps its completion and gives its answer.
+    func answer(_ call: () async throws -> RewriteEngine.Completion) async throws -> String {
+        defer { ended.yield() }
+        let completion = try await call()
+        kept.withLock { $0 = completion }
+        return completion.answer
+    }
+
+    /// The call's completion, nil when the step did not run the model or the call threw.
+    /// When the step timed out, it waits for the call to end first.
+    func completion(timedOut: Bool) async -> RewriteEngine.Completion? {
+        if timedOut {
+            var iterator = ends.makeAsyncIterator()
+            _ = await iterator.next()
+        }
+        return kept.withLock { $0 }
     }
 }
 

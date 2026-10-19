@@ -1,5 +1,4 @@
 import Foundation
-import Synchronization
 import Testing
 @testable import Orra
 
@@ -88,7 +87,10 @@ struct CleanupModelEvaluationTests {
                 let started = ContinuousClock.now
                 let completion = try await engine.cleanUp(text)
                 let elapsed = started.duration(to: .now)
-                let step = await CleanupStep.run(text, complete: { try await engine.cleanUp($0).answer })
+                let call = StepModelCall()
+                let step = await CleanupStep.run(text, complete: { text in try await call.answer { try await engine.cleanUp(text) } })
+                // A call that timed out ends before the next text is timed.
+                _ = await call.completion(timedOut: step.outcome == .timedOut)
                 report += "\(name) \(text.count) characters: \(elapsed), \(completion.promptTokens) prompt tokens, \(completion.generatedTokens) written, step \(step.outcome.logName), allowed \(CleanupStep.timeout(for: text)), cleaned \(CleanupStep.isWorthCleaning(text))\n"
                 if CleanupStep.isWorthCleaning(text) {
                     #expect(step.outcome != .timedOut, "\(name) \(text.count) characters")
@@ -129,14 +131,14 @@ struct CleanupModelEvaluationTests {
     }
 
     private static func run(_ source: String, engine: RewriteEngine, usingPrefixCache: Bool) async -> Run {
-        let completions = Mutex<[RewriteEngine.Completion]>([])
+        let call = StepModelCall()
         let started = ContinuousClock.now
         let result = await CleanupStep.run(source, complete: { text in
-            let completion = try await engine.cleanUp(text, usingPrefixCache: usingPrefixCache)
-            completions.withLock { $0.append(completion) }
-            return completion.answer
+            try await call.answer { try await engine.cleanUp(text, usingPrefixCache: usingPrefixCache) }
         })
-        return Run(text: result.text, outcome: result.outcome, seconds: started.duration(to: .now) / .seconds(1), completion: completions.withLock { $0.last })
+        // Until the paste, as in the app, and not the rest of a call that timed out.
+        let seconds = started.duration(to: .now) / .seconds(1)
+        return Run(text: result.text, outcome: result.outcome, seconds: seconds, completion: await call.completion(timedOut: result.outcome == .timedOut))
     }
 
     /// Runs every case with the prefix cache, as the app does. With

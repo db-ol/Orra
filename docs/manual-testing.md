@@ -464,11 +464,26 @@ got worse than the baseline, see docs/release-gate.md.
   - CleanupStepTests runs the step with a stand in model: a cleanup that passes is used,
     and an unchanged answer, a failed check, an empty cleanup, an unreadable or cut off
     answer, an error, a model slower than the timeout and a late answer that ignores
-    cancellation all give back the text it was given. It checks that the time allowed
+    cancellation all give back the text it was given. The step does not wait for that
+    late answer. It checks that the time allowed
     grows with the text and that text over 400 characters is not cleaned up. It also
     checks the pins of the
     cleanup model, its server addresses and its folder, and that neither model's leftover
     cleanup removes the other's folder.
+  - TimedCallTests checks the time limit of the cleanup and translation calls with stand
+    in calls that ignore cancellation and end only when the test lets them, so it shows
+    the order of events and needs no bound on the time taken. At the limit the caller
+    gets the time out at once while the call still runs, the call is cancelled and its
+    late answer is never used, a call that ends in time gives its answer or its error,
+    a caller whose task is cancelled stops waiting at once, and one cancelled before it
+    asks never starts the call. AbandonedCallTests checks that such a call keeps its
+    access to the model gate until it ends, so a voice request after the dictation's
+    reservation ended waits for it, also through a whole dictation with
+    PushToTalkController, and that a cancelled call to the cleanup model's engine throws
+    before it looks for the model. The evaluations that run the real model time a step
+    until its paste, as in the app. After a time out they wait for the call to end before
+    the next case, see StepModelCall, so they keep its cut off completion and the next
+    case's time leaves it out.
   - PromptPrefixTests checks with stand in token IDs that the cached start of the prompt
     stops two tokens before the first token two prompts differ in, that a prompt reads
     only the tokens after it, and that a prompt that does not start with it, or has
@@ -775,6 +790,7 @@ got worse than the baseline, see docs/release-gate.md.
     TranslationStepTests checks with a stand in model that a translation that fails a
     check, an unreadable answer, an error or a timeout pastes the text without
     translation, the model's cleanup when cleanup is on and it passes the cleanup checks.
+    At the timeout it does not wait for a model that ignores cancellation.
     TranslationTokenizerTests, which needs only the tokenizer files, checks the token IDs
     of both prompts and that every prompt of the translation evaluation starts with its
     target's cached prefix.

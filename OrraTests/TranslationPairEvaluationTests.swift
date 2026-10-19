@@ -1,6 +1,5 @@
 import Foundation
 import MLX
-import Synchronization
 import Testing
 @testable import Orra
 
@@ -124,14 +123,14 @@ struct TranslationPairEvaluationTests {
         guard TranslationStep.isWorthTranslating(source, in: route.language) else {
             return Run(source: source, result: nil, seconds: 0, completion: nil)
         }
-        let completions = Mutex<[RewriteEngine.Completion]>([])
+        let call = StepModelCall()
         let started = ContinuousClock.now
         let result = await TranslationStep.run(source, into: route, cleansUp: cleansUp, complete: { text, route in
-            let completion = try await engine.translate(text, into: route)
-            completions.withLock { $0.append(completion) }
-            return completion.answer
+            try await call.answer { try await engine.translate(text, into: route) }
         })
-        return Run(source: source, result: result, seconds: started.duration(to: .now) / .seconds(1), completion: completions.withLock { $0.last })
+        // Until the paste, as in the app, and not the rest of a call that timed out.
+        let seconds = started.duration(to: .now) / .seconds(1)
+        return Run(source: source, result: result, seconds: seconds, completion: await call.completion(timedOut: result.outcome == .timedOut))
     }
 
     private static func line(_ object: [String: Any]) throws -> String {

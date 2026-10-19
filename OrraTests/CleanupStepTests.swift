@@ -70,18 +70,23 @@ struct CleanupStepTests {
         #expect(result.outcome == .timedOut)
     }
 
-    /// A model that ignores cancellation and answers late is still not used. It answers only
-    /// once the timeout cancelled it, so a busy Mac cannot let it finish first.
+    /// A model that ignores cancellation is not waited for. The step pastes the text it got
+    /// at the timeout while the model still runs, see TimedCall, and the answer that comes
+    /// later is never used. The model answers only when the test lets it, so a busy Mac
+    /// cannot let it finish first.
     @Test(.timeLimit(.minutes(1)))
     func aLateAnswerIsNotUsed() async {
+        let call = HeldWork()
+        let answered = Mutex(false)
         let result = await CleanupStep.run("呃，我们下周二开会。", timeout: .milliseconds(50), complete: { _ in
-            while !Task.isCancelled {
-                usleep(1_000)
-            }
+            await call.run()
+            answered.withLock { $0 = true }
             return #"{"cleaned": "我们下周二开会。"}"#
         })
+        #expect(!answered.withLock { $0 })
         #expect(result.text == "呃，我们下周二开会。")
         #expect(result.outcome == .timedOut)
+        call.release()
     }
 
     @Test func onlyTextWithThreeLettersOrDigitsIsWorthCleaning() {

@@ -141,7 +141,11 @@ actor RewriteEngine {
     /// Runs the cleanup prompt on a transcript. Greedy, so the same text always gets the
     /// same answer. Stops early when the task is cancelled, see CleanupStep. Without the
     /// prefix cache it runs the model on the whole prompt, which the evaluation compares.
+    /// A call whose task was cancelled before its turn, such as one TimedCall gave up on
+    /// while it waited behind another call, throws CancellationError and never runs the
+    /// model, so nobody waits for work whose answer is dropped.
     func cleanUp(_ text: String, usingPrefixCache: Bool = true) throws -> Completion {
+        try Task.checkCancellation()
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
         return try generate(RewritePrompt.text(for: text), maximumTokens: RewritePrompt.maximumTokens(inputTokens: inputTokens), prefix: usingPrefixCache ? prefix : nil, lookingUp: true, task: "Cleanup")
@@ -158,8 +162,10 @@ actor RewriteEngine {
         try translate(text, into: .chinese(target), usingPrefixCache: usingPrefixCache)
     }
 
-    /// Runs the translation prompt of a route on a transcript, the same way.
+    /// Runs the translation prompt of a route on a transcript, the same way. A call
+    /// cancelled before its turn throws before it fills a prefix cache too.
     func translate(_ text: String, into route: TranslationRoute, usingPrefixCache: Bool = true) throws -> Completion {
+        try Task.checkCancellation()
         guard let context else { throw RewriteError.notLoaded }
         let inputTokens = context.tokenizer.encode(text: text, addSpecialTokens: false).count
         let prefix = usingPrefixCache ? try translationPrefix(route) : nil
@@ -341,26 +347,62 @@ struct CleanupModel {
 }
 
 /// A model call with a time limit, for the cleanup and translation steps.
+///
+/// At the limit it cancels the call and returns at once, so the paste never waits past
+/// the limit. The call goes on until it ends by itself, and its result is dropped: one
+/// that waits at the engine behind another call ends when that call is done, and one in
+/// an MLX evaluation that does not look at cancellation ends with the evaluation. So the
+/// call itself must hold whatever keeps other model work away until it really ends, and
+/// the caller must never take the model as free when this returns. The cleanup model's
+/// calls do: each holds its access to the model gate until the engine returns, see
+/// CleanupEngine.gated, and the engine runs one call at a time, see RewriteEngine.
 nonisolated enum TimedCall {
-    /// What `call` gave back or threw, and whether `limit` passed first, which cancels it.
+    /// What ended the wait first.
+    private nonisolated enum Outcome<Value: Sendable>: Sendable {
+        case answered(Result<Value, any Error>)
+        case timedOut
+    }
+
+    /// What `call` gave back or threw, and whether `limit` passed first. Then the result is
+    /// a CancellationError, and the call is cancelled and left to end on its own. A caller
+    /// whose task is cancelled gets a CancellationError at once too, with `timedOut` false,
+    /// and the call is cancelled the same way.
     @concurrent
     static func run<Value: Sendable>(
         within limit: Duration,
         _ call: @escaping @Sendable () async throws -> Value
     ) async -> (result: Result<Value, any Error>, timedOut: Bool) {
-        let work = Task { try await call() }
-        let timer = Task {
+        guard !Task.isCancelled else { return (.failure(CancellationError()), false) }
+        // The first outcome is kept, and the ones after it are dropped.
+        let (outcomes, settle) = AsyncStream<Outcome<Value>>.makeStream(bufferingPolicy: .bufferingOldest(1))
+        // Not awaited past the limit. A task of its own, which keeps the caller's
+        // priority and task locals, as before.
+        let work = Task {
             do {
-                try await Task.sleep(for: limit)
+                settle.yield(.answered(.success(try await call())))
             } catch {
-                return false
+                settle.yield(.answered(.failure(error)))
             }
-            work.cancel()
-            return true
         }
-        let result = await work.result
+        let timer = Task {
+            guard (try? await Task.sleep(for: limit)) != nil else { return }
+            settle.yield(.timedOut)
+        }
+        // Nil when the caller's task is cancelled, which ends the stream.
+        var iterator = outcomes.makeAsyncIterator()
+        let outcome = await iterator.next()
+        settle.finish()
         timer.cancel()
-        return (result, await timer.value)
+        switch outcome {
+        case .answered(let result):
+            return (result, false)
+        case .timedOut:
+            work.cancel()
+            return (.failure(CancellationError()), true)
+        case nil:
+            work.cancel()
+            return (.failure(CancellationError()), false)
+        }
     }
 }
 
