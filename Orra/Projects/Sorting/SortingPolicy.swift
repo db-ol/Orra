@@ -1,0 +1,220 @@
+import Foundation
+
+/// How sure sorting is of an email's project.
+nonisolated enum SortingLevel: String, Sendable, Codable, CaseIterable {
+    /// Filed without a mark, still shown and reversible: the same thread, a rule, person or
+    /// domain the user set, or a linked Mail mailbox.
+    case sure
+    /// Filed with a "suggested" mark: the model chose the project, and agreed with the
+    /// rules when they pointed to one.
+    case likely
+    /// In Needs a Project. No project files are used for it until the user picks one.
+    case unsure
+    /// In Set Aside: list mail with no project people. Only the rules set mail aside.
+    case setAside
+}
+
+/// Why sorting decided as it did, for the project chip.
+nonisolated enum SortingReason: String, Sendable, Codable, CaseIterable {
+    /// The same thread as an email in the project.
+    case thread
+    /// A rule the user made.
+    case rule
+    /// A person the user listed for the project.
+    case person
+    /// A domain the user listed for the project.
+    case domain
+    /// A Mail mailbox linked to the project.
+    case mailbox
+    /// Someone in the email wrote in the project before.
+    case peopleSeen
+    /// An attachment has the name of a project file.
+    case attachment
+    /// The email holds the project's own words.
+    case words
+    /// The model chose the project.
+    case model
+    /// List mail with no project people.
+    case listMail
+    /// No rule pointed to a project.
+    case noSignal
+    /// The rules pointed to more than one project.
+    case signalsDisagree
+    /// People in the email wrote in more than one project before.
+    case peopleInSeveralProjects
+    /// The model found no project.
+    case modelSaidNone
+    /// The model chose another project than the rules.
+    case modelDisagreed
+    /// The model's answer was not one of the choices.
+    case modelAnswerInvalid
+    /// The rules leave it to the model, which has not answered yet.
+    case waitingForModel
+}
+
+/// Where sorting put an email, and why.
+nonisolated struct SortingDecision: Sendable, Equatable, Codable {
+    /// The project, or nil for Needs a Project and Set Aside.
+    var project: UUID?
+    var level: SortingLevel
+    /// The reasons, strongest first. Never empty.
+    var reasons: [SortingReason]
+
+    /// The main reason, for the project chip.
+    var reason: SortingReason {
+        reasons.first ?? .noSignal
+    }
+
+    /// Whether the decision changes once the model answers. The window asks the model only
+    /// while it is open, so with it closed such mail waits in Needs a Project.
+    var waitsForModel: Bool {
+        reasons.contains(.waitingForModel)
+    }
+}
+
+/// Rules first, the model as tie breaker (plan section 8, approved 2026-10-19).
+///
+/// - A thread (unless the user moved the message it answers), a rule, person or domain the
+///   user set, or a linked Mail mailbox is sure, and the model is not asked.
+/// - Only the rules set mail aside: list mail with no project people.
+/// - People seen before, an attachment name, the project's words, or a thread whose
+///   message the user moved, vote. A project that has the only vote is likely, and the
+///   model must agree before the mail is filed there.
+/// - When the rules have no single project, the model may choose one of the top
+///   candidates.
+/// - The model's "none" sends the mail to Needs a Project, never out of the project.
+///
+/// On the synthetic set of phase 0 this policy filed 91 of 105 mails right, sent 10 to
+/// Needs a Project and filed 4 wrong. Rules alone gave 85, 17 and 3.
+nonisolated enum SortingPolicy {
+    /// Whether the decision needs the model's answer.
+    static func needsModel(_ signals: SortingSignals) -> Bool {
+        decide(signals, model: nil).waitsForModel
+    }
+
+    /// The decision for an email. `model` is the model's answer to the SortingPrompt for
+    /// these signals, or nil when the model was not asked.
+    static func decide(_ signals: SortingSignals, model: SortingPrompt.Answer?) -> SortingDecision {
+        let top = signals.topCandidates
+        switch outcome(signals) {
+        case .decided(let decision):
+            return decision
+        case .likely(let project):
+            switch model {
+            case nil:
+                return unsure([.waitingForModel])
+            case .project(let chosen)? where chosen == project:
+                return SortingDecision(project: project, level: .likely, reasons: support(project, signals) + [.model])
+            case .project(let chosen)? where top.contains(chosen):
+                return unsure([.modelDisagreed])
+            case .noProject?:
+                return unsure([.modelSaidNone])
+            case .project?, .invalid?:
+                return unsure([.modelAnswerInvalid])
+            }
+        case .open(let why):
+            guard !top.isEmpty else { return unsure([why]) }
+            switch model {
+            case nil:
+                return unsure([.waitingForModel, why])
+            case .project(let chosen)? where top.contains(chosen):
+                return SortingDecision(project: chosen, level: .likely, reasons: support(chosen, signals) + [.model])
+            case .noProject?:
+                return unsure([.modelSaidNone, why])
+            case .project?, .invalid?:
+                return unsure([.modelAnswerInvalid, why])
+            }
+        }
+    }
+
+    /// What the rules say on their own.
+    private enum Outcome {
+        /// Sure or set aside, and the model is not asked.
+        case decided(SortingDecision)
+        /// One project has the only vote, and the model must agree.
+        case likely(UUID)
+        /// No single project, and the model may choose one.
+        case open(SortingReason)
+    }
+
+    /// The rules in the order of match.py.
+    private static func outcome(_ signals: SortingSignals) -> Outcome {
+        if let thread = signals.thread, !signals.threadMovedByUser {
+            return .decided(SortingDecision(project: thread, level: .sure, reasons: [.thread]))
+        }
+        // Sure only when every rule, person, domain and mailbox that matches names one
+        // project. When they name several, they still rank those projects first.
+        let sure = Set(signals.rules.keys).union(signals.mailboxes)
+        if sure.count == 1, let project = sure.first {
+            let reasons: [SortingReason?] = [signals.rules[project], signals.mailboxes.contains(project) ? .mailbox : nil]
+            return .decided(SortingDecision(project: project, level: .sure, reasons: reasons.compactMap { $0 }))
+        }
+        if signals.listMail != nil, !signals.hasProjectPeople {
+            return .decided(SortingDecision(project: nil, level: .setAside, reasons: [.listMail]))
+        }
+        var votes: [UUID] = []
+        if let thread = signals.thread {
+            votes.append(thread)
+        }
+        if signals.peopleSeen.count > 1 {
+            return .open(.peopleInSeveralProjects)
+        }
+        if signals.peopleSeen.count == 1, let project = signals.peopleSeen.keys.first {
+            votes.append(project)
+        }
+        if signals.attachments.count == 1, let project = signals.attachments.first {
+            votes.append(project)
+        }
+        if let project = wordsVote(signals) {
+            votes.append(project)
+        }
+        switch Set(votes).count {
+        case 0:
+            return .open(.noSignal)
+        case 1 where signals.topCandidates.contains(votes[0]):
+            return .likely(votes[0])
+        default:
+            return .open(.signalsDisagree)
+        }
+    }
+
+    /// The project whose words the email holds, when no other project's words come within
+    /// two of it.
+    private static func wordsVote(_ signals: SortingSignals) -> UUID? {
+        let counts = signals.words.map { (project: $0.key, count: $0.value.count) }
+            .sorted { $0.count > $1.count }
+        guard let best = counts.first else { return nil }
+        if counts.count == 1 || best.count >= counts[1].count + 2 {
+            return best.project
+        }
+        return nil
+    }
+
+    /// Every signal that points to the project, strongest first, for the chip.
+    private static func support(_ project: UUID, _ signals: SortingSignals) -> [SortingReason] {
+        var reasons: [SortingReason] = []
+        if signals.thread == project {
+            reasons.append(.thread)
+        }
+        if let rule = signals.rules[project] {
+            reasons.append(rule)
+        }
+        if signals.mailboxes.contains(project) {
+            reasons.append(.mailbox)
+        }
+        if signals.peopleSeen[project] != nil {
+            reasons.append(.peopleSeen)
+        }
+        if signals.attachments.contains(project) {
+            reasons.append(.attachment)
+        }
+        if signals.words[project] != nil {
+            reasons.append(.words)
+        }
+        return reasons
+    }
+
+    private static func unsure(_ reasons: [SortingReason]) -> SortingDecision {
+        SortingDecision(project: nil, level: .unsure, reasons: reasons)
+    }
+}
