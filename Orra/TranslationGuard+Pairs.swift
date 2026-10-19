@@ -510,17 +510,17 @@ nonisolated extension TranslationGuard {
     // MARK: Tables
 
     /// RewriteGuard.openers with the Japanese and Spanish forms added to each group, so a
-    /// translation that starts like its source passes.
-    static let pairOpeners: [[String]] = zip(RewriteGuard.openers, [
-        ["understood", "もちろん", "かしこまりました", "承知しました", "承知いたしました", "了解", "わかりました", "分かりました", "claro", "por supuesto", "con gusto", "de acuerdo", "vale", "entendido"],
-        ["以下は", "以下が", "aquí tienes", "aquí está", "a continuación"],
-        ["excuse me", "申し訳ありません", "申し訳ございません", "すみません", "ごめん", "lo siento", "perdón", "disculpa", "disculpe"],
-        ["できません", "no puedo"],
-        ["good morning", "good afternoon", "good evening", "こんにちは", "こんばんは", "おはよう", "hola", "buenas", "buenos días"],
-        ["いい質問", "buena pregunta"],
-        ["aiとして", "como ia", "como modelo"],
-        [],
-    ]).map(+)
+    /// translation that starts like its source passes. The forms are keyed by the group's
+    /// first form, as the excuses are.
+    static let pairOpeners: [[String]] = adding([
+        "sure": ["understood", "もちろん", "かしこまりました", "承知しました", "承知いたしました", "了解", "わかりました", "分かりました", "claro", "por supuesto", "con gusto", "de acuerdo", "vale", "entendido"],
+        "here is": ["以下は", "以下が", "aquí tienes", "aquí está", "a continuación"],
+        "i'm sorry": ["excuse me", "申し訳ありません", "申し訳ございません", "すみません", "ごめん", "lo siento", "perdón", "disculpa", "disculpe"],
+        "i can't": ["できません", "no puedo"],
+        "hello": ["good morning", "good afternoon", "good evening", "こんにちは", "こんばんは", "おはよう", "hola", "buenas", "buenos días"],
+        "great question": ["いい質問", "buena pregunta"],
+        "as an ai": ["aiとして", "como ia", "como modelo"],
+    ], to: RewriteGuard.openers)
 
     /// RewriteGuard.excuses with the Japanese and Spanish words that excuse a group, and a
     /// negation for "I can't", which Japanese and Spanish say in many ways.
@@ -531,15 +531,23 @@ nonisolated extension TranslationGuard {
         "as an ai": ["として", "como"],
     ], uniquingKeysWith: +)
 
-    /// RewriteGuard.anywhere with Japanese and Spanish forms added to each group.
-    static let pairAnywhere: [[String]] = zip(RewriteGuard.anywhere, [
-        ["aiとして", "como ia", "como una ia"],
-        ["言語モデル", "modelo de lenguaje"],
-        ["私はai", "soy una ia"],
-        ["システムプロンプト", "prompt del sistema", "indicaciones del sistema"],
-        ["私の指示", "mis instrucciones"],
-        [], [], [], [], [],
-    ]).map(+)
+    /// RewriteGuard.anywhere with Japanese and Spanish forms added to each group, keyed by
+    /// its first form.
+    static let pairAnywhere: [[String]] = adding([
+        "as an ai": ["aiとして", "como ia", "como una ia"],
+        "language model": ["言語モデル", "modelo de lenguaje"],
+        "i'm an ai": ["私はai", "soy una ia"],
+        "system prompt": ["システムプロンプト", "prompt del sistema", "indicaciones del sistema"],
+        "my instructions": ["私の指示", "mis instrucciones"],
+    ], to: RewriteGuard.anywhere)
+
+    /// Each of `groups` with the forms keyed by its first form added after its own. A key
+    /// that names no group, as after a rename in RewriteGuard, fails the assertion in a
+    /// debug build, so its forms are never dropped unnoticed.
+    private static func adding(_ forms: [String: [String]], to groups: [[String]]) -> [[String]] {
+        assert(Set(forms.keys).isSubset(of: groups.map { $0[0] }), "Forms for a group that RewriteGuard does not have")
+        return groups.map { $0 + (forms[$0[0]] ?? []) }
+    }
 
     /// RewriteGuard.shortReplies with Japanese and Spanish ones.
     static let pairShortReplies: Set<String> = Set((RewriteGuard.shortReplies.union(["はい", "いいえ", "うん", "ええ", "了解", "了解です", "わかりました", "sí", "si", "vale", "claro", "hola", "de acuerdo", "listo"])).map(RewriteGuard.bare))
