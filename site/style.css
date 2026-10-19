@@ -289,11 +289,16 @@ h1 {
   transition: opacity 0.4s var(--ease);
 }
 
-/* Japanese lines in the demos wrap between phrases in browsers that can find them, so no
-   line ends with a character or two alone. Other browsers wrap them as before. */
+/* Japanese lines in the demos, and the Chinese lines of the English page, wrap only at the
+   <wbr> between their phrases, so no line ends with a character or two alone. Safari cannot
+   find the phrases itself, as Chrome does for Japanese with word-break: auto-phrase. A
+   phrase that is wider than the line still breaks. The Chinese page wraps as before. */
 .demo-stage:lang(ja),
-.meet-stage:lang(ja) {
-  word-break: auto-phrase;
+.meet-stage:lang(ja),
+.demo-stage:lang(en) :lang(zh),
+.meet-stage:lang(en) :lang(zh) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* Chinese and Japanese have no italic. */

@@ -20,8 +20,10 @@ https://db-ol.github.io/Orra/.
   Japanese and 3 words a second in English and Spanish, read from the lang of the line, so a
   longer line takes longer. Keep each line and each pasted text to two lines at 375 pixels
   wide. The cleanup demo shows an optional feature, so its caption says so.
-- Each page shows its demos in its own language. The speaker dictates in the page's language
-  and translates between it and English, as Orra does for that dictation language.
+- Each page shows its demos in its own language, as Orra works for a reader of that page.
+  On the Chinese, Japanese and Spanish pages the speaker dictates in the page's language and
+  translates between it and English. On the English page the speaker speaks English and
+  translates between English and Chinese.
   - The Japanese and Spanish pages use the sentences of the animations in README.ja.md and
     README.es.md. They say a Japanese or Spanish sentence, pasted as it was said, since the
     filler rule and the cleanup model take English and Chinese only. The translation key
@@ -29,16 +31,23 @@ https://db-ol.github.io/Orra/.
     in Spanish. Live Captions show English sentences with Japanese or Spanish translations,
     and the reply is spoken in English. The cleanup demo keeps the English sentence, since
     with Japanese or Spanish as the dictation language cleanup works on English sentences
-    only, and its caption says so.
-  - The English page shows an English speaker who dictates with 中文 + English, the
-    dictation language Orra picks on a Mac in English. The translation key turns English
-    into Chinese, with the 译 badge. Live Captions show Chinese sentences with English
-    translations, and the reply is spoken in Chinese. These are the sentences of the Chinese
-    README turned around. The English README animations still show the Chinese speaker.
+    only, and its caption says so. The tile on learning from corrections says the same of
+    learning, as the READMEs do. Spoken Japanese is quoted with 「」, as in the README
+    animations.
+  - The English page shows an English speaker whose dictation language is
+    中文（普通话和粤语）+ English, the one Orra picks on a Mac in English. The translation
+    key turns English into Chinese, with the 译 badge. Live Captions show Chinese sentences
+    with English translations, and the reply is spoken in Chinese. These are the sentences
+    of the Chinese README turned around. The English README animations still show the
+    Chinese speaker.
   - The Chinese page shows the Chinese speaker of the Chinese README.
 
   Each line in another language than the page's carries its own lang, which site.js reads
-  for the timing above and style.css for the fonts.
+  for the timing above and style.css for the fonts. Japanese lines, and the Chinese lines of
+  the English page, wrap only at a <wbr> between phrases (word-break: keep-all in
+  style.css), so that no line ends with a character or two alone, in Safari too. Put a <wbr>
+  between the phrases of any such line you change. In a spoken line it goes between the
+  said-words spans, since site.js rebuilds each span from its text.
 - The Meeting Interpretation section draws the Live Captions window and a call in HTML and
   CSS. style.css plays it once when each part scrolls into view, through the class that
   site.js adds. Without site.js, or with reduced motion, it shows its last frame.
@@ -98,7 +107,8 @@ To export the icon again after the icon changes:
 3. Link the privacy details in that language, and show the demos in that language as above,
    with its own lang on each line in another language. A language written without spaces
    between words, as Chinese and Japanese are, goes into the rule of site.js that times
-   the spoken line by character.
+   the spoken line by character, and may need the keep-all rule of style.css, as Japanese
+   has.
 4. Add its version line to the list above. If the language needs its own fonts, add a :lang
    rule to style.css, as the Japanese page has.
 5. Publish the page only once the interface in that language is released, so it names
