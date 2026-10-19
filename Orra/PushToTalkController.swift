@@ -108,14 +108,32 @@ final class PushToTalkController {
     /// Whether a quick double press of the talk key, or of the translation key, starts a
     /// hands free dictation. Saved through `saveHandsFree` whenever it changes.
     private(set) var handsFreeOn: Bool
+    /// What the user records by pressing keys, if anything.
+    private(set) var choosing: KeyChoiceTarget?
     /// Which key the user records by pressing it, if any.
-    private(set) var choosingKeySlot: KeySlot?
+    var choosingKeySlot: KeySlot? {
+        if case .key(let slot) = choosing { slot } else { nil }
+    }
     /// True while the user records a talk key by pressing it.
     var isChoosingTalkKey: Bool {
         choosingKeySlot == .talk
     }
+    /// True while the user records the Live Captions shortcut by pressing it.
+    var isChoosingLiveCaptionsShortcut: Bool {
+        choosing == .liveCaptionsShortcut
+    }
     /// Why the last press while recording a key cannot be one, such as Shift.
     private(set) var keyChoiceRejection: KeyRecorder.Rejection?
+    /// Why the last press while recording the Live Captions shortcut cannot be it.
+    private(set) var shortcutChoiceRejection: LiveCaptionsShortcut.Rejection?
+    /// The shortcut that turns Live Captions on and off from any app, or nil for none. A
+    /// hot key of the system from `start()` on, except while the user records any key,
+    /// see GlobalShortcut. Saved through `saveLiveCaptionsShortcut` whenever it changes.
+    private(set) var liveCaptionsShortcut: KeyCombination?
+    /// Whether the system refused the Live Captions shortcut the last time Orra registered
+    /// it, such as when another app holds the combination for itself. Settings and the
+    /// Problem Report say so. False while there is no shortcut.
+    private(set) var liveCaptionsShortcutRefused = false
     /// Set when the latest key the user picked was the other key's, so the two keys
     /// swapped. Cleared when the user records a key again.
     private(set) var keySwap: KeySwap?
@@ -197,6 +215,8 @@ final class PushToTalkController {
     /// Told the time of every step after a dictation was pasted. Durations only, never
     /// text. LatencyMeasurementTests reads it, the app leaves it alone.
     @ObservationIgnored var onTimings: (DictationTimings) -> Void = { _ in }
+    /// Told at each press of the Live Captions shortcut. AppDelegate sets it.
+    @ObservationIgnored var onLiveCaptionsShortcut: () -> Void = {}
 
     @ObservationIgnored private let capture: AudioCapture
     @ObservationIgnored private let transcription: Transcription
@@ -276,6 +296,15 @@ final class PushToTalkController {
     @ObservationIgnored private let saveSecondTalkKey: (TalkKey?) -> Void
     @ObservationIgnored private let saveTriggerMode: (TriggerMode, KeySlot) -> Void
     @ObservationIgnored private let saveHandsFree: (Bool) -> Void
+    @ObservationIgnored private let saveLiveCaptionsShortcut: (KeyCombination?) -> Void
+    /// Registers the Live Captions shortcut with the system, see `GlobalShortcut.Register`.
+    @ObservationIgnored private let registerShortcut: GlobalShortcut.Register
+    /// Unregisters the shortcut that is registered now, if any.
+    @ObservationIgnored private var unregisterShortcut: GlobalShortcut.Unregister?
+    /// The shortcut that is registered now, if any.
+    @ObservationIgnored private var registeredShortcut: KeyCombination?
+    /// Whether the shortcut is registered while no key is recorded: from `start()` on.
+    @ObservationIgnored private var registersShortcut = false
     /// Watches Orra's own key presses while the user chooses a talk key and the tap is not
     /// installed, which needs no permission.
     /// The local event monitors while the user records a talk key.
@@ -347,6 +376,10 @@ final class PushToTalkController {
     ///   - saveTriggerMode: Saves the mode of a key after the user changes it.
     ///   - handsFree: Whether a double press starts a hands free dictation, as saved.
     ///   - saveHandsFree: Saves the choice after the user changes it.
+    ///   - liveCaptionsShortcut: The Live Captions shortcut, as saved, or nil for none.
+    ///   - saveLiveCaptionsShortcut: Saves the shortcut after it changes.
+    ///   - registerShortcut: Registers the shortcut with the system, see
+    ///     `GlobalShortcut.Register`. Tests pass fakes, so they never register a real one.
     ///   - microphone: The microphone the user chose, or nil for the system default.
     ///   - saveMicrophone: Saves the choice after the user changes it.
     ///   - vocabulary: The user's words and names, as saved.
@@ -400,6 +433,9 @@ final class PushToTalkController {
         saveTriggerMode: @escaping (TriggerMode, KeySlot) -> Void = { _, _ in },
         handsFree: Bool = true,
         saveHandsFree: @escaping (Bool) -> Void = { _ in },
+        liveCaptionsShortcut: KeyCombination? = nil,
+        saveLiveCaptionsShortcut: @escaping (KeyCombination?) -> Void = { _ in },
+        registerShortcut: @escaping GlobalShortcut.Register = GlobalShortcut.registerLive,
         microphone: MicrophoneChoice? = nil,
         saveMicrophone: @escaping (MicrophoneChoice?) -> Void = { _ in },
         vocabulary: [VocabularyWord] = [],
@@ -450,6 +486,9 @@ final class PushToTalkController {
         self.saveTriggerMode = saveTriggerMode
         self.handsFreeOn = handsFree
         self.saveHandsFree = saveHandsFree
+        self.liveCaptionsShortcut = liveCaptionsShortcut
+        self.saveLiveCaptionsShortcut = saveLiveCaptionsShortcut
+        self.registerShortcut = registerShortcut
         self.microphone = microphone
         self.saveMicrophone = saveMicrophone
         self.vocabulary = vocabulary
@@ -485,6 +524,9 @@ final class PushToTalkController {
             logger.info("Waiting for Accessibility access")
         }
         watchAccess()
+        // A hot key of the system, which needs no Accessibility access.
+        registersShortcut = true
+        updateShortcutRegistration()
     }
 
     /// Loads the speech model, and again after a failed load, for example once the model
@@ -783,21 +825,36 @@ final class PushToTalkController {
     /// leaves a note and the recording goes on. Escape, a click anywhere in Orra, or
     /// switching to another app stops it. Only presses in Orra count: the tap checks that
     /// Orra is the active app, and without the tap a local monitor sees only Orra's own
-    /// events. Neither needs a new permission. A recording for the other slot stops first.
+    /// events. Neither needs a new permission. A recording of another key stops first.
     func startChoosingKey(for slot: KeySlot) {
-        guard choosingKeySlot != slot else { return }
-        stopChoosingKey()
-        choosingKeySlot = slot
+        startChoosing(.key(slot))
+    }
+
+    /// Starts recording the Live Captions shortcut, as `startChoosingKey(for:)` records a
+    /// key. A key with Control or Command, or a function key, becomes the shortcut when it
+    /// goes down, see `LiveCaptionsShortcut.outcome`.
+    func startChoosingLiveCaptionsShortcut() {
+        startChoosing(.liveCaptionsShortcut)
+    }
+
+    private func startChoosing(_ target: KeyChoiceTarget) {
+        guard choosing != target else { return }
+        endChoosing()
+        choosing = target
         keyChoiceRejection = nil
+        shortcutChoiceRejection = nil
         keySwap = nil
         keyRecorder = KeyRecorder()
+        // A registered shortcut takes its press before the recorder sees it, so recording
+        // it again, or pressing it while recording a talk key, would turn captions on.
+        updateShortcutRegistration()
         tap?.chooseKey { [weak self] type, keyCode, flags in
             self?.keyChoice(type: type, keyCode: keyCode, flags: flags)
         }
         keyChoiceMonitors = [
             NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
                 // The tap has seen the event first when it is installed.
-                guard let self, choosingKeySlot != nil, tap?.isInstalled != true else { return event }
+                guard let self, choosing != nil, tap?.isInstalled != true else { return event }
                 let flags = event.cgEvent?.flags ?? CGEventFlags(rawValue: UInt64(event.modifierFlags.rawValue))
                 let type: CGEventType = event.type == .keyDown ? .keyDown : .flagsChanged
                 keyChoice(type: type, keyCode: Int64(event.keyCode), flags: flags)
@@ -823,11 +880,19 @@ final class PushToTalkController {
         }
     }
 
-    /// Stops recording a key without changing it.
+    /// Stops recording a key or the shortcut without changing it.
     func stopChoosingKey() {
-        guard choosingKeySlot != nil else { return }
-        choosingKeySlot = nil
+        guard choosing != nil else { return }
+        endChoosing()
+        updateShortcutRegistration()
+    }
+
+    /// Ends a recording, leaving the shortcut unregistered for the caller to register.
+    private func endChoosing() {
+        guard choosing != nil else { return }
+        choosing = nil
         keyChoiceRejection = nil
+        shortcutChoiceRejection = nil
         tap?.chooseKey(nil)
         keyChoiceMonitors.forEach(NSEvent.removeMonitor)
         keyChoiceMonitors = []
@@ -837,10 +902,20 @@ final class PushToTalkController {
         resignObserver = nil
     }
 
-    /// One key down or flags changed event while the user records a key. Internal so tests
-    /// can drive it.
+    /// One key down or flags changed event while the user records a key or the shortcut.
+    /// Internal so tests can drive it.
     func keyChoice(type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
-        guard let slot = choosingKeySlot else { return }
+        switch choosing {
+        case nil:
+            return
+        case .liveCaptionsShortcut:
+            shortcutChoice(type: type, keyCode: keyCode, flags: flags)
+        case .key(let slot):
+            keyChoice(for: slot, type: type, keyCode: keyCode, flags: flags)
+        }
+    }
+
+    private func keyChoice(for slot: KeySlot, type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
         guard let outcome = keyRecorder.handle(type: type, keyCode: keyCode, flags: flags) else {
             // A key that can be the talk key is down, so the note about an earlier press
             // no longer applies.
@@ -851,11 +926,14 @@ final class PushToTalkController {
         }
         switch outcome {
         case .chosen(var key):
+            // The shortcut stays the shortcut. Nothing swaps with it.
+            if let shortcut = liveCaptionsShortcut, key == .combination(shortcut) {
+                keyChoiceRejection = .liveCaptionsShortcut(shortcut)
+                return
+            }
             stopChoosingKey()
-            // The name of a regular key depends on the keyboard layout, so it is kept as it
-            // looks now.
-            if let combination = key.combination, let code = combination.keyCode, KeyName.namedKey(code) == nil {
-                key = .combination(KeyCombination(modifiers: combination.modifiers, keyCode: code, character: KeyName.character(forKeyCode: code)))
+            if let combination = key.combination {
+                key = .combination(combination.withCurrentCharacter())
             }
             switch slot {
             case .talk: chooseTalkKey(key)
@@ -865,6 +943,76 @@ final class PushToTalkController {
             keyChoiceRejection = rejection
         case .cancelled:
             stopChoosingKey()
+        }
+    }
+
+    /// One event while the user records the Live Captions shortcut.
+    private func shortcutChoice(type: CGEventType, keyCode: Int64, flags: CGEventFlags) {
+        guard let outcome = LiveCaptionsShortcut.outcome(type: type, keyCode: keyCode, flags: flags, orraKeys: [talkKey, translationKey]) else { return }
+        switch outcome {
+        case .chosen(let shortcut):
+            endChoosing()
+            setLiveCaptionsShortcut(shortcut.withCurrentCharacter())
+            // Registers it again when the user recorded the shortcut it already was.
+            updateShortcutRegistration()
+        case .rejected(.systemShortcut(let combination)):
+            shortcutChoiceRejection = .systemShortcut(combination.withCurrentCharacter())
+        case .rejected(.orraKey(let combination)):
+            shortcutChoiceRejection = .orraKey(combination.withCurrentCharacter())
+        case .rejected(let rejection):
+            shortcutChoiceRejection = rejection
+        case .cancelled:
+            stopChoosingKey()
+        }
+    }
+
+    /// Makes `shortcut` the Live Captions shortcut, or removes it for nil, and saves the
+    /// choice. Settings refuses a shortcut that is one of Orra's keys before it gets here.
+    func setLiveCaptionsShortcut(_ shortcut: KeyCombination?) {
+        // The same keys with another character are saved, so the name on screen follows
+        // the keyboard layout the user recorded them on.
+        guard shortcut != liveCaptionsShortcut || shortcut?.character != liveCaptionsShortcut?.character else { return }
+        liveCaptionsShortcut = shortcut
+        saveLiveCaptionsShortcut(shortcut)
+        updateShortcutRegistration()
+    }
+
+    /// Whether pressing the Live Captions shortcut may start a dictation for a moment, since
+    /// a watched key is a combination of modifiers only, all of them in the shortcut, see
+    /// `LiveCaptionsShortcut.mayStartDictation`. Settings warns about it under the shortcut.
+    var liveCaptionsShortcutMayStartDictation: Bool {
+        liveCaptionsShortcutMayStartDictation(with: .talk) || liveCaptionsShortcutMayStartDictation(with: .translation)
+    }
+
+    /// Whether the key of `slot` is the reason pressing the Live Captions shortcut may start
+    /// a dictation, while it is watched. A recorder of that key warns about it.
+    func liveCaptionsShortcutMayStartDictation(with slot: KeySlot) -> Bool {
+        guard let shortcut = liveCaptionsShortcut else { return false }
+        let key = slot == .talk ? talkKey : translationKey
+        return watchedKeys.contains(key) && LiveCaptionsShortcut.mayStartDictation(key, pressing: shortcut)
+    }
+
+    /// Registers the shortcut while it should be, and unregisters it otherwise: before
+    /// `start()`, without a shortcut, and while the user records any key.
+    private func updateShortcutRegistration() {
+        if liveCaptionsShortcut == nil {
+            liveCaptionsShortcutRefused = false
+        }
+        let wanted = registersShortcut && choosing == nil ? liveCaptionsShortcut : nil
+        // A shortcut the system refused is tried again.
+        guard wanted != registeredShortcut else { return }
+        unregisterShortcut?()
+        unregisterShortcut = nil
+        registeredShortcut = nil
+        guard let wanted else { return }
+        unregisterShortcut = registerShortcut(wanted) { [weak self] in
+            self?.onLiveCaptionsShortcut()
+        }
+        liveCaptionsShortcutRefused = unregisterShortcut == nil
+        if unregisterShortcut != nil {
+            registeredShortcut = wanted
+        } else {
+            logger.error("The Live Captions shortcut could not be registered")
         }
     }
 

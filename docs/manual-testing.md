@@ -79,7 +79,21 @@ got worse than the baseline, see docs/release-gate.md.
     heading with a divider above and below and no submenu, no two dividers next to each
     other, and Speak Translations to Others only in a build with a voice model, while
     translation is on or while it is on itself. Since 2026-10-19 it also checks that the
-    Talk Key submenu has no hands free switch.
+    Talk Key submenu has no hands free switch, and that Live Captions shows its shortcut
+    as text after the name, with no key equivalent.
+  - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
+    a fake in place of the hot key API, so no real shortcut is registered: which
+    combinations it can be (a key with Control or Command, or F1 to F20 alone or with
+    modifiers, not Option alone, Option with Shift, modifiers alone, Escape or ⌘ Space),
+    the recorder's choice at the key down and its notes (with its own note for Option and
+    a function key), the default ⌃ ⌥ ⌘ C from the key that types C on the layout, saving
+    and "none", the step at the update that saves the default or None beside a talk key of
+    ⌃ ⌥ ⌘ C or of modifiers within it, a saved shortcut that equals a key turning into
+    None at launch, the refusals between the shortcut and the talk and translation keys,
+    the warning beside a key of modifiers only and for which key, that the shortcut is
+    registered from the start and unregistered while any key is recorded, that a refused
+    registration is noted and tried again, that a held shortcut counts once, and that one
+    registered while held waits for its release.
   - LaunchMigrationsTests, added on 2026-10-19, checks the steps that run at every launch
     in temporary defaults: a first launch saves the modes of both keys and the dictation
     language they started with, only a new user's first launch notes that the dictation
@@ -2771,6 +2785,69 @@ it shows starts, stops, counts and failures, never text.
   build has a voice model. With it on, turning Translation off in Settings leaves it in
   the menu, checked, and clicking it there turns speaking off, after which it leaves
   the menu.
+
+The Live Captions shortcut, added on 2026-10-19, not verified yet in the running app. It
+is a Carbon hot key, see docs/hotkey-options.md, ⌃ ⌥ ⌘ C unless changed in Settings,
+General, Keys. Watch the log with
+`log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "shortcut"'`:
+it shows registrations and refusals, never keys.
+
+- [ ] From another app in front, such as Safari or Notes, ⌃ ⌥ ⌘ C turns captions on and
+  opens the window, and pressed again turns them off and closes it, as closing the window
+  does. Copy Captions in the menu still has the meeting. The app in front gets no C.
+- [ ] Holding ⌃ ⌥ ⌘ C for 3 seconds toggles captions once, with key repeat at its fastest
+  and at its slowest in Keyboard settings.
+- [ ] Record ⌃ ⌥ ⌘ C in Settings and keep holding it for 2 seconds. Captions stay off.
+  Release it and press it right away, and captions turn on.
+- [ ] With the focus in a password field, such as Safari's on a login page, the shortcut
+  still turns captions on and off. Note whether it does not.
+- [ ] With VoiceOver on, the shortcut makes VoiceOver say "Live Captions on" and "Live
+  Captions off", also with another app in front. VoiceOver's own keys (⌃ ⌥ with a key)
+  keep working.
+- [ ] With right Control as the talk key, pressing right Control first and then ⌥ ⌘ C
+  turns captions on and pastes nothing. Note whether the indicator or a sound shows the
+  dictation that starts and is cancelled. With the left hand Control nothing starts.
+- [ ] The menu shows "Live Captions    ⌃ ⌥ ⌘ C" as one item, with the keys as text after
+  the name and no key equivalent on the right. With the menu open, pressing ⌃ ⌥ ⌘ C turns
+  captions on or off once. With the shortcut set to None, the item reads Live Captions.
+- [ ] Settings, General, Keys ends with Live Captions shortcut and "Turns Live Captions on
+  and off from any app." under its name, the field showing ⌃ ⌥ ⌘ C and a None button. Clicking
+  the field shows "Press a shortcut" and "Press a shortcut, such as ⌃ ⌥ ⌘ C. Escape
+  cancels." under it. ⌃ ⌥ ⌘ C pressed then is recorded, it does not turn captions
+  on. ⌥ C says "Use a key with Control or Command, or a function key such as F13.", ⌘ C
+  says it is a shortcut of macOS or most apps, ⌥ F13 says "macOS refuses shortcuts with
+  only Option, or Option and Shift. Add Control or Command, or leave Option out.", and
+  F13 alone is taken. Escape, Cancel and
+  a click elsewhere end the recording with no change.
+- [ ] None turns the shortcut off: the field shows None in grey, the None button goes,
+  the shortcut does nothing, and the menu item reads Live Captions. Record one again and
+  it works again. Both stay after a restart.
+- [ ] Pressing ⌃ ⌥ ⌘ C while recording the talk key or the translation key says "⌃ ⌥ ⌘ C
+  is the Live Captions shortcut." and keeps listening, and it does not turn captions on.
+  With a talk key of ⇧ ⌘ D, pressing ⇧ ⌘ D while recording the shortcut says "⇧ ⌘ D is
+  already one of Orra's keys.". Nothing swaps.
+- [ ] A talk key of ⌃ ⌥ (Control and Option held together) shows the note "Pressing ⌃ ⌥
+  ⌘ C may start a dictation for a moment." under the shortcut. The same for a translation
+  key of ⌥ ⌘ while Translation is on, and not while it is off. In the welcome window,
+  picking ⌃ ⌥ as the talk key shows the same note under its field.
+- [ ] If a combination can be found that macOS refuses as a hot key, such as one another
+  app registered for itself, recording it shows "macOS refused ⌃ ⌥ ⌘ C. Another app may
+  already use it." (with its keys) under the row, and Report a Problem lists "Live
+  Captions shortcut refused by macOS: on".
+- [ ] A fresh install gets ⌃ ⌥ ⌘ C. An update from 0.5.0 gets it too, unless the talk key
+  or the translation key was ⌃ ⌥ ⌘ C, or a combination of modifiers within ⌃ ⌥ ⌘ such as
+  ⌃ ⌥, and then the field shows None. Changing the talk key to ⌃ ⌥ afterwards never
+  clears it. On a Dvorak layout the default still reads ⌃ ⌥ ⌘ C and is the key that types
+  C. After this build ran once, record ⌃ ⌥ ⌘ C as the talk key in 0.5.0 and launch this
+  build again: the shortcut shows None and the talk key works.
+- [ ] The Live captions switch on the Meeting Interpretation page names the shortcut in
+  its help: "Press ⌃ ⌥ ⌘ C in any app to turn them on or off." With None, the help has
+  only its first two sentences. In Chinese and Japanese no space follows the 。 before
+  the last sentence.
+- [ ] Interface in Chinese, Japanese and Spanish: the row reads 实时字幕快捷键,
+  ライブキャプションのショートカット and Función rápida para Subtítulos en vivo, the
+  notes and the None button (无, なし, Ninguna) fit at 720 by 560, and Report a
+  Problem lists "Live Captions shortcut: on" or "off".
 - [ ] Voice sample, since 2026-10-15 recorded in Orra rather than picked as a file. Not
   yet tried with a real microphone. Voice sample (声音样本) has Record… (录音…), which opens
   a sheet with a script to read aloud, about 10 seconds. The script is Chinese when

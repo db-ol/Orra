@@ -179,6 +179,28 @@
         }
       }
     },
+    "%@ is a shortcut of macOS or most apps and can't be the Live Captions shortcut. It would stop working everywhere while Orra runs." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ es una función rápida de teclado de macOS o de la mayoría de las apps y no puede ser la función rápida de teclado para Subtítulos en vivo. Dejaría de funcionar en todas partes mientras Orra esté en ejecución."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@はmacOSや多くのアプリのショートカットのため、ライブキャプションのショートカットにできません。設定すると、Orraの実行中はどこでもそのショートカットが使えなくなります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是 macOS 或大多数 app 的快捷键，不能作为实时字幕快捷键。否则 Orra 运行时它在哪里都不起作用。"
+          }
+        }
+      }
+    },
     "%@ is a shortcut of macOS or most apps and can't be the talk key. It would stop working everywhere while Orra runs." : {
       "localizations" : {
         "es-419" : {
@@ -219,6 +241,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 是 macOS 或大多数 app 的快捷键，不能作为翻译键。否则 Orra 运行时它在哪里都不起作用。"
+          }
+        }
+      }
+    },
+    "%@ is already one of Orra's keys." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ya es una de las teclas de Orra."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@はすでにOrraのキーとして使われています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 已经是 Orra 的按键了。"
           }
         }
       }
@@ -313,6 +357,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ 未连接，所以没有说出译文。"
+          }
+        }
+      }
+    },
+    "%@ is the Live Captions shortcut." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ es la función rápida de teclado para Subtítulos en vivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@はライブキャプションのショートカットです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是实时字幕的快捷键。"
           }
         }
       }
@@ -4018,6 +4084,72 @@
         }
       }
     },
+    "Live captions are off each time Orra starts. Closing the caption window turns them off. Press %@ in any app to turn them on or off." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los subtítulos en vivo están desactivados cada vez que se abre Orra. Si cierras la ventana de subtítulos, se desactivan. Presiona %@ en cualquier app para activarlos o desactivarlos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブキャプションは、Orraを起動するたびにオフになります。キャプションウインドウを閉じてもオフになります。どのアプリからでも、%@を押すとライブキャプションのオンとオフを切り替えられます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次启动 Orra 时，实时字幕都是关闭的。关闭字幕窗口也会关闭实时字幕。在任何 App 中按 %@ 即可打开或关闭实时字幕。"
+          }
+        }
+      }
+    },
+    "Live Captions off" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subtítulos en vivo desactivados"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブキャプションをオフにしました"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕已关闭"
+          }
+        }
+      }
+    },
+    "Live Captions on" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subtítulos en vivo activados"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブキャプションをオンにしました"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕已打开"
+          }
+        }
+      }
+    },
     "Live Captions on the Meeting Interpretation page translate the same way." : {
       "localizations" : {
         "es-419" : {
@@ -4036,6 +4168,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“会议同传”页面的实时字幕也按这里的设置翻译。"
+          }
+        }
+      }
+    },
+    "Live Captions shortcut" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Función rápida para Subtítulos en vivo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブキャプションのショートカット"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实时字幕快捷键"
           }
         }
       }
@@ -4124,6 +4278,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在载入…"
+          }
+        }
+      }
+    },
+    "macOS refused %@. Another app may already use it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS rechazó %@. Es posible que otra app ya la esté usando."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOSが%@を受け付けませんでした。ほかのアプリがすでに使用している可能性があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 拒绝了 %@。可能已有其他 App 在使用它。"
+          }
+        }
+      }
+    },
+    "macOS refuses shortcuts with only Option, or Option and Shift. Add Control or Command, or leave Option out." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS no acepta funciones rápidas de teclado solo con Opción, o con Opción y Mayúsculas. Agrega Control o Comando, o quita Opción."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOSでは、OptionキーだけやOptionキーとShiftキーだけのショートカットは使えません。ControlキーかCommandキーを加えるか、Optionキーを外してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 不接受只有 Option，或只有 Option 和 Shift 的快捷键。请加上 Control 或 Command，或者不用 Option。"
           }
         }
       }
@@ -6069,6 +6267,50 @@
         }
       }
     },
+    "Press a shortcut" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Presiona una función rápida de teclado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットを押してください"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下一组快捷键"
+          }
+        }
+      }
+    },
+    "Press a shortcut, such as ⌃ ⌥ ⌘ C. Escape cancels." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Presiona una función rápida de teclado, como ⌃ ⌥ ⌘ C. Presiona Esc para cancelar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌃ ⌥ ⌘ Cなどのショートカットを押してください。Escキーでキャンセルできます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下一组快捷键，例如 ⌃ ⌥ ⌘ C。按 Esc 键取消。"
+          }
+        }
+      }
+    },
     "Press the key once to start, and once more to paste. Escape cancels." : {
       "localizations" : {
         "es-419" : {
@@ -6132,6 +6374,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按一下开始，再按一下结束"
+          }
+        }
+      }
+    },
+    "Pressing %@ may start a dictation for a moment." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al presionar %@, puede empezar un dictado por un momento."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を押すと、一瞬だけ音声入力が始まることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下 %@ 时，可能会短暂开始一次听写。"
           }
         }
       }
@@ -9480,6 +9744,28 @@
         }
       }
     },
+    "Turns Live Captions on and off from any app." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activa y desactiva Subtítulos en vivo desde cualquier app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どのアプリからでも、ライブキャプションのオンとオフを切り替えられます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在任何 App 中打开或关闭实时字幕。"
+          }
+        }
+      }
+    },
     "Type a word or name, then press Return" : {
       "localizations" : {
         "es-419" : {
@@ -9587,6 +9873,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用%@"
+          }
+        }
+      }
+    },
+    "Use a key with Control or Command, or a function key such as F13." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa una tecla con Control o Comando, o una tecla de función como F13."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ControlキーかCommandキーとほかのキーを一緒に押すか、F13などのファンクションキーを使ってください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请用 Control 或 Command 加一个键，或者用 F13 这样的功能键。"
           }
         }
       }

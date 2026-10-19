@@ -55,6 +55,14 @@ struct StatusMenuTests {
         #expect(shown() == ["Live Captions", "Copy Captions", "Copy Previous Captions"])
     }
 
+    /// The Live Captions shortcut shows as text after the name, not as a key equivalent.
+    @Test func liveCaptionsShowsItsShortcut() throws {
+        let shortcut = KeyCombination(modifiers: [.control, .option, .command], keyCode: 0x69)
+        let item = try #require(menu(translationOn: false, speakingOn: false, shortcut: shortcut).items.first { $0.title.hasPrefix("Live Captions") })
+        #expect(item.title == "Live Captions    ⌃ ⌥ ⌘ F13")
+        #expect(item.keyEquivalent.isEmpty)
+    }
+
     /// Double press for hands free left the menu. Settings shows it under Keys, and only
     /// while a key is in Hold.
     @Test func talkKeyHasNoHandsFreeSwitch() throws {
@@ -91,9 +99,9 @@ struct StatusMenuTests {
         }
     }
 
-    /// The menu SwiftUI makes of StatusMenu.
-    private func menu(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore()) -> NSMenu {
-        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert)
+    /// The menu SwiftUI makes of StatusMenu. No Live Captions shortcut unless one is given.
+    private func menu(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore(), shortcut: KeyCombination? = nil) -> NSMenu {
+        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert, liveCaptionsShortcut: shortcut)
         pushToTalk.setTranslationKeyOn(translationOn)
         let speech = TranslationSpeech(
             engines: voiceModel ? .only(FakeSynthesizer()) : .none,

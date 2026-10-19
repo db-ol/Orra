@@ -133,6 +133,23 @@ nonisolated struct KeyCombination: Hashable, Sendable {
         return modifiers == .control && keyCode == KeyName.spaceKeyCode
     }
 
+    /// Whether this can be a shortcut of the system, such as the Live Captions shortcut: a
+    /// regular key with Control or Command, or a function key F1 to F20 with or without
+    /// modifiers, which remapped keys and Stream Deck often send. Modifiers alone, Option
+    /// alone and Option with Shift are refused, since macOS 15 refuses the last two as hot
+    /// keys and they type characters. So are Escape and the shortcuts of macOS.
+    var isValidShortcut: Bool {
+        guard let keyCode, keyCode != TalkKeyDetector.escapeKeyCode, !isSystemShortcut,
+              !hasOnlyOptionModifiers else { return false }
+        return KeyName.isFunctionKey(keyCode) || !modifiers.isDisjoint(with: [.control, .command])
+    }
+
+    /// Whether the modifiers are Option alone or Option with Shift, which macOS 15 refuses
+    /// in a hot key, even with a function key.
+    var hasOnlyOptionModifiers: Bool {
+        modifiers == .option || modifiers == [.option, .shift]
+    }
+
     /// The keys as Mac menus show them, such as "⌃ ⌥" or "⇧ ⌘ D".
     func title(in locale: Locale = .interface) -> String {
         var parts = modifiers.symbols
@@ -150,8 +167,14 @@ nonisolated struct KeyCombination: Hashable, Sendable {
         return [names, String(keyCode), character ?? ""].joined(separator: "|")
     }
 
-    /// Reads a saved combination. Nil for anything that is not a valid one.
+    /// Reads a saved combination. Nil for anything that is not a valid key.
     init?(saved: String) {
+        self.init(saved: saved, accepting: \.isValid)
+    }
+
+    /// Reads a saved combination that `accepts` takes, such as a shortcut, see
+    /// `isValidShortcut`.
+    init?(saved: String, accepting accepts: (KeyCombination) -> Bool) {
         let parts = saved.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
         var modifiers: ModifierSet = []
         for name in parts[0].split(separator: "+") {
@@ -166,7 +189,15 @@ nonisolated struct KeyCombination: Hashable, Sendable {
             character = parts.count > 2 && !parts[2].isEmpty ? parts[2] : nil
         }
         self.init(modifiers: modifiers, keyCode: keyCode, character: character)
-        guard isValid else { return nil }
+        guard accepts(self) else { return nil }
+    }
+
+    /// The combination with the character its regular key types now, unless the key has a
+    /// name of its own, such as Return or F13. The name of a regular key depends on the
+    /// keyboard layout, so a key the user picks keeps the name it has as they pick it.
+    @MainActor func withCurrentCharacter() -> KeyCombination {
+        guard let keyCode, KeyName.namedKey(keyCode) == nil else { return self }
+        return KeyCombination(modifiers: modifiers, keyCode: keyCode, character: KeyName.character(forKeyCode: keyCode))
     }
 
     /// Which way one event moves this combination, see `Hotkey.signal`.

@@ -247,6 +247,8 @@ final class ProblemReporter {
                     .init(name: "Use names on screen", on: pushToTalk.usesScreenNames),
                     .init(name: "Clean up with a local model", on: cleanup.isOn),
                     .init(name: "Translate with the translation key", on: cleanup.translationIsOn),
+                    .init(name: "Live Captions shortcut", on: pushToTalk.liveCaptionsShortcut != nil),
+                    .init(name: "Live Captions shortcut refused by macOS", on: pushToTalk.liveCaptionsShortcutRefused),
                     .init(name: "Check for updates automatically", on: updater.checksAutomatically),
                 ],
                 cleanupModelState: describe(cleanup.models.state, cleanup.engineState),

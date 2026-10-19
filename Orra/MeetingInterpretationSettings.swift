@@ -22,7 +22,7 @@ struct MeetingInterpretationSettings: View {
         Form {
             Section {
                 if let captions {
-                    LiveCaptionRows(captions: captions)
+                    LiveCaptionRows(captions: captions, shortcut: pushToTalk.liveCaptionsShortcut)
                 }
             } header: {
                 Text("For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice.")
@@ -136,6 +136,16 @@ struct MeetingInterpretationSettings: View {
 /// three choices.
 private struct LiveCaptionRows: View {
     let captions: MeetingCaptions
+    /// The Live Captions shortcut, which the switch's help names, or nil for none.
+    let shortcut: KeyCombination?
+
+    /// One string with the shortcut, so each language joins the sentences its own way.
+    private var help: Text {
+        guard let shortcut else {
+            return Text("Live captions are off each time Orra starts. Closing the caption window turns them off.")
+        }
+        return Text("Live captions are off each time Orra starts. Closing the caption window turns them off. Press \(shortcut.title()) in any app to turn them on or off.")
+    }
 
     var body: some View {
         Toggle(isOn: Binding(
@@ -148,7 +158,7 @@ private struct LiveCaptionRows: View {
                 systemImage: "captions.bubble"
             )
         }
-        .help(Text("Live captions are off each time Orra starts. Closing the caption window turns them off."))
+        .help(help)
         Picker(selection: Binding(
             get: { captions.displayMode },
             set: { captions.setDisplayMode($0) }
