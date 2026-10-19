@@ -337,7 +337,9 @@ struct ModelDownloadTests {
     }
 
     @Test func cancelKeepsPartialFile() async throws {
-        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(20))])
+        // The server stops after 400 KB of the weights and holds the connection open, so the
+        // download cannot finish before the test sees it running, however slow the Mac is.
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(dropAfter: 400_000, dropWhen: { false })])
         defer { servers.close() }
         let temporary = TemporaryModelFolders()
         defer { temporary.remove() }
