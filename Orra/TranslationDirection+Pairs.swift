@@ -66,6 +66,18 @@ nonisolated extension TranslationDirection {
         return .other
     }
 
+    /// Whether a text holds words of `language` that a translation into English has to
+    /// translate, also when most of it is English: a Han character or kana for Japanese,
+    /// and for Spanish a word the Spanish rule counts, such as mañana or de, or ¿ or ¡.
+    /// Always false for Chinese, whose routes keep their rules.
+    static func holdsWords(of language: DictationLanguage, in text: String) -> Bool {
+        switch language {
+        case .chinese: false
+        case .japanese: text.unicodeScalars.contains { LanguageGuard.isHan($0) || LanguageGuard.isKana($0) }
+        case .spanish: SpanishCounts(text.precomposedStringWithCompatibilityMapping).spanish > 0
+        }
+    }
+
     /// Honorifics after a name, which the rule leaves out.
     static let japaneseHonorifics: [[Unicode.Scalar]] = ["さん", "さま", "様", "くん", "ちゃん", "氏"].map { Array($0.unicodeScalars) }
 

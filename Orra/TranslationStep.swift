@@ -71,7 +71,13 @@ nonisolated enum TranslationStep {
     /// above for Chinese.
     static func isWorthTranslating(_ text: String, in language: DictationLanguage) -> Bool {
         guard language != .chinese else { return isWorthTranslating(text) }
-        return text.count <= maximumLength && TranslationDirection.source(of: text, in: language) != nil
+        return isWorthTranslating(text, source: TranslationDirection.source(of: text, in: language))
+    }
+
+    /// The same for Japanese or Spanish text whose language the caller read already, see
+    /// TranslationDirection.source(of:in:).
+    static func isWorthTranslating(_ text: String, source: TranslationDirection.Source?) -> Bool {
+        text.count <= maximumLength && source != nil
     }
 
     /// The outcome for the model's answer for `text`, as TranslationPrompt.parse read it:
@@ -87,10 +93,19 @@ nonisolated enum TranslationStep {
 
     /// The outcome on a route, the same way. The Chinese routes get the verdict above. On
     /// the others, for text in the target language already, a translation that only
-    /// repeats the model's cleanup is unchanged too, so the cleanup of Japanese or Spanish
-    /// text never slips in as its translation. Text in the other language keeps a
-    /// translation that the model also wrote into "cleaned", which it sometimes does.
+    /// repeats the model's cleanup is unchanged too, so the model's cleanup never pastes
+    /// as a translation. Text in the other language keeps a translation that the model also
+    /// wrote into "cleaned", which it sometimes does, and so does English text with words
+    /// of the dictation language, such as "I'll send it 明日の朝。", whose translation
+    /// translates them, see TranslationDirection.holdsWords(of:in:).
     static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into route: TranslationRoute) -> Outcome {
+        guard route.language != .chinese else { return verdict(on: answer, for: text, into: route.target) }
+        return verdict(on: answer, for: text, into: route, source: TranslationDirection.source(of: text, in: route.language))
+    }
+
+    /// The same for Japanese or Spanish text whose language the caller read already, see
+    /// TranslationDirection.source(of:in:).
+    static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into route: TranslationRoute, source: TranslationDirection.Source?) -> Outcome {
         guard route.language != .chinese else { return verdict(on: answer, for: text, into: route.target) }
         guard let answer else { return .unreadable }
         if let failure = TranslationGuard.check(source: text, output: answer.translation, route: route) {
@@ -99,8 +114,9 @@ nonisolated enum TranslationStep {
         if answer.translation == text {
             return .unchanged
         }
-        let inTarget = TranslationDirection.source(of: text, in: route.language) == (route.target == .english ? .english : .partner)
-        return inTarget && answer.translation == answer.cleaned ? .unchanged : .translated
+        let inTarget = source == (route.target == .english ? .english : .partner)
+        let repeatsCleanup = answer.translation == answer.cleaned && !TranslationDirection.holdsWords(of: route.language, in: text)
+        return inTarget && repeatsCleanup ? .unchanged : .translated
     }
 
     /// The text to paste and what happened, on a Chinese route. `cleansUp` says whether
@@ -124,13 +140,22 @@ nonisolated enum TranslationStep {
     /// restyle or clean up the text, which Orra never pastes for Japanese or Spanish, so
     /// the model does not run. The Chinese routes always run it.
     static func isInItsLanguage(_ text: String, on route: TranslationRoute) -> Bool {
-        route.language != .chinese && route.target != .english && TranslationDirection.source(of: text, in: route.language) == .partner
+        route.language != .chinese && isInItsLanguage(source: TranslationDirection.source(of: text, in: route.language), on: route)
+    }
+
+    /// The same for text whose language the caller read already, see
+    /// TranslationDirection.source(of:in:).
+    static func isInItsLanguage(source: TranslationDirection.Source?, on route: TranslationRoute) -> Bool {
+        route.language != .chinese && route.target != .english && source == .partner
     }
 
     /// The text to paste and what happened, on any route, the same way. On a route of
     /// Japanese or Spanish, text in the target language already is pasted as it is, see
     /// `isInItsLanguage(_:on:)`, and a translation that only repeats the model's cleanup
     /// pastes the text the step got unless cleanup stands in, see `verdict(on:for:into:)`.
+    /// The model's cleanup never stands in for text with words of the dictation language,
+    /// such as "The new office is near 品川.", whose cleanup may translate them, so Paste
+    /// Original Text brings back 品川.
     @concurrent
     static func run(
         _ text: String,
@@ -139,10 +164,13 @@ nonisolated enum TranslationStep {
         timeout: Duration? = nil,
         complete: @escaping @Sendable (String, TranslationRoute) async throws -> String
     ) async -> Result {
-        if isInItsLanguage(text, on: route) {
+        // The language of the text, read once, on the routes of Japanese and Spanish.
+        let source = route.language == .chinese ? nil : TranslationDirection.source(of: text, in: route.language)
+        if isInItsLanguage(source: source, on: route) {
             Logger.rewrite.notice("Translation into \(route.logName, privacy: .public) not needed, the text is in that language")
             return Result(text: text, untranslated: text, outcome: .unchanged)
         }
+        let cleansUp = cleansUp && !TranslationDirection.holdsWords(of: route.language, in: text)
         let started = ContinuousClock.now
         let (result, timedOut) = await TimedCall.run(within: timeout ?? Self.timeout(for: text)) { try await complete(text, route) }
         var outcome = Outcome.failed
@@ -154,7 +182,7 @@ nonisolated enum TranslationStep {
         } else {
             switch result {
             case .success(let answer):
-                let parsed = TranslationPrompt.parse(answer)
+                let parsed = TranslationPrompt.parse(answer, for: text, on: route)
                 if let parsed, cleansUp, CleanupStep.isWorthCleaning(text) {
                     if let failure = CleanupStep.check(parsed.cleaned, of: text) {
                         cleanup = "held back by the \(failure.logName) check"
@@ -163,7 +191,7 @@ nonisolated enum TranslationStep {
                         cleanup = "used"
                     }
                 }
-                outcome = verdict(on: parsed, for: text, into: route)
+                outcome = verdict(on: parsed, for: text, into: route, source: source)
                 if outcome == .translated {
                     translation = parsed?.translation
                 }

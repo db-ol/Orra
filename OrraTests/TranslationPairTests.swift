@@ -327,6 +327,28 @@ struct TranslationPairTests {
         #expect(both.text == "終わったと思います。")
     }
 
+    /// English text with words of the dictation language keeps its translation into English,
+    /// which translates them, and the model's cleanup never stands in for it, so Paste
+    /// Original Text brings back the words as said.
+    @Test func englishWithWordsOfTheLanguageIsTranslated() async {
+        let japanese = TranslationRoute(.japanese, into: .english)
+        let morning = await TranslationStep.run("I'll send it 明日の朝。", into: japanese, cleansUp: false, complete: Self.answer(#"{"cleaned": "I'll send it tomorrow morning.", "translation": "I'll send it tomorrow morning."}"#))
+        #expect(morning.outcome == .translated)
+        #expect(morning.text == "I'll send it tomorrow morning.")
+        #expect(morning.untranslated == "I'll send it 明日の朝。")
+        let place = await TranslationStep.run("The new office is near 品川.", into: japanese, cleansUp: true, complete: Self.answer(#"{"cleaned": "The new office is near Shinagawa.", "translation": "The new office is near Shinagawa."}"#))
+        #expect(place.outcome == .translated)
+        #expect(place.untranslated == "The new office is near 品川.")
+        let spanish = await TranslationStep.run("I'll call you mañana.", into: TranslationRoute(.spanish, into: .english), cleansUp: false, complete: Self.answer(#"{"cleaned": "I'll call you tomorrow.", "translation": "I'll call you tomorrow."}"#))
+        #expect(spanish.outcome == .translated)
+        #expect(spanish.text == "I'll call you tomorrow.")
+        #expect(TranslationDirection.holdsWords(of: .japanese, in: "Thanks, 山田さん"))
+        #expect(!TranslationDirection.holdsWords(of: .japanese, in: "Thanks, Yamada-san"))
+        #expect(TranslationDirection.holdsWords(of: .spanish, in: "See you mañana"))
+        #expect(!TranslationDirection.holdsWords(of: .spanish, in: "See you tomorrow"))
+        #expect(!TranslationDirection.holdsWords(of: .chinese, in: "我们开会"))
+    }
+
     /// Into English, a filler that opens the text and its English filler that opens the
     /// translation are left out. Other routes, and a translation without a filler before,
     /// keep the answer as it is.

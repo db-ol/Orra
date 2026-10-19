@@ -67,7 +67,12 @@ nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
     /// language and everything else to English, the dictation language and text in neither
     /// language alike.
     func target(for text: String, in language: DictationLanguage) -> TranslationTarget? {
-        guard let source = Self.source(of: text, in: language) else { return nil }
+        target(source: Self.source(of: text, in: language), in: language)
+    }
+
+    /// The same for a text whose language the caller read already.
+    func target(source: Source?, in language: DictationLanguage) -> TranslationTarget? {
+        guard let source else { return nil }
         switch effective(for: language) {
         case .automatic: return source == .english ? language.translationLanguage : .english
         case .english: return .english
