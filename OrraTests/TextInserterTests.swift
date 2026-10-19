@@ -50,7 +50,8 @@ final class InserterFixture {
 
 /// Tests that check the restore await `waitForRestore()` rather than a deadline. The
 /// restore runs on the main actor, which the other tests of a full run can keep busy for
-/// many seconds on a CI runner. The time limits only end a restore that never comes.
+/// many seconds on a CI runner. The time limits only fail a test whose restore is very
+/// late. They cannot end the wait.
 @MainActor
 struct TextInserterTests {
     @Test func pastesWithCommandV() async {
