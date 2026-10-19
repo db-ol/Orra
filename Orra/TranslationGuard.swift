@@ -47,6 +47,8 @@ nonisolated enum TranslationGuard {
         case notJapanese
         /// Chinese in a Japanese translation, see TranslationGuard.isChineseInJapanese.
         case chineseInJapanese
+        /// English left in a Japanese translation, see TranslationGuard.isEnglishInJapanese.
+        case englishInJapanese
         /// Kana in an English translation, other than a short name of the source.
         case kanaInEnglish
         /// Spanish left in an English translation.
@@ -82,6 +84,7 @@ nonisolated enum TranslationGuard {
             case .acronymLost(let acronyms): "acronym lost " + acronyms.joined(separator: ",")
             case .notJapanese: "not Japanese"
             case .chineseInJapanese: "Chinese in Japanese output"
+            case .englishInJapanese: "English in Japanese output"
             case .kanaInEnglish: "kana in English output"
             case .notEnglish: "Spanish in English output"
             case .notSpanish: "English in Spanish output"
@@ -113,6 +116,7 @@ nonisolated enum TranslationGuard {
             case .acronymLost: "acronym"
             case .notJapanese: "not Japanese"
             case .chineseInJapanese: "Chinese in Japanese"
+            case .englishInJapanese: "English in Japanese"
             case .kanaInEnglish: "kana in English"
             case .notEnglish: "not English"
             case .notSpanish: "not Spanish"

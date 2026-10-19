@@ -91,6 +91,9 @@ nonisolated extension TranslationGuard {
             if isChineseInJapanese(source: source, output: output) {
                 return .chineseInJapanese
             }
+            if isEnglishInJapanese(output) {
+                return .englishInJapanese
+            }
             let sourceWords = Set(RewriteGuard.latinWords(source))
             let newWords = RewriteGuard.latinWords(output).filter { !sourceWords.contains($0) }.count
             if newWords > 2 {
@@ -194,8 +197,10 @@ nonisolated extension TranslationGuard {
     }
 
     /// Chinese in a Japanese translation: two or more characters that only simplified
-    /// Chinese writes and the source lacks, or 8 Han characters or more and no kana in a
-    /// translation of a source that has kana or no Han at all.
+    /// Chinese writes and the source lacks, or no kana and 8 Han characters or more in a
+    /// translation of a source that has kana or no Han at all, with one such character or
+    /// from `hanOnlyLength` Han characters on. A name or place in Han characters alone, such
+    /// as 東京駅八重洲中央口, stays Japanese.
     static func isChineseInJapanese(source: String, output: String) -> Bool {
         let sourceScalars = Set(source.unicodeScalars)
         let simplified = output.unicodeScalars.filter { simplifiedOnly.contains($0) && !sourceScalars.contains($0) }
@@ -203,12 +208,41 @@ nonisolated extension TranslationGuard {
             return true
         }
         let sourceIsHanOnly = !RewriteGuard.han(source).isEmpty && !hasKana(source)
-        return !sourceIsHanOnly && RewriteGuard.han(output).count >= 8 && !hasKana(output)
+        let han = RewriteGuard.han(output).count
+        return !sourceIsHanOnly && han >= 8 && !hasKana(output) && (simplified.count == 1 || han >= hanOnlyLength)
     }
 
-    /// Simplified characters that Japanese writes differently, so a Japanese text never
-    /// holds them: 这 们 说 么 吗 and others, each checked against Japanese text of FLEURS.
-    static let simplifiedOnly = Set("这们说么吗还让给对过时里东车门问间现发实应该话请谢欢题难觉买卖钱务产号码电脑么个吧呢没见长开关头场边认识语读写传动业东区欧亚书导团员".unicodeScalars)
+    /// Han characters without kana that make a Japanese translation Chinese even without a
+    /// character that only simplified Chinese writes. Japanese sentences hold kana, and a
+    /// name or place this long is rare.
+    static let hanOnlyLength = 20
+
+    /// Simplified characters that Japanese writes differently, so Japanese text does not
+    /// hold them, such as 这 们 说 吗, for 這 們 説 and the particle か. Characters that
+    /// Japanese writes too are left out, such as 区 (港区), 号 (番号), 写 (写真), 没 (没頭),
+    /// 欧 (欧州) and 里 (里帰り).
+    static let simplifiedOnly = Set("这们说么吗还让给对过时东车门问间现发实应该话请谢欢题难觉买卖钱务产码电脑个吧呢见长开关头场边认识语读传动业亚书导团员".unicodeScalars)
+
+    /// English left in a Japanese translation, outside quotes: a lowercase Latin letter
+    /// right after katakana, as in レcep, or a run of words in lowercase with an English
+    /// function word, as in 45.99ドル plus 税金です. A name, a title in capitals or a quoted
+    /// word, such as “good morning”, stays.
+    static func isEnglishInJapanese(_ output: String) -> Bool {
+        let unquoted = TranslationGuard.replacing(quoted, in: output) { _ in "" }
+        if matches(katakanaThenLowercase, unquoted) {
+            return true
+        }
+        for run in all(lowercaseRun, in: unquoted) {
+            let words = run.split(separator: " ").map(String.init)
+            if words.contains(where: { TranslationDirection.englishFunction.contains($0) || englishLeftWords.contains($0) }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Words that join a sentence, which a name in lowercase does not hold.
+    static let englishLeftWords: Set<String> = ["plus", "minus", "per", "than", "then", "also", "very", "really", "only", "even", "still", "maybe"]
 
     private static func dominantLanguage(_ text: String) -> NLLanguage? {
         let recognizer = NLLanguageRecognizer()
@@ -558,6 +592,12 @@ nonisolated extension TranslationGuard {
     static let pairInstruction = regex("翻訳|訳し|訳す|答え|返信|書いて|要約|言って|traduc|tradúc|contesta|responde|escribe|resume|dime", .caseInsensitive)
 
     private static let kanaRun = regex("[\u{3041}-\u{3096}\u{30A1}-\u{30FA}\u{30FC}]+")
+    /// Text in quotes, which a translation may keep in English.
+    private static let quoted = regex(#"“[^”]*”|「[^」]*」|『[^』]*』|"[^"]*"|'[^']*'|‘[^’]*’"#)
+    private static let katakanaThenLowercase = regex("[\u{30A1}-\u{30FA}][a-z]")
+    /// Words in lowercase, one or more, separated by spaces, outside a version, a file
+    /// name, an address or a number such as 802.11a.
+    private static let lowercaseRun = regex(#"(?<![A-Za-z0-9._@/-])[a-z]+(?: [a-z]+)*(?![A-Za-z0-9._@/-])"#)
     private static let japaneseNumeral = regex("[零〇一二三四五六七八九十百千万億兆]+")
     private static let era = regex("(令和|平成)\\s*(\\d+|元|[一二三四五六七八九十]+)\\s*年")
     private static let digitsWithPairMultiplier = regex(#"(\d+(?:[.,]\d+)?)\s*(億|兆|万|千|mil(?:l[oó]n(?:es)?)?\b|bill[oó]n(?:es)?)"#, .caseInsensitive)

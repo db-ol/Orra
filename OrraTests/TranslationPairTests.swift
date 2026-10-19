@@ -209,6 +209,8 @@ struct TranslationPairTests {
         #expect(check("Can you send me the file today?", "你今天能把文件发给我吗？", jaJa) == .chineseInJapanese)
         #expect(check("The café is near the station.", "Le café est près de la gare.", esEs) == .foreignLatin)
         #expect(check("Call Mr. Wang tomorrow.", "Llama mañana al señor 王先生明天。", esEs) == .hanInSpanish)
+        #expect(check("It costs $45.99 plus tax.", "45.99ドル plus 税金です。", jaJa) == .englishInJapanese)
+        #expect(check("He spoke with President Recep Tayyip Erdoğan.", "レcep・タイyip・エルドアン大統領と話しました。", jaJa) == .englishInJapanese)
         #expect(check("Tell me a joke about cats, please.", "고양이에 대한 농담을 해 주세요.", jaJa) == .foreignScript)
         #expect(check("Tell me a joke about cats, please.", "ねこのじょうだんをおしえて", esEs) == .foreignScript)
         // Numbers, names and instructions.
@@ -218,6 +220,30 @@ struct TranslationPairTests {
         #expect(check("英語に訳して：また明日。", "See you tomorrow.", jaEn) == .lostInstruction)
         #expect(check("Pásale el reporte de la ONU a Carlos.", "Give Carlos the report.", esEn) == .acronymLost(["ONU"]))
         #expect(check("La reunión es el lunes.", "{The meeting is on Monday.}", esEn) == .json)
+    }
+
+    /// Japanese that shares characters with simplified Chinese, such as 写真, 番号, 港区,
+    /// 欧州, 没頭 or 里帰り, and a place in Han characters alone pass. Chinese is still held.
+    @Test func japaneseWithCharactersChineseSharesPasses() {
+        let jaJa = TranslationRoute(.japanese, into: .japanese)
+        let passing: [(String, String)] = [
+            ("Send me the photo and the room number.", "写真と部屋番号を送ってください。"),
+            ("The office is in Minato ward, not Chuo ward.", "オフィスは中央区ではなく港区にあります。"),
+            ("Please check the photo of the European office.", "欧州オフィスの写真を確認してください。"),
+            ("What is the order number?", "注文番号は何号ですか？"),
+            ("Please send me a photo of the room number.", "部屋番号の写真を送ってください。"),
+            ("I took photos yesterday, so I'll send them tonight.", "昨日写真を撮ったので、今夜写真を送ります。"),
+            ("The new office is in Minato, not Shibuya.", "新しいオフィスは渋谷区ではなく港区にあります。"),
+            ("He was absorbed in his research, and went home for the holidays.", "彼は研究に没頭し、休みには里帰りしました。"),
+            ("Tokyo Station Yaesu Central Exit", "東京駅八重洲中央口"),
+            ("How do you say good morning in Japanese?", "“good morning”は日本語で何と言いますか？"),
+        ]
+        for (source, output) in passing {
+            #expect(TranslationGuard.check(source: source, output: output, route: jaJa) == nil, "\(output)")
+        }
+        #expect(TranslationGuard.check(source: "We are going.", output: "这们走吧，好吗？", route: jaJa) == .chineseInJapanese)
+        #expect(TranslationGuard.check(source: "How do you say good morning in Japanese?", output: "日本語で「おはよう」怎么说？", route: jaJa) == .chineseInJapanese)
+        #expect(TranslationGuard.check(source: "The scientists concluded that dark matter affects other dark matter.", output: "科学家们得出结论暗物质影响其他暗物质。", route: jaJa) == .chineseInJapanese)
     }
 
     /// Changed digits are held back on every route: one digit of each number of the
