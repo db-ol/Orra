@@ -194,14 +194,26 @@ struct TranslationSpeechTests {
     @Test func aTranslationThatCannotBeSpokenIsStillPasted() {
         let ready = makeSpeech()
         ready.setAlsoPastes(false)
-        #expect(!ready.voiceForDictation.alsoPastes())
+        #expect(!ready.voiceForDictation.alsoPastes(.english))
         let noModel = makeSpeech(folders: nil)
         noModel.setAlsoPastes(false)
-        #expect(noModel.voiceForDictation.alsoPastes())
+        #expect(noModel.voiceForDictation.alsoPastes(.english))
         let noDevice = makeSpeech(outputs: [Self.speakers])
         noDevice.setAlsoPastes(false)
-        #expect(noDevice.voiceForDictation.alsoPastes())
-        #expect(makeSpeech().voiceForDictation.alsoPastes())
+        #expect(noDevice.voiceForDictation.alsoPastes(.english))
+        #expect(makeSpeech().voiceForDictation.alsoPastes(.english))
+        // CosyVoice3 does not speak Japanese, so a Japanese translation is pasted.
+        let cosyVoice = TranslationSpeech(
+            engines: .only(synthesizer, as: .cosyVoice),
+            playback: playback,
+            outputs: { [Self.orraMicrophone] },
+            folders: { Self.folders },
+            settings: TranslationSpeech.Settings(isOn: true, alsoPastes: false, output: nil)
+        )
+        #expect(cosyVoice.voiceForDictation.alsoPastes(.japanese))
+        #expect(!cosyVoice.voiceForDictation.alsoPastes(.spanish))
+        #expect(!cosyVoice.voiceForDictation.alsoPastes(.english))
+        #expect(!ready.voiceForDictation.alsoPastes(.japanese))
     }
 
     /// Dictation first: nothing is synthesized while the user dictates.
@@ -426,7 +438,7 @@ struct TranslationSpeechTests {
             }
         }
         let speech = makeSpeech()
-        #expect(speech.voiceForDictation.alsoPastes())
+        #expect(speech.voiceForDictation.alsoPastes(.english))
         speech.speak("好的，我们开始吧。今天先看一下上周的进度。", in: .chinese)
         await speech.waitUntilDone()
         #expect(spoken == ["zh 好的，我们开始吧。", "zh 好的，我们开始吧。", "zh 今天先看一下上周的进度。"])
@@ -434,7 +446,7 @@ struct TranslationSpeechTests {
         #expect(playback.calls == ["start Orra Microphone", "play \(played)", "finish", "stop"])
         #expect(speech.problem == "The voice model failed twice on a sentence, so Orra skipped it.")
         #expect(speech.state == .idle)
-        #expect(speech.voiceForDictation.alsoPastes())
+        #expect(speech.voiceForDictation.alsoPastes(.english))
     }
 
     /// The word check: a whole piece whose length passes is written down by the speech

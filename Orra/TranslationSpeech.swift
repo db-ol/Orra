@@ -6,12 +6,12 @@ import os
 struct TranslationVoice {
     /// Whether a translation is spoken: Speak Translation is on and this build can speak.
     var speaks: () -> Bool
-    /// Whether a spoken translation is pasted too.
-    var alsoPastes: () -> Bool
+    /// Whether a spoken translation into this language is pasted too.
+    var alsoPastes: (TranslationTarget) -> Bool
     /// Queues a translation to be spoken, and returns at once.
     var speak: (String, TranslationTarget) -> Void
 
-    static let off = TranslationVoice(speaks: { false }, alsoPastes: { true }, speak: { _, _ in })
+    static let off = TranslationVoice(speaks: { false }, alsoPastes: { _ in true }, speak: { _, _ in })
 }
 
 /// Speak Translation: speaks what the translation key translated, in a voice model, into
@@ -210,14 +210,15 @@ final class TranslationSpeech {
     }
 
     /// For PushToTalkController. A translation is pasted even with Also Paste off while
-    /// the voice model is not on this Mac or no device would take the voice, so it is not
-    /// lost to a translation that cannot be spoken.
+    /// the voice model is not on this Mac, no device would take the voice or the model
+    /// does not speak its language, as CosyVoice3 does not speak Japanese, so it is not lost
+    /// to a translation that cannot be spoken.
     var voiceForDictation: TranslationVoice {
         TranslationVoice(
             speaks: { [weak self] in self?.speaks == true },
-            alsoPastes: { [weak self] in
+            alsoPastes: { [weak self] language in
                 guard let self else { return true }
-                return self.alsoPastes || self.folders() == nil || self.currentDevice() == nil
+                return self.alsoPastes || self.folders() == nil || self.currentDevice() == nil || self.engine?.speaks(language) == false
             },
             speak: { [weak self] text, language in self?.speak(text, in: language) }
         )

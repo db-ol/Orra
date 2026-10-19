@@ -1487,7 +1487,7 @@ final class PushToTalkController {
             // one that failed is not spoken in the wrong language.
             if isTranslation, let language, voice.speaks() {
                 voice.speak(text, language)
-                if !voice.alsoPastes() {
+                if !voice.alsoPastes(language) {
                     markVocabularyUsed(in: originalText ?? text)
                     let total = timings.total
                     logger.notice("Release to speak took \(total, privacy: .public) for \(recording.duration, privacy: .public) s of audio, the translation was not pasted")

@@ -16,11 +16,13 @@ struct TranslationVoiceDictationTests {
         var spoken: [String] = []
         var speaks = true
         var alsoPastes = true
+        /// Languages the voice does not speak, whose translations are pasted anyway.
+        var unspoken: Set<TranslationTarget> = []
 
         var voice: TranslationVoice {
             TranslationVoice(
                 speaks: { self.speaks },
-                alsoPastes: { self.alsoPastes },
+                alsoPastes: { self.alsoPastes || self.unspoken.contains($0) },
                 speak: { text, language in self.spoken.append("\(language.rawValue) \(text)") }
             )
         }
@@ -143,5 +145,25 @@ struct TranslationVoiceDictationTests {
         speech.reply = "See you tomorrow."
         try await dictate(japanese, with: .rightOption)
         #expect(voice.spoken.last == "ja また明日。")
+    }
+
+    /// With Also Paste off, a translation into a language the voice model does not speak,
+    /// as CosyVoice3 does not speak Japanese, is pasted, so it is not lost.
+    @Test func aTranslationTheVoiceDoesNotSpeakIsPasted() async throws {
+        let voice = Recorder()
+        voice.alsoPastes = false
+        voice.unspoken = [.japanese]
+        let translation = PushToTalkControllerTests.FakeTranslation(answer: #"{"cleaned": "See you tomorrow.", "translation": "また明日。"}"#)
+        let japanese = await controller(translation, voice: voice, language: .japanese)
+        speech.reply = "See you tomorrow."
+        try await dictate(japanese, with: .rightOption)
+        #expect(voice.spoken == ["ja また明日。"])
+        #expect(inserter.inserted == ["また明日。"])
+        // An English translation is only spoken.
+        translation.shared.answer.withLock { $0 = #"{"cleaned": "ありがとうございます", "translation": "Thank you very much."}"# }
+        speech.reply = "ありがとうございます"
+        try await dictate(japanese, with: .rightOption)
+        #expect(voice.spoken.last == "en Thank you very much.")
+        #expect(inserter.inserted == ["また明日。"])
     }
 }
