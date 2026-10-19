@@ -63,17 +63,17 @@ got worse than the baseline, see docs/release-gate.md.
   it ended in TEST SUCCEEDED with 2998 test cases passed and 21 skipped on 2026-10-17 in
   92 s, the real model tests included.
   - SettingsPageTests checks the six tabs since 2026-10-19 (General, Dictation,
-    Translation, Meeting Interpretation, Vocabulary and About), each with its own icon and
-    color, that a tab asked for, such as Vocabulary or Meeting Interpretation, opens once
-    while Settings… afterwards opens General alone, that Change Talk Key… asks for General
-    scrolled to Keys once, that an open window is told, that the hands free row applies
-    only while a key is in Hold, the line under Clean Up Text for each state of the model,
-    and the texts of the model's status for translation. With
-    TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders every tab to a PNG
-    there, General also scrolled to Keys, with translation on and after a swap of the keys,
-    and with the talk key in Press to start and stop, Dictation with cleanup on and in
-    Japanese, Translation off, on and in Spanish, and Meeting Interpretation with
-    translation off and on, which CI never does.
+    Translation, Meeting Interpretation, Vocabulary and About), each with its own icon
+    and color, that a tab asked for, such as Vocabulary or Meeting Interpretation, opens
+    once while Settings… afterwards opens General alone, that Change Talk Key… and
+    Change… on the Translation page ask for General scrolled to Keys once, that an open
+    window is told, that the hands free row applies only while a key is in Hold, the line
+    under Clean Up Text for each state of the model, and the texts of the model's status
+    for translation. With TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder, it renders
+    every tab to a PNG there, General also scrolled to Keys, with translation on and
+    after a swap of the keys, and with the talk key in Press to start and stop, Dictation
+    with cleanup on and in Japanese, Translation off, on, in Spanish and with its key in
+    Hold, and Meeting Interpretation with translation off and on, which CI never does.
   - StatusMenuTests reads the top level of the menu SwiftUI makes of the menu bar menu,
     without showing it: Live Captions, off, right under the Meeting Interpretation
     heading with a divider above and below and no submenu, no two dividers next to each
@@ -81,9 +81,10 @@ got worse than the baseline, see docs/release-gate.md.
     translation is on or while it is on itself. Since 2026-10-19 it also checks that the
     Talk Key submenu has no hands free switch.
   - LaunchMigrationsTests, added on 2026-10-19, checks the steps that run at every launch
-    in temporary defaults: a first launch saves the talk key's mode and the dictation
-    language it started with and leaves the translation key's mode unsaved, a saved value
-    stays, and running twice gives what running once gives.
+    in temporary defaults: a first launch saves the modes of both keys and the dictation
+    language they started with, an update keeps the translation key in Hold for a user who
+    turned Translation on before, a saved value stays, and running twice gives what running
+    once gives.
   - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
     for each translation direction and interface language, recording and stopping, too
     short, the stop at the time limit, a microphone that fails to start, a cancel while
@@ -435,10 +436,10 @@ got worse than the baseline, see docs/release-gate.md.
     and Chinese, and the step the guide talks about.
   - WelcomeSuggestionTests covers the three rows the welcome window suggests once Orra is
     ready: that they show only with setup complete, their lines and buttons in English
-    and Chinese, the meeting row's line on Meeting Interpretation in Settings and in the
-    Orra menu, On in place of the button for a feature that is on, no On and no button
-    while cleanup is on and its model is not on the Mac, and the page of Settings each
-    button opens.
+    and Chinese, the translation line in the translation key's mode since 2026-10-19, the
+    meeting row's line on Meeting Interpretation in Settings and in the Orra menu, On in
+    place of the button for a feature that is on, no On and no button while cleanup is on
+    and its model is not on the Mac, and the page of Settings each button opens.
   - WelcomeLanguageTests covers the language picked in the welcome window: the
     localization of each choice, Same as the Mac for English, Chinese, Traditional
     Chinese, Japanese, Spanish from Spain and Mexico and French first, Chinese, Japanese
@@ -740,11 +741,13 @@ got worse than the baseline, see docs/release-gate.md.
     capture of its first modifier. TriggerModeTests checks that a combination that waits
     drops it. The random sequences run with right Option waiting for every other seed.
   - HotkeyPreferenceTests checks since 2026-10-17 that a new user's talk key starts in
-    press to start and stop and the translation key in hold, that a saved talk key,
-    microphone access or Accessibility access each keeps hold for a user without a saved
-    mode, that the first launch saves the mode so it stays once the user has set Orra up,
-    and that a saved mode always wins. SetupDownloadTests checks the guide's line for
-    each mode.
+    press to start and stop, that a saved talk key, microphone access or Accessibility
+    access each keeps hold for a user without a saved mode, that the first launch saves
+    the mode so it stays once the user has set Orra up, and that a saved mode always wins.
+    Since 2026-10-19 it checks that the translation key starts in press to start and stop
+    for a new user and for one set up before, that a saved Translation switch, on or off,
+    keeps it in hold, and that the saved mode stays when Translation is turned on later.
+    SetupDownloadTests checks the guide's line for each mode.
   - TriggerModeTests and HotkeyPreferenceTests, added on 2026-10-14, check press to start
     and stop (a press records and its release keeps recording, a long press too, a
     shortcut cancels, a left key tapped starts at its release, Escape and its key up are
@@ -2343,7 +2346,10 @@ running app:
 
 Translation key, added on 2026-10-13, not verified yet. The translation rows (on General
 until 2026-10-19, on the Translation page since) and the badge were rendered to PNG by the
-opt in tests, in English and in Chinese, but not seen in the running app:
+opt in tests, in English and in Chinese, but not seen in the running app. Since 2026-10-19
+the translation key starts in Press to start and stop unless Translation was turned on
+before, see below. For the checks here that hold right Option, pick Hold under Translation
+key mode first:
 
 - [ ] Settings, Translation shows the Translation (翻译) switch, off, and Translate into
   (翻译成) right under it with Automatic, English and Chinese as choices and the explanation
@@ -2352,8 +2358,9 @@ opt in tests, in English and in Chinese, but not seen in the running app:
   Translation on the Translation page to use this key." until translation is on. Pointing
   at the Translation switch shows the length limit, Paste Original Text and that Orra
   never learns from a translated paste. Pointing at the translation key field shows which
-  keys can be the translation key, that the two keys swap, that a press counts only after
-  a moment, and since 2026-10-16 that fn and the right hand keys start recording when
+  keys can be the translation key, that the two keys swap, that a press with another key
+  is a shortcut and records nothing (a press counted only after a moment until
+  2026-10-19), and since 2026-10-16 that fn and the right hand keys start recording when
   pressed. Turning it on without the model asks "Download the model for translation?", and
   Cancel leaves it off. With cleanup on and the model in place it turns on at once, and
   with cleanup on and the model downloading it turns on without asking.
@@ -2491,12 +2498,12 @@ keyboard. The tip was not seen in the running app:
 
 Press to start and stop for new users, added on 2026-10-17, not verified yet. A new
 user's talk key starts in Press to start and stop, and the welcome window offers Hold and
-Double press. The translation key stays in Hold. A user who set Orra up before has no
-saved mode and keeps Hold: Orra counts as set up before when a talk key is saved or Orra
-has microphone or Accessibility access, and the first launch saves the mode it chose. For
-a new user, prepare a first launch as in Welcome window above, and also run
-`defaults delete io.github.db-ol.Orra talkKeys`, `talkKeyCombination` and `talkKeyMode`
-the same way. Put them back afterwards:
+Double press. The translation key stayed in Hold until 2026-10-19, see the next part. A
+user who set Orra up before has no saved mode and keeps Hold: Orra counts as set up
+before when a talk key is saved or Orra has microphone or Accessibility access, and the
+first launch saves the mode it chose. For a new user, prepare a first launch as in
+Welcome window above, and also run `defaults delete io.github.db-ol.Orra talkKeys`,
+`talkKeyCombination` and `talkKeyMode` the same way. Put them back afterwards:
 
 - [ ] Step 4, Choose your talk key, shows Talk key mode with three radio buttons, Hold,
   Press to start and stop and Double press, with Press to start and stop selected and
@@ -2524,9 +2531,8 @@ the same way. Put them back afterwards:
   mode twice quickly to keep recording after you let go." under it, and works. The talk
   key's help reads "Use the talk key on its own…", and "Hold the talk key on its own…" in
   Hold. The translation key's help ends with "With Double press in Hold to keep recording
-  on, press it twice quickly and it keeps recording after you let go."
-- [ ] A new user who turns on Translation finds the translation key in Hold, and holding
-  it translates as before.
+  on, press the translation key twice quickly and it keeps recording after you let go."
+  while that key is in Hold, and leaves it out in the other modes.
 - [ ] Update from an earlier version keeping Hold: on a Mac where 0.4.1 is set up with
   right Control never chosen and no mode ever picked (`defaults read
   io.github.db-ol.Orra talkKeyMode` finds nothing), update to this build. The talk key
@@ -2535,6 +2541,52 @@ the same way. Put them back afterwards:
 - [ ] The same update with fn saved as the talk key, and again with only Accessibility
   allowed after `tccutil reset Microphone io.github.db-ol.Orra`: Hold both times.
 - [ ] An update with a mode saved, such as Double press, keeps that mode.
+
+Press to start and stop for the translation key, added on 2026-10-19, not verified yet.
+The translation key starts in Press to start and stop for everyone who never turned
+Translation on, new or not. A user who did, even once, keeps Hold: Translation is off until
+turned on and `translatesWithTranslationKey` is saved only when it changes, so any saved
+value counts. Each launch saves the mode the key started in under `translationKeyMode`
+when nothing is saved there. For a user who never turned Translation on, quit Orra and run
+`defaults delete io.github.db-ol.Orra translatesWithTranslationKey` and
+`defaults delete io.github.db-ol.Orra translationKeyMode`. Put them back afterwards:
+
+- [ ] After the launch, `defaults read io.github.db-ol.Orra translationKeyMode` prints
+  toggle. Turn Translation on in Settings, Translation: Translation key mode under Keys
+  on General shows Press to start and stop, and after a restart it still does.
+- [ ] Settings, Translation shows "Orra pastes what you said in another language." under
+  the Translation switch, and right under it a Translation key row with "Press right
+  Option to translate, and again to finish" and Change…. The row is dimmed while
+  Translation is off. Change… turns the window to General scrolled to Keys. With the key
+  in Hold the row says "Hold right Option to translate", and with another key it names
+  that key.
+- [ ] The Orra menu says "Press right Option to translate, and again to finish" while
+  Translation is on. The welcome window's Try next says "Press right Option to translate,
+  and again to finish. Chinese becomes English, and English becomes Chinese." and the same
+  with Japanese or Spanish for those dictation languages.
+- [ ] In TextEdit, press right Option, say "我们下周二开会", and press right Option again: the
+  translation is pasted. Escape cancels without pasting. The indicator says "Press right
+  Option to finish" with the badge.
+- [ ] A stray tap: tap right Option on its own and say nothing. A recording starts with
+  the start sound and the indicator. Pressing right Option again, or Escape, ends it and
+  pastes nothing.
+- [ ] Option E then E types é and records nothing, Option Command Escape opens Force
+  Quit, and neither plays a sound.
+- [ ] Pointing at the translation key field shows "Use the translation key on its own…"
+  with no line about double pressing. With the key in Hold, the line "With Double press
+  in Hold to keep recording on, press the translation key twice quickly…" follows.
+- [ ] An update from 0.5.0 with Translation never turned on (`defaults read
+  io.github.db-ol.Orra translatesWithTranslationKey` finds nothing) and no translation
+  key mode saved: the key is in Press to start and stop, and `translationKeyMode` reads
+  toggle.
+- [ ] An update with Translation turned on before, on or off now (`defaults read
+  io.github.db-ol.Orra translatesWithTranslationKey` prints 1 or 0), and no translation
+  key mode saved: the key stays in Hold, holding it translates as before, a double press
+  still starts hands free, Keys shows Double press in Hold to keep recording, and
+  `translationKeyMode` reads hold.
+- [ ] An update with a translation key mode saved, such as Double press, keeps that mode.
+- [ ] In 简体中文, 日本語 and Español the Translation page, the menu line, the welcome line and
+  the help read well, with nothing cut off.
 
 Live captions, added on 2026-10-14 as Meeting Captions. On 2026-10-15 the maintainer
 checked captions and the scroll follow with a local build. Live Captions, under Meeting

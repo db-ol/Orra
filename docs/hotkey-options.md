@@ -298,6 +298,21 @@ user can change. Implemented in `Orra/TalkKey.swift`, `Orra/TalkKeyDetector.swif
 - The menu's Talk Key submenu shows the translation key with Change Translation Key…,
   and the menu says "Hold right Option to translate" under the hold hint, while
   translation is on.
+- On 2026-10-19 the maintainer chose Press to start and stop as the mode the translation
+  key starts in, as a new user's talk key does, for everyone who never turned Translation
+  on. `TriggerModePreference.load` tells them apart by `translatesWithTranslationKey`:
+  the switch starts off and is saved only when it changes, so a saved value, on or off,
+  means Translation was on at least once, and only then could the key be used. Those
+  users keep Hold. `LaunchMigrations` saves the mode the key started in under
+  `translationKeyMode`, so turning Translation on later does not move it to Hold.
+- In Press to start and stop the key still waits 0.3 seconds as above. A press released
+  sooner starts hands free at its release, a longer one counts at the end of the wait and
+  goes on after the release, and a shortcut during the press cancels it. So a tap of the
+  key on its own starts a recording, where Hold drops it as too short. It runs until the
+  next press of the key, Escape or the recording limit, and a recording without speech
+  gives no text. Right Option is rarely tapped alone. The menu, the welcome window and the
+  Translation page say how to use the key in its mode through `translateHint`, and
+  Change… on the Translation page opens General at Keys.
 
 Not verified on hardware yet: whether 0.3 seconds feels right on a right hand key, how
 right Option behaves with input methods that use it, and whether a double press of right
