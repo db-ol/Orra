@@ -19,9 +19,10 @@ https://db-ol.github.io/Orra/.
   The spoken line of each demo appears at about 8.5 Chinese characters or 3 English words a
   second, so a longer line takes longer. Keep each line and each pasted text to two lines at
   375 pixels wide. The cleanup demo shows an optional feature, so its caption says so.
-- The Japanese and Spanish pages keep the English and Chinese demos and sentences, because
-  Orra dictates and translates Chinese and English. Each of those lines carries its own lang,
-  which site.js reads for the timing above. Only the labels and descriptions are translated.
+- The Japanese and Spanish pages keep the English and Chinese demos and sentences, as
+  README.ja.md and README.es.md keep the English animations. Each of those lines carries its
+  own lang, which site.js reads for the timing above. Only the labels and descriptions are
+  translated.
 - The Meeting Interpretation section draws the Live Captions window and a call in HTML and
   CSS, with the sentences of the meeting animation in the README. style.css plays it once
   when each part scrolls into view, through the class that site.js adds. Without site.js,
