@@ -291,12 +291,12 @@ private struct GeneralSettings: View {
                 }
                 Section {
                     // The note about swapped keys shows once, under the translation key.
-                    TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false)
+                    TalkKeyRecorder(pushToTalk: pushToTalk, showsLabel: true, showsHint: false, showsSwap: false, showsShortcutNote: false)
                         .help(talkKeyHelp + Text(verbatim: "\n") + Text("Recommended: fn on a Mac's built in keyboard, right Control on an external keyboard."))
                     SecondTalkKeyPicker(pushToTalk: pushToTalk)
                     TriggerModePicker(pushToTalk: pushToTalk, slot: .talk)
                     VStack(alignment: .leading, spacing: 6) {
-                        TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false)
+                        TalkKeyRecorder(pushToTalk: pushToTalk, slot: .translation, showsLabel: true, showsHint: false, showsShortcutNote: false)
                             // The key does nothing while translation is off.
                             .disabled(!cleanup.translationIsOn)
                         if !cleanup.translationIsOn {
@@ -845,6 +845,9 @@ struct TalkKeyRecorder: View {
     var showsSwap = true
     /// Whether the line with the recommended keys is shown under the field.
     var showsRecommendation = false
+    /// Whether the note that pressing the Live Captions shortcut may start a dictation of
+    /// this key shows under the field. Settings shows it under the shortcut instead.
+    var showsShortcutNote = true
     /// The language of the text built here, which the welcome window sets to the one
     /// picked there.
     @Environment(\.interfaceLocale) private var interfaceLocale
@@ -911,6 +914,9 @@ struct TalkKeyRecorder: View {
                     }
                     .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
+                }
+                if showsShortcutNote, let shortcut = pushToTalk.liveCaptionsShortcut, pushToTalk.liveCaptionsShortcutMayStartDictation(with: slot) {
+                    ShortcutDictationNote(shortcut: shortcut)
                 }
                 // Which keys can be the key, before the user starts recording.
                 if showsHint {
@@ -1025,10 +1031,30 @@ private struct RecorderFieldBox: ViewModifier {
     }
 }
 
+/// The note that pressing the Live Captions shortcut may start a dictation for a moment,
+/// since a key is a combination of modifiers only, all of them in the shortcut, such as
+/// ⌃ ⌥ beside ⌃ ⌥ ⌘ C.
+private struct ShortcutDictationNote: View {
+    let shortcut: KeyCombination
+    @Environment(\.interfaceLocale) private var interfaceLocale
+
+    var body: some View {
+        Label {
+            Text("Pressing \(shortcut.title(in: interfaceLocale)) may start a dictation for a moment.")
+        } icon: {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+        }
+        .font(.subheadline)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 /// The Live Captions shortcut, recorded like the keys above it: a field that shows it, such
 /// as "⌃ ⌥ ⌘ C", or None. Clicking the field starts recording, and the next shortcut the
 /// user presses becomes it. A press that cannot be one shows why under the field. None
-/// turns the shortcut off. A note warns when pressing it may start a dictation for a moment.
+/// turns the shortcut off. A note warns when pressing it may start a dictation for a moment,
+/// and when macOS refused it.
 private struct LiveCaptionsShortcutRecorder: View {
     let pushToTalk: PushToTalkController
     @Environment(\.interfaceLocale) private var interfaceLocale
@@ -1055,7 +1081,7 @@ private struct LiveCaptionsShortcutRecorder: View {
                     Button(action: start) {
                         HStack(spacing: 4) {
                             if isRecording {
-                                Text("Press a key or a combination")
+                                Text("Press a shortcut")
                                     .foregroundStyle(Color.accentColor)
                             } else {
                                 shortcutName
@@ -1070,7 +1096,7 @@ private struct LiveCaptionsShortcutRecorder: View {
                     // in Orra does, rather than starting it again.
                     .allowsHitTesting(!isRecording)
                     .accessibilityLabel(Text("Live Captions shortcut"))
-                    .accessibilityValue(isRecording ? Text("Press a key or a combination") : shortcutName)
+                    .accessibilityValue(isRecording ? Text("Press a shortcut") : shortcutName)
                     if isRecording {
                         Button("Cancel") {
                             pushToTalk.stopChoosingKey()
@@ -1082,15 +1108,22 @@ private struct LiveCaptionsShortcutRecorder: View {
                     }
                 }
             } label: {
-                // The field carries the same label for VoiceOver, so it is read once. A long
-                // name wraps rather than being cut.
+                // The field carries the same name for VoiceOver, so only the description is
+                // read here. A long name wraps rather than being cut.
                 Label {
-                    Text("Live Captions shortcut")
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Live Captions shortcut")
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityHidden(true)
+                        Text("Turns Live Captions on and off from any app.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 } icon: {
                     Image(systemName: "captions.bubble")
+                        .accessibilityHidden(true)
                 }
-                .accessibilityHidden(true)
             }
             // Under the whole row, as the translation key's note, so the field keeps its
             // place beside the name.
@@ -1110,22 +1143,20 @@ private struct LiveCaptionsShortcutRecorder: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text("Turns Live Captions on and off from any app.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let shortcut = pushToTalk.liveCaptionsShortcut, pushToTalk.liveCaptionsShortcutMayStartDictation {
-                    // A key of modifiers only, all in the shortcut, such as ⌃ ⌥ beside
-                    // ⌃ ⌥ ⌘ C.
+            } else if let shortcut = pushToTalk.liveCaptionsShortcut {
+                if pushToTalk.liveCaptionsShortcutRefused {
+                    // Another app may hold the combination for itself.
                     Label {
-                        Text("Pressing \(shortcut.title(in: interfaceLocale)) may start a dictation for a moment.")
+                        Text("macOS refused \(shortcut.title(in: interfaceLocale)). Another app may already use it.")
                     } icon: {
                         Image(systemName: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
                     }
                     .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
+                }
+                if pushToTalk.liveCaptionsShortcutMayStartDictation {
+                    ShortcutDictationNote(shortcut: shortcut)
                 }
             }
         }

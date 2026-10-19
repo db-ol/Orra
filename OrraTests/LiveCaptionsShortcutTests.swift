@@ -117,6 +117,11 @@ struct LiveCaptionsShortcutTests {
         let returnKey = outcome(.keyDown, kVK_Return, .maskAlternate)
         #expect(returnKey == .rejected(.notAShortcut))
         #expect(LiveCaptionsShortcut.Rejection.notAShortcut.message(in: Locale(identifier: "en")) == "Use a key with Control or Command, or a function key such as F13.")
+        // A function key alone would do, so the note names Option, which macOS refuses.
+        #expect(outcome(.keyDown, kVK_F13, .maskAlternate) == .rejected(.onlyOption))
+        #expect(outcome(.keyDown, kVK_F5, [.maskAlternate, .maskShift]) == .rejected(.onlyOption))
+        #expect(outcome(.keyDown, kVK_ANSI_C, [.maskAlternate, .maskShift]) == .rejected(.notAShortcut))
+        #expect(LiveCaptionsShortcut.Rejection.onlyOption.message(in: Locale(identifier: "en")) == "macOS refuses shortcuts with only Option, or Option and Shift. Add Control or Command, or leave Option out.")
 
         // One of Orra's keys, never swapped.
         let talkKey = Hotkey.combination(Self.controlOptionCommandF13)
@@ -196,6 +201,26 @@ struct LiveCaptionsShortcutTests {
             // None stays none.
             LiveCaptionsShortcutPreference.save(nil, to: defaults)
             #expect(LiveCaptionsShortcutPreference.keep(nil, beside: [.rightControl], in: defaults) == nil)
+            #expect(defaults.string(forKey: "liveCaptionsShortcut") == "none")
+        }
+    }
+
+    /// A talk key recorded as ⌃ ⌥ ⌘ C in a version without the shortcut, after it was saved,
+    /// keeps working, and the shortcut turns into None.
+    @Test func aSavedShortcutThatIsAKeyTurnsIntoNone() throws {
+        try withTestDefaults("LiveCaptionsShortcut.savedKey") { defaults in
+            let shortcut = Self.controlOptionCommandC
+            LiveCaptionsShortcutPreference.save(shortcut, to: defaults)
+            // The same keys typed as another character are the same key.
+            let talkKey = Hotkey.combination(KeyCombination(modifiers: Self.hyper, keyCode: Int64(kVK_ANSI_C), character: "J"))
+            #expect(LiveCaptionsShortcutPreference.keep(shortcut, beside: [talkKey, .rightOption], in: defaults) == nil)
+            #expect(defaults.string(forKey: "liveCaptionsShortcut") == "none")
+        }
+        try withTestDefaults("LiveCaptionsShortcut.savedKey") { defaults in
+            // A saved value Orra cannot read loads as the default, which the key then is.
+            defaults.set("option|8|C", forKey: "liveCaptionsShortcut")
+            let loaded = LiveCaptionsShortcutPreference.load(defaultShortcut: Self.controlOptionCommandC, from: defaults)
+            #expect(LiveCaptionsShortcutPreference.keep(loaded, beside: [.combination(Self.controlOptionCommandC)], in: defaults) == nil)
             #expect(defaults.string(forKey: "liveCaptionsShortcut") == "none")
         }
     }
@@ -293,14 +318,20 @@ struct LiveCaptionsShortcutTests {
 
     @Test func settingsWarnsWhenAKeyOfModifiersOnlyIsInTheShortcut() {
         #expect(controller(talkKey: Self.controlOption).liveCaptionsShortcutMayStartDictation)
+        // The recorder of the key that is the reason warns too, such as in the welcome window.
+        #expect(controller(talkKey: Self.controlOption).liveCaptionsShortcutMayStartDictation(with: .talk))
+        #expect(!controller(talkKey: Self.controlOption).liveCaptionsShortcutMayStartDictation(with: .translation))
         #expect(!controller(talkKey: .rightControl).liveCaptionsShortcutMayStartDictation)
         #expect(!controller(talkKey: .combination(KeyCombination(modifiers: [.control, .shift]))).liveCaptionsShortcutMayStartDictation)
         #expect(!controller(talkKey: Self.controlOption, shortcut: nil).liveCaptionsShortcutMayStartDictation)
         // The translation key counts while it is watched.
         let translator = controller(talkKey: .fn, translationKey: .combination(KeyCombination(modifiers: [.option, .command])))
         #expect(!translator.liveCaptionsShortcutMayStartDictation)
+        #expect(!translator.liveCaptionsShortcutMayStartDictation(with: .translation))
         translator.setTranslationKeyOn(true)
         #expect(translator.liveCaptionsShortcutMayStartDictation)
+        #expect(translator.liveCaptionsShortcutMayStartDictation(with: .translation))
+        #expect(!translator.liveCaptionsShortcutMayStartDictation(with: .talk))
         #expect(String(localized: LocalizedStringResource("Pressing \(Self.controlOptionCommandF13.title()) may start a dictation for a moment.", locale: Locale(identifier: "en"))) == "Pressing ⌃ ⌥ ⌘ F13 may start a dictation for a moment.")
     }
 
@@ -351,12 +382,24 @@ struct LiveCaptionsShortcutTests {
     @Test func aShortcutTheSystemRefusedIsTriedAgainAtTheNextChange() {
         shortcuts.refuses = true
         let controller = controller()
+        #expect(!controller.liveCaptionsShortcutRefused)
         controller.start()
         #expect(shortcuts.registered == nil)
+        // Settings and the Problem Report say so.
+        #expect(controller.liveCaptionsShortcutRefused)
+        #expect(String(localized: LocalizedStringResource("macOS refused \(Self.controlOptionCommandF13.title()). Another app may already use it.", locale: Locale(identifier: "en"))) == "macOS refused ⌃ ⌥ ⌘ F13. Another app may already use it.")
         shortcuts.refuses = false
         controller.startChoosingKey(for: .talk)
         controller.stopChoosingKey()
         #expect(shortcuts.registered == Self.controlOptionCommandF13)
+        #expect(!controller.liveCaptionsShortcutRefused)
+        // None is never refused.
+        shortcuts.refuses = true
+        controller.startChoosingKey(for: .talk)
+        controller.stopChoosingKey()
+        #expect(controller.liveCaptionsShortcutRefused)
+        controller.setLiveCaptionsShortcut(nil)
+        #expect(!controller.liveCaptionsShortcutRefused)
     }
 
     @Test func aHeldShortcutCountsOncePerPress() {
@@ -373,6 +416,21 @@ struct LiveCaptionsShortcutTests {
         #expect(counts(after: .milliseconds(800)))
         // A release that never came is not waited for forever.
         #expect(counts(after: .milliseconds(800) + ShortcutPresses.missedRelease))
+    }
+
+    /// Registered right after it was recorded, the shortcut is still held, and presses of
+    /// that hold do not turn captions on.
+    @Test func aShortcutRegisteredWhileHeldWaitsForItsRelease() {
+        let start = ContinuousClock.now
+        var presses = ShortcutPresses.held(since: start)
+        func counts(after elapsed: Duration) -> Bool {
+            presses.press(at: start + elapsed)
+        }
+        #expect(presses.isDown)
+        #expect(!counts(after: .milliseconds(300)))
+        #expect(!counts(after: .milliseconds(2000)))
+        presses.release()
+        #expect(counts(after: .milliseconds(2100)))
     }
 
     @Test func theHotKeyGetsTheModifiersAsCarbonNamesThem() {

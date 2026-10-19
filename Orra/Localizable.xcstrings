@@ -4084,6 +4084,28 @@
         }
       }
     },
+    "Live captions are off each time Orra starts. Closing the caption window turns them off. Press %@ in any app to turn them on or off." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los subtítulos en vivo están desactivados cada vez que se abre Orra. Si cierras la ventana de subtítulos, se desactivan. Presiona %@ en cualquier app para activarlos o desactivarlos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライブキャプションは、Orraを起動するたびにオフになります。キャプションウインドウを閉じてもオフになります。どのアプリからでも、%@を押すとライブキャプションのオンとオフを切り替えられます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每次启动 Orra 时，实时字幕都是关闭的。关闭字幕窗口也会关闭实时字幕。在任何 App 中按 %@ 即可打开或关闭实时字幕。"
+          }
+        }
+      }
+    },
     "Live Captions off" : {
       "localizations" : {
         "es-419" : {
@@ -4256,6 +4278,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在载入…"
+          }
+        }
+      }
+    },
+    "macOS refused %@. Another app may already use it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS rechazó %@. Es posible que otra app ya la esté usando."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOSが%@を受け付けませんでした。ほかのアプリがすでに使用している可能性があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 拒绝了 %@。可能已有其他 App 在使用它。"
+          }
+        }
+      }
+    },
+    "macOS refuses shortcuts with only Option, or Option and Shift. Add Control or Command, or leave Option out." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS no acepta funciones rápidas de teclado solo con Opción, o con Opción y Mayúsculas. Agrega Control o Comando, o quita Opción."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOSでは、OptionキーだけやOptionキーとShiftキーだけのショートカットは使えません。ControlキーかCommandキーを加えるか、Optionキーを外してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 不接受只有 Option，或只有 Option 和 Shift 的快捷键。请加上 Control 或 Command，或者不用 Option。"
           }
         }
       }
@@ -5981,28 +6047,6 @@
         }
       }
     },
-    "Press %@ in any app to turn them on or off." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Presiona %@ en cualquier app para activarlos o desactivarlos."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "どのアプリからでも、%@を押すとライブキャプションのオンとオフを切り替えられます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在任何 App 中按 %@ 即可打开或关闭实时字幕。"
-          }
-        }
-      }
-    },
     "Press %@ to finish" : {
       "localizations" : {
         "es-419" : {
@@ -6219,6 +6263,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按一下键开始说话，说完再按一下。Orra 会把你说的话输入到你正在使用的 App 中。语音在这台 Mac 上转成文字。"
+          }
+        }
+      }
+    },
+    "Press a shortcut" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Presiona una función rápida de teclado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットを押してください"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按下一组快捷键"
           }
         }
       }

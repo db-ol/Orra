@@ -85,13 +85,15 @@ got worse than the baseline, see docs/release-gate.md.
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
     modifiers, not Option alone, Option with Shift, modifiers alone, Escape or ⌘ Space),
-    the recorder's choice at the key down and its notes, the default ⌃ ⌥ ⌘ C from the key
-    that types C on the layout, saving and "none", the step at the update that saves the
-    default or None beside a talk key of ⌃ ⌥ ⌘ C or of modifiers within it, the refusals
-    between the shortcut and the talk and translation keys, the warning beside a key of
-    modifiers only, that the shortcut is registered from the start and unregistered while
-    any key is recorded, that a refused registration is tried again, and that a held
-    shortcut counts once.
+    the recorder's choice at the key down and its notes (with its own note for Option and
+    a function key), the default ⌃ ⌥ ⌘ C from the key that types C on the layout, saving
+    and "none", the step at the update that saves the default or None beside a talk key of
+    ⌃ ⌥ ⌘ C or of modifiers within it, a saved shortcut that equals a key turning into
+    None at launch, the refusals between the shortcut and the talk and translation keys,
+    the warning beside a key of modifiers only and for which key, that the shortcut is
+    registered from the start and unregistered while any key is recorded, that a refused
+    registration is noted and tried again, that a held shortcut counts once, and that one
+    registered while held waits for its release.
   - LaunchMigrationsTests, added on 2026-10-19, checks the steps that run at every launch
     in temporary defaults: a first launch saves the modes of both keys and the dictation
     language they started with, only a new user's first launch notes that the dictation
@@ -2795,6 +2797,8 @@ it shows registrations and refusals, never keys.
   does. Copy Captions in the menu still has the meeting. The app in front gets no C.
 - [ ] Holding ⌃ ⌥ ⌘ C for 3 seconds toggles captions once, with key repeat at its fastest
   and at its slowest in Keyboard settings.
+- [ ] Record ⌃ ⌥ ⌘ C in Settings and keep holding it for 2 seconds. Captions stay off.
+  Release it and press it right away, and captions turn on.
 - [ ] With the focus in a password field, such as Safari's on a login page, the shortcut
   still turns captions on and off. Note whether it does not.
 - [ ] With VoiceOver on, the shortcut makes VoiceOver say "Live Captions on" and "Live
@@ -2807,11 +2811,13 @@ it shows registrations and refusals, never keys.
   the name and no key equivalent on the right. With the menu open, pressing ⌃ ⌥ ⌘ C turns
   captions on or off once. With the shortcut set to None, the item reads Live Captions.
 - [ ] Settings, General, Keys ends with Live Captions shortcut and "Turns Live Captions on
-  and off from any app." under it, the field showing ⌃ ⌥ ⌘ C and a None button. Clicking
-  the field shows "Press a key or a combination" and "Press a shortcut, such as ⌃ ⌥ ⌘ C.
-  Escape cancels." under it. ⌃ ⌥ ⌘ C pressed then is recorded, it does not turn captions
+  and off from any app." under its name, the field showing ⌃ ⌥ ⌘ C and a None button. Clicking
+  the field shows "Press a shortcut" and "Press a shortcut, such as ⌃ ⌥ ⌘ C. Escape
+  cancels." under it. ⌃ ⌥ ⌘ C pressed then is recorded, it does not turn captions
   on. ⌥ C says "Use a key with Control or Command, or a function key such as F13.", ⌘ C
-  says it is a shortcut of macOS or most apps, and F13 alone is taken. Escape, Cancel and
+  says it is a shortcut of macOS or most apps, ⌥ F13 says "macOS refuses shortcuts with
+  only Option, or Option and Shift. Add Control or Command, or leave Option out.", and
+  F13 alone is taken. Escape, Cancel and
   a click elsewhere end the recording with no change.
 - [ ] None turns the shortcut off: the field shows None in grey, the None button goes,
   the shortcut does nothing, and the menu item reads Live Captions. Record one again and
@@ -2822,15 +2828,22 @@ it shows registrations and refusals, never keys.
   already one of Orra's keys.". Nothing swaps.
 - [ ] A talk key of ⌃ ⌥ (Control and Option held together) shows the note "Pressing ⌃ ⌥
   ⌘ C may start a dictation for a moment." under the shortcut. The same for a translation
-  key of ⌥ ⌘ while Translation is on, and not while it is off.
+  key of ⌥ ⌘ while Translation is on, and not while it is off. In the welcome window,
+  picking ⌃ ⌥ as the talk key shows the same note under its field.
+- [ ] If a combination can be found that macOS refuses as a hot key, such as one another
+  app registered for itself, recording it shows "macOS refused ⌃ ⌥ ⌘ C. Another app may
+  already use it." (with its keys) under the row, and Report a Problem lists "Live
+  Captions shortcut refused by macOS: on".
 - [ ] A fresh install gets ⌃ ⌥ ⌘ C. An update from 0.5.0 gets it too, unless the talk key
   or the translation key was ⌃ ⌥ ⌘ C, or a combination of modifiers within ⌃ ⌥ ⌘ such as
   ⌃ ⌥, and then the field shows None. Changing the talk key to ⌃ ⌥ afterwards never
   clears it. On a Dvorak layout the default still reads ⌃ ⌥ ⌘ C and is the key that types
-  C.
+  C. After this build ran once, record ⌃ ⌥ ⌘ C as the talk key in 0.5.0 and launch this
+  build again: the shortcut shows None and the talk key works.
 - [ ] The Live captions switch on the Meeting Interpretation page names the shortcut in
   its help: "Press ⌃ ⌥ ⌘ C in any app to turn them on or off." With None, the help has
-  only its first two sentences.
+  only its first two sentences. In Chinese and Japanese no space follows the 。 before
+  the last sentence.
 - [ ] Interface in Chinese, Japanese and Spanish: the row reads 实时字幕快捷键,
   ライブキャプションのショートカット and Función rápida para Subtítulos en vivo, the
   notes and the None button (无, なし, Ninguna) fit at 720 by 560, and Report a

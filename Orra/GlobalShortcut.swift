@@ -16,8 +16,8 @@ extension Logger {
 /// It is a hot key of the system, see GlobalShortcut, and not a key of the keyboard tap.
 /// So it needs no Accessibility access, and a press of any other key waits for nothing new.
 /// Orra's own keys are right hand modifiers, so the left hand presses it without starting a
-/// dictation. A talk key that is right Control, pressed first with the right hand, starts a
-/// dictation, which the rest of the shortcut then cancels.
+/// dictation. A talk key that is a right hand key, such as right Control, pressed first,
+/// starts a dictation, which the rest of the shortcut then cancels.
 nonisolated enum LiveCaptionsShortcut {
     /// What one press means while the user records the shortcut.
     enum Outcome: Equatable, Sendable {
@@ -34,6 +34,8 @@ nonisolated enum LiveCaptionsShortcut {
         /// Neither Control nor Command and no function key, such as a letter alone, or
         /// Option with a letter, which types a character.
         case notAShortcut
+        /// A function key with Option alone or with Shift, which macOS refuses as a hot key.
+        case onlyOption
         /// A shortcut of macOS or of nearly every app, such as ⌘ C, see
         /// `KeyCombination.isSystemShortcut`. The shortcut would take its press in every app.
         case systemShortcut(KeyCombination)
@@ -46,6 +48,8 @@ nonisolated enum LiveCaptionsShortcut {
             switch self {
             case .notAShortcut:
                 String(localized: LocalizedStringResource("Use a key with Control or Command, or a function key such as F13.", locale: locale))
+            case .onlyOption:
+                String(localized: LocalizedStringResource("macOS refuses shortcuts with only Option, or Option and Shift. Add Control or Command, or leave Option out.", locale: locale))
             case .systemShortcut(let combination):
                 String(localized: LocalizedStringResource("\(combination.title(in: locale)) is a shortcut of macOS or most apps and can't be the Live Captions shortcut. It would stop working everywhere while Orra runs.", locale: locale))
             case .orraKey(let combination):
@@ -78,6 +82,10 @@ nonisolated enum LiveCaptionsShortcut {
             return .rejected(.systemShortcut(combination))
         }
         guard combination.isValidShortcut else {
+            // A function key alone would do, so the note names Option.
+            if KeyName.isFunctionKey(keyCode), combination.hasOnlyOptionModifiers {
+                return .rejected(.onlyOption)
+            }
             return .rejected(.notAShortcut)
         }
         if orraKeys.contains(.combination(combination)) {
@@ -134,10 +142,18 @@ nonisolated enum LiveCaptionsShortcutPreference {
     /// default then, or none when one of `keys` clashes with it, see
     /// `LiveCaptionsShortcut.clashes`. So a user whose talk key is ⌃ ⌥ ⌘ C, or ⌃ ⌥, keeps
     /// their key working as before the update. Saved at once, so a key the user picks
-    /// later never clears the shortcut. LaunchMigrations runs it. Returns the shortcut to
-    /// use.
+    /// later never clears the shortcut. LaunchMigrations runs it at every launch. Returns
+    /// the shortcut to use.
+    ///
+    /// A saved shortcut that one of `keys` is turns into none too. Settings never allows
+    /// that, but a version without the shortcut does, or a saved value Orra cannot read
+    /// loads as the default. The key keeps working, as it did when it was picked.
     static func keep(_ shortcut: KeyCombination?, beside keys: [Hotkey], in defaults: UserDefaults = .standard) -> KeyCombination? {
-        guard defaults.string(forKey: defaultsKey) == nil else { return shortcut }
+        if defaults.string(forKey: defaultsKey) != nil {
+            guard let shortcut, keys.contains(.combination(shortcut)) else { return shortcut }
+            save(nil, to: defaults)
+            return nil
+        }
         let kept = shortcut.flatMap { shortcut in
             keys.contains { LiveCaptionsShortcut.clashes($0, with: shortcut) } ? nil : shortcut
         }
@@ -157,6 +173,19 @@ nonisolated struct ShortcutPresses: Equatable, Sendable {
 
     private(set) var isDown = false
     private var lastPress: ContinuousClock.Instant?
+
+    init() {}
+
+    /// The presses of a shortcut whose keys are already down, as when it is registered
+    /// right after the user recorded it. Presses during that hold do not count. The system
+    /// sends no release for a press it never matched, so the owner calls `release()` once
+    /// the key is up.
+    static func held(since now: ContinuousClock.Instant) -> ShortcutPresses {
+        var presses = ShortcutPresses()
+        presses.isDown = true
+        presses.lastPress = now
+        return presses
+    }
 
     /// A press arrived. True when it counts as a new press.
     mutating func press(at now: ContinuousClock.Instant) -> Bool {
@@ -229,11 +258,30 @@ enum GlobalShortcut {
             Logger.shortcut.error("The system refused the shortcut, status \(status, privacy: .public)")
             return nil
         }
-        entries[id] = Entry(pressed: pressed)
-        Logger.shortcut.info("Shortcut registered")
+        // Right after the user recorded the shortcut, its key is still down. A press the
+        // system may repeat during that hold must not turn captions on.
+        let key = CGKeyCode(truncatingIfNeeded: keyCode)
+        let held = CGEventSource.keyState(.hidSystemState, key: key)
+        entries[id] = Entry(pressed: pressed, presses: held ? .held(since: .now) : ShortcutPresses())
+        if held {
+            releaseWhenUp(id: id, key: key)
+        }
+        Logger.shortcut.info("Shortcut registered, held: \(held, privacy: .public)")
         return {
             UnregisterEventHotKey(reference)
             entries[id] = nil
+        }
+    }
+
+    /// Marks the shortcut with this ID released once its key is up. Checks every 50 ms, for
+    /// 30 seconds at most, after which a press counts again anyway.
+    private static func releaseWhenUp(id: UInt32, key: CGKeyCode) {
+        Task {
+            let deadline = ContinuousClock.now + .seconds(30)
+            while CGEventSource.keyState(.hidSystemState, key: key), ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            entries[id]?.presses.release()
         }
     }
 

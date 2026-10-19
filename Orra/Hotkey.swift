@@ -140,8 +140,14 @@ nonisolated struct KeyCombination: Hashable, Sendable {
     /// keys and they type characters. So are Escape and the shortcuts of macOS.
     var isValidShortcut: Bool {
         guard let keyCode, keyCode != TalkKeyDetector.escapeKeyCode, !isSystemShortcut,
-              modifiers != .option, modifiers != [.option, .shift] else { return false }
+              !hasOnlyOptionModifiers else { return false }
         return KeyName.isFunctionKey(keyCode) || !modifiers.isDisjoint(with: [.control, .command])
+    }
+
+    /// Whether the modifiers are Option alone or Option with Shift, which macOS 15 refuses
+    /// in a hot key, even with a function key.
+    var hasOnlyOptionModifiers: Bool {
+        modifiers == .option || modifiers == [.option, .shift]
     }
 
     /// The keys as Mac menus show them, such as "⌃ ⌥" or "⇧ ⌘ D".

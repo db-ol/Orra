@@ -139,10 +139,12 @@ private struct LiveCaptionRows: View {
     /// The Live Captions shortcut, which the switch's help names, or nil for none.
     let shortcut: KeyCombination?
 
+    /// One string with the shortcut, so each language joins the sentences its own way.
     private var help: Text {
-        let help = Text("Live captions are off each time Orra starts. Closing the caption window turns them off.")
-        guard let shortcut else { return help }
-        return help + Text(verbatim: " ") + Text("Press \(shortcut.title()) in any app to turn them on or off.")
+        guard let shortcut else {
+            return Text("Live captions are off each time Orra starts. Closing the caption window turns them off.")
+        }
+        return Text("Live captions are off each time Orra starts. Closing the caption window turns them off. Press \(shortcut.title()) in any app to turn them on or off.")
     }
 
     var body: some View {
