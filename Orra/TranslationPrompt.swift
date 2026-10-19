@@ -113,24 +113,15 @@ nonisolated enum TranslationPrompt {
     /// The start of the answer, written into the prompt for the model, as for cleanup.
     static let prefill = RewritePrompt.prefill
 
-    /// The whole prompt of a Chinese route in Qwen3.5's chat format, as its chat template
-    /// renders it with the generation prompt and thinking turned off, followed by the
-    /// prefill.
+    /// The whole prompt of a Chinese route, see `text(for:into route:)`.
     static func text(for transcript: String, into target: TranslationTarget) -> String {
-        var prompt = "<|im_start|>system\n" + system(target) + "<|im_end|>\n"
-        for example in examples(target) {
-            prompt += "<|im_start|>user\n" + user(example.transcript, target) + "<|im_end|>\n"
-            prompt += "<|im_start|>assistant\n" + answer(cleaned: example.cleaned, translation: example.translation) + "<|im_end|>\n"
-        }
-        prompt += "<|im_start|>user\n" + user(transcript, target) + "<|im_end|>\n"
-        prompt += "<|im_start|>assistant\n" + RewritePrompt.noThinking + prefill
-        return prompt
+        text(for: transcript, into: .chinese(target))
     }
 
-    /// The whole prompt of a route, in the same format. The Chinese routes get exactly the
-    /// prompt of `text(for:into:)` with their target.
+    /// The whole prompt of a route in Qwen3.5's chat format, as its chat template renders
+    /// it with the generation prompt and thinking turned off, followed by the prefill. The
+    /// Chinese routes get their system text, examples and transcript as they always did.
     static func text(for transcript: String, into route: TranslationRoute) -> String {
-        guard route.language != .chinese else { return text(for: transcript, into: route.target) }
         var prompt = "<|im_start|>system\n" + system(route) + "<|im_end|>\n"
         for example in examples(route) {
             prompt += "<|im_start|>user\n" + user(example.transcript, route.target) + "<|im_end|>\n"

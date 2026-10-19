@@ -21,14 +21,14 @@ nonisolated enum PromptPrefix {
         shared(encode(RewritePrompt.text(for: "你好")), encode(RewritePrompt.text(for: "Hello there")))
     }
 
-    /// The prefix of the translation prompt for a target, found the same way. Each target
-    /// has its own prompt and so its own prefix.
+    /// The prefix of the translation prompt of a Chinese route, see
+    /// `translationPrompt(into route:encode:)`.
     static func translationPrompt(into target: TranslationTarget, encode: (String) -> [Int]) -> [Int] {
-        shared(encode(TranslationPrompt.text(for: "你好", into: target)), encode(TranslationPrompt.text(for: "Hello there", into: target)))
+        translationPrompt(into: .chinese(target), encode: encode)
     }
 
-    /// The prefix of the translation prompt for a route, found the same way. The Chinese
-    /// routes get the prefix of their target.
+    /// The prefix of the translation prompt for a route, found the same way. Each route has
+    /// its own prompt and so its own prefix.
     static func translationPrompt(into route: TranslationRoute, encode: (String) -> [Int]) -> [Int] {
         shared(encode(TranslationPrompt.text(for: "你好", into: route)), encode(TranslationPrompt.text(for: "Hello there", into: route)))
     }
