@@ -178,6 +178,53 @@ struct CaptionPipelineTests {
         #expect(models.translated.isEmpty)
     }
 
+    /// Original only shows what was said, so nothing is translated, also with the model
+    /// ready. A switch to a mode that translates counts from the next sentence, and so
+    /// does a switch back.
+    @Test func originalOnlyNeverTranslates() async throws {
+        let models = FakeCaptionModels(["Hello everyone.", "Next slide please.", "That sounds good.", "Let's look at the numbers."])
+        var wantsTranslation = false
+        var reports: [CaptionSentence] = []
+        let pipeline = CaptionPipeline(engines: models.engines(), wantsTranslation: { wantsTranslation }) { reports.append($0) }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 2))
+        try await eventually { reports.count == 2 }
+        #expect(reports.map(\.original) == ["Hello everyone.", "Next slide please."])
+        #expect(reports.allSatisfy { $0.translation == .none })
+        #expect(models.translated.isEmpty)
+        wantsTranslation = true
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        try await eventually { reports.last?.translation == .done("听起来不错。") }
+        #expect(models.translated.map(\.text) == ["That sounds good."])
+        wantsTranslation = false
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        await pipeline.finish()
+        #expect(models.translated.map(\.text) == ["That sounds good."])
+        #expect(reports.last?.original == "Let's look at the numbers.")
+        #expect(reports.last?.translation == CaptionSentence.Translation.none)
+    }
+
+    /// A switch to Original while the language of a sentence is read leaves that sentence
+    /// without translation.
+    @Test func aSwitchToOriginalDuringTheLanguageReadIsHeeded() async throws {
+        let models = FakeCaptionModels(["Hello everyone."])
+        var wantsTranslation = true
+        var reports: [CaptionSentence] = []
+        var engines = models.engines()
+        let direction = engines.direction
+        // The pipeline asks for the direction after its first check and reads the language
+        // with it, so the switch lands between the two checks.
+        engines.direction = {
+            wantsTranslation = false
+            return direction()
+        }
+        let pipeline = CaptionPipeline(engines: engines, wantsTranslation: { wantsTranslation }) { reports.append($0) }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        await pipeline.finish()
+        #expect(!wantsTranslation)
+        #expect(reports.map(\.translation) == [.none])
+        #expect(models.translated.isEmpty)
+    }
+
     @Test func withoutTheSpeechModelSentencesAreDroppedAndSaidSo() async throws {
         let models = FakeCaptionModels(["Hello everyone."])
         models.speechReady = false

@@ -52,6 +52,7 @@ struct CaptionTranscriptTests {
     }
 
     @Test func copyFollowsTheDisplayMode() {
+        #expect(CaptionDisplayMode.originalOnly.copyContent == .original)
         #expect(CaptionDisplayMode.translationOnly.copyContent == .translation)
         #expect(CaptionDisplayMode.originalAndTranslation.copyContent == .originalAndTranslation)
     }

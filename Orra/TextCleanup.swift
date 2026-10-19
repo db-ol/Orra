@@ -306,7 +306,8 @@ final class TextCleanup {
         captionsNeedModel && isLoaded
     }
 
-    /// Meeting captions started. Loads the model when it is in place, or again when it was
+    /// Meeting captions run in a mode that translates, from their start or from a switch
+    /// away from Original only. Loads the model when it is in place, or again when it was
     /// unloaded while idle, and keeps it loaded until captions stop. Without the model the
     /// caption window offers the download, see `confirmCaptionDownload()`, and nothing goes
     /// online before the user agrees. With the model loaded already, the translation

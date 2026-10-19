@@ -155,6 +155,9 @@ final class CaptionPipeline {
 
     private var segmenter: CaptionSegmenter
     private let engines: CaptionEngines
+    /// Whether the captions want translations now, false while they show only what was
+    /// said. Read for each sentence, so a switch counts from the next one.
+    private let wantsTranslation: () -> Bool
     private let report: (CaptionSentence) -> Void
     /// Called with the id of an interim line whose sentence got no final text, so it goes.
     private let withdraw: (Int) -> Void
@@ -181,12 +184,14 @@ final class CaptionPipeline {
         settings: CaptionSegmenter.Settings = .init(),
         backlogLimit: Int = CaptionPipeline.defaultBacklogLimit,
         interimInterval: Double? = nil,
+        wantsTranslation: @escaping () -> Bool = { true },
         speechNotReady: @escaping () -> Void = {},
         withdraw: @escaping (Int) -> Void = { _ in },
         report: @escaping (CaptionSentence) -> Void
     ) {
         segmenter = CaptionSegmenter(settings: settings)
         self.engines = engines
+        self.wantsTranslation = wantsTranslation
         self.backlogLimit = backlogLimit
         self.interimInterval = interimInterval
         self.report = report
@@ -353,11 +358,12 @@ final class CaptionPipeline {
         guard !text.isEmpty else { return }
         // The direction and the language of the dictation, so a user who dictates in Spanish
         // reads an English meeting in Spanish and a Spanish one in English. The language of
-        // the sentence is read once, off the main actor.
-        let plan = await engines.direction().plan(for: text, in: language)
+        // the sentence is read once, off the main actor, and not at all while the captions
+        // show only what was said.
+        let plan = wantsTranslation() ? await engines.direction().plan(for: text, in: language) : nil
         guard !isStopped, !Task.isCancelled else { return }
         let needsTranslation = plan.map { !TranslationStep.isInItsLanguage(source: $0.source, on: $0.route) } ?? false
-        let translates = needsTranslation && text.count <= TranslationStep.maximumLength && waiting <= backlogLimit && engines.canTranslate()
+        let translates = needsTranslation && wantsTranslation() && text.count <= TranslationStep.maximumLength && waiting <= backlogLimit && engines.canTranslate()
         let id: Int
         if let interimID {
             id = interimID

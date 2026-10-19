@@ -111,15 +111,14 @@ struct CaptionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Picker("Show", selection: Binding(get: { captions.displayMode }, set: { captions.setDisplayMode($0) })) {
-                    ForEach(CaptionDisplayMode.allCases, id: \.self) { mode in
-                        Text(mode.title)
-                    }
+                // Three segments while they fit, a menu in a narrow window.
+                ViewThatFits(in: .horizontal) {
+                    CaptionModePicker(captions: captions)
+                        .pickerStyle(.segmented)
+                    CaptionModePicker(captions: captions)
+                        .pickerStyle(.menu)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 CaptionCopyButton(captions: captions)
             }
             CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
@@ -174,6 +173,22 @@ struct CaptionView: View {
         } message: {
             Text("The model comes from Hugging Face or a mirror. Your text stays on this Mac.")
         }
+    }
+}
+
+/// What the window shows of each sentence: Original, Translated or Both, as in Settings.
+private struct CaptionModePicker: View {
+    let captions: MeetingCaptions
+
+    var body: some View {
+        Picker("Show", selection: Binding(get: { captions.displayMode }, set: { captions.setDisplayMode($0) })) {
+            ForEach(CaptionDisplayMode.allCases, id: \.self) { mode in
+                CaptionModeChoice(mode: mode)
+                    .tag(mode)
+            }
+        }
+        .labelsHidden()
+        .fixedSize()
     }
 }
 
@@ -276,8 +291,8 @@ private struct CaptionNotes: View {
             }
             // No translation notes or download until the capture runs. While it starts,
             // captions do not need the model yet, and a download agreed to then would be
-            // ignored.
-            if captions.capture == .listening {
+            // ignored. None in Original only, which does not translate.
+            if captions.capture == .listening, captions.displayMode.translates {
                 translationNote
             }
         }
@@ -333,11 +348,36 @@ private struct CaptionNotes: View {
 }
 
 extension CaptionDisplayMode {
-    /// The name in the picker.
+    /// The name in the picker, the same in the window and in Settings, where the row's
+    /// label "Captions show" supplies the verb.
     var title: LocalizedStringKey {
         switch self {
-        case .translationOnly: "Translation only"
-        case .originalAndTranslation: "Original and translation"
+        case .originalOnly: "Original"
+        case .translationOnly: "Translated"
+        case .originalAndTranslation: "Both"
+        }
+    }
+
+    /// The help of the choice. Original only says that it does not translate.
+    var help: LocalizedStringKey? {
+        switch self {
+        case .originalOnly: "Shows what was said, without translating it."
+        case .translationOnly, .originalAndTranslation: nil
+        }
+    }
+}
+
+/// One choice of a display mode picker, with its help when it has one. In the window and
+/// in Settings.
+struct CaptionModeChoice: View {
+    let mode: CaptionDisplayMode
+
+    var body: some View {
+        if let help = mode.help {
+            Text(mode.title)
+                .help(Text(help))
+        } else {
+            Text(mode.title)
         }
     }
 }

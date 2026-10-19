@@ -133,7 +133,7 @@ struct MeetingInterpretationSettings: View {
 }
 
 /// Live captions: the switch and what the caption window shows. The window has the same
-/// picker.
+/// three choices.
 private struct LiveCaptionRows: View {
     let captions: MeetingCaptions
 
@@ -154,7 +154,7 @@ private struct LiveCaptionRows: View {
             set: { captions.setDisplayMode($0) }
         )) {
             ForEach(CaptionDisplayMode.allCases, id: \.self) { mode in
-                Text(mode.title).tag(mode)
+                CaptionModeChoice(mode: mode).tag(mode)
             }
         } label: {
             Label("Captions show", systemImage: "text.bubble")

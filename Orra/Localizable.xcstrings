@@ -1074,6 +1074,29 @@
         }
       }
     },
+    "Both" : {
+      "comment" : "A display mode of the caption window and its choice in Settings: each sentence's original with its translation",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ambos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "両方"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "双语"
+          }
+        }
+      }
+    },
     "Cancel" : {
       "localizations" : {
         "es-419" : {
@@ -4789,25 +4812,25 @@
         }
       }
     },
-    "Original and translation" : {
-      "comment" : "A display mode of the caption window, each sentence with its translation",
+    "Original" : {
+      "comment" : "A display mode of the caption window and its choice in Settings: what was said, not translated",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Original y traducción"
+            "value" : "Original"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "原文と訳文"
+            "value" : "原文"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "原文和译文逐句对照"
+            "value" : "原文"
           }
         }
       }
@@ -7329,6 +7352,29 @@
         }
       }
     },
+    "Shows what was said, without translating it." : {
+      "comment" : "The help of the Original display mode, in the caption window and in Settings",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra lo que se dijo, sin traducirlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話された内容を翻訳せずに表示します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只显示说的原话，不翻译。"
+          }
+        }
+      }
+    },
     "Some external keyboards never send fn to the Mac." : {
       "localizations" : {
         "es-419" : {
@@ -9103,6 +9149,29 @@
         }
       }
     },
+    "Translated" : {
+      "comment" : "A display mode of the caption window and its choice in Settings: the translation of each sentence",
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Traducción"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "訳文"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "译文"
+          }
+        }
+      }
+    },
     "Translation" : {
       "localizations" : {
         "es-419" : {
@@ -9187,29 +9256,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "翻译键：%@"
-          }
-        }
-      }
-    },
-    "Translation only" : {
-      "comment" : "A display mode of the caption window",
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Solo traducción"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "訳文のみ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只显示译文"
           }
         }
       }
