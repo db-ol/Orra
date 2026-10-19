@@ -1,10 +1,10 @@
 <h1 align="center">
-  <a href="https://db-ol.github.io/Orra/"><img src="site/icon.png" alt="Orra" width="64" valign="middle"></a> Orra
+  <a href="https://db-ol.github.io/Orra/es/"><img src="site/icon.png" alt="Orra" width="64" valign="middle"></a> Orra
 </h1>
 
 <p align="center">
   <a href="https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg"><img src="https://img.shields.io/badge/descargar-Orra.dmg-0A84FF?logo=apple&logoColor=white" alt="Descargar Orra.dmg"></a>
-  <a href="https://db-ol.github.io/Orra/"><img src="https://img.shields.io/badge/sitio%20web-db--ol.github.io%2FOrra-555555?logo=safari&logoColor=white" alt="Sitio web de Orra"></a>
+  <a href="https://db-ol.github.io/Orra/es/"><img src="https://img.shields.io/badge/sitio%20web-db--ol.github.io%2FOrra-555555?logo=safari&logoColor=white" alt="Sitio web de Orra"></a>
   <a href="https://github.com/db-ol/Orra/releases"><img src="https://img.shields.io/github/v/release/db-ol/Orra?label=versi%C3%B3n&color=0A84FF" alt="Última versión"></a>
 </p>
 
