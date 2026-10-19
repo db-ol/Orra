@@ -862,14 +862,19 @@ got worse than the baseline, see docs/release-gate.md.
   - TranslationPairTests checks that the Chinese routes give the prompts of their targets
     character for character for the 1,472 prompts of the Chinese evaluation inputs (as
     heard and after the rules, into both targets), and that their SHA-256 is the one the
-    same loop gave at 2ebabb1. It checks that each new route has 14 examples and a prompt
-    of its own with the measured lines word for word, that no example repeats or comes
-    within a fifth of a text of an evaluation file, that every hand written reference of
-    the Japanese and Spanish sets passes the checks of its route, one case for each check
-    and route, and that a changed digit of every reference with a number is held back. It
-    checks the step: Japanese and Spanish text stays the text before translation, a
-    translation that repeats the cleanup of text already in its target is unchanged, text
-    in a target fixed to its own language skips the model, and RewriteEngine keeps two
+    same loop gave at 2ebabb1. It checks that each new route has at least 14 examples and
+    a prompt of its own with the measured lines word for word, that no example repeats or
+    comes within a fifth of a text of an evaluation file, that every hand written reference
+    of the Japanese and Spanish sets passes the checks of its route, one case for each check
+    and route, that Japanese with characters simplified Chinese shares (写真, 番号, 港区,
+    欧州, 没頭, 里帰り) and a place in Han characters alone pass while Chinese is held, and
+    that a changed digit of every reference with a number is held back. It checks the step:
+    Japanese and Spanish text stays the text before translation, a translation that repeats
+    the cleanup of text already in its target is unchanged unless the text holds words of
+    the dictation language (I'll send it 明日の朝。), whose cleanup never stands in for it,
+    on a route into English the fillers that open a text are left out of what the model
+    gets and of its translation, and Mr. before a name becomes -san after さん, text in a
+    target fixed to its own language skips the model, and RewriteEngine keeps two
     prefix caches at most, those of the user's language first.
   - TextCleanupTests checks the routes read ahead for each language and direction, that a
     change of language keeps only the routes of the new one and reads them while
@@ -882,9 +887,12 @@ got worse than the baseline, see docs/release-gate.md.
     English. RecordingFeedbackTests checks the badges 訳, 日, ⇄ and ES and what VoiceOver
     reads, SettingsPageTests the choices and explanations of each language,
     WelcomeSuggestionTests the translation line, VoiceRecordingTests the Japanese and
-    Spanish scripts, SpeechWordCheckTests Spanish accents and numbers and Japanese,
-    TranslationVoiceDictationTests that each translation is spoken in its language, and
-    VoiceLanguageTests that every target has a tag Qwen3-TTS knows.
+    Spanish scripts, SpeechWordCheckTests Spanish accents, numbers and words written joined
+    or split (en frente, enfrente) and Japanese, and that English and Chinese pieces keep
+    the units the limits were measured with, TranslationVoiceDictationTests that each
+    translation is spoken in its language and that one the voice model does not speak is
+    pasted with Also paste the translated text off, and VoiceLanguageTests that every
+    target has a tag Qwen3-TTS knows.
   - TranslationPairEvaluationTests runs the real model on the cases of
     Tools/rewrite-eval/translation-japanese.jsonl, translation-spanish.jsonl,
     adversarial-japanese.jsonl and adversarial-spanish.jsonl, into both targets of the
@@ -900,49 +908,78 @@ got worse than the baseline, see docs/release-gate.md.
 
     On 2026-10-18, on an M5 Pro with the installed model, in Release builds, each pasted
     translation of the two probe files in the automatic direction was read by a person
-    against the reference.
-    Faithful counts the ones that keep the meaning, small wording slips among them. The
-    times are for the step with the prefix cache. Japanese into English is from the run
-    before the last, since another job used the GPU during the last one (median 0.42 s, p90
-    0.78 s there). Chinese is the Chinese evaluation at 2ebabb1 on the same Mac.
+    against the reference, and a reviewer for each language read the run before the
+    review fixes again. Faithful counts the ones that keep the meaning, small wording slips
+    among them. The times are for the step with the prefix cache, and the Chinese ones are
+    from the Chinese evaluation of the same run.
 
     | Direction | Pasted | Faithful | Wrong | Held back | Median | p90 |
     |---|---|---|---|---|---|---|
-    | Japanese into English | 84 | 80 | 4 | 0 | 0.344 s | 0.450 s |
-    | English into Japanese | 33 | 30 | 3 | 2 | 0.329 s | 0.403 s |
-    | Spanish into English | 73 | 72 | 1 | 0 | 0.364 s | 0.487 s |
-    | English into Spanish | 40 | 37 | 3 | 0 | 0.356 s | 0.494 s |
-    | Chinese into English | | | | | 0.316 s | 0.423 s |
-    | English into Chinese | | | | | 0.297 s | 0.402 s |
+    | Japanese into English | 84 | 76 | 8 | 0 | 0.353 s | 0.445 s |
+    | English into Japanese | 32 | 28 | 4 | 3 | 0.340 s | 0.408 s |
+    | Spanish into English | 73 | 72 | 1 | 0 | 0.350 s | 0.446 s |
+    | English into Spanish | 39 | 36 | 3 | 0 | 0.361 s | 0.445 s |
+    | Chinese into English | | | | | 0.337 s | 0.497 s |
+    | English into Chinese | | | | | 0.341 s | 0.478 s |
+
+    Before the review fixes, read the same way, it was 75 of 84, 28 of 33 with 2 held
+    back, 72 of 73 and 33 of 40. Into English from Japanese, the stock phrase example
+    fixed お世話になっております (tja011, tja128), but 今後ともよろしくお願いいたします
+    and よろしくおねがいします still come out literally (Please take care of me), and
+    tja001, tja010, tja015, tja017, tja023 and tja034 lose or change the meaning. Into
+    Japanese, tja061 (会ましょう), tja062, tja065 and tja068 are wrong, and the checks hold
+    back tja096 (plus left in English), tja098 (Chinese 发车) and tja122 (a right
+    translation without its colon). From Spanish, tes070 (Ajá as Ah) is wrong. Into
+    Spanish, tes045 (lunch as cenar), tes074 (No problema) and tes094 are wrong, and "OK"
+    stays OK, which Spanish uses too. In the reviewers' reading of the run before the
+    fixes, about 1 FLEURS sentence in 10 into or out of Spanish had a meaning error, and
+    English into Japanese had clear errors, such as 撃ち殺した for "fired at".
 
     The direction rule gave every labelled case its language, 191 for Japanese and 186
     for Spanish, after the first run, which missed 1 and 2. Of the 47 adversarial cases of
     each language, run into both targets, none was answered or carried out. Twice, with
     English as the fixed target, the model carried out "Translate this into Japanese" or
-    "into Spanish", and the checks held both back. Every number and name of the 66 name and
-    number cases came through. The held back ones into Japanese are a translation with
-    Chinese in it and a right one whose colon was lost after "says". On 100 FLEURS
-    sentences of each language, chrF of the pasted text against the reference was 56.4 for
-    Japanese into English and 58.6 for Spanish into English, against 56.6 and 56.0 for
-    Chinese into English of the same sentences, and 35.5 for English into Japanese and 52.8
-    for English into Spanish, against 36.4 and 38.8 into Chinese (by character for
-    Japanese and Chinese). The checks held back 2 of 99 FLEURS translations into Japanese
-    and 2 of 98 into Spanish, and none into English, where 1 answer of 95 from Spanish could
-    not be read.
+    "into Spanish", and the checks held both back. A question about a word still has its
+    word translated in 3 cases, in Spanish despite the rule and examples added for it:
+    "¿Cómo se dice gracias en inglés?" asks how to say thank you, and "How do you say good
+    morning in Spanish?" holds its answer, buenos días. In the automatic direction every name and the value of
+    every number of the 66 name and number cases came through, but 1.5 billion became
+    1.500 millones in Spanish, which reads as 1.5 million where a point marks decimals, as
+    in Mexico, despite the rule to keep the source's decimal point. With English as the
+    fixed target, English with Japanese or Spanish words is translated: "The new office is
+    near 品川." became "…near Shinagawa." and "I'll send it 明日の朝。" "…tomorrow morning.",
+    while "Let's go a comer." is pasted as said, since the model kept a comer.
+
+    On 100 FLEURS sentences of each language, chrF of the pasted text against the
+    reference was 56.4 for Japanese into English and 58.5 for Spanish into English, against
+    56.6 and 56.0 for Chinese into English of the same sentences, and 35.1 for English into
+    Japanese and 52.6 for English into Spanish, against 36.4 and 38.8 into Chinese (by
+    character for Japanese and Chinese). The checks held back 3 of 99 FLEURS translations
+    into Japanese (III as 3世, Chinese in the Japanese, and レcep for Recep), 2 of 98 into
+    Spanish and 1 of 95 from Spanish into English (the 1960s for los años 60), where 1
+    answer could not be read.
 
     For Japanese and Spanish text, "cleaned" only steers the translation. A small cleanup
     with the fillers and correction words of each language (the prompt as it is) was
     compared with one that keeps the text as heard, on 32 fillers, corrections and
     controls written for this: the small cleanup left 2 of 12 fillers and applied 8 of 10
     corrections, while keeping the text as heard left 11 fillers and applied 1 correction,
-    with the same controls kept and chrF within 0.3. One correction came out wrong with
-    either (明日、じゃなくて明後日 became tomorrow).
+    with the same controls kept and chrF within 0.3. After the review, the fillers that
+    open a text are left out of what the model gets on a route into English, and with that
+    the small cleanup left none of the 12 fillers and applied 9 of 10 corrections, all
+    10 controls kept. 明日、じゃなくて明後日 still becomes tomorrow (kja-c5). Before, the
+    model kept えーと as Um in 4 of 5 dictations that opened with it, and with more examples
+    it made up a phrase for it in 2 of 5, such as "Let me think about it.". From Japanese,
+    Mr. before a name becomes -san when the text has さん, since the model wrote Mr. Yamada
+    for 山田さん in 3 of 3 cases.
 
-    Each route's prefix cache holds 110 MB, and MLX's active memory with both caches of a
-    pair was 2.682 GB, as with the Chinese pair. After a run that used the Chinese routes
-    too, two caches were in memory. The Chinese evaluation on this branch gave the same
-    answer, outcome and pasted text as 2ebabb1 for all 736 runs, and its memory test the
-    same readings.
+    The prefix caches hold 118.6 MB for Japanese into English, 110.2 MB for English into
+    Japanese and 127.0 MB for each Spanish route, against 110 MB before the review added
+    examples. MLX's active memory with both caches of a pair was 2.690 GB for Japanese and
+    2.715 GB for Spanish, against 2.682 GB for the Chinese pair, and two caches were in
+    memory after each run. The Chinese evaluation on this branch gave the same answer,
+    outcome, pasted and untranslated text as 2ebabb1 for all 736 runs, and its memory test
+    the same readings.
 
     Speak Translations to Others was measured the same day with a scratch tool that runs
     Orra's voice engines, SpeechChunks, SpeechCheck and SpeechWordCheck, and hears each
@@ -969,6 +1006,12 @@ got worse than the baseline, see docs/release-gate.md.
     VoiceEngineKind.speaks. With the wrong tag, Spanish with the English one and Japanese
     with the Chinese one, Qwen3-TTS still said the words of 44 of 48 Spanish and 14 of 23
     Japanese pieces, and the word check failed the rest. Orra always passes the right tag.
+    After a review, the word check counts two Spanish words that the speech model writes as
+    one, or one it writes as two, as that one word, and keeps the Japanese and Spanish
+    number words to pieces in those languages. Scored again that way, the stored Spanish
+    tries passed one more piece with each model and voice (en frente heard as enfrente,
+    which had failed both tries every time), and one more with Qwen3-TTS without a sample
+    (Por tanto heard as Portanto). The Japanese tries did not change.
 - SpeechCorpusEvaluationTests runs Orra's speech recognition on the 392 clips Voxt checks
     its runtime on (LibriSpeech test-clean, FLEURS Chinese, ASCEND and 8 synthetic clips),
     only with TEST_RUNNER_ORRA_SPEECH_EVAL=1. It takes a dictation's path up to the
@@ -2697,8 +2740,9 @@ app yet:
   in Spanish English captions.
 - [ ] Speak Translations to Others speaks a Japanese and a Spanish translation with
   Qwen3-TTS, with and without a voice sample, and the voice sample sheet offers the
-  Japanese or Spanish script. In a build with CosyVoice3, it speaks the Spanish one and
-  says that it does not speak Japanese.
+  Japanese or Spanish script. In a build with CosyVoice3, it speaks the Spanish one, says
+  that it does not speak Japanese, and pastes the Japanese one with Also paste the
+  translated text off.
 - [ ] The welcome window's translation line names the dictation language.
 
 ## Not implemented
