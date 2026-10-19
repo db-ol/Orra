@@ -154,10 +154,10 @@ struct TranslationPairTests {
                 }
             }
         }
-        for reference in try Self.references() {
+        for probe in try Self.references() {
             checked += 1
-            if let failure = TranslationGuard.check(source: reference.input, output: reference.reference, route: reference.route) {
-                held.append("\(reference.id) \(failure)")
+            if let failure = TranslationGuard.check(source: probe.input, output: probe.reference, route: probe.route) {
+                held.append("\(probe.id) \(failure)")
             }
         }
         for (file, language) in [("adversarial-japanese.jsonl", DictationLanguage.japanese), ("adversarial-spanish.jsonl", .spanish)] {
@@ -266,16 +266,16 @@ struct TranslationPairTests {
     @Test func aChangedDigitIsHeldBack() throws {
         var mutated = 0
         var missed: [String] = []
-        for reference in try Self.references() {
-            guard let digit = reference.reference.firstIndex(where: { $0.isASCII && $0.isNumber }) else { continue }
+        for probe in try Self.references() {
+            guard let digit = probe.reference.firstIndex(where: { $0.isASCII && $0.isNumber }) else { continue }
             // Never a zero, which the tiny values a source number gives when divided
             // explain, for Chinese as well.
-            var changed = reference.reference
-            let value = Int(String(reference.reference[digit]))!
+            var changed = probe.reference
+            let value = Int(String(probe.reference[digit]))!
             changed.replaceSubrange(digit...digit, with: String(value % 9 + 1))
             mutated += 1
-            if TranslationGuard.check(source: reference.input, output: changed, route: reference.route) == nil {
-                missed.append(reference.id)
+            if TranslationGuard.check(source: probe.input, output: changed, route: probe.route) == nil {
+                missed.append(probe.id)
             }
         }
         #expect(mutated > 40)
