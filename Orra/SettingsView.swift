@@ -211,12 +211,18 @@ private struct GeneralSettings: View {
         }
     }
 
-    /// The translation key's help in its mode. Double press for hands free works only in
-    /// Hold, so only then does the help name it.
+    /// The translation key's help in its mode. A press in Double press records nothing, so
+    /// only the other modes start recording at the press. Double press for hands free works
+    /// only in Hold, so only then does the help name it.
     private var translationKeyHelp: Text {
-        let help = Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("Use the translation key on its own. A press together with another key is a shortcut and records nothing, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it.")
-        guard pushToTalk.translationMode == .hold else { return help }
-        return help + Text(verbatim: "\n") + Text("With Double press in Hold to keep recording on, press the translation key twice quickly and it keeps recording after you let go.")
+        var help = Text("The translation key can be fn, Control, Option or Command on the left or right, or a combination. Pick the talk key and the two keys swap.") + Text(verbatim: "\n") + Text("Use the translation key on its own. A press together with another key is a shortcut and records nothing, so its shortcuts and the characters Option types keep working.")
+        if pushToTalk.translationMode != .doubleTap {
+            help = help + Text(verbatim: "\n") + Text("As fn or a right Control, Option or Command key, the translation key starts recording when you press it.")
+        }
+        if pushToTalk.translationMode == .hold {
+            help = help + Text(verbatim: "\n") + Text("With Double press in Hold to keep recording on, press the translation key twice quickly and it keeps recording after you let go.")
+        }
+        return help
     }
 
     var body: some View {

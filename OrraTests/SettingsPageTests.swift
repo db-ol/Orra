@@ -34,19 +34,13 @@ struct SettingsPageTests {
         #expect(SettingsWindow.takeRequest() == .init(tab: .translation, section: nil))
     }
 
-    /// Change Talk Key… and Change Translation Key… in the menu open General scrolled to
-    /// Keys, which sit below the fold of the window's first size. Once.
+    /// Change Talk Key… and Change Translation Key… in the menu, and Change… beside the
+    /// translation key on the Translation page, open General scrolled to Keys, which sit
+    /// below the fold of the window's first size. Once.
     @Test func changeTalkKeyOpensGeneralAtTheKeys() {
         SettingsWindow.show(.general, section: .keys)
         #expect(SettingsWindow.takeRequest() == .init(tab: .general, section: .keys))
         #expect(SettingsWindow.takeRequest() == .init(tab: .general, section: nil))
-    }
-
-    /// Change… beside the translation key on the Translation page turns the window to
-    /// General at Keys, where the key and its mode are set.
-    @Test func changeOnTheTranslationPageOpensGeneralAtTheKeys() {
-        TranslationSettings.showKeys()
-        #expect(SettingsWindow.takeRequest() == .init(tab: .general, section: .keys))
     }
 
     @Test func anOpenWindowIsToldToTurn() {

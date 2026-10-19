@@ -1030,6 +1030,28 @@
         }
       }
     },
+    "As fn or a right Control, Option or Command key, the translation key starts recording when you press it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si la tecla de traducción es fn o una tecla Control, Opción o Comando derecha, empieza a grabar en cuanto la presionas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻訳キーがfnキーまたは右のControl、Option、Commandキーの場合は、押すとすぐに録音を開始します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "翻译键是 fn 键或右侧的 Control、Option、Command 键时，按下就开始录音。"
+          }
+        }
+      }
+    },
     "Attach the diagnostic report" : {
       "localizations" : {
         "es-419" : {
@@ -9635,24 +9657,24 @@
         }
       }
     },
-    "Use the translation key on its own. A press together with another key is a shortcut and records nothing, so its shortcuts and the characters Option types keep working. As fn or a right Control, Option or Command key, it starts recording when you press it." : {
+    "Use the translation key on its own. A press together with another key is a shortcut and records nothing, so its shortcuts and the characters Option types keep working." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Usa la tecla de traducción sin otras teclas. Si la presionas junto con otra tecla, es una función rápida de teclado y no graba nada, así que sus funciones rápidas de teclado y los caracteres que escribe la tecla Opción siguen funcionando. Si es la tecla fn o una tecla Control, Opción o Comando derecha, empieza a grabar en cuanto la presionas."
+            "value" : "Usa la tecla de traducción sin otras teclas. Si la presionas junto con otra tecla, es una función rápida de teclado y no graba nada, así que sus funciones rápidas de teclado y los caracteres que escribe la tecla Opción siguen funcionando."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "翻訳キーは単独で使います。ほかのキーと一緒に押した場合はショートカットとして扱われて録音されないため、そのキーのショートカットやOptionキーで入力する文字はそのまま使えます。fnキーまたは右のControl、Option、Commandキーの場合は、押すとすぐに録音を開始します。"
+            "value" : "翻訳キーは単独で使います。ほかのキーと一緒に押した場合はショートカットとして扱われて録音されないため、そのキーのショートカットやOptionキーで入力する文字はそのまま使えます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "单独使用翻译键。和其他键一起按下时算作快捷键，不会录音，所以它的快捷键和 Option 键输入的字符照常可用。翻译键是 fn 键或右侧的 Control、Option、Command 键时，按下就开始录音。"
+            "value" : "单独使用翻译键。和其他键一起按下时算作快捷键，不会录音，所以它的快捷键和 Option 键输入的字符照常可用。"
           }
         }
       }

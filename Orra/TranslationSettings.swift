@@ -93,7 +93,7 @@ private struct TranslationKeyRow: View {
     var body: some View {
         LabeledContent {
             Button("Change…") {
-                TranslationSettings.showKeys()
+                SettingsWindow.show(.general, section: .keys)
             }
         } label: {
             Label {
@@ -108,14 +108,6 @@ private struct TranslationKeyRow: View {
                 Image(systemName: "character.bubble")
             }
         }
-    }
-}
-
-extension TranslationSettings {
-    /// Turns the open settings window to General, scrolled to Keys, for Change… beside the
-    /// translation key.
-    static func showKeys() {
-        SettingsWindow.show(.general, section: .keys)
     }
 }
 
