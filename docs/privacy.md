@@ -4,13 +4,13 @@ English · [简体中文](privacy.zh-CN.md) · [日本語](privacy.ja.md) · [Es
 
 The [README](../README.md) has a short summary. This page has the details.
 
-Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own. The text it pastes stays on this Mac's clipboard, so Universal Clipboard does not offer it to your other devices.
+Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own. The text it pastes stays on this Mac's clipboard, so Universal Clipboard does not offer it to your other devices. So does the text you copy with Copy Last Dictation or with the copy commands of Live Captions.
 
 **Learning from your corrections** is off until you turn it on. While it is on, Orra reads the text of the field it just pasted into, through macOS Accessibility, once a second for up to 3 minutes after each paste, and only while you are in that field. It reads at most 20,000 characters, keeps the text in memory during those minutes only, and never writes it anywhere. It never reads password fields or an app with secure input on. It keeps only the word pairs, such as 奥拉 and Orra, with how often and when each was seen, in ~/Library/Application Support/io.github.db-ol.Orra/corrections.json, and forgets a pair seen once after a week. Runs of three or more digits, such as codes, amounts and years, are never kept. Orra changes dictated text only where a kept pair's misheard spelling appears. Forget Learned Corrections in Settings deletes all pairs.
 
 **Use names on screen** is off until you turn it on. While it is on, each time you start a dictation, Orra reads through macOS Accessibility up to 1,000 characters before the cursor in the field you dictate into, and the title of its window. In an app that cannot give part of a field, Orra reads the whole field when it holds 20,000 characters or fewer and keeps only the last 1,000 characters before the cursor. A field that does not say where its cursor is gives only the window title. It never reads password fields, password managers (1Password, Bitwarden, KeePassXC, Apple's Passwords and Keychain Access) or an app with secure input on, and never Orra's own windows. It takes up to 40 names and rare words from that text and gives them to the speech model on your Mac, never the text itself. It keeps the text and the names in memory for that dictation only, and never saves or logs them.
 
-**Meeting Interpretation** keeps captions and the words said in the voice sample in memory only. It keeps the voice sample in memory too, unless you turn on Remember my voice, which is off until you do. It never logs text or audio.
+**Meeting Interpretation** keeps captions and the words said in the voice sample in memory only. Captions stay there until Orra quits, so you can copy them after a meeting. It keeps the voice sample in memory too, unless you turn on Remember my voice, which is off until you do. It never logs text or audio.
 
 **Orra uses the internet for model downloads you ask for and for update checks only.**
 
