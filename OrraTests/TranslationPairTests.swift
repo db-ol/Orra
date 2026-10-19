@@ -35,10 +35,10 @@ struct TranslationPairTests {
 
     // MARK: Prompts
 
-    /// The Chinese routes get the prompts of their target, character for character, for
-    /// every input of the Chinese evaluation, as heard and after the rules, and those are
-    /// the prompts of 2ebabb1, before Japanese and Spanish: their SHA-256 is the one a
-    /// test computed there the same way.
+    /// The Chinese routes keep their prompts character for character, for every input of
+    /// the Chinese evaluation, as heard and after the rules: those are the prompts of
+    /// 2ebabb1, before Japanese and Spanish, since their SHA-256 is the one a test computed
+    /// there the same way.
     @Test func theChineseRoutesKeepTheirPrompts() throws {
         var count = 0
         var hasher = SHA256()
@@ -48,7 +48,6 @@ struct TranslationPairTests {
                 for text in [input, NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: input))] {
                     for target in DictationLanguage.chinese.translationTargets {
                         let prompt = TranslationPrompt.text(for: text, into: .chinese(target))
-                        #expect(prompt == TranslationPrompt.text(for: text, into: target))
                         hasher.update(data: Data((prompt + "\u{1E}").utf8))
                         count += 1
                     }
