@@ -119,7 +119,7 @@ struct MeetingCaptionsTests {
         try await eventually { captions.store.sentences.first?.translatedText == "大家好。" }
     }
 
-    @Test func turningOffDropsEveryCaptionAndClosesTheWindow() async throws {
+    @Test func turningOffKeepsTheCaptionsAndClosesTheWindow() async throws {
         let source = FakeSource()
         let events = Box()
         let captions = makeCaptions(FakeCaptionModels(["Hello.", "Again."]), source: source, events: events)
@@ -129,7 +129,9 @@ struct MeetingCaptionsTests {
         captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
         try await eventually { captions.store.sentences.count == 1 }
         captions.setOn(false)
-        #expect(captions.store.sentences.isEmpty)
+        // Kept until Orra quits, so the meeting can still be copied.
+        #expect(captions.store.sentences.map(\.original) == ["Hello."])
+        #expect(captions.store.hasFinalSentences)
         #expect(captions.capture == .off)
         try await eventually { source.stops == 1 }
         #expect(!source.isCapturing)
@@ -137,7 +139,79 @@ struct MeetingCaptionsTests {
         // Samples still on their way from the capture are ignored.
         captions.receive(FakeCaptionModels.audio(sentences: 1), run: run)
         try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.store.sentences.map(\.original) == ["Hello."])
+    }
+
+    @Test func aStartMovesTheLastMeetingToThePreviousTranscript() async throws {
+        let source = FakeSource()
+        let captions = makeCaptions(FakeCaptionModels(["Hello everyone.", "Next slide please."]), source: source, events: Box())
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.receive(FakeCaptionModels.audio(sentences: 2), run: captions.currentRun)
+        try await eventually { captions.store.sentences.compactMap(\.translatedText) == ["大家好。", "请看下一张幻灯片。"] }
+        captions.setOn(false)
+        // The window starts empty, and the meeting is kept unseen.
+        captions.setOn(true)
         #expect(captions.store.sentences.isEmpty)
+        #expect(!captions.store.hasFinalSentences)
+        #expect(captions.store.previous.sentences.map(\.original) == ["Hello everyone.", "Next slide please."])
+        // A start with nothing said leaves the previous transcript alone.
+        captions.setOn(false)
+        captions.setOn(true)
+        #expect(captions.store.previous.sentences.map(\.original) == ["Hello everyone.", "Next slide please."])
+        captions.setOn(false)
+    }
+
+    @Test func aStopEndsAPendingTranslationWithoutOne() async throws {
+        let models = FakeCaptionModels(["Hello everyone."])
+        models.holdsTranslations = true
+        let captions = makeCaptions(models, source: FakeSource(), events: Box())
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { models.isHolding }
+        #expect(captions.store.sentences.first?.translation == .pending)
+        captions.setOn(false)
+        #expect(captions.store.sentences.map(\.translation) == [.none])
+        // The translation that comes after the stop changes nothing.
+        models.letGo()
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(captions.store.sentences.map(\.translation) == [.none])
+        #expect(captions.store.transcript.text(.translation) == "Hello everyone.")
+    }
+
+    @Test func aStopKeepsTheLineStillBeingHeardAsAFinalSentence() async throws {
+        let captions = makeCaptions(FakeCaptionModels(["Hello", "Hello everyone."]), source: FakeSource(), events: Box())
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        // Like the capture, in 100 ms pieces, until the sentence shows as interim text.
+        let audio = CaptionAudio.silence(0.5) + CaptionAudio.tone(1.5)
+        let chunk = RecordingLimits.sampleRate / 10
+        for start in stride(from: 0, to: audio.count, by: chunk) {
+            captions.receive(Array(audio[start..<min(audio.count, start + chunk)]), run: captions.currentRun)
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try await eventually { captions.store.sentences.first?.isInterim == true }
+        #expect(!captions.store.hasFinalSentences)
+        captions.setOn(false)
+        #expect(captions.store.sentences.map(\.original) == ["Hello"])
+        #expect(captions.store.sentences.map(\.isInterim) == [false])
+        #expect(captions.store.sentences.map(\.translation) == [.none])
+        #expect(captions.store.hasFinalSentences)
+    }
+
+    @Test func copyingUsesTheDisplayModeUnlessAContentIsChosen() {
+        var copies: [String] = []
+        let store = CaptionStore()
+        let captions = MeetingCaptions(source: FakeSource().source, engines: FakeCaptionModels([]).engines(), store: store, copyText: { copies.append($0) })
+        #expect(!captions.copy(store.transcript))
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hello everyone.", translation: .done("大家好。")))
+        store.apply(CaptionSentence(id: 2, start: 1, end: 2, original: "Next slide", translation: .none, isInterim: true))
+        #expect(captions.copy(store.transcript))
+        captions.setDisplayMode(.originalAndTranslation)
+        captions.copy(store.transcript)
+        captions.copy(store.transcript, as: .original)
+        #expect(copies == ["大家好。", "Hello everyone.\n大家好。", "Hello everyone."])
     }
 
     @Test func aRefusedCaptureSaysSoInTheWindow() async throws {
@@ -285,11 +359,62 @@ struct CaptionDisplayTests {
             store.apply(CaptionSentence(id: id, start: Double(id), end: Double(id) + 1, original: "\(id)", translation: .pending))
         }
         #expect(store.sentences.map(\.id) == [3, 4, 5])
+        #expect(store.droppedOldest)
+        #expect(!store.hasTranslation)
         store.apply(CaptionSentence(id: 4, start: 4, end: 5, original: "4", translation: .done("four")))
         #expect(store.sentences.map(\.id) == [3, 4, 5])
         #expect(store.sentences[1].translatedText == "four")
-        store.clear()
+        #expect(store.hasTranslation)
+        store.startOver()
         #expect(store.sentences.isEmpty)
+        #expect(!store.droppedOldest)
+        #expect(!store.hasTranslation)
+    }
+
+    @Test @MainActor func theWindowDrawsTheLast500WhileTheCopyHoldsMore() {
+        let store = CaptionStore()
+        #expect(CaptionStore.limit == 10_000)
+        for id in 1...600 {
+            store.apply(CaptionSentence(id: id, start: Double(id), end: Double(id) + 1, original: "\(id)", translation: .none))
+        }
+        #expect(store.shown.count == 500)
+        #expect(store.shown.first?.id == 101)
+        #expect(store.shown.last?.id == 600)
+        #expect(store.transcript.sentences.count == 600)
+        #expect(!store.droppedOldest)
+    }
+
+    @Test @MainActor func settlingKeepsTheHeardLineAndEndsPendingTranslations() {
+        let store = CaptionStore()
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hello everyone.", translation: .done("大家好。")))
+        store.apply(CaptionSentence(id: 2, start: 1, end: 2, original: "Next slide please.", translation: .pending))
+        store.apply(CaptionSentence(id: 3, start: 2, end: 3, original: "That sounds good.", translation: .none))
+        store.apply(CaptionSentence(id: 4, start: 3, end: 4, original: "so the next", translation: .none, isInterim: true))
+        store.settle()
+        #expect(store.sentences.map(\.translation) == [.done("大家好。"), .none, .none, .none])
+        #expect(store.sentences.map(\.isInterim) == [false, false, false, false])
+        #expect(store.sentences.map(\.original) == ["Hello everyone.", "Next slide please.", "That sounds good.", "so the next"])
+    }
+
+    @Test @MainActor func startingOverKeepsOnlyAMeetingWithFinalSentences() {
+        let store = CaptionStore()
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hello everyone.", translation: .done("大家好。")))
+        store.apply(CaptionSentence(id: 2, start: 1, end: 2, original: "Next", translation: .none, isInterim: true))
+        #expect(store.hasFinalSentences)
+        store.startOver()
+        #expect(store.sentences.isEmpty)
+        #expect(!store.hasFinalSentences)
+        // Only the final sentence, as a copy has it.
+        #expect(store.previous.sentences.map(\.original) == ["Hello everyone."])
+        // An interim line alone is nothing to keep, so the previous meeting stays.
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hmm", translation: .none, isInterim: true))
+        #expect(!store.hasFinalSentences)
+        store.startOver()
+        #expect(store.previous.sentences.map(\.original) == ["Hello everyone."])
+        // A later meeting with final sentences replaces it.
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Gracias a todos.", translation: .done("Thanks, everyone.")))
+        store.startOver()
+        #expect(store.previous.sentences.map(\.original) == ["Gracias a todos."])
     }
 }
 

@@ -5,8 +5,8 @@ import Testing
 @testable import Orra
 
 /// The top level of the menu bar menu, read from the menu SwiftUI makes of StatusMenu:
-/// Live Captions under a Meeting Interpretation heading, and when Speak Translations to
-/// Others shows.
+/// Live Captions under a Meeting Interpretation heading, and when the copy items and
+/// Speak Translations to Others show.
 @MainActor
 struct StatusMenuTests {
     let mic = FakeMicrophone()
@@ -37,9 +37,27 @@ struct StatusMenuTests {
         #expect(meetingLines(translationOn: true, speakingOn: true, voiceModel: false) == ["Live Captions"])
     }
 
+    @Test func copyCaptionsAndCopyPreviousCaptionsShowOnlyWithFinalSentences() {
+        let store = CaptionStore()
+        func shown() -> [String] {
+            meetingLines(translationOn: false, speakingOn: false, store: store)
+        }
+        #expect(shown() == ["Live Captions"])
+        // A line still being heard is nothing to copy yet.
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hello", translation: .none, isInterim: true))
+        #expect(shown() == ["Live Captions"])
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Hello everyone.", translation: .pending))
+        #expect(shown() == ["Live Captions", "Copy Captions"])
+        // Captions start again: the meeting is the previous one.
+        store.startOver()
+        #expect(shown() == ["Live Captions", "Copy Previous Captions"])
+        store.apply(CaptionSentence(id: 1, start: 0, end: 1, original: "Next slide please.", translation: .none))
+        #expect(shown() == ["Live Captions", "Copy Captions", "Copy Previous Captions"])
+    }
+
     /// The lines under the Meeting Interpretation heading, up to the divider after them.
-    private func meetingLines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true) -> [String] {
-        let lines = lines(translationOn: translationOn, speakingOn: speakingOn, voiceModel: voiceModel)
+    private func meetingLines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore()) -> [String] {
+        let lines = lines(translationOn: translationOn, speakingOn: speakingOn, voiceModel: voiceModel, store: store)
         guard let heading = lines.firstIndex(of: "# Meeting Interpretation") else { return [] }
         return Array(lines[(heading + 1)...].prefix { $0 != "---" })
     }
@@ -47,7 +65,7 @@ struct StatusMenuTests {
     /// The menu's top level, one line for each item: "# " starts a section heading, " >"
     /// ends a submenu, " (on)" ends an item that is on, and "---" is a divider. Without
     /// Accessibility access and with the speech model not downloaded, as in a test.
-    private func lines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true) -> [String] {
+    private func lines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore()) -> [String] {
         let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert)
         pushToTalk.setTranslationKeyOn(translationOn)
         let speech = TranslationSpeech(
@@ -66,7 +84,8 @@ struct StatusMenuTests {
             ),
             captions: MeetingCaptions(
                 source: SystemAudioSource(start: { _ in }, stop: {}),
-                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text }),
+                store: store
             ),
             openAtLogin: OpenAtLogin(readStatus: { .off }, register: { _ in }, openLoginItemsSettings: {}),
             inputs: AudioInputList { AudioInputList.Reading(inputs: [], defaultInput: nil, lidClosed: false) },
