@@ -109,15 +109,24 @@ final class CaptionStore {
 }
 
 /// What the caption window shows of each sentence. Saved, so the window opens the way the
-/// user left it.
+/// user left it. In the order of the picker, from what was said to its translation.
 nonisolated enum CaptionDisplayMode: String, CaseIterable, Sendable {
+    /// What was said, without translating it. The local model is not loaded for it.
+    case originalOnly
     case translationOnly
     case originalAndTranslation
 
     static let defaultsKey = "captionDisplayMode"
 
+    /// The saved mode. Translation only while none is saved, so a user who never chose
+    /// keeps what they had. A build without Original only reads it as that too.
     static func load(from defaults: UserDefaults = .standard) -> CaptionDisplayMode {
         defaults.string(forKey: defaultsKey).flatMap(CaptionDisplayMode.init(rawValue:)) ?? .translationOnly
+    }
+
+    /// Whether captions translate in this mode.
+    var translates: Bool {
+        self != .originalOnly
     }
 
     func save(to defaults: UserDefaults = .standard) {
@@ -140,13 +149,14 @@ nonisolated enum CaptionDisplayMode: String, CaseIterable, Sendable {
     /// The lines of a sentence in this mode. While the sentence is still being heard and
     /// while its translation is pending, the original shows on its own in the secondary
     /// style, and the translation replaces or joins it once it is there. Without a
-    /// translation the original is the main line.
+    /// translation the original is the main line. Original only shows a final sentence
+    /// as its original, whatever its translation.
     func lines(for sentence: CaptionSentence) -> [Line] {
         if sentence.isInterim {
             return [Line(text: sentence.original, style: .secondary)]
         }
         return switch (self, sentence.translation) {
-        case (_, .none):
+        case (.originalOnly, _), (_, .none):
             [Line(text: sentence.original, style: .main)]
         case (_, .pending):
             [Line(text: sentence.original, style: .secondary)]
@@ -267,12 +277,16 @@ final class MeetingCaptions {
     @ObservationIgnored private var run = 0
     @ObservationIgnored private var heardSeconds = 0.0
     @ObservationIgnored private var heardSound = false
+    /// True once this run called `started`, so a switch to a mode that translates calls it
+    /// once, and a switch back does not undo it until captions stop.
+    @ObservationIgnored private var wantsModel = false
 
     /// - Parameters:
     ///   - source: The capture of the sound the Mac plays. Tests pass a fake.
     ///   - engines: The models, see CaptionEngines.live.
-    ///   - started: Called when captions start, so the cleanup model loads, see
-    ///     TextCleanup.captionsStarted.
+    ///   - started: Called once captions run in a mode that translates, so the cleanup
+    ///     model loads, see TextCleanup.captionsStarted. Not in Original only, until the
+    ///     user switches to a mode that translates.
     ///   - stopped: Called when they stop.
     ///   - copyText: Puts a copy on the clipboard. Tests pass a fake.
     ///   - silenceHint: Seconds of only zeros before the window suggests the permission.
@@ -307,6 +321,11 @@ final class MeetingCaptions {
         guard mode != displayMode else { return }
         displayMode = mode
         saveDisplayMode(mode)
+        // A switch to a mode that translates while captions run loads the model now. A
+        // switch back keeps it until captions stop, so it does not load and unload.
+        if capture == .listening {
+            wantModelIfTranslating()
+        }
     }
 
     /// Copies a transcript, such as `store.transcript` or `store.previous`, the way the
@@ -331,7 +350,9 @@ final class MeetingCaptions {
         speechModelMissing = false
         heardSeconds = 0
         heardSound = false
-        let pipeline = CaptionPipeline(engines: engines, interimInterval: CaptionPipeline.defaultInterimInterval, speechNotReady: { [weak self] in
+        let pipeline = CaptionPipeline(engines: engines, interimInterval: CaptionPipeline.defaultInterimInterval, wantsTranslation: { [weak self] in
+            self?.displayMode.translates ?? false
+        }, speechNotReady: { [weak self] in
             self?.speechModelMissing = true
         }, withdraw: { [weak self] id in
             self?.store.remove(id: id)
@@ -376,10 +397,17 @@ final class MeetingCaptions {
             return
         }
         // Only once the capture runs: the local model is not loaded, nor its download
-        // offered, for captions that cannot hear anything.
-        started()
+        // offered, for captions that cannot hear anything, nor in Original only.
+        wantModelIfTranslating()
         capture = .listening
-        Logger.captions.notice("Meeting captions started")
+        Logger.captions.notice("Meeting captions started, showing \(self.displayMode.rawValue, privacy: .public)")
+    }
+
+    /// Asks for the local model once per run, when the display mode translates.
+    private func wantModelIfTranslating() {
+        guard displayMode.translates, !wantsModel else { return }
+        wantsModel = true
+        started()
     }
 
     private func stop() {
@@ -391,6 +419,7 @@ final class MeetingCaptions {
         }
         pipeline?.stop()
         pipeline = nil
+        wantsModel = false
         // Kept for a copy after the meeting. Sentences still waiting to be transcribed
         // are dropped, since transcribing them would keep the GPU busy after the stop.
         store.settle()

@@ -178,6 +178,25 @@ struct CaptionPipelineTests {
         #expect(models.translated.isEmpty)
     }
 
+    /// Original only shows what was said, so nothing is translated, also with the model
+    /// ready. A switch to a mode that translates counts from the next sentence.
+    @Test func originalOnlyNeverTranslates() async throws {
+        let models = FakeCaptionModels(["Hello everyone.", "Next slide please.", "That sounds good."])
+        var wantsTranslation = false
+        var reports: [CaptionSentence] = []
+        let pipeline = CaptionPipeline(engines: models.engines(), wantsTranslation: { wantsTranslation }) { reports.append($0) }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 2))
+        try await eventually { reports.count == 2 }
+        #expect(reports.map(\.original) == ["Hello everyone.", "Next slide please."])
+        #expect(reports.allSatisfy { $0.translation == .none })
+        #expect(models.translated.isEmpty)
+        wantsTranslation = true
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        await pipeline.finish()
+        #expect(models.translated.map(\.text) == ["That sounds good."])
+        #expect(reports.last?.translation == .done("听起来不错。"))
+    }
+
     @Test func withoutTheSpeechModelSentencesAreDroppedAndSaidSo() async throws {
         let models = FakeCaptionModels(["Hello everyone."])
         models.speechReady = false

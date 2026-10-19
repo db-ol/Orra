@@ -86,12 +86,13 @@ struct MeetingCaptionsTests {
         }
     }
 
-    private func makeCaptions(_ models: FakeCaptionModels, source: FakeSource, events: Box) -> MeetingCaptions {
+    private func makeCaptions(_ models: FakeCaptionModels, source: FakeSource, events: Box, displayMode: CaptionDisplayMode = .translationOnly) -> MeetingCaptions {
         let captions = MeetingCaptions(
             source: source.source,
             engines: models.engines(),
             started: { events.items.append("started") },
             stopped: { events.items.append("stopped") },
+            displayMode: displayMode,
             silenceHint: 2
         )
         captions.showWindow = { events.items.append("show") }
@@ -239,6 +240,57 @@ struct MeetingCaptionsTests {
         #expect(copies == ["大家好。", "Hello everyone.\n大家好。", "Hello everyone."])
     }
 
+    /// Original only does not load the local model, nor offer its download. A switch to a
+    /// mode that translates asks for it once, and a switch back keeps it until the stop.
+    @Test func originalOnlyAsksForTheModelOnlyAfterASwitchToTranslating() async throws {
+        let models = FakeCaptionModels(["Hello everyone.", "Next slide please."])
+        let events = Box()
+        let captions = makeCaptions(models, source: FakeSource(), events: events, displayMode: .originalOnly)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        #expect(events.items == ["show"])
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.count == 1 }
+        #expect(captions.store.sentences.map(\.translation) == [.none])
+        #expect(models.translated.isEmpty)
+        captions.setDisplayMode(.originalAndTranslation)
+        #expect(events.items == ["show", "started"])
+        captions.setDisplayMode(.originalOnly)
+        captions.setDisplayMode(.translationOnly)
+        #expect(events.items == ["show", "started"])
+        captions.receive(FakeCaptionModels.audio(sentences: 1), run: captions.currentRun)
+        try await eventually { captions.store.sentences.last?.translatedText == "请看下一张幻灯片。" }
+        // The sentence heard in Original only keeps its original.
+        #expect(captions.store.sentences.first?.translation == CaptionSentence.Translation.none)
+        captions.setOn(false)
+        #expect(events.items == ["show", "started", "stopped", "close"])
+        // The next start in Original only asks again only after a switch.
+        captions.setDisplayMode(.originalOnly)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        #expect(events.items == ["show", "started", "stopped", "close", "show"])
+        captions.setOn(false)
+    }
+
+    /// A switch while captions are off, or still starting, waits for the capture to run.
+    @Test func aSwitchBeforeTheCaptureRunsAsksForTheModelOnceItDoes() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        let events = Box()
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: events, displayMode: .originalOnly)
+        captions.setDisplayMode(.originalAndTranslation)
+        captions.setDisplayMode(.originalOnly)
+        #expect(events.items.isEmpty)
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        captions.setDisplayMode(.translationOnly)
+        #expect(events.items == ["show"])
+        source.releaseStart()
+        try await eventually { captions.capture == .listening }
+        #expect(events.items == ["show", "started"])
+        captions.setOn(false)
+    }
+
     @Test func aRefusedCaptureSaysSoInTheWindow() async throws {
         let source = FakeSource()
         source.fails = .notConfigured
@@ -355,6 +407,13 @@ struct MeetingCaptionsTests {
             #expect(CaptionDisplayMode.load(from: defaults) == .translationOnly)
             CaptionDisplayMode.originalAndTranslation.save(to: defaults)
             #expect(CaptionDisplayMode.load(from: defaults) == .originalAndTranslation)
+            CaptionDisplayMode.originalOnly.save(to: defaults)
+            #expect(CaptionDisplayMode.load(from: defaults) == .originalOnly)
+            // The values saved before Original only came stay as they were.
+            #expect(CaptionDisplayMode.translationOnly.rawValue == "translationOnly")
+            #expect(CaptionDisplayMode.originalAndTranslation.rawValue == "originalAndTranslation")
+            defaults.set("somethingNewer", forKey: CaptionDisplayMode.defaultsKey)
+            #expect(CaptionDisplayMode.load(from: defaults) == .translationOnly)
         }
     }
 }
@@ -369,6 +428,16 @@ struct CaptionDisplayTests {
         #expect(mode.lines(for: sentence(.pending)) == [.init(text: "我们开始吧。", style: .secondary)])
         #expect(mode.lines(for: sentence(.done("Let's begin."))) == [.init(text: "Let's begin.", style: .main)])
         #expect(mode.lines(for: sentence(.none)) == [.init(text: "我们开始吧。", style: .main)])
+    }
+
+    @Test func originalOnlyShowsTheOriginalWhateverItsTranslation() {
+        let mode = CaptionDisplayMode.originalOnly
+        #expect(!mode.translates)
+        #expect(CaptionDisplayMode.allCases.filter(\.translates) == [.translationOnly, .originalAndTranslation])
+        #expect(CaptionDisplayMode.allCases.first == .originalOnly)
+        for translation in [CaptionSentence.Translation.pending, .done("Let's begin."), .none] {
+            #expect(mode.lines(for: sentence(translation)) == [.init(text: "我们开始吧。", style: .main)])
+        }
     }
 
     @Test func bothShowTheOriginalAndTheTranslationJoinsIt() {

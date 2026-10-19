@@ -56,6 +56,7 @@ extension CaptionDisplayMode {
     /// What Copy copies in this mode: every sentence the way the window shows it.
     nonisolated var copyContent: CaptionTranscript.Content {
         switch self {
+        case .originalOnly: .original
         case .translationOnly: .translation
         case .originalAndTranslation: .originalAndTranslation
         }
