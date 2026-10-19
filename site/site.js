@@ -30,21 +30,22 @@
   var demos = document.querySelector(".demos");
   if (!demos) return;
 
-  // Speech appears at about 8.5 Chinese characters or 3 English words a
-  // second. The spoken line is split into spans that fade in one after the
+  // Speech appears at about 8.5 characters a second in Chinese and Japanese,
+  // which have no spaces between words, and 3 words a second in English and
+  // Spanish. The spoken line is split into spans that fade in one after the
   // other, so it wraps like normal text. The speak phase lasts as long as
   // the line takes to appear, plus a short pause.
   var speakMs = {};
   demos.querySelectorAll("[data-demo]").forEach(function (figure) {
     var said = figure.querySelector(".demo-said");
     if (!said) return;
-    var chinese = /^zh/i.test((said.closest("[lang]") || document.documentElement).getAttribute("lang"));
-    var step = chinese ? 1 / 8.5 : 1 / 3;
+    var characters = /^(zh|ja)/i.test((said.closest("[lang]") || document.documentElement).getAttribute("lang"));
+    var step = characters ? 1 / 8.5 : 1 / 3;
     var count = 0;
     // The quotation marks around the line show with its first and last unit.
     Array.from(said.childNodes).forEach(function (node) {
       var part = node.nodeType === 1 ? node : document.createElement("span");
-      var units = chinese ? Array.from(node.textContent) : node.textContent.match(/\S+\s*/g) || [];
+      var units = characters ? Array.from(node.textContent) : node.textContent.match(/\S+\s*/g) || [];
       if (part !== node) said.replaceChild(part, node);
       part.textContent = "";
       units.forEach(function (unit) {

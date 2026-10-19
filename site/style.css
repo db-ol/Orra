@@ -289,7 +289,16 @@ h1 {
   transition: opacity 0.4s var(--ease);
 }
 
-.demo-said:lang(zh) {
+/* Japanese lines in the demos wrap between phrases in browsers that can find them, so no
+   line ends with a character or two alone. Other browsers wrap them as before. */
+.demo-stage:lang(ja),
+.meet-stage:lang(ja) {
+  word-break: auto-phrase;
+}
+
+/* Chinese and Japanese have no italic. */
+.demo-said:lang(zh),
+.demo-said:lang(ja) {
   font-style: normal;
 }
 

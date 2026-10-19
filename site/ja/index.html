@@ -48,20 +48,20 @@
         <div class="demos">
           <figure class="demo" data-demo="dictate">
             <figcaption class="demo-name">音声入力</figcaption>
-            <div class="demo-stage" role="img" aria-label="アニメーション: 誰かが英語で“Um, I’ll post Wednesday’s meeting notes this afternoon.”と話します。Orraのカプセルの音量バーが声に合わせて動き、フィラーのumを除いた言葉がメモに入力されます。">
-              <p class="demo-said" aria-hidden="true" lang="en">“<span class="filler">Um, </span><span class="said-words">I’ll post Wednesday’s meeting notes this afternoon.</span>”</p>
-              <div class="demo-window" aria-hidden="true" lang="en">
+            <div class="demo-stage" role="img" aria-label="アニメーション: 誰かが“水曜日の議事録は、今日の午後に共有します”と話します。Orraのカプセルの音量バーが声に合わせて動き、話したとおりの文がメモに入力されます。">
+              <p class="demo-said" aria-hidden="true">“<span class="said-words">水曜日の議事録は、今日の午後に共有します。</span>”</p>
+              <div class="demo-window" aria-hidden="true">
                 <div class="demo-chrome"><i></i><i></i><i></i></div>
-                <p class="doc-title">Project update</p>
-                <p class="demo-target"><span class="pasted">I’ll post Wednesday’s meeting notes this afternoon.</span><span class="caret"></span></p>
+                <p class="doc-title">プロジェクトの進捗</p>
+                <p class="demo-target"><span class="pasted">水曜日の議事録は、今日の午後に共有します。</span><span class="caret"></span></p>
               </div>
               <span class="capsule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
           </figure>
 
           <figure class="demo" data-demo="cleanup">
-            <figcaption class="demo-name">整文（オプション）</figcaption>
-            <div class="demo-stage" role="img" aria-label="アニメーション: 誰かが英語で“Let’s go over the quote at three, oh wait, four tomorrow.”と話します。Orraのカプセルの音量バーが声に合わせて動きます。整文がオンなので、Orraが話しながらの言い直しを反映し、メールに“Let’s go over the quote at four tomorrow.”と入力されます。">
+            <figcaption class="demo-name">整文（オプション、英語の文のみ）</figcaption>
+            <div class="demo-stage" role="img" aria-label="アニメーション: 誰かが英語で“Let’s go over the quote at three, oh wait, four tomorrow.”と話します。Orraのカプセルの音量バーが声に合わせて動きます。整文がオンなので、Orraが話しながらの言い直しを反映し、メールに“Let’s go over the quote at four tomorrow.”と入力されます。音声入力の言語に日本語を選んだ場合、整文は今のところ英語の文にのみ対応しています。">
               <p class="demo-said" aria-hidden="true" lang="en">“<span class="said-words">Let’s go over the quote at </span><span class="filler">three, oh wait, </span><span class="said-words">four tomorrow.</span>”</p>
               <div class="demo-window" aria-hidden="true">
                 <div class="demo-chrome"><i></i><i></i><i></i></div>
@@ -74,14 +74,14 @@
 
           <figure class="demo" data-demo="translate">
             <figcaption class="demo-name">翻訳</figcaption>
-            <div class="demo-stage" role="img" aria-label="アニメーション: チャットで友人が英語で“When can I see the designs?”と尋ねます。誰かが中国語で“我这边周五之前能把设计稿发给你”と話すと、Orraのカプセルに小さな“译”バッジが表示され、英語の訳文“I can send you the designs before Friday.”がメッセージ入力欄に入力されます。">
-              <p class="demo-said" aria-hidden="true" lang="zh-Hans">“<span class="said-words">我这边周五之前能把设计稿发给你。</span>”</p>
+            <div class="demo-stage" role="img" aria-label="アニメーション: チャットで友人が英語で“When can I see the designs?”と尋ねます。誰かが“デザインは金曜日までにお送りできます”と話すと、Orraのカプセルに小さな“訳”バッジが表示され、英語の訳文“I can send you the designs by Friday.”がメッセージ入力欄に入力されます。">
+              <p class="demo-said" aria-hidden="true">“<span class="said-words">デザインは金曜日までにお送りできます。</span>”</p>
               <div class="demo-window chat" aria-hidden="true" lang="en">
                 <div class="chat-head"><span class="avatar">S</span>Sam</div>
                 <p class="bubble">When can I see the designs?</p>
-                <p class="demo-target composer"><span class="pasted">I can send you the designs before Friday.</span><span class="caret"></span></p>
+                <p class="demo-target composer"><span class="pasted">I can send you the designs by Friday.</span><span class="caret"></span></p>
               </div>
-              <span class="capsule" aria-hidden="true"><span class="badge" lang="zh-Hans">译</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="capsule" aria-hidden="true"><span class="badge">訳</span><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
             </div>
           </figure>
         </div>
@@ -118,17 +118,17 @@
         <p class="statement reveal">相手の話はあなたの言語で読めて、あなたの話は相手の言語で、あなた自身の声でも届けられます。</p>
         <div class="meet">
           <div class="meet-part reveal">
-            <div class="meet-stage" role="img" aria-label="アニメーション: ライブキャプションのウインドウに、通話の英語の2文“Can we move the launch to next Thursday?”と“The test report isn’t ready yet.”が表示され、それぞれの下に中国語の訳文“我们能把发布挪到下周四吗？”と“测试报告还没准备好。”が表示されます。">
+            <div class="meet-stage" role="img" aria-label="アニメーション: ライブキャプションのウインドウに、通話の英語の2文“Can we move the launch to next Thursday?”と“The test report isn’t ready yet.”が表示され、それぞれの下に日本語の訳文“リリースを来週の木曜日にずらせますか？”と“テストレポートはまだできていません”が表示されます。">
               <div class="captions" aria-hidden="true">
                 <p class="captions-title">ライブキャプション</p>
                 <p class="captions-modes"><span>訳文のみ</span><span class="on">原文と訳文</span></p>
                 <div class="caption">
                   <p class="caption-original" lang="en">Can we move the launch to next Thursday?</p>
-                  <p class="caption-translation" lang="zh-Hans">我们能把发布挪到下周四吗？</p>
+                  <p class="caption-translation">リリースを来週の木曜日にずらせますか？</p>
                 </div>
                 <div class="caption">
                   <p class="caption-original" lang="en">The test report isn’t ready yet.</p>
-                  <p class="caption-translation" lang="zh-Hans">测试报告还没准备好。</p>
+                  <p class="caption-translation">テストレポートはまだできていません。</p>
                 </div>
               </div>
             </div>
@@ -136,8 +136,8 @@
             <p>通話などMacで再生される音声を、Orraが翻訳してフローティングウインドウにキャプションとして表示します。翻訳には、翻訳キーと同じお使いのMac上のモデルを使います。マイクは使わず、キャプションはメモリ上にだけ保持されます。</p>
           </div>
           <div class="meet-part reveal">
-            <div class="meet-stage" role="img" aria-label="アニメーション: 誰かが翻訳キーを押して、中国語で“可以，我周三之前把测试做完”と話します。通話アプリはマイクとしてOrra Microphoneを使っていて、通話の相手のAlexには英語の訳文“Sure, I’ll finish testing by Wednesday.”が聞こえます。">
-              <p class="meet-said" aria-hidden="true" lang="zh-Hans">“可以，我周三之前把测试做完。”</p>
+            <div class="meet-stage" role="img" aria-label="アニメーション: 誰かが翻訳キーを押して、“いいですよ、水曜日までにテストを終わらせます”と話します。通話アプリはマイクとしてOrra Microphoneを使っていて、通話の相手のAlexには英語の訳文“Sure, I’ll finish testing by Wednesday.”が聞こえます。">
+              <p class="meet-said" aria-hidden="true">“いいですよ、水曜日までにテストを終わらせます。”</p>
               <div class="demo-window call" aria-hidden="true">
                 <div class="chat-head"><span class="avatar">A</span>Alex</div>
                 <p class="call-label">Alexに聞こえる音声</p>
