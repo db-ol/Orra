@@ -141,6 +141,11 @@ final class TextInserter {
         return .pasted
     }
 
+    /// Waits until the latest paste's restore has run or was cancelled. Internal for tests.
+    func waitForRestore() async {
+        await restoreTask?.value
+    }
+
     private func readPasteboard() async -> PasteboardSnapshot {
         var snapshot = await readSnapshot(pasteboard.name.rawValue)
         if snapshot.changeCount != pasteboard.changeCount {
