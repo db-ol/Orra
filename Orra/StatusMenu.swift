@@ -101,11 +101,19 @@ struct StatusMenu: View {
         // without a submenu. A section draws its heading and the dividers above and below
         // it, so no Divider goes next to it.
         Section("Meeting Interpretation") {
-            // The sound the Mac plays, transcribed and translated in a floating window.
-            Toggle("Live Captions", isOn: Binding(
+            // The sound the Mac plays, transcribed and translated in a floating window. The
+            // shortcut shows as text after the name. As a key equivalent of the item it
+            // might turn captions on and off twice while the menu is open.
+            Toggle(isOn: Binding(
                 get: { captions.isOn },
                 set: { captions.setOn($0) }
-            ))
+            )) {
+                if let shortcut = pushToTalk.liveCaptionsShortcut {
+                    Text("Live Captions") + Text(verbatim: "    \(shortcut.title())")
+                } else {
+                    Text("Live Captions")
+                }
+            }
             // The whole meeting the way the window shows it, also after the window is
             // closed, and the meeting before the last start. Each only when it has a
             // final sentence.

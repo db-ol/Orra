@@ -245,6 +245,13 @@ nonisolated enum KeySlot: Equatable, Sendable {
     case translation
 }
 
+/// What the user records by pressing keys in Settings: one of Orra's two keys, or the Live
+/// Captions shortcut.
+nonisolated enum KeyChoiceTarget: Equatable, Sendable {
+    case key(KeySlot)
+    case liveCaptionsShortcut
+}
+
 /// What the user sees after picking for one slot the key of the other: the two keys
 /// swapped, and this is where each one went.
 nonisolated struct KeySwap: Equatable, Sendable {
@@ -296,6 +303,9 @@ nonisolated struct KeyRecorder: Equatable, Sendable {
         /// A shortcut of macOS or of nearly every app, such as ⌘ C, see
         /// `KeyCombination.isSystemShortcut`. The symbols of the modifiers and the key code.
         case shortcut(modifiers: String, keyCode: Int64)
+        /// The Live Captions shortcut, which never swaps with a key. The controller refuses
+        /// it, since the recorder does not know the shortcut.
+        case liveCaptionsShortcut(KeyCombination)
     }
 
     static let shiftKeyCodes: Set<Int64> = [0x38, 0x3C]
@@ -454,6 +464,8 @@ extension KeyRecorder.Rejection {
             } else {
                 String(localized: LocalizedStringResource("A shortcut of macOS or most apps can't be the talk key. It would stop working everywhere while Orra runs.", locale: locale))
             }
+        case .liveCaptionsShortcut(let shortcut):
+            Self.shortcutMessage(shortcut, in: locale)
         }
     }
 
@@ -482,7 +494,14 @@ extension KeyRecorder.Rejection {
             } else {
                 String(localized: LocalizedStringResource("A shortcut of macOS or most apps can't be the translation key. It would stop working everywhere while Orra runs.", locale: locale))
             }
+        case .liveCaptionsShortcut(let shortcut):
+            Self.shortcutMessage(shortcut, in: locale)
         }
+    }
+
+    /// The same note for either key: the press is the Live Captions shortcut.
+    private static func shortcutMessage(_ shortcut: KeyCombination, in locale: Locale) -> String {
+        String(localized: LocalizedStringResource("\(shortcut.title(in: locale)) is the Live Captions shortcut.", locale: locale))
     }
 }
 

@@ -39,6 +39,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             saveTriggerMode: { TriggerModePreference.save($0, for: $1) },
             handsFree: HandsFreePreference.load(),
             saveHandsFree: { HandsFreePreference.save($0) },
+            liveCaptionsShortcut: LiveCaptionsShortcutPreference.load(
+                defaultShortcut: LiveCaptionsShortcut.defaultShortcut(keyCodeForC: KeyboardLayout.keyCode(for: "c", withCommand: true))
+            ),
+            saveLiveCaptionsShortcut: { LiveCaptionsShortcutPreference.save($0) },
             microphone: MicrophonePreference.load(),
             saveMicrophone: { MicrophonePreference.save($0) },
             vocabulary: VocabularyPreference.load(),
@@ -231,6 +235,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The Live Captions shortcut turns captions on, or off as closing the window does. The
+    /// window is the only other sign, so VoiceOver hears which.
+    private func toggleCaptionsFromShortcut() {
+        captions.setOn(!captions.isOn)
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: LiveCaptionsShortcut.announcement(captionsOn: captions.isOn),
+                .priority: NSAccessibilityPriorityLevel.high.rawValue,
+            ]
+        )
+    }
+
     /// Watches the translation key while translation is on, now and after every change of
     /// the switch.
     private func followTranslation() {
@@ -330,6 +348,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         captions.showWindow = { [captionWindow] in captionWindow.show() }
         captions.closeWindow = { [captionWindow] in captionWindow.close() }
+        pushToTalk.onLiveCaptionsShortcut = { [weak self] in self?.toggleCaptionsFromShortcut() }
         // The steps that keep a user's settings across versions. A version that changes
         // what a setting starts as adds its step inside, not here.
         LaunchMigrations.run(pushToTalk)
@@ -392,5 +411,12 @@ enum LaunchMigrations {
         // The dictation language stays the same way, see DictationLanguagePreference, and a
         // new user's follows the welcome window until it is picked or setup is done.
         DictationLanguagePreference.keep(pushToTalk.dictationLanguage, follows: pushToTalk.dictationLanguageFollows, in: defaults)
+        // Everyone gets the Live Captions shortcut, unless a key clashes with it, see
+        // LiveCaptionsShortcutPreference.
+        pushToTalk.setLiveCaptionsShortcut(LiveCaptionsShortcutPreference.keep(
+            pushToTalk.liveCaptionsShortcut,
+            beside: [pushToTalk.talkKey, pushToTalk.translationKey],
+            in: defaults
+        ))
     }
 }

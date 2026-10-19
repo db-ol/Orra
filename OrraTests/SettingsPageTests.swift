@@ -124,6 +124,8 @@ struct SettingsPageTests {
         try await render(.general, scrollingTo: .keys, name: "\(language)-0-general-keys")
         try await render(.general, translationOn: true, swapped: true, scrollingTo: .keys, name: "\(language)-0-general-translation-swapped")
         try await render(.general, talkMode: .toggle, scrollingTo: .keys, name: "\(language)-0-general-keys-without-hold")
+        // A talk key of ⌃ ⌥ inside ⌃ ⌥ ⌘ C, with the note under the Live Captions shortcut.
+        try await render(.general, talkKey: .combination(KeyCombination(modifiers: [.control, .option])), talkMode: .toggle, scrollingTo: .keys, name: "\(language)-0-general-keys-shortcut-note")
         try await render(.general, translationOn: true, height: 1200, name: "\(language)-0-general-full-height")
         try await render(.dictation, name: "\(language)-1-dictation")
         try await render(.dictation, cleanupOn: true, height: 1000, name: "\(language)-1-dictation-cleanup-on")
@@ -146,9 +148,9 @@ struct SettingsPageTests {
     /// A tab in the whole window, at the window's first size or `height`. With `meeting`,
     /// the Meeting Interpretation page has its parts, with captions that hear nothing and a
     /// voice model that is not downloaded. `dictating` is the dictation language picked,
-    /// `talkMode` and `translationMode` the modes of the keys, and `section` the part the
-    /// page scrolls to.
-    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
+    /// `talkKey`, `talkMode` and `translationMode` the talk key and the modes of the keys, and
+    /// `section` the part the page scrolls to.
+    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing.
         let models = ModelInstaller(
@@ -164,7 +166,17 @@ struct SettingsPageTests {
             models: models,
             engine: CleanupEngine(load: { _ in }, unload: {}, complete: { $0 })
         )
-        let pushToTalk = PushToTalkController(capture: mic.capture, transcription: speech.transcription, insert: inserter.insert, talkMode: talkMode, translationMode: translationMode, dictationLanguage: dictating)
+        let pushToTalk = PushToTalkController(
+            capture: mic.capture,
+            transcription: speech.transcription,
+            insert: inserter.insert,
+            talkKey: talkKey,
+            talkMode: talkMode,
+            translationMode: translationMode,
+            // The default on a US layout, never registered, since the controller never starts.
+            liveCaptionsShortcut: LiveCaptionsShortcut.defaultShortcut(keyCodeForC: 0x08),
+            dictationLanguage: dictating
+        )
         for word in ["Orra", "Qwen3-ASR", "克劳德"] {
             pushToTalk.addToVocabulary(word)
         }
