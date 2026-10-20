@@ -3,9 +3,9 @@ import Synchronization
 import Testing
 @testable import Orra
 
-/// The reply handoff with a fake clipboard, a fake Mail behind the real MailBridge and a fake
-/// activation, which record what happened in order. No test touches a pasteboard, sends an
-/// Apple Event or brings an app to the front.
+/// The reply handoff with a fake clipboard, a fake Mail behind the real MailBridge, and fakes
+/// of whether Orra is in front and of the activation, which record what happened in order.
+/// No test touches a pasteboard, sends an Apple Event or brings an app to the front.
 @MainActor
 struct ReplyHandoffTests {
     private typealias Request = MailEvents.Request
@@ -20,11 +20,26 @@ struct ReplyHandoffTests {
     private static let draft = "Dear Mei,\n\nThe samples ship on Friday, 23 October.\n\nBest,\nLin\n"
 
     @Test(arguments: [false, true])
-    func openReplyCopiesThenRepliesThenBringsMailToTheFront(all: Bool) async {
+    func openReplyCopiesRepliesCopiesAgainThenBringsMailToTheFront(all: Bool) async {
         let fixture = Fixture()
         let outcome = await fixture.handoff().openReply(Self.draft, to: Self.message, all: all)
         #expect(outcome == .replyOpened)
-        #expect(fixture.steps == [.copy(Self.draft), .send(.reply(to: Self.message.reference, all: all)), .front])
+        #expect(fixture.steps == [
+            .copy(Self.draft),
+            .send(.reply(to: Self.message.reference, all: all)),
+            .copy(Self.draft),
+            .front,
+        ])
+    }
+
+    /// The user went to another app while Mail made the reply. A copy made there stays, and
+    /// Mail does not come over that app.
+    @Test func afterTheUserLeftOrraTheReplyOpensWithoutCopyOrFront() async {
+        let fixture = Fixture()
+        fixture.leavesOrraOnReply = true
+        #expect(await fixture.handoff().openReply(Self.draft, to: Self.message, all: false) == .replyOpened)
+        #expect(fixture.steps == [.copy(Self.draft), .send(.reply(to: Self.message.reference, all: false))])
+        #expect(fixture.activeChecks == 1)
     }
 
     @Test func theDraftIsCopiedAsItIs() async {
@@ -32,6 +47,7 @@ struct ReplyHandoffTests {
         let draft = "  王经理您好：\n\n样品周五发出。\n\n"
         #expect(await fixture.handoff().openReply(draft, to: Self.message, all: false) == .replyOpened)
         #expect(fixture.steps.first == .copy(draft))
+        #expect(fixture.steps.dropFirst(2).first == .copy(draft))
     }
 
     @Test func withMailNotRunningItOnlyCopies() async {
@@ -66,11 +82,38 @@ struct ReplyHandoffTests {
         }
     }
 
-    @Test func aReplyCancelledBeforeMailIsAskedOnlyCopies() async {
-        let fixture = Fixture()
-        fixture.cancelsReply = true
-        #expect(await fixture.handoff().openReply(Self.draft, to: Self.message, all: false) == .copied)
+    /// The reply waits on a real send thread behind an earlier event, and the window goes
+    /// away before its turn. The thread never runs it, and the handoff only copied. A
+    /// handoff that hung would hang the test, and the time limit stops it.
+    @Test(.timeLimit(.minutes(1)))
+    func aReplyCancelledBeforeItsTurnOnlyCopies() async throws {
+        let thread = MailEvents.SendThread()
+        let (started, starting) = AsyncStream<Void>.makeStream()
+        let release = DispatchSemaphore(value: 0)
+        let earlier = Task {
+            try await thread.run {
+                starting.yield()
+                release.wait()
+            }
+        }
+        var iterator = started.makeAsyncIterator()
+        await iterator.next()
+
+        let fixture = Fixture(sendThread: thread)
+        let handoff = fixture.handoff()
+        let reply = Task { await handoff.openReply(Self.draft, to: Self.message, all: false) }
+        while fixture.steps.isEmpty {
+            await Task.yield()
+        }
+        reply.cancel()
+        #expect(await reply.value == .copied)
+
+        release.signal()
+        try await earlier.value
+        // The thread runs its work in order, so the reply would have run before this.
+        try await thread.run {}
         #expect(fixture.steps == [.copy(Self.draft)])
+        #expect(fixture.activeChecks == 0)
     }
 
     @Test func copyOnlyAsksNothingOfMail() {
@@ -78,6 +121,7 @@ struct ReplyHandoffTests {
         #expect(fixture.handoff().copyOnly(Self.draft) == .copied)
         #expect(fixture.steps == [.copy(Self.draft)])
         #expect(fixture.runningChecks == 0)
+        #expect(fixture.activeChecks == 0)
     }
 
     @Test func anEmptyDraftChangesNothing() async {
@@ -99,7 +143,8 @@ struct ReplyHandoffTests {
         #expect(fixture.runningChecks == 0)
     }
 
-    /// The clipboard, Mail and the activation, as a test sets them, with what each was asked.
+    /// The clipboard, Mail, whether Orra is in front and the activation, as a test sets them,
+    /// with what each was asked. With a send thread, Mail's events wait their turn on it.
     private final class Fixture: Sendable {
         enum Step: Equatable, Sendable {
             case copy(String)
@@ -114,10 +159,17 @@ struct ReplyHandoffTests {
             var copyWorks = true
             var replyFailure: Int?
             var quitsOnReply = false
-            var cancelsReply = false
+            var orraActive = true
+            var activeChecks = 0
+            var leavesOrraOnReply = false
         }
 
         private let state = Mutex(State())
+        private let sendThread: MailEvents.SendThread?
+
+        init(sendThread: MailEvents.SendThread? = nil) {
+            self.sendThread = sendThread
+        }
 
         var steps: [Step] {
             state.withLock { $0.steps }
@@ -150,11 +202,15 @@ struct ReplyHandoffTests {
             set { state.withLock { $0.quitsOnReply = newValue } }
         }
 
-        /// Whether the caller is cancelled before its turn on the send thread, which then
-        /// sends nothing.
-        var cancelsReply: Bool {
-            get { state.withLock { $0.cancelsReply } }
-            set { state.withLock { $0.cancelsReply = newValue } }
+        /// How often the handoff asked whether Orra is in front.
+        var activeChecks: Int {
+            state.withLock { $0.activeChecks }
+        }
+
+        /// Whether the user goes to another app while Mail makes the reply.
+        var leavesOrraOnReply: Bool {
+            get { state.withLock { $0.leavesOrraOnReply } }
+            set { state.withLock { $0.leavesOrraOnReply = newValue } }
         }
 
         @MainActor
@@ -173,21 +229,32 @@ struct ReplyHandoffTests {
                             return state.mailRunning
                         }
                     },
-                    send: { request in try self.send(request) },
+                    send: { request in
+                        guard let thread = self.sendThread else {
+                            return try self.send(request)
+                        }
+                        return try await thread.run { try self.send(request) }
+                    },
                     permission: { _ in 0 }
                 )),
+                isOrraActive: {
+                    self.state.withLock { state in
+                        state.activeChecks += 1
+                        return state.orraActive
+                    }
+                },
                 bringMailToFront: { self.state.withLock { $0.steps.append(.front) } }
             )
         }
 
         private func send(_ request: Request) throws -> MailEvents.Value {
             try state.withLock { state in
-                if state.cancelsReply {
-                    throw CancellationError()
-                }
                 state.steps.append(.send(request))
                 if state.quitsOnReply {
                     state.mailRunning = false
+                }
+                if state.leavesOrraOnReply {
+                    state.orraActive = false
                 }
                 if let code = state.replyFailure {
                     throw MailEvents.Failure(code: code)

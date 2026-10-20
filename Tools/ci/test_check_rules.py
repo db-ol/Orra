@@ -411,6 +411,7 @@ class AppleEventTests(SourceCheckTestCase):
             'let mail = SBApplication(bundleIdentifier: "com.apple.mail")': "SBApplication",
             "let bridge = MailBridge.live": "MailBridge.live",
             "let events = MailEvents.live": "MailEvents.live",
+            "let front = ReplyHandoff.bringMailToFront": "ReplyHandoff.bringMailToFront",
         }
         for code, name in cases.items():
             with self.subTest(code=code):
