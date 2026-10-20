@@ -500,6 +500,18 @@ class MailEventsRuleTests(SourceCheckTestCase):
         self.assert_rule_ten_fails(self.REAL + "AECreateAppleEvent(a, b, target, r, x, event)\n", "AECreateAppleEvent")
         self.assert_rule_ten_fails(self.REAL + "AEBuildAppleEvent(a, b, type, target, size, r, x, event, nil, format)\n", "AEBuildAppleEvent")
 
+    def test_changing_an_event_after_it_is_built_fails(self):
+        cases = {
+            'event.setAttribute(NSAppleEventDescriptor(typeCode: MailEvents.code("de" + "lo")), forKeyword: keyEventIDAttr)': ["setAttribute", "keyEventIDAttr"],
+            "event.setAttribute(other, forKeyword: AEKeyword(keyEventClassAttr))": ["setAttribute", "keyEventClassAttr"],
+            "let other = NSAppleEventDescriptor(descriptorType: typeAppleEvent, data: saved)": ["typeAppleEvent"],
+            "AEPutAttributeDesc(event, keyword, value)": ["AEPutAttributeDesc"],
+            "AEPutAttributePtr(event, keyword, type, data, size)": ["AEPutAttributePtr"],
+        }
+        for code, names in cases.items():
+            with self.subTest(code=code):
+                self.assertCountEqual(self.rule_ten(self.REAL + code + "\n"), names)
+
     def test_a_reply_without_its_window_fails(self):
         self.assert_rule_ten_fails(
             self.changed("NSAppleEventDescriptor(boolean: true), forKeyword: MailEvents.code(\"ropw\")", "NSAppleEventDescriptor(boolean: false), forKeyword: MailEvents.code(\"ropw\")"),

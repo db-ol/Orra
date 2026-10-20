@@ -732,8 +732,17 @@ FILE_REMOVAL = _rule(r"\bremoveItem\b", r"\bmoveItem\b", r"\breplaceItem\w*", r"
 # NSUserDefaultsController reach the same values.
 DEFAULTS = _rule(r"\bUserDefaults\b", r"\bAppStorage\b", r"\bCFPreferences\w*", r"\bNSUserDefaults\w*")
 
-# Rule 10, in MailEvents.swift. Other ways to build an event, whose codes the rule cannot read.
-MAIL_EVENTS_BANNED = _rule(r"\bAECreateAppleEvent\b", r"\bAEBuildAppleEvent\b")
+# Rule 10, in MailEvents.swift. Other ways to build an event, whose codes the rule cannot
+# read, and ways to change the class or the ID of an event after it is built.
+MAIL_EVENTS_BANNED = _rule(
+    r"\bAECreateAppleEvent\b",
+    r"\bAEBuildAppleEvent\b",
+    r"\btypeAppleEvent\b",
+    r"\bsetAttribute\b",
+    r"\bAEPutAttribute\w*",
+    r"\bkeyEventClassAttr\b",
+    r"\bkeyEventIDAttr\b",
+)
 # The calls that build an event, with the labels of their event class and event ID.
 EVENT_BUILDERS = (
     (re.compile(r"\bappleEvent\s*\(\s*withEventClass\b"), "withEventClass", "appleEvent(withEventClass:"),
