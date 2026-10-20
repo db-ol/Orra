@@ -13,7 +13,8 @@ import Foundation
 /// it and the user's instruction as text the recipients may get, next to the email. So
 /// what the user typed into the draft or asked for stays, and only what the model added is
 /// held to the check, such as project data for someone outside the project or an amount no
-/// source holds.
+/// source holds. An amount flagged in the draft before stays flagged while the new version
+/// holds it.
 nonisolated struct ReviseService: Sendable {
     /// What the prompts and the draft check need about the email a draft replies to. The
     /// window has it from the explanation.
@@ -36,7 +37,6 @@ nonisolated struct ReviseService: Sendable {
         var own: [Person] = []
         var incomingText: String
         var sourceTexts: [String] = []
-        var questionsForUser: [String] = []
         var today: Date
         var timeZone: TimeZone
     }
@@ -48,10 +48,13 @@ nonisolated struct ReviseService: Sendable {
         /// What the user asked for.
         var change: RevisePrompt.Change
         /// The draft check of what the model wrote. Its draft is the new version, or nil
-        /// when the check held it back for its language.
+        /// when the check held it back for its language. It never holds the
+        /// `decidesQuestion` flag, which counts against the questions of the first draft
+        /// and so would show whenever the user or the instruction settled one.
         var check: DraftCheck.Result
-        /// For a tone, the placeholders of the draft that the new version leaves out. A
-        /// tone settles none, so the window says which went missing.
+        /// The placeholders of the draft before that the new version leaves out, in place
+        /// of that flag. A tone settles none, so any listed went missing. An instruction may
+        /// settle one, so the window shows them for the user to check.
         var droppedPlaceholders: [String] = []
 
         /// The new version, or nil when it was held back.
@@ -92,6 +95,9 @@ nonisolated struct ReviseService: Sendable {
         case tooLong
         /// The model wrote nothing that can be used.
         case emptyAnswer
+        /// The model wrote as many tokens as it may, so the end of its answer may be
+        /// missing. Nothing is saved.
+        case cutShort
         /// The answer check's answer is no JSON with an entry for the questions.
         case unreadableAnswer
         /// The translation came back in another language than the one asked for.
@@ -107,11 +113,13 @@ nonisolated struct ReviseService: Sendable {
     var save: @Sendable (Version) async -> Void
 
     /// A new version of `draft`, from the user's instruction or in a tone, checked with
-    /// DraftCheck, and saved unless the check held it back.
+    /// DraftCheck, and saved unless the check held it back. `flags` are the flags of
+    /// `draft` from its own check, the explanation's or the version's before, so an amount
+    /// flagged there stays flagged.
     @concurrent
-    func revise(_ draft: String, _ change: RevisePrompt.Change, context: Context) async throws -> Version {
+    func revise(_ draft: String, _ change: RevisePrompt.Change, flags: [DraftCheck.Flag], context: Context) async throws -> Version {
         guard context.language == .zh || context.language == .en else { throw Failure.noDraftLanguage }
-        guard !draft.allSatisfy(\.isWhitespace) else { throw Failure.emptyDraft }
+        guard !RevisePrompt.block(draft).allSatisfy(\.isWhitespace) else { throw Failure.emptyDraft }
         var said = ""
         if case .instruction(let words) = change {
             guard !words.allSatisfy(\.isWhitespace) else { throw Failure.emptyInstruction }
@@ -123,28 +131,59 @@ nonisolated struct ReviseService: Sendable {
         )
         guard let prompt = RevisePrompt.Revision(input, countTokens: countTokens) else { throw Failure.tooLong }
         let answer = try await run(ProjectsModelRequest(prompt: prompt.text, maximumTokens: prompt.maximumTokens, priority: .user))
-        guard let written = RevisePrompt.Revision.draft(RevisePrompt.Revision.prefill(context.language) + answer, placeholders: prompt.placeholders) else {
+        guard !RevisePrompt.reachedLimit(answer, maximumTokens: prompt.maximumTokens, countTokens: countTokens) else { throw Failure.cutShort }
+        let prefill = RevisePrompt.Revision.prefill(context.language)
+        guard let written = RevisePrompt.Revision.draft(prefill + answer, placeholders: prompt.placeholders, earlier: draft + "\n" + said) else {
             throw Failure.emptyAnswer
         }
         try Task.checkCancellation()
-        let check = await DraftCheck.check(DraftCheckInput(
+        let given = [context.incomingText, said].filter { !$0.isEmpty }
+        var check = await DraftCheck.check(DraftCheckInput(
             draft: written,
             language: context.language,
             recipients: context.recipients,
             projectPeople: context.projectPeople,
             own: context.own,
-            incomingText: [context.incomingText, draft, said].filter { !$0.isEmpty }.joined(separator: "\n\n"),
+            incomingText: (given + [draft]).joined(separator: "\n\n"),
             sourceTexts: context.sourceTexts,
-            questionsForUser: context.questionsForUser,
             today: context.today
         ))
         try Task.checkCancellation()
-        let dropped = RevisePrompt.Revision.dropped(answer, placeholders: prompt.placeholders)
+        if let checked = check.draft {
+            check.flags = Self.flags(of: checked, found: check.flags, before: flags, sources: given + context.sourceTexts, today: context.today)
+        }
+        let dropped = RevisePrompt.Revision.dropped(from: draft, in: check.draft ?? written)
         let version = Version(messageID: context.messageID, change: change, check: check, droppedPlaceholders: dropped)
         if version.draft != nil {
             await save(version)
         }
         return version
+    }
+
+    /// The flags of a new version: what DraftCheck found with the draft before as a source,
+    /// and the amounts flagged in the draft before that the new version still holds and
+    /// that only the draft before holds, not the email, the instruction or the files. In
+    /// the order they stand in the new version.
+    private static func flags(of draft: String, found: [DraftCheck.Flag], before: [DraftCheck.Flag], sources: [String], today: Date) -> [DraftCheck.Flag] {
+        let flagged = Set(before.flatMap { flag -> [String] in
+            guard case .output(let finding) = flag, finding.kind == .amountWithoutSource else { return [] }
+            return OutputChecks.numbers(in: finding.text).map(\.value)
+        })
+        guard !flagged.isEmpty else { return found }
+        let output = found.compactMap { flag -> OutputChecks.Finding? in
+            guard case .output(let finding) = flag else { return nil }
+            return finding
+        }
+        // Fewer sources find every finding of DraftCheck, and more amounts.
+        let kept = OutputChecks.findings(in: draft, sources: sources, today: today).filter { finding in
+            output.contains(finding)
+                || (finding.kind == .amountWithoutSource && OutputChecks.numbers(in: finding.text).contains { flagged.contains($0.value) })
+        }
+        let others = found.filter { flag in
+            guard case .output = flag else { return true }
+            return false
+        }
+        return kept.map(DraftCheck.Flag.output) + others
     }
 
     /// The draft in the language the user reads, for reading next to it, or nil when the
@@ -154,15 +193,16 @@ nonisolated struct ReviseService: Sendable {
         guard context.language == .zh || context.language == .en else { throw Failure.noDraftLanguage }
         let target: ProjectsLanguage = context.userLanguage == .zh ? .zh : .en
         guard target != context.language else { return nil }
-        guard !draft.allSatisfy(\.isWhitespace) else { throw Failure.emptyDraft }
+        guard !RevisePrompt.block(draft).allSatisfy(\.isWhitespace) else { throw Failure.emptyDraft }
         guard let prompt = RevisePrompt.Translation(draft: draft, from: context.language, to: target, ownName: context.ownName, countTokens: countTokens) else {
             throw Failure.tooLong
         }
         let answer = try await run(ProjectsModelRequest(prompt: prompt.text, maximumTokens: prompt.maximumTokens, priority: .user))
+        guard !RevisePrompt.reachedLimit(answer, maximumTokens: prompt.maximumTokens, countTokens: countTokens) else { throw Failure.cutShort }
         guard let translation = RevisePrompt.Translation.translation(RevisePrompt.Translation.prefill(target) + answer) else {
             throw Failure.emptyAnswer
         }
-        guard ProjectsLanguage.reading(translation) == target else { throw Failure.wrongLanguage }
+        guard RevisePrompt.Translation.reads(translation, as: target, draft: draft) else { throw Failure.wrongLanguage }
         return translation
     }
 
@@ -172,7 +212,7 @@ nonisolated struct ReviseService: Sendable {
     func checkAnswers(of draft: String, context: Context) async throws -> Answers {
         let questions = RevisePrompt.AnswerCheck.questions(in: context.emailText)
         guard !questions.isEmpty else { return Answers() }
-        guard !draft.allSatisfy(\.isWhitespace) else { throw Failure.emptyDraft }
+        guard !RevisePrompt.block(draft).allSatisfy(\.isWhitespace) else { throw Failure.emptyDraft }
         guard let prompt = RevisePrompt.AnswerCheck(
             questions: questions, emailText: context.emailText, draft: draft, language: context.language,
             ownName: context.ownName, countTokens: countTokens
