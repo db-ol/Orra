@@ -1,24 +1,31 @@
+import AppKit
+import os
 import SwiftUI
 
 /// Projects, a page of Settings shown only in builds that show Projects: the switch with what
-/// Projects reads, keeps and never does, the model it works with, and what it keeps on this
-/// Mac with a way to delete it.
+/// Projects reads, keeps and never does, the model it works with and its download, Mail
+/// access with the mailboxes Projects reads, and what it keeps on this Mac with a way to
+/// delete it.
 ///
 /// The page sits outside Orra/Projects, since it is the one place where Projects may link to
 /// the privacy page and to System Settings. Code in Orra/Projects never opens a URL. The page
 /// is compiled in every build, so Xcode keeps its strings in the catalog.
 struct ProjectsSettings: View {
     let projects: ProjectsSwitch
-    let cleanup: TextCleanup
+    @Bindable var cleanup: TextCleanup
+    /// Mail access and the mailboxes Projects reads, nil where the page is shown without
+    /// them, which leaves out the parts about Mail.
+    var mail: MailAccess? = nil
     @State private var isConfirmingDelete = false
     @State private var isAskingKeepOrDelete = false
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         Form {
             Section {
                 Toggle(isOn: Binding(
                     get: { projects.isOn },
-                    set: { $0 ? projects.turnOn() : turnOff() }
+                    set: { $0 ? turnOn() : turnOff() }
                 )) {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
@@ -38,7 +45,9 @@ struct ProjectsSettings: View {
                         Image(systemName: "briefcase")
                     }
                 }
-                .disabled(!projects.canTurnOn || projects.isDeleting)
+                // Off while Orra looks for the cleanup model on disk, a moment at launch,
+                // since only then does it know whether turning on needs a download.
+                .disabled(!projects.canTurnOn || projects.isDeleting || (!projects.isOn && !cleanup.canTurnOn))
                 if !projects.hasEnoughMemory {
                     Text("Projects needs \(CleanupDefault.gigabytes(CleanupDefault.minimumMemory)) GB of memory or more. This Mac has \(projects.memoryGigabytes) GB.")
                         .foregroundStyle(.secondary)
@@ -63,8 +72,17 @@ struct ProjectsSettings: View {
                         systemImage: "wand.and.sparkles"
                     )
                 }
+                if projects.isOn {
+                    ModelDownload(cleanup: cleanup)
+                }
             } header: {
                 Text("Model")
+            }
+            if projects.isOn, let mail {
+                MailAccessSection(mail: mail) {
+                    openURL(Self.automationSettings)
+                }
+                MailboxesSection(mail: mail)
             }
             Section {
                 LabeledContent {
@@ -91,9 +109,52 @@ struct ProjectsSettings: View {
         .task {
             await projects.measureStorage()
         }
+        // Lists Mail's mailboxes each time the page shows while Projects is on, and when
+        // Projects turns on here.
+        .task(id: projects.isOn) {
+            if projects.isOn {
+                await mail?.show()
+            }
+        }
+        // Back from System Settings, where the user may have turned Mail on for Orra.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await mail?.refresh() }
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didLaunchApplicationNotification)) { note in
+            if Self.isMail(note) {
+                Task { await mail?.refresh() }
+            }
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didTerminateApplicationNotification)) { note in
+            if Self.isMail(note) {
+                Task { await mail?.refresh() }
+            }
+        }
+        .alert("Download the cleanup model?", isPresented: $cleanup.isConfirmingProjectsDownload) {
+            Button(CleanupLabels.downloadButton(cleanup.models.state, total: cleanup.models.manifest.totalBytes)) {
+                downloadAndTurnOn()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Projects explains mail and drafts replies with the cleanup model. The model comes from Hugging Face or a mirror. Your mail and files stay on this Mac.")
+        }
+        .alert("Allow Orra to read Mail?", isPresented: Binding(
+            get: { mail?.isExplaining ?? false },
+            set: { mail?.isExplaining = $0 }
+        )) {
+            Button("Continue") {
+                Task { await mail?.ask() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Projects reads mail only in the mailboxes you choose here, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail.")
+        }
         .alert("Delete all Projects data?", isPresented: $isConfirmingDelete) {
             Button("Delete All", role: .destructive) {
-                Task { await projects.deleteAllData() }
+                Task {
+                    await projects.deleteAllData()
+                    mail?.choice.forget()
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -101,14 +162,41 @@ struct ProjectsSettings: View {
         }
         .alert("Turn off Projects?", isPresented: $isAskingKeepOrDelete) {
             Button("Keep Data") {
-                Task { await projects.turnOff(keepingData: true) }
+                Task {
+                    await projects.turnOff(keepingData: true)
+                    cleanup.projectsTurnedOff()
+                }
             }
             Button("Delete Data", role: .destructive) {
-                Task { await projects.turnOff(keepingData: false) }
+                Task {
+                    await projects.turnOff(keepingData: false)
+                    cleanup.projectsTurnedOff()
+                    mail?.choice.forget()
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Keep your projects with their index, mail text and drafts on this Mac for when you turn Projects on again, or delete them now. Your mail in Mail and the files in your folders stay as they are.")
+        }
+    }
+
+    /// Turns Projects on, or asks first whether to download the cleanup model when it is
+    /// not on this Mac and no download of it was agreed to, see TextCleanup.turnOnProjects.
+    private func turnOn() {
+        guard projects.canTurnOn, !projects.isDeleting else { return }
+        if cleanup.turnOnProjects() {
+            projects.turnOn()
+        }
+    }
+
+    /// The user agreed to the download when turning Projects on. It starts only once
+    /// Projects is on.
+    private func downloadAndTurnOn() {
+        projects.turnOn()
+        if projects.isOn {
+            cleanup.confirmProjectsDownload()
+        } else {
+            cleanup.isConfirmingProjectsDownload = false
         }
     }
 
@@ -117,7 +205,16 @@ struct ProjectsSettings: View {
     private func turnOff() {
         Task {
             isAskingKeepOrDelete = await projects.turnOffOrAsk()
+            if !projects.isOn {
+                cleanup.projectsTurnedOff()
+            }
         }
+    }
+
+    /// Whether a notification of NSWorkspace is about Mail.
+    private static func isMail(_ note: Notification) -> Bool {
+        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        return app?.bundleIdentifier == "com.apple.mail"
     }
 
     /// Where the cleanup model stands, in the words of this page.
@@ -127,6 +224,17 @@ struct ProjectsSettings: View {
         case .checking, .verifying: String(localized: "Checking…")
         case .downloading: String(localized: "Downloading…")
         case .missing, .failed: String(localized: "Not on this Mac yet")
+        }
+    }
+
+    /// What stands in the way while Projects is on and the cleanup model is not on this
+    /// Mac, above the button that downloads it.
+    static func modelLines(_ state: ModelInstaller.State, total: Int64) -> [String] {
+        switch state {
+        case .missing:
+            [String(localized: "Until it is, Projects cannot explain mail or draft replies.")]
+        default:
+            state.menuLines(total: total)
         }
     }
 
@@ -148,6 +256,10 @@ struct ProjectsSettings: View {
         return URL(string: "https://github.com/db-ol/Orra/blob/main/docs/\(name)")!
     }
 
+    /// Privacy & Security, Automation in System Settings, where the user turns Mail on for
+    /// Orra after saying no.
+    static let automationSettings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!
+
     /// The word Preview in a thin capsule beside the name of Projects, since Projects may
     /// still change. The sidebar shows it under the name.
     private struct PreviewLabel: View {
@@ -160,6 +272,433 @@ struct ProjectsSettings: View {
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
                 .overlay(Capsule().strokeBorder(.secondary.opacity(0.6), lineWidth: 1))
+        }
+    }
+
+    /// The cleanup model's download while Projects is on: its progress with Cancel
+    /// Download, or what stands in the way with the button that downloads it, which names
+    /// the size. Nothing once the model is on this Mac.
+    private struct ModelDownload: View {
+        let cleanup: TextCleanup
+
+        var body: some View {
+            let total = cleanup.models.manifest.totalBytes
+            let state = cleanup.models.state
+            switch state {
+            case .downloading(let bytes, let source):
+                VStack(alignment: .leading, spacing: 6) {
+                    ProgressView(value: Double(bytes), total: Double(max(total, 1))) {
+                        Text(verbatim: CleanupLabels.progress(bytes: bytes, total: total))
+                    } currentValueLabel: {
+                        if let source {
+                            Text(verbatim: String(localized: "From \(source.rawValue)"))
+                        }
+                    }
+                    Button("Cancel Download") {
+                        cleanup.cancelDownload()
+                    }
+                }
+            case .missing, .failed:
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(ProjectsSettings.modelLines(state, total: total), id: \.self) { line in
+                            Text(verbatim: line)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    Spacer()
+                    Button(CleanupLabels.downloadButton(state, total: total)) {
+                        cleanup.confirmProjectsDownload()
+                    }
+                }
+            case .verifying:
+                ForEach(state.menuLines(total: total), id: \.self) { line in
+                    Text(verbatim: line)
+                        .foregroundStyle(.secondary)
+                }
+            case .installed, .checking:
+                EmptyView()
+            }
+        }
+    }
+
+    /// Orra's access to Mail: allowed, refused with the way to System Settings, or the
+    /// button that asks.
+    private struct MailAccessSection: View {
+        let mail: MailAccess
+        let openAutomationSettings: () -> Void
+
+        var body: some View {
+            Section {
+                LabeledContent {
+                    switch mail.access {
+                    case .allowed:
+                        Text("Allowed")
+                            .foregroundStyle(.secondary)
+                    case .denied:
+                        Text("Not allowed")
+                            .foregroundStyle(.secondary)
+                    case .unknown:
+                        HStack {
+                            if mail.isAsking {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Button("Allow Mail Access…") {
+                                mail.allowClicked()
+                            }
+                            .disabled(mail.isAsking)
+                        }
+                    }
+                } label: {
+                    DescribedLabel(
+                        title: "Mail access",
+                        detail: "Orra reads mail in the Mail app only while Mail is open, and never opens it.",
+                        systemImage: "envelope"
+                    )
+                }
+                if let line = mail.line {
+                    HStack {
+                        Text(verbatim: line)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if mail.access == .denied {
+                            Spacer()
+                            Button("Open Automation Settings…", action: openAutomationSettings)
+                        }
+                    }
+                }
+            } header: {
+                Text("Mail")
+            }
+        }
+    }
+
+    /// The mailboxes Projects reads, ticked one by one, the days, and Start Reading Mail,
+    /// before which nothing is read.
+    private struct MailboxesSection: View {
+        let mail: MailAccess
+
+        var body: some View {
+            Section {
+                ForEach(mail.rows, id: \.self) { mailbox in
+                    Toggle(isOn: Binding(
+                        get: { mail.isChosen(mailbox) },
+                        set: { mail.choose(mailbox, $0) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: MailAccess.title(mailbox))
+                            if let place = MailAccess.place(mailbox) {
+                                Text(verbatim: place)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                }
+                if mail.isListing {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Listing the mailboxes in Mail…")
+                            .foregroundStyle(.secondary)
+                    }
+                } else if mail.listed == nil {
+                    if !mail.mailIsRunning {
+                        Text("Open Mail to see its mailboxes.")
+                            .foregroundStyle(.secondary)
+                    } else if mail.listFailed {
+                        HStack {
+                            Text("Mail did not answer.")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Try Again") {
+                                Task { await mail.refresh() }
+                            }
+                        }
+                    } else if mail.access != .allowed {
+                        Text("Allow Mail access to see its mailboxes.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Picker(selection: Binding(
+                    get: { mail.choice.days },
+                    set: { mail.choice.choose(days: $0) }
+                )) {
+                    ForEach(MailChoice.dayChoices, id: \.self) { days in
+                        Text("Last \(days) days").tag(days)
+                    }
+                } label: {
+                    DescribedLabel(
+                        title: "Period",
+                        detail: "Projects reads only mail received within this period.",
+                        systemImage: "calendar"
+                    )
+                }
+                if mail.choice.isConfirmed {
+                    Text("Projects reads new mail in the chosen mailboxes while Mail is open.")
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    HStack {
+                        Text("Nothing is read before you click Start Reading Mail.")
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button("Start Reading Mail") {
+                            mail.startReading()
+                        }
+                        .disabled(!mail.canStartReading)
+                    }
+                }
+            } header: {
+                Text("Mailboxes")
+            }
+        }
+    }
+}
+
+extension ProjectsSettings {
+    /// Mail access and the mailboxes Projects reads, as the page shows them, apart from the
+    /// view so tests drive it with a fake Mail. AppDelegate keeps one for the app, whose
+    /// MailChoice the scan reads too.
+    ///
+    /// - It asks macOS whether Orra may control Mail only after the user clicked Allow
+    ///   Mail Access… and read Orra's explanation, and only while Mail runs. Otherwise it
+    ///   shows what the bridge last learned, never a fresh check, see
+    ///   MailBridge.lastPermission.
+    /// - It lists Mail's mailboxes for the picker while the page shows, Projects is on and
+    ///   Mail runs, unless macOS has not been asked yet. Their names stay in memory. Only
+    ///   the ticked ones are saved, by MailChoice.
+    /// - Start Reading Mail confirms the choice, before which the scan reads nothing
+    ///   (decision 17).
+    @Observable
+    final class MailAccess {
+        /// What the page says about Orra's access to Mail.
+        nonisolated enum Access: Equatable, Sendable {
+            /// macOS allows Orra to control Mail.
+            case allowed
+            /// -1743: the user said no, or turned Mail off for Orra under Privacy &
+            /// Security, Automation. Orra never asks again by itself.
+            case denied
+            /// Not asked yet, or not known in this run. Allow Mail Access… asks.
+            case unknown
+        }
+
+        /// A line under the access after the user clicked Allow Mail Access….
+        nonisolated enum Note: Equatable, Sendable {
+            /// Mail does not run, so nothing was asked. Orra never opens it.
+            case openMailFirst
+            /// macOS gave no answer in time.
+            case noAnswer
+        }
+
+        let bridge: MailBridge
+        /// The chosen mailboxes and days, which the scan reads.
+        let choice: MailChoice
+        /// Whether Mail ran at the last look.
+        private(set) var mailIsRunning = false
+        /// What the bridge last learned about the permission, nil before anything did.
+        private(set) var permission: MailPermission?
+        /// True while the page shows Orra's explanation, before macOS is asked.
+        var isExplaining = false
+        /// True while macOS is asked, which may wait for the user to answer its prompt.
+        private(set) var isAsking = false
+        private(set) var note: Note?
+        /// Mail's mailboxes as listed while the page shows, nil before they are.
+        private(set) var listed: [MailMailbox]?
+        private(set) var isListing = false
+        /// Whether the last listing failed for a reason other than access or Mail quitting.
+        private(set) var listFailed = false
+        @ObservationIgnored private let isOn: () -> Bool
+
+        /// - Parameter isOn: whether Projects is on. Nothing is asked or listed while it is
+        ///   off.
+        init(bridge: MailBridge, choice: MailChoice, isOn: @escaping () -> Bool) {
+            self.bridge = bridge
+            self.choice = choice
+            self.isOn = isOn
+        }
+
+        var access: Access {
+            Self.access(permission)
+        }
+
+        nonisolated static func access(_ permission: MailPermission?) -> Access {
+            switch permission {
+            case .allowed?: .allowed
+            case .denied?: .denied
+            case .notAsked?, .mailNotRunning?, .unknown?, nil: .unknown
+            }
+        }
+
+        /// The line under the access: what to do after a click that asked nothing or got
+        /// no answer, or the way to System Settings after a no.
+        var line: String? {
+            Self.line(access: access, note: note)
+        }
+
+        nonisolated static func line(access: Access, note: Note?) -> String? {
+            switch (note, access) {
+            case (.openMailFirst?, _):
+                String(localized: "Open Mail first. Orra never opens it.")
+            case (.noAnswer?, _):
+                String(localized: "macOS gave no answer. Try again.")
+            case (nil, .denied):
+                String(localized: "Orra may not control Mail. Turn on Mail under Orra in Privacy & Security, Automation.")
+            case (nil, .allowed), (nil, .unknown):
+                nil
+            }
+        }
+
+        // MARK: Access
+
+        /// Allow Mail Access… was clicked. While Mail runs, the page shows Orra's
+        /// explanation first and asks nothing yet, see `ask()`. Otherwise it says to open
+        /// Mail first.
+        func allowClicked() {
+            mailIsRunning = bridge.isRunning()
+            guard isOn(), !isAsking else { return }
+            guard mailIsRunning else {
+                note = .openMailFirst
+                return
+            }
+            note = nil
+            isExplaining = true
+        }
+
+        /// Continue under Orra's explanation: asks macOS whether Orra may control Mail,
+        /// which shows its prompt when the user has not answered it yet. Nothing else here
+        /// asks macOS. Once allowed, lists Mail's mailboxes.
+        func ask() async {
+            isExplaining = false
+            guard isOn(), !isAsking else { return }
+            mailIsRunning = bridge.isRunning()
+            guard mailIsRunning else {
+                note = .openMailFirst
+                return
+            }
+            isAsking = true
+            let answer = await bridge.permission(true)
+            isAsking = false
+            permission = bridge.lastPermission() ?? answer
+            mailIsRunning = bridge.isRunning()
+            switch answer {
+            case .allowed:
+                note = nil
+                listed = nil
+                await refresh()
+            case .denied:
+                note = nil
+            case .mailNotRunning:
+                note = .openMailFirst
+            case .notAsked, .unknown:
+                note = .noAnswer
+            }
+        }
+
+        // MARK: Mailboxes
+
+        /// The page shows: lists Mail's mailboxes again, so one added in Mail since shows
+        /// too.
+        func show() async {
+            listed = nil
+            await refresh()
+        }
+
+        /// Looks again whether Mail runs and what the bridge last learned about access,
+        /// without asking macOS. Lists Mail's mailboxes when they are not listed yet, while
+        /// Projects is on and Mail runs, unless macOS has not been asked yet. After a no,
+        /// the listing shows whether the user has since turned Mail on for Orra.
+        func refresh() async {
+            mailIsRunning = bridge.isRunning()
+            permission = bridge.lastPermission()
+            if mailIsRunning, note == .openMailFirst {
+                note = nil
+            }
+            guard isOn(), mailIsRunning, listed == nil, !isListing, !isAsking, permission != .notAsked else { return }
+            isListing = true
+            defer { isListing = false }
+            do {
+                listed = try await bridge.mailboxes()
+                listFailed = false
+                Logger.projectsMail.notice("Settings listed \(self.listed?.count ?? 0, privacy: .public) mailboxes")
+            } catch let error as MailBridgeError {
+                listFailed = Self.isNoAnswer(error)
+            } catch {
+                // Cancelled, as when the page closes. The next look lists again.
+            }
+            permission = bridge.lastPermission()
+            mailIsRunning = bridge.isRunning()
+        }
+
+        /// Whether a listing failed for a reason the access line and the line about Mail
+        /// not running do not cover.
+        private nonisolated static func isNoAnswer(_ error: MailBridgeError) -> Bool {
+            switch error {
+            case .denied, .notAsked, .mailNotRunning: false
+            case .notAnswered, .timedOut, .notFound, .changedWhileReading, .unexpectedReply, .failed: true
+            }
+        }
+
+        /// The mailboxes the picker shows: those Mail listed, then the chosen ones it did
+        /// not list, such as the suggestion before Mail is open or a mailbox since removed,
+        /// so each can be unticked.
+        var rows: [MailMailbox] {
+            Self.rows(listed: listed ?? [], chosen: choice.mailboxes)
+        }
+
+        nonisolated static func rows(listed: [MailMailbox], chosen: [MailMailbox]) -> [MailMailbox] {
+            var seen = Set<MailMailbox>()
+            return (listed + chosen).filter { seen.insert($0).inserted }
+        }
+
+        func isChosen(_ mailbox: MailMailbox) -> Bool {
+            choice.mailboxes.contains(mailbox)
+        }
+
+        /// Ticks or unticks a mailbox, which MailChoice saves at once. Only ticked mailboxes
+        /// are saved.
+        func choose(_ mailbox: MailMailbox, _ chosen: Bool) {
+            if chosen {
+                guard !isChosen(mailbox) else { return }
+                choice.choose(choice.mailboxes + [mailbox])
+            } else {
+                choice.choose(choice.mailboxes.filter { $0 != mailbox })
+            }
+        }
+
+        /// Whether Start Reading Mail can confirm the choice: Projects is on, Orra may read
+        /// Mail, at least one mailbox is ticked, and the choice is not confirmed yet.
+        var canStartReading: Bool {
+            isOn() && access == .allowed && !choice.mailboxes.isEmpty && !choice.isConfirmed
+        }
+
+        /// Start Reading Mail: confirms the choice, after which the scan reads the chosen
+        /// mailboxes while Mail runs.
+        func startReading() {
+            guard canStartReading else { return }
+            choice.confirm()
+            Logger.projectsMail.notice("Mail choice confirmed: \(self.choice.mailboxes.count, privacy: .public) mailboxes, \(self.choice.days, privacy: .public) days")
+        }
+
+        /// A mailbox's name in the picker: the inbox and the sent mailbox of all accounts in
+        /// the user's language, any other by its name in Mail.
+        nonisolated static func title(_ mailbox: MailMailbox) -> String {
+            switch mailbox.kind {
+            case .inbox: String(localized: "Inbox (all accounts)")
+            case .sent: String(localized: "Sent (all accounts)")
+            case .mailbox: mailbox.name
+            }
+        }
+
+        /// Where a mailbox sits, its account or On My Mac, under its name. Nil for the two
+        /// of all accounts.
+        nonisolated static func place(_ mailbox: MailMailbox) -> String? {
+            guard mailbox.kind == .mailbox else { return nil }
+            return mailbox.account ?? String(localized: "On My Mac")
         }
     }
 }

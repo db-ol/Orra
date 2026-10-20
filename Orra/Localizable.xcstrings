@@ -940,6 +940,50 @@
         }
       }
     },
+    "Allow Mail access to see its mailboxes." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permite el acceso a Mail para ver sus buzones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールボックスを表示するには、“メール”へのアクセスを許可してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许访问“邮件”后即可看到其中的邮箱。"
+          }
+        }
+      }
+    },
+    "Allow Mail Access…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permitir acceso a Mail…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”へのアクセスを許可…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许访问“邮件”…"
+          }
+        }
+      }
+    },
     "Allow Microphone Access…" : {
       "localizations" : {
         "es-419" : {
@@ -984,6 +1028,28 @@
         }
       }
     },
+    "Allow Orra to read Mail?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Permitir que Orra lea Mail?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraに“メール”の読み取りを許可しますか?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要允许 Orra 读取“邮件”吗？"
+          }
+        }
+      }
+    },
     "Allow the microphone" : {
       "localizations" : {
         "es-419" : {
@@ -1002,6 +1068,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允许使用麦克风"
+          }
+        }
+      }
+    },
+    "Allowed" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permitido"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "許可済み"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已允许"
           }
         }
       }
@@ -1948,6 +2036,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 秒后关闭"
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "続ける"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续"
           }
         }
       }
@@ -3616,6 +3726,28 @@
         }
       }
     },
+    "Inbox (all accounts)" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entrada (todas las cuentas)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "受信（すべてのアカウント）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收件箱（所有帐户）"
+          }
+        }
+      }
+    },
     "Input device" : {
       "localizations" : {
         "es-419" : {
@@ -3899,6 +4031,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语言"
+          }
+        }
+      }
+    },
+    "Last %lld days" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Últimos %lld días"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "過去%lld日間"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近 %lld 天"
           }
         }
       }
@@ -4193,6 +4347,28 @@
         }
       }
     },
+    "Listing the mailboxes in Mail…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Listando los buzones de Mail…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”のメールボックスを一覧表示しています…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在列出“邮件”中的邮箱…"
+          }
+        }
+      }
+    },
     "Live captions" : {
       "localizations" : {
         "es-419" : {
@@ -4480,6 +4656,28 @@
         }
       }
     },
+    "macOS gave no answer. Try again." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS no respondió. Vuelve a intentarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOSから応答がありませんでした。もう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 没有回应。请重试。"
+          }
+        }
+      }
+    },
     "macOS refused %@. Another app may already use it." : {
       "localizations" : {
         "es-419" : {
@@ -4520,6 +4718,94 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "macOS 不接受只有 Option，或只有 Option 和 Shift 的快捷键。请加上 Control 或 Command，或者不用 Option。"
+          }
+        }
+      }
+    },
+    "Mail" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メール"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "邮件"
+          }
+        }
+      }
+    },
+    "Mail access" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acceso a Mail"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”へのアクセス"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”访问权限"
+          }
+        }
+      }
+    },
+    "Mail did not answer." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail no respondió."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”から応答がありませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”没有响应。"
+          }
+        }
+      }
+    },
+    "Mailboxes" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buzones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールボックス"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "邮箱"
           }
         }
       }
@@ -4876,6 +5162,28 @@
         }
       }
     },
+    "Not allowed" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No permitido"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未許可"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未允许"
+          }
+        }
+      }
+    },
     "Not done yet" : {
       "localizations" : {
         "es-419" : {
@@ -4982,6 +5290,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无"
+          }
+        }
+      }
+    },
+    "Nothing is read before you click Start Reading Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se lee nada hasta que hagas clic en Empezar a leer el correo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メールの読み取りを開始”をクリックするまで、何も読み取りません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在你点按“开始读取邮件”之前，不会读取任何邮件。"
           }
         }
       }
@@ -5093,6 +5423,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在外接键盘上，右侧 Control 键最合适，因为有些外接键盘（比如 Logitech MX Keys）的 fn 键信号根本传不到 Mac。在 Mac 自带的键盘上，左下角的 fn（地球仪）键在右手用鼠标时也很顺手。"
+          }
+        }
+      }
+    },
+    "On My Mac" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En mi Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMac内"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我的 Mac 上"
           }
         }
       }
@@ -5248,6 +5600,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登录时打开"
+          }
+        }
+      }
+    },
+    "Open Automation Settings…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir configuración de Automatización…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“オートメーション”設定を開く…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开自动化设置…"
+          }
+        }
+      }
+    },
+    "Open Mail first. Orra never opens it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre Mail primero. Orra nunca la abre."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先に“メール”を開いてください。Orraがアプリを開くことはありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先打开“邮件”。Orra 从不自行打开它。"
+          }
+        }
+      }
+    },
+    "Open Mail to see its mailboxes." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre Mail para ver sus buzones."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールボックスを表示するには、“メール”を開いてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“邮件”即可看到其中的邮箱。"
           }
         }
       }
@@ -5759,6 +6177,28 @@
         }
       }
     },
+    "Orra may not control Mail. Turn on Mail under Orra in Privacy & Security, Automation." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no tiene permiso para controlar Mail. Activa Mail debajo de Orra en Privacidad y seguridad, Automatización."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraには“メール”を制御する権限がありません。“プライバシーとセキュリティ”の“オートメーション”で、Orraの下にある“メール”をオンにしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无权控制“邮件”。请在“隐私与安全性”的“自动化”中，打开 Orra 下面的“邮件”。"
+          }
+        }
+      }
+    },
     "Orra needs it to notice the talk key and to paste the text. Turn on Orra in the list that opens, then come back here." : {
       "localizations" : {
         "es-419" : {
@@ -5909,6 +6349,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 会粘贴译文。"
+          }
+        }
+      }
+    },
+    "Orra reads mail in the Mail app only while Mail is open, and never opens it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra lee el correo en la app Mail solo mientras está abierta, y nunca la abre."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraは、“メール”アプリが開いている間だけメールを読み取り、アプリを開くことはありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 只在“邮件” App 打开时读取其中的邮件，从不自行打开它。"
           }
         }
       }
@@ -6219,6 +6681,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你常用的人名、产品名和术语。Orra 会把它们交给语音模型，让它按你的写法输出。这些词只保存在这台 Mac 上。"
+          }
+        }
+      }
+    },
+    "Period" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Período"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "期間"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "时间范围"
           }
         }
       }
@@ -6774,6 +7258,28 @@
         }
       }
     },
+    "Projects explains mail and drafts replies with the cleanup model. The model comes from Hugging Face or a mirror. Your mail and files stay on this Mac." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos explica el correo y redacta respuestas con el modelo de limpieza. El modelo viene de Hugging Face o de una réplica. Tu correo y tus archivos no salen de esta Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、整文モデルでメールを説明し、返信の下書きを作成します。モデルはHugging Faceまたはミラーからダウンロードされます。メールとファイルがこのMacから送信されることはありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”使用整理模型解读邮件并起草回复。模型来自 Hugging Face 或其镜像。你的邮件和文件只留在这台 Mac 上。"
+          }
+        }
+      }
+    },
     "Projects needs %lld GB of memory or more. This Mac has %lld GB." : {
       "localizations" : {
         "es-419" : {
@@ -6792,6 +7298,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“项目”需要 %lld GB 或以上的内存，这台 Mac 只有 %lld GB。"
+          }
+        }
+      }
+    },
+    "Projects reads mail only in the mailboxes you choose here, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos lee el correo solo en los buzones que elijas aquí, y solo mientras Mail está abierta. Nunca envía, mueve ni elimina correo. A continuación, macOS te pregunta si Orra puede controlar Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、ここで選んだメールボックスのメールのみを、“メール”が開いている間だけ読み取ります。メールを送信、移動、削除することはありません。次に、macOSがOrraによる“メール”の制御を許可するかどうかを確認します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”只读取你在这里选择的邮箱中的邮件，而且只在“邮件”打开时读取。它从不发送、移动或删除邮件。接下来 macOS 会询问是否允许 Orra 控制“邮件”。"
+          }
+        }
+      }
+    },
+    "Projects reads new mail in the chosen mailboxes while Mail is open." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos lee el correo nuevo de los buzones elegidos mientras Mail está abierta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、“メール”が開いている間、選択したメールボックスの新着メールを読み取ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”会在“邮件”打开时读取所选邮箱中的新邮件。"
+          }
+        }
+      }
+    },
+    "Projects reads only mail received within this period." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos lee solo el correo recibido en este período."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、この期間内に受信したメールのみを読み取ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”只读取在这段时间内收到的邮件。"
           }
         }
       }
@@ -7857,6 +8429,28 @@
         }
       }
     },
+    "Sent (all accounts)" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviados (todas las cuentas)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信済み（すべてのアカウント）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已发送（所有帐户）"
+          }
+        }
+      }
+    },
     "Set Up in Settings…" : {
       "localizations" : {
         "es-419" : {
@@ -8406,6 +9000,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语音模型"
+          }
+        }
+      }
+    },
+    "Start Reading Mail" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empezar a leer el correo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールの読み取りを開始"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始读取邮件"
           }
         }
       }
@@ -10400,6 +11016,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "撤销"
+          }
+        }
+      }
+    },
+    "Until it is, Projects cannot explain mail or draft replies." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasta entonces, Proyectos no puede explicar el correo ni redactar respuestas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "それまでは、“プロジェクト”はメールの説明や返信の下書きができません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此之前，“项目”无法解读邮件或起草回复。"
           }
         }
       }

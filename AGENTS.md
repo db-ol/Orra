@@ -125,7 +125,8 @@ trusted once in Xcode. docs/dependencies.md has the details.
 - Orra goes online only for the speech model download the user starts from the menu or the
   welcome window, the cleanup model download the user agrees to in Settings or starts in
   the welcome window (with the speech model through Download Models, or alone while
-  cleanup is on), and for
+  cleanup is on), the cleanup model download the user agrees to when turning on Projects
+  or later on its page, and for
   update checks through Sparkle that the user allowed or started.
   Launching must never touch the network before the user allowed update checks. Any other
   network use needs the maintainer's approval. docs/model-download.md describes the

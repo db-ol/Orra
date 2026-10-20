@@ -106,6 +106,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Projects, off until the user turns it on in Settings, and only in builds that show
     /// it. Reading the switch starts nothing.
     let projects = ProjectsSwitch()
+    /// The Mail mailboxes Projects reads, which Settings shows and the scan reads. Creating
+    /// it reads only the preferences.
+    let mailChoice = MailChoice()
+    /// Mail access and the mailboxes on the Projects page of Settings. Creating it sends
+    /// nothing to Mail.
+    lazy var projectsMail = ProjectsSettings.MailAccess(bridge: .live, choice: mailChoice) { [projects] in
+        projects.isOn
+    }
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
     let dockIcon = DockIcon.live()

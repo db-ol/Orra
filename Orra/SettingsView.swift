@@ -168,6 +168,9 @@ struct SettingsView: View {
     var voiceModels: VoiceModels? = nil
     /// The Projects switch, nil where the page is shown without it, which hides its tab.
     var projects: ProjectsSwitch? = nil
+    /// Mail access and the mailboxes on the Projects page, nil where the page is shown
+    /// without them.
+    var projectsMail: ProjectsSettings.MailAccess? = nil
     @State private var tab = SettingsTab.general
     /// The part of the page to scroll to, until the page has scrolled there.
     @State private var scrollTarget: SettingsSection?
@@ -235,7 +238,7 @@ struct SettingsView: View {
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .projects:
             if let projects {
-                ProjectsSettings(projects: projects, cleanup: cleanup)
+                ProjectsSettings(projects: projects, cleanup: cleanup, mail: projectsMail)
             }
         case .about:
             AboutSettings(models: models, pushToTalk: pushToTalk, updater: updater)
