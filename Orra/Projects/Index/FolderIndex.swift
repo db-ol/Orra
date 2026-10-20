@@ -11,27 +11,33 @@ extension Logger {
 /// Keeps the text of each project's folders in the Projects database, for ChunkSearch.
 ///
 /// - Each project is started with its folders and stopped by its UUID. One background task
-///   at low priority does the work of all projects, one file at a time.
-/// - A project is swept when it starts, after its folders change (FolderEvents) and every
-///   `sweepInterval`, an hour by default (a guess). A sweep lists the folders with FolderWalk, removes the files that are
-///   gone, and reads the files that are new or whose size or modification date changed with
+///   at low priority does the work of all projects, one file at a time, and projects take
+///   turns.
+/// - A sweep lists the folders with FolderWalk, removes the files that are gone, and reads
+///   the files that are new or whose size or modification date changed with
 ///   FileTextExtractor. It cuts their text with TextChunker and keeps the chunks in two full
-///   text tables, see ProjectsDatabase and ChunkSearch. A rename moves a file's row, so a
-///   moved file is not read again.
-/// - It waits while a dictation is under way, before each file and before each write.
-/// - A project holds at most 5,000 files and about 200 MB of text. The file that passes the
-///   text limit is the last one read.
+///   text tables, see ProjectsDatabase and ChunkSearch.
+/// - A project is swept when it starts, every hour, and at the first tick of the timer
+///   (every `sweepGap`) after its folders changed (FolderEvents). So a folder that keeps
+///   changing is swept at most once in that time. Renames and removals are taken in at
+///   once: a rename moves a file's rows, so a moved file is not read again, and a removal
+///   drops its text.
+/// - It waits while a dictation is under way, before the walk, before each file and before
+///   each write.
+/// - A project holds at most 5,000 files and about 200 MB of text. The new file that passes
+///   the text limit is the last new one read. A file the index holds is read again when it
+///   changes, even past the limit, so its old text never stays.
 /// - A file that gives no text is kept with why and with its size and modification date,
 ///   so a file that took too long is not read again until it changes. Reasons that can pass
 ///   without a change, such as no access, are tried again at each sweep.
-/// - Files the walk skips only because they are not on this Mac, such as iCloud files
-///   removed to save space, keep their text in the index.
-/// - What waits is bounded: the changes of a project only ask for a full sweep once they
-///   name too many paths.
+/// - Files that are not on this Mac, such as iCloud files or folders removed to save space,
+///   keep their text in the index. Nothing inside a folder that is not on this Mac is
+///   looked at, since that would download it.
+/// - Folders FolderWalk refuses, such as one that holds Mail's data, are never watched.
 ///
 /// It never writes, moves or deletes anything in the folders. Main actor state, since the
-/// window shows the reports. The reading, the chunking and the database run off the main
-/// actor.
+/// window shows the reports. The walk, the bookkeeping of a sweep, the reading, the chunking
+/// and the database run off the main actor.
 @Observable
 final class FolderIndex {
     /// The limits of one project.
@@ -76,6 +82,13 @@ final class FolderIndex {
     /// Reasons a file gives no text that can pass without a change to the file. They are not
     /// kept, so the file is tried again at the next sweep.
     nonisolated static let passingSkips: Set<FileSkipReason> = [.noAccess, .dataless, .notDownloaded, .cancelled]
+    /// How often the timer ticks. A project whose folders changed is swept at the next tick
+    /// (a guess).
+    nonisolated static let sweepGap: Duration = .seconds(60)
+    /// Every this many ticks, every project is swept, an hour (a guess).
+    nonisolated static let ticksPerFullSweep = 60
+    /// How often a wait for the end of a dictation looks again.
+    nonisolated static let pollInterval: Duration = .milliseconds(100)
 
     /// The reports of the started projects.
     private(set) var reports: [UUID: Report] = [:]
@@ -85,10 +98,7 @@ final class FolderIndex {
     @ObservationIgnored private let isDictating: () -> Bool
     @ObservationIgnored private let walk: FolderWalk
     @ObservationIgnored private let readText: @Sendable (URL) async -> Result<FileTextResult, FileSkipReason>
-    @ObservationIgnored private let chunker: TextChunker
-    @ObservationIgnored private let priority: TaskPriority
-    @ObservationIgnored private let sweepInterval: Duration
-    @ObservationIgnored private let pollInterval: Duration
+    @ObservationIgnored private let chunker = TextChunker()
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private let watch: Watch
 
@@ -98,13 +108,17 @@ final class FolderIndex {
         /// Counts starts, so work for an earlier start of the same project stops.
         var generation: Int
         var sweepDue = true
+        /// Changes the worker has not taken in yet.
         var pending = FolderEvents.Changes()
+        /// Whether the folders changed since the last sweep began, so the next tick sweeps
+        /// them.
+        var changedSinceSweep = false
         var stopWatching: (() -> Void)?
         /// What the last sweep found that the database does not keep.
         var facts = SweepFacts()
     }
 
-    private struct SweepFacts {
+    private nonisolated struct SweepFacts: Sendable {
         var skipped: [FileSkipReason: Int] = [:]
         var skippedFiles: [SkippedFile] = []
         var refusedFolders: [URL: FolderWalk.Refusal] = [:]
@@ -115,6 +129,9 @@ final class FolderIndex {
     @ObservationIgnored private var projects: [UUID: Watched] = [:]
     @ObservationIgnored private var generations = 0
     @ObservationIgnored private var worker: Task<Void, Never>?
+    /// A stopped worker that may still be finishing its file. The next worker waits for it,
+    /// so only one works at a time.
+    @ObservationIgnored private var stoppedWorker: Task<Void, Never>?
     @ObservationIgnored private var timer: Task<Void, Never>?
     @ObservationIgnored private var wake: AsyncStream<Void>.Continuation?
     /// The project the worker reads now.
@@ -122,6 +139,8 @@ final class FolderIndex {
     /// The project the worker read last.
     @ObservationIgnored private var lastWorked: UUID?
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+    /// Waits for the worker to leave its project, see forget(project:).
+    @ObservationIgnored private var leaveWaiters: [CheckedContinuation<Void, Never>] = []
 
     /// - Parameters:
     ///   - isDictating: true from the press of the talk key or the translation key until the
@@ -134,10 +153,6 @@ final class FolderIndex {
         limits: Limits = Limits(),
         walk: FolderWalk = FolderWalk(),
         readText: @escaping @Sendable (URL) async -> Result<FileTextResult, FileSkipReason> = { await FileTextExtractor().text(of: $0) },
-        chunker: TextChunker = TextChunker(),
-        priority: TaskPriority = .background,
-        sweepInterval: Duration = .seconds(60 * 60),
-        pollInterval: Duration = .milliseconds(100),
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         watch: @escaping Watch = FolderIndex.watchWithFolderEvents
     ) {
@@ -146,12 +161,20 @@ final class FolderIndex {
         self.limits = limits
         self.walk = walk
         self.readText = readText
-        self.chunker = chunker
-        self.priority = priority
-        self.sweepInterval = sweepInterval
-        self.pollInterval = pollInterval
         self.sleep = sleep
         self.watch = watch
+    }
+
+    /// Stops the folder events and the worker, in case the index goes away without
+    /// `stopAll()`, so nothing keeps watching the folders.
+    isolated deinit {
+        for watched in projects.values {
+            watched.stopWatching?()
+        }
+        worker?.cancel()
+        stoppedWorker?.cancel()
+        timer?.cancel()
+        wake?.finish()
     }
 
     // MARK: Starting and stopping
@@ -191,9 +214,10 @@ final class FolderIndex {
     /// Stops a project and removes everything the index holds for it.
     func forget(project id: UUID) async throws {
         stop(project: id)
-        // A file being read for it is written before the worker sees the stop.
+        // A file being read for it is written before the worker sees the stop. This waits
+        // for that file even when the calling task is cancelled.
         while working == id {
-            try? await sleep(pollInterval)
+            await withCheckedContinuation { leaveWaiters.append($0) }
         }
         let removed = try await database.transaction { database in
             let removed = try Self.removeRows(project: id, in: database)
@@ -206,8 +230,8 @@ final class FolderIndex {
         Logger.projectsIndex.notice("Index forgot a project")
     }
 
-    /// Returns once no project waits for work. For tests, and for code that must see the
-    /// result of a start.
+    /// Returns once no project waits for work. Changes that wait for the next tick do not
+    /// count. For tests, and for code that must see the result of a start.
     func waitUntilIdle() async {
         guard !isIdle else { return }
         await withCheckedContinuation { idleWaiters.append($0) }
@@ -216,6 +240,15 @@ final class FolderIndex {
     /// Whether no project waits for work.
     var isIdle: Bool {
         working == nil && !projects.values.contains { $0.sweepDue || !$0.pending.isEmpty }
+    }
+
+    /// Sweeps the projects whose folders changed since their last sweep. The timer calls it
+    /// every `sweepGap`, and tests call it in its place.
+    func sweepChangedProjects() {
+        for (id, watched) in projects where watched.changedSinceSweep {
+            projects[id]?.sweepDue = true
+        }
+        wake?.yield()
     }
 
     // MARK: What it holds
@@ -248,20 +281,30 @@ final class FolderIndex {
         guard worker == nil else { return }
         let (wakes, wake) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         self.wake = wake
-        worker = Task(priority: priority) { [weak self] in
+        let previous = stoppedWorker
+        stoppedWorker = nil
+        worker = Task(priority: .background) { [weak self] in
+            await previous?.value
             for await _ in wakes {
                 guard let self else { return }
                 await self.work()
             }
         }
-        timer = Task(priority: priority) { [weak self, sleep, sweepInterval] in
-            while !Task.isCancelled {
+        timer = Task(priority: .background) { [weak self, sleep] in
+            var ticks = 0
+            while true {
                 do {
-                    try await sleep(sweepInterval)
+                    try await sleep(Self.sweepGap)
                 } catch {
                     return
                 }
-                self?.sweepAll()
+                ticks += 1
+                guard !Task.isCancelled, let self else { return }
+                if ticks.isMultiple(of: Self.ticksPerFullSweep) {
+                    self.sweepAll()
+                } else {
+                    self.sweepChangedProjects()
+                }
             }
         }
     }
@@ -270,10 +313,13 @@ final class FolderIndex {
         worker?.cancel()
         timer?.cancel()
         wake?.finish()
+        if let worker {
+            stoppedWorker = worker
+        }
         worker = nil
         timer = nil
         wake = nil
-        // `working` stays until the cancelled worker leaves its file, see forget(project:).
+        // `working` stays until the stopped worker leaves its file, see forget(project:).
         resumeIdleWaiters()
     }
 
@@ -292,6 +338,7 @@ final class FolderIndex {
     private func received(_ changes: FolderEvents.Changes, project id: UUID, generation: Int) {
         guard projects[id]?.generation == generation else { return }
         projects[id]?.pending.merge(changes, limit: FolderEvents.limit)
+        projects[id]?.changedSinceSweep = true
         wake?.yield()
     }
 
@@ -305,6 +352,11 @@ final class FolderIndex {
             await process(id)
             working = nil
             lastWorked = id
+            let waiters = leaveWaiters
+            leaveWaiters = []
+            for waiter in waiters {
+                waiter.resume()
+            }
         }
         resumeIdleWaiters()
     }
@@ -330,22 +382,31 @@ final class FolderIndex {
         guard var watched = projects[id] else { return }
         let generation = watched.generation
         let changes = watched.pending
+        let sweepDue = watched.sweepDue
         watched.pending = FolderEvents.Changes()
         watched.sweepDue = false
+        if sweepDue {
+            watched.changedSinceSweep = false
+        }
         projects[id] = watched
         reports[id]?.isIndexing = true
         do {
-            if watched.stopWatching == nil {
-                try await startWatching(id, generation: generation)
+            await waitWhileDictating()
+            var removedText = false
+            if isCurrent(id, generation) {
+                if watched.stopWatching == nil {
+                    try await startWatching(id, generation: generation)
+                }
+                removedText = try await apply(changes, project: id)
             }
-            var removedText = try await apply(changes, project: id)
-            if isCurrent(id, generation), try await sweep(id, generation: generation) {
+            if sweepDue, isCurrent(id, generation), try await sweep(id, generation: generation) {
                 removedText = true
             }
+            await waitWhileDictating()
             if removedText {
                 try await database.compactAfterDeletes()
             }
-            if changes.lastEventID > 0 {
+            if changes.lastEventID > 0, isCurrent(id, generation) {
                 try await storeLastEvent(changes.lastEventID, project: id)
             }
         } catch let failure as ProjectsDatabase.Failure {
@@ -358,17 +419,31 @@ final class FolderIndex {
     }
 
     /// Starts watching the folders before the first sweep, so nothing that changes during it
-    /// is missed, from the last event the index took in.
+    /// is missed, from the last event the index took in. A folder FolderWalk refuses, such as
+    /// one that holds Mail's data or the home folder, is never watched. A missing one is, so
+    /// its files are seen once it appears.
     private func startWatching(_ id: UUID, generation: Int) async throws {
+        guard let folders = projects[id]?.folders else { return }
+        var watchable: [URL] = []
+        for folder in folders {
+            let refusal = await walk.refusal(for: folder)
+            if refusal == nil || refusal == .notAFolder {
+                watchable.append(folder)
+            }
+        }
         let rows = try await database.run("SELECT last_event FROM index_watch WHERE project = ?", [.text(id.uuidString)])
-        guard isCurrent(id, generation), let folders = projects[id]?.folders else { return }
+        guard isCurrent(id, generation) else { return }
+        guard !watchable.isEmpty else {
+            projects[id]?.stopWatching = {}
+            return
+        }
         let since = rows.first?.first?.integer.map { UInt64(bitPattern: $0) }
         let deliver: @Sendable (FolderEvents.Changes) -> Void = { [weak self] changes in
             Task { @MainActor in
                 self?.received(changes, project: id, generation: generation)
             }
         }
-        projects[id]?.stopWatching = watch(folders, since, deliver)
+        projects[id]?.stopWatching = watch(watchable, since, deliver)
     }
 
     private func storeLastEvent(_ event: UInt64, project id: UUID) async throws {
@@ -380,7 +455,7 @@ final class FolderIndex {
     /// Moves the rows of renamed files and removes the rows of removed ones. Returns whether
     /// text was removed.
     private func apply(_ changes: FolderEvents.Changes, project id: UUID) async throws -> Bool {
-        guard !changes.mustSweep, !changes.renamed.isEmpty || !changes.removed.isEmpty else { return false }
+        guard !changes.renamed.isEmpty || !changes.removed.isEmpty else { return false }
         return try await database.transaction { database in
             var removed = false
             for rename in changes.renamed {
@@ -396,10 +471,24 @@ final class FolderIndex {
     // MARK: Sweeping
 
     /// A file the database holds, as the last sweep left it.
-    private struct Stored {
+    private nonisolated struct Stored: Sendable {
         var size: Int64
         var modified: Double
         var textBytes: Int64
+    }
+
+    /// What a sweep must do, found off the main actor.
+    private nonisolated struct Survey: Sendable {
+        var facts = SweepFacts()
+        var listed = 0
+        /// The files the database holds that are gone, by path.
+        var gone: [String] = []
+        /// The files to read: first those the database holds, then new ones.
+        var changed: [FolderWalk.File] = []
+        /// The text bytes the database holds for the changed files it holds, by path.
+        var storedBytes: [String: Int64] = [:]
+        /// The text bytes of the files the database holds that stay as they are.
+        var keptBytes: Int64 = 0
     }
 
     /// Lists the folders, removes the files that are gone and reads the new and changed
@@ -407,51 +496,17 @@ final class FolderIndex {
     private func sweep(_ id: UUID, generation: Int) async throws -> Bool {
         guard let folders = projects[id]?.folders else { return false }
         let started = ContinuousClock.now
-        var facts = SweepFacts()
-        var listed: [FolderWalk.File] = []
-        var paths = Set<String>()
-        var notOnThisMac = Set<String>()
-        for folder in folders {
-            let remaining = limits.files - listed.count
-            guard remaining > 0 else {
-                facts.reachedFileLimit = true
-                break
-            }
-            let listing: FolderWalk.Listing
-            do {
-                listing = try await walk.list(folder, limit: remaining)
-            } catch {
-                facts.refusedFolders[folder] = error
-                continue
-            }
-            // A walk cut short would remove what it did not reach.
-            guard !listing.wasCancelled, isCurrent(id, generation) else { return false }
-            for file in listing.files where paths.insert(file.url.path).inserted {
-                listed.append(file)
-            }
-            facts.skipped.merge(listing.skipCounts, uniquingKeysWith: +)
-            for skip in listing.skipped {
-                if facts.skippedFiles.count < FolderWalk.maximumListedSkips {
-                    facts.skippedFiles.append(SkippedFile(url: skip.url, reason: skip.reason))
-                }
-                if skip.reason == .dataless || skip.reason == .notDownloaded {
-                    notOnThisMac.insert(skip.url.path)
-                }
-            }
-            facts.reachedFileLimit = facts.reachedFileLimit || listing.reachedLimit
-        }
-
-        let rows = try await database.run(
-            "SELECT path, size, modified, text_bytes FROM index_files WHERE project = ?", [.text(id.uuidString)])
-        var stored: [String: Stored] = [:]
-        for row in rows where row.count == 4 {
-            guard let path = row[0].text, let size = row[1].integer, let modified = row[2].real else { continue }
-            stored[path] = Stored(size: size, modified: modified, textBytes: row[3].integer ?? 0)
-        }
-        let gone = stored.keys.filter { !paths.contains($0) && !notOnThisMac.contains($0) }.sorted()
+        await waitWhileDictating()
+        guard isCurrent(id, generation),
+              let survey = try await Self.survey(project: id, folders: folders, limits: limits, walk: walk, database: database),
+              isCurrent(id, generation)
+        else { return false }
+        var facts = survey.facts
         var removedText = false
-        if !gone.isEmpty {
-            removedText = try await database.transaction { database in
+        if !survey.gone.isEmpty {
+            await waitWhileDictating()
+            guard isCurrent(id, generation) else { return false }
+            removedText = try await database.transaction { [gone = survey.gone] database in
                 var removed = false
                 for path in gone {
                     removed = try Self.removeRows(project: id, path: path, in: database) || removed
@@ -460,16 +515,14 @@ final class FolderIndex {
             }
         }
 
-        var textBytes = stored.filter { paths.contains($0.key) || notOnThisMac.contains($0.key) }.values.reduce(0) { $0 + $1.textBytes }
-        let changed = listed.filter { file in
-            guard let row = stored[file.url.path] else { return true }
-            return row.size != file.size || row.modified != file.modified.timeIntervalSince1970
-        }
+        var textBytes = survey.keptBytes
         var read = 0
         var skipped = 0
-        for file in changed {
+        for file in survey.changed {
             guard isCurrent(id, generation) else { break }
-            if textBytes >= limits.textBytes {
+            let isNew = survey.storedBytes[file.url.path] == nil
+            // The limit holds back new files only, so a changed file never keeps its old text.
+            if isNew, textBytes >= limits.textBytes {
                 facts.reachedTextLimit = true
                 break
             }
@@ -513,13 +566,136 @@ final class FolderIndex {
         }
         let milliseconds = started.duration(to: .now) / .milliseconds(1)
         Logger.projectsIndex.notice(
-            "Index sweep: \(listed.count, privacy: .public) files listed, \(read, privacy: .public) read, \(skipped, privacy: .public) without text, \(gone.count, privacy: .public) removed, in \(Int(milliseconds), privacy: .public) ms")
+            "Index sweep: \(survey.listed, privacy: .public) files listed, \(read, privacy: .public) read, \(skipped, privacy: .public) without text, \(survey.gone.count, privacy: .public) removed, in \(Int(milliseconds), privacy: .public) ms")
         return removedText
+    }
+
+    /// Walks the folders and compares what they hold with what the database holds. Nil when
+    /// the walk was cut short, since it would remove what it did not reach.
+    @concurrent
+    private nonisolated static func survey(
+        project id: UUID, folders: [URL], limits: Limits, walk: FolderWalk, database: ProjectsDatabase
+    ) async throws -> Survey? {
+        var survey = Survey()
+        var listed: [(path: String, file: FolderWalk.File)] = []
+        var paths = Set<String>()
+        var roots: [String] = []
+        for folder in folders {
+            let remaining = limits.files - listed.count
+            guard remaining > 0 else {
+                survey.facts.reachedFileLimit = true
+                break
+            }
+            let listing: FolderWalk.Listing
+            do {
+                listing = try await walk.list(folder, limit: remaining)
+            } catch {
+                survey.facts.refusedFolders[folder] = error
+                continue
+            }
+            guard !listing.wasCancelled else { return nil }
+            roots.append(listing.folder.path)
+            for file in listing.files {
+                let path = file.url.path
+                if paths.insert(path).inserted {
+                    listed.append((path, file))
+                }
+            }
+            survey.facts.skipped.merge(listing.skipCounts, uniquingKeysWith: +)
+            for skip in listing.skipped where survey.facts.skippedFiles.count < FolderWalk.maximumListedSkips {
+                survey.facts.skippedFiles.append(SkippedFile(url: skip.url, reason: skip.reason))
+            }
+            survey.facts.reachedFileLimit = survey.facts.reachedFileLimit || listing.reachedLimit
+        }
+        survey.listed = listed.count
+
+        let rows = try await database.run(
+            "SELECT path, size, modified, text_bytes FROM index_files WHERE project = ?", [.text(id.uuidString)])
+        var stored: [String: Stored] = [:]
+        for row in rows where row.count == 4 {
+            guard let path = row[0].text, let size = row[1].integer, let modified = row[2].real else { continue }
+            stored[path] = Stored(size: size, modified: modified, textBytes: row[3].integer ?? 0)
+        }
+        var away = AwayFromThisMac(roots: roots, walk: walk)
+        for (path, row) in stored where !paths.contains(path) {
+            if away.holds(path) {
+                survey.keptBytes += row.textBytes
+            } else {
+                survey.gone.append(path)
+            }
+        }
+        survey.gone.sort()
+        var new: [FolderWalk.File] = []
+        for (path, file) in listed {
+            guard let row = stored[path] else {
+                new.append(file)
+                continue
+            }
+            if row.size == file.size, row.modified == file.modified.timeIntervalSince1970 {
+                survey.keptBytes += row.textBytes
+            } else {
+                survey.changed.append(file)
+                survey.storedBytes[path] = row.textBytes
+            }
+        }
+        survey.changed += new
+        return survey
+    }
+
+    /// Tells whether a file the walk did not list is only away from this Mac, so its text
+    /// stays: it or a folder above it, up to its added folder, is dataless, or it is an
+    /// iCloud file that is not downloaded. It looks at the folders from the added one down
+    /// and stops at the first dataless one, since looking inside it would download it.
+    private nonisolated struct AwayFromThisMac {
+        private nonisolated enum Place {
+            case present
+            case dataless
+            case missing
+        }
+
+        /// The added folders, by their real paths.
+        let roots: [String]
+        let walk: FolderWalk
+        private var folders: [String: Place] = [:]
+
+        init(roots: [String], walk: FolderWalk) {
+            self.roots = roots
+            self.walk = walk
+        }
+
+        mutating func holds(_ path: String) -> Bool {
+            guard let root = roots.first(where: { path.hasPrefix($0 + "/") }) else { return false }
+            var folder = root
+            var above = [root]
+            for part in path.dropFirst(root.count + 1).split(separator: "/").dropLast() {
+                folder += "/" + part
+                above.append(folder)
+            }
+            for folder in above {
+                let place = folders[folder] ?? look(at: folder)
+                folders[folder] = place
+                switch place {
+                case .present: continue
+                case .dataless: return true
+                case .missing: return false
+                }
+            }
+            switch look(at: path) {
+            case .dataless: return true
+            case .missing: return false
+            case .present: return !walk.isDownloaded(URL(fileURLWithPath: path))
+            }
+        }
+
+        private func look(at path: String) -> Place {
+            guard let flags = walk.flags(path) else { return .missing }
+            return flags & UInt32(SF_DATALESS) != 0 ? .dataless : .present
+        }
     }
 
     private func waitWhileDictating() async {
         while isDictating() && !Task.isCancelled {
-            try? await sleep(pollInterval)
+            try? await sleep(Self.pollInterval)
         }
     }
 
@@ -642,6 +818,13 @@ final class FolderIndex {
 
     private typealias Value = ProjectsDatabase.Value
 
+    /// The condition for the file at the path in parameter `name`, or every file in the
+    /// folder at that path. The range lets SQLite search the (project, path) index: a path
+    /// below the folder starts with the path and "/", and "0" follows "/".
+    private nonisolated static func atOrUnder(_ name: String) -> String {
+        "path >= \(name) AND path < \(name) || '0' AND (path = \(name) OR substr(path, length(\(name)) + 1, 1) = '/')"
+    }
+
     /// The rows of the files that match `condition`, with the project as the first parameter.
     private static func removeFiles(where condition: String, _ parameters: [Value], in database: isolated ProjectsDatabase) throws -> Bool {
         let files = "SELECT id FROM index_files WHERE project = ?1 AND \(condition)"
@@ -660,7 +843,7 @@ final class FolderIndex {
 
     /// Removes the file at `path`, or every file in the folder at `path`.
     private static func removeRows(project: UUID, under path: String, in database: isolated ProjectsDatabase) throws -> Bool {
-        try removeFiles(where: "(path = ?2 OR substr(path, 1, length(?2) + 1) = ?2 || '/')", [.text(project.uuidString), .text(path)], in: database)
+        try removeFiles(where: atOrUnder("?2"), [.text(project.uuidString), .text(path)], in: database)
     }
 
     /// Removes every file of a project.
@@ -670,16 +853,18 @@ final class FolderIndex {
 
     /// Moves the rows of a renamed file, or of every file in a renamed folder. What the new
     /// place held before is replaced. A renamed file's chunks get the words of its new name.
-    /// Returns whether text was removed.
+    /// A rename whose old place holds nothing, such as one a sweep already took in, changes
+    /// nothing. Returns whether text was removed.
     private static func applyRename(_ rename: FolderEvents.Rename, project: UUID, in database: isolated ProjectsDatabase) throws -> Bool {
+        let old: [Value] = [.text(project.uuidString), .text(rename.from)]
+        guard try !database.run("SELECT 1 FROM index_files WHERE project = ?1 AND \(atOrUnder("?2")) LIMIT 1", old).isEmpty else { return false }
         let removed = try removeRows(project: project, under: rename.to, in: database)
         let name = searchableName(URL(fileURLWithPath: rename.to))
         let chunks = "SELECT id FROM index_chunks WHERE file IN (SELECT id FROM index_files WHERE project = ?1 AND path = ?2)"
-        let file: [Value] = [.text(project.uuidString), .text(rename.from)]
-        try database.run("UPDATE index_chunk_words SET name = ?3 WHERE rowid IN (\(chunks))", file + [.text(ChunkSearch.indexedWords(name))])
-        try database.run("UPDATE index_chunk_trigrams SET name = ?3 WHERE rowid IN (\(chunks))", file + [.text(ChunkSearch.indexedTrigramText(name))])
+        try database.run("UPDATE index_chunk_words SET name = ?3 WHERE rowid IN (\(chunks))", old + [.text(ChunkSearch.indexedWords(name))])
+        try database.run("UPDATE index_chunk_trigrams SET name = ?3 WHERE rowid IN (\(chunks))", old + [.text(ChunkSearch.indexedTrigramText(name))])
         try database.run(
-            "UPDATE index_files SET path = ?2 || substr(path, length(?3) + 1) WHERE project = ?1 AND (path = ?3 OR substr(path, 1, length(?3) + 1) = ?3 || '/')",
+            "UPDATE index_files SET path = ?2 || substr(path, length(?3) + 1) WHERE project = ?1 AND \(atOrUnder("?3"))",
             [.text(project.uuidString), .text(rename.to), .text(rename.from)])
         return removed
     }

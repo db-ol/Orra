@@ -18,8 +18,9 @@ import os
 /// - When events were lost, when a watched folder itself moved, or when more than `limit`
 ///   paths changed, the batch only says that a full sweep is needed.
 /// - It starts from the last event FolderIndex stored, so changes made while Orra was closed
-///   are reported too. FolderIndex still sweeps at start and now and then, which covers
-///   whatever FSEvents does not report.
+///   are reported too. FolderIndex takes in renames and removals at once, and sweeps the
+///   project at its next tick for the rest. It also sweeps at start and every hour, which
+///   covers whatever FSEvents does not report.
 ///
 /// All state lives on `queue`. `start()` and `stop()` return at once and do their work there.
 nonisolated final class FolderEvents: @unchecked Sendable {
@@ -44,7 +45,8 @@ nonisolated final class FolderEvents: @unchecked Sendable {
         var renamed: [Rename] = []
         /// Paths that are gone, files or folders.
         var removed: Set<String> = []
-        /// Paths created or changed, files or folders.
+        /// Paths created or changed, files or folders. A path changed after it was removed
+        /// is no longer removed, so its text is not dropped and read again.
         var changed: Set<String> = []
         /// Whether only a full sweep can tell what changed.
         var mustSweep = false
@@ -55,10 +57,14 @@ nonisolated final class FolderEvents: @unchecked Sendable {
             renamed.isEmpty && removed.isEmpty && changed.isEmpty && !mustSweep
         }
 
-        /// Adds a later batch. A path's later state wins. Past `limit` paths, the changes
-        /// only ask for a full sweep, so what waits stays small.
+        /// Adds a later batch. A path's later state wins, and a path a later rename moved
+        /// something to is no longer removed. Past `limit` paths, the changes only ask for
+        /// a full sweep, so what waits stays small.
         mutating func merge(_ later: Changes, limit: Int) {
             lastEventID = max(lastEventID, later.lastEventID)
+            for rename in later.renamed {
+                removed.remove(rename.to)
+            }
             renamed += later.renamed
             for path in later.removed {
                 changed.remove(path)
@@ -221,8 +227,6 @@ nonisolated final class FolderEvents: @unchecked Sendable {
     private let folders: [String]
     private let since: UInt64?
     private let quiet: Duration
-    private let maximumWait: Duration
-    private let limit: Int
     private let deliver: @Sendable (Changes) -> Void
     private let queue = DispatchQueue(label: "io.github.db-ol.Orra.projects-folder-events", qos: .utility)
     private var collector: Collector
@@ -231,21 +235,12 @@ nonisolated final class FolderEvents: @unchecked Sendable {
 
     /// Watches `folders` from the event after `since`, or from now when nil, and hands each
     /// batch to `deliver` on its own queue.
-    init(
-        folders: [String],
-        since: UInt64?,
-        quiet: Duration = FolderEvents.quiet,
-        maximumWait: Duration = FolderEvents.maximumWait,
-        limit: Int = FolderEvents.limit,
-        deliver: @escaping @Sendable (Changes) -> Void
-    ) {
+    init(folders: [String], since: UInt64?, quiet: Duration = FolderEvents.quiet, deliver: @escaping @Sendable (Changes) -> Void) {
         self.folders = folders
         self.since = since
         self.quiet = quiet
-        self.maximumWait = maximumWait
-        self.limit = limit
         self.deliver = deliver
-        collector = Collector(roots: [], quiet: quiet, maximumWait: maximumWait, limit: limit)
+        collector = Collector(roots: [], quiet: quiet)
     }
 
     /// Starts the stream. Call `stop()` when done, since the stream keeps this object.
@@ -261,7 +256,7 @@ nonisolated final class FolderEvents: @unchecked Sendable {
     private func startNow() {
         guard stream == nil else { return }
         let roots = folders.map { Self.realPath($0) ?? $0 }
-        collector = Collector(roots: roots, quiet: quiet, maximumWait: maximumWait, limit: limit)
+        collector = Collector(roots: roots, quiet: quiet)
         let info = Unmanaged.passRetained(self).toOpaque()
         var context = FSEventStreamContext(version: 0, info: info, retain: nil, release: nil, copyDescription: nil)
         let flags = FSEventStreamCreateFlags(
@@ -293,7 +288,7 @@ nonisolated final class FolderEvents: @unchecked Sendable {
         FSEventStreamInvalidate(stream)
         FSEventStreamRelease(stream)
         self.stream = nil
-        collector = Collector(roots: collector.roots, quiet: quiet, maximumWait: maximumWait, limit: limit)
+        collector = Collector(roots: collector.roots, quiet: quiet)
         Unmanaged.passUnretained(self).release()
     }
 

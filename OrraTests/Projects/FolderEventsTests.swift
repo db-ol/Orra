@@ -170,6 +170,18 @@ struct FolderEventsTests {
         #expect(changes == FolderEvents.Changes(mustSweep: true, lastEventID: 9))
     }
 
+    /// A path removed and then the target of a later rename holds the renamed file, so it is
+    /// no longer removed.
+    @Test func aRenameToARemovedPathKeepsIt() {
+        let rename = FolderEvents.Rename(from: root + "/draft.docx", to: root + "/brief.docx")
+        var changes = FolderEvents.Changes(removed: paths("brief.docx", "old.docx"), lastEventID: 1)
+        changes.merge(FolderEvents.Changes(renamed: [rename], lastEventID: 2), limit: 10)
+        #expect(changes == FolderEvents.Changes(renamed: [rename], removed: paths("old.docx"), lastEventID: 2))
+        // A removal after the rename still counts.
+        changes.merge(FolderEvents.Changes(removed: paths("brief.docx"), lastEventID: 3), limit: 10)
+        #expect(changes.removed == paths("brief.docx", "old.docx"))
+    }
+
     /// A real folder: a new file, a rename, a removal, and a change made while nothing
     /// watched, found from the last event ID.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_FOLDER_EVENTS"] != nil), .timeLimit(.minutes(1)))

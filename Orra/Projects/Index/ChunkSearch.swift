@@ -45,6 +45,9 @@ nonisolated struct ChunkSearch: Sendable {
     static let maximumWordTerms = 120
     /// The most trigrams in one query.
     static let maximumTrigramTerms = 200
+    /// The characters of a text a query is made from. A long mail gives its terms well
+    /// before the end, so the rest is not cut into words.
+    static let maximumQueryCharacters = 20_000
 
     let database: ProjectsDatabase
 
@@ -156,12 +159,13 @@ nonisolated struct ChunkSearch: Sendable {
 
     // MARK: Queries
 
-    /// The MATCH query for the words table: the text's words without stop words and single
-    /// letters or characters, each once, at most `maximumWordTerms`. Nil when none is left.
+    /// The MATCH query for the words table: the words of the text's first
+    /// `maximumQueryCharacters` without stop words and single letters or characters, each
+    /// once, at most `maximumWordTerms`. Nil when none is left.
     static func wordQuery(_ text: String) -> String? {
         var terms: [String] = []
         var seen = Set<String>()
-        for word in words(in: text) {
+        for word in words(in: String(text.prefix(maximumQueryCharacters))) {
             let term = cleaned(word)
             guard term.contains(where: { $0.isLetter || $0.isNumber }), !stopWords.contains(term) else { continue }
             if term.count == 1, term.first?.isNumber != true { continue }
@@ -172,22 +176,23 @@ nonisolated struct ChunkSearch: Sendable {
         return matchQuery(terms)
     }
 
-    /// The MATCH query for the trigram table: every three Chinese characters in a row, each
-    /// once, at most `maximumTrigramTerms`. Nil when there are none. Latin words are left to
-    /// the words table, since the trigram table holds only chunks with Chinese, and a Latin
-    /// word there would favor them over chunks in English.
+    /// The MATCH query for the trigram table: every three Chinese characters in a row in the
+    /// text's first `maximumQueryCharacters`, each once, at most `maximumTrigramTerms`. Nil
+    /// when there are none. Latin words are left to the words table, since the trigram table
+    /// holds only chunks with Chinese, and a Latin word there would favor them over chunks in
+    /// English.
     static func trigramQuery(_ text: String) -> String? {
-        let form = cleaned(indexedTrigramText(text))
+        let form = cleaned(indexedTrigramText(String(text.prefix(maximumQueryCharacters))))
         var terms: [String] = []
         var seen = Set<String>()
-        func add(_ term: String) {
-            if terms.count < maximumTrigramTerms, seen.insert(term).inserted { terms.append(term) }
-        }
-        for run in runs(of: form) where run.isChinese {
+        collecting: for run in runs(of: form) where run.isChinese {
             let characters = Array(run.text)
             guard characters.count >= 3 else { continue }
             for start in 0...(characters.count - 3) {
-                add(String(characters[start..<(start + 3)]))
+                let term = String(characters[start..<(start + 3)])
+                guard seen.insert(term).inserted else { continue }
+                terms.append(term)
+                if terms.count == maximumTrigramTerms { break collecting }
             }
         }
         return matchQuery(terms)

@@ -105,6 +105,19 @@ struct ChunkSearchTests {
 
     /// Text from a mail can hold FTS5 syntax. Each piece stays a plain term: no error, no
     /// prefix match, no column filter, no NEAR.
+    /// A query is made from the start of a long text only, so a long mail costs no more
+    /// than its start.
+    @Test func queriesComeFromTheStartOfALongText() throws {
+        let long = "印刷合同 posters " + String(repeating: "灯具 lamps ", count: 3_000) + "海报设计 brochure"
+        #expect(long.count > ChunkSearch.maximumQueryCharacters)
+        let words = try #require(ChunkSearch.wordQuery(long))
+        #expect(words.contains("\"posters\"") && words.contains("\"lamps\""))
+        #expect(!words.contains("brochure"))
+        let trigrams = try #require(ChunkSearch.trigramQuery(long))
+        #expect(trigrams.contains("\"印刷合\""))
+        #expect(!trigrams.contains("海报设"))
+    }
+
     @Test func hostileTermsFindOnlyThemselves() async throws {
         defer { cleanUp() }
         let database = try await ProjectsDatabase.open(in: storage)

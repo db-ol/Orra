@@ -5,7 +5,7 @@ import Testing
 
 /// The index of project folders, on files made in a temporary folder, with a database in a
 /// temporary root, stand ins for the folder events and the dictation, and a sleep that only
-/// yields. No time decides a result.
+/// yields. The tests call the timer's tick themselves. No time decides a result.
 @MainActor
 @Suite(.timeLimit(.minutes(1)))
 struct FolderIndexTests {
@@ -21,6 +21,10 @@ struct FolderIndexTests {
     /// Paths whose stat flags say dataless, for the walk.
     final class Dataless: Sendable {
         let paths = Mutex<Set<String>>([])
+
+        func add(_ paths: [String]) {
+            self.paths.withLock { $0.formUnion(paths) }
+        }
     }
 
     /// Whether a dictation is under way, as EngineTurns says.
@@ -30,6 +34,71 @@ struct FolderIndexTests {
         var isOn: Bool {
             get { value.withLock { $0 } }
             set { value.withLock { $0 = newValue } }
+        }
+    }
+
+    /// Holds the reads that wait on it until the test opens it, and counts how many waited
+    /// at once.
+    final class Gate: Sendable {
+        private struct State {
+            var waiting: [CheckedContinuation<Void, Never>] = []
+            var arrivals: [CheckedContinuation<Void, Never>] = []
+            var isOpen = false
+            var mostAtOnce = 0
+        }
+
+        private let state = Mutex(State())
+
+        var waiting: Int {
+            state.withLock { $0.waiting.count }
+        }
+
+        var mostAtOnce: Int {
+            state.withLock { $0.mostAtOnce }
+        }
+
+        func wait() async {
+            await withCheckedContinuation { continuation in
+                let arrivals = state.withLock { state -> [CheckedContinuation<Void, Never>]? in
+                    guard !state.isOpen else { return nil }
+                    state.waiting.append(continuation)
+                    state.mostAtOnce = max(state.mostAtOnce, state.waiting.count)
+                    defer { state.arrivals = [] }
+                    return state.arrivals
+                }
+                guard let arrivals else {
+                    continuation.resume()
+                    return
+                }
+                for arrival in arrivals {
+                    arrival.resume()
+                }
+            }
+        }
+
+        /// Returns once a read waits.
+        func untilARead() async {
+            await withCheckedContinuation { continuation in
+                let now = state.withLock { state in
+                    guard state.waiting.isEmpty else { return true }
+                    state.arrivals.append(continuation)
+                    return false
+                }
+                if now {
+                    continuation.resume()
+                }
+            }
+        }
+
+        func open() {
+            let waiting = state.withLock { state in
+                state.isOpen = true
+                defer { state.waiting = [] }
+                return state.waiting
+            }
+            for waiter in waiting {
+                waiter.resume()
+            }
         }
     }
 
@@ -50,6 +119,7 @@ struct FolderIndexTests {
         var onSleep: (() async -> Void)?
         private(set) var sleeps = 0
         private(set) var deliveries: [@Sendable (FolderEvents.Changes) -> Void] = []
+        private(set) var watched: [[URL]] = []
         private(set) var watchedSince: [UInt64?] = []
         private(set) var stops = 0
 
@@ -83,16 +153,16 @@ struct FolderIndexTests {
                     reads.names.withLock { $0.append(url.lastPathComponent) }
                     return await reader(url)
                 },
-                sweepInterval: .seconds(3_600),
                 sleep: { [weak self] duration in
-                    if duration >= .seconds(60) {
+                    if duration >= FolderIndex.sweepGap {
                         try await Task.sleep(for: duration)
                     } else {
                         await self?.slept()
                     }
                 },
-                watch: { [unowned self] _, since, deliver in
+                watch: { [unowned self] folders, since, deliver in
                     self.deliveries.append(deliver)
+                    self.watched.append(folders)
                     self.watchedSince.append(since)
                     return { [unowned self] in self.stops += 1 }
                 })
@@ -140,6 +210,18 @@ struct FolderIndexTests {
             await index.waitUntilIdle()
         }
 
+        /// Ticks the timer, and waits until the sweeps it started are done.
+        func tick() async {
+            index.sweepChangedProjects()
+            await index.waitUntilIdle()
+        }
+
+        /// Hands changes to the index and ticks the timer.
+        func deliverAndTick(_ changes: FolderEvents.Changes) async {
+            await deliver(changes)
+            await tick()
+        }
+
         func start(_ project: UUID? = nil, folders: [URL]? = nil) async {
             index.start(project: project ?? alpha, folders: folders ?? [folderURL])
             await index.waitUntilIdle()
@@ -164,283 +246,457 @@ struct FolderIndexTests {
         }
     }
 
+    /// Runs `body` with a fixture, and cleans up before it returns, also after a failure.
+    private func withFixture(
+        limits: FolderIndex.Limits = FolderIndex.Limits(),
+        dictation: Dictation = Dictation(),
+        read: (@Sendable (URL) async -> Result<FileTextResult, FileSkipReason>)? = nil,
+        _ body: (Fixture) async throws -> Void
+    ) async throws {
+        let fixture = try await Fixture(limits: limits, dictation: dictation, read: read)
+        do {
+            try await body(fixture)
+        } catch {
+            await fixture.cleanUp()
+            throw error
+        }
+        await fixture.cleanUp()
+    }
+
     @Test func indexesTheTextOfAFolderAndSearchFindsIt() async throws {
-        let fixture = try await Fixture()
-        defer { Task { await fixture.cleanUp() } }
-        try fixture.write("合同.md", "# 付款\n\n合同付款条款需要确认。")
-        try fixture.write("sub/notes.txt", "The print run is 500 calendars.")
-        try fixture.write("budget.xlsx", "x")
-        try fixture.write(".draft.md", "hidden")
-        try fixture.write("empty.txt", "   \n")
-        await fixture.start()
+        try await withFixture { fixture in
+            try fixture.write("合同.md", "# 付款\n\n合同付款条款需要确认。")
+            try fixture.write("sub/notes.txt", "The print run is 500 calendars.")
+            try fixture.write("budget.xlsx", "x")
+            try fixture.write(".draft.md", "hidden")
+            try fixture.write("empty.txt", "   \n")
+            await fixture.start()
 
-        #expect(fixture.reads.all.sorted() == ["empty.txt", "notes.txt", "合同.md"])
-        let report = try #require(fixture.index.reports[fixture.alpha])
-        #expect(report.indexed == 2)
-        #expect(report.chunks == 2)
-        #expect(report.textBytes == Int64("# 付款\n\n合同付款条款需要确认。".utf8.count + "The print run is 500 calendars.".utf8.count))
-        #expect(report.hiddenText == 0)
-        #expect(report.skipped == [.spreadsheetOrSlides: 1, .hidden: 1, .noText: 1])
-        #expect(report.refusedFolders.isEmpty)
-        #expect(!report.reachedFileLimit && !report.reachedTextLimit && !report.isIndexing)
+            #expect(fixture.reads.all.sorted() == ["empty.txt", "notes.txt", "合同.md"])
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 2)
+            #expect(report.chunks == 2)
+            #expect(report.textBytes == Int64("# 付款\n\n合同付款条款需要确认。".utf8.count + "The print run is 500 calendars.".utf8.count))
+            #expect(report.hiddenText == 0)
+            #expect(report.skipped == [.spreadsheetOrSlides: 1, .hidden: 1, .noText: 1])
+            #expect(report.refusedFolders.isEmpty)
+            #expect(!report.reachedFileLimit && !report.reachedTextLimit && !report.isIndexing)
 
-        let hit = try #require(try await fixture.search("合同", in: [fixture.alpha]).first)
-        #expect(hit.file.path == fixture.folder + "/合同.md")
-        #expect(hit.heading == "付款")
-        #expect(hit.project == fixture.alpha)
-        #expect(try await fixture.search("calendars").map(\.file.lastPathComponent) == ["notes.txt"])
-        // The file name counts as words of its chunks.
-        #expect(try await fixture.search("notes").map(\.file.lastPathComponent) == ["notes.txt"])
+            let hit = try #require(try await fixture.search("合同", in: [fixture.alpha]).first)
+            #expect(hit.file.path == fixture.folder + "/合同.md")
+            #expect(hit.heading == "付款")
+            #expect(hit.project == fixture.alpha)
+            #expect(try await fixture.search("calendars").map(\.file.lastPathComponent) == ["notes.txt"])
+            // The file name counts as words of its chunks.
+            #expect(try await fixture.search("notes").map(\.file.lastPathComponent) == ["notes.txt"])
 
-        let skipped = try await fixture.index.skippedFiles(project: fixture.alpha)
-        #expect(skipped.map(\.url.lastPathComponent) == ["budget.xlsx", "empty.txt"])
-        #expect(skipped.map(\.reason) == [.spreadsheetOrSlides, .noText])
-        #expect(skipped[1].modified != nil)
-        #expect(fixture.watchedSince == [nil])
-        try await fixture.expectTablesAgree()
+            let skipped = try await fixture.index.skippedFiles(project: fixture.alpha)
+            #expect(skipped.map(\.url.lastPathComponent) == ["budget.xlsx", "empty.txt"])
+            #expect(skipped.map(\.reason) == [.spreadsheetOrSlides, .noText])
+            #expect(skipped[1].modified != nil)
+            #expect(fixture.watchedSince == [nil])
+            try await fixture.expectTablesAgree()
+        }
     }
 
-    @Test func aSweepReadsOnlyWhatChangedAndDropsWhatIsGone() async throws {
-        let fixture = try await Fixture()
-        defer { Task { await fixture.cleanUp() } }
-        let old = Date(timeIntervalSince1970: 1_760_000_000)
-        try fixture.write("合同.md", "合同付款条款需要确认。", modified: old)
-        try fixture.write("notes.txt", "The print run is 500 calendars.", modified: old)
-        try fixture.write("same.txt", "Lamps arrive on Friday.", modified: old)
-        await fixture.start()
-        #expect(fixture.reads.all.count == 3)
+    /// Changed folders are swept at the next tick, which reads only what changed and drops
+    /// what is gone.
+    @Test func aSweepAtTheNextTickReadsOnlyWhatChangedAndDropsWhatIsGone() async throws {
+        try await withFixture { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            try fixture.write("合同.md", "合同付款条款需要确认。", modified: old)
+            try fixture.write("notes.txt", "The print run is 500 calendars.", modified: old)
+            try fixture.write("same.txt", "Lamps arrive on Friday.", modified: old)
+            await fixture.start()
+            #expect(fixture.reads.all.count == 3)
 
-        try fixture.write("notes.txt", "The print run is 800 posters.", modified: old.addingTimeInterval(60))
-        try fixture.write("new.md", "New brochure text.")
-        try FileManager.default.removeItem(atPath: fixture.folder + "/合同.md")
-        await fixture.deliver(FolderEvents.Changes(changed: [fixture.folder + "/notes.txt", fixture.folder + "/new.md"], lastEventID: 7))
+            try fixture.write("notes.txt", "The print run is 800 posters.", modified: old.addingTimeInterval(60))
+            try fixture.write("new.md", "New brochure text.")
+            try FileManager.default.removeItem(atPath: fixture.folder + "/合同.md")
+            await fixture.deliver(FolderEvents.Changes(changed: [fixture.folder + "/notes.txt", fixture.folder + "/new.md"], lastEventID: 7))
+            // Nothing is read before the tick.
+            #expect(fixture.reads.all.count == 3)
+            #expect(fixture.index.isIdle)
 
-        #expect(fixture.reads.all.dropFirst(3).sorted() == ["new.md", "notes.txt"])
-        #expect(try await fixture.search("合同").isEmpty)
-        #expect(try await fixture.search("calendars").isEmpty)
-        #expect(try await fixture.search("posters").count == 1)
-        #expect(try await fixture.search("lamps").count == 1)
-        #expect(fixture.index.reports[fixture.alpha]?.indexed == 3)
-        try await fixture.expectTablesAgree()
+            await fixture.tick()
+            #expect(fixture.reads.all.dropFirst(3).sorted() == ["new.md", "notes.txt"])
+            #expect(try await fixture.search("合同").isEmpty)
+            #expect(try await fixture.search("calendars").isEmpty)
+            #expect(try await fixture.search("posters").count == 1)
+            #expect(try await fixture.search("lamps").count == 1)
+            #expect(fixture.index.reports[fixture.alpha]?.indexed == 3)
+            try await fixture.expectTablesAgree()
+
+            // A tick without changes sweeps nothing.
+            await fixture.tick()
+            #expect(fixture.reads.all.count == 5)
+        }
     }
 
-    /// A rename moves the file's row, so the file is not read again. A renamed folder moves
-    /// the rows of its files.
+    /// A rename moves the file's row at once, so the file is not read again. A renamed folder
+    /// moves the rows of its files.
     @Test func aRenameMovesTheRowWithoutReadingTheFileAgain() async throws {
-        let fixture = try await Fixture()
-        defer { Task { await fixture.cleanUp() } }
-        try fixture.write("notes.txt", "The print run is 500 calendars.")
-        try fixture.write("sub/plan.md", "灯具采购计划。")
-        await fixture.start()
-        #expect(fixture.reads.all.count == 2)
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "The print run is 500 calendars.")
+            try fixture.write("sub/plan.md", "灯具采购计划。")
+            await fixture.start()
+            #expect(fixture.reads.all.count == 2)
 
-        try FileManager.default.moveItem(atPath: fixture.folder + "/notes.txt", toPath: fixture.folder + "/Print notes.txt")
-        try FileManager.default.moveItem(atPath: fixture.folder + "/sub", toPath: fixture.folder + "/plans")
-        await fixture.deliver(FolderEvents.Changes(renamed: [
-            FolderEvents.Rename(from: fixture.folder + "/notes.txt", to: fixture.folder + "/Print notes.txt"),
-            FolderEvents.Rename(from: fixture.folder + "/sub", to: fixture.folder + "/plans"),
-        ]))
+            try FileManager.default.moveItem(atPath: fixture.folder + "/notes.txt", toPath: fixture.folder + "/Print notes.txt")
+            try FileManager.default.moveItem(atPath: fixture.folder + "/sub", toPath: fixture.folder + "/plans")
+            await fixture.deliver(FolderEvents.Changes(renamed: [
+                FolderEvents.Rename(from: fixture.folder + "/notes.txt", to: fixture.folder + "/Print notes.txt"),
+                FolderEvents.Rename(from: fixture.folder + "/sub", to: fixture.folder + "/plans"),
+            ]))
+            #expect(try await fixture.search("calendars").map(\.file.path) == [fixture.folder + "/Print notes.txt"])
+            #expect(try await fixture.search("灯具采购").map(\.file.path) == [fixture.folder + "/plans/plan.md"])
 
-        #expect(fixture.reads.all.count == 2)
-        #expect(try await fixture.search("calendars").map(\.file.path) == [fixture.folder + "/Print notes.txt"])
-        #expect(try await fixture.search("灯具采购").map(\.file.path) == [fixture.folder + "/plans/plan.md"])
-        #expect(try await fixture.count("SELECT count(*) FROM index_files") == 2)
-        try await fixture.expectTablesAgree()
+            await fixture.tick()
+            #expect(fixture.reads.all.count == 2)
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 2)
+            try await fixture.expectTablesAgree()
+        }
+    }
+
+    /// A rename a sweep already took in, such as one replayed from the stored event, finds
+    /// nothing at its old path and leaves the new path as it is.
+    @Test func aRenameWhoseOldPathHoldsNothingChangesNothing() async throws {
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "The print run is 500 calendars.")
+            await fixture.start()
+            await fixture.deliverAndTick(FolderEvents.Changes(renamed: [
+                FolderEvents.Rename(from: fixture.folder + "/draft.txt", to: fixture.folder + "/notes.txt"),
+            ]))
+            #expect(fixture.reads.all == ["notes.txt"])
+            #expect(try await fixture.search("calendars").count == 1)
+        }
+    }
+
+    /// A removal drops the text at once, without waiting for the tick.
+    @Test func aRemovalDropsTheTextAtOnce() async throws {
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "The print run is 500 calendars.")
+            try fixture.write("sub/plan.md", "灯具采购计划。")
+            try fixture.write("sub plan.md", "Lamps arrive on Friday.")
+            await fixture.start()
+            try FileManager.default.removeItem(atPath: fixture.folder + "/notes.txt")
+            try FileManager.default.removeItem(atPath: fixture.folder + "/sub")
+            await fixture.deliver(FolderEvents.Changes(removed: [fixture.folder + "/notes.txt", fixture.folder + "/sub"]))
+            #expect(try await fixture.search("calendars").isEmpty)
+            #expect(try await fixture.search("灯具采购").isEmpty)
+            // A file whose name starts with the removed folder's name stays.
+            #expect(try await fixture.search("lamps").count == 1)
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 1)
+            try await fixture.expectTablesAgree()
+        }
     }
 
     /// A file that took too long is kept with why and its modification date, so it is read
     /// again only once it changes.
     @Test func aSlowFileIsSkippedUntilItChanges() async throws {
-        let fixture = try await Fixture(read: { url in
+        try await withFixture(read: { url in
             url.lastPathComponent == "slow.pdf" ? .failure(.tooSlow) : await FileTextExtractor().text(of: url)
-        })
-        defer { Task { await fixture.cleanUp() } }
-        let old = Date(timeIntervalSince1970: 1_760_000_000)
-        try fixture.write("slow.pdf", "%PDF", modified: old)
-        try fixture.write("notes.txt", "Calendars.")
-        await fixture.start()
-        #expect(fixture.reads.all.sorted() == ["notes.txt", "slow.pdf"])
-        #expect(fixture.index.reports[fixture.alpha]?.skipped == [.tooSlow: 1])
-        let skipped = try await fixture.index.skippedFiles(project: fixture.alpha)
-        #expect(skipped == [FolderIndex.SkippedFile(url: URL(fileURLWithPath: fixture.folder + "/slow.pdf"), reason: .tooSlow, modified: old)])
+        }) { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            try fixture.write("slow.pdf", "%PDF", modified: old)
+            try fixture.write("notes.txt", "Calendars.")
+            await fixture.start()
+            #expect(fixture.reads.all.sorted() == ["notes.txt", "slow.pdf"])
+            #expect(fixture.index.reports[fixture.alpha]?.skipped == [.tooSlow: 1])
+            let skipped = try await fixture.index.skippedFiles(project: fixture.alpha)
+            #expect(skipped == [FolderIndex.SkippedFile(url: URL(fileURLWithPath: fixture.folder + "/slow.pdf"), reason: .tooSlow, modified: old)])
 
-        await fixture.deliver(FolderEvents.Changes(mustSweep: true))
-        #expect(fixture.reads.all.count == 2)
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.reads.all.count == 2)
 
-        try FileManager.default.setAttributes([.modificationDate: old.addingTimeInterval(1)], ofItemAtPath: fixture.folder + "/slow.pdf")
-        await fixture.deliver(FolderEvents.Changes(changed: [fixture.folder + "/slow.pdf"]))
-        #expect(fixture.reads.all.count == 3)
-        #expect(fixture.reads.all.last == "slow.pdf")
+            try FileManager.default.setAttributes([.modificationDate: old.addingTimeInterval(1)], ofItemAtPath: fixture.folder + "/slow.pdf")
+            await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/slow.pdf"]))
+            #expect(fixture.reads.all.count == 3)
+            #expect(fixture.reads.all.last == "slow.pdf")
+        }
     }
 
     /// No access can pass without a change to the file, so it is tried at every sweep and
     /// only counted.
     @Test func aFileWithoutAccessIsTriedAgain() async throws {
-        let fixture = try await Fixture(read: { url in
+        try await withFixture(read: { url in
             url.lastPathComponent == "locked.txt" ? .failure(.noAccess) : await FileTextExtractor().text(of: url)
-        })
-        defer { Task { await fixture.cleanUp() } }
-        try fixture.write("locked.txt", "Secret.")
-        await fixture.start()
-        #expect(fixture.index.reports[fixture.alpha]?.skipped == [.noAccess: 1])
-        #expect(try await fixture.count("SELECT count(*) FROM index_files") == 0)
-        #expect(try await fixture.index.skippedFiles(project: fixture.alpha).map(\.reason) == [.noAccess])
-        await fixture.deliver(FolderEvents.Changes(mustSweep: true))
-        #expect(fixture.reads.all == ["locked.txt", "locked.txt"])
+        }) { fixture in
+            try fixture.write("locked.txt", "Secret.")
+            await fixture.start()
+            #expect(fixture.index.reports[fixture.alpha]?.skipped == [.noAccess: 1])
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 0)
+            #expect(try await fixture.index.skippedFiles(project: fixture.alpha).map(\.reason) == [.noAccess])
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.reads.all == ["locked.txt", "locked.txt"])
+        }
     }
 
     @Test func itWaitsWhileADictationIsUnderWay() async throws {
-        let fixture = try await Fixture()
-        defer { Task { await fixture.cleanUp() } }
-        try fixture.write("notes.txt", "Calendars.")
-        fixture.dictating = true
-        var readWhileDictating = false
-        fixture.onSleep = { @MainActor [unowned fixture] in
-            readWhileDictating = readWhileDictating || !fixture.reads.all.isEmpty
-            if fixture.sleeps == 3 {
-                fixture.dictating = false
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "Calendars.")
+            fixture.dictating = true
+            var readWhileDictating = false
+            fixture.onSleep = { @MainActor [unowned fixture] in
+                readWhileDictating = readWhileDictating || !fixture.reads.all.isEmpty
+                if fixture.sleeps == 3 {
+                    fixture.dictating = false
+                }
             }
+            await fixture.start()
+            #expect(fixture.sleeps == 3)
+            #expect(!readWhileDictating)
+            #expect(fixture.reads.all == ["notes.txt"])
+            #expect(fixture.index.reports[fixture.alpha]?.indexed == 1)
         }
-        await fixture.start()
-        #expect(fixture.sleeps == 3)
-        #expect(!readWhileDictating)
-        #expect(fixture.reads.all == ["notes.txt"])
-        #expect(fixture.index.reports[fixture.alpha]?.indexed == 1)
     }
 
     /// The writes wait too: a dictation that starts while a file is read holds its chunks
     /// back until it ends.
     @Test func aDictationThatStartsDuringAReadHoldsTheWrite() async throws {
         let dictation = Dictation()
-        let fixture = try await Fixture(dictation: dictation, read: { url in
+        try await withFixture(dictation: dictation, read: { url in
             dictation.isOn = true
             return await FileTextExtractor().text(of: url)
-        })
-        defer { Task { await fixture.cleanUp() } }
-        try fixture.write("notes.txt", "Calendars.")
-        var chunksWhileDictating: Int64 = -1
-        fixture.onSleep = { [unowned fixture] in
-            chunksWhileDictating = (try? await fixture.count("SELECT count(*) FROM index_chunks")) ?? -1
-            fixture.dictating = false
+        }) { fixture in
+            try fixture.write("notes.txt", "Calendars.")
+            var chunksWhileDictating: Int64 = -1
+            fixture.onSleep = { [unowned fixture] in
+                chunksWhileDictating = (try? await fixture.count("SELECT count(*) FROM index_chunks")) ?? -1
+                fixture.dictating = false
+            }
+            await fixture.start()
+            #expect(fixture.sleeps == 1)
+            #expect(chunksWhileDictating == 0)
+            #expect(try await fixture.count("SELECT count(*) FROM index_chunks") == 1)
         }
-        await fixture.start()
-        #expect(fixture.sleeps == 1)
-        #expect(chunksWhileDictating == 0)
-        #expect(try await fixture.count("SELECT count(*) FROM index_chunks") == 1)
     }
 
     @Test func aProjectHoldsAtMostItsFiles() async throws {
-        let fixture = try await Fixture(limits: FolderIndex.Limits(files: 2))
-        defer { Task { await fixture.cleanUp() } }
-        for name in ["a.txt", "b.txt", "c.txt"] {
-            try fixture.write(name, "Text of \(name).")
+        try await withFixture(limits: FolderIndex.Limits(files: 2)) { fixture in
+            for name in ["a.txt", "b.txt", "c.txt"] {
+                try fixture.write(name, "Text of \(name).")
+            }
+            await fixture.start()
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 2)
+            #expect(report.reachedFileLimit)
+            #expect(!report.reachedTextLimit)
         }
-        await fixture.start()
-        let report = try #require(fixture.index.reports[fixture.alpha])
-        #expect(report.indexed == 2)
-        #expect(report.reachedFileLimit)
-        #expect(!report.reachedTextLimit)
     }
 
-    /// The file that passes the text limit is the last one read.
-    @Test func aProjectStopsReadingPastItsText() async throws {
-        let fixture = try await Fixture(limits: FolderIndex.Limits(textBytes: 30))
-        defer { Task { await fixture.cleanUp() } }
-        for name in ["a.txt", "b.txt", "c.txt"] {
-            try fixture.write(name, "Twenty bytes of text")
+    /// The new file that passes the text limit is the last new one read. A file the index
+    /// holds is still read again when it changes, so its old text never stays.
+    @Test func aProjectStopsReadingNewFilesPastItsText() async throws {
+        try await withFixture(limits: FolderIndex.Limits(textBytes: 30)) { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            for name in ["a.txt", "b.txt", "c.txt"] {
+                try fixture.write(name, "Twenty bytes of text", modified: old)
+            }
+            await fixture.start()
+            #expect(fixture.reads.all == ["a.txt", "b.txt"])
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 2)
+            #expect(report.textBytes == 40)
+            #expect(report.reachedTextLimit)
+            // A later sweep reads nothing more.
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.reads.all == ["a.txt", "b.txt"])
+
+            try fixture.write("a.txt", "Posters arrive today", modified: old.addingTimeInterval(60))
+            await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/a.txt"]))
+            #expect(fixture.reads.all == ["a.txt", "b.txt", "a.txt"])
+            #expect(try await fixture.search("posters").map(\.file.lastPathComponent) == ["a.txt"])
+            #expect(fixture.index.reports[fixture.alpha]?.textBytes == 40)
+            #expect(fixture.index.reports[fixture.alpha]?.reachedTextLimit == true)
         }
-        await fixture.start()
-        #expect(fixture.reads.all == ["a.txt", "b.txt"])
-        let report = try #require(fixture.index.reports[fixture.alpha])
-        #expect(report.indexed == 2)
-        #expect(report.textBytes == 40)
-        #expect(report.reachedTextLimit)
-        // A later sweep reads nothing more.
-        await fixture.deliver(FolderEvents.Changes(mustSweep: true))
-        #expect(fixture.reads.all == ["a.txt", "b.txt"])
     }
 
     @Test func filesThatHidTextAreCounted() async throws {
-        let fixture = try await Fixture(read: { url in
+        try await withFixture(read: { url in
             guard url.lastPathComponent == "brief.txt" else { return await FileTextExtractor().text(of: url) }
             return .success(FileTextResult(pages: [.init(number: nil, text: "The print run is 500 calendars.")], hiddenRuns: 2, modified: .now, isCut: false))
-        })
-        defer { Task { await fixture.cleanUp() } }
-        try fixture.write("brief.txt", "x")
-        try fixture.write("plain.txt", "Calendars too.")
-        await fixture.start()
-        #expect(fixture.index.reports[fixture.alpha]?.hiddenText == 1)
-        #expect(try await fixture.index.filesWithHiddenText(project: fixture.alpha).map(\.lastPathComponent) == ["brief.txt"])
-        let hits = try await fixture.search("calendars")
-        #expect(Dictionary(uniqueKeysWithValues: hits.map { ($0.file.lastPathComponent, $0.fileHiddenRuns) }) == ["brief.txt": 2, "plain.txt": 0])
+        }) { fixture in
+            try fixture.write("brief.txt", "x")
+            try fixture.write("plain.txt", "Calendars too.")
+            await fixture.start()
+            #expect(fixture.index.reports[fixture.alpha]?.hiddenText == 1)
+            #expect(try await fixture.index.filesWithHiddenText(project: fixture.alpha).map(\.lastPathComponent) == ["brief.txt"])
+            let hits = try await fixture.search("calendars")
+            #expect(Dictionary(uniqueKeysWithValues: hits.map { ($0.file.lastPathComponent, $0.fileHiddenRuns) }) == ["brief.txt": 2, "plain.txt": 0])
+        }
     }
 
     /// A file removed to save space cannot be read without a download, so its text stays.
     @Test func aFileNoLongerOnThisMacKeepsItsText() async throws {
-        let fixture = try await Fixture()
-        defer { Task { await fixture.cleanUp() } }
-        let notes = try fixture.write("notes.txt", "The print run is 500 calendars.")
-        await fixture.start()
-        _ = fixture.dataless.paths.withLock { $0.insert(notes.path) }
-        await fixture.deliver(FolderEvents.Changes(mustSweep: true))
-        #expect(try await fixture.search("calendars").count == 1)
-        #expect(fixture.index.reports[fixture.alpha]?.skipped[.dataless] == 1)
-        #expect(fixture.reads.all == ["notes.txt"])
+        try await withFixture { fixture in
+            let notes = try fixture.write("notes.txt", "The print run is 500 calendars.")
+            await fixture.start()
+            fixture.dataless.add([notes.path])
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(try await fixture.search("calendars").count == 1)
+            #expect(fixture.index.reports[fixture.alpha]?.skipped[.dataless] == 1)
+            #expect(fixture.reads.all == ["notes.txt"])
+        }
     }
 
-    @Test func refusedAndRemovedFolders() async throws {
-        let fixture = try await Fixture()
-        defer { Task { await fixture.cleanUp() } }
-        let second = URL(fileURLWithPath: fixture.folder + "/../Second", isDirectory: true).standardizedFileURL
-        try fixture.write(second.path + "/plan.txt", "Lamps arrive on Friday.")
-        try fixture.write("notes.txt", "Calendars.")
-        let missing = URL(fileURLWithPath: fixture.folder + "/../Missing", isDirectory: true).standardizedFileURL
-        await fixture.start(folders: [fixture.folderURL, second, missing])
-        let report = try #require(fixture.index.reports[fixture.alpha])
-        #expect(report.indexed == 2)
-        #expect(report.refusedFolders == [missing: .notAFolder])
+    /// A folder removed to save space lists none of its files, and they keep their text. A
+    /// file that is really gone does not.
+    @Test func theFilesOfAFolderNoLongerOnThisMacKeepTheirText() async throws {
+        try await withFixture { fixture in
+            try fixture.write("sub/plan.md", "灯具采购计划。")
+            try fixture.write("sub/deeper/notes.txt", "The print run is 500 calendars.")
+            try fixture.write("gone.txt", "Lamps arrive on Friday.")
+            await fixture.start()
+            fixture.dataless.add([fixture.folder + "/sub"])
+            try FileManager.default.removeItem(atPath: fixture.folder + "/gone.txt")
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(try await fixture.search("灯具采购").count == 1)
+            #expect(try await fixture.search("calendars").count == 1)
+            #expect(try await fixture.search("lamps").isEmpty)
+            #expect(fixture.reads.all.count == 3)
+            #expect(fixture.index.reports[fixture.alpha]?.textBytes == Int64("灯具采购计划。".utf8.count + "The print run is 500 calendars.".utf8.count))
+        }
+    }
 
-        // Without the second folder, its files leave the index.
-        await fixture.start(folders: [fixture.folderURL])
-        #expect(try await fixture.search("lamps").isEmpty)
-        #expect(fixture.index.reports[fixture.alpha]?.indexed == 1)
-        #expect(fixture.stops == 1)
-        try await fixture.expectTablesAgree()
+    /// The walk names at most `FolderWalk.maximumListedSkips` skipped files. Files not on
+    /// this Mac past them keep their text too.
+    @Test func filesNoLongerOnThisMacPastTheListedSkipsKeepTheirText() async throws {
+        try await withFixture { fixture in
+            // The walk takes the folders of a folder last name first, so these fill the list
+            // of skips before it reaches the notes.
+            var away: [String] = []
+            for number in 0..<FolderWalk.maximumListedSkips {
+                try away.append(fixture.write("b/away \(number).txt", "Away.").path)
+            }
+            fixture.dataless.add(away)
+            try fixture.write("a/notes.txt", "The print run is 500 calendars.")
+            await fixture.start()
+            #expect(fixture.reads.all == ["notes.txt"])
+            #expect(fixture.index.reports[fixture.alpha]?.skipped[.dataless] == FolderWalk.maximumListedSkips)
+
+            fixture.dataless.add([fixture.folder + "/a/notes.txt"])
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.index.reports[fixture.alpha]?.skipped[.dataless] == FolderWalk.maximumListedSkips + 1)
+            #expect(try await fixture.search("calendars").count == 1)
+        }
+    }
+
+    /// Added folders the walk refuses are reported and never watched. A missing folder is
+    /// watched, so its files are seen once it appears.
+    @Test func refusedAndRemovedFolders() async throws {
+        try await withFixture { fixture in
+            let second = URL(fileURLWithPath: fixture.folder + "/../Second", isDirectory: true).standardizedFileURL
+            try fixture.write(second.path + "/plan.txt", "Lamps arrive on Friday.")
+            try fixture.write("notes.txt", "Calendars.")
+            let missing = URL(fileURLWithPath: fixture.folder + "/../Missing", isDirectory: true).standardizedFileURL
+            // A folder named like Mail's data, such as one in a backup, made up for the test.
+            let mailCopy = URL(fileURLWithPath: fixture.folder + "/../Backup/Library/Mail", isDirectory: true).standardizedFileURL
+            try fixture.write(mailCopy.path + "/note.txt", "Posters.")
+            await fixture.start(folders: [fixture.folderURL, second, missing, mailCopy])
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 2)
+            #expect(report.refusedFolders == [missing: .notAFolder, mailCopy: .mailData])
+            #expect(fixture.watched == [[fixture.folderURL, second, missing]])
+            #expect(!fixture.reads.all.contains("note.txt"))
+
+            // Without the second folder, its files leave the index.
+            await fixture.start(folders: [fixture.folderURL])
+            #expect(try await fixture.search("lamps").isEmpty)
+            #expect(fixture.index.reports[fixture.alpha]?.indexed == 1)
+            #expect(fixture.stops == 1)
+            try await fixture.expectTablesAgree()
+        }
     }
 
     @Test func theLastEventIsKeptForTheNextStart() async throws {
-        let fixture = try await Fixture()
-        defer { Task { await fixture.cleanUp() } }
-        try fixture.write("notes.txt", "Calendars.")
-        await fixture.start()
-        await fixture.deliver(FolderEvents.Changes(changed: [fixture.folder + "/notes.txt"], lastEventID: 4_242))
-        fixture.index.stop(project: fixture.alpha)
-        #expect(fixture.stops == 1)
-        #expect(fixture.index.reports[fixture.alpha] == nil)
-        await fixture.start()
-        #expect(fixture.watchedSince == [nil, 4_242])
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "Calendars.")
+            await fixture.start()
+            await fixture.deliver(FolderEvents.Changes(changed: [fixture.folder + "/notes.txt"], lastEventID: 4_242))
+            fixture.index.stop(project: fixture.alpha)
+            #expect(fixture.stops == 1)
+            #expect(fixture.index.reports[fixture.alpha] == nil)
+            await fixture.start()
+            #expect(fixture.watchedSince == [nil, 4_242])
+        }
     }
 
     /// Stopping keeps what the index holds. Forgetting a project removes all of it, and
     /// nothing of the other projects.
     @Test func stopKeepsTheIndexAndForgetRemovesIt() async throws {
-        let fixture = try await Fixture()
-        defer { Task { await fixture.cleanUp() } }
-        try fixture.write("notes.txt", "灯具采购合同已经签好。")
-        let other = URL(fileURLWithPath: fixture.folder + "/../Other", isDirectory: true).standardizedFileURL
-        try fixture.write(other.path + "/plan.txt", "灯具采购合同还在谈。")
-        await fixture.start(fixture.alpha)
-        await fixture.start(fixture.beta, folders: [other])
-        #expect(try await fixture.search("灯具采购").count == 2)
+        try await withFixture { fixture in
+            try fixture.write("notes.txt", "灯具采购合同已经签好。")
+            let other = URL(fileURLWithPath: fixture.folder + "/../Other", isDirectory: true).standardizedFileURL
+            try fixture.write(other.path + "/plan.txt", "灯具采购合同还在谈。")
+            await fixture.start(fixture.alpha)
+            await fixture.start(fixture.beta, folders: [other])
+            #expect(try await fixture.search("灯具采购").count == 2)
 
-        fixture.index.stop(project: fixture.alpha)
-        #expect(try await fixture.search("灯具采购", in: [fixture.alpha]).count == 1)
+            fixture.index.stop(project: fixture.alpha)
+            #expect(try await fixture.search("灯具采购", in: [fixture.alpha]).count == 1)
 
-        try await fixture.index.forget(project: fixture.beta)
-        #expect(try await fixture.search("灯具采购", in: [fixture.beta]).isEmpty)
-        #expect(try await fixture.search("灯具采购", in: [fixture.alpha]).count == 1)
-        #expect(try await fixture.count("SELECT count(*) FROM index_files WHERE project = '\(fixture.beta.uuidString)'") == 0)
-        try await fixture.expectTablesAgree()
-        #expect(fixture.index.isIdle)
+            try await fixture.index.forget(project: fixture.beta)
+            #expect(try await fixture.search("灯具采购", in: [fixture.beta]).isEmpty)
+            #expect(try await fixture.search("灯具采购", in: [fixture.alpha]).count == 1)
+            #expect(try await fixture.count("SELECT count(*) FROM index_files WHERE project = '\(fixture.beta.uuidString)'") == 0)
+            try await fixture.expectTablesAgree()
+            #expect(fixture.index.isIdle)
+        }
+    }
+
+    /// Forgetting a project while one of its files is read waits for that file, without
+    /// polling, even when the task that forgets is cancelled, and then removes all of it.
+    @Test func forgetWaitsForTheFileBeingRead() async throws {
+        let gate = Gate()
+        try await withFixture(read: { url in
+            if url.lastPathComponent == "slow.txt" {
+                await gate.wait()
+            }
+            return await FileTextExtractor().text(of: url)
+        }) { fixture in
+            try fixture.write("notes.txt", "Calendars.")
+            try fixture.write("slow.txt", "Posters.")
+            fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
+            await gate.untilARead()
+
+            let forgetting = Task { try await fixture.index.forget(project: fixture.alpha) }
+            forgetting.cancel()
+            for _ in 0..<100 {
+                await Task.yield()
+            }
+            gate.open()
+            try await forgetting.value
+            #expect(fixture.sleeps == 0)
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 0)
+            #expect(try await fixture.count("SELECT count(*) FROM index_chunks") == 0)
+            try await fixture.expectTablesAgree()
+        }
+    }
+
+    /// A project started again right after its stop waits until the stopped worker left its
+    /// file, so only one worker reads at a time.
+    @Test func aWorkerStartedAgainWaitsForTheStoppedOne() async throws {
+        let gate = Gate()
+        try await withFixture(read: { url in
+            await gate.wait()
+            return await FileTextExtractor().text(of: url)
+        }) { fixture in
+            try fixture.write("slow.txt", "Posters.")
+            fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
+            await gate.untilARead()
+            fixture.index.stop(project: fixture.alpha)
+            fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
+            for _ in 0..<100 {
+                await Task.yield()
+            }
+            #expect(gate.waiting == 1)
+            gate.open()
+            await fixture.index.waitUntilIdle()
+            #expect(gate.mostAtOnce == 1)
+            #expect(fixture.reads.all == ["slow.txt", "slow.txt"])
+            #expect(try await fixture.count("SELECT count(*) FROM index_files") == 1)
+            #expect(fixture.index.isIdle)
+        }
     }
 }
