@@ -113,7 +113,7 @@ grep -q "Authority=$IDENTITY" <<<"$details" || { echo "Not signed with $IDENTITY
 grep -q "flags=.*runtime" <<<"$details" || { echo "The hardened runtime is off" >&2; exit 1; }
 grep -q "Timestamp=" <<<"$details" || { echo "The signature has no secure timestamp" >&2; exit 1; }
 entitlements="$(codesign -d --entitlements - --xml "$app" 2>/dev/null | plutil -convert json -o - -)"
-[[ "$entitlements" == '{"com.apple.security.device.audio-input":true}' ]] || {
+[[ "$entitlements" == '{"com.apple.security.automation.apple-events":true,"com.apple.security.device.audio-input":true}' ]] || {
     echo "Unexpected entitlements: $entitlements" >&2
     exit 1
 }
@@ -127,7 +127,7 @@ for code in "$sparkle_framework" "$sparkle_framework/Versions/B/Autoupdate" "$sp
 done
 shown="$(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString)"
 [[ "$shown" == "$version" ]] || { echo "The app says version $shown" >&2; exit 1; }
-echo "Signed: Developer ID, hardened runtime, audio input only, arm64, version $version"
+echo "Signed: Developer ID, hardened runtime, audio input and Apple Events only, arm64, version $version"
 
 submit() {
     local file="$1"
