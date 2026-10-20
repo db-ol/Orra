@@ -74,19 +74,19 @@ nonisolated enum SenderChecks {
             return true
         }
         let name = registeredName(shape)
-        for known in guarded {
-            let knownShape = skeleton(known)
-            if shape == knownShape {
+        for real in guarded {
+            let realShape = skeleton(real)
+            if shape == realShape {
                 return true
             }
-            let knownName = registeredName(knownShape)
-            guard !name.isEmpty, !knownName.isEmpty else { continue }
-            if knownName.count >= 5, holdsAsPart(name, knownName) {
+            let realName = registeredName(realShape)
+            guard !name.isEmpty, !realName.isEmpty else { continue }
+            if realName.count >= 5, holdsAsPart(name, realName) {
                 return true
             }
-            if knownName.count >= 6, abs(name.count - knownName.count) <= 2 {
-                let distance = editDistance(Array(name), Array(knownName))
-                if distance <= (knownName.count >= 10 ? 2 : 1) {
+            if realName.count >= 6, abs(name.count - realName.count) <= 2 {
+                let distance = editDistance(Array(name), Array(realName))
+                if distance <= (realName.count >= 10 ? 2 : 1) {
                     return true
                 }
             }
