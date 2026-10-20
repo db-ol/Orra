@@ -37,8 +37,10 @@ nonisolated struct MailHeaders: Sendable, Equatable {
 
     /// Parses a header block in bytes. Each value is read as UTF-8 when its bytes are valid
     /// UTF-8, or else as GB18030, or else as Windows-1252, since mail that does not follow
-    /// RFC 2047 often carries raw bytes in the subject or a name.
-    init(bytes: ArraySlice<UInt8>, limits: Limits = Limits()) {
+    /// RFC 2047 often carries raw bytes in the subject or a name. With `readsCharacters`, the
+    /// bytes are the characters of a source that came as text, one byte each, and a value
+    /// that is not UTF-8 reads as those characters.
+    init(bytes: ArraySlice<UInt8>, limits: Limits = Limits(), readsCharacters: Bool = false) {
         var fields: [Field] = []
         var name: String?
         var value: [UInt8] = []
@@ -54,7 +56,8 @@ nonisolated struct MailHeaders: Sendable, Equatable {
                 value.removeSubrange(limits.maximumValueBytes...)
                 isCut = true
             }
-            fields.append(Field(name: name, value: Self.headerText(value)))
+            let text = readsCharacters ? String(bytes: value, encoding: .utf8) ?? String(bytes: value, encoding: .isoLatin1) : nil
+            fields.append(Field(name: name, value: text ?? Self.headerText(value)))
         }
 
         var start = bytes.startIndex
@@ -143,10 +146,12 @@ nonisolated struct MailHeaders: Sendable, Equatable {
     /// characters become spaces, so a decoded value never spans lines.
     static func decodedWords(_ value: String) -> String {
         let bytes = Array(value.utf8)
+        guard bytes.count > 1 else { return oneLine(value) }
         var result = ""
         var literalStart = 0
         var pending: (charset: String, bytes: [UInt8])?
         var index = 0
+        var ends = WordEnds(bytes)
 
         func flushPending() {
             if let word = pending {
@@ -157,7 +162,7 @@ nonisolated struct MailHeaders: Sendable, Equatable {
 
         while index < bytes.count {
             guard bytes[index] == 0x3D, index + 1 < bytes.count, bytes[index + 1] == 0x3F,
-                  let word = encodedWord(bytes, at: index) else {
+                  let word = encodedWord(bytes, at: index, ends: &ends) else {
                 index += 1
                 continue
             }
@@ -181,9 +186,48 @@ nonisolated struct MailHeaders: Sendable, Equatable {
         return oneLine(result)
     }
 
+    /// Where the next "?=" and the next byte that may not stand in an encoded word are, from
+    /// a position that only moves forward, so a value full of words that never end takes
+    /// linear time.
+    private struct WordEnds {
+        let bytes: [UInt8]
+        private var terminatorAt = 0
+        private var breakerAt = 0
+
+        init(_ bytes: [UInt8]) {
+            self.bytes = bytes
+            terminatorAt = Self.find(in: bytes, from: 0) { $0 + 1 < bytes.count && bytes[$0] == 0x3F && bytes[$0 + 1] == 0x3D }
+            breakerAt = Self.find(in: bytes, from: 0) { bytes[$0] <= 0x20 || bytes[$0] >= 0x7F }
+        }
+
+        private static func find(in bytes: [UInt8], from start: Int, where test: (Int) -> Bool) -> Int {
+            var index = start
+            while index < bytes.count, !test(index) { index += 1 }
+            return index
+        }
+
+        /// The first "?=" at or after `start`.
+        mutating func terminator(from start: Int) -> Int {
+            if start > terminatorAt {
+                let bytes = bytes
+                terminatorAt = Self.find(in: bytes, from: start) { $0 + 1 < bytes.count && bytes[$0] == 0x3F && bytes[$0 + 1] == 0x3D }
+            }
+            return terminatorAt
+        }
+
+        /// The first byte at or after `start` that may not stand in a word.
+        mutating func breaker(from start: Int) -> Int {
+            if start > breakerAt {
+                let bytes = bytes
+                breakerAt = Self.find(in: bytes, from: start) { bytes[$0] <= 0x20 || bytes[$0] >= 0x7F }
+            }
+            return breakerAt
+        }
+    }
+
     /// The encoded word that starts at `start`, with its charset, its decoded bytes and the
     /// index after it, or nil when the text there is not one.
-    private static func encodedWord(_ bytes: [UInt8], at start: Int) -> (charset: String, bytes: [UInt8], end: Int)? {
+    private static func encodedWord(_ bytes: [UInt8], at start: Int, ends: inout WordEnds) -> (charset: String, bytes: [UInt8], end: Int)? {
         var index = start + 2
         let charsetStart = index
         while index < bytes.count, bytes[index] != 0x3F {
@@ -199,12 +243,8 @@ nonisolated struct MailHeaders: Sendable, Equatable {
         // RFC 2047 caps a word at 75 characters. A longer cap stays lenient with senders,
         // and bounds the work on a value full of words that never end.
         let textStart = index + 3
-        var textEnd = textStart
-        while textEnd + 1 < bytes.count, !(bytes[textEnd] == 0x3F && bytes[textEnd + 1] == 0x3D) {
-            if bytes[textEnd] <= 0x20 || bytes[textEnd] >= 0x7F || textEnd - textStart > maximumWordBytes { return nil }
-            textEnd += 1
-        }
-        guard textEnd + 1 < bytes.count else { return nil }
+        let textEnd = ends.terminator(from: textStart)
+        guard textEnd + 1 < bytes.count, textEnd - textStart <= maximumWordBytes, ends.breaker(from: textStart) >= textEnd else { return nil }
         let encoded = bytes[textStart..<textEnd]
         let decoded = encoding == 0x62 ? base64(encoded) : quotedPrintable(encoded, underscoreIsSpace: true)
         return (charset, decoded, textEnd + 2)
@@ -215,6 +255,7 @@ nonisolated struct MailHeaders: Sendable, Equatable {
     /// Text with line breaks and other control characters, tab included, turned into
     /// spaces, and trimmed.
     static func oneLine(_ text: String) -> String {
+        guard text.utf8.contains(where: { $0 < 0x20 || $0 == 0x7F || $0 == 0xC2 }) else { return text.trimmingCharacters(in: .whitespaces) }
         var scalars = String.UnicodeScalarView()
         for scalar in text.unicodeScalars {
             scalars.append(scalar.properties.generalCategory == .control ? " " : scalar)

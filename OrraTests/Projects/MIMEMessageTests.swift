@@ -215,17 +215,18 @@ struct MIMEMessageTests {
         ]))
         #expect(unclosed.bodies.map(\.text) == ["Part one", "Part two"])
 
-        // A boundary that never shows: the body reads as plain text.
+        // A multipart that cannot be split gives no text, since its parts as plain text
+        // would show markup and hidden text that Mail never shows.
         let missing = MIMEMessage(source: Self.source([
             "Content-Type: multipart/mixed; boundary=never",
             "",
             "Just text",
         ]))
-        #expect(missing.bodies.map(\.text) == ["Just text"])
-
-        // A multipart without a boundary reads as plain text.
+        #expect(missing.bodies.isEmpty)
+        #expect(missing.isCut)
         let noBoundary = MIMEMessage(source: Self.source(["Content-Type: multipart/mixed", "", "Text"]))
-        #expect(noBoundary.bodies.map(\.text) == ["Text"])
+        #expect(noBoundary.bodies.isEmpty)
+        #expect(noBoundary.isCut)
 
         // A line that only starts like a delimiter is text.
         let lookalike = MIMEMessage(source: Self.source([
@@ -330,8 +331,72 @@ struct MIMEMessageTests {
 
     @Test func parsingOffTheMainActorGivesTheSameMessage() async {
         let source = Self.source(["Subject: async", "", "Body"])
-        #expect(await MIMEMessage.parsed(source) == MIMEMessage(source: source))
         #expect(await MIMEMessage.parsed("Subject: async\r\n\r\nBody") == MIMEMessage(source: source))
+    }
+
+    @Test func aTextSourceOfLatinCharactersReadsAsTheyCame() {
+        // Mail may give an 8 bit UTF-8 message as the characters it decoded. They all fit in
+        // a byte, but are not the source's bytes, so they read as they came.
+        let decoded = "Subject: Réunion à 10h\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\nCafé à 10h, Größe ok."
+        let message = MIMEMessage(source: decoded)
+        #expect(message.headers.subject == "Réunion à 10h")
+        #expect(message.bodies.map(\.text) == ["Café à 10h, Größe ok."])
+    }
+
+    @Test(arguments: [
+        // An encoded word is a valid boundary, and stays as it is.
+        "Content-Type: multipart/alternative; boundary=\"=?utf-8?q?x?=\"",
+        // A comment may stand in the field.
+        "Content-Type: multipart/alternative (generated); boundary=\"b1\"",
+        "Content-Type: multipart/alternative; boundary=\"b1\"; boundary=\"b2\"",
+    ])
+    func multipartFieldsReadAsMailReadsThem(_ field: String) {
+        let boundary = field.contains("=?utf-8") ? "=?utf-8?q?x?=" : "b1"
+        let message = MIMEMessage(source: Self.source([
+            field,
+            "",
+            "--\(boundary)",
+            "Content-Type: text/plain",
+            "",
+            "Plain version",
+            "--\(boundary)",
+            "Content-Type: text/html",
+            "",
+            "<p>Rich</p><div style=\"display:none\">secret line</div>",
+            "--\(boundary)--",
+        ]))
+        #expect(message.bodies == [MIMEMessage.Body(format: .markup, text: "<p>Rich</p><div style=\"display:none\">secret line</div>")])
+        #expect(VisibleText(message).text == "Rich")
+    }
+
+    @Test func onlyTheShownAlternativeListsItsAttachments() {
+        let message = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/alternative; boundary=a",
+            "",
+            "--a",
+            "Content-Type: multipart/related; boundary=r",
+            "",
+            "--r",
+            "Content-Type: text/html",
+            "",
+            "<p>Rich</p>",
+            "--r",
+            "Content-Type: image/png; name=hero.png",
+            "",
+            "iVBORw0KGgo=",
+            "--r--",
+            "--a",
+            "Content-Type: text/plain",
+            "",
+            "Plain",
+            "--a",
+            "Content-Type: text/x-amp-html",
+            "",
+            "<p>amp</p>",
+            "--a--",
+        ]))
+        #expect(message.bodies.map(\.text) == ["Plain"])
+        #expect(message.attachments.isEmpty)
     }
 
     @Test func headerValuesReadParametersOfEveryForm() {
@@ -341,5 +406,11 @@ struct MIMEMessageTests {
         #expect(value.parameters["size"] == "12")
         #expect(value.parameters["x"] == #"a;b"c"#)
         #expect(MIMEMessage.HeaderValue("text/plain").parameters.isEmpty)
+        // Comments go, the first of a name counts, and only file names decode encoded words.
+        let type = MIMEMessage.HeaderValue(#"Text / HTML (generated (nested)); charset="=?x?q?y?="; name="=?UTF-8?B?5Y6f?=.txt"; name=other; note="(kept)""#)
+        #expect(type.value == "text/html")
+        #expect(type.parameters["charset"] == "=?x?q?y?=")
+        #expect(type.parameters["name"] == "原.txt")
+        #expect(type.parameters["note"] == "(kept)")
     }
 }

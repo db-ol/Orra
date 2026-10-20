@@ -7,7 +7,9 @@ import Foundation
 /// - an attribution such as "On 12 Oct 2026, at 09:30, Mei Tan <mei.tan@orchard.example>
 ///   wrote:", "在 2026年10月12日 09:30，Mei Tan 写道：" or "Mei Tan 于2026年10月12日 09:30写道：",
 ///   which may wrap onto a second line. When quoted lines follow, only the attribution goes.
-///   Otherwise everything after it is history, as some mail quotes without ">"
+///   Otherwise everything after it is history, as some mail quotes without ">", but only for
+///   an attribution with a date or an address, so a sentence such as "On Monday the printer
+///   wrote:" keeps the rest of the email as own text
 /// - everything from a separator line such as "-----Original Message-----" or
 ///   "-----原始邮件-----"
 /// - everything from an Outlook header block: a From: or 发件人： line with a Sent:, Date:,
@@ -19,8 +21,10 @@ import Foundation
 /// lands in `quotedText`.
 ///
 /// The signature is what follows the last "-- " line of the own text, when it holds 20
-/// lines with text or fewer. Blank lines in the own text stay as they are, so PromptHygiene
-/// still finds text after a long run of them.
+/// lines with text or fewer. A line of two dashes without the space is no signature line,
+/// since it often only sets text apart. Blank lines in the own text stay as they are, so
+/// PromptHygiene still finds text after a long run of them. Later checks for payment
+/// changes and other warnings read the signature too, since it is the sender's text.
 nonisolated struct QuotedHistory: Sendable, Equatable {
     var ownText: String
     var quotedText: String
@@ -57,16 +61,18 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
                     index += span
                     continue
                 }
-                Self.moveTrailingRules(from: &own, to: &quoted)
-                quoted += lines[index...]
-                break
+                if lines[index..<(index + span)].contains(where: Self.hasDateOrAddress) {
+                    Self.moveTrailingRules(from: &own, to: &quoted)
+                    quoted += lines[index...]
+                    break
+                }
             }
             own.append(line)
             index += 1
         }
 
         var signature: [Substring] = []
-        if let dashes = own.lastIndex(where: { $0 == "-- " || $0 == "--" }),
+        if let dashes = own.lastIndex(where: { $0 == "-- " }),
            own[(dashes + 1)...].count(where: { !$0.allSatisfy(\.isWhitespace) }) <= Self.maximumSignatureLines {
             signature = Array(own[(dashes + 1)...])
             own.removeSubrange(dashes...)
@@ -106,6 +112,11 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
         if line.hasPrefix("On "), next.lowercased().hasSuffix("wrote:") { return 2 }
         if next.hasSuffix("写道：") || next.hasSuffix("写道:"), line.hasPrefix("在") || next.hasPrefix("于") { return 2 }
         return nil
+    }
+
+    /// Whether an attribution line holds a digit, as of a date or a time, or an address.
+    private static func hasDateOrAddress(_ line: Substring) -> Bool {
+        line.contains { $0 == "@" || $0.isNumber }
     }
 
     private static func isEnglishAttribution(_ line: String) -> Bool {

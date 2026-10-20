@@ -40,7 +40,28 @@ struct MailThreadsTests {
 
     @Test func inReplyToCountsThroughAKnownMessage() {
         #expect(Self.root(Self.message("c", inReplyTo: ["b"]), known: [Self.known("b", root: "a")]) == "a")
-        #expect(Self.root(Self.message("c", inReplyTo: ["unknown"], subject: "New topic")) == "c")
+        // A parent no one has seen is the root, as an unknown first reference is.
+        #expect(Self.root(Self.message("c", inReplyTo: ["unknown"], subject: "New topic")) == "unknown")
+        #expect(Self.root(Self.message("c", inReplyTo: ["c"], subject: "New topic")) == "c")
+    }
+
+    @Test func aReplyNamingOnlyItsParentJoinsTheRepliesThatListTheThread() {
+        let messages = [
+            Self.message("b", inReplyTo: ["a"], subject: "Re: Plan", day: 1),
+            Self.message("c", inReplyTo: ["b"], references: ["a", "b"], subject: "Re: Plan", day: 2),
+        ]
+        #expect(MailThreads.roots(of: messages, ownAddresses: Self.own) == ["b": "a", "c": "a"])
+    }
+
+    @Test func theSubjectFallbackNeedsTheSamePeople() {
+        let accountant = "ravi@ledger.example"
+        let earlier = Self.known("a", root: "a", subject: "invoice", people: [accountant, "mei@orchard.example"], day: -3)
+        // One person in common, but others who differ: two threads.
+        let other = Self.message("b", subject: "Re: Invoice", people: [accountant, "lu@harbor.example", "theo@studio.example"])
+        #expect(Self.root(other, known: [earlier]) == "b")
+        // A reply to the sender alone still joins a reply to all.
+        let toSender = Self.message("c", subject: "Re: Invoice", people: [accountant, "theo@studio.example"])
+        #expect(Self.root(toSender, known: [earlier]) == "a")
     }
 
     @Test(arguments: ["Re: Proofs", "RE: proofs", "回复：Proofs", "回复: Proofs", "答复：Proofs", "AW: Proofs", "Fwd: Proofs", "FW: Proofs", "转发：Proofs", "Re[2]: Proofs", "Re: Re: Fwd:  Proofs "])

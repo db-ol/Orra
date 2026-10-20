@@ -6,10 +6,13 @@ import Foundation
 /// - References lists the thread from its first message, so its first entry is the root.
 ///   When that message is known, its own root counts, so a thread once joined by subject
 ///   stays together.
-/// - Without References, the root of a known message that In-Reply-To names.
+/// - Without References, the message In-Reply-To names: its root when it is known, else
+///   itself, as References does with a first entry no one has seen, so a reply that names
+///   only its parent joins the replies that list the whole thread.
 /// - Else, for a subject that starts with Re:, 回复：, 答复：, AW:, Fwd:, FW: or 转发：, the
-///   newest known message with the same subject, at least one person in common besides the
-///   user, and a date within four weeks of this one.
+///   newest known message with the same subject and the same people within four weeks of
+///   this one. The same people means the people of one, the user left out, are all among
+///   the people of the other, so a reply to the sender alone still joins a reply to all.
 /// - Else the email is the root of its own thread.
 nonisolated enum MailThreads {
     /// An email as threading sees it.
@@ -53,16 +56,19 @@ nonisolated enum MailThreads {
         if let first = message.references.first(where: { $0 != id }) {
             return known(first)?.root ?? first
         }
-        for parent in message.inReplyTo where parent != id {
-            if let parent = known(parent) { return parent.root }
+        if let parent = message.inReplyTo.first(where: { $0 != id }) {
+            return known(parent)?.root ?? parent
         }
         let subject = subjectKey(message.subject)
         guard subject.isReply, !subject.key.isEmpty else { return id }
         let people = message.people.subtracting(ownAddresses)
+        guard !people.isEmpty else { return id }
         let match = sameSubject(subject.key)
             .filter {
-                $0.messageID != id
-                    && !$0.people.subtracting(ownAddresses).isDisjoint(with: people)
+                let others = $0.people.subtracting(ownAddresses)
+                return $0.messageID != id
+                    && !others.isEmpty
+                    && (others.isSubset(of: people) || people.isSubset(of: others))
                     && abs($0.date.timeIntervalSince(message.date)) <= subjectWindow
             }
             .max { $0.date < $1.date }

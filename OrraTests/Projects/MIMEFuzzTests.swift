@@ -13,8 +13,8 @@ struct MIMEFuzzTests {
         maximumSourceBytes: maximumCaseBytes, maximumParts: 64, maximumDepth: 8, maximumTextBytes: 32 << 10,
         maximumHeaderBytes: 8 << 10, maximumSteps: 400_000)
     private static let visibleLimits = VisibleText.Limits(
-        maximumMarkupBytes: maximumCaseBytes, maximumDepth: 64, maximumRules: 50, maximumTextBytes: 32 << 10,
-        maximumHiddenPieces: 8, maximumHiddenLength: 80, maximumSteps: 400_000)
+        maximumMarkupBytes: maximumCaseBytes, maximumDepth: 64, maximumRules: 50, maximumDeclarations: 400,
+        maximumTextBytes: 32 << 10, maximumHiddenPieces: 8, maximumHiddenLength: 80, maximumSteps: 400_000)
 
     /// Random parts of mail, from a fixed seed.
     private struct Generator {
@@ -64,13 +64,15 @@ struct MIMEFuzzTests {
                 let type = pick([
                     "text/plain", "text/html", "multipart/mixed", "multipart/alternative", "multipart/related",
                     "multipart/signed", "multipart/digest", "multipart/encrypted", "message/rfc822", "application/pdf",
-                    "image/png", "TEXT/HTML", "text", "", "multipart/", "/",
+                    "image/png", "TEXT/HTML", "text", "", "multipart/", "/", "multipart/alternative (generated)",
+                    "multipart / mixed", "text/html (x",
                 ])
                 var value = type
                 for _ in 0..<int(0...3) {
                     value += "; " + pick([
                         "charset=utf-8", "charset=\"gb2312\"", "charset=GBK", "charset=big5", "charset=gb18030",
                         "charset=iso-8859-1", "charset=bogus", "charset=", "boundary=\"\(boundary)\"", "boundary=\(boundary)",
+                        "boundary=\"=?utf-8?q?\(boundary)?=\"", "boundary=\"b1\" (comment)",
                         "boundary=", "name=\"\(encodedWord()).pdf\"", "name*0*=utf-8''%E6%8A%A5", "name*1=\"x\"",
                         "format=flowed", "delsp=yes", "x=\"unclosed",
                     ])
@@ -233,8 +235,8 @@ struct MIMEFuzzTests {
 
         let visible = VisibleText(message, limits: visibleLimits)
         let markupBytes = message.bodies.filter { $0.format == .markup }.reduce(0) { $0 + min($1.text.utf8.count, visibleLimits.maximumMarkupBytes) }
-        #expect(visible.steps <= visibleLimits.maximumSteps + markupBytes)
-        #expect(visible.steps <= (visibleLimits.maximumDepth + visibleLimits.maximumRules + 4) * (markupBytes + 1))
+        // The limit, and past it at most the markup itself and one element's candidate rules.
+        #expect(visible.steps <= visibleLimits.maximumSteps + markupBytes + 4 * visibleLimits.maximumRules)
         #expect(visible.text.utf8.count <= visibleLimits.maximumTextBytes)
         #expect(visible.hidden.count <= visibleLimits.maximumHiddenPieces)
         #expect(visible.hidden.allSatisfy { $0.text.count <= visibleLimits.maximumHiddenLength })
@@ -384,6 +386,35 @@ struct MIMEFuzzTests {
         }
     }
 
+    @Test func manyDeclarationsPerRuleHitTheCaps() {
+        // Each declaration of each rule applies to every element, so the caps count them.
+        let declarations = (0..<64).map { _ in "color: #000" }.joined(separator: "; ")
+        let rules = (0..<2_000).map { _ in "b { \(declarations) }" }.joined(separator: " ")
+        let markup = "<style>\(rules)</style>" + String(repeating: "<b>x</b>", count: 5_000)
+        let limits = VisibleText.Limits(maximumSteps: 300_000)
+        let visible = VisibleText(markup: markup, limits: limits)
+        #expect(visible.isCut)
+        #expect(visible.steps <= limits.maximumSteps + markup.utf8.count)
+        let short = "<style>\(rules)</style>" + String(repeating: "<b>x</b>", count: 20)
+        let fewDeclarations = VisibleText(markup: short, limits: VisibleText.Limits(maximumDeclarations: 640))
+        #expect(fewDeclarations.isCut)
+        #expect(fewDeclarations.steps <= 20 * (640 * 8 + 4 * 10) + 3 * short.utf8.count)
+    }
+
+    @Test func encodedWordsThatNeverEndCostLittle() {
+        // A long name full of words that never end, in many parts.
+        let name = String(repeating: "=?a?b?x", count: 4_000)
+        var source = "Content-Type: multipart/mixed; boundary=b\r\n\r\n"
+        for _ in 0..<20 {
+            source += "--b\r\nContent-Type: application/pdf; name=\"\(name)\"\r\nContent-Disposition: attachment; filename=\"\(name)\"\r\n\r\nAAAA\r\n"
+        }
+        source += "--b--\r\n"
+        let message = MIMEMessage(source: Data(source.utf8))
+        #expect(message.attachments.count == 20)
+        #expect(message.attachments.first?.name == name)
+        #expect(message.steps <= 4 * source.utf8.count)
+    }
+
     @Test func manyStyleRulesHitTheCaps() {
         let rules = (0..<5_000).map { "* { color: #00000\($0 % 10) }" }.joined(separator: " ")
         let markup = "<style>\(rules)</style>" + String(repeating: "<span>x</span>", count: 5_000)
@@ -403,7 +434,7 @@ struct MIMEFuzzTests {
         // Words that never end: each one is given up on after a bounded look.
         let unended = String(repeating: "=?a?b?" + String(repeating: "A", count: 30), count: 2_000)
         #expect(MailHeaders.decodedWords(unended) == unended)
-        let quotes = String(repeating: "> quoted\nOn Monday, Mei wrote:\n", count: 20_000)
+        let quotes = String(repeating: "> quoted\nOn 12 Oct 2026, Mei wrote:\n", count: 20_000)
         #expect(QuotedHistory(splitting: quotes).ownText == "")
     }
 }

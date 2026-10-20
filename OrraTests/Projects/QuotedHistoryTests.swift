@@ -55,9 +55,20 @@ struct QuotedHistoryTests {
     }
 
     @Test func anAttributionWithoutQuoteMarksTakesTheRest() {
-        let split = QuotedHistory(splitting: "Thanks.\n\nOn Monday, Mei Tan wrote:\n\nCan we meet on Friday?\nMei")
+        let split = QuotedHistory(splitting: "Thanks.\n\nOn 12 Oct 2026, Mei Tan wrote:\n\nCan we meet on Friday?\nMei")
         #expect(split.ownText == "Thanks.")
-        #expect(split.quotedText == "On Monday, Mei Tan wrote:\n\nCan we meet on Friday?\nMei")
+        #expect(split.quotedText == "On 12 Oct 2026, Mei Tan wrote:\n\nCan we meet on Friday?\nMei")
+    }
+
+    @Test(arguments: [
+        "Hi Mei,\n\nOn Monday the printer wrote:\n\nThe ink is late, so we print on Friday.\nBest, Theo",
+        "苏晴，\n\n供应商在邮件里写道：\n\n墨水晚到，周五开印。\n顾远",
+    ])
+    func aSentenceThatLooksLikeAnAttributionKeepsTheRest(_ text: String) {
+        // Without a date or an address and without quoted lines, it is the email's own text.
+        let split = QuotedHistory(splitting: text)
+        #expect(split.ownText == text)
+        #expect(split.quotedText == "")
     }
 
     @Test(arguments: [
@@ -126,9 +137,10 @@ struct QuotedHistoryTests {
         #expect(split.ownText == "See you Friday.")
         #expect(split.signature == "Mei Tan\nOrchard Press")
         #expect(split.quotedText == "On Monday, Theo wrote:\n> Friday?")
-        let bare = QuotedHistory(splitting: "Text\n--\nMei")
-        #expect(bare.ownText == "Text")
-        #expect(bare.signature == "Mei")
+        // Two dashes without the space only set text apart.
+        let bare = QuotedHistory(splitting: "The list:\n--\nPay 2,000 by Friday\nShip on Monday")
+        #expect(bare.ownText == "The list:\n--\nPay 2,000 by Friday\nShip on Monday")
+        #expect(bare.signature == "")
     }
 
     @Test func aLongTailAfterDashesIsNoSignature() {

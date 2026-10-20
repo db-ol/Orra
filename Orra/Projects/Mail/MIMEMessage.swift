@@ -16,7 +16,11 @@ import Foundation
 ///   of signed mail are not listed.
 /// - Parsing never fails. Broken structure reads as far as it can, and the limits cap the
 ///   size, the parts, the depth, the text and the steps, so a hostile message costs a
-///   bounded amount of work. One step is one line looked at or one byte decoded.
+///   bounded amount of work. One step is one line looked at, one byte decoded or one byte
+///   of a Content-Type or Content-Disposition value read.
+/// - A part declared as multipart that cannot be split, for want of a boundary or of a
+///   delimiter line, gives no text and marks the message as cut. Read as plain text, its
+///   parts would show the model markup and hidden text that Mail never shows.
 nonisolated struct MIMEMessage: Sendable, Equatable {
     /// A text part the reader sees.
     nonisolated struct Body: Sendable, Equatable {
@@ -65,36 +69,48 @@ nonisolated struct MIMEMessage: Sendable, Equatable {
 
     /// Parses the bytes of a raw source.
     init(source: Data, limits: Limits = Limits()) {
-        self.init(bytes: [UInt8](source), sourceIsText: false, limits: limits)
+        let maximum = max(0, limits.maximumSourceBytes)
+        self.init(bytes: [UInt8](source.prefix(maximum)), form: .bytes, isLonger: source.count > maximum, limits: limits)
     }
 
-    /// Parses a raw source that came as text. A source whose characters all fit in one byte
-    /// is read as those bytes, so 8 bit parts keep their charset. A source with wider
-    /// characters was decoded already, so its 8 bit parts read as UTF-8 first. How Mail
-    /// turns an 8 bit source into text is unverified.
+    /// Parses a raw source that came as text, as Mail gives it. How Mail turns an 8 bit
+    /// source into text is unverified, so both forms read:
+    /// - Characters that all fit in one byte are read as those bytes, so 8 bit parts keep
+    ///   their charset. A raw part or header value that is not valid in its charset, as
+    ///   UTF-8 text Mail decoded already would be, reads as the characters Mail gave.
+    /// - A source with wider characters was decoded already, so its 8 bit parts read as
+    ///   UTF-8 first.
     init(source: String, limits: Limits = Limits()) {
-        let fitsInBytes = source.unicodeScalars.allSatisfy { $0.value <= 0xFF }
-        let bytes = fitsInBytes ? source.unicodeScalars.map { UInt8($0.value) } : Array(source.utf8)
-        self.init(bytes: bytes, sourceIsText: !fitsInBytes, limits: limits)
+        let maximum = max(0, limits.maximumSourceBytes)
+        var bytes: [UInt8] = []
+        var fitsInBytes = true
+        var scalars = source.unicodeScalars.makeIterator()
+        while bytes.count < maximum, let scalar = scalars.next() {
+            guard scalar.value <= 0xFF else {
+                fitsInBytes = false
+                break
+            }
+            bytes.append(UInt8(scalar.value))
+        }
+        if fitsInBytes {
+            self.init(bytes: bytes, form: .characters, isLonger: scalars.next() != nil, limits: limits)
+        } else {
+            let utf8 = Array(source.utf8.prefix(maximum))
+            self.init(bytes: utf8, form: .decoded, isLonger: source.utf8.count > utf8.count, limits: limits)
+        }
     }
 
     /// Parses off the main actor, since a large message takes a while and the keyboard tap
     /// runs on the main thread.
     @concurrent
-    static func parsed(_ source: Data, limits: Limits = Limits()) async -> MIMEMessage {
-        MIMEMessage(source: source, limits: limits)
-    }
-
-    @concurrent
     static func parsed(_ source: String, limits: Limits = Limits()) async -> MIMEMessage {
         MIMEMessage(source: source, limits: limits)
     }
 
-    private init(bytes: [UInt8], sourceIsText: Bool, limits: Limits) {
-        var parser = Parser(bytes: bytes, sourceIsText: sourceIsText, limits: limits)
-        let end = min(bytes.count, max(0, limits.maximumSourceBytes))
-        if end < bytes.count { parser.isCut = true }
-        let entity = parser.entity(0..<end, depth: 0)
+    private init(bytes: [UInt8], form: SourceForm, isLonger: Bool, limits: Limits) {
+        var parser = Parser(bytes: bytes, form: form, limits: limits)
+        if isLonger { parser.isCut = true }
+        let entity = parser.entity(0..<bytes.count, depth: 0)
         headers = entity.headers
         bodies = entity.bodies
         attachments = parser.attachments
@@ -104,58 +120,47 @@ nonisolated struct MIMEMessage: Sendable, Equatable {
 }
 
 nonisolated extension MIMEMessage {
-    /// A Content-Type or Content-Disposition value: its main value in lowercase and its
-    /// parameters by lowercase name, with RFC 2231 sections joined and decoded and RFC 2047
-    /// words decoded, which many senders use in file names.
+    /// How the bytes of the source were made.
+    private enum SourceForm {
+        /// The raw bytes.
+        case bytes
+        /// Characters of a text source that all fit in one byte, one byte each.
+        case characters
+        /// A text source with wider characters, decoded already, as UTF-8.
+        case decoded
+    }
+
+    /// A Content-Type or Content-Disposition value: its main value in lowercase without
+    /// white space and its parameters by lowercase name, the first of a name counting.
+    /// Comments in parentheses are dropped, RFC 2231 sections are joined and decoded, and
+    /// RFC 2047 words are decoded in the file name parameters, where many senders use them.
+    /// A boundary and a charset stay as they are.
     struct HeaderValue: Sendable, Equatable {
         var value: String
         var parameters: [String: String]
 
         init(_ text: String) {
-            var pieces: [String] = []
-            var current = ""
-            var quoted = false
-            var escaped = false
-            for character in text {
-                if escaped {
-                    current.append(character)
-                    escaped = false
-                    continue
-                }
-                switch character {
-                case "\\" where quoted:
-                    current.append(character)
-                    escaped = true
-                case "\"":
-                    quoted.toggle()
-                    current.append(character)
-                case ";" where !quoted:
-                    pieces.append(current)
-                    current = ""
-                default:
-                    current.append(character)
-                }
-                if pieces.count > Self.maximumParameters { break }
-            }
-            pieces.append(current)
-            value = pieces[0].trimmingCharacters(in: .whitespaces).lowercased()
+            // Bytes, not characters, so a long value costs little per byte.
+            let pieces = Self.pieces(Self.withoutComments(Array(text.utf8)))
+            value = String(decoding: pieces[0].filter { !Self.isSpace($0) }.map(Self.lowercased), as: UTF8.self)
 
             var plain: [String: String] = [:]
             var sections: [String: [Int: (text: String, extended: Bool)]] = [:]
             for piece in pieces.dropFirst().prefix(Self.maximumParameters) {
-                guard let equals = piece.firstIndex(of: "=") else { continue }
-                var name = piece[..<equals].trimmingCharacters(in: .whitespaces).lowercased()
-                let raw = Self.unquoted(piece[piece.index(after: equals)...].trimmingCharacters(in: .whitespaces))
+                guard let equals = piece.firstIndex(of: 0x3D) else { continue }
+                var name = String(decoding: Self.trimmed(piece[..<equals]).map(Self.lowercased), as: UTF8.self)
+                let raw = Self.unquoted(Self.trimmed(piece[(equals + 1)...]))
                 var extended = false
                 if name.hasSuffix("*") {
                     extended = true
                     name.removeLast()
                 }
                 if let star = name.firstIndex(of: "*"), let number = Int(name[name.index(after: star)...]), number < 100 {
-                    sections[String(name[..<star]), default: [:]][number] = (raw, extended)
+                    let base = String(name[..<star])
+                    if sections[base]?[number] == nil { sections[base, default: [:]][number] = (raw, extended) }
                 } else if extended {
-                    sections[name, default: [:]][0] = (raw, true)
-                } else if !name.isEmpty {
+                    if sections[name]?[0] == nil { sections[name, default: [:]][0] = (raw, true) }
+                } else if !name.isEmpty, plain[name] == nil {
                     plain[name] = raw
                 }
             }
@@ -178,24 +183,98 @@ nonisolated extension MIMEMessage {
                 }
                 plain[name] = MailHeaders.text(bytes, charset: charset)
             }
-            parameters = plain.mapValues { MailHeaders.decodedWords($0) }
+            for name in ["name", "filename"] {
+                if let raw = plain[name] { plain[name] = MailHeaders.decodedWords(raw) }
+            }
+            parameters = plain
         }
 
         private static let maximumParameters = 64
 
-        private static func unquoted(_ text: String) -> String {
-            guard text.count >= 2, text.hasPrefix("\""), text.hasSuffix("\"") else { return text }
-            var result = ""
+        /// The value split at semicolons outside quoted strings, the main value first.
+        private static func pieces(_ bytes: [UInt8]) -> [ArraySlice<UInt8>] {
+            var pieces: [ArraySlice<UInt8>] = []
+            var start = 0
+            var quoted = false
+            var index = 0
+            while index < bytes.count, pieces.count <= maximumParameters {
+                switch bytes[index] {
+                case 0x5C where quoted: index += 1
+                case 0x22: quoted.toggle()
+                case 0x3B where !quoted:
+                    pieces.append(bytes[start..<index])
+                    start = index + 1
+                default: break
+                }
+                index += 1
+            }
+            pieces.append(bytes[min(start, bytes.count)...])
+            return pieces
+        }
+
+        /// The bytes with comments outside quoted strings replaced by a space, as RFC 2045
+        /// allows them in these fields. Comments may nest.
+        private static func withoutComments(_ bytes: [UInt8]) -> [UInt8] {
+            guard bytes.contains(0x28) else { return bytes }
+            var result: [UInt8] = []
+            result.reserveCapacity(bytes.count)
+            var quoted = false
+            var depth = 0
+            var index = 0
+            while index < bytes.count {
+                let byte = bytes[index]
+                if byte == 0x5C, quoted || depth > 0 {
+                    if depth == 0 { result += bytes[index..<min(index + 2, bytes.count)] }
+                    index += 2
+                    continue
+                }
+                if depth > 0 {
+                    if byte == 0x28 { depth += 1 } else if byte == 0x29 { depth -= 1 }
+                    index += 1
+                    continue
+                }
+                if byte == 0x22 { quoted.toggle() }
+                if byte == 0x28, !quoted {
+                    depth = 1
+                    result.append(0x20)
+                } else {
+                    result.append(byte)
+                }
+                index += 1
+            }
+            return result
+        }
+
+        private static func isSpace(_ byte: UInt8) -> Bool {
+            byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
+        }
+
+        private static func lowercased(_ byte: UInt8) -> UInt8 {
+            (0x41...0x5A).contains(byte) ? byte | 0x20 : byte
+        }
+
+        private static func trimmed(_ bytes: ArraySlice<UInt8>) -> ArraySlice<UInt8> {
+            var slice = bytes
+            while let first = slice.first, isSpace(first) { slice = slice.dropFirst() }
+            while let last = slice.last, isSpace(last) { slice = slice.dropLast() }
+            return slice
+        }
+
+        /// A parameter value without its quotes and escapes.
+        private static func unquoted(_ bytes: ArraySlice<UInt8>) -> String {
+            guard bytes.count >= 2, bytes.first == 0x22, bytes.last == 0x22 else { return String(decoding: bytes, as: UTF8.self) }
+            var result: [UInt8] = []
+            result.reserveCapacity(bytes.count)
             var escaped = false
-            for character in text.dropFirst().dropLast() {
-                if escaped || character != "\\" {
-                    result.append(character)
+            for byte in bytes.dropFirst().dropLast() {
+                if escaped || byte != 0x5C {
+                    result.append(byte)
                     escaped = false
                 } else {
                     escaped = true
                 }
             }
-            return result
+            return String(decoding: result, as: UTF8.self)
         }
 
         private static func percentDecoded(_ text: Substring) -> [UInt8] {
@@ -225,7 +304,7 @@ nonisolated extension MIMEMessage {
 
     private struct Parser {
         let bytes: [UInt8]
-        let sourceIsText: Bool
+        let form: SourceForm
         let limits: Limits
         var steps = 0
         var parts = 0
@@ -233,9 +312,9 @@ nonisolated extension MIMEMessage {
         var isCut = false
         var attachments: [Attachment] = []
 
-        init(bytes: [UInt8], sourceIsText: Bool, limits: Limits) {
+        init(bytes: [UInt8], form: SourceForm, limits: Limits) {
             self.bytes = bytes
-            self.sourceIsText = sourceIsText
+            self.form = form
             self.limits = limits
         }
 
@@ -293,29 +372,28 @@ nonisolated extension MIMEMessage {
                 bodyStart = next
             }
             guard step(headerEnd - range.lowerBound) else { return entity }
-            entity.headers = MailHeaders(bytes: bytes[range.lowerBound..<headerEnd])
+            entity.headers = MailHeaders(bytes: bytes[range.lowerBound..<headerEnd], readsCharacters: form == .characters)
             if entity.headers.isCut { isCut = true }
             let body = bodyStart..<max(bodyStart, range.upperBound)
 
-            let type = HeaderValue(entity.headers["Content-Type"] ?? defaultType)
+            let typeText = entity.headers["Content-Type"]
+            let dispositionText = entity.headers["Content-Disposition"]
+            guard step((typeText?.utf8.count ?? 0) + (dispositionText?.utf8.count ?? 0)) else { return entity }
+            let type = HeaderValue(typeText ?? defaultType)
             var mimeType = type.value.contains("/") ? type.value : defaultType
-            if mimeType.contains(where: \.isWhitespace) { mimeType = defaultType }
-            let disposition = entity.headers["Content-Disposition"].map(HeaderValue.init)
+            let disposition = dispositionText.map(HeaderValue.init)
             let transfer = (entity.headers["Content-Transfer-Encoding"] ?? "").trimmingCharacters(in: .whitespaces).lowercased()
             let name = disposition?.parameters["filename"] ?? type.parameters["name"]
 
             if mimeType.hasPrefix("multipart/") {
-                if let boundary = type.parameters["boundary"], !boundary.isEmpty {
-                    guard depth < limits.maximumDepth else {
-                        isCut = true
-                        return entity
-                    }
-                    entity.bodies = multipart(body, subtype: String(mimeType.dropFirst("multipart/".count)), boundary: boundary, depth: depth)
+                guard let boundary = type.parameters["boundary"], !boundary.isEmpty, depth < limits.maximumDepth else {
+                    isCut = true
                     return entity
                 }
-                // A multipart without a boundary reads as plain text.
-                mimeType = "text/plain"
+                entity.bodies = multipart(body, subtype: String(mimeType.dropFirst("multipart/".count)), boundary: boundary, depth: depth)
+                return entity
             }
+            if mimeType.contains(where: { $0 == "(" || $0 == ")" }) { mimeType = defaultType }
             switch mimeType {
             case "application/pkcs7-signature", "application/x-pkcs7-signature", "application/pgp-signature":
                 return entity
@@ -376,15 +454,14 @@ nonisolated extension MIMEMessage {
             if !closed, let partStart, partStart < body.upperBound {
                 ranges.append(partStart..<body.upperBound)
             }
-            // A multipart without one delimiter reads as plain text.
+            // A multipart without one delimiter cannot be split.
             if ranges.isEmpty, !closed {
-                if let text = decodedText(body, transfer: "", charset: nil), !text.isEmpty {
-                    return [Body(format: .plain, text: text)]
-                }
+                isCut = true
                 return []
             }
 
             var children: [[Body]] = []
+            var childAttachments: [Range<Int>] = []
             for (number, range) in ranges.enumerated() {
                 guard parts < limits.maximumParts else {
                     isCut = true
@@ -402,9 +479,17 @@ nonisolated extension MIMEMessage {
                     continue
                 }
                 children.append(child.bodies)
+                childAttachments.append(attachmentsBefore..<attachments.count)
             }
             if subtype == "alternative" {
-                return children.last { !$0.isEmpty } ?? []
+                // Mail shows one alternative, so only its attachments count.
+                guard let shown = children.lastIndex(where: { !$0.isEmpty }) else { return [] }
+                let kept = attachments[childAttachments[shown]]
+                if let first = childAttachments.first?.lowerBound {
+                    attachments.removeSubrange(first..<attachments.count)
+                    attachments += kept
+                }
+                return children[shown]
             }
             return children.flatMap { $0 }
         }
@@ -428,7 +513,7 @@ nonisolated extension MIMEMessage {
                 decoded = Array(bytes[range])
                 isRaw = true
             }
-            let readsAsUTF8 = isRaw && sourceIsText
+            let readsAsUTF8 = isRaw && form == .decoded
             if decoded.count > budget {
                 decoded.removeSubrange(budget...)
                 isCut = true
@@ -442,10 +527,23 @@ nonisolated extension MIMEMessage {
             let text: String
             if readsAsUTF8, let utf8 = String(bytes: decoded, encoding: .utf8) {
                 text = utf8
+            } else if isRaw, form == .characters {
+                text = Self.characterText(decoded, charset: charset)
             } else {
                 text = MailHeaders.text(decoded, charset: charset)
             }
             return Self.unixLines(text)
+        }
+
+        /// A raw part of a source that came as characters of one byte each: the text in its
+        /// charset when its bytes are valid there, else the characters Mail gave, as when
+        /// Mail decoded UTF-8 text already. A single byte label or none reads as UTF-8 first,
+        /// a common mistake of senders.
+        static func characterText(_ bytes: [UInt8], charset: String?) -> String {
+            let declared = charset.flatMap(MailHeaders.encoding)
+            if declared == nil || declared == .windowsCP1252, let utf8 = String(bytes: bytes, encoding: .utf8) { return utf8 }
+            if let declared, declared != .windowsCP1252, let text = String(bytes: bytes, encoding: declared) { return text }
+            return String(bytes: bytes, encoding: .isoLatin1) ?? String(decoding: bytes, as: UTF8.self)
         }
 
         private static let mboxFrom = Array("From ".utf8)
