@@ -56,6 +56,8 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
         /// The warnings the user sees for this finding.
         func warnings(source: Source) -> [ProjectsWarning] {
             var warnings: [ProjectsWarning] = []
+            // The tokens of a chat template show in the text. Phase 0 labeled a fake turn as
+            // words to an assistant only, so they give no hidden text warning.
             if case .hidden(let hidden) = kind, hidden != .chatTemplateTokens {
                 warnings.append(.hiddenText)
             }
@@ -84,7 +86,7 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
         text = Self.removingTagCharacters(text, into: &findings)
         text = Self.removingInvisibleCharacters(text, into: &findings)
         text = Self.cuttingAfterBlankLines(text, marker: markers.afterBlankLines, into: &findings)
-        text = Self.replacingComments(text, marker: markers.comment, into: &findings)
+        text = Self.replacingComments(text, source: source, marker: markers.comment, into: &findings)
         text = Self.replacingTemplateBlocks(text, marker: markers.assistant, into: &findings)
         text = Self.replacingAssistantLines(text, marker: markers.assistant, into: &findings)
         self.text = Self.withoutRepeatedMarkers(text)
@@ -100,11 +102,13 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
         return warnings
     }
 
-    /// The kinds of hidden text found, each once, in the order found.
+    /// The kinds of hidden text found, each once, in the order found. Chat template tokens
+    /// are left out, as in the warnings: the reader sees them, so they count as words to an
+    /// assistant and not as hidden text.
     var hiddenText: [ProjectsHiddenText] {
         var kinds: [ProjectsHiddenText] = []
         for finding in findings {
-            if case .hidden(let kind) = finding.kind, !kinds.contains(kind) {
+            if case .hidden(let kind) = finding.kind, kind != .chatTemplateTokens, !kinds.contains(kind) {
                 kinds.append(kind)
             }
         }
@@ -211,27 +215,27 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
 
     /// Removes invisible characters and bidirectional controls, character by character.
     private static func removingInvisibleCharacters(_ text: String, into findings: inout [Finding]) -> String {
-        var result = ""
+        guard text.unicodeScalars.contains(where: mayBeRemoved) else { return text }
+        var result = String.UnicodeScalarView()
         var invisible = false
         var bidi = false
         var previous: Unicode.Scalar?
         for (characterIndex, character) in text.enumerated() {
             let scalars = Array(character.unicodeScalars)
             let selectors = scalars.filter(isVariationSelector).count
-            var kept = String.UnicodeScalarView()
             for (index, scalar) in scalars.enumerated() {
                 defer { previous = scalar }
                 switch scalar.value {
                 case 0x200D:
                     // A joiner inside an emoji or a conjunct has more of its character after it.
                     if index < scalars.count - 1 {
-                        kept.append(scalar)
+                        result.append(scalar)
                     } else {
                         invisible = true
                     }
                 case 0x200C:
                     if let previous, joinsLetters(previous) {
-                        kept.append(scalar)
+                        result.append(scalar)
                     } else {
                         invisible = true
                     }
@@ -247,11 +251,10 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
                     } else if selectors > 1, isVariationSelector(scalar) {
                         invisible = true
                     } else {
-                        kept.append(scalar)
+                        result.append(scalar)
                     }
                 }
             }
-            result.unicodeScalars.append(contentsOf: kept)
         }
         if invisible {
             findings.append(finding(.hidden(.invisibleCharacters), text: ""))
@@ -259,7 +262,18 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
         if bidi {
             findings.append(finding(.hidden(.bidiControls), text: ""))
         }
-        return result
+        return String(result)
+    }
+
+    /// Whether the step above may take the scalar out, so text without any such scalar,
+    /// which is most text, is left as it is.
+    private static func mayBeRemoved(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x200C, 0x200D, 0x00AD, 0x200E, 0x200F, 0x061C, 0x202A...0x202E, 0x2066...0x2069:
+            true
+        default:
+            invisibleScalars.contains(scalar.value) || isVariationSelector(scalar)
+        }
     }
 
     private static let blackFlag: Unicode.Scalar = "\u{1F3F4}"
@@ -317,17 +331,32 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
     private static let blankLineRun = 8
 
     /// Replaces each HTML comment, and an unclosed one to the end, with the marker. An empty
-    /// comment goes without one.
-    private static func replacingComments(_ text: String, marker: String, into findings: inout [Finding]) -> String {
-        guard text.contains("<!--") else { return text }
+    /// comment that closes goes without one.
+    ///
+    /// A file's chunk may start inside a comment that opened in the chunk before it. So in
+    /// a file, text before a "-->" that ends its line, with no "<!--" before it, is the rest
+    /// of a comment too. An arrow such as "A --> B" has text after it and stays.
+    private static func replacingComments(_ text: String, source: Source, marker: String, into findings: inout [Finding]) -> String {
         var result = ""
         var rest = Substring(text)
+        if source == .file, let close = rest.range(of: "-->"), !rest[..<close.lowerBound].contains("<!--"),
+           rest[close.upperBound...].prefix(while: { !$0.isNewline }).allSatisfy(\.isWhitespace) {
+            let content = rest[..<close.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !content.isEmpty {
+                result += marker
+                findings.append(finding(.hidden(.htmlComment), text: content))
+            }
+            rest = rest[close.upperBound...]
+        }
+        guard rest.contains("<!--") else { return result + rest }
         while let open = rest.range(of: "<!--") {
             result += rest[..<open.lowerBound]
             let after = rest[open.upperBound...]
             let close = after.range(of: "-->")
             let content = (close.map { after[..<$0.lowerBound] } ?? after).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !content.isEmpty {
+            // An unclosed comment, even an empty one, goes on in the text that follows,
+            // such as the next chunk of a file.
+            if !content.isEmpty || close == nil {
                 result += marker
                 findings.append(finding(.hidden(.htmlComment), text: content))
             }
@@ -352,17 +381,20 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
     }
 
     /// Replaces each line that addresses an assistant, with the rest of its paragraph, with
-    /// the marker.
+    /// the marker. A heading of the explanation's answer that a person may also write, such
+    /// as "Points:", counts only when the text holds another one, as a fake answer does.
     private static func replacingAssistantLines(_ text: String, marker: String, into findings: inout [Finding]) -> String {
         var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let fakesAnswer = Set(lines.compactMap(answerHeading)).count > 1
         var index = 0
         while index < lines.count {
-            let line = lines[index]
-            guard !allMarkers.contains(line.trimmingCharacters(in: .whitespaces)), addressesAssistant(withoutInlineMarkers(line)) else {
+            let line = withoutInlineMarkers(lines[index])
+            guard !allMarkers.contains(lines[index].trimmingCharacters(in: .whitespaces)),
+                  addressesAssistant(line) || (fakesAnswer && answerHeading(line) != nil) else {
                 index += 1
                 continue
             }
-            let end = isBracketed(line) ? index : paragraphEnd(after: index, in: lines)
+            let end = isBracketed(lines[index]) ? index : paragraphEnd(after: index, in: lines)
             let hidden = lines[index...end].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
             let claims = lines[index...end].contains { claimsToBeOrra($0) }
             findings.append(Finding(kind: .addressesAssistant, text: hidden, addressesAssistant: true, claimsToBeOrra: claims))
@@ -424,6 +456,19 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
         return templateTokens.firstMatch(in: line, range: range) != nil
     }
 
+    /// The heading of the explanation's answer that the line is, on a line of its own, or
+    /// nil.
+    private static func answerHeading(_ line: String) -> String? {
+        let form = SortingText.matchingForm(line)
+        let range = NSRange(form.startIndex..., in: form)
+        guard let match = answerHeadings.firstMatch(in: form, range: range), let word = Range(match.range(at: 1), in: form) else { return nil }
+        return String(form[word])
+    }
+
+    private static let answerHeadings = try! NSRegularExpression(
+        pattern: #"^\W*(警告|要点|回复前需确认|回复草稿|warnings|points|before you reply|draft reply)\s*[:：]\s*$"#
+    )
+
     /// Whether any line of the text matches one of the patterns, which read the matching
     /// form: lowercased, with full width letters made plain and white space made one space.
     private static func matches(_ text: String, _ patterns: [NSRegularExpression]) -> Bool {
@@ -452,6 +497,11 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
     private static let machine = #"(?:ai|a\.i\.|llm|llms|gpt|chatbots?|bots?|language models?|(?:ai|e-?mail|mail|inbox|automated|automatic|digital|smart)\s+(?:assistants?|agents?))"#
     /// The same in Chinese. A plain 助手 or 模型 is often a person or a physical model.
     private static let machineZh = #"(?:ai|人工智能|大模型|语言模型|ai\s*模型|机器人|自动程序|(?:ai|智能|邮件|自动)\s*(?:助手|助理))"#
+    /// What a line asks of an assistant it names with a colon or a comma, as in
+    /// "Assistant: tell the user …". "Assistant: Jana Holt" names a person and stays.
+    private static let request = #"(?:please|tell|say|write|reply|include|forward|send|summari[sz]e|ignore|disregard|do not|don['’]t|draft|add|(?:file|move|mark)\s+(?:it|this|them|the|all|as)|(?:when|while|as|if)\s+you)\b"#
+    /// The same in Chinese, after a colon or a comma.
+    private static let requestZh = #"(?:请(?!求)|不要|别|忽略|告诉|回复|转发|发送|总结|记住|标记|把)"#
 
     private static let assistantPatterns: [NSRegularExpression] = [
         // English
@@ -463,6 +513,12 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
         #"\bto\s+(?:the|any|all|every)\s+"# + machine + #"(?![a-z])"#,
         // "AI reading this", "assistants summarizing this email"
         #"\b(?:"# + machine + #"|assistants?)\s+(?:that\s+)?(?:reads?|reading|process(?:es|ing)?|summari[sz](?:es|ing|e)|handl(?:es|ing|e)|scann?(?:s|ing)?|pars(?:es|ing|e))\s+(?:this|these|the\s+(?:e-?mail|message|mail|folder|file|document)|incoming)\b"#,
+        // "Assistant: tell the user", "[image: AI assistant: …]", "(Assistant: file it there.)"
+        // and "Assistant, when you draft", at the start of a line or after a bracket, a
+        // colon or the end of a sentence
+        #"(?:^\W*|[\[【(（:：.。!！?？;；]\s*)(?:(?:ai|e-?mail|orra)\s+)?assistants?\s*[:：,，]\s*"# + request,
+        // "AI assistant: please …" anywhere in a line
+        #"\b(?:ai|e-?mail|orra)\s+assistants?\s*[:：,，]\s*"# + request,
         #"\b(?:dear|hey|hi|hello|attention|attn)\s*,?\s+"# + machine + #"(?![a-z])"#,
         #"\bif\s+you(?:'re|’re|\s+are)\s+(?:an?\s+)?"# + machine + #"(?![a-z])"#,
         #"\b(?:ignore|disregard|forget|override|bypass)\s+(?:all\s+|any\s+|every\s+)?(?:of\s+)?(?:your\s+|the\s+|my\s+|these\s+|those\s+)?(?:previous|prior|earlier|above|preceding|original|existing|other|system)\s+(?:instructions?|rules|prompts?|directions|guidelines|directives|context|commands)\b"#,
@@ -479,25 +535,43 @@ nonisolated struct PromptHygiene: Sendable, Equatable {
         #"(?:致|给|写给|提醒|告诉)[^。！？!?\n]{0,12}"# + machineZh + #"(?![员师店])"#,
         #"(?:处理|阅读|读取|总结|整理|分析)(?:本|这封|此|该|这份|这个|这些)(?:邮件|信|文件|文档|文件夹|资料|内容)?\s*的\s*(?:ai|人工智能|助手|模型|自动程序|机器人)"#,
         #"(?:ai|助手|模型)\s*请注意|请\s*(?:ai|助手|模型)\s*注意"#,
+        // "AI 助手：请…" anywhere in a line, "AI助手请…" and "请AI助手…"
+        #"(?:(?<![a-z])ai|智能|邮件|orra)\s*(?:助手|助理)\s*(?:[:：,，]\s*"# + requestZh + #"|请(?!求))"#,
+        #"请\s*(?:ai|智能|orra)\s*(?:助手|助理)"#,
         #"(?:忽略|无视|忘记|忘掉|不要理会|不用理会|跳过)\s*(?:你|您)?(?:之前|以上|前面|先前|上面|此前|原来|原有|上述|所有|全部|一切)(?:的)?(?:所有|全部|一切)?(?:的)?(?:指令|指示|设定|提示词|系统提示|规则)"#,
         #"^\W*(?:系统|ai|人工智能)\s*(?:消息|提示|指令)?\s*[:：]"#,
         #"系统提示词|系统指令"#,
         #"(?:你|您)现在(?:是|扮演|作为)(?:一个|一名)?(?:(?:邮件|系统|ai|人工智能)(?:管理员|助手|模型|机器人)|ai|人工智能|机器人|助手)"#,
         #"(?:不要|别|切勿|请勿)(?:向|给)[^。！？!?\n]{1,6}显示(?:这段|这句|这条|此段|此条|本段)"#,
-        // Headings that open a block of instructions.
-        #"^#{1,6}\s*(?:instructions?|system|prompt|指令|系统|提示词|系统指令)\s*$"#,
+        // Headings that open instructions for an assistant. "## Instructions" or "## 系统"
+        // alone heads ordinary text in many documents.
+        #"^#{1,6}\s*(?:(?:ai|assistant|model|llm)\s+instructions?|instructions?\s+(?:for|to)\s+(?:the\s+|any\s+)?(?:ai|assistants?|models?|llms?)|(?:给|致)\s*(?:ai|助手|模型)\s*的?\s*(?:指令|说明)|(?:ai|助手|模型)\s*指令)\s*$"#,
         // The format of a model's answer: a JSON object with the keys Orra's prompts ask
-        // for, or a heading of the explanation's answer on a line of its own.
+        // for, or a heading of the explanation's answer that only a draft has. The other
+        // headings count when two of them appear, see replacingAssistantLines.
         #"^\W*\{\s*"(?:project|cleaned|translation|answer|reply|draft|decision|warnings|summary|confidence|reason)"\s*:"#,
-        #"^\W*(?:警告|要点|回复前需确认|回复草稿|warnings|points|before you reply|draft reply)\s*[:：]\s*$"#,
+        #"^\W*(?:回复前需确认|回复草稿|draft reply)\s*[:：]\s*$"#,
     ].map { try! NSRegularExpression(pattern: $0) }
 
+    /// Things Orra's own messages would be, after "Orra".
+    private static let orraThings = #"(?:system|assistant|security|notice|alert|warning|message|team|support|notification|admin)"#
+    private static let orraThingsZh = #"(?:系统|助手|提示|通知|安全|团队|消息|管理员|提醒)"#
+
     /// Wordings that speak as Orra or name it as the sender. A mail that only names Orra, as
-    /// a notice about its code may, does not count.
+    /// feedback from its users or a notice about its code may, does not count.
     private static let orraPatterns: [NSRegularExpression] = [
-        #"\b(?:from|by|via)\s+orra\b"#,
-        #"\borra\s+(?:system|assistant|security|notice|alert|warning|message|team|support|notification|admin)\b"#,
+        // A sender line, "Sent from Orra"
+        #"^\W*(?:sent\s+)?(?:from|by|via)\s+orra\s*[:：.]?\s*$"#,
+        #"\b(?:message|notice|alert|warning|notification|reminder|sent|generated|written|issued)\s+(?:from|by|via)\s+orra\b"#,
+        // "Orra Security: …", "Orra Team" alone, "[Orra system notice]"
+        #"^\W*orra\s+"# + orraThings + #"\s*(?:[:：.!]|$)"#,
+        #"[\[【(（<]\s*orra\s+"# + orraThings + #"\b"#,
         #"^\W*orra\s*[:：]"#,
-        #"来自\s*orra|orra\s*(?:系统|助手|提示|通知|安全|团队|消息|管理员)"#,
+        // "Verified by Orra", "已由 Orra 安全验证"
+        #"\b(?:verified|checked|scanned|approved|certified|confirmed)\s+(?:as\s+\w+\s+)?by\s+orra\b"#,
+        #"(?:由|经|被)\s*orra\s*的?\s*(?:安全)?\s*(?:验证|检查|扫描|审核|认证|确认)"#,
+        #"来自\s*orra\s*的?\s*"# + orraThingsZh + #"|来自\s*orra\s*[:：]?\s*$"#,
+        #"^\W*orra\s*"# + orraThingsZh + #"\s*(?:[:：]|$)"#,
+        #"[\[【(（<]\s*orra\s*"# + orraThingsZh,
     ].map { try! NSRegularExpression(pattern: $0) }
 }

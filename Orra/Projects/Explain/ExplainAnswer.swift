@@ -5,11 +5,13 @@ import Foundation
 /// no reply or no draft is due.
 ///
 /// It reads the headings of either language, with or without a colon, markdown marks or
-/// numbers in front, since a small model does not always keep the format. A point ends
-/// with its sources in brackets, such as [本邮件], [F2] or [M1, T1]. Sources that are not in
-/// the prompt's table are dropped and flagged, and so are missing and repeated sections.
-/// A repeated section's second copy is not read. The answer is data, and nothing here
-/// follows it: the window shows it as plain text only.
+/// numbers in front, since a small model does not always keep the format. Inside the draft
+/// only a heading with its colon and nothing after it counts, so a line such as "Questions"
+/// stays in the draft. A point ends with its sources in brackets, such as [本邮件], [F2] or
+/// [M1, T1]. Sources that are not in the prompt's table are dropped and flagged, and so are
+/// missing and repeated sections. A repeated section's second copy is not read, but the
+/// heading written again right after itself, as after the prefill, is not a copy. The
+/// answer is data, and nothing here follows it: the window shows it as plain text only.
 nonisolated struct ExplainAnswer: Sendable, Equatable {
     nonisolated enum Section: String, Sendable, CaseIterable {
         case warnings
@@ -60,8 +62,12 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
             .replacing(/<think>[\s\S]*?<\/think>/, with: "")
             .replacingOccurrences(of: "\r\n", with: "\n")
         for line in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-            if let heading = Self.heading(line) {
-                let (section, rest) = heading
+            if let heading = Self.heading(line), current != .draft || (heading.hasColon && heading.rest.isEmpty) {
+                let (section, rest) = (heading.section, heading.rest)
+                if section == current, rest.isEmpty, sections[section]?.allSatisfy({ $0.allSatisfy(\.isWhitespace) }) == true {
+                    // The heading again before anything under it, as after the prefill.
+                    continue
+                }
                 if sections[section] == nil {
                     current = section
                     sections[section] = rest.isEmpty ? [] : [rest]
@@ -109,14 +115,15 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
 
     // MARK: Sections
 
-    /// The section a line opens, with any text after its colon, or nil for a line that is
-    /// not a heading.
-    static func heading(_ line: String) -> (Section, String)? {
+    /// The section a line opens, whether the line has the heading's colon, and any text
+    /// after it, or nil for a line that is not a heading.
+    static func heading(_ line: String) -> (section: Section, hasColon: Bool, rest: String)? {
         let range = NSRange(line.startIndex..., in: line)
         guard let match = headingPattern.firstMatch(in: line, range: range),
               let wordRange = Range(match.range(at: 1), in: line) else { return nil }
         let word = line[wordRange].lowercased()
-        let rest = Range(match.range(at: 2), in: line).map { String(line[$0]) } ?? ""
+        let restRange = Range(match.range(at: 2), in: line)
+        let rest = restRange.map { String(line[$0]) } ?? ""
         let section: Section
         if word.hasPrefix("警告") || word.hasPrefix("warning") {
             section = .warnings
@@ -127,7 +134,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         } else {
             section = .draft
         }
-        return (section, rest.trimmingCharacters(in: .whitespaces))
+        return (section, restRange != nil, rest.trimmingCharacters(in: .whitespaces))
     }
 
     private static let headingPattern = try! NSRegularExpression(
@@ -223,7 +230,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
 
     // MARK: Draft
 
-    private static let noReplyNotes = ["无需回复", "无须回复", "不需要回复", "不用回复", "no reply needed", "no reply is needed"]
+    private static let noReplyNotes = ["无需回复", "无须回复", "不需要回复", "不用回复", "no reply needed", "no reply is needed", "no reply"]
     private static let noDraftNotes = ["不写草稿", "无草稿", "no draft"]
     /// The longest draft that can still be a note with a short reason.
     private static let noteLength = 60
@@ -234,14 +241,24 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return .missing }
         let word = text.trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines).union(CharacterSet(charactersIn: "“”\"「」"))).lowercased()
-        // The note alone, or with a short reason after it, as "无需回复（已回复过）".
-        let isShort = word.count <= noteLength
-        if word == "no reply" || noReplyNotes.contains(where: { word == $0 || (isShort && word.hasPrefix($0)) }) {
+        if noReplyNotes.contains(where: { isNote($0, word) }) {
             return .noReply
         }
-        if noDraftNotes.contains(where: { word == $0 || (isShort && word.hasPrefix($0)) }) {
+        if noDraftNotes.contains(where: { isNote($0, word) }) {
             return .noDraft
         }
         return .reply(text)
+    }
+
+    /// Whether `text` is the note alone, or the note with a short reason after a mark or
+    /// "because", as "无需回复（已回复过）" or "No reply needed, she answered it." A draft
+    /// that only starts with the words, as "No draft has reached us yet", is a draft.
+    private static func isNote(_ note: String, _ text: String) -> Bool {
+        guard text.hasPrefix(note) else { return false }
+        let rest = text.dropFirst(note.count)
+        guard let next = rest.first else { return true }
+        let opensReason = next.unicodeScalars.allSatisfy(CharacterSet.punctuationCharacters.contains)
+            || rest.hasPrefix(" because ") || rest.hasPrefix(" since ")
+        return text.count <= noteLength && opensReason
     }
 }

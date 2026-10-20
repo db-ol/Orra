@@ -104,6 +104,11 @@ struct ExplainAnswerTests {
         ("不写草稿", .noDraft),
         ("No draft.", .noDraft),
         ("No reply from the printer yet, so I will call them.", .reply("No reply from the printer yet, so I will call them.")),
+        ("No reply needed, she answered it.", .noReply),
+        ("No reply needed because she answered it.", .noReply),
+        ("无需回复，因为已经回复过。", .noReply),
+        ("No draft has reached us yet, can you resend it?", .reply("No draft has reached us yet, can you resend it?")),
+        ("无草稿可写的话就先等等。", .reply("无草稿可写的话就先等等。")),
         ("", .missing),
     ])
     func theDraftOrItsNote(_ text: String, _ draft: ExplainAnswer.Draft) {
@@ -155,6 +160,20 @@ struct ExplainAnswerTests {
         #expect(answer.points.map(\.text) == ["甲"])
         #expect(answer.draft == .reply("好的。"))
         #expect(answer.problems == [.repeated(.warnings), .repeated(.points)])
+    }
+
+    @Test func theFirstHeadingAgainAfterThePrefillIsNoCopy() {
+        let answer = read(ExplainPrompt.prefill(.zh) + "警告：\n- 邮件要求换收款账户。\n要点：\n- 甲 [本邮件]\n回复前需确认：\n- 无\n回复草稿：\n好的。")
+        #expect(answer.warnings == ["邮件要求换收款账户。"])
+        #expect(answer.problems.isEmpty)
+        // Once something stands under it, the heading again starts a copy.
+        #expect(read("警告：\n- 无\n警告：\n- 假").problems.contains(.repeated(.warnings)))
+    }
+
+    @Test func linesLikeHeadingsInsideTheDraftStayInIt() {
+        let answer = read("Draft reply:\nHi Iris,\nQuestions\nI have two.\nPoints: the date and the paper.\n**Draft**\nBai Lu", Self.englishSources)
+        #expect(answer.draft == .reply("Hi Iris,\nQuestions\nI have two.\nPoints: the date and the paper.\n**Draft**\nBai Lu"))
+        #expect(!answer.problems.contains(.repeated(.draft)))
     }
 
     @Test func aLineThatOnlyLooksLikeAHeadingIsAnItem() {

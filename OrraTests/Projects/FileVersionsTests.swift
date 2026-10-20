@@ -9,6 +9,7 @@ struct FileVersionsTests {
         FileVersions.File(url: url(name), modified: Self.start.addingTimeInterval(Double(day) * 86_400), head: head)
     }
 
+    /// A file of the project's folder, or of a subfolder when the name holds a slash.
     private func url(_ name: String) -> URL {
         URL(fileURLWithPath: "/Projects/Harbor/" + name)
     }
@@ -17,9 +18,11 @@ struct FileVersionsTests {
         let versions = FileVersions(files)
         var result: [String: String] = [:]
         for file in files {
+            let name = file.url.lastPathComponent
             switch versions.status(of: file.url) {
-            case .current: result[file.url.lastPathComponent] = "current"
-            case .replaced(by: let newer): result[file.url.lastPathComponent] = newer.lastPathComponent
+            case .current: result[name] = "current"
+            case .replaced(by: let newer): result[name] = newer.lastPathComponent
+            case .earlier(than: let newer): result[name] = "earlier than " + newer.lastPathComponent
             }
         }
         return result
@@ -40,10 +43,9 @@ struct FileVersionsTests {
         ])
     }
 
-    @Test func marksAndDatesRankFiles() {
+    @Test func marksRankFiles() {
         #expect(statuses([file("signage.txt"), file("signage-change-2026-10-02.md")])["signage.txt"] == "signage-change-2026-10-02.md")
         #expect(statuses([file("program-2026-09-01.txt"), file("program-update-2026-10-05.md")])["program-2026-09-01.txt"] == "program-update-2026-10-05.md")
-        #expect(statuses([file("minutes-2026-09-01.md"), file("minutes-2026-09-15.md")])["minutes-2026-09-01.md"] == "minutes-2026-09-15.md")
         #expect(statuses([file("letter-draft.docx", day: 3), file("letter.docx")])["letter-draft.docx"] == "letter.docx")
         #expect(statuses([file("layout-v5.pdf", day: 3), file("layout-final.pdf")])["layout-v5.pdf"] == "layout-final.pdf")
         #expect(statuses([file("budget-old.xlsx", day: 3), file("budget.xlsx")])["budget-old.xlsx"] == "budget.xlsx")
@@ -57,8 +59,26 @@ struct FileVersionsTests {
         #expect(result["合同第三版.docx"] == "current")
     }
 
-    @Test func theSameNameInTwoFormatsKeepsTheNewerFile() {
-        #expect(statuses([file("quote.pdf", day: 1), file("quote.docx", day: 2)])["quote.pdf"] == "quote.docx")
+    @Test func filesThatDifferOnlyByDateAreEarlierAndNotReplaced() {
+        // Invoices of two months and the notes of two meetings both hold values of their own.
+        #expect(statuses([file("invoice-2026-10-01.pdf"), file("invoice-2026-11-01.pdf")]) == [
+            "invoice-2026-10-01.pdf": "earlier than invoice-2026-11-01.pdf",
+            "invoice-2026-11-01.pdf": "current",
+        ])
+        #expect(statuses([file("minutes-2026-09-01.md"), file("minutes-2026-09-15.md"), file("minutes-2026-09-29.md")])["minutes-2026-09-01.md"] == "earlier than minutes-2026-09-29.md")
+        #expect(statuses([file("quote.pdf", day: 1), file("quote.docx", day: 2)])["quote.pdf"] == "earlier than quote.docx")
+        // A version among the dates still replaces.
+        #expect(statuses([file("plan-2026-09-01.md"), file("plan-v2-2026-08-01.md")])["plan-2026-09-01.md"] == "plan-v2-2026-08-01.md")
+    }
+
+    @Test func filesInOtherFoldersAreOtherDocuments() {
+        let versions = FileVersions([file("client-a/contract.md", day: 1), file("client-b/contract.md", day: 2), file("client-b/contract-v2.md")])
+        #expect(versions.status(of: url("client-a/contract.md")) == .current)
+        #expect(versions.status(of: url("client-b/contract.md")) == .replaced(by: url("client-b/contract-v2.md")))
+        // A line names the version of its own folder's document.
+        let stated = FileVersions([file("client-a/terms-v1.md"), file("client-b/terms-v1.md"), file("client-b/terms.md", head: "替代 v1")])
+        #expect(stated.status(of: url("client-a/terms-v1.md")) == .current)
+        #expect(stated.status(of: url("client-b/terms-v1.md")) == .replaced(by: url("client-b/terms.md")))
     }
 
     @Test func differentDocumentsStayCurrent() {
@@ -93,6 +113,9 @@ struct FileVersionsTests {
 
     @Test func aLineNamesAnotherDocumentByNameOrDate() {
         #expect(statuses([file("notes.md", head: "This replaces seating-plan.md."), file("seating-plan.md", day: 2)])["seating-plan.md"] == "notes.md")
+        // A name in another folder counts when the file's own folder has none.
+        let elsewhere = FileVersions([file("final/plan.md", head: "Replaces drafts/plan-old.md"), file("drafts/plan-old.md", day: 2)])
+        #expect(elsewhere.status(of: url("drafts/plan-old.md")) == .replaced(by: url("final/plan.md")))
         #expect(statuses([file("agenda-2026-09-15.txt", day: 2), file("program-update.md", head: "取代 2026-09-15 的 agenda。")])["agenda-2026-09-15.txt"] == "program-update.md")
     }
 
@@ -111,6 +134,16 @@ struct FileVersionsTests {
             file("map-b.md", day: 2, head: "This replaces map-a.md"),
         ])
         #expect(result.values.filter { $0 == "current" }.count == 1)
+        let ring = statuses((0..<5).map { file("part-\($0).md", day: $0, head: "This replaces part-\(($0 + 1) % 5).md") })
+        #expect(ring.values.filter { $0 == "current" }.count == 1)
+        #expect(Set(ring.values).count == 2)
+    }
+
+    @Test func aLongChainOfLinesEndsAtItsStart() {
+        let files = (0..<300).map { file("step-\($0).md", day: $0, head: $0 == 0 ? "" : "This replaces step-\($0 - 1).md") }
+        let versions = FileVersions(files)
+        #expect(versions.status(of: url("step-0.md")) == .replaced(by: url("step-299.md")))
+        #expect(versions.status(of: url("step-299.md")) == .current)
     }
 
     @Test func aFileNotGivenIsCurrent() {

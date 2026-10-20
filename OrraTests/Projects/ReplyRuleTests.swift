@@ -75,6 +75,8 @@ struct ReplyRuleTests {
         #expect(ProjectsLanguage.reading(raw) == .en)
         let cleaned = PromptHygiene(raw, source: .mail, language: .zh)
         #expect(decide(text: cleaned.text) == .reply(.zh))
+        // The rule cleans the text itself, so the raw text decides the same.
+        #expect(decide(text: raw) == .reply(.zh))
     }
 
     @Test func withoutTextTheSubjectDecides() {

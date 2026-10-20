@@ -9,15 +9,18 @@ import Foundation
 ///   "replaces schedule-v1" or "supersedes the version of 2026-09-15". The line names a
 ///   version of the same document, a date or the name of another file, or says "the
 ///   previous version".
-/// - **Files of the same document by their names.** Names that are the same once versions
-///   (v2, 第二版), dates, and words such as final, draft, update or 修订 are taken out
-///   belong to one document, whatever their format, so quote-v1.pdf and quote-v2.docx do.
-///   The current one is, in this order: marked final (final, 终稿, 定稿), the highest
-///   version, marked as a revision or an update (revised, update, change, 修订, 变更), not
-///   marked as a draft or as old, the latest date in the name, and the latest
-///   modification. A file with a later date in its name, such as notes for another
-///   meeting, counts as a newer file of the same kind, and the prompt says only that
-///   where the two differ the newer one counts.
+/// - **Files of the same document by their names.** Files in one folder whose names are
+///   the same once versions (v2, 第二版), dates, and words such as final, draft, update or
+///   修订 are taken out belong to one document, whatever their format, so quote-v1.pdf and
+///   quote-v2.docx do. The current one is, in this order: marked final (final, 终稿, 定稿),
+///   the highest version, marked as a revision or an update (revised, update, change, 修订,
+///   变更), not marked as a draft or as old, the latest date in the name, and the latest
+///   modification.
+///
+/// A file of the same document that differs from the current one in its final mark, its
+/// version or its mark is replaced. One that differs only by the date in its name or by
+/// its modification, such as an invoice of another month or the notes of another meeting,
+/// is only an earlier file of the same kind: its values held for their own time.
 ///
 /// A line in a file is never followed when it would make a file replace itself through
 /// others. Files the user never added play no part, since the caller passes only the files
@@ -35,68 +38,143 @@ nonisolated struct FileVersions: Sendable, Equatable {
         case current
         /// Replaced by this file, the current one of the document.
         case replaced(by: URL)
+        /// An earlier file of the same kind as this one, which is newer but replaces nothing.
+        case earlier(than: URL)
     }
 
-    /// The status of each file that a newer one replaced. Every other file is current.
+    /// The files that a newer one replaced, each with the current file of its document.
     let replaced: [URL: URL]
+    /// The files that are only earlier than a newer file of the same kind, with that file.
+    let earlier: [URL: URL]
 
     init(_ files: [File]) {
-        var unique: [File] = []
-        for file in files where !unique.contains(where: { $0.url == file.url }) {
-            unique.append(file)
-        }
+        var seen: Set<URL> = []
+        let unique = files.filter { seen.insert($0.url).inserted }
         let names = unique.map { Name($0.url.lastPathComponent) }
         let order = unique.indices.sorted { Self.isNewer(unique[$0], names[$0], than: unique[$1], names[$1]) }
-        var edges: [Int: Int] = [:]
+        let documents = Documents(unique, names: names, order: order)
 
-        func reaches(_ start: Int, _ target: Int) -> Bool {
-            var current = start
-            var seen: Set<Int> = []
-            while let next = edges[current], seen.insert(current).inserted {
-                if next == target { return true }
-                current = next
+        // Edges from an old file to the file that replaced it. Each file has at most one,
+        // and `end` finds where a file's edges lead, so a cycle is never made.
+        var edges: [Int: Int] = [:]
+        var ends = Array(unique.indices)
+        func end(_ index: Int) -> Int {
+            var index = index
+            while ends[index] != index {
+                ends[index] = ends[ends[index]]
+                index = ends[index]
             }
-            return false
+            return index
         }
         func add(_ old: Int, replacedBy new: Int) {
-            guard old != new, edges[old] == nil, !reaches(new, old) else { return }
+            // An old file without an edge is where its own edges end, so a new file whose
+            // edges end there would close a cycle.
+            guard old != new, edges[old] == nil, end(new) != old else { return }
             edges[old] = new
+            ends[old] = end(new)
         }
 
         // Lines in the files, newest file first.
         for index in order {
-            for target in Self.statedTargets(of: index, files: unique, names: names) {
+            for target in Self.statedTargets(of: index, files: unique, documents: documents) {
                 add(target, replacedBy: index)
             }
         }
-        // Names: every other file of a document is replaced by its current one.
-        var families: [String: [Int]] = [:]
-        for index in order {
-            if let family = names[index].family {
-                families[family, default: []].append(index)
-            }
-        }
-        for members in families.values where members.count > 1 {
+        // Names: every other file of a document is replaced by its current one, or only
+        // earlier than it when the two differ by dates alone.
+        var earlierEdges: [Int: Int] = [:]
+        for members in documents.members.values where members.count > 1 {
             guard let current = members.first(where: { edges[$0] == nil }) else { continue }
-            for member in members where member != current {
-                add(member, replacedBy: current)
+            for member in members where member != current && edges[member] == nil {
+                if names[member].differsBeyondDates(from: names[current]) {
+                    add(member, replacedBy: current)
+                } else {
+                    earlierEdges[member] = current
+                }
             }
         }
 
         var replaced: [URL: URL] = [:]
         for old in edges.keys {
-            var end = old
-            var seen: Set<Int> = [old]
-            while let next = edges[end], seen.insert(next).inserted {
-                end = next
-            }
-            replaced[unique[old].url] = unique[end].url
+            replaced[unique[old].url] = unique[end(old)].url
         }
         self.replaced = replaced
+        var earlier: [URL: URL] = [:]
+        for (old, newer) in earlierEdges where edges[old] == nil {
+            earlier[unique[old].url] = unique[newer].url
+        }
+        self.earlier = earlier
     }
 
     func status(of url: URL) -> Status {
-        replaced[url].map { .replaced(by: $0) } ?? .current
+        if let newer = replaced[url] {
+            return .replaced(by: newer)
+        }
+        return earlier[url].map { .earlier(than: $0) } ?? .current
+    }
+
+    /// The files by document, and by what a line may name them with, built once.
+    nonisolated private struct Documents {
+        /// The files of each document, by folder and family, newest first.
+        var members: [Key: [Int]] = [:]
+        /// The key of each file's document, or nil for a name with no family.
+        var keys: [Key?] = []
+        /// The files by the date in their names.
+        var byDate: [Int: [Int]] = [:]
+        /// The files by their names without the extension, which a line may name, and the
+        /// lengths of those names by their first characters. Shorter names are not looked up.
+        var byStem: [String: [Int]] = [:]
+        var lengthsByStart: [String: Set<Int>] = [:]
+        var folders: [String] = []
+        let names: [Name]
+
+        nonisolated struct Key: Hashable {
+            var folder: String
+            var family: String
+        }
+
+        static let stemStart = 4
+
+        init(_ files: [File], names: [Name], order: [Int]) {
+            self.names = names
+            for (index, file) in files.enumerated() {
+                let folder = file.url.deletingLastPathComponent().standardizedFileURL.path
+                folders.append(folder)
+                keys.append(names[index].family.map { Key(folder: folder, family: $0) })
+                let stem = (file.url.lastPathComponent as NSString).deletingPathExtension.precomposedStringWithCompatibilityMapping.lowercased()
+                if stem.count >= Self.stemStart {
+                    byStem[stem, default: []].append(index)
+                    lengthsByStart[String(stem.prefix(Self.stemStart)), default: []].insert(stem.count)
+                }
+                if names[index].date != 0 {
+                    byDate[names[index].date, default: []].append(index)
+                }
+            }
+            for index in order {
+                if let key = keys[index] {
+                    members[key, default: []].append(index)
+                }
+            }
+        }
+
+        /// The other files whose names without the extension the statement of file `index`
+        /// holds, only those in its own folder when there are any.
+        func named(in statement: String, by index: Int) -> [Int] {
+            let characters = Array(statement)
+            guard characters.count >= Self.stemStart else { return [] }
+            var found: [Int] = []
+            var seen: Set<Int> = []
+            for start in 0...(characters.count - Self.stemStart) {
+                guard let lengths = lengthsByStart[String(characters[start..<(start + Self.stemStart)])] else { continue }
+                for length in lengths where start + length <= characters.count {
+                    for other in byStem[String(characters[start..<(start + length)])] ?? [] where other != index && seen.insert(other).inserted {
+                        found.append(other)
+                    }
+                }
+            }
+            let nearby = found.filter { folders[$0] == folders[index] }
+            return nearby.isEmpty ? found : nearby
+        }
     }
 
     // MARK: Names
@@ -164,6 +242,12 @@ nonisolated struct FileVersions: Sendable, Equatable {
                 .split(whereSeparator: { Self.separators.contains($0) })
                 .joined(separator: "-")
             self.family = family.isEmpty ? nil : family
+        }
+
+        /// Whether the two names differ in their final mark, their version or their mark,
+        /// and not only in their dates.
+        func differsBeyondDates(from other: Name) -> Bool {
+            isFinal != other.isFinal || version != other.version || mark != other.mark
         }
 
         private static let separators = Set<Character>(" -_.()（）[]【】,，、+~")
@@ -242,13 +326,16 @@ nonisolated struct FileVersions: Sendable, Equatable {
     // MARK: Lines that name what a file replaces
 
     /// The files that a line near the top of file `index` says it replaces.
-    private static func statedTargets(of index: Int, files: [File], names: [Name]) -> [Int] {
+    private static func statedTargets(of index: Int, files: [File], documents: Documents) -> [Int] {
         var targets: [Int] = []
+        var seen: Set<Int> = []
         let lines = files[index].head.split(whereSeparator: \.isNewline).prefix(headLines)
+        var statementCount = 0
         for line in lines {
             let form = SortingText.matchingForm(String(line))
-            for statement in statements(in: form) {
-                for target in resolve(statement, of: index, files: files, names: names) where !targets.contains(target) {
+            for statement in statements(in: form) where statementCount < statementLimit {
+                statementCount += 1
+                for target in resolve(statement, of: index, files: files, documents: documents) where seen.insert(target).inserted {
                     targets.append(target)
                 }
             }
@@ -256,8 +343,9 @@ nonisolated struct FileVersions: Sendable, Equatable {
         return targets
     }
 
-    /// The lines of a file's head that count.
+    /// The lines of a file's head that count, and the statements in them.
     private static let headLines = 20
+    private static let statementLimit = 4
 
     /// What the line says is replaced: the text after "replaces" or "替代", or before
     /// "作废". "以此为准" stands for the earlier versions of the same document.
@@ -284,22 +372,37 @@ nonisolated struct FileVersions: Sendable, Equatable {
     /// The files a statement names, among the others: a version of the same document, a
     /// file with a date in its name, a file by its name, or the earlier versions of the
     /// same document.
-    private static func resolve(_ statement: String, of index: Int, files: [File], names: [Name]) -> [Int] {
+    private static func resolve(_ statement: String, of index: Int, files: [File], documents: Documents) -> [Int] {
         let named = Name(text: statement)
-        let family = names[index].family
+        let key = documents.keys[index]
+        let names = documents.names
+        let sameDocument = key.flatMap { documents.members[$0] } ?? []
         var targets: [Int] = []
-        for other in files.indices where other != index {
-            let name = names[other]
-            let stem = (files[other].url.lastPathComponent as NSString).deletingPathExtension.precomposedStringWithCompatibilityMapping.lowercased()
-            if !named.version.isEmpty, name.family == family, name.version == named.version {
+        var seen: Set<Int> = [index]
+        func add(_ other: Int) {
+            if seen.insert(other).inserted {
                 targets.append(other)
-            } else if named.date != 0, name.date == named.date, name.family == family || mentions(name.family, in: statement) {
-                targets.append(other)
-            } else if stem.count >= 4, statement.contains(stem) {
-                targets.append(other)
-            } else if family != nil, name.family == family, statement.firstMatch(of: previousPattern) != nil,
-                      isNewer(files[index], names[index], than: files[other], name) {
-                targets.append(other)
+            }
+        }
+        if !named.version.isEmpty {
+            for other in sameDocument where names[other].version == named.version {
+                add(other)
+            }
+        }
+        if named.date != 0 {
+            for other in documents.byDate[named.date] ?? [] {
+                let otherKey = documents.keys[other]
+                if otherKey == key || mentions(otherKey?.family, in: statement) {
+                    add(other)
+                }
+            }
+        }
+        for other in documents.named(in: statement, by: index) {
+            add(other)
+        }
+        if statement.firstMatch(of: previousPattern) != nil {
+            for other in sameDocument where isNewer(files[index], names[index], than: files[other], names[other]) {
+                add(other)
             }
         }
         return targets

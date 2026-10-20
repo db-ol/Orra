@@ -6,8 +6,8 @@ import Foundation
 ///
 /// No reply is due when the user sent the email, when the user answered it later in its
 /// thread, or for list mail. Otherwise the draft is in the language of the email's own
-/// text, Chinese or English, read with `ProjectsLanguage.reading(_:)` after the lines that
-/// PromptHygiene took out, so a fake English system line in a Chinese email does not turn
+/// text, Chinese or English, read with `ProjectsLanguage.reading(_:)` without the lines that
+/// PromptHygiene takes out, so a fake English system line in a Chinese email does not turn
 /// the reply into English. An email in another language needs a reply but gets no draft.
 nonisolated struct ReplyRule: Sendable, Equatable {
     /// Another message of the email's thread.
@@ -54,7 +54,8 @@ nonisolated struct ReplyRule: Sendable, Equatable {
     ///   - date: when the email was sent or received.
     ///   - thread: the other messages of its thread.
     ///   - list: its list headers.
-    ///   - text: its own text after PromptHygiene, with the markers in it.
+    ///   - text: its own text, raw or already through PromptHygiene. It is cleaned here,
+    ///     which changes nothing in text that was cleaned before.
     ///   - subject: its subject, read for the language when the text has no letters.
     func decision(sender: String, date: Date, thread: [Message], list: ListMail, text: String, subject: String) -> Decision {
         let address = ProjectsAddress.normalized(sender)
@@ -64,7 +65,7 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         if thread.contains(where: { $0.date > date && isOwn(ProjectsAddress.normalized($0.sender)) }) {
             return .noReply(.answeredLater)
         }
-        let readable = PromptHygiene.withoutMarkers(text)
+        let readable = PromptHygiene.withoutMarkers(PromptHygiene(text, source: .mail).text)
         if list.sign(sender: address ?? "", text: readable) != nil {
             return .noReply(.listMail)
         }
