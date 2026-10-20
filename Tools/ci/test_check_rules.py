@@ -366,11 +366,24 @@ class AppleEventTests(SourceCheckTestCase):
         self.assert_passes("OrraTests/WindowTests.swift", text)
 
     def test_a_file_on_the_allow_list_may_build_and_send(self):
-        allowed = frozenset({"Orra/Projects/Mail/MailEvents.swift"})
+        allowed = frozenset({"Orra/Projects/Mail/Example.swift"})
         text = "let event = NSAppleEventDescriptor(eventClass: a, eventID: b, targetDescriptor: t, returnID: r, transactionID: x)\nlet reply = try event.sendEvent(options: [], timeout: 10)\n"
-        self.assert_passes("Orra/Projects/Mail/MailEvents.swift", text, apple_event_files=allowed)
+        self.assert_passes("Orra/Projects/Mail/Example.swift", text, apple_event_files=allowed)
         self.assert_fails("Orra/Projects/Mail/MailBridge.swift", text, 3, "sendEvent(options", apple_event_files=allowed)
-        self.assert_fails("Orra/Projects/Mail/MailEvents.swift", text, 3, "sendEvent(options")
+        self.assert_fails("Orra/Projects/Mail/Example.swift", text, 3, "sendEvent(options")
+
+    def test_only_mail_events_is_on_the_allow_list(self):
+        self.assertEqual(check_rules.APPLE_EVENT_FILES, frozenset({"Orra/Projects/Mail/MailEvents.swift"}))
+        problems = self.check_one(
+            "Orra/Projects/Mail/MailEvents.swift", "let reply = try event.sendEvent(options: [], timeout: 10)\n"
+        )
+        self.assertNotIn(3, [problem.rule for problem in problems])
+        problems = self.check_one(
+            "Orra/Projects/Mail/MailEvents.swift",
+            "let reply = try event.sendEvent(options: [], timeout: 10)\n",
+            apple_event_files=frozenset(),
+        )
+        self.assertIn((3, "sendEvent(options"), [(problem.rule, problem.name) for problem in problems])
 
     def test_tests_may_build_but_never_send(self):
         self.assert_passes("OrraTests/LaunchWindowTests.swift", """\
@@ -401,6 +414,171 @@ class AppleEventTests(SourceCheckTestCase):
 
     def test_names_in_comments_and_strings_pass(self):
         self.assert_passes("Orra/Other.swift", '// AESendMessage\nlet a = "sendEvent(options:"\n')
+
+
+class MailEventsRuleTests(SourceCheckTestCase):
+    """Rule 10, on the real MailEvents.swift and on changed copies of it."""
+
+    PATH = "Orra/Projects/Mail/MailEvents.swift"
+    REAL = (REPOSITORY / PATH).read_text(encoding="utf-8")
+
+    def changed(self, old, new, count=1):
+        """The real file with one change, which must find its place."""
+        self.assertEqual(self.REAL.count(old), count, old)
+        return self.REAL.replace(old, new)
+
+    def rule_ten(self, text):
+        return [problem.name for problem in self.check_one(self.PATH, text) if problem.rule == 10]
+
+    def assert_rule_ten_fails(self, text, name):
+        self.assertIn(name, self.rule_ten(text))
+
+    def test_the_real_file_passes(self):
+        self.assertEqual(self.check_one(self.PATH, self.REAL), [])
+        self.assertEqual(check_rules.check_mail_events(self.REAL), [])
+
+    def test_the_rule_holds_whatever_the_allow_list_says(self):
+        text = self.changed('case reply = "emalrpms"', 'case reply = "emalfwms"')
+        problems = self.check_one(self.PATH, text, apple_event_files=frozenset({self.PATH}))
+        self.assertIn("MailEvent case reply = emalfwms", [problem.name for problem in problems if problem.rule == 10])
+
+    def test_the_rule_reads_only_mail_events(self):
+        text = self.changed('case reply = "emalrpms"', 'case delete = "coredelo"')
+        self.assert_passes("Orra/Projects/Mail/MailEventsTools.swift", text, apple_event_files=frozenset({"Orra/Projects/Mail/MailEventsTools.swift"}))
+
+    def test_another_event_in_the_enum_fails(self):
+        text = self.changed('    case reply = "emalrpms"\n', '    case reply = "emalrpms"\n    case delete = "coredelo"\n')
+        self.assertCountEqual(self.rule_ten(text), ["MailEvent case delete = coredelo", '"coredelo", the code of delete'])
+        text = self.changed('case count = "corecnte"', 'case count = "corecnte", move = "coremove"')
+        self.assertCountEqual(self.rule_ten(text), ["MailEvent case move = coremove", '"coremove", the code of move'])
+
+    def test_a_changed_or_missing_event_fails(self):
+        self.assertCountEqual(
+            self.rule_ten(self.changed('case reply = "emalrpms"', 'case reply = "emalfwms"')),
+            ["MailEvent case reply = emalfwms", '"emalfwms", the code of forward'],
+        )
+        self.assertCountEqual(
+            self.rule_ten(self.changed('case get = "coregetd"', 'case get = "coresetd"')),
+            ["MailEvent case get = coresetd", '"coresetd", the code of set'],
+        )
+        self.assertEqual(self.rule_ten(self.changed('    case count = "corecnte"\n', "")), ["MailEvent without case count"])
+        self.assert_rule_ten_fails(self.changed('case get = "coregetd"', "case get"), "MailEvent case get without its code")
+        self.assert_rule_ten_fails(self.changed("enum MailEvent:", "enum MailEvents2:"), "no MailEvent enum")
+
+    def test_codes_not_from_the_raw_value_fail(self):
+        self.assert_rule_ten_fails(
+            self.changed("MailEvents.code(rawValue.prefix(4))", 'MailEvents.code("core")'),
+            "MailEvent eventClass not from rawValue.prefix(4)",
+        )
+        self.assert_rule_ten_fails(
+            self.changed("MailEvents.code(rawValue.suffix(4))", "MailEvents.code(rawValue.prefix(4))"),
+            "MailEvent eventID not from rawValue.suffix(4)",
+        )
+
+    def test_an_event_with_codes_of_its_own_fails(self):
+        cases = [
+            ("withEventClass: self.event.eventClass", 'withEventClass: MailEvents.code("core")'),
+            ("eventID: self.event.eventID", "eventID: MailEvents.code(rawValue)"),
+            ("eventID: self.event.eventID", "eventID: other.eventID"),
+            ("withEventClass: self.event.eventClass", "withEventClass: 0x636F_7265"),
+        ]
+        for old, new in cases:
+            with self.subTest(new=new):
+                self.assert_rule_ten_fails(self.changed(old, new), "appleEvent(withEventClass: not from MailEvent")
+        self.assertEqual(self.rule_ten(self.changed("withEventClass: self.event.eventClass", "withEventClass: MailEvent.get.eventClass")), ["appleEvent(withEventClass: not from MailEvent"])
+        self.assertEqual(
+            self.rule_ten(self.changed(
+                "withEventClass: self.event.eventClass,\n                eventID: self.event.eventID",
+                "withEventClass: MailEvent.reply.eventClass,\n                eventID: MailEvent.reply.eventID",
+            )),
+            [],
+        )
+        self.assert_rule_ten_fails(
+            self.REAL + "let other = NSAppleEventDescriptor(eventClass: a, eventID: b, targetDescriptor: t, returnID: r, transactionID: x)\n",
+            "NSAppleEventDescriptor(eventClass: not from MailEvent",
+        )
+        self.assert_rule_ten_fails(self.REAL + "AECreateAppleEvent(a, b, target, r, x, event)\n", "AECreateAppleEvent")
+        self.assert_rule_ten_fails(self.REAL + "AEBuildAppleEvent(a, b, type, target, size, r, x, event, nil, format)\n", "AEBuildAppleEvent")
+
+    def test_changing_an_event_after_it_is_built_fails(self):
+        cases = {
+            'event.setAttribute(NSAppleEventDescriptor(typeCode: MailEvents.code("de" + "lo")), forKeyword: keyEventIDAttr)': ["setAttribute", "keyEventIDAttr"],
+            "event.setAttribute(other, forKeyword: AEKeyword(keyEventClassAttr))": ["setAttribute", "keyEventClassAttr"],
+            "let other = NSAppleEventDescriptor(descriptorType: typeAppleEvent, data: saved)": ["typeAppleEvent"],
+            "AEPutAttributeDesc(event, keyword, value)": ["AEPutAttributeDesc"],
+            "AEPutAttributePtr(event, keyword, type, data, size)": ["AEPutAttributePtr"],
+        }
+        for code, names in cases.items():
+            with self.subTest(code=code):
+                self.assertCountEqual(self.rule_ten(self.REAL + code + "\n"), names)
+
+    def test_a_reply_without_its_window_fails(self):
+        self.assert_rule_ten_fails(
+            self.changed("NSAppleEventDescriptor(boolean: true), forKeyword: MailEvents.code(\"ropw\")", "NSAppleEventDescriptor(boolean: false), forKeyword: MailEvents.code(\"ropw\")"),
+            "ropw not set to true",
+        )
+        self.assert_rule_ten_fails(
+            self.changed("                event.setParam(NSAppleEventDescriptor(boolean: true), forKeyword: MailEvents.code(\"ropw\"))\n", ""),
+            "reply without ropw true",
+        )
+        self.assert_rule_ten_fails(
+            self.REAL + 'let late = { event.setParam(NSAppleEventDescriptor(boolean: open), forKeyword: MailEvents.code("ropw")) }\n',
+            "ropw not set to true",
+        )
+
+    def test_a_code_of_a_command_that_changes_mail_fails(self):
+        cases = {
+            'let a = "coredelo"': '"coredelo", the code of delete',
+            'let a = "delo"': '"delo", the code of delete',
+            'let a = "emsgsend"': '"emsgsend", the code of send',
+            'let a = "emsg"': '"emsg", the code of send',
+            'let a = "send"': '"send", the code of send',
+            'let a = "aevtquit"': '"aevtquit", the code of quit',
+            'let a = "setd"': '"setd", the code of set',
+            'let a = "cpma"': '"cpma", the code of perform mail action with messages',
+            'let a = "ctnt"': '"ctnt", the code of content',
+            'let a = #"move"#': '"move", the code of move',
+            'let a = "del\\u{6F}"': '"delo", the code of delete',
+            "let a = 0x6465_6C6F": "0x6465_6C6F, the code delo of delete",
+            "let a = 1684368495": "1684368495, the code delo of delete",
+            "let a = 0o14431266157": "0o14431266157, the code delo of delete",
+        }
+        for code, name in cases.items():
+            with self.subTest(code=code):
+                self.assert_rule_ten_fails(self.REAL + code + "\n", name)
+
+    def test_codes_that_only_read_and_comments_pass(self):
+        text = self.REAL + '// coredelo, delete and "send"\nlet a = "core"\nlet b = "emal"\nlet c = "move it"\nlet d = "\\(x)send"\n'
+        self.assertEqual(self.rule_ten(text), [])
+
+    def test_the_banned_codes(self):
+        banned = check_rules.MAIL_BANNED_CODES
+        for code in ("delo", "send", "fwms", "chma", "emsg", "aevt", "ctnt", "setd"):
+            self.assertIn(code, banned)
+        for code in ("core", "emal", "getd", "cnte", "rpms", "raso", "meid"):
+            self.assertNotIn(code, banned)
+
+    def test_the_list_covers_every_command_of_mail(self):
+        """Every command in Mail's scripting dictionary is either one of the three events, a
+        command that only reads, or a command rule 10 bans. Skipped where Mail is not, as on
+        the Linux runner."""
+        dictionaries = [
+            Path("/System/Applications/Mail.app/Contents/Resources/Mail.sdef"),
+            Path("/System/Library/ScriptingDefinitions/CocoaStandard.sdef"),
+        ]
+        if not all(path.is_file() for path in dictionaries):
+            self.skipTest("Mail's scripting dictionary is not on this machine")
+        import xml.etree.ElementTree as ElementTree
+
+        reading = {"coredoex": "exists", "emaleafn": "extract name from", "emaleaua": "extract address from"}
+        allowed = set(check_rules.MAIL_EVENTS.values())
+        for path in dictionaries:
+            for command in ElementTree.parse(path).iter("command"):
+                code = command.get("code")
+                with self.subTest(path=path.name, command=command.get("name")):
+                    self.assertTrue(code in allowed or code in reading or code in check_rules.MAIL_CHANGING_COMMANDS, code)
+                    if code in check_rules.MAIL_CHANGING_COMMANDS:
+                        self.assertEqual(check_rules.MAIL_CHANGING_COMMANDS[code].lower(), command.get("name").lower())
 
 
 class ScriptTextTests(SourceCheckTestCase):

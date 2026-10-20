@@ -207,7 +207,7 @@ struct LocalizationTests {
         let quit = try #require(strings["Quit Orra"].flatMap { Self.translations($0, in: language).first?.value })
         #expect(bundle.localizedString(forKey: "Quit Orra", value: nil, table: nil) == quit)
         let prompts = try Self.catalog("InfoPlist")
-        for key in ["NSMicrophoneUsageDescription", "NSAudioCaptureUsageDescription"] {
+        for key in ["NSMicrophoneUsageDescription", "NSAudioCaptureUsageDescription", "NSAppleEventsUsageDescription"] {
             let prompt = try #require(prompts[key].flatMap { Self.translations($0, in: language).first?.value })
             #expect(bundle.localizedString(forKey: key, value: nil, table: "InfoPlist") == prompt)
         }

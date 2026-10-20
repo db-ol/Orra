@@ -14,8 +14,9 @@ This file is the guide for anyone, human or agent, who changes this repository.
   (product Qwen3ASR, pinned commit) is approved for Qwen3-ASR 1.7B.
 - Distributed outside the Mac App Store. App Sandbox is off because Orra will use Accessibility APIs.
 - Signed by team X77KW5VYFJ. Releases use its Developer ID and are notarized. The hardened
-  runtime is on, with the audio input entitlement as its only exception, which the
-  microphone needs.
+  runtime is on with two exceptions: the audio input entitlement, which the microphone
+  needs, and the Apple Events entitlement, which Projects needs to read mail in the Mail
+  app, approved by the maintainer on 2026-10-18.
 
 ## Intended flow
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
@@ -56,8 +57,8 @@ trusted once in Xcode. docs/dependencies.md has the details.
 ## Localization
 - The interface is in English, Simplified Chinese (zh-Hans), Japanese (ja) and Spanish
   (es-419). Orra/Localizable.xcstrings holds the strings, and Orra/InfoPlist.xcstrings the
-  microphone and system audio prompts. Spanish is Latin American Spanish, which a Mac in
-  any Spanish falls back to, and it matches the menu items SwiftUI adds.
+  microphone, system audio and Mail automation prompts. Spanish is Latin American Spanish,
+  which a Mac in any Spanish falls back to, and it matches the menu items SwiftUI adds.
 - SwiftUI text literals are localized on their own. Text built in code uses
   `String(localized:)`, and SwiftUI shows text that is already localized with
   `Text(verbatim:)`.
@@ -154,6 +155,7 @@ docs/privacy.md, as docs/website.md describes.
   It also checks the Projects source rules of Runtime rules: the names code in Orra/Projects
   must not use, where NSAttributedString may appear, that Orra/Projects holds Swift files
   only, Apple Events built or sent in Orra outside the files it allows or sent from tests,
+  the three events the Mail bridge may build and the window each reply opens,
   script text in any file under Orra, OrraTests or Tools, and where SQLite, removing files
   and UserDefaults may appear. It reads names in code, not every way around them, so review
   Projects changes by hand too. The same job runs the tests of the rules check in Tools/ci

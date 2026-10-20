@@ -3146,6 +3146,39 @@ or press the key to start and again to finish where they say hold:
   translated text off.
 - [ ] The welcome window's translation line names the dictation language.
 
+Mail access for Projects, added on 2026-10-19, not verified yet. Projects reads mail in the
+Mail app through three Apple Events, see Orra/Projects/Mail/MailEvents.swift: get and count,
+which only read, and reply, which opens Mail's reply window. Orra/Info.plist holds
+NSAppleEventsUsageDescription, with its Chinese, Japanese and Spanish text in
+InfoPlist.xcstrings. Nothing asks for the permission yet. Allow Mail Access… in Settings >
+Projects comes later, so the checks after the first wait for it, in a Debug build with Mail
+open. Watch the log with
+`log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "projects-mail"'`:
+it shows the events with their times and error codes, and the permission checks, never
+mail.
+
+- [ ] Signing & Capabilities of the Orra target shows Apple Events ticked under Hardened
+  Runtime, Resource Access, next to Audio Input. On a release build,
+  `codesign -d --entitlements - --xml Orra.app` lists
+  com.apple.security.automation.apple-events and com.apple.security.device.audio-input and
+  nothing else.
+- [ ] The first Allow Mail Access… with Mail open: macOS asks whether Orra may control Mail,
+  with the text from Info.plist, in English, Chinese, Japanese and Spanish. Allowing it
+  lists Orra under Privacy & Security, Automation, with Mail turned on.
+- [ ] Don't Allow, or Mail turned off for Orra in that list: Settings > Projects shows one
+  line that leads to Privacy & Security, Automation, and the log shows -1743. Orra never
+  asks again by itself. To see the prompt again, quit Orra and run
+  `tccutil reset AppleEvents io.github.db-ol.Orra` yourself, which also resets the answer of
+  a Debug build.
+- [ ] With Mail not open, nothing asks, Mail stays closed, and the log says Mail is not
+  running.
+- [ ] With Mail open and access not asked yet (after the `tccutil reset` above), reading
+  mail shows no prompt, and the log shows each event failed with -1744. Only Allow Mail
+  Access… shows the prompt.
+- [ ] Opening Settings > Projects or Report a Problem shows the last answer without a new
+  check: no prompt, and no permission check line in the log.
+- [ ] Reading mail never marks a message as read and never moves one.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
