@@ -624,6 +624,8 @@ PROJECTS_BANNED = _rule(
     r"\bk?AX[A-Z]\w*",
     r"\bNSWorkspace\b",
     r"\bNSPasteboard\b",
+    # The concealed copy of Orra/ConcealedClipboard.swift. Projects gets it as a closure.
+    r"\bConcealedClipboard\b",
     r"\bProcess\b",
     r"\bNSTask\b",
     r"\bposix_spawnp?\b",

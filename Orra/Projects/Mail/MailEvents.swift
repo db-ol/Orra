@@ -400,8 +400,9 @@ nonisolated extension MailEvents {
     /// procNotFound, which a send to a process that is gone gives too.
     private static let notRunning = procNotFound
 
-    /// Mail, when it runs and has finished launching. Never launches it.
-    private static func runningMail() -> NSRunningApplication? {
+    /// Mail, when it runs and has finished launching. Never launches it. ReplyHandoff
+    /// brings this process to the front.
+    static func runningMail() -> NSRunningApplication? {
         NSRunningApplication.runningApplications(withBundleIdentifier: mailIdentifier)
             .first { !$0.isTerminated && $0.isFinishedLaunching && $0.processIdentifier > 0 }
     }

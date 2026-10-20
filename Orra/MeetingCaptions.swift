@@ -298,7 +298,7 @@ final class MeetingCaptions {
         displayMode: CaptionDisplayMode = .translationOnly,
         saveDisplayMode: @escaping (CaptionDisplayMode) -> Void = { _ in },
         store: CaptionStore = CaptionStore(),
-        copyText: @escaping (String) -> Void = { TextInserter.copy($0, to: .general) },
+        copyText: @escaping (String) -> Void = { ConcealedClipboard.copy($0, to: .general) },
         silenceHint: Double = 8
     ) {
         self.source = source
@@ -335,7 +335,7 @@ final class MeetingCaptions {
 
     /// Copies a transcript, such as `store.transcript` or `store.previous`, the way the
     /// window shows it unless `content` says otherwise. Concealed and kept on this Mac,
-    /// as Copy Last Dictation, see TextInserter.copy, since captions are other people's
+    /// as Copy Last Dictation, see ConcealedClipboard, since captions are other people's
     /// words. Returns false when there is nothing to copy. Logs the count, never the text.
     @discardableResult
     func copy(_ transcript: CaptionTranscript, as content: CaptionTranscript.Content? = nil) -> Bool {

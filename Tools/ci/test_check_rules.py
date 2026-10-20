@@ -179,6 +179,7 @@ class ProjectsCodeTests(SourceCheckTestCase):
             "let name = kAXFocusedUIElementAttribute": "kAXFocusedUIElementAttribute",
             "NSWorkspace.shared.open(url)": "NSWorkspace",
             "NSPasteboard.general.clearContents()": "NSPasteboard",
+            "ConcealedClipboard.copy(draft, to: .general)": "ConcealedClipboard",
             "let task = Process()": "Process",
             "let task = Foundation.Process()": "Process",
             "let task = NSTask()": "NSTask",
@@ -267,7 +268,10 @@ class ProjectsCodeTests(SourceCheckTestCase):
             """)
 
     def test_rule_one_holds_only_in_the_projects_folder(self):
-        self.assert_passes("Orra/AppLanguage.swift", "let shell = Process()\nNSWorkspace.shared.open(url)\n")
+        self.assert_passes(
+            "Orra/AppLanguage.swift",
+            "let shell = Process()\nNSWorkspace.shared.open(url)\nConcealedClipboard.copy(draft, to: .general)\n",
+        )
         self.assert_passes("OrraTests/Projects/ExampleTests.swift", "let task = Process()\n")
 
     def test_a_failure_prints_no_more_than_the_name(self):

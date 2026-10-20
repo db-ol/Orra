@@ -60,7 +60,7 @@ struct TextInserterTests {
         let inserter = fixture.makeInserter()
         #expect(await inserter.insert("这个 PR 先 merge 一下") == .pasted)
         #expect(fixture.pasteboard.string(forType: .string) == "这个 PR 先 merge 一下")
-        #expect(fixture.pasteboard.types?.contains(TextInserter.concealedType) == true)
+        #expect(fixture.pasteboard.types?.contains(ConcealedClipboard.concealedType) == true)
         #expect(fixture.postedKeyCodes == [9])
     }
 
@@ -73,7 +73,7 @@ struct TextInserterTests {
         await inserter.insert("new")
         await inserter.waitForRestore()
         #expect(fixture.pasteboard.string(forType: .string) == "old")
-        #expect(fixture.pasteboard.types?.contains(TextInserter.concealedType) == false)
+        #expect(fixture.pasteboard.types?.contains(ConcealedClipboard.concealedType) == false)
     }
 
     @Test(.timeLimit(.minutes(1)))
@@ -183,18 +183,6 @@ struct TextInserterTests {
         #expect(fixture.pasteboard.string(forType: .string) == "old")
     }
 
-    @Test func copyLastDictationIsConcealedAndStays() async throws {
-        let fixture = InserterFixture()
-        defer { fixture.release() }
-        fixture.put("old")
-        TextInserter.copy("什么都可以", to: fixture.pasteboard)
-        #expect(fixture.pasteboard.string(forType: .string) == "什么都可以")
-        #expect(fixture.pasteboard.types?.contains(TextInserter.concealedType) == true)
-        // Nothing puts the old contents back.
-        try await Task.sleep(for: .milliseconds(150))
-        #expect(fixture.pasteboard.string(forType: .string) == "什么都可以")
-    }
-
     @Test func emptyTextChangesNothing() async {
         let fixture = InserterFixture()
         defer { fixture.release() }
@@ -249,14 +237,14 @@ struct TextInserterTests {
         let plain = await PasteboardSnapshot.read(pasteboardNamed: fixture.pasteboard.name.rawValue)
         #expect(plain.restoreOptions == [])
         // As Copy Last Dictation and the copy of Live Captions put it there.
-        TextInserter.copy("Hello everyone.", to: fixture.pasteboard)
+        ConcealedClipboard.copy("Hello everyone.", to: fixture.pasteboard)
         let concealed = await PasteboardSnapshot.read(pasteboardNamed: fixture.pasteboard.name.rawValue)
         #expect(concealed.restoreOptions == .currentHostOnly)
         let inserter = fixture.makeInserter()
         await inserter.insert("new")
         await inserter.waitForRestore()
         #expect(fixture.pasteboard.string(forType: .string) == "Hello everyone.")
-        #expect(fixture.pasteboard.types?.contains(TextInserter.concealedType) == true)
+        #expect(fixture.pasteboard.types?.contains(ConcealedClipboard.concealedType) == true)
     }
 
     @Test func currentLayoutHasAKeyForV() throws {
