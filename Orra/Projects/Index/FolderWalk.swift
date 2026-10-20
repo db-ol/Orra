@@ -4,12 +4,16 @@ import Foundation
 ///
 /// - The folder is refused when it is the home folder or holds it, when it is a volume root,
 ///   and when it is, lies inside or holds Mail's data (~/Library/Mail and
-///   ~/Library/Containers/com.apple.mail). Since a folder that holds the home folder is
-///   refused, the walk enters ~/Library, Desktop, Documents and Downloads only when the added
-///   folder is one of them or lies inside one. So adding a folder never makes macOS ask about
-///   them, and a folder in iCloud Drive (~/Library/Mobile Documents) can still be added.
+///   ~/Library/Containers/com.apple.mail), or lies inside a copy of it, such as one in a
+///   backup. Since a folder that holds the home folder is refused, the walk enters ~/Library,
+///   Desktop, Documents and Downloads only when the added folder is one of them or lies
+///   inside one. So adding a folder never makes macOS ask about them, and a folder in iCloud
+///   Drive (~/Library/Mobile Documents) can still be added.
 /// - Places are compared by device and inode as well as by path, so a second path to the
 ///   same folder, such as one through /System/Volumes/Data, is refused like the first.
+/// - The walk never enters another volume, such as /System/Volumes/Data or a disk in
+///   /Volumes, the home folder, ~/Library, Desktop, Documents, Downloads or Mail's data
+///   reached through a second path, or a copy of Mail's data.
 /// - Every path is resolved, symbolic links and `..` included, and a file whose real path
 ///   leaves the folder is skipped. Symbolic links and Finder aliases are never followed.
 /// - Hidden files, packages, .git, node_modules and archives are skipped, and so is every
@@ -26,6 +30,10 @@ nonisolated struct FolderWalk: Sendable {
         var home: URL
         /// ~/Library/Mail and ~/Library/Containers/com.apple.mail.
         var mailData: [URL]
+        /// The folders the walk never enters besides Mail's data: the home folder, ~/Library,
+        /// Desktop, Documents and Downloads. The walk can reach one of them only through a
+        /// second path, since an added folder that holds the home folder is refused.
+        var protectedFolders: [URL]
 
         /// The places of a home folder at `home`, with Mail's data where Mail keeps it.
         init(home: URL) {
@@ -34,6 +42,9 @@ nonisolated struct FolderWalk: Sendable {
                 home.appending(path: "Library/Mail", directoryHint: .isDirectory),
                 home.appending(path: "Library/Containers/com.apple.mail", directoryHint: .isDirectory),
             ]
+            protectedFolders = [home] + ["Library", "Desktop", "Documents", "Downloads"].map {
+                home.appending(path: $0, directoryHint: .isDirectory)
+            }
         }
 
         /// This Mac's. Orra is not sandboxed, so this is the user's own home folder.
@@ -48,7 +59,8 @@ nonisolated struct FolderWalk: Sendable {
         case home
         /// The top of a disk.
         case volumeRoot
-        /// Mail's data, a folder inside it, or a folder that holds it.
+        /// Mail's data, a folder inside it, a folder that holds it, or a folder inside a copy
+        /// of it.
         case mailData
     }
 
@@ -71,11 +83,23 @@ nonisolated struct FolderWalk: Sendable {
         var folder: URL
         /// Sorted by path.
         var files: [File] = []
-        /// Sorted by path.
+        /// The skipped files and folders a person may want to hear about, sorted by path, at
+        /// most `FolderWalk.maximumListedSkips` of them. The reasons in
+        /// `FolderWalk.countedSkips` are only counted.
         var skipped: [Skip] = []
+        /// Every skipped file and folder, listed or not, counted by reason.
+        var skipCounts: [FileSkipReason: Int] = [:]
         /// Whether the walk stopped at its limit of files.
         var reachedLimit = false
+        /// Whether the walk stopped because its task was cancelled. The listing holds what
+        /// the walk found until then.
+        var wasCancelled = false
     }
+
+    /// The most skipped files and folders a listing names.
+    static let maximumListedSkips = 1_000
+    /// Skips a listing only counts, since a folder may hold many and they are expected.
+    static let countedSkips: Set<FileSkipReason> = [.hidden, .package, .gitFolder, .nodeModules, .archive, .unsupportedFormat]
 
     let places: Places
     let maximumFileSize: Int64
@@ -84,17 +108,22 @@ nonisolated struct FolderWalk: Sendable {
     let flags: @Sendable (String) -> UInt32?
     /// Whether a file is on this Mac in its newest version. Tests pass a stand in.
     let isDownloaded: @Sendable (URL) -> Bool
+    /// Whether a folder is the root of a volume. Tests pass a stand in, since a temporary
+    /// folder holds no volume.
+    let isVolume: @Sendable (URL) -> Bool
 
     init(
         places: Places = .current,
         maximumFileSize: Int64 = FolderWalk.maximumFileSize,
         flags: @escaping @Sendable (String) -> UInt32? = FolderWalk.statFlags,
-        isDownloaded: @escaping @Sendable (URL) -> Bool = FolderWalk.isDownloaded
+        isDownloaded: @escaping @Sendable (URL) -> Bool = FolderWalk.isDownloaded,
+        isVolume: @escaping @Sendable (URL) -> Bool = FolderWalk.isVolume
     ) {
         self.places = places
         self.maximumFileSize = maximumFileSize
         self.flags = flags
         self.isDownloaded = isDownloaded
+        self.isVolume = isVolume
     }
 
     /// Why `folder` cannot be added, or nil when it can.
@@ -105,7 +134,8 @@ nonisolated struct FolderWalk: Sendable {
     }
 
     /// The files of `folder` and its folders, at most `limit` of them. Off the main actor,
-    /// since a large folder takes a while and the keyboard tap runs on the main thread.
+    /// since a large folder takes a while and the keyboard tap runs on the main thread. The
+    /// walk checks for cancellation once a folder.
     @concurrent
     func list(_ folder: URL, limit: Int = .max) async throws(Refusal) -> Listing {
         switch resolve(folder) {
@@ -121,8 +151,8 @@ nonisolated struct FolderWalk: Sendable {
         guard let path = Self.realPath(folder.path) else { return .failure(.notAFolder) }
         var info = stat()
         guard lstat(path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR else { return .failure(.notAFolder) }
-        let isVolume = (try? URL(fileURLWithPath: path).resourceValues(forKeys: [.isVolumeKey]))?.isVolume
-        if isVolume == true { return .failure(.volumeRoot) }
+        if isVolume(URL(fileURLWithPath: path, isDirectory: true)) { return .failure(.volumeRoot) }
+        if Self.liesInMailDataByName(path) { return .failure(.mailData) }
         let added = Self.placeAndAbove(path)
         if Self.placeAndAbove(Self.canonical(places.home.path)).contains(where: { $0.matches(added[0]) }) {
             return .failure(.home)
@@ -151,6 +181,12 @@ nonisolated struct FolderWalk: Sendable {
             }
         }
 
+        init(_ path: String, info: stat) {
+            self.path = path
+            device = info.st_dev
+            inode = info.st_ino
+        }
+
         /// The same folder. Paths are compared without case, which refuses a little more
         /// on a volume that tells case apart.
         func matches(_ other: Place) -> Bool {
@@ -170,6 +206,22 @@ nonisolated struct FolderWalk: Sendable {
             places.append(Place(current.isEmpty ? "/" : current))
         }
         return places
+    }
+
+    /// Whether `path` is or lies inside a folder whose path ends in Library/Mail or
+    /// Library/Containers/com.apple.mail, wherever it is, so a copy in a backup counts too.
+    private static func liesInMailDataByName(_ path: String) -> Bool {
+        let parts = path.lowercased().split(separator: "/")
+        return parts.indices.contains { index in
+            parts[index...].starts(with: ["library", "mail"]) || parts[index...].starts(with: ["library", "containers", "com.apple.mail"])
+        }
+    }
+
+    /// Whether `path` ends in Library/Mail or Library/Containers/com.apple.mail, wherever it
+    /// is.
+    private static func isMailDataByName(_ path: String) -> Bool {
+        let parts = path.lowercased().split(separator: "/")
+        return parts.suffix(2).elementsEqual(["library", "mail"]) || parts.suffix(3).elementsEqual(["library", "containers", "com.apple.mail"])
     }
 
     /// The real path of `path`, or for a path that does not exist, the real path of the
@@ -192,19 +244,30 @@ nonisolated struct FolderWalk: Sendable {
 
     private func walk(from root: String, limit: Int) -> Listing {
         var listing = Listing(folder: URL(fileURLWithPath: root, isDirectory: true))
+        func skip(_ url: URL, _ reason: FileSkipReason) {
+            listing.skipCounts[reason, default: 0] += 1
+            if !Self.countedSkips.contains(reason), listing.skipped.count < Self.maximumListedSkips {
+                listing.skipped.append(Skip(url: url, reason: reason))
+            }
+        }
         if let rootFlags = flags(root), rootFlags & UInt32(SF_DATALESS) != 0 {
-            listing.skipped.append(Skip(url: listing.folder, reason: .dataless))
+            skip(listing.folder, .dataless)
             return listing
         }
+        let protected = (places.protectedFolders + places.mailData).map { Place(Self.canonical($0.path)) }
         var folders = [root]
         walking: while let folder = folders.popLast() {
+            if Task.isCancelled {
+                listing.wasCancelled = true
+                break
+            }
             guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder) else {
-                listing.skipped.append(Skip(url: URL(fileURLWithPath: folder, isDirectory: true), reason: .noAccess))
+                skip(URL(fileURLWithPath: folder, isDirectory: true), .noAccess)
                 continue
             }
             for name in names.sorted() {
                 let path = folder + "/" + name
-                switch examine(path, inside: root) {
+                switch examine(path, inside: root, protected: protected) {
                 case .folder:
                     folders.append(path)
                 case .file(let file):
@@ -214,7 +277,7 @@ nonisolated struct FolderWalk: Sendable {
                     }
                     listing.files.append(file)
                 case .skip(let reason, let isFolder):
-                    listing.skipped.append(Skip(url: URL(fileURLWithPath: path, isDirectory: isFolder), reason: reason))
+                    skip(URL(fileURLWithPath: path, isDirectory: isFolder), reason)
                 }
             }
         }
@@ -225,7 +288,7 @@ nonisolated struct FolderWalk: Sendable {
 
     /// What the walk does with `path`, read without following a link and without opening
     /// a file.
-    private func examine(_ path: String, inside root: String) -> Examined {
+    private func examine(_ path: String, inside root: String, protected: [Place]) -> Examined {
         var info = stat()
         guard lstat(path, &info) == 0 else { return .skip(.noAccess, isFolder: false) }
         let type = info.st_mode & S_IFMT
@@ -239,16 +302,22 @@ nonisolated struct FolderWalk: Sendable {
         let isDataless = (flags(path) ?? info.st_flags) & UInt32(SF_DATALESS) != 0
         if isFolder {
             if isDataless { return .skip(.dataless, isFolder: true) }
+            let place = Place(path, info: info)
+            if Self.isMailDataByName(path) || protected.contains(where: { $0.matches(place) }) {
+                return .skip(.protectedFolder, isFolder: true)
+            }
+            if isVolume(url) { return .skip(.volume, isFolder: true) }
             if (try? url.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true { return .skip(.package, isFolder: true) }
             return .folder
         }
         guard type == S_IFREG else { return .skip(.unsupportedFormat, isFolder: false) }
-        if (try? url.resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile == true { return .skip(.alias, isFolder: false) }
+        // The extension first, so a folder of photos costs no alias lookups.
         let format: FileTextExtractor.Format
         switch FileTextExtractor.format(ofExtension: url.pathExtension) {
         case .success(let found): format = found
         case .failure(let reason): return .skip(reason, isFolder: false)
         }
+        if (try? url.resourceValues(forKeys: [.isAliasFileKey]))?.isAliasFile == true { return .skip(.alias, isFolder: false) }
         if Int64(info.st_size) > maximumFileSize { return .skip(.tooLarge, isFolder: false) }
         if isDataless { return .skip(.dataless, isFolder: false) }
         if !isDownloaded(url) { return .skip(.notDownloaded, isFolder: false) }
@@ -262,6 +331,11 @@ nonisolated struct FolderWalk: Sendable {
     static func statFlags(_ path: String) -> UInt32? {
         var info = stat()
         return lstat(path, &info) == 0 ? info.st_flags : nil
+    }
+
+    /// Whether `url` is the root of a volume.
+    static func isVolume(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isVolumeKey]))?.isVolume == true
     }
 
     /// Whether `url` is on this Mac in its newest version. Always true outside iCloud.

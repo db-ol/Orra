@@ -26,12 +26,24 @@ struct FolderWalkTests {
         let notes = try #require(listing.files.first { $0.url.lastPathComponent == "notes.md" })
         #expect(notes.size == 4)
         #expect(notes.modified == modified)
-        #expect(skips(of: listing) == [
-            ".draft.md": .hidden, ".git": .gitFolder, "Viewer.app": .package, "backup.zip": .archive,
-            "budget.xlsx": .spreadsheetOrSlides, "deck.pptx": .spreadsheetOrSlides, "flagged.txt": .hidden,
-            "node_modules": .nodeModules, "photo.jpg": .unsupportedFormat,
+        // Expected skips are only counted.
+        #expect(skips(of: listing) == ["budget.xlsx": .spreadsheetOrSlides, "deck.pptx": .spreadsheetOrSlides])
+        #expect(listing.skipCounts == [
+            .hidden: 2, .gitFolder: 1, .package: 1, .archive: 1, .spreadsheetOrSlides: 2, .nodeModules: 1, .unsupportedFormat: 1,
         ])
         #expect(!listing.reachedLimit)
+        #expect(!listing.wasCancelled)
+    }
+
+    @Test func namesAtMostAThousandSkips() async throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        for number in 1...(FolderWalk.maximumListedSkips + 5) {
+            try tree.file("home/Projects/Alpha/sheet \(number).xlsx")
+        }
+        let listing = try await tree.walk().list(tree.url("home/Projects/Alpha"))
+        #expect(listing.skipped.count == FolderWalk.maximumListedSkips)
+        #expect(listing.skipCounts == [.spreadsheetOrSlides: FolderWalk.maximumListedSkips + 5])
     }
 
     /// A sparse file has the size of a large one and takes no room.
@@ -103,7 +115,50 @@ struct FolderWalkTests {
 
         let listing = try await tree.walk().list(tree.url(project))
         #expect(names(of: listing) == ["notes.md"])
-        #expect(skips(of: listing) == ["secret alias": .alias, "secret.pdf": .alias])
+        // An alias without an extension Projects reads is skipped for its name alone.
+        #expect(skips(of: listing) == ["secret.pdf": .alias])
+        #expect(listing.skipCounts == [.alias: 1, .unsupportedFormat: 1])
+    }
+
+    /// The walk stays off other volumes, such as /System/Volumes/Data, which would lead back
+    /// to the home folder, and out of the protected folders and copies of Mail's data.
+    @Test func neverEntersAnotherVolumeOrAProtectedFolder() async throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        let project = "home/Projects/Alpha"
+        try tree.file("\(project)/notes.md")
+        for name in ["Mounted Disk/disk.md", "Shared/shared.md", "Backup/Users/someone/Library/Mail/V10/message.txt",
+                     "Backup/Users/someone/Library/Containers/com.apple.mail/Data/message.txt", "Backup/Users/someone/plan.md"] {
+            try tree.file("\(project)/\(name)")
+        }
+        var places = FolderWalk.Places(home: tree.url("home"))
+        // A stand in for a protected folder the walk reaches, which only a second path can do.
+        places.protectedFolders.append(tree.url("\(project)/Shared"))
+        let walk = FolderWalk(places: places, isVolume: { $0.lastPathComponent == "Mounted Disk" })
+        let listing = try await walk.list(tree.url(project))
+        #expect(names(of: listing) == ["Backup/Users/someone/plan.md", "notes.md"])
+        #expect(skips(of: listing) == [
+            "Mounted Disk": .volume, "Shared": .protectedFolder, "Backup/Users/someone/Library/Mail": .protectedFolder,
+            "Backup/Users/someone/Library/Containers/com.apple.mail": .protectedFolder,
+        ])
+        // A folder inside a copy of Mail's data is refused, and a volume root.
+        for folder in ["Backup/Users/someone/Library/Mail/V10", "Backup/Users/someone/Library/Containers/com.apple.mail/Data"] {
+            #expect(await walk.refusal(for: tree.url("\(project)/\(folder)")) == .mailData, "\(folder)")
+        }
+        #expect(await walk.refusal(for: tree.url("\(project)/Mounted Disk")) == .volumeRoot)
+    }
+
+    @Test func stopsWhenItsTaskIsCancelled() async throws {
+        let tree = try Tree()
+        defer { tree.remove() }
+        try tree.file("home/Projects/Alpha/notes.md")
+        let walk = tree.walk()
+        let listing = try await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await walk.list(tree.url("home/Projects/Alpha"))
+        }.value
+        #expect(listing.wasCancelled)
+        #expect(listing.files.isEmpty)
     }
 
     @Test func refusesMailsDataAndEveryFolderAroundIt() async throws {

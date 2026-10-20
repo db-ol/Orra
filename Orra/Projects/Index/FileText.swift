@@ -4,8 +4,9 @@ import PDFKit
 
 /// Why a file in a project folder gives no text for the index. FolderWalk skips a file or a
 /// folder for one of the reasons up to `noAccess` before anything opens it.
-/// FileTextExtractor checks a file's reasons again before it reads, and adds the last four.
-/// The raw values stay the same from release to release, so the index can store them.
+/// FileTextExtractor checks a file's reasons again before it reads, and adds the reasons
+/// after `noAccess`. The raw values stay the same from release to release, so the index can
+/// store them.
 nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable {
     /// A name that starts with a period, or a file Finder hides.
     case hidden
@@ -23,6 +24,12 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case alias
     /// A path that leads out of the added folder once resolved.
     case outsideFolder
+    /// A disk mounted inside the folder, such as /System/Volumes/Data or a disk in /Volumes.
+    case volume
+    /// A folder the walk never enters: the home folder, ~/Library, Desktop, Documents,
+    /// Downloads or Mail's data, reached through a second path, or a copy of Mail's data
+    /// such as one in a backup.
+    case protectedFolder
     /// A file over its size limit, see `FolderWalk.maximumFileSize` and
     /// `FileTextExtractor.Limits`.
     case tooLarge
@@ -46,6 +53,9 @@ nonisolated enum FileSkipReason: String, Error, Sendable, Codable, CaseIterable 
     case tooSlow
     /// A file without text, such as a scanned PDF.
     case noText
+    /// The read stopped because its task was cancelled, so nothing is known about the file.
+    /// The index does not store this reason.
+    case cancelled
 }
 
 /// The text of one file, page by page.
@@ -60,8 +70,10 @@ nonisolated struct FileTextResult: Sendable, Equatable {
     /// The pages that hold text, in order.
     var pages: [Page]
     /// How many runs of hidden text were dropped: text colored like what lies behind it,
-    /// nearly transparent text, and text in a tiny font. The text itself is gone. The
-    /// count lets Projects tell the user that the file holds hidden text.
+    /// nearly transparent text, text in a tiny font, Word's hidden text in RTF, and text
+    /// that leaves no ink on a PDF page. The text itself is gone. The count lets Projects
+    /// tell the user that the file may hold hidden text. Light text on a docx's cell shading,
+    /// run shading or highlight counts too, since AppKit does not report them.
     var hiddenRuns: Int
     /// The file's modification date when it was read.
     var modified: Date
@@ -79,8 +91,9 @@ nonisolated struct FileTextResult: Sendable, Equatable {
 ///   detection and never as HTML, so a .doc that holds HTML is unreadable and never reaches
 ///   WebKit.
 /// - One call reads an Office or text file whole and cannot be stopped, so their size is
-///   capped before the call. A PDF is read page by page, with the time checked after each
-///   page and the number of pages capped.
+///   capped before the call. For docx and odt, which are ZIP files, the sizes their parts
+///   unpack to are capped too. A PDF is read page by page, with the time and cancellation
+///   checked after each page and the number of pages capped.
 /// - Hidden text is dropped and counted, see `FileTextResult.hiddenRuns`.
 nonisolated struct FileTextExtractor: Sendable {
     /// The formats it reads.
@@ -94,7 +107,8 @@ nonisolated struct FileTextExtractor: Sendable {
     nonisolated struct Limits: Sendable {
         /// Any file, the same as FolderWalk's.
         var fileBytes = FolderWalk.maximumFileSize
-        /// docx, doc, rtf and odt.
+        /// docx, doc, rtf and odt. For docx and odt it also caps the sizes of their parts
+        /// unpacked, added up, since AppKit unpacks them in memory.
         var officeBytes: Int64 = 20_000_000
         /// md and txt.
         var textBytes: Int64 = 10_000_000
@@ -148,6 +162,7 @@ nonisolated struct FileTextExtractor: Sendable {
     ]
 
     private func read(_ file: URL) -> Result<FileTextResult, FileSkipReason> {
+        guard !Task.isCancelled else { return .failure(.cancelled) }
         let format: Format
         switch Self.format(ofExtension: file.pathExtension) {
         case .success(let found): format = found
@@ -175,7 +190,7 @@ nonisolated struct FileTextExtractor: Sendable {
             case .failure(let reason): return .failure(reason)
             }
         case .docx, .doc, .rtf, .odt:
-            switch Self.officeText(data, format: format) {
+            switch officeText(data, format: format) {
             case .success(let read):
                 pages = [FileTextResult.Page(number: nil, text: read.text)]
                 hiddenRuns = read.hiddenRuns
@@ -211,8 +226,10 @@ nonisolated struct FileTextExtractor: Sendable {
                 setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, policy)
             }
         }
-        // O_NONBLOCK keeps a file that turned into a named pipe from blocking the open.
-        let descriptor = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        // O_NOFOLLOW_ANY refuses a symbolic link anywhere in the path, in case a folder was
+        // swapped for one after the walk. O_NONBLOCK keeps a file that turned into a named
+        // pipe from blocking the open.
+        let descriptor = open(path, O_RDONLY | O_NOFOLLOW_ANY | O_NONBLOCK | O_CLOEXEC)
         guard descriptor >= 0 else {
             return .failure(errno == ELOOP ? .symbolicLink : errno == EDEADLK ? .dataless : .noAccess)
         }
@@ -229,7 +246,10 @@ nonisolated struct FileTextExtractor: Sendable {
             guard data.count <= limit else { return .failure(.tooLarge) }
             return .success((data, FolderWalk.date(of: opened)))
         } catch {
-            return .failure((error as NSError).code == Int(EDEADLK) ? .dataless : .noAccess)
+            // FileHandle reports the POSIX error under NSUnderlyingErrorKey.
+            let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
+            let isDataless = underlying?.domain == NSPOSIXErrorDomain && underlying?.code == Int(EDEADLK)
+            return .failure(isDataless ? .dataless : .noAccess)
         }
     }
 
@@ -261,35 +281,40 @@ nonisolated struct FileTextExtractor: Sendable {
                 pages.append(FileTextResult.Page(number: index + 1, text: read.text))
                 hiddenRuns += read.hiddenRuns
             }
+            if Task.isCancelled { return .failure(.cancelled) }
             if start.duration(to: now()) > limits.pdfTime { return .failure(.tooSlow) }
         }
         return .success((pages, hiddenRuns, document.pageCount > count))
     }
 
-    /// The text of a PDF page without its hidden runs. PDFKit gives the color and the size
-    /// of each run, but not what lies behind it, and slides often put white text on a dark
-    /// box. So a page with light text is drawn, and light text counts as hidden only where
-    /// it does not stand out from what lies under it. PDFKit reports transparent text as
-    /// opaque, so that is not found.
+    /// The text of a PDF page without its hidden runs. PDFKit gives the size of each run but
+    /// not whether it is drawn: it reports transparent text as opaque, and says nothing of
+    /// invisible text (render mode 3) or of a shape drawn over text. So the page is drawn,
+    /// and a line counts as hidden where it leaves no ink. A scan's invisible text layer lies
+    /// on the scan's ink and is kept. Text drawn over other text is not found.
     private static func visibleText(of page: PDFPage) -> (text: String, hiddenRuns: Int) {
         guard let document = page.attributedString else { return (page.string ?? "", 0) }
-        var drawing: PageDrawing?
-        var drawn = false
+        guard let drawing = PageDrawing(page) else {
+            // Without a drawing, light and transparent text counts as hidden.
+            return visible(document) { attributes, _ in
+                if isTiny(attributes) { return true }
+                guard let color = RGB(attributes[.foregroundColor] as? NSColor ?? .black) else { return false }
+                return color.isTransparent || color.isLight
+            }
+        }
+        let string = document.string as NSString
         return visible(document) { attributes, range in
             if isTiny(attributes) { return true }
-            guard let color = RGB(attributes[.foregroundColor] as? NSColor ?? .black) else { return false }
-            if color.isTransparent { return true }
-            guard color.isLight else { return false }
-            if !drawn {
-                drawing = PageDrawing(page)
-                drawn = true
-            }
-            guard let drawing, let box = page.selection(for: range)?.bounds(for: page) else { return false }
-            return !drawing.standsOut(color, in: box)
+            guard let box = page.selection(for: range)?.bounds(for: page) else { return false }
+            // Punctuation alone leaves too little ink to judge, and hides nothing.
+            let characters = string.substring(with: range).count { $0.isLetter || $0.isNumber }
+            guard characters > 0 else { return false }
+            let size = (attributes[.font] as? NSFont)?.pointSize ?? box.height
+            return !drawing.showsInk(in: box, characters: characters, size: size)
         }
     }
 
-    /// A PDF page drawn at up to one pixel a point, to see what lies under light text.
+    /// A PDF page drawn at up to one pixel a point, to see where text leaves ink.
     private struct PageDrawing {
         private let pixels: [UInt8]
         private let width: Int
@@ -326,59 +351,177 @@ nonisolated struct FileTextExtractor: Sendable {
             self.origin = box.origin
         }
 
-        /// Whether more than 2% of the pixels in `box`, in page space, differ clearly from
-        /// `color`. Text in a box with no such pixel matches what lies under it, so no one
-        /// can see it. A box off the page counts as standing out, so its text is kept.
-        func standsOut(_ color: RGB, in box: CGRect) -> Bool {
+        /// Whether `box`, in page space, shows the ink of `characters` letters or digits of
+        /// `size` points: for each, ink on at least 2% of a square of that size. Ink is a
+        /// pixel that differs by more than 16 levels (1 in 16) in a channel from the box's
+        /// most common color, so text lighter than about 15/16 gray on white shows none. The
+        /// ink is counted per character, not per area, since PDFKit's box for a line can
+        /// reach far past its last character. A box off the page counts as showing ink, so
+        /// its text is kept.
+        func showsInk(in box: CGRect, characters: Int, size: CGFloat) -> Bool {
             let left = max(0, Int(((box.minX - origin.x) * scale).rounded(.down)))
             let right = min(width, Int(((box.maxX - origin.x) * scale).rounded(.up)))
             let bottom = max(0, Int(((box.minY - origin.y) * scale).rounded(.down)))
             let top = min(height, Int(((box.maxY - origin.y) * scale).rounded(.up)))
             guard left < right, bottom < top else { return true }
-            var differing = 0
-            for y in bottom..<top {
-                // The first row in memory is the top of the drawing.
-                let row = (height - 1 - y) * width
-                for x in left..<right {
-                    let pixel = (row + x) * 4
-                    let pixelColor = RGB(
-                        red: Double(pixels[pixel]) / 255, green: Double(pixels[pixel + 1]) / 255,
-                        blue: Double(pixels[pixel + 2]) / 255, alpha: 1)
-                    if pixelColor.distance(to: color) > 0.25 { differing += 1 }
+            return pixels.withUnsafeBufferPointer { pixels in
+                // The most common color is the average of the fullest bin, with bins of 32
+                // levels a channel. The first row in memory is the top of the drawing.
+                var counts = [Int](repeating: 0, count: 512)
+                var sums = [Int](repeating: 0, count: 512 * 3)
+                var common = 0
+                for y in bottom..<top {
+                    let row = (height - 1 - y) * width
+                    for x in left..<right {
+                        let pixel = (row + x) * 4
+                        let red = Int(pixels[pixel]), green = Int(pixels[pixel + 1]), blue = Int(pixels[pixel + 2])
+                        let bin = (red >> 5) << 6 | (green >> 5) << 3 | blue >> 5
+                        counts[bin] += 1
+                        sums[bin * 3] += red
+                        sums[bin * 3 + 1] += green
+                        sums[bin * 3 + 2] += blue
+                        if counts[bin] > counts[common] { common = bin }
+                    }
                 }
+                let red = sums[common * 3] / counts[common]
+                let green = sums[common * 3 + 1] / counts[common]
+                let blue = sums[common * 3 + 2] / counts[common]
+                var ink = 0
+                for y in bottom..<top {
+                    let row = (height - 1 - y) * width
+                    for x in left..<right {
+                        let pixel = (row + x) * 4
+                        if abs(Int(pixels[pixel]) - red) > 16 || abs(Int(pixels[pixel + 1]) - green) > 16
+                            || abs(Int(pixels[pixel + 2]) - blue) > 16 {
+                            ink += 1
+                        }
+                    }
+                }
+                let side = Double(size * scale)
+                return ink >= max(1, Int(Double(characters) * side * side / 50))
             }
-            return differing * 50 > (right - left) * (top - bottom)
         }
     }
 
     // MARK: Office
 
-    private static func officeText(_ data: Data, format: Format) -> Result<(text: String, hiddenRuns: Int), FileSkipReason> {
+    private func officeText(_ data: Data, format: Format) -> Result<(text: String, hiddenRuns: Int), FileSkipReason> {
         let signature: [UInt8]
         let documentType: NSAttributedString.DocumentType
         switch format {
-        case .docx: (signature, documentType) = (zipSignature, .officeOpenXML)
-        case .odt: (signature, documentType) = (zipSignature, .openDocument)
+        case .docx: (signature, documentType) = (Self.zipSignature, .officeOpenXML)
+        case .odt: (signature, documentType) = (Self.zipSignature, .openDocument)
         case .doc: (signature, documentType) = ([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1], .docFormat)
         case .rtf: (signature, documentType) = (Array(#"{\rtf"#.utf8), .rtf)
         case .pdf, .text: return .failure(.unsupportedFormat)
         }
         guard data.starts(with: signature) else { return .failure(.unreadable) }
+        if signature == Self.zipSignature, let reason = Self.zipRefusal(data, unpackedLimit: min(limits.fileBytes, limits.officeBytes)) {
+            return .failure(reason)
+        }
+        let readable = format == .rtf ? Self.markingHiddenText(inRTF: data) : data
         var attributes: NSDictionary?
         guard let document = try? NSAttributedString(
-            data: data, options: [.documentType: documentType], documentAttributes: &attributes
+            data: readable, options: [.documentType: documentType], documentAttributes: &attributes
         ) else { return .failure(.unreadable) }
         let page = attributes?[NSAttributedString.DocumentAttributeKey.backgroundColor.rawValue] as? NSColor
-        return .success(visible(document) { attributes, _ in isHidden(attributes, onPage: page) })
+        return .success(Self.visible(document) { attributes, _ in Self.isHidden(attributes, onPage: page) })
     }
 
     private static let zipSignature: [UInt8] = [0x50, 0x4B, 0x03, 0x04]
 
-    /// Whether an Office run is hidden: a tiny font, nearly transparent, or colored like
-    /// what lies behind it, which is the run's own background, the table cell's, the page's
-    /// or white.
+    /// Why the parts of a docx or odt must not be unpacked, or nil when they may. AppKit
+    /// unpacks each part in memory, at the size the ZIP's central directory gives for it, and
+    /// fails on a part that unpacks larger (local test), so those sizes added up cap what it
+    /// unpacks. A file with more than one central directory, encrypted parts, ZIP64 sizes or
+    /// a compression other than deflate is unreadable.
+    private static func zipRefusal(_ data: Data, unpackedLimit: Int64) -> FileSkipReason? {
+        data.withUnsafeBytes { bytes -> FileSkipReason? in
+            func number(_ offset: Int, _ size: Int) -> Int {
+                (0..<size).reduce(0) { $0 | Int(bytes[offset + $1]) << (8 * $1) }
+            }
+            // The end of the central directory: 22 bytes, then a comment of up to 65,535
+            // bytes that runs to the end of the file.
+            let lowest = max(0, bytes.count - 22 - 65_535)
+            let ends = stride(from: bytes.count - 22, through: lowest, by: -1).filter { offset in
+                number(offset, 4) == 0x0605_4B50 && offset + 22 + number(offset + 20, 2) == bytes.count
+            }
+            guard ends.count == 1, let end = ends.first else { return .unreadable }
+            let entries = number(end + 10, 2), directorySize = number(end + 12, 4), directoryStart = number(end + 16, 4)
+            // One disk, no ZIP64, and the directory just before its end.
+            guard number(end + 4, 4) == 0, number(end + 8, 2) == entries, entries != 0xFFFF,
+                  directoryStart + directorySize == end else { return .unreadable }
+            var offset = directoryStart
+            var unpacked: Int64 = 0
+            for _ in 0..<entries {
+                guard offset + 46 <= end, number(offset, 4) == 0x0201_4B50 else { return .unreadable }
+                let flags = number(offset + 8, 2), method = number(offset + 10, 2)
+                let packedSize = number(offset + 20, 4), size = number(offset + 24, 4)
+                guard flags & 1 == 0, method == 0 || method == 8, packedSize != 0xFFFF_FFFF, size != 0xFFFF_FFFF else {
+                    return .unreadable
+                }
+                unpacked += Int64(size)
+                if unpacked > unpackedLimit { return .tooLarge }
+                offset += 46 + number(offset + 28, 2) + number(offset + 30, 2) + number(offset + 32, 2)
+            }
+            return offset == end ? nil : .unreadable
+        }
+    }
+
+    /// The kerning that marks Word's hidden text in RTF, in points. No real document uses it.
+    private static let hiddenKerning = -1_000.0
+
+    /// `rtf` with Word's hidden text marked in a way AppKit keeps. AppKit reads the hidden
+    /// text control word `\v` as plain text, so `\v` becomes a kerning of -1,000 points
+    /// (`\expndtw-20000`) and `\v0` a kerning of 0. The kerning lost this way changes
+    /// nothing in the text. Control symbols such as `\\` and the bytes of `\bin` are skipped.
+    private static func markingHiddenText(inRTF rtf: Data) -> Data {
+        let bytes = [UInt8](rtf)
+        var marked = Data(capacity: bytes.count)
+        var copied = 0
+        var index = 0
+        func isLetter(_ index: Int) -> Bool { index < bytes.count && (bytes[index] | 0x20) >= 0x61 && (bytes[index] | 0x20) <= 0x7A }
+        func isDigit(_ index: Int) -> Bool { index < bytes.count && bytes[index] >= 0x30 && bytes[index] <= 0x39 }
+        while index < bytes.count {
+            guard bytes[index] == 0x5C else {
+                index += 1
+                continue
+            }
+            var end = index + 1
+            while isLetter(end) { end += 1 }
+            guard end > index + 1 else {
+                // A control symbol, such as \\ or \'e4.
+                index += 2
+                continue
+            }
+            let name = bytes[(index + 1)..<end]
+            var parameterEnd = end
+            if parameterEnd < bytes.count, bytes[parameterEnd] == 0x2D, isDigit(parameterEnd + 1) { parameterEnd += 1 }
+            while isDigit(parameterEnd) { parameterEnd += 1 }
+            let parameter = Int(String(decoding: bytes[end..<parameterEnd], as: UTF8.self))
+            if name.elementsEqual("v".utf8) {
+                marked.append(contentsOf: bytes[copied..<index])
+                marked.append(contentsOf: (parameter == 0 ? #"\expndtw0"# : #"\expndtw-20000"#).utf8)
+                copied = parameterEnd
+            } else if name.elementsEqual("bin".utf8), let parameter, parameter > 0 {
+                // Raw bytes follow the space after the control word.
+                let start = parameterEnd < bytes.count && bytes[parameterEnd] == 0x20 ? parameterEnd + 1 : parameterEnd
+                index = min(bytes.count, start + parameter)
+                continue
+            }
+            index = parameterEnd
+        }
+        marked.append(contentsOf: bytes[copied...])
+        return marked
+    }
+
+    /// Whether an Office run is hidden: a tiny font, nearly transparent, Word's hidden text
+    /// marked in RTF, or colored like what lies behind it, which is the run's own background,
+    /// the table cell's, the page's or white. AppKit does not report a docx's cell shading,
+    /// run shading or highlight, so light text on them counts as hidden too.
     private static func isHidden(_ attributes: [NSAttributedString.Key: Any], onPage page: NSColor?) -> Bool {
         if isTiny(attributes) { return true }
+        if let kerning = attributes[.kern] as? Double, kerning <= hiddenKerning { return true }
         guard let color = RGB(attributes[.foregroundColor] as? NSColor ?? .black) else { return false }
         if color.isTransparent { return true }
         var behind: [NSColor?] = [attributes[.backgroundColor] as? NSColor]

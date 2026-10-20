@@ -5,7 +5,8 @@ import Foundation
 /// - A chunk holds at most `size` characters. Qwen counts 1.5 to 1.8 Chinese characters a
 ///   token, so 800 characters are about 500 tokens.
 /// - Cuts fall at headings, blank lines and sentence ends. Only a paragraph with no sentence
-///   end near its cut is cut at a line break, a space, or anywhere.
+///   end near its cut is cut at a line break, a space, or anywhere. A heading is found on any
+///   line, since docx, rtf, odt and PDF text often has no blank line between paragraphs.
 /// - A chunk never spans two pages.
 /// - Within a section, a chunk repeats about the last `overlap` characters of the one before,
 ///   so a sentence cut in two is whole in one of them. A chunk that starts at a heading
@@ -75,7 +76,7 @@ nonisolated struct TextChunker: Sendable {
 
     // MARK: Paragraphs and pieces
 
-    /// The paragraphs of a page, split at blank lines and trimmed.
+    /// The paragraphs of a page, split at blank lines and before a heading line, and trimmed.
     static func paragraphs(of text: String) -> [String] {
         var paragraphs: [String] = []
         var lines: [Substring] = []
@@ -88,6 +89,7 @@ nonisolated struct TextChunker: Sendable {
             if line.allSatisfy(\.isWhitespace) {
                 flush()
             } else {
+                if !lines.isEmpty && heading(in: String(line)) != nil { flush() }
                 lines.append(line)
             }
         }
@@ -97,36 +99,36 @@ nonisolated struct TextChunker: Sendable {
 
     /// `paragraph` in pieces short enough that a piece with the repeat in front of it fits a
     /// chunk. A cut falls after the last sentence end in the second half of the piece, or
-    /// else after the last line break or space there, or at the limit.
+    /// else after the last line break or space there, or at the limit. Only one piece's
+    /// characters are held at a time, so a long file without blank lines stays small.
     private func cut(_ paragraph: String) -> [String] {
         let limit = max(1, size - overlap - 2)
-        let characters = Array(paragraph)
-        guard characters.count > limit else { return [paragraph] }
         var pieces: [String] = []
-        var start = 0
-        while characters.count - start > limit {
-            let end = Self.cutPoint(in: characters, from: start, limit: limit)
-            let piece = String(characters[start..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+        var rest = Substring(paragraph)
+        while true {
+            // One character more than fits, to see what follows a period at the limit.
+            let window = Array(rest.prefix(limit + 1))
+            guard window.count > limit else { break }
+            let end = Self.cutPoint(in: window, limit: limit)
+            let piece = String(window[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
             if !piece.isEmpty { pieces.append(piece) }
-            start = end
-            while start < characters.count && characters[start].isWhitespace { start += 1 }
+            rest = rest.dropFirst(end).drop(while: \.isWhitespace)
         }
-        let rest = String(characters[start...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        if !rest.isEmpty { pieces.append(rest) }
+        let last = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !last.isEmpty { pieces.append(last) }
         return pieces
     }
 
-    private static func cutPoint(in characters: [Character], from start: Int, limit: Int) -> Int {
-        let end = start + limit
-        let candidates = (start + limit / 2)..<end
+    private static func cutPoint(in characters: [Character], limit: Int) -> Int {
+        let candidates = (limit / 2)..<limit
         if let found = candidates.last(where: { isSentenceEnd(characters, at: $0) }) {
             var cut = found + 1
-            while cut < end && closings.contains(characters[cut]) { cut += 1 }
+            while cut < limit && closings.contains(characters[cut]) { cut += 1 }
             return cut
         }
         if let found = candidates.last(where: { characters[$0].isNewline }) { return found + 1 }
         if let found = candidates.last(where: { characters[$0].isWhitespace }) { return found + 1 }
-        return end
+        return limit
     }
 
     /// The last `overlap` characters of `text`, so the repeat starts at a sentence or a

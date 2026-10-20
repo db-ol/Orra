@@ -86,6 +86,19 @@ struct TextChunkerTests {
         #expect(chunk(["二、付款方式\n\n首付百分之三十。"])[0].heading == "二、付款方式")
     }
 
+    /// docx, rtf, odt and PDF text often has no blank line between paragraphs, so a heading
+    /// is found on any line.
+    @Test func findsHeadingsBetweenSingleLineBreaks() {
+        let intro = (1...4).map { "Intro sentence \($0) says the calendar is printed in Ningbo for the studio." }
+        let payment = (1...8).map { "付款第\($0)条说明定金和尾款的时间安排已经确认，发票随货寄出。" }
+        let delivery = (1...4).map { "Delivery sentence \($0) says the courier brings the boxes in November." }
+        let text = (["Calendar print brief"] + intro + ["二、付款方式"] + payment + ["3. Delivery"] + delivery).joined(separator: "\n")
+        let chunks = chunk([text])
+        #expect(chunks.map(\.heading) == [nil, "二、付款方式", "3. Delivery"])
+        #expect(chunks[1].text.hasPrefix("二、付款方式\n付款第1条"))
+        #expect(chunks[2].text.hasPrefix("3. Delivery\nDelivery sentence 1"))
+    }
+
     @Test func recognizesHeadings() {
         let headings: [(String, String)] = [
             ("# 付款", "付款"), ("## Delivery plan", "Delivery plan"), ("二、付款方式", "二、付款方式"),
