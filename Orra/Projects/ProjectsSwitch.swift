@@ -35,6 +35,10 @@ final class ProjectsSwitch {
     private(set) var isDeleting = false
     /// What the user chose, as saved.
     private var chosen: Bool
+    /// Stops what Projects runs and closes its database and project list, so nothing writes
+    /// into the files a delete removes. The app sets it while Projects runs, and a delete
+    /// waits for it first.
+    @ObservationIgnored var closeBeforeDelete: (() async -> Void)?
     @ObservationIgnored private let defaults: UserDefaults
 
     init(
@@ -117,11 +121,13 @@ final class ProjectsSwitch {
     }
 
     /// Deletes everything Projects keeps on this Mac, and measures again. Returns at once
-    /// while another delete runs.
+    /// while another delete runs. What Projects runs is stopped and its database closed
+    /// first, see `closeBeforeDelete`.
     func deleteAllData() async {
         guard !isDeleting else { return }
         isDeleting = true
         defer { isDeleting = false }
+        await closeBeforeDelete?()
         let bytes = await storage.size()
         do {
             try await storage.deleteAll()

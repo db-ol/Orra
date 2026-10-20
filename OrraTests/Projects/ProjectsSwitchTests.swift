@@ -215,6 +215,34 @@ struct ProjectsSwitchTests {
         #expect(projects.isOn)
     }
 
+    /// Turning off with Delete closes the database and the project list first, so nothing
+    /// writes into the files the delete removes or brings them back after it.
+    @Test func aDeleteClosesWhatProjectsRunsFirst() async throws {
+        defer { cleanUp() }
+        let store = MailStore(database: try await ProjectsDatabase.open(in: storage))
+        let list = ProjectList(storage: storage)
+        try await list.load()
+        try await list.add(Project(name: "Harbor Lights signage"), mail: store)
+        let projects = makeSwitch()
+        projects.turnOn()
+        var listWasThere: Bool?
+        projects.closeBeforeDelete = {
+            listWasThere = FileManager.default.fileExists(atPath: list.file.path)
+            await list.close()
+            await store.close()
+        }
+        await projects.turnOff(keepingData: false)
+        #expect(listWasThere == true)
+        #expect(!projects.deleteFailed)
+        await #expect(throws: ProjectsDatabase.Failure.self) {
+            try await store.counts()
+        }
+        await #expect(throws: ProjectList.Failure.closed) {
+            try await list.update(Project(name: "Late"))
+        }
+        #expect(!FileManager.default.fileExists(atPath: storage.folder.path))
+    }
+
     /// A delete that leaves data behind says so and keeps the count. The message goes once a
     /// later delete leaves nothing.
     @Test func aDeleteThatLeavesDataBehindSaysSo() async throws {
