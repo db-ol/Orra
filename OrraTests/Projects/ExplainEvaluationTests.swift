@@ -59,7 +59,8 @@ struct ExplainEvaluationTests {
                 domains: project.domains
             )
         }
-        let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("ExplainEvaluationTests-\(UUID().uuidString)", isDirectory: true))
+        let storageRoot = FileManager.default.temporaryDirectory.appendingPathComponent("ExplainEvaluationTests-\(UUID().uuidString)", isDirectory: true)
+        let storage = ProjectsStorage(root: storageRoot)
         let database = try await ProjectsDatabase.open(in: storage)
         let index = FolderIndex(database: database, isDictating: { false }, watch: { _, _, _ in {} })
         let indexStarted = ContinuousClock.now
@@ -178,6 +179,7 @@ struct ExplainEvaluationTests {
         await engine.unload()
         await database.close()
         try await storage.deleteAll()
+        try FileManager.default.removeItem(at: storageRoot)
 
         let sorted = times.sorted()
         let median = sorted[sorted.count / 2]
