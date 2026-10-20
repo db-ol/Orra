@@ -139,8 +139,8 @@ final class ExplainService {
         var ownAddresses: [String] = []
         /// All of the user's projects.
         var projects: [Project] = []
-        /// Everyone the user exchanged mail with, read from mail other than this email, so
-        /// a stranger's first email never makes its sender known.
+        /// Everyone the user wrote to before, read from the user's own mail only, so no
+        /// stranger's email ever makes its sender, or anyone it names, known.
         var correspondents: [SenderChecks.Person] = []
         /// The text of the mail the user sent, or nil when Orra does not read sent mail,
         /// which leaves quotes of the user unchecked.

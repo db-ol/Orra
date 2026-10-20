@@ -87,7 +87,9 @@ struct MailStoreTests {
         ], ownAddresses: [Self.work], at: Self.date(3))
         #expect(again == ["c@test.example"])
         #expect(try await store.known(["a@test.example", "c@test.example", "z@test.example"]) == ["a@test.example", "c@test.example"])
-        #expect(try await store.counts() == MailStore.Counts(emails: 3, files: 0))
+        let counts = try await store.counts()
+        #expect(counts.emails == 3)
+        #expect(counts.files == 0)
         // The first copy stays as it was.
         #expect(try await store.sortingEmail("a@test.example")?.sender == "kim@quay.example")
         await store.close()
@@ -114,6 +116,34 @@ struct MailStoreTests {
         // An email the store does not hold yet finds its thread by its headers.
         let new = SortingService.Email(messageID: "new@test.example", sender: "song.yutong@harborlights.example", date: Self.date(5), subject: "Re: Signage plan", text: "", inReplyTo: ["subject@test.example"])
         #expect(try await store.thread(of: new).count == 4)
+        await store.close()
+    }
+
+    /// The scan saves the newest mail first, so a reply can come before its parent. The
+    /// parent joins the reply to the thread's root, and sorting runs for the reply again.
+    @Test func aReplySavedBeforeItsParentJoinsTheThreadWhenTheParentComes() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("child@test.example", from: "song.yutong@harborlights.example", day: 2, subject: "Re: Signs", inReplyTo: ["parent@test.example"]),
+            Self.message("mine@test.example", from: Self.work, to: ["song.yutong@harborlights.example"], day: 3, subject: "Re: Signs",
+                         references: ["root@test.example", "parent@test.example", "child@test.example"]),
+        ], ownAddresses: [Self.work], at: Self.date(4))
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: "child@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "mine@test.example"))
+        #expect(try await store.move("mine@test.example", to: Self.harbor))
+        #expect(try await store.waiting().isEmpty)
+
+        try await store.save([
+            Self.message("root@test.example", from: "song.yutong@harborlights.example", subject: "Signs"),
+            Self.message("parent@test.example", from: Self.work, to: ["song.yutong@harborlights.example"], day: 1, subject: "Re: Signs", references: ["root@test.example"]),
+        ], ownAddresses: [Self.work], at: Self.date(5))
+        let child = try #require(try await store.sortingEmail("child@test.example"))
+        #expect(try await store.thread(of: child).map(\.messageID) == ["root@test.example", "parent@test.example", "mine@test.example"])
+        let explained = try #require(try await store.explainEmail("child@test.example"))
+        #expect(try await store.threadMail(of: explained).map(\.messageID) == ["root@test.example", "parent@test.example", "mine@test.example"])
+        // The reply is sorted again with its whole thread. A moved email never is.
+        #expect(try await store.waiting().map(\.messageID) == ["root@test.example", "parent@test.example", "child@test.example"])
         await store.close()
     }
 
@@ -386,30 +416,93 @@ struct MailStoreTests {
         await store.close()
     }
 
-    @Test func correspondenceReadsOnlyEarlierMailAndNeverTheEmailItself() async throws {
+    /// Only the people the user wrote to count, from the user's mail dated before the email.
+    @Test func correspondenceReadsOnlyTheUsersEarlierMail() async throws {
         defer { cleanUp() }
         let store = try await openStore()
         try await store.save([
             Self.message("a@test.example", from: "kim@quay.example", name: "Kim", cc: ["Lee@Quay.example"]),
-            Self.message("b@test.example", from: Self.work, to: ["Ann Yu <ann@quay.example>", "kim@quay.example"], day: 1, text: "Sent by me."),
-            Self.message("c@test.example", from: "Bai Lu <BAI.LU@lumenhaus.example>", to: ["kim@quay.example"], day: 2, text: "Also sent by me."),
+            Self.message("b@test.example", from: Self.work, to: ["ann@quay.example", "kim@quay.example"], cc: [Self.home, "Ann@quay.example"], day: 1, text: "Sent by me."),
+            Self.message("c@test.example", from: "Bai Lu <BAI.LU@lumenhaus.example>", to: ["joe@quay.example"], day: 2, text: "Also sent by me."),
             Self.message("stranger@test.example", from: "new@stranger.example", day: 3),
-            Self.message("later@test.example", from: "later@quay.example", day: 4),
+            Self.message("later@test.example", from: Self.work, to: ["later@quay.example"], day: 4, text: "Sent after."),
         ], ownAddresses: [Self.work], at: Self.date(5))
         let email = try #require(try await store.explainEmail("stranger@test.example"))
         let known = try await store.correspondence(before: email, ownAddresses: [Self.work, Self.home])
+        // Kim's own email names Lee, and neither counts. Kim counts as someone the user wrote to.
         #expect(known.correspondents == [
-            SenderChecks.Person(name: "Kim", address: "kim@quay.example"),
-            SenderChecks.Person(name: "", address: "lee@quay.example"),
             SenderChecks.Person(name: "", address: "ann@quay.example"),
+            SenderChecks.Person(name: "", address: "kim@quay.example"),
+            SenderChecks.Person(name: "", address: "joe@quay.example"),
         ])
         #expect(known.sentTexts == ["Sent by me.", "Also sent by me."])
-        #expect(try await store.correspondence(before: email, ownAddresses: []).sentTexts.isEmpty)
+        // Without the user's addresses, or without any mail from them, Orra does not read
+        // the user's sent mail, so quotes of the user stay unchecked.
+        let unknown = try await store.correspondence(before: email, ownAddresses: [])
+        #expect(unknown.correspondents.isEmpty)
+        #expect(unknown.sentTexts == nil)
+        let notRead = try await store.correspondence(before: email, ownAddresses: ["someone@else.example"])
+        #expect(notRead.correspondents.isEmpty)
+        #expect(notRead.sentTexts == nil)
+        // Sent mail that is all after the email gives an empty list, not nil.
+        let first = try #require(try await store.explainEmail("a@test.example"))
+        #expect(try await store.correspondence(before: first, ownAddresses: [Self.work]).sentTexts == [])
         await store.close()
     }
 
-    /// An explanation with every part filled, so its round trip covers every type in it.
-    static func explanation(_ id: String, draft: Explanation.Draft? = nil) -> Explanation {
+    /// A stranger's harmless first email from a lookalike address never makes the second
+    /// one known, so the payment change keeps every warning.
+    @Test func aSecondEmailFromALookalikeSenderKeepsItsWarnings() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let project = ExplainService.Project(
+            id: Self.harbor, name: "Harbor Lights signage",
+            people: [ExplainPrompt.Person(name: "Gu Chen", address: "gu.chen@harborlights.example")], domains: ["harborlights.example"])
+        try await store.save([
+            Self.message("real@test.example", from: "gu.chen@harborlights.example", name: "Gu Chen", day: 0, text: "The signs are ready."),
+            Self.message("mine@test.example", from: Self.work, to: ["gu.chen@harborlights.example"], day: 1, text: "Thanks, Gu Chen."),
+            Self.message("first@test.example", from: "billing@harb0rlights.example", name: "Gu Chen", cc: ["lee@quay.example"], day: 2, text: "See you at the opening."),
+            Self.message("second@test.example", from: "billing@harb0rlights.example", name: "Gu Chen", day: 3,
+                         text: "Our bank account changed. Please pay the invoice to the new account today."),
+        ], ownAddresses: [Self.work], at: Self.date(4))
+        var warnings: [String: [ProjectsWarning]] = [:]
+        for id in ["first@test.example", "second@test.example"] {
+            let email = try #require(try await store.explainEmail(id))
+            let correspondence = try await store.correspondence(before: email, ownAddresses: [Self.work])
+            #expect(!correspondence.correspondents.contains { $0.address.hasSuffix("harb0rlights.example") || $0.address == "lee@quay.example" })
+            let known = ExplainService.Known(
+                ownName: "Bai Lu", ownAddresses: [Self.work], projects: [project],
+                correspondents: correspondence.correspondents, sentTexts: correspondence.sentTexts)
+            warnings[id] = await ExplainService.ruleWarnings(email, known: known)
+        }
+        for warning in [ProjectsWarning.lookalikeDomain, .senderNameMismatch, .unknownSenderPayment] {
+            #expect(warnings["second@test.example"]?.contains(warning) == true)
+        }
+        #expect(warnings["first@test.example"]?.contains(.lookalikeDomain) == true)
+        await store.close()
+    }
+
+    @Test func threadMailHoldsTheMessagesNearestTheEmail() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let count = MailStore.maximumThreadMessages + 4
+        var messages = [Self.message("t0@test.example", from: "kim@quay.example", subject: "Tiles")]
+        for index in 1..<count {
+            messages.append(Self.message("t\(index)@test.example", from: "kim@quay.example", day: Double(index), subject: "Re: Tiles", inReplyTo: ["t\(index - 1)@test.example"]))
+        }
+        try await store.save(messages, ownAddresses: [Self.work], at: Self.date(Double(count)))
+        let email = try #require(try await store.explainEmail("t2@test.example"))
+        let thread = try await store.threadMail(of: email).map(\.messageID)
+        #expect(thread.count == MailStore.maximumThreadMessages)
+        #expect(thread.first == "t0@test.example")
+        #expect(thread.last == "t\(MailStore.maximumThreadMessages)@test.example")
+        #expect(!thread.contains("t2@test.example"))
+        await store.close()
+    }
+
+    /// An explanation with every part filled, so its round trip covers every type in it,
+    /// made for `project`.
+    static func explanation(_ id: String, draft: Explanation.Draft? = nil, project: UUID? = harbor) -> Explanation {
         let chunk = TextChunker.Chunk(file: URL(fileURLWithPath: "/tmp/plan.pdf"), page: 2, modified: date(-3), heading: "Sizes", text: "Sign A is 60 by 90 cm.")
         let checked = DraftCheck.Result(
             draft: "您好，尺寸已确认。[待确认：交期]",
@@ -419,7 +512,7 @@ struct MailStoreTests {
             outsideRecipients: ["lee@quay.example"])
         return Explanation(
             messageID: id,
-            project: harbor,
+            project: project,
             language: .zh,
             today: date(1),
             reply: .reply(.zh),
@@ -442,7 +535,7 @@ struct MailStoreTests {
         let store = try await openStore()
         try await store.save([Self.message("a@test.example", from: "song.yutong@harborlights.example")], ownAddresses: [Self.work], at: Self.start)
         #expect(try await store.explanation(for: "a@test.example") == nil)
-        let explanation = Self.explanation("a@test.example")
+        let explanation = Self.explanation("a@test.example", project: nil)
         #expect(try await store.save(explanation, at: Self.date(1)))
         #expect(try await store.explanation(for: "a@test.example") == explanation)
         let listed = try #require(try await store.list(.needsProject).first)
@@ -459,26 +552,92 @@ struct MailStoreTests {
         defer { cleanUp() }
         let store = try await openStore()
         try await store.save([Self.message("a@test.example", from: "song.yutong@harborlights.example")], ownAddresses: [Self.work], at: Self.start)
-        try await store.save(Self.explanation("a@test.example"), at: Self.date(1))
+        #expect(try await store.save(Self.explanation("a@test.example", project: nil), at: Self.date(1)))
         let formal = ReviseService.Version(
             messageID: "a@test.example", change: .tone(.formal),
             check: DraftCheck.Result(draft: "尊敬的宋女士：尺寸已确认。", language: .zh), droppedPlaceholders: ["[待确认：交期]"])
         let shorter = ReviseService.Version(
             messageID: "a@test.example", change: .instruction("更短一点"),
             check: DraftCheck.Result(draft: "尺寸已确认。", language: .zh, flags: [.decidesQuestion(placeholders: 0, questions: 1)]))
-        #expect(try await store.save(formal, at: Self.date(2)) == 1)
-        #expect(try await store.save(shorter, at: Self.date(3)) == 2)
-        #expect(try await store.save(ReviseService.Version(messageID: "unknown@test.example", change: .tone(.warm), check: DraftCheck.Result(draft: "Hi", language: .en)), at: Self.date(3)) == nil)
+        #expect(try await store.save(formal, startedAt: Self.date(2), at: Self.date(2)) == 1)
+        #expect(try await store.save(shorter, startedAt: Self.date(2), at: Self.date(3)) == 2)
+        #expect(try await store.save(ReviseService.Version(messageID: "unknown@test.example", change: .tone(.warm), check: DraftCheck.Result(draft: "Hi", language: .en)), startedAt: Self.date(3), at: Self.date(3)) == nil)
         #expect(try await store.versions(of: "a@test.example") == [
             MailStore.DraftVersion(number: 1, made: Self.date(2), version: formal),
             MailStore.DraftVersion(number: 2, made: Self.date(3), version: shorter),
         ])
         #expect(try await store.removeNewestVersion(of: "a@test.example", at: Self.date(4)))
         #expect(try await store.versions(of: "a@test.example").map(\.number) == [1])
-        #expect(try await store.save(shorter, at: Self.date(5)) == 2)
-        try await store.save(Self.explanation("a@test.example", draft: .missing), at: Self.date(6))
+        #expect(try await store.save(shorter, startedAt: Self.date(5), at: Self.date(5)) == 2)
+        #expect(try await store.save(Self.explanation("a@test.example", draft: .missing, project: nil), at: Self.date(6)))
         #expect(try await store.versions(of: "a@test.example").isEmpty)
         #expect(try await store.removeNewestVersion(of: "a@test.example", at: Self.date(7)) == false)
+        await store.close()
+    }
+
+    /// A revision that started before the email was explained again ends on nothing, so it
+    /// never shows as a version of the new draft.
+    @Test func aRevisionThatEndsAfterANewExplanationIsNotSaved() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("a@test.example", from: "song.yutong@harborlights.example"),
+            Self.message("b@test.example", from: "song.yutong@harborlights.example"),
+        ], ownAddresses: [Self.work], at: Self.start)
+        let warm = ReviseService.Version(messageID: "a@test.example", change: .tone(.warm), check: DraftCheck.Result(draft: "Hi Song,", language: .en))
+        // No explanation, no draft to revise.
+        #expect(try await store.save(warm, startedAt: Self.date(1), at: Self.date(1)) == nil)
+        #expect(try await store.save(Self.explanation("a@test.example", project: nil), at: Self.date(1)))
+        let four = Self.date(4)
+        let late = store.versionSave(startedAt: Self.date(2), now: { four })
+        #expect(try await store.save(Self.explanation("a@test.example", project: nil), at: Self.date(3)))
+        await late(warm)
+        #expect(try await store.versions(of: "a@test.example").isEmpty)
+        await store.versionSave(startedAt: Self.date(3), now: { four })(warm)
+        #expect(try await store.versions(of: "a@test.example").map(\.number) == [1])
+        await store.close()
+    }
+
+    /// An explanation holds text of the project it was made for. When the email changes
+    /// project, the explanation and the draft go, so forgetting the project before leaves
+    /// none of its text behind.
+    @Test func anEmailThatChangesProjectLosesItsExplanationAndDraft() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let secret = "lanternquokka"
+        try await store.save([
+            Self.message("moved@test.example", from: "song.yutong@harborlights.example"),
+            Self.message("sorted@test.example", from: "song.yutong@harborlights.example", day: 1),
+            Self.message("stays@test.example", from: "song.yutong@harborlights.example", day: 2),
+        ], ownAddresses: [Self.work], at: Self.date(3))
+        var explanation = Self.explanation("moved@test.example")
+        explanation.sources["F1"] = .file(TextChunker.Chunk(file: URL(fileURLWithPath: "/tmp/plan.pdf"), page: 1, modified: Self.start, heading: "", text: "The \(secret) sizes."))
+        for id in ["moved@test.example", "sorted@test.example", "stays@test.example"] {
+            #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .likely, reasons: [.model]), for: id))
+            explanation.messageID = id
+            #expect(try await store.save(explanation, at: Self.date(4)))
+            #expect(try await store.save(ReviseService.Version(messageID: id, change: .tone(.warm), check: DraftCheck.Result(draft: "\(secret) draft", language: .en)), startedAt: Self.date(4), at: Self.date(4)) == 1)
+        }
+
+        #expect(try await store.move("moved@test.example", to: Self.maple))
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.model]), for: "sorted@test.example"))
+        // A decision or a move to the same project keeps them.
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.model]), for: "stays@test.example"))
+        #expect(try await store.move("stays@test.example", to: Self.harbor))
+        for id in ["moved@test.example", "sorted@test.example"] {
+            #expect(try await store.explanation(for: id) == nil)
+            #expect(try await store.versions(of: id).isEmpty)
+        }
+        #expect(try await store.explanation(for: "stays@test.example") != nil)
+        #expect(try await store.versions(of: "stays@test.example").count == 1)
+        // An explanation made for the project before is not saved after the move.
+        explanation.messageID = "moved@test.example"
+        #expect(try await store.save(explanation, at: Self.date(5)) == false)
+
+        try await store.forget(project: Self.harbor)
+        try await store.database.run("PRAGMA wal_checkpoint(TRUNCATE)")
+        #expect(bytesOnDisk(store.database).range(of: Data(secret.utf8)) == nil)
+        #expect(try await store.list(.project(Self.maple)).map(\.messageID) == ["moved@test.example"])
         await store.close()
     }
 
@@ -511,9 +670,30 @@ struct MailStoreTests {
         #expect(needs[0] == MailStore.Listed(
             messageID: "moved@test.example", date: Self.date(6), sender: MailStore.Person(address: "kim@quay.example"),
             subject: "Hello", project: nil, level: .unsure, reasons: [], movedByUser: true, reply: nil, warnings: [],
-            isExplained: false, hasText: true))
+            isExplained: false, hasText: true, summary: "Could you send the plan?"))
         #expect(needs[1].level == nil)
         #expect(needs[2].reasons == [.signalsDisagree])
+        await store.close()
+    }
+
+    /// The line under the subject is the first sentence until the email is explained, then
+    /// the first point (decision 16).
+    @Test func theListShowsTheFirstSentenceThenTheFirstPoint() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("a@test.example", from: "song.yutong@harborlights.example", text: "\n  Hi   Bai Lu,\nThe signs are 3.5 m wide. Please confirm."),
+            Self.message("b@test.example", from: "song.yutong@harborlights.example", day: 1, text: "尺寸已确认。下周安装。"),
+        ], ownAddresses: [Self.work], at: Self.date(2))
+        #expect(try await store.list(.needsProject).map(\.summary) == ["尺寸已确认。", "Hi Bai Lu,"])
+        // An explanation made for a project the email is not in is not saved.
+        #expect(try await store.save(Self.explanation("a@test.example"), at: Self.date(3)) == false)
+        #expect(try await store.save(Self.explanation("a@test.example", project: nil), at: Self.date(3)))
+        #expect(try await store.list(.needsProject).map(\.summary) == ["尺寸已确认。", "Sign A is 60 by 90 cm."])
+        #expect(MailStore.firstSentence("The signs are 3.5 m wide. Please confirm.") == "The signs are 3.5 m wide.")
+        #expect(MailStore.firstSentence("Ready? Yes.") == "Ready?")
+        #expect(MailStore.firstSentence(String(repeating: "a", count: 500)).count == MailStore.summaryLength)
+        #expect(MailStore.firstSentence(" \n\n").isEmpty)
         await store.close()
     }
 
@@ -532,16 +712,18 @@ struct MailStoreTests {
         #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: "maple@test.example"))
         #expect(try await store.move("moved@test.example", to: Self.maple))
         #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "harbor@test.example"))
-        try await store.save(Self.explanation("maple@test.example"), at: Self.date(5))
-        try await store.save(ReviseService.Version(messageID: "maple@test.example", change: .tone(.warm), check: DraftCheck.Result(draft: "\(secret) draft", language: .en)), at: Self.date(5))
+        #expect(try await store.save(Self.explanation("maple@test.example", project: Self.maple), at: Self.date(5)))
+        #expect(try await store.save(ReviseService.Version(messageID: "maple@test.example", change: .tone(.warm), check: DraftCheck.Result(draft: "\(secret) draft", language: .en)), startedAt: Self.date(5), at: Self.date(5)) == 1)
         #expect(try await store.saveTally(SortingService.Tally(count: 1, last: Self.date(1)), rule: .sender("kim@quay.example"), project: Self.maple))
         #expect(try await store.saveTally(SortingService.Tally(count: 1, last: Self.date(1)), rule: .sender("kim@quay.example"), project: Self.harbor))
         try await store.database.run("PRAGMA wal_checkpoint(TRUNCATE)")
         #expect(bytesOnDisk(store.database).range(of: Data(secret.utf8)) != nil)
 
         try await store.forget(project: Self.maple)
-        #expect(try await store.known(["maple@test.example", "moved@test.example", "harbor@test.example", "waiting@test.example"]) == ["harbor@test.example", "waiting@test.example"])
+        #expect(try await store.sortingEmail("maple@test.example") == nil)
+        #expect(try await store.sortingEmail("moved@test.example") == nil)
         #expect(try await store.list(.project(Self.maple)).isEmpty)
+        #expect(try await store.database.run("SELECT COUNT(*) FROM mail_messages").first == [.integer(2)])
         #expect(try await store.tally(.sender("kim@quay.example"), project: Self.maple) == nil)
         #expect(try await store.tally(.sender("kim@quay.example"), project: Self.harbor)?.count == 1)
         #expect(try await store.database.run("SELECT COUNT(*) FROM mail_draft_versions").first == [.integer(0)])
@@ -550,6 +732,31 @@ struct MailStoreTests {
         // Nothing can be filed in the project after.
         #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: "waiting@test.example") == false)
         #expect(try await store.saveTally(SortingService.Tally(count: 1, last: Self.date(5)), rule: .domain("quay.example"), project: Self.maple) == false)
+        await store.close()
+    }
+
+    /// The scan stops at known mail, so the forgotten emails count as known, and they are
+    /// never saved again. Only a hash of their Message-IDs stays.
+    @Test func forgottenMailIsNeverReadAgain() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("maple-quokka@test.example", from: "owen@pike-build.example"),
+            Self.message("harbor@test.example", from: "song.yutong@harborlights.example", day: 1),
+        ], ownAddresses: [Self.work], at: Self.date(2))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: "maple-quokka@test.example"))
+        try await store.forget(project: Self.maple)
+        #expect(try await store.known(["maple-quokka@test.example", "harbor@test.example", "new@test.example"]) == ["maple-quokka@test.example", "harbor@test.example"])
+        let again = try await store.save([
+            Self.message("maple-quokka@test.example", from: "owen@pike-build.example"),
+            Self.message("new@test.example", from: "owen@pike-build.example", day: 3),
+        ], ownAddresses: [Self.work], at: Self.date(4))
+        #expect(again == ["new@test.example"])
+        #expect(try await store.sortingEmail("maple-quokka@test.example") == nil)
+        #expect(try await store.database.run("SELECT until FROM mail_gone") == [[.real(Self.date(2).addingTimeInterval(Retention.goneIDs).timeIntervalSince1970)]])
+        try await store.database.run("PRAGMA wal_checkpoint(TRUNCATE)")
+        #expect(bytesOnDisk(store.database).range(of: Data("maple-quokka".utf8)) == nil)
+        #expect(MailStore.goneKey("maple-quokka@test.example").count == 64)
         await store.close()
     }
 
@@ -585,7 +792,9 @@ struct MailStoreTests {
             INSERT INTO index_files (project, path, size, modified, skip) VALUES
                 ('p', '/tmp/a.txt', 1, 0, NULL), ('p', '/tmp/b.txt', 1, 0, NULL), ('p', '/tmp/c.bin', 1, 0, 'unsupported')
             """)
-        #expect(try await store.counts() == MailStore.Counts(emails: 1, files: 2))
+        let counts = try await store.counts()
+        #expect(counts.emails == 1)
+        #expect(counts.files == 2)
         await store.close()
         await #expect(throws: ProjectsDatabase.Failure.self) {
             try await store.counts()
