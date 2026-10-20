@@ -194,8 +194,48 @@ struct SettingsPageTests {
         try await render(.projects, name: "\(language)-5-projects")
         try await render(.projects, cleanupInstalled: true, projectsData: 1_500_000, name: "\(language)-5-projects-with-data")
         try await render(.projects, physicalMemory: 8 << 30, name: "\(language)-5-projects-8-gb")
+        try await render(.projects, projectsOn: true, mail: .notAsked, height: 1000, name: "\(language)-5-projects-on")
+        try await render(.projects, cleanupInstalled: true, projectsOn: true, mail: .allowed, height: 1100, name: "\(language)-5-projects-mailboxes")
+        try await render(.projects, cleanupInstalled: true, projectsOn: true, mail: .denied, height: 1000, name: "\(language)-5-projects-mail-denied")
         try await render(.about, name: "\(language)-6-about")
         try await render(.about, height: 900, name: "\(language)-6-about-full-height")
+    }
+
+    /// The mailboxes of the stand in Mail: the two of all accounts, two of an account, and
+    /// one On My Mac.
+    private nonisolated static let snapshotMailboxes: [MailMailbox] = {
+        let account = MailEvents.Specifier.textID(MailEvents.Code.account, "2B7E-account", of: .application)
+        let mailbox = { (name: String, container: MailEvents.Specifier, account: String?) in
+            MailMailbox(kind: .mailbox, reference: .name(MailEvents.Code.mailbox, name, of: container), name: name, account: account)
+        }
+        return [.inbox, .sent, mailbox("Clients", account, "Studio"), mailbox("Archive/2026", account, "Studio"), mailbox("orra-test", .application, nil)]
+    }()
+
+    /// Mail access over a stand in Mail that runs and never sends an Apple Event: macOS last
+    /// answered `permission`, and the listing follows it.
+    private static func mailAccess(answering permission: MailPermission, defaults: UserDefaults, isOn: @escaping () -> Bool) -> ProjectsSettings.MailAccess {
+        let bridge = MailBridge(
+            isRunning: { true },
+            permission: { _ in permission },
+            lastPermission: { permission },
+            accounts: { [] },
+            mailboxes: {
+                switch permission {
+                case .allowed: return snapshotMailboxes
+                case .denied: throw MailBridgeError.denied
+                default: throw MailBridgeError.notAsked
+                }
+            },
+            count: { _ in 0 },
+            listing: { _, _ in [] },
+            headers: { _ in "" },
+            source: { _ in "" },
+            attachments: { _ in [] },
+            mailbox: { _ in throw MailBridgeError.notFound },
+            selection: { [] },
+            reply: { _, _ in }
+        )
+        return ProjectsSettings.MailAccess(bridge: bridge, choice: MailChoice(defaults: defaults, suggestsInboxAndSent: false), isOn: isOn)
     }
 
     private var folder: URL {
@@ -208,8 +248,10 @@ struct SettingsPageTests {
     /// `talkKey`, `talkMode` and `translationMode` the talk key and the modes of the keys, and
     /// `section` the part the page scrolls to. The Projects page shows on a Mac with
     /// `physicalMemory`, with a cleanup model in place when `cleanupInstalled`, and with
-    /// `projectsData` bytes kept, in folders of its own.
-    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, cleanupInstalled: Bool = false, physicalMemory: UInt64 = 48 << 30, projectsData: Int = 0, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
+    /// `projectsData` bytes kept, in folders of its own, and on with `projectsOn`. With
+    /// `mail`, it shows Mail access as macOS last answered it, over a stand in Mail with a
+    /// few made up mailboxes, one of them ticked once access is allowed.
+    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, cleanupInstalled: Bool = false, physicalMemory: UInt64 = 48 << 30, projectsData: Int = 0, projectsOn: Bool = false, mail: MailPermission? = nil, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing, or the files of the test model in place.
         let models = ModelInstaller(
@@ -232,8 +274,13 @@ struct SettingsPageTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: physicalMemory, storage: storage)
-        if projectsData > 0 {
+        if projectsData > 0 || projectsOn {
             projects.turnOn()
+        }
+        let projectsMail = mail.map { Self.mailAccess(answering: $0, defaults: defaults, isOn: { projects.isOn }) }
+        if mail == .allowed, let projectsMail {
+            await projectsMail.show()
+            projectsMail.choose(Self.snapshotMailboxes[2], true)
         }
         let cleanup = TextCleanup(
             isOn: cleanupOn,
@@ -281,7 +328,8 @@ struct SettingsPageTests {
             voiceModels: meeting ? VoiceModels(kind: .qwen3) { [temporary] manifest in
                 ModelInstaller(manifest: manifest, folders: temporary.folders, environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in nil }, sleep: { _ in }))
             } : nil,
-            projects: projects
+            projects: projects,
+            projectsMail: projectsMail
         )
         // The window's first size.
         let size = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)

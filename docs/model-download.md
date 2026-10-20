@@ -217,9 +217,19 @@ When Orra goes online for it:
   with cleanup saved off, the welcome window downloads the speech model only and cleanup
   is turned on in Settings. Nothing goes online before one of these buttons. Turning on
   the other switch while a download was agreed to for one asks nothing more. Cancel
-  Download keeps the bytes on disk and turns both switches off again.
-- Never at launch, and never while cleanup and translation are both off. Launch only
-  looks at the installed folder's file sizes. Loading uses local files only.
+  Download keeps the bytes on disk and turns both switches off again. It leaves Projects
+  on.
+- Or after the user turns Projects on, which only Debug builds show for now, and agrees
+  to the download in the dialog that names its size, or chooses Download, Resume
+  Download or Try Again on its page while Projects is on. Turning Projects on while
+  cleanup or translation is on asks nothing more. A download agreed to for Projects goes
+  on with Settings closed until Projects turns off, and then stops unless cleanup,
+  translation or captions wait for it. The Projects page shows Cancel Download only
+  while cleanup and translation are off and captions do not run, so it never turns them
+  off.
+- Never at launch, and never while cleanup, translation and Projects are all off, except
+  while captions translate and the user agreed in the caption window. Launch only looks
+  at the installed folder's file sizes. Loading uses local files only.
 
 Servers, at these commits. On 2026-10-11 each of the three served the three small files
 and tokenizer.json with the pinned SHA-256 values and answered a Range request on the

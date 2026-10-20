@@ -3152,9 +3152,8 @@ Mail access for Projects, added on 2026-10-19, not verified yet. Projects reads 
 Mail app through three Apple Events, see Orra/Projects/Mail/MailEvents.swift: get and count,
 which only read, and reply, which opens Mail's reply window. Orra/Info.plist holds
 NSAppleEventsUsageDescription, with its Chinese, Japanese and Spanish text in
-InfoPlist.xcstrings. Nothing asks for the permission yet. Allow Mail Access… in Settings >
-Projects comes later, so the checks after the first wait for it, in a Debug build with Mail
-open. Watch the log with
+InfoPlist.xcstrings. Only Allow Mail Access… in Settings > Projects asks for the
+permission, while Projects is on. Check in a Debug build with Mail open. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "projects-mail"'`:
 it shows the events with their times and error codes, and the permission checks, never
 mail.
@@ -3164,9 +3163,13 @@ mail.
   `codesign -d --entitlements - --xml Orra.app` lists
   com.apple.security.automation.apple-events and com.apple.security.device.audio-input and
   nothing else.
-- [ ] The first Allow Mail Access… with Mail open: macOS asks whether Orra may control Mail,
-  with the text from Info.plist, in English, Chinese, Japanese and Spanish. Allowing it
-  lists Orra under Privacy & Security, Automation, with Mail turned on.
+- [ ] The first Allow Mail Access… with Mail open: Orra's explanation comes first, and
+  Cancel asks nothing. After Continue, macOS asks whether Orra may control Mail, with the
+  text from Info.plist, in English, Chinese, Japanese and Spanish. Allowing it lists Orra
+  under Privacy & Security, Automation, with Mail turned on, and the page lists Mail's
+  mailboxes.
+- [ ] Allow Mail Access… with Mail closed says to open Mail first, asks nothing and leaves
+  Mail closed.
 - [ ] Don't Allow, or Mail turned off for Orra in that list: Settings > Projects shows one
   line that leads to Privacy & Security, Automation, and the log shows -1743. Orra never
   asks again by itself. To see the prompt again, quit Orra and run
@@ -3178,7 +3181,26 @@ mail.
   mail shows no prompt, and the log shows each event failed with -1744. Only Allow Mail
   Access… shows the prompt.
 - [ ] Opening Settings > Projects or Report a Problem shows the last answer without a new
-  check: no prompt, and no permission check line in the log.
+  check: no prompt, and no permission check line in the log. With Projects on and Mail
+  open, the page lists the mailboxes, so the log shows get events.
+- [ ] Under Mailboxes a Debug build ticks nothing. Inbox (all accounts) and Sent (all
+  accounts) show on their own, and each account and On My Mac under a disclosure, closed
+  unless one of its mailboxes is ticked. Start Reading Mail stays off until access is
+  allowed and a mailbox is ticked. No mail is read before Start Reading Mail, and this
+  prints only the ticked mailboxes:
+  `defaults export io.github.db-ol.Orra - | plutil -extract projectsMailboxes raw -o - - | base64 -D`
+- [ ] Once release builds show Projects: a release build ticks Inbox (all accounts) and
+  Sent (all accounts) before the user chooses.
+- [ ] Choose a mailbox with no project made yet, then turn Projects off. It asks Keep or
+  Delete. Delete Data, or Delete All Projects Data… with Projects on or off, removes the
+  choice, and the command above then finds no projectsMailboxes.
+- [ ] Quit Mail and open it again while the page shows. The mailboxes list again without
+  Try Again. If "Mail did not answer" stays, note it.
+- [ ] Turning Projects on without the cleanup model asks before the download and names its
+  size. Cancel leaves Projects off. Download turns Projects on and shows the progress on
+  the page, and the download goes on with Settings closed. The page shows Cancel Download
+  only while cleanup and translation are off and captions do not run. Turning Projects
+  off stops the download unless cleanup, translation or captions wait for it.
 - [ ] Reading mail never marks a message as read and never moves one.
 
 ## Not implemented

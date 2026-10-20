@@ -126,6 +126,29 @@ struct MailChoiceTests {
         #expect(next.mailboxes == (suggests ? [.inbox, .sent] : []))
     }
 
+    /// Whether anything is saved, so that Settings asks Keep or Delete at turn off and
+    /// offers Delete All for it: a tick, the days or the confirm, read again at launch,
+    /// until forgotten. The suggestion alone saves nothing.
+    @Test(arguments: [false, true])
+    func theChoiceCountsAsSavedOnceAnyPartIs(suggests: Bool) {
+        defer { cleanUp() }
+        let choice = MailChoice(defaults: defaults, suggestsInboxAndSent: suggests)
+        #expect(!choice.isSaved)
+        choice.choose(days: 30)
+        #expect(choice.isSaved)
+        #expect(MailChoice(defaults: defaults, suggestsInboxAndSent: suggests).isSaved)
+        choice.forget()
+        #expect(!choice.isSaved)
+        choice.choose([Self.archive])
+        #expect(choice.isSaved)
+        choice.forget()
+        choice.confirm()
+        #expect(choice.isSaved)
+        #expect(MailChoice(defaults: defaults, suggestsInboxAndSent: suggests).isSaved)
+        choice.forget()
+        #expect(!MailChoice(defaults: defaults, suggestsInboxAndSent: suggests).isSaved)
+    }
+
     /// The cleanup steps of the test guide list Orra's preferences that hold "projects".
     @Test func theKeysNameProjects() {
         for key in [MailChoice.mailboxesKey, MailChoice.daysKey, MailChoice.confirmedKey] {
