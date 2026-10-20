@@ -108,6 +108,22 @@ struct ProblemReportTests {
         #expect(ProblemReport.describe(captionTarget: .spanish, picked: false, for: .japanese) == "Spanish (default), acts as Japanese")
     }
 
+    /// One line for Projects, on or off, with counts only. A build that hides Projects has
+    /// no line.
+    @Test func theProjectsLineSaysOnOrOffWithCountsOnly() {
+        var facts = Self.facts
+        func report() -> String {
+            ProblemReport.format(facts, log: [], logSource: "log store", crashReports: [], created: Date())
+        }
+        #expect(!report().contains("Projects"))
+        facts.projects = ProblemReport.ProjectsFacts(isOn: false)
+        #expect(report().contains("Learned word pairs: 3\nProjects: off\n"))
+        facts.projects = ProblemReport.ProjectsFacts(isOn: true)
+        #expect(report().contains("Projects: on, counts not read\n"))
+        facts.projects?.counts = ProblemReport.ProjectsCounts(projects: 5, emails: 105, files: 47)
+        #expect(report().contains("Projects: on, 5 projects, 105 emails, 47 files\n"))
+    }
+
     @Test func reportKeepsTheNewestLogLines() {
         let log = (1...(ProblemReport.maximumLogLines + 5)).map { "line \($0)" }
         let report = ProblemReport.format(Self.facts, log: log, logSource: "log show", crashReports: [], created: Date())

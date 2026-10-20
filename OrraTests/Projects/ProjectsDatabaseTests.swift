@@ -77,7 +77,7 @@ struct ProjectsDatabaseTests {
         #expect(try await database.run("PRAGMA secure_delete").first == [.integer(1)])
         #expect(try await database.run("PRAGMA foreign_keys").first == [.integer(1)])
         #expect(try await database.run("PRAGMA trusted_schema").first == [.integer(0)])
-        #expect(try await database.run("PRAGMA user_version").first == [.integer(1)])
+        #expect(try await database.run("PRAGMA user_version").first == [.integer(Int64(ProjectsDatabase.migrations.count))])
         // macOS 15 has SQLite 3.43 or later, so FTS5 drops deleted rows at once.
         #expect(sqlite3_libversion_number() >= ProjectsDatabase.secureDeleteVersion)
         #expect(database.hasFullTextSecureDelete)

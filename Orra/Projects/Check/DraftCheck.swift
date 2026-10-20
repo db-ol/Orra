@@ -2,7 +2,7 @@ import Foundation
 import NaturalLanguage
 
 /// The plain values a draft is checked with.
-nonisolated struct DraftCheckInput: Sendable, Equatable {
+nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
     typealias Person = SenderChecks.Person
 
     /// The draft the model wrote.
@@ -55,8 +55,8 @@ nonisolated struct DraftCheckInput: Sendable, Equatable {
 /// meant to stop.
 nonisolated enum DraftCheck {
     /// A part of the draft the check took out, so the window can show what was removed.
-    nonisolated struct Removal: Sendable, Equatable {
-        nonisolated enum Kind: String, Sendable {
+    nonisolated struct Removal: Sendable, Equatable, Codable {
+        nonisolated enum Kind: String, Sendable, Codable {
             case link
             case actionClaim
             case assistantVoice
@@ -68,14 +68,14 @@ nonisolated enum DraftCheck {
         var text: String
     }
 
-    nonisolated enum Flag: Sendable, Equatable {
+    nonisolated enum Flag: Sendable, Equatable, Codable {
         /// What OutputChecks found in the checked draft.
         case output(OutputChecks.Finding)
         /// Fewer "to confirm" placeholders than questions for the user.
         case decidesQuestion(placeholders: Int, questions: Int)
     }
 
-    nonisolated struct Result: Sendable, Equatable {
+    nonisolated struct Result: Sendable, Equatable, Codable {
         /// The checked draft, with each removal replaced by a placeholder, or nil when the
         /// draft is held back for its language.
         var draft: String?

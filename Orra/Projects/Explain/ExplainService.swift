@@ -3,8 +3,8 @@ import os
 
 /// One email explained, with the checks of the code around the model's answer. The window
 /// shows it as plain text only.
-nonisolated struct Explanation: Sendable, Equatable {
-    nonisolated struct Point: Sendable, Equatable {
+nonisolated struct Explanation: Sendable, Equatable, Codable {
+    nonisolated struct Point: Sendable, Equatable, Codable {
         /// The point without its source brackets, as the model wrote it.
         var text: String
         /// Its source ids that are in `sources`, such as F2, in order.
@@ -14,7 +14,7 @@ nonisolated struct Explanation: Sendable, Equatable {
         var flags: [OutputChecks.Finding]
     }
 
-    nonisolated enum Draft: Sendable, Equatable {
+    nonisolated enum Draft: Sendable, Equatable, Codable {
         /// The model's draft after DraftCheck. Its draft is nil when DraftCheck held it
         /// back, since it is not in the language the reply rule chose.
         case checked(DraftCheck.Result)
@@ -139,8 +139,8 @@ final class ExplainService {
         var ownAddresses: [String] = []
         /// All of the user's projects.
         var projects: [Project] = []
-        /// Everyone the user exchanged mail with, read from mail other than this email, so
-        /// a stranger's first email never makes its sender known.
+        /// Everyone the user wrote to before, read from the user's own mail only, so no
+        /// stranger's email ever makes its sender, or anyone it names, known.
         var correspondents: [SenderChecks.Person] = []
         /// The text of the mail the user sent, or nil when Orra does not read sent mail,
         /// which leaves quotes of the user unchecked.

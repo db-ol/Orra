@@ -42,7 +42,7 @@ nonisolated struct ReviseService: Sendable {
     }
 
     /// A new version of a draft.
-    nonisolated struct Version: Sendable, Equatable {
+    nonisolated struct Version: Sendable, Equatable, Codable {
         /// The email the draft replies to.
         var messageID: String
         /// What the user asked for.

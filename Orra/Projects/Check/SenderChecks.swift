@@ -15,7 +15,7 @@ import Foundation
 /// the user's own addresses gets no warning.
 nonisolated enum SenderChecks {
     /// A person as the display name and the address of a mail header.
-    nonisolated struct Person: Sendable, Equatable {
+    nonisolated struct Person: Sendable, Equatable, Codable {
         var name: String
         var address: String
     }

@@ -14,7 +14,7 @@ import Foundation
 /// - Each chunk keeps its file, its page, the file's modification date and the heading above
 ///   its first line, which may sit on an earlier page.
 nonisolated struct TextChunker: Sendable {
-    nonisolated struct Chunk: Sendable, Equatable {
+    nonisolated struct Chunk: Sendable, Equatable, Codable {
         var file: URL
         /// The page number in a PDF, nil for the other formats.
         var page: Int?

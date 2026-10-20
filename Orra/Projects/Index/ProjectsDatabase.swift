@@ -2,8 +2,8 @@ import Foundation
 import SQLite3
 
 /// The Projects database, projects.sqlite in `ProjectsStorage.indexFolder`, the only holder of
-/// a SQLite handle in Orra. It holds the index of the project folders, and the store adds its
-/// tables in a later migration.
+/// a SQLite handle in Orra. It holds the index of the project folders, see FolderIndex, and the
+/// mail, drafts and counts of moves of MailStore.
 ///
 /// - The file and the files SQLite writes next to it are for the user alone (0600), in a
 ///   folder for the user alone (0700) that is left out of backups as a whole, so recent text
@@ -82,7 +82,8 @@ actor ProjectsDatabase {
     /// the secure-delete option.
     nonisolated static let secureDeleteVersion: Int32 = 3_042_000
 
-    /// The schema, in order. The index of the project folders, see FolderIndex.
+    /// The schema, in order. First the index of the project folders, see FolderIndex, then
+    /// the tables of MailStore, see `MailStore.migration`.
     ///
     /// - index_files: one row for each file the index read, with its text or with why it
     ///   gives none, and the size and modification date it had, so it is read again only
@@ -128,6 +129,7 @@ actor ProjectsDatabase {
                 last_event INTEGER NOT NULL
             );
             """),
+        MailStore.migration,
     ]
 
     /// The database file.

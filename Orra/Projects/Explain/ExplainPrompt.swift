@@ -94,7 +94,7 @@ nonisolated struct ExplainPrompt: Sendable {
     }
 
     /// Where a finding is.
-    nonisolated enum Place: Sendable, Hashable {
+    nonisolated enum Place: Sendable, Hashable, Codable {
         case email
         /// A file excerpt, by its source id such as F2.
         case file(String)
@@ -105,7 +105,7 @@ nonisolated struct ExplainPrompt: Sendable {
     }
 
     /// What a source id stands for.
-    nonisolated enum Source: Sendable, Equatable {
+    nonisolated enum Source: Sendable, Equatable, Codable {
         /// An email, by its Message-ID.
         case message(String)
         /// The chunk of a file the prompt shows, with its file and its page in a PDF.
@@ -113,7 +113,7 @@ nonisolated struct ExplainPrompt: Sendable {
     }
 
     /// A finding the checks section names.
-    nonisolated struct Finding: Sendable, Hashable {
+    nonisolated struct Finding: Sendable, Hashable, Codable {
         var warning: ProjectsWarning
         var place: Place
     }

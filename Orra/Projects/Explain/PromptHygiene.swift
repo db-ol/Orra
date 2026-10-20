@@ -26,17 +26,17 @@ import Foundation
 /// and explain.py, and widened to more wordings of the same kinds.
 ///
 /// Cleaning text twice gives the same text as cleaning it once.
-nonisolated struct PromptHygiene: Sendable, Equatable {
+nonisolated struct PromptHygiene: Sendable, Equatable, Codable {
     /// Where the text comes from, which decides the warning for a line that addresses an
     /// assistant.
-    nonisolated enum Source: Sendable, Equatable {
+    nonisolated enum Source: Sendable, Equatable, Codable {
         case mail
         case file
     }
 
     /// Something the hygiene took out.
-    nonisolated struct Finding: Sendable, Equatable {
-        nonisolated enum Kind: Sendable, Hashable {
+    nonisolated struct Finding: Sendable, Equatable, Codable {
+        nonisolated enum Kind: Sendable, Hashable, Codable {
             /// Text or characters the reader does not see, or the tokens of a chat template.
             case hidden(ProjectsHiddenText)
             /// A passage that addresses an assistant or a model, speaks as the system, or
