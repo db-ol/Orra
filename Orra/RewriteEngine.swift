@@ -43,10 +43,11 @@ nonisolated extension ModelFolders {
     }
 }
 
-/// Owns the cleanup model, which also translates. An actor, so loading and generating run
-/// off the main actor and one cleanup or translation runs at a time. Loaded while cleanup
-/// or translation is on and the user dictates, unloaded when both are off or nobody
-/// dictated for a while, see TextCleanup.
+/// Owns the cleanup model, which also translates and runs Projects jobs. An actor, so
+/// loading and generating run off the main actor and one call runs at a time. Loaded while
+/// cleanup or translation is on and the user dictates, while captions translate, and while
+/// Projects holds it. Unloaded when none of them needs it or nobody dictated for a while,
+/// see TextCleanup.
 ///
 /// Written against mlx-swift-lm 3.31.4.
 actor RewriteEngine {
@@ -79,6 +80,12 @@ actor RewriteEngine {
     private var translationPrefixes: [TranslationRoute: Prefix] = [:]
     /// Which routes have a prefix cache, in the order they were used.
     private var prefixSlots = TranslationPrefixSlots()
+
+    /// The Projects jobs that have not ended, by their id, see `startJob`. Dropped with the
+    /// model.
+    private var jobs: [Int: Job] = [:]
+    /// The id of the latest job.
+    private var lastJobID = 0
 
     /// The bytes the cleanup prefix cache holds, 0 without one.
     var prefixCacheBytes: Int {
@@ -125,17 +132,30 @@ actor RewriteEngine {
         Logger.rewrite.notice("Cleanup model loaded and warmed up in \(started.duration(to: .now), privacy: .public)")
     }
 
-    /// Drops the model, its prefix cache and the GPU buffers MLX keeps for reuse, and asks
-    /// malloc to return the pages it holds free, so the memory goes back to the system.
+    /// Drops the model, its prefix cache, the Projects jobs under way and the GPU buffers
+    /// MLX keeps for reuse, and asks malloc to return the pages it holds free, so the memory
+    /// goes back to the system. A later call on a dropped job throws
+    /// RewriteError.jobDropped.
     func unload() {
         guard context != nil else { return }
         prefix = nil
         translationPrefixes = [:]
         prefixSlots = TranslationPrefixSlots()
+        let droppedJobs = jobs.count
+        jobs = [:]
         context = nil
         Memory.clearCache()
         let returned = malloc_zone_pressure_relief(nil, 0)
-        Logger.rewrite.notice("Cleanup model unloaded, malloc returned \(returned, privacy: .public) bytes")
+        if droppedJobs > 0 {
+            Logger.rewrite.notice("Cleanup model unloaded with \(droppedJobs, privacy: .public) Projects jobs dropped, malloc returned \(returned, privacy: .public) bytes")
+        } else {
+            Logger.rewrite.notice("Cleanup model unloaded, malloc returned \(returned, privacy: .public) bytes")
+        }
+    }
+
+    /// Gives the GPU buffers MLX keeps for reuse back, without unloading the model.
+    func clearCache() {
+        Memory.clearCache()
     }
 
     /// Runs the cleanup prompt on a transcript. Greedy, so the same text always gets the
@@ -220,6 +240,175 @@ actor RewriteEngine {
         Logger.rewrite.notice("Dropped \(routes.count, privacy: .public) translation prefix caches")
     }
 
+    // MARK: Projects jobs
+
+    /// The longest prompt a Projects job may have, in tokens. A sliced job of this length
+    /// peaked 1.3 to 1.6 GB above the idle speech and cleanup models on an M5 Pro, which
+    /// leaves room next to dictation on a Mac with 16 GB.
+    nonisolated static let maximumJobPromptTokens = 8_192
+
+    /// A Projects job that `startJob` began.
+    nonisolated struct JobStart: Equatable, Sendable {
+        let id: Int
+        let promptTokens: Int
+    }
+
+    /// What one `readSlice` did.
+    nonisolated struct SliceRun: Equatable, Sendable {
+        /// The prompt tokens this slice read.
+        let read: Int
+        /// The prompt tokens left to read before the answer. The first burst reads the
+        /// last token of the prompt, so this is 0 once only that one is left.
+        let remaining: Int
+        /// How long the slice ran on this actor, from its start until the GPU was done
+        /// with it. Time spent waiting for the actor never counts.
+        let ran: Duration
+    }
+
+    /// What one `writeBurst` did.
+    nonisolated struct BurstRun: Equatable, Sendable {
+        /// The answer tokens this burst wrote.
+        let written: Int
+        /// True once the answer is complete: the model ended it, or it reached the job's
+        /// maximum.
+        let finished: Bool
+        /// How long the burst ran on this actor, measured as for a slice.
+        let ran: Duration
+    }
+
+    /// A job between its calls: the prompt's tokens, how far the model read them, the
+    /// model's cache, and the answer so far. Only this actor touches it.
+    private nonisolated final class Job {
+        let prompt: [Int]
+        let maximumTokens: Int
+        var cache: [any KVCache]
+        /// How many prompt tokens the model has read.
+        var read = 0
+        /// Writes the answer, from the first burst on.
+        var writer: TokenIterator?
+        var answer: [Int] = []
+        var isFinished = false
+
+        init(prompt: [Int], maximumTokens: Int, cache: [any KVCache]) {
+            self.prompt = prompt
+            self.maximumTokens = maximumTokens
+            self.cache = cache
+        }
+    }
+
+    /// Begins a Projects job on a prompt, which ends with the caller's own prefill. The
+    /// model reads the prompt in slices, see `readSlice`, and writes the answer in bursts,
+    /// see `writeBurst`, each its own call, so a cleanup or a translation never waits for
+    /// more than one of them. Greedy, without PromptLookup and without a prefix cache.
+    /// Throws RewriteError.promptTooLong for a prompt over `maximumJobPromptTokens`.
+    func startJob(_ prompt: String, maximumTokens: Int) throws -> JobStart {
+        try Task.checkCancellation()
+        guard let context else { throw RewriteError.notLoaded }
+        let tokens = context.tokenizer.encode(text: prompt, addSpecialTokens: false)
+        guard tokens.count <= Self.maximumJobPromptTokens else { throw RewriteError.promptTooLong }
+        lastJobID += 1
+        jobs[lastJobID] = Job(prompt: tokens, maximumTokens: maximumTokens, cache: context.model.newCache(parameters: nil))
+        return JobStart(id: lastJobID, promptTokens: tokens.count)
+    }
+
+    /// Reads up to `count` more tokens of a job's prompt into its cache, and leaves the
+    /// last token for the first burst. Waits until the GPU is done and gives MLX's freed
+    /// buffers back before it returns, so no work of the job is under way between calls.
+    ///
+    /// Each slice is one forward pass. Its size changes how bf16 values round, so where two
+    /// words are close the greedy answer can take the other one: the same prompt read in
+    /// other slices can get another answer. Slices that end where one call ends its windows
+    /// of 512 tokens give exactly the answer of one call. Reading every slice in pieces of
+    /// a fixed size would make the answer the same whatever the slices, but on an M5 Pro
+    /// pieces of 64 tokens took 35 to 42% longer to the first token than one call, pieces
+    /// of 128 took 13 to 15% longer, and slices of 256 in one pass 4 to 6%.
+    func readSlice(_ id: Int, tokens count: Int) throws -> SliceRun {
+        let started = ContinuousClock.now
+        try Task.checkCancellation()
+        guard let job = jobs[id], let context else { throw RewriteError.jobDropped }
+        // Where the slices stop: before the last token, or where they are once the answer
+        // has begun.
+        let last = job.writer == nil ? max(job.prompt.count - 1, job.read) : job.read
+        let end = min(job.read + max(count, 1), last)
+        if end > job.read {
+            let slice = MLXArray(Array(job.prompt[job.read..<end]))[.newAxis]
+            // Only the cache is evaluated, so the logits of the slice are never computed.
+            _ = context.model(slice, cache: job.cache)
+            eval(job.cache)
+        }
+        Stream().synchronize()
+        let ran = started.duration(to: .now)
+        Memory.clearCache()
+        let read = end - job.read
+        job.read = end
+        return SliceRun(read: read, remaining: last - end, ran: ran)
+    }
+
+    /// Writes up to `count` more tokens of a job's answer, after reading what is left of
+    /// its prompt on the first burst. The tokens stay here until `endJob` decodes them all
+    /// at once, so a character made of several tokens is never cut. Stops early when the
+    /// task is cancelled. Waits for the GPU and gives MLX's freed buffers back, as
+    /// `readSlice` does.
+    func writeBurst(_ id: Int, tokens count: Int) throws -> BurstRun {
+        let started = ContinuousClock.now
+        try Task.checkCancellation()
+        guard let job = jobs[id], let context else { throw RewriteError.jobDropped }
+        if job.writer == nil, !job.isFinished {
+            if job.read < job.prompt.count, job.maximumTokens > 0 {
+                let rest = Array(job.prompt[job.read...])
+                job.writer = try TokenIterator(input: LMInput(tokens: MLXArray(rest)), model: context.model, cache: job.cache, parameters: GenerateParameters(maxTokens: job.maximumTokens, temperature: 0))
+                job.read = job.prompt.count
+            } else {
+                job.isFinished = true
+            }
+        }
+        let stop = stopTokens(context)
+        var written = 0
+        while written < count, !job.isFinished {
+            guard let token = job.writer?.next(), !stop.contains(token) else {
+                job.isFinished = true
+                break
+            }
+            job.answer.append(token)
+            written += 1
+            if job.answer.count >= job.maximumTokens {
+                job.isFinished = true
+            }
+            if Task.isCancelled {
+                break
+            }
+        }
+        // The writer evaluates the next token ahead. Let it finish, so nothing runs on the
+        // GPU for this job until its next call.
+        Stream().synchronize()
+        let ran = started.duration(to: .now)
+        Memory.clearCache()
+        return BurstRun(written: written, finished: job.isFinished, ran: ran)
+    }
+
+    /// Ends a job: decodes what the model wrote, without any prefill, drops the job and
+    /// gives MLX's freed buffers back, its cache among them. Also for a job that has not
+    /// finished, such as one whose caller was cancelled. Throws RewriteError.jobDropped
+    /// when an unload dropped the job before.
+    func endJob(_ id: Int) throws -> String {
+        guard let job = jobs.removeValue(forKey: id) else { throw RewriteError.jobDropped }
+        let answer = context?.tokenizer.decode(tokenIds: job.answer, skipSpecialTokens: true) ?? ""
+        // Lets go of the job's arrays before the cache is cleared, so they go back too.
+        job.writer = nil
+        job.cache = []
+        Memory.clearCache()
+        return answer
+    }
+
+    /// The end of turn tokens from generation_config.json and the tokenizer.
+    private func stopTokens(_ context: ModelContext) -> Set<Int> {
+        var stop = context.configuration.eosTokenIds
+        if let end = context.tokenizer.eosTokenId {
+            stop.insert(end)
+        }
+        return stop
+    }
+
     /// Runs the model on the start of a prompt that every transcript shares and returns its
     /// cache. Without a shared start there is no cache and every run reads the whole
     /// prompt.
@@ -262,11 +451,7 @@ actor RewriteEngine {
                 Logger.rewrite.notice("\(task, privacy: .public) prompt does not start with the cached prefix, so all of it is read")
             }
         }
-        // The end of turn tokens from generation_config.json and the tokenizer.
-        var stop = context.configuration.eosTokenIds
-        if let end = context.tokenizer.eosTokenId {
-            stop.insert(end)
-        }
+        let stop = stopTokens(context)
         var generated: [Int] = []
         var reason = "the token limit"
         var lookup = PromptLookup.Counts()
@@ -325,6 +510,10 @@ nonisolated enum RewriteError: Error, Equatable {
     case notLoaded
     /// The model has a cache that PromptLookup can neither trim nor restore.
     case cacheCannotRollBack
+    /// A Projects job's prompt is longer than RewriteEngine.maximumJobPromptTokens.
+    case promptTooLong
+    /// The model was unloaded since the Projects job began, which dropped the job.
+    case jobDropped
 }
 
 /// What PushToTalkController needs from the cleanup model. Closures, so tests pass fakes.

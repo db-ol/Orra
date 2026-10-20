@@ -14,7 +14,8 @@ import os
 /// speaks, see `dictationStarted()`. Turning the last one off unloads it and stops a
 /// download. Translation works with cleanup off: the translation prompt cleans up and
 /// translates in one answer, and the cleanup in it is used only while cleanup is on, see
-/// TranslationStep.
+/// TranslationStep. Meeting captions and Projects keep the model loaded while they need it,
+/// see `captionsStarted()` and `projectsStarted()`.
 @Observable
 final class TextCleanup {
     nonisolated enum EngineState: Equatable, Sendable {
@@ -51,6 +52,9 @@ final class TextCleanup {
     /// True while meeting captions run, which translate with the model. The model is then
     /// loaded when it is in place and stays loaded, see `captionsStarted()`.
     private(set) var captionsNeedModel = false
+    /// How many holders Projects has on the model: one while the Projects window is open,
+    /// and one for each request of the user while it runs, see `projectsStarted()`.
+    private(set) var projectsHolders = 0
     /// True while the caption window asks whether to download the model.
     var isConfirmingCaptionDownload = false
     let models: ModelInstaller
@@ -285,11 +289,11 @@ final class TextCleanup {
     }
 
     /// Starts the idle timer again, unless cleanup and translation are off, a dictation is
-    /// under way or the model is not loaded.
+    /// under way, captions or Projects hold the model, or it is not loaded.
     private func scheduleIdleUnload() {
         idleTimer?.cancel()
         idleTimer = nil
-        guard let idleUnloadDelay, needsModel, !isDictating, !captionsNeedModel, isLoaded else { return }
+        guard let idleUnloadDelay, needsModel, !isDictating, !captionsNeedModel, !projectsNeedModel, isLoaded else { return }
         idleTimer = Task { [weak self, sleep] in
             guard (try? await sleep(idleUnloadDelay)) != nil, !Task.isCancelled else { return }
             self?.unloadWhileIdle()
@@ -302,7 +306,7 @@ final class TextCleanup {
     /// load fills them again.
     private func unloadWhileIdle() {
         idleTimer = nil
-        guard needsModel, !isDictating, !captionsNeedModel, isLoaded else { return }
+        guard needsModel, !isDictating, !captionsNeedModel, !projectsNeedModel, isLoaded else { return }
         engineState = .unloadedWhileIdle
         Logger.rewrite.notice("Unloading the cleanup model after no dictation for \(self.idleUnloadDelay ?? .zero, privacy: .public)")
         enqueue { [engine] in await engine.unload() }
@@ -318,9 +322,16 @@ final class TextCleanup {
         )
     }
 
-    /// Whether the model is wanted: cleanup or translation is on, or captions run.
+    /// Whether the model is wanted: cleanup or translation is on, captions run, or Projects
+    /// holds it.
     var needsModel: Bool {
-        isOn || translationIsOn || captionsNeedModel
+        isOn || translationIsOn || captionsNeedModel || projectsNeedModel
+    }
+
+    /// True while the Projects window is open or a request of the user runs there, see
+    /// `projectsStarted()`.
+    var projectsNeedModel: Bool {
+        projectsHolders > 0
     }
 
     /// Whether captions can translate now: they run and the model is in memory. Captions
@@ -366,6 +377,105 @@ final class TextCleanup {
         isConfirmingCaptionDownload = false
         guard captionsNeedModel else { return }
         models.download()
+    }
+
+    // MARK: Projects
+
+    /// Projects takes a holder on the model: the Projects window when it opens, and a
+    /// request of the user when it starts. Each holder gives it back with
+    /// `projectsStopped()`. While one remains, the model is never unloaded for being idle.
+    /// The first holder loads the model when it is in place, or again when it was unloaded
+    /// while idle. Without the model nothing is downloaded, and
+    /// `waitUntilLoadedForProjects()` says it is not there.
+    func projectsStarted() {
+        projectsHolders += 1
+        guard projectsHolders == 1 else { return }
+        let installed: URL? = if case .installed(let folder) = models.state { folder } else { nil }
+        guard !modelNeededNow(loadingAgainFrom: installed, for: "Projects"), let installed, !isLoaded else { return }
+        load(from: installed)
+    }
+
+    /// A holder of `projectsStarted()` lets go. After the last one, the model is unloaded
+    /// at once when nothing else needs it, as after captions. While cleanup, translation or
+    /// captions still need it, MLX's freed buffers go back and the model stays, until the
+    /// idle time of cleanup and translation or for as long as captions run.
+    func projectsStopped() {
+        guard projectsHolders > 0 else { return }
+        projectsHolders -= 1
+        guard projectsHolders == 0 else { return }
+        if needsModel {
+            enqueue { [engine] in await engine.clearCache() }
+            scheduleIdleUnload()
+        } else {
+            releaseModelIfUnneeded()
+        }
+    }
+
+    /// How often Projects looks again whether Orra has found the model on disk.
+    private static let projectsCheckInterval: Duration = .milliseconds(100)
+
+    /// Whether Projects can run a job on the model now. Waits while Orra looks for the
+    /// model on disk, at launch or after Try Again, and for a load under way, for as long
+    /// as they take, since no dictation waits for this. False when no holder of
+    /// `projectsStarted()` remains, when the model is not on this Mac, when it failed to
+    /// load, and at once when the task is cancelled.
+    func waitUntilLoadedForProjects() async -> Bool {
+        // A model found on disk loads for the holders, see `load(from:)`.
+        while projectsNeedModel, models.state == .checking {
+            guard (try? await sleep(Self.projectsCheckInterval)) != nil else { return false }
+        }
+        guard projectsNeedModel else { return false }
+        if engineState == .unloadedWhileIdle {
+            modelNeededNow(loadingAgainFrom: folder, for: "Projects")
+        }
+        if engineState == .loading {
+            let started = ContinuousClock.now
+            nextWaiter += 1
+            let id = nextWaiter
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    if Task.isCancelled {
+                        continuation.resume()
+                    } else {
+                        loadWaiters[id] = continuation
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in
+                    self?.resumeWaiter(id)
+                }
+            }
+            Logger.rewrite.notice("Waited \(started.duration(to: .now), privacy: .public) for the cleanup model for Projects, loaded: \(self.projectsNeedModel && self.isLoaded, privacy: .public)")
+        }
+        return !Task.isCancelled && projectsNeedModel && isLoaded
+    }
+
+    /// The closures ProjectsModelQueue runs its jobs with: the model's job calls, each its
+    /// own entry at the model gate, the wait for the model while Projects holds it, and a
+    /// holder for each request of the user. The caller passes what makes a job pause, see
+    /// ProjectsModelEnvironment.
+    func projectsEnvironment(
+        isDictating: @escaping () -> Bool,
+        captionsOn: @escaping () -> Bool,
+        memoryPressure: @escaping () -> ProjectsMemoryPressure.Level,
+        voiceLoaded: @escaping () -> Bool,
+        physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory
+    ) -> ProjectsModelEnvironment {
+        ProjectsModelEnvironment(
+            startJob: engine.startJob,
+            readSlice: engine.readSlice,
+            writeBurst: engine.writeBurst,
+            endJob: engine.endJob,
+            isDictating: isDictating,
+            captionsOn: captionsOn,
+            memoryPressure: memoryPressure,
+            voiceLoaded: voiceLoaded,
+            physicalMemory: physicalMemory,
+            waitUntilLoaded: { [weak self] in await self?.waitUntilLoadedForProjects() ?? false },
+            holdModel: { [weak self] in self?.projectsStarted() },
+            releaseModel: { [weak self] in self?.projectsStopped() },
+            sleep: sleep
+        )
     }
 
     /// The switch on the Clean Up Text page was turned on. With the model in place cleanup
@@ -711,6 +821,17 @@ struct CleanupEngine {
     /// Drops the translation prompts of routes outside a set, see
     /// RewriteEngine.keepTranslationPrefixes.
     var keepTranslationPrefixes: @Sendable (Set<TranslationRoute>) async -> Void = { _ in }
+    /// Begins a Projects job on a prompt with a maximum number of answer tokens, see
+    /// RewriteEngine.startJob.
+    var startJob: @Sendable (String, Int) async throws -> RewriteEngine.JobStart = { _, _ in throw RewriteError.notLoaded }
+    /// Reads a number of a job's prompt tokens, see RewriteEngine.readSlice.
+    var readSlice: @Sendable (Int, Int) async throws -> RewriteEngine.SliceRun = { _, _ in throw RewriteError.notLoaded }
+    /// Writes a number of a job's answer tokens, see RewriteEngine.writeBurst.
+    var writeBurst: @Sendable (Int, Int) async throws -> RewriteEngine.BurstRun = { _, _ in throw RewriteError.notLoaded }
+    /// Ends a job with its answer, see RewriteEngine.endJob.
+    var endJob: @Sendable (Int) async throws -> String = { _ in throw RewriteError.notLoaded }
+    /// Gives MLX's freed buffers back, see RewriteEngine.clearCache.
+    var clearCache: @Sendable () async -> Void = {}
     /// The model gate the cleanup model runs at, see `gated`. Nil when it runs at none, as
     /// a test's stand in does. A load reserves it, see TextCleanup.
     var gate: ModelGate? = nil
@@ -723,7 +844,12 @@ struct CleanupEngine {
             complete: { try await engine.cleanUp($0).answer },
             translate: { try await engine.translate($0, into: $1).answer },
             prepareTranslation: { try await engine.prepareTranslation(into: $0) },
-            keepTranslationPrefixes: { await engine.keepTranslationPrefixes($0) }
+            keepTranslationPrefixes: { await engine.keepTranslationPrefixes($0) },
+            startJob: { try await engine.startJob($0, maximumTokens: $1) },
+            readSlice: { try await engine.readSlice($0, tokens: $1) },
+            writeBurst: { try await engine.writeBurst($0, tokens: $1) },
+            endJob: { try await engine.endJob($0) },
+            clearCache: { await engine.clearCache() }
         ).gated(gate)
     }
 }
