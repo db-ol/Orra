@@ -119,12 +119,34 @@ struct ProjectListTests {
         await store.close()
     }
 
-    /// A later Orra may add fields. A project needs only its ID and name, and the rest
-    /// reads as empty.
-    @Test func aProjectReadsWithOnlyItsIDAndName() throws {
-        let id = UUID()
-        let project = try JSONDecoder().decode(Project.self, from: Data(#"{"id": "\#(id.uuidString)", "name": "Short", "later": true}"#.utf8))
-        #expect(project == Project(id: id, name: "Short"))
+    /// A change that cannot be written leaves the list as the file has it, so nothing is
+    /// filed in a project that the next start would not know.
+    @Test func aChangeThatCannotBeSavedIsUndone() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let index = FolderIndex(database: store.database, isDictating: { false }, watch: { _, _, _ in {} })
+        let list = ProjectList(storage: storage)
+        try await list.load()
+        try await list.add(Self.harbor, mail: store)
+        // A folder in the place of the file makes every write fail.
+        try FileManager.default.removeItem(at: list.file)
+        try FileManager.default.createDirectory(at: list.file.appendingPathComponent("blocked", isDirectory: true), withIntermediateDirectories: true)
+
+        await #expect(throws: (any Error).self) {
+            try await list.add(Self.maple, mail: store)
+        }
+        #expect(list.projects == [Self.harbor])
+        var changed = Self.harbor
+        changed.description = "Changed"
+        await #expect(throws: (any Error).self) {
+            try await list.update(changed)
+        }
+        #expect(list.projects == [Self.harbor])
+        await #expect(throws: (any Error).self) {
+            try await list.forget(Self.harbor.id, mail: store, index: index)
+        }
+        #expect(list.projects == [Self.harbor])
+        await store.close()
     }
 
     @Test func changesInARowAreWrittenInTheirOrder() async throws {
@@ -166,7 +188,7 @@ struct ProjectListTests {
 
         try await list.forget(Self.maple.id, mail: store, index: index)
         #expect(list.projects == [Self.harbor])
-        #expect(try await store.known(["a@test.example"]).isEmpty)
+        #expect(try await store.sortingEmail("a@test.example") == nil)
         #expect(try await store.database.run("SELECT project FROM index_files") == [[.text(Self.harbor.id.uuidString)]])
         let again = ProjectList(storage: storage)
         try await again.load()

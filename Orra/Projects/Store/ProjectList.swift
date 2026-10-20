@@ -84,24 +84,6 @@ nonisolated struct Project: Sendable, Equatable, Identifiable, Codable {
         self.mailboxes = mailboxes
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case id, name, description, folders, people, domains, rules, mailboxes
-    }
-
-    /// Only the ID and the name must be there, so a later Orra can add fields that this one
-    /// reads as empty.
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-        folders = try container.decodeIfPresent([Data].self, forKey: .folders) ?? []
-        people = try container.decodeIfPresent([Person].self, forKey: .people) ?? []
-        domains = try container.decodeIfPresent([String].self, forKey: .domains) ?? []
-        rules = try container.decodeIfPresent([Rule].self, forKey: .rules) ?? []
-        mailboxes = try container.decodeIfPresent([String].self, forKey: .mailboxes) ?? []
-    }
-
     /// The project as sorting reads it. SortingService adds the people seen and the file
     /// names.
     var candidate: SortingCandidate {
@@ -214,22 +196,38 @@ final class ProjectList {
     }
 
     /// Adds a project and saves the list. It is registered in the mail store first, so mail
-    /// can be filed in it from the moment sorting sees it.
+    /// can be filed in it from the moment sorting sees it. When the list cannot be saved,
+    /// the project leaves the list again, so nothing is filed in a project that the next
+    /// start would not know.
     func add(_ project: Project, mail: MailStore) async throws {
         try checkWritable()
         guard self.project(project.id) == nil else { return try await update(project) }
         try await mail.add(project: project.id)
         try checkWritable()
         projects.append(project)
-        try await save()
+        do {
+            try await save()
+        } catch {
+            projects.removeAll { $0.id == project.id }
+            throw error
+        }
     }
 
-    /// Changes a project in the list and saves it.
+    /// Changes a project in the list and saves it. When the list cannot be saved, the
+    /// project is as it was, unless a later change came meanwhile.
     func update(_ project: Project) async throws {
         try checkWritable()
         guard let index = projects.firstIndex(where: { $0.id == project.id }) else { throw Failure.unknownProject }
+        let before = projects[index]
         projects[index] = project
-        try await save()
+        do {
+            try await save()
+        } catch {
+            if let index = projects.firstIndex(where: { $0.id == project.id }), projects[index] == project {
+                projects[index] = before
+            }
+            throw error
+        }
     }
 
     /// Forget Project: removes everything Projects keeps for the project. Its mail, drafts
@@ -242,8 +240,16 @@ final class ProjectList {
         try await mail.forget(project: id)
         try await index.forget(project: id)
         try checkWritable()
-        projects.removeAll { $0.id == id }
-        try await save()
+        guard let position = projects.firstIndex(where: { $0.id == id }) else { throw Failure.unknownProject }
+        let forgotten = projects.remove(at: position)
+        do {
+            try await save()
+        } catch {
+            if project(id) == nil {
+                projects.insert(forgotten, at: min(position, projects.count))
+            }
+            throw error
+        }
         Logger.projects.notice("Projects: forgot a project, \(self.projects.count, privacy: .public) left")
     }
 
