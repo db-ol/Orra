@@ -17,7 +17,7 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         var date: Date
     }
 
-    nonisolated enum NoReplyReason: String, Sendable, Equatable {
+    nonisolated enum NoReplyReason: String, Sendable, Equatable, Codable {
         /// The user sent the email.
         case sentByUser
         /// The user answered it later in the thread.
@@ -26,7 +26,7 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         case listMail
     }
 
-    nonisolated enum Decision: Sendable, Equatable {
+    nonisolated enum Decision: Sendable, Equatable, Codable {
         case noReply(NoReplyReason)
         /// A reply is due. The language is zh or en for a draft, or other for an email that
         /// gets no draft.

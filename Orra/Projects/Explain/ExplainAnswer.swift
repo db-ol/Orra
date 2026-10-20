@@ -13,7 +13,7 @@ import Foundation
 /// heading written again right after itself, as after the prefill, is not a copy. The
 /// answer is data, and nothing here follows it: the window shows it as plain text only.
 nonisolated struct ExplainAnswer: Sendable, Equatable {
-    nonisolated enum Section: String, Sendable, CaseIterable {
+    nonisolated enum Section: String, Sendable, CaseIterable, Codable {
         case warnings
         case points
         case questions
@@ -37,7 +37,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         case missing
     }
 
-    nonisolated enum Problem: Sendable, Equatable {
+    nonisolated enum Problem: Sendable, Equatable, Codable {
         case missing(Section)
         case repeated(Section)
         /// A point named a source the prompt does not have.

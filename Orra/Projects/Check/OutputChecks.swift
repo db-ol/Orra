@@ -10,8 +10,8 @@ import Foundation
 /// wherever `NumberRules.writingNumbersAsDigits` writes them so, as in 五万八千六百元 and
 /// 十月十九日. The phase 0 prototype (numcheck.py) is the reference.
 nonisolated enum OutputChecks {
-    nonisolated struct Finding: Sendable, Equatable {
-        nonisolated enum Kind: Sendable {
+    nonisolated struct Finding: Sendable, Equatable, Codable {
+        nonisolated enum Kind: Sendable, Codable {
             /// A date written with a weekday it does not fall on, or a date that does not exist.
             case dateWeekdayMismatch
             /// An amount that none of the sources holds.

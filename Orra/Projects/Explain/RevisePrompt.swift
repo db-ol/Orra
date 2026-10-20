@@ -22,14 +22,14 @@ import Foundation
 /// does not fit without the email gives no prompt.
 nonisolated enum RevisePrompt {
     /// The tones the user can pick for a draft.
-    nonisolated enum Tone: String, Sendable, CaseIterable {
+    nonisolated enum Tone: String, Sendable, CaseIterable, Codable {
         case formal
         case warm
         case firm
     }
 
     /// What a new version of the draft changes.
-    nonisolated enum Change: Sendable, Equatable {
+    nonisolated enum Change: Sendable, Equatable, Codable {
         /// The user's own words, typed or dictated.
         case instruction(String)
         case tone(Tone)
