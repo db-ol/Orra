@@ -96,8 +96,30 @@ nonisolated struct SortingProjects: Sendable {
         let own = Set(ownAddresses.map(SortingText.address).filter { !$0.isEmpty })
         self.ownAddresses = own.sorted()
         words = Self.distinctiveWords(candidates, ownAddresses: own)
-        seen = Dictionary(candidates.map { ($0.id, Set($0.peopleSeen.map(SortingText.address))) }, uniquingKeysWith: { $0.union($1) })
+        seen = Self.seenAddresses(candidates.map { ($0.id, $0.peopleSeen) })
         fileNames = Dictionary(candidates.map { ($0.id, Set($0.fileNames.map(SortingText.matchingForm))) }, uniquingKeysWith: { $0.union($1) })
+    }
+
+    private init(_ projects: SortingProjects, seen: [UUID: Set<String>]) {
+        candidates = projects.candidates
+        ownAddresses = projects.ownAddresses
+        words = projects.words
+        fileNames = projects.fileNames
+        self.seen = seen
+    }
+
+    /// The same projects with other people seen before, such as those the store knows when
+    /// one email comes. People seen take no part in the projects' own words, so this runs
+    /// for every email without preparing the projects again. Projects that are not
+    /// candidates are left out.
+    func withPeopleSeen(_ seen: [UUID: Set<String>]) -> SortingProjects {
+        let ids = Set(candidates.map(\.id))
+        return SortingProjects(self, seen: Self.seenAddresses(seen.filter { ids.contains($0.key) }.map { ($0.key, $0.value) }))
+    }
+
+    /// The people seen in each project, in the form sorting compares addresses in.
+    private static func seenAddresses(_ pairs: [(UUID, Set<String>)]) -> [UUID: Set<String>] {
+        Dictionary(pairs.map { ($0.0, Set($0.1.map(SortingText.address))) }, uniquingKeysWith: { $0.union($1) })
     }
 }
 

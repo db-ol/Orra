@@ -151,6 +151,19 @@ struct SortingSignalsTests {
         #expect(!mine.hasProjectPeople)
     }
 
+    @Test func peopleSeenCanBeReplacedForEachEmail() async {
+        var candidates = Self.candidates
+        candidates[0].peopleSeen = ["iris.fang@printworks.example"]
+        let prepared = await SortingProjects.prepare(candidates, ownAddresses: Self.own)
+        let projects = prepared.withPeopleSeen([Self.maple: ["Iris.Fang@printworks.example"], UUID(): ["iris.fang@printworks.example"]])
+        #expect(projects.seen == [Self.maple: ["iris.fang@printworks.example"]])
+        #expect(projects.words == prepared.words)
+        #expect(projects.fileNames == prepared.fileNames)
+        #expect(projects.candidates == prepared.candidates)
+        let found = await SortingSignals.gather(for: mail(from: "iris.fang@printworks.example"), among: projects) { _ in [:] }
+        #expect(found.peopleSeen == [Self.maple: ["iris.fang@printworks.example"]])
+    }
+
     @Test func theUsersOwnAddressesAreReadInAnyCase() async {
         let projects = await SortingProjects.prepare(Self.candidates, ownAddresses: [" Bai.Lu@LumenHaus.example ", "bai.lu@lumenhaus.example", ""])
         #expect(projects.ownAddresses == [Self.work])
