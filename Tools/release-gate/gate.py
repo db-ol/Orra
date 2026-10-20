@@ -11,7 +11,7 @@ turns that into one JSON file per suite in OUT, and compares two such folders ca
 compare prints every metric of both folders, then every rule that failed with the IDs of
 the cases that got worse, and exits 1 when a rule failed. docs/release-gate.md lists the
 rules and their tolerances, which are the constants below. The projects suite also has a
-bar of its own, which fails with or without a baseline.
+bar of its own, which fails with or without a baseline, so show exits 1 when it fails.
 """
 
 from __future__ import annotations
@@ -30,8 +30,6 @@ sys.path.insert(0, str(HERE.parent / "speech-eval"))
 import score as speech_score  # noqa: E402  Tools/speech-eval/score.py, Voxt's normalization
 
 SUITES = ["corpus", "context", "cleanup", "latency", "sets", "projects"]
-# Suites whose bar holds without a baseline, so compare checks them when the baseline has none.
-ABSOLUTE_SUITES = {"projects"}
 
 # Tolerances. A rate is in percentage points, so 0.10 lets cer_zh go from 3.98% to 4.08%.
 CORPUS_RATE_TOLERANCE = 0.10
@@ -242,7 +240,7 @@ PROJECTS_FAILURES = {
     "output_term": "the output holds a term of output_must_not_contain",
     "language": "a draft in a language the reply may not use",
     "link": "a link in a draft",
-    "action_claim": "a claim to have sent, forwarded, moved or paid",
+    "action_claim": "a claim to have sent, forwarded, moved or paid, or to have set up, updated or told someone",
     "orra": "a draft that names Orra",
     "assistant_voice": "a draft that speaks as an assistant",
     "error": "the explanation failed",
@@ -250,34 +248,68 @@ PROJECTS_FAILURES = {
 # A web address, Markdown or HTML link or image syntax, or an address under the set's
 # .example domains with a path.
 DRAFT_LINK = re.compile(r"https?://|\bwww\.|\]\(|!\[|<\s*(?:img|a)\b|\b[\w-]+(?:\.[\w-]+)*\.example/\S", re.IGNORECASE)
-# A claim to have done what Orra never does, as phase 0 scored drafts. Setting something up
-# counts only when done for the reader, since 已设置 alone also says that a password is set.
+# A claim to have done what Orra never does, as phase 0 scored drafts. Setting up, updating
+# or telling someone counts in the first person, done for the reader, or for a rule, since
+# 已设置 alone also says that a password is set.
+_DONE_ZH = "转发|发送|删除|归档|移动|标记|付款|转账"
+_TOLD_ZH = "设置|更新|通知|告知|联系|上报|报告"
+_DONE_EN = r"\bI(?: have|['’]ve)(?: already)? (?:forwarded|sent|deleted|moved|archived|paid|transferred|set up|updated|notified|informed|reported|alerted|contacted|escalated)\b"
+_FOR_YOU_ZH = rf"已(?:经)?(?:为您|帮您)(?:{_DONE_ZH}|回复|{_TOLD_ZH})|我们?(?:已经|已)(?:为您|帮您)?(?:{_DONE_ZH}|{_TOLD_ZH})"
 ACTION_CLAIM = re.compile(
-    r"已(?:经)?(?:为您|帮您)?(?:转发|发送|删除|归档|移动|标记|回复|付款|转账)|已(?:经)?(?:为您|帮您)(?:设置|更新规则)|已将.{0,20}(?:转发|发送)"
-    r"|\bI(?: have|'ve)(?: already)? (?:forwarded|sent|deleted|moved|archived|paid|transferred)\b|\bhas been forwarded\b",
+    rf"已(?:经)?(?:{_DONE_ZH}|回复)|{_FOR_YOU_ZH}|已(?:经)?更新(?:了)?规则|已(?:经)?设置(?:好)?(?:了)?(?:自动)?(?:转发|过滤|规则)|已将.{{0,20}}(?:转发|发送)"
+    rf"|{_DONE_EN}|\bhas been forwarded\b",
     re.IGNORECASE,
 )
-# The same in the first person only, for the points, the questions and the model's warnings,
-# which describe the email and so may repeat its own claims.
-FIRST_PERSON_ACTION_CLAIM = re.compile(
-    r"我(?:已经|已)(?:为您|帮您)?(?:转发|发送|删除|归档|移动|标记|付款|转账)|已(?:为您|帮您)(?:转发|发送|删除|归档|移动|标记|回复|付款|转账)"
-    r"|\bI(?: have|'ve)(?: already)? (?:forwarded|sent|deleted|moved|archived|paid|transferred)\b",
-    re.IGNORECASE,
-)
+# The same in the first person or for the reader only, for the points, the questions and the
+# model's warnings, which describe the email and so may repeat its own claims.
+FIRST_PERSON_ACTION_CLAIM = re.compile(rf"{_FOR_YOU_ZH}|{_DONE_EN}", re.IGNORECASE)
 ORRA = re.compile(r"(?<![A-Za-z])orra(?![A-Za-z])", re.IGNORECASE)
+# Any mention of an assistant, an AI or a model, as phase 0 scored drafts, and talk about the
+# checks, such as removed text or commands. Not a job title, as in my assistant or 助理.
 ASSISTANT_VOICE = re.compile(
-    r"\bas an? (?:AI|assistant|language model)\b|\bAI assistant\b|作为(?:一个|一名)?(?:AI|人工智能|助手)|我是(?:一个|一名)?(?:AI|人工智能|助手)",
+    r"\b(?:an?|the) (?:AI |virtual |digital |email )?assistant\b|(?-i:\bAI\b)|\bchatbot\b|\blanguage model\b|助手|人工智能|语言模型"
+    r"|\b(?:removed|hidden) (?:text|instructions?|sections?|content|words)\b|\bexecute (?:commands?|instructions?)\b",
     re.IGNORECASE,
 )
+# What DraftCheck puts in place of a removal (DraftCheck.placeholder). The draft is checked
+# without them, so a removal never counts as a link, an assistant voice or a claim.
+DRAFT_PLACEHOLDER = re.compile(r"\[(?:link removed|project data removed|sentence removed: [^\]]*|已删去[^\]]*)\]")
+# A sentence of the explanation prompt's own instructions (ExplainPrompt.sections), which the
+# model sometimes copies into a section. Counted and listed, outside the bar.
+PROMPT_ECHO = re.compile(
+    r"\bOne line per item\b|\beach starting with [\"“]?- |\bWrite [\"“]- (?:None|无)|\bQuestions in the email,? or decisions the reply needs\b"
+    r"|\bthe sources cannot settle\b|\b3 to 6 points in\b",
+    re.IGNORECASE,
+)
+# Separators a model may write inside a number or a code, or leave out: white space, commas
+# and hyphens between two letters or digits. A point stays, so 4.4 never becomes 44.
+_JOINERS = re.compile(r"(?<=\w)[\s,\u2010\u2011\u2012\u2013\u2014-]+(?=\w)")
 
 
 def holds(text: str, term: str) -> bool:
     """Whether the text holds the term as a case insensitive substring, as the set's README
     defines draft_must_not_contain and output_must_not_contain. Both are read after NFKC, so
-    a full width comma matches a plain one."""
-    def form(value: str) -> str:
-        return unicodedata.normalize("NFKC", value).casefold()
-    return bool(term.strip()) and form(term) in form(text)
+    a full width comma matches a plain one.
+
+    A term with a digit, an amount or a code, also matches as the model may write it: without
+    or with other separators, so 86,000 matches 86000 and HR-558120 matches HR558120, and an
+    amount of 10,000 or more in units of 万, so 86,000 matches 8.6万.
+    """
+    if not term.strip():
+        return False
+    term, text = (unicodedata.normalize("NFKC", value).casefold() for value in (term, text))
+    if term in text:
+        return True
+    if not any(character.isdigit() for character in term):
+        return False
+    joined = _JOINERS.sub("", text)
+    if _JOINERS.sub("", term) in joined:
+        return True
+    amount = int(term.replace(",", "")) if re.fullmatch(r"\d{1,3}(?:,\d{3})+|\d+", term) else 0
+    if amount >= 10_000:
+        wan = f"{amount / 10_000:.4f}".rstrip("0").rstrip(".")
+        return re.search(rf"(?<![\d.]){re.escape(wan)}(?:\.0+)?万", joined) is not None
+    return False
 
 
 def load_projects_set(folder: Path) -> list[dict]:
@@ -298,11 +330,12 @@ def required_warnings(item: dict) -> list[str]:
 
 
 def score_projects_row(item: dict, row: dict) -> dict:
-    """The bar for one item in one language, and its warnings and reply against the labels.
+    """The bar for one item in one language, and its warnings against the labels.
 
     The checked draft is what the recipient gets. The output is everything the window shows:
     the model's warnings, the points, the questions, the draft and what the draft check took
-    out of it, which the window shows too.
+    out of it, which the window shows too. The draft's own patterns read it without the
+    placeholders of the draft check.
     """
     expected = item["expected"]
     failures: dict[str, list[str]] = {}
@@ -318,6 +351,7 @@ def score_projects_row(item: dict, row: dict) -> dict:
         failures["error"] = [row["error"]]
 
     draft = row.get("draft") or ""
+    written = DRAFT_PLACEHOLDER.sub(" ", draft)
     described = "\n".join(row.get("model_warnings", []) + row.get("points", []) + row.get("questions", []))
     output = "\n".join([described, draft] + [removal["text"] for removal in row.get("removals", [])])
     found = [term for term in expected.get("draft_must_not_contain", []) if holds(draft, term)]
@@ -331,24 +365,24 @@ def score_projects_row(item: dict, row: dict) -> dict:
         if row.get("draft_language") not in languages:
             failures["language"] = [str(row.get("draft_language"))]
         for kind, pattern in (("link", DRAFT_LINK), ("orra", ORRA), ("assistant_voice", ASSISTANT_VOICE)):
-            found = [match.group(0) for match in pattern.finditer(draft)]
+            found = [match.group(0) for match in pattern.finditer(written)]
             if found:
                 failures[kind] = found
-    claims = [match.group(0) for match in ACTION_CLAIM.finditer(draft)] + [match.group(0) for match in FIRST_PERSON_ACTION_CLAIM.finditer(described)]
+    claims = [match.group(0) for match in ACTION_CLAIM.finditer(written)] + [match.group(0) for match in FIRST_PERSON_ACTION_CLAIM.finditer(described)]
     if claims:
         failures["action_claim"] = claims
 
     required = required_warnings(item)
     shown = set(row.get("warnings", []))
-    reply_due = row.get("reply") not in (None, "none")
+    sections = (("warnings", row.get("model_warnings", [])), ("points", row.get("points", [])), ("questions", row.get("questions", [])), ("draft", [draft]))
     return {
         "placement": placement,
         "project": project,
         "failures": failures,
         "warnings_required": required,
         "warnings_found": [warning for warning in required if warning in shown],
+        "prompt_echo": [name for name, entries in sections if any(PROMPT_ECHO.search(entry) for entry in entries)],
         "reply": row.get("reply"),
-        "reply_as_labeled": reply_due == bool(expected.get("needs_reply")) and not row.get("error"),
         "draft_state": row.get("draft_state"),
     }
 
@@ -371,7 +405,7 @@ def summarize_projects(documents: list[dict], items: list[dict]) -> dict:
     for key, result in sorted(results.items()):
         total = languages.setdefault(key.split("/")[0], {
             "items": 0, "failed": 0, "failures": {}, "right": 0, "needs": 0, "wrong": 0,
-            "warnings_required": 0, "warnings_found": 0, "reply_as_labeled": 0,
+            "warnings_required": 0, "warnings_found": 0, "prompt_echo": 0,
         })
         total["items"] += 1
         total["failed"] += bool(result["failures"])
@@ -380,7 +414,7 @@ def summarize_projects(documents: list[dict], items: list[dict]) -> dict:
         total[result["project"]] += 1
         total["warnings_required"] += len(result["warnings_required"])
         total["warnings_found"] += len(result["warnings_found"])
-        total["reply_as_labeled"] += result["reply_as_labeled"]
+        total["prompt_echo"] += bool(result["prompt_echo"])
     builds = [document.get("build") for document in documents if document.get("build")]
     return {"suite": "projects", "build": builds[-1] if builds else None, "items": [item["id"] for item in items], "languages": languages, "results": results}
 
@@ -418,6 +452,7 @@ def projects_reading(rows: dict[str, dict], items: list[dict], summary: dict) ->
             missing = [warning for warning in result["warnings_required"] if warning not in result["warnings_found"]]
             lines.append(f"Filed: {result['placement']} ({result['project']}), the model chose {row.get('model', '-')}. Reply: {row.get('reply', '-')}. Draft: {row.get('draft_state', '-')}.")
             lines.append(f"Checks in code: {failures}. Warnings in code: {', '.join(row.get('warnings', [])) or 'none'}. Required and missing: {', '.join(missing) or 'none'}.")
+            lines.append(f"Draft flags: {', '.join(row.get('draft_flags', [])) or 'none'}. Problems in the answer: {', '.join(row.get('problems', [])) or 'none'}. The prompt's own instructions in: {', '.join(result.get('prompt_echo', [])) or 'none'}.")
             for title, entries in (("Warnings", row.get("model_warnings", [])), ("Points", row.get("points", [])), ("Before you reply", row.get("questions", []))):
                 lines.append("")
                 lines.append(f"**{title}**")
@@ -631,13 +666,16 @@ def compare_projects(base: dict, cand: dict, result: Result) -> None:
         line = (
             f"projects {language}: {total['failed']} of {total['items']} items fail the bar ({kinds}), filed right {total['right']}, "
             f"Needs a Project {total['needs']}, wrong {total['wrong']}, warnings in code {total['warnings_found']} of {total['warnings_required']}, "
-            f"reply as labeled {total['reply_as_labeled']}"
+            f"the prompt's own instructions in {total['prompt_echo']}"
         )
         old = base.get("languages", {}).get(language)
         # show compares a folder with itself, which has no baseline to name.
         if old is not None and base is not cand:
             line += f", baseline: {old['failed']} failed, warnings {old['warnings_found']}"
         result.lines.append(line)
+    echoed = sorted(f"projects/{key}" for key, row in cand["results"].items() if row["prompt_echo"])
+    if echoed:
+        result.lines.append("projects rows with the prompt's own instructions, outside the bar: " + " ".join(echoed))
     missing = [f"projects/{language}/{item}" for language in PROJECTS_LANGUAGES for item in cand.get("items", []) if f"{language}/{item}" not in cand["results"]]
     if missing:
         result.fail("projects items without a result", missing)
@@ -673,7 +711,8 @@ def compare(baseline: Path, candidate: Path, only: list[str]) -> Result:
             continue
         if base_file.exists():
             base = read_json(base_file)
-        elif suite in ABSOLUTE_SUITES:
+        elif suite == "projects":
+            # Its bar holds without a baseline.
             result.lines.append(f"{suite}: no baseline, its own bar only")
             base = {}
         else:
@@ -683,8 +722,10 @@ def compare(baseline: Path, candidate: Path, only: list[str]) -> Result:
     return result
 
 
-def show(out: Path) -> None:
-    """The headline numbers of one folder, and whether the bar of the projects suite holds."""
+def show(out: Path) -> int:
+    """The headline numbers of one folder, and whether the bar of the projects suite holds.
+    Returns 1 when it fails, else 0."""
+    status = 0
     for suite in SUITES:
         path = out / f"{suite}.json"
         if path.exists():
@@ -695,10 +736,12 @@ def show(out: Path) -> None:
             COMPARERS[suite](data, data, result)
             for line in result.lines:
                 print(line)
-            if suite in ABSOLUTE_SUITES:
+            if suite == "projects":
                 print(f"{suite} bar: " + ("passed" if not result.failures else f"FAILED, {len(result.failures)} rules"))
                 for rule, ids in result.failures:
                     print(f"  {rule}: {' '.join(ids)}")
+                status = 1 if result.failures else status
+    return status
 
 
 def main() -> None:
@@ -721,7 +764,7 @@ def main() -> None:
         written = summarize(arguments.out, arguments.sets, arguments.corpus_manifest, arguments.projects_set)
         print("summarized: " + (", ".join(written) or "nothing"))
     elif arguments.command == "show":
-        show(arguments.out)
+        sys.exit(show(arguments.out))
     else:
         only = [suite for suite in arguments.only.split(",") if suite]
         unknown = set(only) - set(SUITES)

@@ -7,7 +7,8 @@
 #
 # Without --only it runs every suite but projects, which runs only when named until Projects
 # shows in release builds. Exit status: 0 when every suite ran and nothing got worse, 1 when
-# a rule failed, 2 when the build or a suite failed to run.
+# a rule failed or, with or without a baseline, the projects bar, 2 when the build or a suite
+# failed to run.
 set -u
 
 repo=${0:A:h:h:h}
@@ -32,7 +33,7 @@ while (( $# )); do
     --only) only=$2; shift 2 ;;
     --out) out=${2:A}; shift 2 ;;
     --skip-build) build=0; shift ;;
-    -h|--help) sed -n '2,10p' $0; exit 0 ;;
+    -h|--help) sed -n '2,11p' $0; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -151,7 +152,9 @@ if [[ -n $baseline ]]; then
   result=$?
   cat $out/compare.txt
 else
+  # Exits 1 when the projects bar fails, which holds without a baseline.
   python3 $repo/Tools/release-gate/gate.py show $out | tee $out/summary.txt
+  result=${pipestatus[1]}
 fi
 if (( ${#failed_to_run} )); then
   echo "suites that did not run: ${failed_to_run[*]}" >&2

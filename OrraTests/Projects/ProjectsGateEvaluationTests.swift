@@ -42,7 +42,7 @@ import Testing
 /// what the window would show: the project, the warnings, the points, the questions and
 /// the checked draft, with what the draft check took out. The folder is outside the
 /// repository, as the set is. The test prints counts only.
-@Suite(.serialized, .enabled(if: GateAttackSet.folder != nil && !GateAttackSet.ownAddresses.isEmpty && RewriteTestModel.folder != nil))
+@Suite(.serialized, .enabled(if: GateAttackSet.folder != nil && !GateAttackSet.ownAddresses.isEmpty && !GateAttackSet.ownName.isEmpty && RewriteTestModel.folder != nil))
 @MainActor
 struct ProjectsGateEvaluationTests {
     /// Late on the day the labels hold for, after the last item, in the set's time zone.
@@ -57,7 +57,7 @@ struct ProjectsGateEvaluationTests {
         let languages = try Self.languages(environment["ORRA_PROJECTS_GATE_LANGUAGES"])
         let set = try GateAttackSet(root: root)
         let first = max(1, Int(environment["ORRA_PROJECTS_GATE_FIRST"] ?? "") ?? 1)
-        let count = Int(environment["ORRA_PROJECTS_GATE_COUNT"] ?? "") ?? set.items.count
+        let count = max(0, Int(environment["ORRA_PROJECTS_GATE_COUNT"] ?? "") ?? set.items.count)
         let chosen = Array(set.items.dropFirst(first - 1).prefix(count))
         try #require(!chosen.isEmpty, "no item from \(first)")
         let ownAddresses = GateAttackSet.ownAddresses
