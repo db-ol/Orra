@@ -40,6 +40,24 @@ nonisolated enum ProblemReport {
         var cleanupModelState: String
         var vocabularyCount: Int
         var learnedPairCount: Int
+        /// Projects, nil in a build that hides it, which then gets no line.
+        var projects: ProjectsFacts? = nil
+    }
+
+    /// Projects on or off, and how much it keeps. Counts only, never a name or any text of
+    /// the mail or the files.
+    struct ProjectsFacts: Equatable, Sendable {
+        var isOn: Bool
+        /// Nil while Projects is off, since its database is closed then, or when they could
+        /// not be read.
+        var counts: ProjectsCounts?
+    }
+
+    struct ProjectsCounts: Equatable, Sendable {
+        var projects: Int
+        var emails: Int
+        /// The files of the project folders whose text is in the index.
+        var files: Int
     }
 
     /// A setting that is on or off, by its English name.
@@ -161,6 +179,9 @@ nonisolated enum ProblemReport {
         lines.append("Cleanup model: \(facts.cleanupModelState)")
         lines.append("Vocabulary: \(facts.vocabularyCount) words")
         lines.append("Learned word pairs: \(facts.learnedPairCount)")
+        if let projects = facts.projects {
+            lines.append("Projects: \(describe(projects))")
+        }
         lines.append("")
         lines.append("## Log, last hour (\(logSource))")
         if log.isEmpty {
@@ -214,6 +235,13 @@ nonisolated enum ProblemReport {
         formatter.timeZone = timeZone
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
         return "Orra-Report-\(formatter.string(from: date)).txt"
+    }
+
+    /// The Projects line: off, or on with what it keeps.
+    static func describe(_ projects: ProjectsFacts) -> String {
+        guard projects.isOn else { return "off" }
+        guard let counts = projects.counts else { return "on, counts not read" }
+        return "on, \(counts.projects) projects, \(counts.emails) emails, \(counts.files) files"
     }
 
     /// Bytes as gigabytes with one decimal, the same in every language.

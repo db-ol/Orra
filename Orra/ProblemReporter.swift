@@ -22,23 +22,31 @@ final class ProblemReporter {
     private(set) var state: State = .creating
     @ObservationIgnored private let facts: () -> ProblemReport.Facts
     @ObservationIgnored private let modelFolder: URL
+    @ObservationIgnored private let projectCounts: () async -> ProblemReport.ProjectsCounts?
     @ObservationIgnored private var job: Task<Void, Never>?
 
     /// - Parameters:
     ///   - facts: Reads the facts. The model folder's size is filled in later.
     ///   - modelFolder: The installed speech model's folder.
-    init(facts: @escaping () -> ProblemReport.Facts, modelFolder: URL) {
+    ///   - projectCounts: What Projects keeps, read only while Projects is on, or nil when
+    ///     it cannot be read.
+    init(facts: @escaping () -> ProblemReport.Facts, modelFolder: URL, projectCounts: @escaping () async -> ProblemReport.ProjectsCounts? = { nil }) {
         self.facts = facts
         self.modelFolder = modelFolder
+        self.projectCounts = projectCounts
     }
 
     /// Writes a new report. Does nothing while one is being written.
     func create() {
         guard job == nil else { return }
         state = .creating
-        let facts = facts()
+        var facts = facts()
         let modelFolder = modelFolder
+        let projectCounts = projectCounts
         job = Task { [weak self] in
+            if facts.projects?.isOn == true {
+                facts.projects?.counts = await projectCounts()
+            }
             let result = await Self.write(facts, modelFolder: modelFolder, created: Date())
             guard let self else { return }
             job = nil
@@ -195,6 +203,10 @@ final class ProblemReporter {
     // MARK: Facts
 
     /// The app's reporter, reading the facts from Orra's objects.
+    /// - Parameters:
+    ///   - projects: The Projects switch, for the Projects line, which a build that hides
+    ///     Projects leaves out.
+    ///   - projectCounts: What Projects keeps, from its project list and its store.
     static func live(
         pushToTalk: PushToTalkController,
         models: ModelInstaller,
@@ -205,7 +217,9 @@ final class ProblemReporter {
         learning: CorrectionLearning,
         cleanup: TextCleanup,
         captions: MeetingCaptions,
-        updater: AppUpdater
+        updater: AppUpdater,
+        projects: ProjectsSwitch? = nil,
+        projectCounts: @escaping () async -> ProblemReport.ProjectsCounts? = { nil }
     ) -> ProblemReporter {
         ProblemReporter(facts: {
             let info = Bundle.main.infoDictionary ?? [:]
@@ -258,9 +272,10 @@ final class ProblemReporter {
                 ],
                 cleanupModelState: describe(cleanup.models.state, cleanup.engineState),
                 vocabularyCount: pushToTalk.vocabulary.count,
-                learnedPairCount: learning.store.entries.count
+                learnedPairCount: learning.store.entries.count,
+                projects: projects.flatMap { $0.isVisible ? ProblemReport.ProjectsFacts(isOn: $0.isOn) : nil }
             )
-        }, modelFolder: ModelFolders.live.installed(.qwen3))
+        }, modelFolder: ModelFolders.live.installed(.qwen3), projectCounts: projectCounts)
     }
 
     private static func describe(_ installer: ModelInstaller.State, _ model: PushToTalkController.ModelState) -> String {
