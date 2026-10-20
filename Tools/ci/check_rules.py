@@ -482,16 +482,18 @@ def check_dependency_doc(doc, pins):
 # through swift_views, so a name in a comment never counts. Rules 1 to 4 and 6 to 8 look at
 # code only, outside string literals, so English words in a prompt never trip them. Rule 5
 # also looks inside string literals, and reads every other file whole. Names match on word
-# boundaries. A rule names paths only, never the syntax of a file it allows, so a file that
-# does not exist yet passes. A failure names the file, the line, the rule and the name it
-# matched, never the rest of the line.
+# boundaries. Rules 1 to 9 name paths only, never the syntax of a file they allow, so a file
+# that does not exist yet passes. Rule 10 reads the syntax of the one file it is about,
+# Orra/Projects/Mail/MailEvents.swift, once it exists. A failure names the file, the line,
+# the rule and the name it matched, never the rest of the line.
 
 PROJECTS_FOLDER = "Orra/Projects/"
 PROJECTS_TESTS_FOLDER = "OrraTests/Projects/"
 
-# The only Swift files under Orra/ that may build or send an Apple Event (rule 3). The Mail
-# bridge adds Orra/Projects/Mail/MailEvents.swift.
-APPLE_EVENT_FILES = frozenset()
+# The file of the Mail bridge that builds and sends Mail's events (rule 10).
+MAIL_EVENTS_FILE = "Orra/Projects/Mail/MailEvents.swift"
+# The only Swift files under Orra/ that may build or send an Apple Event (rule 3).
+APPLE_EVENT_FILES = frozenset({MAIL_EVENTS_FILE})
 
 # The only file in Orra/Projects that may make an NSAttributedString (rule 2).
 FILE_TEXT_FILE = "Orra/Projects/Index/FileText.swift"
@@ -523,6 +525,53 @@ SOURCE_RULES = {
     7: "In Orra/Projects only ProjectsStorage.swift removes, moves, replaces or trashes files.",
     8: "In Orra/Projects only ProjectsSwitch.swift and Mail/MailChoice.swift use UserDefaults.",
     9: "Orra/Projects holds Swift files only, since Xcode would copy any other file into the app.",
+    10: "MailEvents.swift builds only the get, count and reply events of its MailEvent enum, opens "
+        "a window with every reply, and holds no code of a Mail command that changes mail, sends "
+        "it, or opens, prints or quits something, nor the code of content.",
+}
+
+# Rule 10. The three events the Mail bridge may build, by their names in the MailEvent enum,
+# each the event class and the event ID as Mail.sdef writes them. get and count, from the
+# standard suite, only read. reply, from Mail's suite, makes a reply in a window of its own.
+MAIL_EVENTS = {"get": "coregetd", "count": "corecnte", "reply": "emalrpms"}
+# The commands that change mail, send it, or open, print or quit something, from
+# /System/Applications/Mail.app/Contents/Resources/Mail.sdef (Mail 16.0 on macOS 26.6) and
+# the standard suite it includes from /System/Library/ScriptingDefinitions/CocoaStandard.sdef.
+# set is in neither, since AppleScript sends it for any property, so its code comes from
+# AERegistry.h (kAECoreSuite and kAESetData).
+MAIL_CHANGING_COMMANDS = {
+    "coresetd": "set",
+    "coredelo": "delete",
+    "coremove": "move",
+    "coreclon": "duplicate",
+    "corecrel": "make",
+    "coresave": "save",
+    "coreclos": "close",
+    "emsgsend": "send",
+    "emalfwms": "forward",
+    "emalrdms": "redirect",
+    "emalbcms": "bounce",
+    "emalsyac": "synchronize",
+    "emalchma": "check for new mail",
+    "emalimmx": "import Mail mailbox",
+    "emalemtg": "GetURL",
+    "emalemto": "mailto",
+    "emalcpma": "perform mail action with messages",
+    "aevtodoc": "open",
+    "aevtpdoc": "print",
+    "aevtquit": "quit",
+}
+# The four letter codes rule 10 bans: the event ID of each of those commands, the event class
+# of those whose class no event of MAIL_EVENTS shares, and content, the message property
+# Mail renders, which the model must never read (AGENTS.md).
+MAIL_BANNED_CODES = {
+    **{command[4:]: name for command, name in MAIL_CHANGING_COMMANDS.items()},
+    **{
+        command[:4]: name
+        for command, name in MAIL_CHANGING_COMMANDS.items()
+        if command[:4] not in {event[:4] for event in MAIL_EVENTS.values()}
+    },
+    "ctnt": "content",
 }
 
 
@@ -683,6 +732,20 @@ FILE_REMOVAL = _rule(r"\bremoveItem\b", r"\bmoveItem\b", r"\breplaceItem\w*", r"
 # NSUserDefaultsController reach the same values.
 DEFAULTS = _rule(r"\bUserDefaults\b", r"\bAppStorage\b", r"\bCFPreferences\w*", r"\bNSUserDefaults\w*")
 
+# Rule 10, in MailEvents.swift. Other ways to build an event, whose codes the rule cannot read.
+MAIL_EVENTS_BANNED = _rule(r"\bAECreateAppleEvent\b", r"\bAEBuildAppleEvent\b")
+# The calls that build an event, with the labels of their event class and event ID.
+EVENT_BUILDERS = (
+    (re.compile(r"\bappleEvent\s*\(\s*withEventClass\b"), "withEventClass", "appleEvent(withEventClass:"),
+    (re.compile(r"\bNSAppleEventDescriptor\s*(?:\.\s*init\s*)?\(\s*eventClass\b"), "eventClass", "NSAppleEventDescriptor(eventClass:"),
+)
+# A reply opens its window: the opening window parameter ropw is set to true, and only so.
+OPENING_WINDOW = re.compile(
+    r'\.\s*setParam\s*\(\s*NSAppleEventDescriptor\s*\(\s*boolean\s*:\s*true\s*\)\s*,\s*'
+    r'forKeyword\s*:\s*(?:(?:MailEvents|Self)\s*\.\s*)?code\s*\(\s*"ropw"\s*\)\s*\)'
+)
+INTEGER_LITERAL = re.compile(r"(?<![\w.])(0x[0-9A-Fa-f_]+|0o[0-7_]+|0b[01_]+|[0-9][0-9_]*)(?![\w.])")
+
 SourceProblem = namedtuple("SourceProblem", "path line rule name")
 
 
@@ -735,6 +798,14 @@ def swift_views(text):
     over it, so a quote in it starts no string. A name in backticks stays in the code view
     too, and the lexer steps over it the same way.
     """
+    comments, literals = _lex(text)
+    return _blanked(text, comments + literals), _blanked(text, comments)
+
+
+def _lex(text):
+    """The spans of the comments and of the literals of a Swift file, see swift_views. The
+    text of a string around an interpolation is a span of its own, from the opening quote or
+    the closing parenthesis of an interpolation."""
     comments = []
     literals = []
     # One entry per open interpolation: the hashes and the kind of its string, and the
@@ -790,7 +861,7 @@ def swift_views(text):
             if interpolation:
                 open_strings.append((hashes, multiline, depth))
                 depth = 0
-    return _blanked(text, comments + literals), _blanked(text, comments)
+    return comments, literals
 
 
 def _block_comment_end(text, start):
@@ -1017,6 +1088,179 @@ def _attributed_strings(code, path):
     return problems
 
 
+def _string_value(text, start, end):
+    """The text of a one line string literal at text[start:end], with its escapes read, or
+    None for a multi-line string, a regex literal or the text around an interpolation."""
+    literal = text[start:end]
+    hashes = len(literal) - len(literal.lstrip("#"))
+    closer = '"' + "#" * hashes
+    body = literal[hashes:]
+    if not body.startswith('"') or body.startswith('"""') or len(body) < 2 * len(closer) or not body.endswith(closer):
+        return None
+    escape = "\\" + "#" * hashes
+    named = {"0": "\0", "n": "\n", "r": "\r", "t": "\t", '"': '"', "'": "'", "\\": "\\"}
+
+    def read(match):
+        if match.group(1).startswith("u"):
+            return chr(int(match.group(2), 16))
+        return named[match.group(1)]
+
+    return re.sub(re.escape(escape) + r"(u\{([0-9A-Fa-f]{1,8})\}|[0nrt\"'\\])", read, body[1:len(body) - len(closer)])
+
+
+def _top_level_items(arguments):
+    """The arguments of a call, split at its top level commas."""
+    items = []
+    depth = 0
+    start = 0
+    for index, character in enumerate(arguments):
+        if character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+        elif character == "," and depth == 0:
+            items.append(arguments[start:index])
+            start = index + 1
+    items.append(arguments[start:])
+    return items
+
+
+def _labeled(arguments):
+    """The labeled arguments of a call, label to value."""
+    values = {}
+    for item in _top_level_items(arguments):
+        match = re.match(r"\s*(\w+)\s*:(.*)\Z", item, re.DOTALL)
+        if match:
+            values[match.group(1)] = match.group(2).strip()
+    return values
+
+
+def _enum_body(code, name):
+    """The span of the body of enum name between its braces in the code view, or None."""
+    match = re.search(r"\benum\s+" + name + r"\b[^{]*\{", code)
+    if match is None:
+        return None
+    depth = 0
+    for index in range(match.end() - 1, len(code)):
+        if code[index] == "{":
+            depth += 1
+        elif code[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return match.end(), index
+    return None
+
+
+def _mail_event_cases(code, uncommented, body):
+    """The case declarations at the top level of the MailEvent body: (offset, text) for each
+    case, the text running to the end of its line, or on while the line ends in a comma."""
+    start, end = body
+    cases = []
+    depth = 0
+    index = start
+    while index < end:
+        character = code[index]
+        if character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+        elif depth == 0 and code.startswith("case", index) and _word_before(code, index)[0] == "" \
+                and not (code[index + 4:index + 5].isalnum() or code[index + 4:index + 5] == "_"):
+            stop = index + 4
+            while True:
+                line_end = code.find("\n", stop)
+                line_end = end if line_end < 0 or line_end > end else line_end
+                if line_end >= end or not uncommented[index + 4:line_end].rstrip().endswith(","):
+                    break
+                stop = line_end + 1
+            cases.append((index, uncommented[index + 4:line_end]))
+            index = line_end
+            continue
+        index += 1
+    return cases
+
+
+def check_mail_events(text, path=MAIL_EVENTS_FILE):
+    """Rule 10 for MailEvents.swift: only the events of MAIL_EVENTS, every reply with its
+    window, and no code of MAIL_BANNED_CODES."""
+    comments, literals = _lex(text)
+    code = _blanked(text, comments + literals)
+    uncommented = _blanked(text, comments)
+    problems = _find(code, path, 10, MAIL_EVENTS_BANNED)
+
+    def problem(offset, name):
+        problems.append(SourceProblem(path, None if offset is None else _line(text, offset), 10, name))
+
+    # The enum holds exactly the three events, and its codes come from its raw values.
+    body = _enum_body(code, "MailEvent")
+    declared = set()
+    if body is None:
+        problem(None, "no MailEvent enum")
+    else:
+        for offset, declaration in _mail_event_cases(code, uncommented, body):
+            for item in _top_level_items(declaration):
+                case = re.fullmatch(r'\s*(\w+)\s*=\s*"([^"\\\n]*)"\s*', item)
+                if case is None:
+                    problem(offset, "MailEvent case " + " ".join(item.split()) + " without its code")
+                    continue
+                event, event_code = case.groups()
+                if MAIL_EVENTS.get(event) != event_code or event in declared:
+                    problem(offset, f"MailEvent case {event} = {event_code}")
+                declared.add(event)
+        for event in MAIL_EVENTS:
+            if event not in declared:
+                problem(body[0], f"MailEvent without case {event}")
+        enum_code = code[body[0]:body[1]]
+        for name, part in (("eventClass", "prefix"), ("eventID", "suffix")):
+            getter = re.search(r"\bvar\s+" + name + r"\b[^{]*\{([^{}]*)\}", enum_code)
+            if getter is None or not re.search(r"\brawValue\s*\.\s*" + part + r"\s*\(\s*4\s*\)", getter.group(1)):
+                problem(body[0], f"MailEvent {name} not from rawValue.{part}(4)")
+
+    # Every event takes its event class and event ID from a MailEvent.
+    for pattern, class_label, name in EVENT_BUILDERS:
+        for match in pattern.finditer(code):
+            opening = code.index("(", match.start())
+            arguments = _arguments(code, opening)
+            values = _labeled(arguments) if arguments is not None else {}
+            bases = []
+            for label, member in ((class_label, "eventClass"), ("eventID", "eventID")):
+                value = re.fullmatch(r"(?:self\s*\.\s*)?([\w.\s]*?)\s*\.\s*" + member, values.get(label, ""))
+                bases.append(None if value is None else re.sub(r"\s+", "", value.group(1)))
+            base = bases[0]
+            from_mail_event = base is not None and bases[1] == base and (
+                re.fullmatch(r"MailEvent\.(?:" + "|".join(MAIL_EVENTS) + r")", base) is not None
+                or (re.fullmatch(r"\w+", base) is not None and re.search(r"\b" + base + r"\s*:\s*MailEvent\b", code) is not None)
+            )
+            if not from_mail_event:
+                problem(match.start(), name + " not from MailEvent")
+
+    # Every reply opens its window.
+    allowed = [match.span() for match in OPENING_WINDOW.finditer(uncommented)]
+    mentions = [match.start() for match in re.finditer(r'"ropw"', uncommented)]
+    if not mentions:
+        problem(None, "reply without ropw true")
+    for offset in mentions:
+        if not any(start <= offset < end for start, end in allowed):
+            problem(offset, "ropw not set to true")
+
+    # No code of a command that changes mail, in a string or as a number.
+    for start, end in literals:
+        value = _string_value(text, start, end)
+        if value is None:
+            continue
+        name = MAIL_CHANGING_COMMANDS.get(value) if len(value) == 8 else MAIL_BANNED_CODES.get(value) if len(value) == 4 else None
+        if name is not None:
+            problem(start, f'"{value}", the code of {name}')
+    banned_numbers = {int.from_bytes(code_text.encode("latin-1"), "big"): (code_text, name) for code_text, name in MAIL_BANNED_CODES.items()}
+    for match in INTEGER_LITERAL.finditer(code):
+        literal = match.group(1).replace("_", "")
+        number = int(literal, 0) if literal[:2].lower() in ("0x", "0o", "0b") else int(literal, 10)
+        if number in banned_numbers:
+            code_text, name = banned_numbers[number]
+            problem(match.start(), f"{match.group(1)}, the code {code_text} of {name}")
+    return problems
+
+
 def source_files(root):
     """(path relative to root, path) of every file the source rules read, in a fixed order."""
     for top in SOURCE_FOLDERS:
@@ -1075,6 +1319,8 @@ def check_sources(root, apple_event_files=APPLE_EVENT_FILES):
                 problems += _find(code, path, 8, DEFAULTS)
         if in_app and path not in apple_event_files:
             problems += _find(code, path, 3, APPLE_EVENT_BUILDING)
+        if path == MAIL_EVENTS_FILE:
+            problems += check_mail_events(text, path)
         if in_tests:
             problems += _find(code, path, 4, APPLE_EVENT_SENDING)
         if (in_app or in_tests) and not in_projects and not path.startswith(PROJECTS_TESTS_FOLDER):
