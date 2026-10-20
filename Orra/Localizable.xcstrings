@@ -3947,24 +3947,24 @@
         }
       }
     },
-    "Keep your projects with their index, mail text and drafts on this Mac for when you turn Projects on again, or delete them now. Your mail in Mail and the files in your folders stay as they are." : {
+    "Keep your projects with their index, mail text and drafts, and your choice of mailboxes, on this Mac for when you turn Projects on again, or delete them now. Your mail in Mail and the files in your folders stay as they are." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conserva en esta Mac tus proyectos con su índice, el texto de los correos y los borradores para cuando vuelvas a activar Proyectos, o elimínalos ahora. Tu correo en Mail y los archivos de tus carpetas no cambian."
+            "value" : "Conserva en esta Mac tus proyectos con su índice, el texto de los correos y los borradores, y tu selección de buzones, para cuando vuelvas a activar Proyectos, o elimínalos ahora. Tu correo en Mail y los archivos de tus carpetas no cambian."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "次に“プロジェクト”をオンにするときのために、プロジェクトと、そのインデックス、メールのテキスト、下書きをこのMacに残すか、今すぐ削除できます。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
+            "value" : "次に“プロジェクト”をオンにするときのために、プロジェクトと、そのインデックス、メールのテキスト、下書き、メールボックスの選択をこのMacに残すか、今すぐ削除できます。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你可以把项目以及它们的索引、邮件文字和草稿留在这台 Mac 上，下次打开“项目”时接着用，也可以现在就删除。“邮件” App 里的邮件和你文件夹里的文件保持不变。"
+            "value" : "你可以把项目以及它们的索引、邮件文字和草稿，还有你对邮箱的选择，留在这台 Mac 上，下次打开“项目”时接着用，也可以现在就删除。“邮件” App 里的邮件和你文件夹里的文件保持不变。"
           }
         }
       }
@@ -6089,6 +6089,28 @@
         }
       }
     },
+    "Orra is not allowed to control Mail. Turn on Mail under Orra in Privacy & Security, Automation." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra no tiene permiso para controlar Mail. Activa Mail debajo de Orra en Privacidad y seguridad, Automatización."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraには“メール”を制御する権限がありません。“プライバシーとセキュリティ”の“オートメーション”で、Orraの下にある“メール”をオンにしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 无权控制“邮件”。请在“隐私与安全性”的“自动化”中，打开 Orra 下面的“邮件”。"
+          }
+        }
+      }
+    },
     "Orra is ready" : {
       "localizations" : {
         "es-419" : {
@@ -6173,28 +6195,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra 只保留最近 %lld 句。"
-          }
-        }
-      }
-    },
-    "Orra may not control Mail. Turn on Mail under Orra in Privacy & Security, Automation." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra no tiene permiso para controlar Mail. Activa Mail debajo de Orra en Privacidad y seguridad, Automatización."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orraには“メール”を制御する権限がありません。“プライバシーとセキュリティ”の“オートメーション”で、Orraの下にある“メール”をオンにしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Orra 无权控制“邮件”。请在“隐私与安全性”的“自动化”中，打开 Orra 下面的“邮件”。"
           }
         }
       }
@@ -7275,7 +7275,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“项目”使用整理模型解读邮件并起草回复。模型来自 Hugging Face 或其镜像。你的邮件和文件只留在这台 Mac 上。"
+            "value" : "“项目”使用整理模型解释邮件并起草回复。模型来自 Hugging Face 或其镜像。你的邮件和文件只留在这台 Mac 上。"
           }
         }
       }
@@ -7302,6 +7302,28 @@
         }
       }
     },
+    "Projects reads mail from the chosen period in these mailboxes while Mail is open." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos lee el correo del período elegido en estos buzones mientras Mail está abierta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、“メール”が開いている間、これらのメールボックスから選択した期間のメールを読み取ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”会在“邮件”打开时，读取这些邮箱中所选时间范围内的邮件。"
+          }
+        }
+      }
+    },
     "Projects reads mail only in the mailboxes you choose here, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail." : {
       "localizations" : {
         "es-419" : {
@@ -7320,28 +7342,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“项目”只读取你在这里选择的邮箱中的邮件，而且只在“邮件”打开时读取。它从不发送、移动或删除邮件。接下来 macOS 会询问是否允许 Orra 控制“邮件”。"
-          }
-        }
-      }
-    },
-    "Projects reads new mail in the chosen mailboxes while Mail is open." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Proyectos lee el correo nuevo de los buzones elegidos mientras Mail está abierta."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“プロジェクト”は、“メール”が開いている間、選択したメールボックスの新着メールを読み取ります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“项目”会在“邮件”打开时读取所选邮箱中的新邮件。"
           }
         }
       }
@@ -7522,24 +7522,24 @@
         }
       }
     },
-    "Reads the mailboxes you choose in Mail and the folders you add. What it keeps stays on this Mac." : {
+    "Reads the Mail mailboxes you choose and the folders you add. What it keeps stays on this Mac." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lee los buzones que elijas en Mail y las carpetas que agregues. Lo que guarda no sale de esta Mac."
+            "value" : "Lee los buzones de Mail que elijas y las carpetas que agregues. Lo que guarda no sale de esta Mac."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“メール”で選んだメールボックスと、追加したフォルダを読み取ります。保存した内容はこのMacから出ません。"
+            "value" : "選んだ“メール”のメールボックスと、追加したフォルダを読み取ります。保存した内容はこのMacから出ません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "读取你在“邮件” App 中选择的邮箱和你添加的文件夹。它保存的内容只留在这台 Mac 上。"
+            "value" : "读取你选择的“邮件”邮箱和你添加的文件夹。它保存的内容只留在这台 Mac 上。"
           }
         }
       }
@@ -10293,24 +10293,24 @@
         }
       }
     },
-    "This deletes your projects with their index, mail text and drafts from this Mac. Your mail in Mail and the files in your folders stay as they are." : {
+    "This deletes your projects with their index, mail text and drafts, and your choice of mailboxes, from this Mac. Your mail in Mail and the files in your folders stay as they are." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se eliminarán de esta Mac tus proyectos con su índice, el texto de los correos y los borradores. Tu correo en Mail y los archivos de tus carpetas no cambian."
+            "value" : "Se eliminarán de esta Mac tus proyectos con su índice, el texto de los correos y los borradores, y tu selección de buzones. Tu correo en Mail y los archivos de tus carpetas no cambian."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プロジェクトと、そのインデックス、メールのテキスト、下書きをこのMacから削除します。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
+            "value" : "プロジェクトと、そのインデックス、メールのテキスト、下書き、メールボックスの選択をこのMacから削除します。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这会从这台 Mac 上删除你的项目，以及它们的索引、邮件文字和草稿。“邮件” App 里的邮件和你文件夹里的文件保持不变。"
+            "value" : "这会从这台 Mac 上删除你的项目，以及它们的索引、邮件文字和草稿，还有你对邮箱的选择。“邮件” App 里的邮件和你文件夹里的文件保持不变。"
           }
         }
       }
@@ -11037,7 +11037,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在此之前，“项目”无法解读邮件或起草回复。"
+            "value" : "在此之前，“项目”无法解释邮件或起草回复。"
           }
         }
       }

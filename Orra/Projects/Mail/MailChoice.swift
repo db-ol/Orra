@@ -40,6 +40,10 @@ final class MailChoice {
     private(set) var days: Int
     /// Whether the user confirmed the choice once.
     private(set) var isConfirmed: Bool
+    /// Whether any of the three preferences is saved, so that turning Projects off asks to
+    /// keep or delete it and Delete All Projects Data can remove it, as with the data in
+    /// the Projects folder.
+    private(set) var isSaved: Bool
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let suggestion: [MailMailbox]
 
@@ -55,6 +59,7 @@ final class MailChoice {
         let savedDays = defaults.integer(forKey: Self.daysKey)
         days = Self.dayChoices.contains(savedDays) ? savedDays : Self.defaultDays
         isConfirmed = defaults.bool(forKey: Self.confirmedKey)
+        isSaved = [Self.mailboxesKey, Self.daysKey, Self.confirmedKey].contains { defaults.object(forKey: $0) != nil }
     }
 
     /// Chooses these mailboxes, each once, in this order, and saves them.
@@ -70,6 +75,7 @@ final class MailChoice {
         guard Self.dayChoices.contains(days) else { return }
         self.days = days
         defaults.set(days, forKey: Self.daysKey)
+        isSaved = true
     }
 
     /// Confirms the choice as it stands, with Start Reading Mail, and saves all of it, so a
@@ -79,6 +85,7 @@ final class MailChoice {
         saveMailboxes()
         defaults.set(days, forKey: Self.daysKey)
         defaults.set(true, forKey: Self.confirmedKey)
+        isSaved = true
     }
 
     /// Forgets the mailboxes, the days and the confirm, and removes their preferences, as
@@ -91,12 +98,14 @@ final class MailChoice {
         mailboxes = suggestion
         days = Self.defaultDays
         isConfirmed = false
+        isSaved = false
     }
 
     private func saveMailboxes() {
         // Encoding plain values cannot fail. If it ever did, the old choice stays saved.
         if let data = try? JSONEncoder().encode(mailboxes) {
             defaults.set(data, forKey: Self.mailboxesKey)
+            isSaved = true
         }
     }
 }

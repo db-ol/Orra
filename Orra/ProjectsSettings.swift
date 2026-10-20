@@ -34,7 +34,7 @@ struct ProjectsSettings: View {
                                 PreviewLabel()
                             }
                             Group {
-                                Text("Reads the mailboxes you choose in Mail and the folders you add. What it keeps stays on this Mac.")
+                                Text("Reads the Mail mailboxes you choose and the folders you add. What it keeps stays on this Mac.")
                                 Text("It never sends, moves or deletes mail, and never sends your mail or files anywhere.")
                             }
                             .font(.subheadline)
@@ -99,7 +99,7 @@ struct ProjectsSettings: View {
                 Button("Delete All Projects Data…", role: .destructive) {
                     isConfirmingDelete = true
                 }
-                .disabled(!projects.holdsData || projects.isDeleting)
+                .disabled(!holdsData || projects.isDeleting)
             } header: {
                 Text("Data")
             }
@@ -122,7 +122,7 @@ struct ProjectsSettings: View {
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didLaunchApplicationNotification)) { note in
             if Self.isMail(note) {
-                Task { await mail?.refresh() }
+                Task { await mail?.mailLaunched() }
             }
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didTerminateApplicationNotification)) { note in
@@ -151,32 +151,34 @@ struct ProjectsSettings: View {
         }
         .alert("Delete all Projects data?", isPresented: $isConfirmingDelete) {
             Button("Delete All", role: .destructive) {
+                // The choice goes first, so a scan that still runs stops at its next look.
+                mail?.choice.forget()
                 Task {
                     await projects.deleteAllData()
-                    mail?.choice.forget()
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This deletes your projects with their index, mail text and drafts from this Mac. Your mail in Mail and the files in your folders stay as they are.")
+            Text("This deletes your projects with their index, mail text and drafts, and your choice of mailboxes, from this Mac. Your mail in Mail and the files in your folders stay as they are.")
         }
         .alert("Turn off Projects?", isPresented: $isAskingKeepOrDelete) {
             Button("Keep Data") {
                 Task {
                     await projects.turnOff(keepingData: true)
-                    cleanup.projectsTurnedOff()
+                    turnedOff()
                 }
             }
             Button("Delete Data", role: .destructive) {
+                // The choice goes first, so a scan that still runs stops at its next look.
+                mail?.choice.forget()
                 Task {
                     await projects.turnOff(keepingData: false)
-                    cleanup.projectsTurnedOff()
-                    mail?.choice.forget()
+                    turnedOff()
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Keep your projects with their index, mail text and drafts on this Mac for when you turn Projects on again, or delete them now. Your mail in Mail and the files in your folders stay as they are.")
+            Text("Keep your projects with their index, mail text and drafts, and your choice of mailboxes, on this Mac for when you turn Projects on again, or delete them now. Your mail in Mail and the files in your folders stay as they are.")
         }
     }
 
@@ -200,15 +202,32 @@ struct ProjectsSettings: View {
         }
     }
 
+    /// Whether Projects keeps anything on this Mac: data in its folder, as last measured, or
+    /// the chosen mailboxes in the preferences.
+    private var holdsData: Bool {
+        projects.holdsData || mail?.choice.isSaved == true
+    }
+
     /// Turning the switch off asks whether to keep or delete what Projects keeps on this Mac,
     /// and only when it keeps something.
     private func turnOff() {
         Task {
-            isAskingKeepOrDelete = await projects.turnOffOrAsk()
+            if mail?.choice.isSaved == true {
+                isAskingKeepOrDelete = true
+            } else {
+                isAskingKeepOrDelete = await projects.turnOffOrAsk()
+            }
             if !projects.isOn {
-                cleanup.projectsTurnedOff()
+                turnedOff()
             }
         }
+    }
+
+    /// Projects is off: a download only it agreed to stops, and the mailbox names listed
+    /// for the picker leave memory.
+    private func turnedOff() {
+        cleanup.projectsTurnedOff()
+        mail?.projectsTurnedOff()
     }
 
     /// Whether a notification of NSWorkspace is about Mail.
@@ -276,8 +295,8 @@ struct ProjectsSettings: View {
     }
 
     /// The cleanup model's download while Projects is on: its progress with Cancel
-    /// Download, or what stands in the way with the button that downloads it, which names
-    /// the size. Nothing once the model is on this Mac.
+    /// Download while nothing else waits for it, or what stands in the way with the button
+    /// that downloads it, which names the size. Nothing once the model is on this Mac.
     private struct ModelDownload: View {
         let cleanup: TextCleanup
 
@@ -294,8 +313,12 @@ struct ProjectsSettings: View {
                             Text(verbatim: String(localized: "From \(source.rawValue)"))
                         }
                     }
-                    Button("Cancel Download") {
-                        cleanup.cancelDownload()
+                    // While cleanup, translation or captions wait for the model, the cancel
+                    // stays with them, since it would turn them off.
+                    if cleanup.canCancelProjectsDownload {
+                        Button("Cancel Download") {
+                            cleanup.cancelProjectsDownload()
+                        }
                     }
                 }
             case .missing, .failed:
@@ -376,27 +399,33 @@ struct ProjectsSettings: View {
     }
 
     /// The mailboxes Projects reads, ticked one by one, the days, and Start Reading Mail,
-    /// before which nothing is read.
+    /// before which nothing is read. The two of all accounts show on their own, and each
+    /// account's mailboxes and those On My Mac under a disclosure that is open while one of
+    /// them is ticked, so the days and Start Reading Mail stay near.
     private struct MailboxesSection: View {
         let mail: MailAccess
+        /// The groups the user opened or closed, by their place.
+        @State private var expanded: [String: Bool] = [:]
 
         var body: some View {
             Section {
-                ForEach(mail.rows, id: \.self) { mailbox in
-                    Toggle(isOn: Binding(
-                        get: { mail.isChosen(mailbox) },
-                        set: { mail.choose(mailbox, $0) }
-                    )) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(verbatim: MailAccess.title(mailbox))
-                            if let place = MailAccess.place(mailbox) {
-                                Text(verbatim: place)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                ForEach(MailAccess.groups(mail.rows), id: \.self) { group in
+                    if let place = group.place {
+                        DisclosureGroup(isExpanded: Binding(
+                            get: { expanded[place] ?? group.mailboxes.contains(where: mail.isChosen) },
+                            set: { expanded[place] = $0 }
+                        )) {
+                            ForEach(group.mailboxes, id: \.self) { mailbox in
+                                // A disclosure centers its rows otherwise.
+                                row(mailbox, in: place)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                        } label: {
+                            Text(verbatim: place)
                         }
+                    } else {
+                        ForEach(group.mailboxes, id: \.self) { row($0, in: nil) }
                     }
-                    .toggleStyle(.checkbox)
                 }
                 if mail.isListing {
                     HStack {
@@ -438,7 +467,7 @@ struct ProjectsSettings: View {
                     )
                 }
                 if mail.choice.isConfirmed {
-                    Text("Projects reads new mail in the chosen mailboxes while Mail is open.")
+                    Text("Projects reads mail from the chosen period in these mailboxes while Mail is open.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
@@ -457,6 +486,23 @@ struct ProjectsSettings: View {
                 Text("Mailboxes")
             }
         }
+
+        /// A mailbox with its tick. A tick or an untick keeps its group open, so the group
+        /// does not close under the pointer when its last mailbox is unticked.
+        private func row(_ mailbox: MailMailbox, in place: String?) -> some View {
+            Toggle(isOn: Binding(
+                get: { mail.isChosen(mailbox) },
+                set: { chosen in
+                    if let place {
+                        expanded[place] = true
+                    }
+                    mail.choose(mailbox, chosen)
+                }
+            )) {
+                Text(verbatim: MailAccess.title(mailbox))
+            }
+            .toggleStyle(.checkbox)
+        }
     }
 }
 
@@ -470,8 +516,11 @@ extension ProjectsSettings {
     ///   shows what the bridge last learned, never a fresh check, see
     ///   MailBridge.lastPermission.
     /// - It lists Mail's mailboxes for the picker while the page shows, Projects is on and
-    ///   Mail runs, unless macOS has not been asked yet. Their names stay in memory. Only
-    ///   the ticked ones are saved, by MailChoice.
+    ///   Mail runs. The first listing after launch also learns the access, since its events
+    ///   never bring up the prompt (kAEDoNotPromptForUserConsent, see MailEvents). Once one
+    ///   learned that macOS has not asked the user yet (-1744), nothing is listed until the
+    ///   user allows access. Their names stay in memory while Projects is on. Only the
+    ///   ticked ones are saved, by MailChoice.
     /// - Start Reading Mail confirms the choice, before which the scan reads nothing
     ///   (decision 17).
     @Observable
@@ -540,16 +589,18 @@ extension ProjectsSettings {
             Self.line(access: access, note: note)
         }
 
+        /// The access comes first, so a note from before the user answered never hides the
+        /// line after a no.
         nonisolated static func line(access: Access, note: Note?) -> String? {
-            switch (note, access) {
-            case (.openMailFirst?, _):
-                String(localized: "Open Mail first. Orra never opens it.")
-            case (.noAnswer?, _):
-                String(localized: "macOS gave no answer. Try again.")
-            case (nil, .denied):
-                String(localized: "Orra may not control Mail. Turn on Mail under Orra in Privacy & Security, Automation.")
-            case (nil, .allowed), (nil, .unknown):
+            switch (access, note) {
+            case (.denied, _):
+                String(localized: "Orra is not allowed to control Mail. Turn on Mail under Orra in Privacy & Security, Automation.")
+            case (.allowed, _), (.unknown, nil):
                 nil
+            case (.unknown, .openMailFirst?):
+                String(localized: "Open Mail first. Orra never opens it.")
+            case (.unknown, .noAnswer?):
+                String(localized: "macOS gave no answer. Try again.")
             }
         }
 
@@ -610,21 +661,25 @@ extension ProjectsSettings {
 
         /// Looks again whether Mail runs and what the bridge last learned about access,
         /// without asking macOS. Lists Mail's mailboxes when they are not listed yet, while
-        /// Projects is on and Mail runs, unless macOS has not been asked yet. After a no,
-        /// the listing shows whether the user has since turned Mail on for Orra.
+        /// Projects is on and Mail runs, unless a request learned that macOS has not asked
+        /// the user yet (-1744). Before any request, as after launch, it lists, and the
+        /// listing's events never bring up the prompt. After a no, or a question that got no
+        /// answer in time, the listing shows whether the user has since allowed Orra.
         func refresh() async {
             mailIsRunning = bridge.isRunning()
             permission = bridge.lastPermission()
-            if mailIsRunning, note == .openMailFirst {
-                note = nil
-            }
+            dropOutdatedNote()
             guard isOn(), mailIsRunning, listed == nil, !isListing, !isAsking, permission != .notAsked else { return }
             isListing = true
             defer { isListing = false }
             do {
-                listed = try await bridge.mailboxes()
-                listFailed = false
-                Logger.projectsMail.notice("Settings listed \(self.listed?.count ?? 0, privacy: .public) mailboxes")
+                let mailboxes = try await bridge.mailboxes()
+                // Projects went off meanwhile, so the names are not kept.
+                if isOn() {
+                    listed = mailboxes
+                    listFailed = false
+                    Logger.projectsMail.notice("Settings listed \(mailboxes.count, privacy: .public) mailboxes")
+                }
             } catch let error as MailBridgeError {
                 listFailed = Self.isNoAnswer(error)
             } catch {
@@ -632,6 +687,34 @@ extension ProjectsSettings {
             }
             permission = bridge.lastPermission()
             mailIsRunning = bridge.isRunning()
+            dropOutdatedNote()
+        }
+
+        /// Mail started. Lists its mailboxes, and once more after a pause when Mail did not
+        /// answer, as it may not while it starts.
+        func mailLaunched(retryAfter pause: Duration = .seconds(3)) async {
+            await refresh()
+            guard listFailed else { return }
+            try? await Task.sleep(for: pause)
+            await refresh()
+        }
+
+        /// Drops the note under the access once it no longer holds: Mail runs again after
+        /// "Open Mail first", or macOS has answered since "no answer".
+        private func dropOutdatedNote() {
+            if access != .unknown || (mailIsRunning && note == .openMailFirst) {
+                note = nil
+            }
+        }
+
+        /// Projects turned off. Forgets the mailboxes listed for the picker and what the
+        /// page said, so no mailbox name stays in memory while Projects is off. The choice
+        /// stays, unless the user deleted it, see MailChoice.forget().
+        func projectsTurnedOff() {
+            listed = nil
+            listFailed = false
+            note = nil
+            isExplaining = false
         }
 
         /// Whether a listing failed for a reason the access line and the line about Mail
@@ -653,6 +736,29 @@ extension ProjectsSettings {
         nonisolated static func rows(listed: [MailMailbox], chosen: [MailMailbox]) -> [MailMailbox] {
             var seen = Set<MailMailbox>()
             return (listed + chosen).filter { seen.insert($0).inserted }
+        }
+
+        /// The mailboxes of one place in the picker.
+        nonisolated struct MailboxGroup: Hashable, Sendable {
+            /// The account or On My Mac, as `place(_:)` names it, or nil for the inbox and
+            /// the sent mailbox of all accounts, which show without a disclosure.
+            let place: String?
+            let mailboxes: [MailMailbox]
+        }
+
+        /// The rows by place, in the order each place first comes: Mail lists the two of all
+        /// accounts first, then each account's mailboxes, then those On My Mac.
+        nonisolated static func groups(_ rows: [MailMailbox]) -> [MailboxGroup] {
+            var places: [String?] = []
+            var mailboxes: [String?: [MailMailbox]] = [:]
+            for mailbox in rows {
+                let place = place(mailbox)
+                if mailboxes[place] == nil {
+                    places.append(place)
+                }
+                mailboxes[place, default: []].append(mailbox)
+            }
+            return places.map { MailboxGroup(place: $0, mailboxes: mailboxes[$0] ?? []) }
         }
 
         func isChosen(_ mailbox: MailMailbox) -> Bool {

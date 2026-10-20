@@ -3183,14 +3183,24 @@ mail.
 - [ ] Opening Settings > Projects or Report a Problem shows the last answer without a new
   check: no prompt, and no permission check line in the log. With Projects on and Mail
   open, the page lists the mailboxes, so the log shows get events.
-- [ ] Under Mailboxes a Debug build ticks nothing, and a release build ticks Inbox (all
-  accounts) and Sent (all accounts). Start Reading Mail stays off until access is allowed
-  and a mailbox is ticked. `defaults read io.github.db-ol.Orra projectsMailboxes` holds
-  only the ticked mailboxes, and no mail is read before Start Reading Mail.
+- [ ] Under Mailboxes a Debug build ticks nothing. Inbox (all accounts) and Sent (all
+  accounts) show on their own, and each account and On My Mac under a disclosure, closed
+  unless one of its mailboxes is ticked. Start Reading Mail stays off until access is
+  allowed and a mailbox is ticked. No mail is read before Start Reading Mail, and this
+  prints only the ticked mailboxes:
+  `defaults export io.github.db-ol.Orra - | plutil -extract projectsMailboxes raw -o - - | base64 -D`
+- [ ] Once release builds show Projects: a release build ticks Inbox (all accounts) and
+  Sent (all accounts) before the user chooses.
+- [ ] Choose a mailbox with no project made yet, then turn Projects off. It asks Keep or
+  Delete. Delete Data, or Delete All Projects Data… with Projects on or off, removes the
+  choice, and the command above then finds no projectsMailboxes.
+- [ ] Quit Mail and open it again while the page shows. The mailboxes list again without
+  Try Again. If "Mail did not answer" stays, note it.
 - [ ] Turning Projects on without the cleanup model asks before the download and names its
   size. Cancel leaves Projects off. Download turns Projects on and shows the progress on
-  the page, and the download goes on with the Projects window closed. Turning Projects off
-  stops it unless cleanup or translation waits for it.
+  the page, and the download goes on with Settings closed. The page shows Cancel Download
+  only while cleanup and translation are off and captions do not run. Turning Projects
+  off stops the download unless cleanup, translation or captions wait for it.
 - [ ] Reading mail never marks a message as read and never moves one.
 
 ## Not implemented

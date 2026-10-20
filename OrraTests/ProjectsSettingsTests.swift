@@ -15,6 +15,8 @@ struct ProjectsSettingsTests {
     nonisolated static let account = MailEvents.Specifier.textID(MailEvents.Code.account, "5C12-account", of: .application)
     nonisolated static let archive = MailMailbox(kind: .mailbox, reference: .name(MailEvents.Code.mailbox, "Archive", of: account), name: "Archive", account: "Studio")
     nonisolated static let imported = MailMailbox(kind: .mailbox, reference: .name(MailEvents.Code.mailbox, "orra-test", of: .application), name: "orra-test", account: nil)
+    nonisolated static let drafts = MailMailbox(kind: .mailbox, reference: .name(MailEvents.Code.mailbox, "Drafts", of: account), name: "Drafts", account: "Studio")
+    nonisolated static let deniedLine = "Orra is not allowed to control Mail. Turn on Mail under Orra in Privacy & Security, Automation."
 
     let suite = "io.github.db-ol.OrraTests.projects-settings-\(UUID().uuidString)"
     let defaults: UserDefaults
@@ -60,6 +62,39 @@ struct ProjectsSettingsTests {
         #expect(access.access == .allowed)
         #expect(access.listed == mail.mailboxes)
         #expect(access.line == nil)
+    }
+
+    /// Right after launch the bridge has learned nothing. The first look lists once, with
+    /// events that never bring up the prompt, and so learns that macOS has not asked the
+    /// user yet. After that nothing is listed until the user allows access.
+    @Test func theFirstLookAfterLaunchListsOnceAndAsksNothing() async {
+        defer { cleanUp() }
+        mail.remembered = nil
+        mail.listingError = .notAsked
+        let access = access()
+        await access.show()
+        #expect(mail.asks.isEmpty)
+        #expect(mail.listings == 1)
+        #expect(access.access == .unknown)
+        #expect(access.listed == nil)
+        #expect(!access.listFailed)
+        #expect(access.line == nil)
+        await access.refresh()
+        await access.show()
+        #expect(mail.listings == 1)
+        #expect(mail.asks.isEmpty)
+    }
+
+    /// The same first look after an earlier run allowed access shows it as allowed, still
+    /// without a permission check.
+    @Test func theFirstLookAfterLaunchFindsAnEarlierYes() async {
+        defer { cleanUp() }
+        mail.remembered = nil
+        let access = access()
+        await access.show()
+        #expect(mail.asks.isEmpty)
+        #expect(access.access == .allowed)
+        #expect(access.listed == mail.mailboxes)
     }
 
     /// With the access remembered from an earlier request, showing the page lists the
@@ -124,7 +159,7 @@ struct ProjectsSettingsTests {
         access.allowClicked()
         await access.ask()
         #expect(access.access == .denied)
-        #expect(access.line == "Orra may not control Mail. Turn on Mail under Orra in Privacy & Security, Automation.")
+        #expect(access.line == Self.deniedLine)
         #expect(access.listed == nil)
         #expect(!access.listFailed)
         #expect(ProjectsSettings.automationSettings.absoluteString == "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
@@ -146,7 +181,7 @@ struct ProjectsSettingsTests {
         let access = access()
         await access.show()
         #expect(access.access == .denied)
-        #expect(access.line == "Orra may not control Mail. Turn on Mail under Orra in Privacy & Security, Automation.")
+        #expect(access.line == Self.deniedLine)
         #expect(mail.asks.isEmpty)
     }
 
@@ -164,6 +199,42 @@ struct ProjectsSettingsTests {
         access.allowClicked()
         #expect(access.line == nil)
         #expect(access.isExplaining)
+    }
+
+    /// macOS took longer than the limit, and the user answered its prompt later. The next
+    /// look learns the answer from the listing, and the line about no answer goes, so it
+    /// never hides the way to System Settings.
+    @Test(arguments: [MailPermission.allowed, .denied])
+    func anAnswerAfterTheTimeLimitReplacesTheNote(later: MailPermission) async {
+        defer { cleanUp() }
+        mail.answer = .unknown
+        mail.remembered = .notAsked
+        let access = access()
+        access.allowClicked()
+        await access.ask()
+        #expect(access.note == .noAnswer)
+        #expect(access.line == "macOS gave no answer. Try again.")
+        mail.listingError = later == .denied ? .denied : nil
+        await access.refresh()
+        #expect(mail.asks == [true])
+        #expect(access.note == nil)
+        switch later {
+        case .denied:
+            #expect(access.access == .denied)
+            #expect(access.line == Self.deniedLine)
+        default:
+            #expect(access.access == .allowed)
+            #expect(access.line == nil)
+            #expect(access.listed == mail.mailboxes)
+        }
+    }
+
+    /// After a no, the line leads to System Settings whatever the page noted before.
+    @Test func aNoComesBeforeAnyNote() {
+        #expect(MailAccess.line(access: .denied, note: .noAnswer) == Self.deniedLine)
+        #expect(MailAccess.line(access: .denied, note: .openMailFirst) == Self.deniedLine)
+        #expect(MailAccess.line(access: .allowed, note: .noAnswer) == nil)
+        #expect(MailAccess.line(access: .unknown, note: nil) == nil)
     }
 
     @Test func accessFollowsWhatTheBridgeLearned() {
@@ -209,7 +280,86 @@ struct ProjectsSettingsTests {
         #expect(access.listed == mail.mailboxes)
     }
 
+    /// Mail did not answer the listing at its start. One more look after the pause lists
+    /// the mailboxes without Try Again.
+    @Test func aListingRightAfterMailStartsIsTriedOnceMore() async {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        mail.nextListingError = .notAnswered(code: -609)
+        let access = access()
+        await access.mailLaunched(retryAfter: .zero)
+        #expect(mail.listings == 2)
+        #expect(!access.listFailed)
+        #expect(access.listed == mail.mailboxes)
+    }
+
+    /// A listing that worked, or that failed for access, is not tried again.
+    @Test func onlyAListingMailDidNotAnswerIsTriedAgain() async {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        let access = access()
+        await access.mailLaunched(retryAfter: .zero)
+        #expect(mail.listings == 1)
+        let refused = MailAccess(bridge: mail.bridge, choice: MailChoice(defaults: defaults, suggestsInboxAndSent: false), isOn: { true })
+        mail.listingError = .denied
+        await refused.mailLaunched(retryAfter: .zero)
+        #expect(mail.listings == 2)
+        #expect(refused.access == .denied)
+    }
+
+    /// Projects turned off while Mail listed its mailboxes: their names are not kept.
+    @Test func aListingThatEndsAfterTurningOffIsDropped() async {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        let on = Mutex(true)
+        mail.whileListing = { on.withLock { $0 = false } }
+        let access = access(isOn: { on.withLock { $0 } })
+        await access.show()
+        #expect(mail.listings == 1)
+        #expect(access.listed == nil)
+        #expect(access.rows.isEmpty)
+    }
+
+    /// Turning Projects off forgets the names listed and what the page said, and keeps the
+    /// choice, which only Delete forgets.
+    @Test func turningOffForgetsTheListedNames() async {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        let access = access()
+        await access.show()
+        access.choose(Self.archive, true)
+        access.allowClicked()
+        #expect(access.listed == mail.mailboxes)
+        #expect(access.isExplaining)
+        access.projectsTurnedOff()
+        #expect(access.listed == nil)
+        #expect(!access.isExplaining)
+        #expect(access.choice.mailboxes == [Self.archive])
+        #expect(access.rows == [Self.archive])
+        // A listing Mail did not answer, and a click while Mail is closed.
+        mail.listingError = .timedOut
+        await access.show()
+        #expect(access.listFailed)
+        mail.isRunning = false
+        access.allowClicked()
+        #expect(access.note == .openMailFirst)
+        access.projectsTurnedOff()
+        #expect(!access.listFailed)
+        #expect(access.note == nil)
+    }
+
     // MARK: Mailboxes
+
+    /// The picker shows the two of all accounts on their own, then each place in the order
+    /// it first comes, so a chosen mailbox Mail did not list joins its account.
+    @Test func thePickerGroupsTheMailboxesByPlace() {
+        let rows = MailAccess.rows(listed: [.inbox, .sent, Self.archive, Self.imported], chosen: [Self.drafts])
+        let groups = MailAccess.groups(rows)
+        #expect(groups.map(\.place) == [nil, "Studio", "On My Mac"])
+        #expect(groups.map(\.mailboxes) == [[.inbox, .sent], [Self.archive, Self.drafts], [Self.imported]])
+        #expect(MailAccess.groups([]).isEmpty)
+        #expect(MailAccess.groups([Self.imported]).map(\.place) == ["On My Mac"])
+    }
 
     /// A Debug build suggests no mailbox, so nothing is ticked and Start Reading Mail
     /// waits for a tick.
@@ -321,6 +471,10 @@ struct ProjectsSettingsTests {
             var asks: [Bool] = []
             var listings = 0
             var listingError: MailBridgeError?
+            /// An error for the next listing only, as Mail gives while it starts.
+            var nextListingError: MailBridgeError?
+            /// Runs during each listing, as the user would meanwhile.
+            var whileListing: (@Sendable () -> Void)?
             var mailboxes: [MailMailbox] = [.inbox, .sent, ProjectsSettingsTests.archive, ProjectsSettingsTests.imported]
             var box: MailMailbox?
             var messages: [(listing: MailListing, source: String)] = []
@@ -348,6 +502,16 @@ struct ProjectsSettingsTests {
         var listingError: MailBridgeError? {
             get { state.withLock { $0.listingError } }
             set { state.withLock { $0.listingError = newValue } }
+        }
+
+        var nextListingError: MailBridgeError? {
+            get { state.withLock { $0.nextListingError } }
+            set { state.withLock { $0.nextListingError = newValue } }
+        }
+
+        var whileListing: (@Sendable () -> Void)? {
+            get { state.withLock { $0.whileListing } }
+            set { state.withLock { $0.whileListing = newValue } }
         }
 
         var asks: [Bool] {
@@ -410,11 +574,18 @@ struct ProjectsSettingsTests {
                 lastPermission: { self.remembered },
                 accounts: { throw MailBridgeError.failed(code: -1) },
                 mailboxes: {
-                    try self.state.withLock { state in
+                    self.whileListing?()
+                    return try self.state.withLock { state in
                         state.listings += 1
                         guard state.isRunning else { throw MailBridgeError.mailNotRunning }
-                        if let error = state.listingError {
-                            if error == .denied { state.remembered = .denied }
+                        if let error = state.nextListingError ?? state.listingError {
+                            state.nextListingError = nil
+                            // As the real bridge, a refusal is remembered.
+                            switch error {
+                            case .denied: state.remembered = .denied
+                            case .notAsked: state.remembered = .notAsked
+                            default: break
+                            }
                             throw error
                         }
                         state.remembered = .allowed
