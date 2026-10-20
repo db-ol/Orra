@@ -15,7 +15,8 @@ import os
 /// download. Translation works with cleanup off: the translation prompt cleans up and
 /// translates in one answer, and the cleanup in it is used only while cleanup is on, see
 /// TranslationStep. Meeting captions and Projects keep the model loaded while they need it,
-/// see `captionsStarted()` and `projectsStarted()`.
+/// see `captionsStarted()` and `projectsStarted()`. Turning Projects on asks before its
+/// download too, see `turnOnProjects()`.
 @Observable
 final class TextCleanup {
     nonisolated enum EngineState: Equatable, Sendable {
@@ -57,6 +58,13 @@ final class TextCleanup {
     private(set) var projectsHolders = 0
     /// True while the caption window asks whether to download the model.
     var isConfirmingCaptionDownload = false
+    /// True while the Projects page asks whether to download the model, see
+    /// `turnOnProjects()`.
+    var isConfirmingProjectsDownload = false
+    /// Whether the user agreed on the Projects page to download the model, until Projects
+    /// turns off. Such a download goes on while nothing loads the model, such as with the
+    /// Projects window closed, see `projectsTurnedOff()`.
+    private(set) var projectsAgreedToDownload = false
     let models: ModelInstaller
 
     @ObservationIgnored private let engine: CleanupEngine
@@ -478,6 +486,48 @@ final class TextCleanup {
         )
     }
 
+    /// The Projects switch in Settings is being turned on. True when Projects may go on at
+    /// once: the model is in place, a download of it is under way, or the user agreed to
+    /// its download already, for cleanup, translation or Projects. Otherwise the page asks
+    /// first, see `isConfirmingProjectsDownload` and `confirmProjectsDownload()`, and
+    /// nothing goes online before the user agrees. False without asking while Orra still
+    /// looks for the model on disk, see `canTurnOn`. Starts no download and loads nothing,
+    /// since Projects loads the model only while its window is open or a request runs.
+    func turnOnProjects() -> Bool {
+        guard canTurnOn else { return false }
+        switch models.state {
+        case .installed, .downloading, .verifying:
+            return true
+        case .checking, .missing, .failed:
+            if isOn || translationIsOn || projectsAgreedToDownload {
+                return true
+            }
+            isConfirmingProjectsDownload = true
+            return false
+        }
+    }
+
+    /// The user agreed on the Projects page to download the model: in the question when
+    /// turning Projects on, or with the button under the model's line, which names the
+    /// size. The download goes on while Projects is on, also with its window closed, until
+    /// `projectsTurnedOff()`.
+    func confirmProjectsDownload() {
+        isConfirmingProjectsDownload = false
+        projectsAgreedToDownload = true
+        models.download()
+    }
+
+    /// Projects was turned off. Stops a download only Projects agreed to while nothing
+    /// else needs the model. A download agreed to for cleanup or translation goes on.
+    func projectsTurnedOff() {
+        isConfirmingProjectsDownload = false
+        guard projectsAgreedToDownload else { return }
+        projectsAgreedToDownload = false
+        if !needsModel, case .downloading = models.state {
+            models.cancel()
+        }
+    }
+
     /// The switch on the Clean Up Text page was turned on. With the model in place cleanup
     /// starts at once. While translation is on, the user agreed to the download already,
     /// so cleanup is on at once and waits for the model like translation does. Otherwise
@@ -612,11 +662,13 @@ final class TextCleanup {
         models.download()
     }
 
-    /// Cancel Download under a switch. The bytes stay for the next time, and cleanup and
-    /// translation are off until the user turns one on again, since neither works without
-    /// the model.
+    /// Cancel Download under a switch or on the Projects page. The bytes stay for the next
+    /// time, and cleanup and translation are off until the user turns one on again, since
+    /// neither works without the model. Projects stays on, and its page offers the download
+    /// again.
     func cancelDownload() {
         models.cancel()
+        projectsAgreedToDownload = false
         setOn(false)
         setTranslationOn(false)
     }
@@ -637,9 +689,11 @@ final class TextCleanup {
         releaseModelIfUnneeded()
     }
 
+    /// Unloads the model once nothing needs it, and stops its download unless Projects
+    /// agreed to it.
     private func releaseModelIfUnneeded() {
         guard !needsModel else { return }
-        if case .downloading = models.state {
+        if case .downloading = models.state, !projectsAgreedToDownload {
             models.cancel()
         }
         loadGeneration += 1

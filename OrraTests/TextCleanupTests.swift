@@ -276,6 +276,167 @@ struct TextCleanupTests {
         #expect(cleanup.engineState == .ready)
     }
 
+    // MARK: Projects
+
+    /// Turning Projects on without the model asks first, and nothing goes online until the
+    /// user agrees. Cleanup stays off.
+    @Test func turningProjectsOnAsksBeforeTheDownload() async {
+        defer { temporary.remove() }
+        let calls = Mutex(0)
+        var saved: [Bool] = []
+        let cleanup = makeCleanup(fetch: FileFetch { _, _, _, _, _, _ in calls.withLock { $0 += 1 } }, saved: { saved.append($0) })
+        await cleanup.start()
+        #expect(cleanup.turnOnProjects() == false)
+        #expect(cleanup.isConfirmingProjectsDownload)
+        #expect(!cleanup.isConfirmingDownload)
+        #expect(!cleanup.projectsAgreedToDownload)
+        // The window opening and closing downloads nothing either.
+        cleanup.projectsStarted()
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+        #expect(calls.withLock { $0 } == 0)
+        guard case .missing = cleanup.models.state else {
+            Issue.record("Nothing should download before the user agrees, the state is \(cleanup.models.state)")
+            return
+        }
+        // Turning Projects off clears the question.
+        cleanup.projectsTurnedOff()
+        #expect(!cleanup.isConfirmingProjectsDownload)
+        #expect(!cleanup.isOn)
+        #expect(saved.isEmpty)
+    }
+
+    /// Before Orra has looked for the model on disk, turning Projects on neither asks nor
+    /// goes on, as for cleanup.
+    @Test func turningProjectsOnBeforeTheCheckDoesNotAsk() async {
+        defer { temporary.remove() }
+        let cleanup = makeCleanup(fetch: FileFetch { _, _, _, _, _, _ in })
+        #expect(cleanup.turnOnProjects() == false)
+        #expect(!cleanup.isConfirmingProjectsDownload)
+    }
+
+    /// With the model in place Projects turns on at once, downloads nothing and loads
+    /// nothing until its window or a request holds the model.
+    @Test func withTheModelInPlaceProjectsTurnOnWithoutAsking() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let calls = Mutex(0)
+        let fake = FakeEngine()
+        let cleanup = makeCleanup(fetch: FileFetch { _, _, _, _, _, _ in calls.withLock { $0 += 1 } }, engine: fake.engine)
+        await cleanup.start()
+        #expect(cleanup.turnOnProjects())
+        #expect(!cleanup.isConfirmingProjectsDownload)
+        await cleanup.waitForLoad()
+        #expect(fake.loads == 0)
+        #expect(calls.withLock { $0 } == 0)
+    }
+
+    /// A download agreed to for Projects goes on while the window opens and closes and
+    /// captions start and stop, since Projects stays on. Once in place, the model stays
+    /// unloaded while nothing holds it. Cleanup and translation stay off.
+    @Test func aDownloadForProjectsGoesOnWithTheWindowClosed() async {
+        defer { temporary.remove() }
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(10))])
+        defer { servers.close() }
+        var saved: [Bool] = []
+        let fake = FakeEngine()
+        let cleanup = makeCleanup(fetch: servers.fetch, saved: { saved.append($0) }, engine: fake.engine)
+        await cleanup.start()
+        #expect(cleanup.turnOnProjects() == false)
+        cleanup.confirmProjectsDownload()
+        #expect(!cleanup.isConfirmingProjectsDownload)
+        #expect(cleanup.projectsAgreedToDownload)
+        #expect(!cleanup.isOn)
+        #expect(!cleanup.translationIsOn)
+        guard case .downloading = cleanup.models.state else {
+            Issue.record("Expected a download, got \(cleanup.models.state)")
+            return
+        }
+        // Turning Projects on again asks nothing.
+        #expect(cleanup.turnOnProjects())
+        #expect(!cleanup.isConfirmingProjectsDownload)
+        cleanup.projectsStarted()
+        cleanup.projectsStopped()
+        cleanup.captionsStarted()
+        cleanup.captionsStopped()
+        await cleanup.models.waitForDownload()
+        await cleanup.waitForLoad()
+        #expect(cleanup.models.state == .installed(temporary.installed))
+        #expect(fake.loads == 0)
+        #expect(saved.isEmpty)
+    }
+
+    /// Turning Projects off stops a download only Projects agreed to.
+    @Test func turningProjectsOffStopsItsDownload() async {
+        defer { temporary.remove() }
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(10))])
+        defer { servers.close() }
+        let cleanup = makeCleanup(fetch: servers.fetch)
+        await cleanup.start()
+        cleanup.confirmProjectsDownload()
+        cleanup.projectsTurnedOff()
+        #expect(!cleanup.projectsAgreedToDownload)
+        await cleanup.models.waitForDownload()
+        guard case .missing = cleanup.models.state else {
+            Issue.record("Expected the download to stop, got \(cleanup.models.state)")
+            return
+        }
+        // Without an agreement, nothing stops at the next turn off.
+        cleanup.projectsTurnedOff()
+        #expect(!cleanup.isConfirmingProjectsDownload)
+    }
+
+    /// A download agreed to for cleanup counts for Projects, and goes on when Projects
+    /// turns off. Cancel Download on the Projects page stops it as under the switch of
+    /// cleanup, and Projects asks again next time.
+    @Test func projectsShareTheDownloadOfCleanup() async {
+        defer { temporary.remove() }
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(50))])
+        defer { servers.close() }
+        let cleanup = makeCleanup(fetch: servers.fetch)
+        await cleanup.start()
+        cleanup.turnOn()
+        cleanup.confirmDownload()
+        #expect(cleanup.turnOnProjects())
+        #expect(!cleanup.isConfirmingProjectsDownload)
+        #expect(!cleanup.projectsAgreedToDownload)
+        cleanup.projectsTurnedOff()
+        guard case .downloading = cleanup.models.state else {
+            Issue.record("The download for cleanup should go on, the state is \(cleanup.models.state)")
+            return
+        }
+        #expect(cleanup.turnOnProjects())
+        cleanup.confirmProjectsDownload()
+        #expect(cleanup.projectsAgreedToDownload)
+        cleanup.cancelDownload()
+        await cleanup.models.waitForDownload()
+        #expect(!cleanup.projectsAgreedToDownload)
+        #expect(!cleanup.isOn)
+        #expect(cleanup.turnOnProjects() == false)
+        #expect(cleanup.isConfirmingProjectsDownload)
+    }
+
+    /// Once the download for Projects is in place, the model loads only for a holder.
+    @Test func aFinishedDownloadForProjectsLoadsOnlyForAHolder() async {
+        defer { temporary.remove() }
+        let servers = StubServers()
+        defer { servers.close() }
+        let fake = FakeEngine()
+        let cleanup = makeCleanup(fetch: servers.fetch, engine: fake.engine)
+        await cleanup.start()
+        cleanup.confirmProjectsDownload()
+        await cleanup.models.waitForDownload()
+        await cleanup.waitForLoad()
+        #expect(cleanup.models.state == .installed(temporary.installed))
+        #expect(fake.loads == 0)
+        cleanup.projectsStarted()
+        await cleanup.waitForLoad()
+        #expect(fake.isLoaded)
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+        #expect(!fake.isLoaded)
+    }
+
     // MARK: Translation
 
     @Test func translationIsOffUntilSavedAndTheDirectionIsAutomatic() throws {
