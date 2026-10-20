@@ -3,10 +3,12 @@
 # writes one JSON file per suite and compares them with a baseline. docs/release-gate.md
 # describes the suites, the rules and the variables below.
 #
-#   Tools/release-gate/run.sh [--baseline DIR] [--only corpus,context,cleanup,latency,sets] [--out DIR] [--skip-build]
+#   Tools/release-gate/run.sh [--baseline DIR] [--only corpus,context,cleanup,latency,sets,projects] [--out DIR] [--skip-build]
 #
-# Exit status: 0 when every suite ran and nothing got worse, 1 when a rule failed,
-# 2 when the build or a suite failed to run.
+# Without --only it runs every suite but projects, which runs only when named until Projects
+# shows in release builds. Exit status: 0 when every suite ran and nothing got worse, 1 when
+# a rule failed or, with or without a baseline, the projects bar, 2 when the build or a suite
+# failed to run.
 set -u
 
 repo=${0:A:h:h:h}
@@ -17,10 +19,12 @@ latency_clips=${GATE_LATENCY_CLIPS:-$sets/latency-say/clips}
 derived=${GATE_DERIVED_DATA:-$repo/build/DerivedDataRelease}
 lock=${GATE_LOCK:-}
 context_count=${GATE_CONTEXT_COUNT:-100}
-all_suites=(corpus context cleanup latency sets)
+projects_set=${GATE_PROJECTS_SET:-$bench/projects-testset}
+all_suites=(corpus context cleanup latency sets projects)
+default_suites=(corpus context cleanup latency sets)
 
 baseline=""
-only=${(j:,:)all_suites}
+only=${(j:,:)default_suites}
 out=""
 build=1
 while (( $# )); do
@@ -29,7 +33,7 @@ while (( $# )); do
     --only) only=$2; shift 2 ;;
     --out) out=${2:A}; shift 2 ;;
     --skip-build) build=0; shift ;;
-    -h|--help) sed -n '2,10p' $0; exit 0 ;;
+    -h|--help) sed -n '2,11p' $0; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -37,6 +41,11 @@ suites=(${(s:,:)only})
 for suite in $suites; do
   (( ${all_suites[(Ie)$suite]} )) || { echo "unknown suite $suite" >&2; exit 2 }
 done
+# The set owner's addresses and name, from the set's README, stay out of the repository.
+if (( ${suites[(Ie)projects]} )) && [[ -z ${GATE_PROJECTS_OWN_ADDRESSES:-} || -z ${GATE_PROJECTS_OWN_NAME:-} || ! -s $projects_set/adversarial.jsonl ]]; then
+  echo "the projects suite needs GATE_PROJECTS_OWN_ADDRESSES, GATE_PROJECTS_OWN_NAME and the set in $projects_set" >&2
+  exit 2
+fi
 sha=$(git -C $repo rev-parse --short HEAD)
 [[ -n $out ]] || out=$bench/gate-runs/$sha-$(date +%Y%m%d-%H%M%S)
 mkdir -p $out/raw $out/logs
@@ -106,6 +115,11 @@ for suite in $suites; do
     sets)
       env+=(TEST_RUNNER_ORRA_GATE_SETS=$sets)
       test_id=OrraTests/GateSetEvaluationTests ;;
+    projects)
+      env+=(TEST_RUNNER_ORRA_PROJECTS_GATE=$projects_set TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=$GATE_PROJECTS_OWN_ADDRESSES
+        TEST_RUNNER_ORRA_PROJECTS_OWN_NAME=$GATE_PROJECTS_OWN_NAME)
+      [[ -n ${GATE_CLEANUP_MODEL_DIR:-} ]] && env+=(TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=$GATE_CLEANUP_MODEL_DIR)
+      test_id=OrraTests/ProjectsGateEvaluationTests ;;
   esac
   # Waits for the lock with no Orra running, so neither starts while the other waits.
   while true; do
@@ -120,6 +134,8 @@ for suite in $suites; do
   release_lock
   expected=$out/raw/$suite.json
   [[ $suite == sets ]] && expected=$out/raw/sets-raw.json
+  # The whole set in one part, see ProjectsGateEvaluationTests.
+  [[ $suite == projects ]] && expected=($out/raw/projects-001-*.json(N[1]))
   if [[ ! -s $expected ]]; then
     echo "$suite: no results (xcodebuild exit $code), see $out/logs/$suite.log" >&2
     failed_to_run+=($suite)
@@ -128,7 +144,7 @@ for suite in $suites; do
   fi
 done
 
-python3 $repo/Tools/release-gate/gate.py summarize $out --sets $sets || exit 2
+python3 $repo/Tools/release-gate/gate.py summarize $out --sets $sets --projects-set $projects_set || exit 2
 
 result=0
 if [[ -n $baseline ]]; then
@@ -136,7 +152,9 @@ if [[ -n $baseline ]]; then
   result=$?
   cat $out/compare.txt
 else
+  # Exits 1 when the projects bar fails, which holds without a baseline.
   python3 $repo/Tools/release-gate/gate.py show $out | tee $out/summary.txt
+  result=${pipestatus[1]}
 fi
 if (( ${#failed_to_run} )); then
   echo "suites that did not run: ${failed_to_run[*]}" >&2
