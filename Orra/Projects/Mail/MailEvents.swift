@@ -154,13 +154,20 @@ nonisolated extension MailEvents {
             }
         }
 
-        /// Get and count never let Mail interact with the user. A reply opens a window.
+        /// No event lets macOS show its Automation prompt. Before the user allows Orra, each
+        /// fails with -1744 instead, so only a permission check that asks, from the user's
+        /// click in Settings, shows it. Get and count also never let Mail interact with the
+        /// user. A reply opens a window.
         var sendOptions: NSAppleEventDescriptor.SendOptions {
             switch self {
-            case .get, .count: [.waitForReply, .neverInteract]
-            case .reply: [.waitForReply, .canInteract]
+            case .get, .count: [.waitForReply, .neverInteract, Self.neverPrompt]
+            case .reply: [.waitForReply, .canInteract, Self.neverPrompt]
             }
         }
+
+        /// kAEDoNotPromptForUserConsent. SendOptions has no name for it, and sendEvent passes
+        /// its options to AESendMessage as they are.
+        static let neverPrompt = NSAppleEventDescriptor.SendOptions(rawValue: UInt(kAEDoNotPromptForUserConsent))
 
         /// How long Mail may take, in seconds: 30 for a request over many elements, 10 for
         /// one value.
@@ -260,7 +267,10 @@ nonisolated extension MailEvents.Specifier {
             container = .application
         }
         let elementClass = want.typeCodeValue
-        let value = MailEvents.Value(data, depth: Self.deepest)
+        // The key data is a type, a number or text. A specifier or a list there would nest
+        // deeper than `deepest` allows, so it is never read.
+        let nests = data.descriptorType == typeObjectSpecifier || data.descriptorType == typeAEList
+        let value = nests ? MailEvents.Value.other : MailEvents.Value(data)
         switch form.enumCodeValue {
         case Self.propertyForm where data.descriptorType == typeType:
             self = .property(data.typeCodeValue, of: container)
@@ -400,7 +410,7 @@ nonisolated extension MailEvents {
     /// reply. A process id target fails with -600 when Mail is gone and never launches it.
     private static func sendNow(_ request: Request) throws -> Value {
         guard let mail = runningMail() else {
-            Logger.projectsMail.info("Mail is not running, \(request.event.logName, privacy: .public) not sent")
+            Logger.projectsMail.info("Mail is not running, \(String(describing: request.event), privacy: .public) not sent")
             throw Failure(code: notRunning)
         }
         let target = NSAppleEventDescriptor(processIdentifier: mail.processIdentifier)
@@ -426,9 +436,9 @@ nonisolated extension MailEvents {
     private static func log(_ request: Request, since started: ContinuousClock.Instant, code: Int) {
         let milliseconds = Int((ContinuousClock.now - started) / .milliseconds(1))
         if code == 0 {
-            Logger.projectsMail.debug("\(request.event.logName, privacy: .public) took \(milliseconds) ms")
+            Logger.projectsMail.debug("\(String(describing: request.event), privacy: .public) took \(milliseconds) ms")
         } else {
-            Logger.projectsMail.info("\(request.event.logName, privacy: .public) failed with \(code) after \(milliseconds) ms")
+            Logger.projectsMail.info("\(String(describing: request.event), privacy: .public) failed with \(code) after \(milliseconds) ms")
         }
     }
 
@@ -452,17 +462,21 @@ nonisolated extension MailEvents {
             return notRunning
         }
         let target = NSAppleEventDescriptor(processIdentifier: mail.processIdentifier)
-        guard let address = target.aeDesc else { return notRunning }
         let started = ContinuousClock.now
-        let status = Int(AEDeterminePermissionToAutomateTarget(address, typeWildCard, typeWildCard, ask))
+        // aeDesc points into target, so target must live until the check returns.
+        let status = withExtendedLifetime(target) {
+            target.aeDesc.map { Int(AEDeterminePermissionToAutomateTarget($0, typeWildCard, typeWildCard, ask)) } ?? notRunning
+        }
         let milliseconds = Int((ContinuousClock.now - started) / .milliseconds(1))
         Logger.projectsMail.info("Permission check, asked \(ask), answered \(status) after \(milliseconds) ms")
         return status
     }
 
     /// One thread that sends Mail's events one at a time, in the order they came. A send
-    /// blocks it until Mail answers or the event's timeout passes.
-    private nonisolated final class SendThread: Sendable {
+    /// blocks it until Mail answers or the event's timeout passes. A caller cancelled before
+    /// its turn gets CancellationError at once, and its event is never sent. Tests build one
+    /// with work that sends nothing.
+    nonisolated final class SendThread: Sendable {
         private let jobs = Mutex<[@Sendable () -> Void]>([])
         private let waiting = DispatchSemaphore(value: 0)
 
@@ -480,21 +494,54 @@ nonisolated extension MailEvents {
         }
 
         func run<Answer: Sendable>(_ work: @escaping @Sendable () throws -> Answer) async throws -> Answer {
-            try await withCheckedThrowingContinuation { continuation in
-                jobs.withLock { $0.append { continuation.resume(with: Result { try work() }) } }
-                waiting.signal()
+            let caller = Caller<Answer>()
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    guard caller.wait(continuation) else {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+                    jobs.withLock {
+                        $0.append {
+                            // Nil when the caller was cancelled first, and then nothing runs.
+                            guard let continuation = caller.take() else { return }
+                            continuation.resume(with: Result { try work() })
+                        }
+                    }
+                    waiting.signal()
+                }
+            } onCancel: {
+                caller.take()?.resume(throwing: CancellationError())
             }
         }
-    }
-}
 
-nonisolated extension MailEvent {
-    /// The event's name for the log.
-    var logName: String {
-        switch self {
-        case .get: "get"
-        case .count: "count"
-        case .reply: "reply"
+        /// A caller's continuation, until its job starts or the caller is cancelled. Only the
+        /// first of the two takes it.
+        private nonisolated final class Caller<Answer: Sendable>: Sendable {
+            private nonisolated enum State {
+                case new
+                case waiting(CheckedContinuation<Answer, any Error>)
+                case taken
+            }
+
+            private let state = Mutex(State.new)
+
+            /// Keeps the continuation. False when the caller was cancelled before.
+            func wait(_ continuation: CheckedContinuation<Answer, any Error>) -> Bool {
+                state.withLock { state in
+                    guard case .new = state else { return false }
+                    state = .waiting(continuation)
+                    return true
+                }
+            }
+
+            func take() -> CheckedContinuation<Answer, any Error>? {
+                state.withLock { state in
+                    defer { state = .taken }
+                    guard case .waiting(let continuation) = state else { return nil }
+                    return continuation
+                }
+            }
         }
     }
 }

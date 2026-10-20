@@ -1,11 +1,13 @@
 import CoreServices
 import Foundation
+import Synchronization
 import Testing
 @testable import Orra
 
 /// The events of the Mail bridge, built for this test process and never sent, as the Mail
 /// spike's self check did. Each must be one of MailEvent's three, with every value a typed
-/// parameter, get and count without interaction, and a reply that opens its window.
+/// parameter, none that lets macOS show its prompt, get and count without interaction, and
+/// a reply that opens its window.
 struct MailEventsTests {
     private typealias Code = MailEvents.Code
     private typealias Specifier = MailEvents.Specifier
@@ -24,6 +26,7 @@ struct MailEventsTests {
         #expect(MailEvent.get.eventClass == 0x636F_7265)
         #expect(MailEvent.get.eventID == 0x6765_7464)
         #expect(MailEvents.code("ID  ") == 0x4944_2020)
+        #expect(MailEvents.Request.neverPrompt.rawValue == 0x0002_0000)
     }
 
     @Test func getReadsAPropertyOfAMessageWithoutInteraction() throws {
@@ -55,6 +58,7 @@ struct MailEventsTests {
         #expect(request.event == .get)
         #expect(request.sendOptions.contains(.waitForReply))
         #expect(request.sendOptions.contains(.neverInteract))
+        #expect(request.sendOptions.contains(MailEvents.Request.neverPrompt))
         #expect(!request.sendOptions.contains(.canInteract))
         #expect(request.timeout == 10)
     }
@@ -84,6 +88,7 @@ struct MailEventsTests {
         #expect(Self.container(inbox)?.descriptorType == typeNull)
 
         #expect(request.sendOptions.contains(.neverInteract))
+        #expect(request.sendOptions.contains(MailEvents.Request.neverPrompt))
         #expect(request.timeout == 30)
     }
 
@@ -110,6 +115,7 @@ struct MailEventsTests {
         let elementClass = try #require(event.paramDescriptor(forKeyword: keyAEObjectClass))
         #expect(Self.letters(elementClass.typeCodeValue) == "mssg")
         #expect(request.sendOptions.contains(.neverInteract))
+        #expect(request.sendOptions.contains(MailEvents.Request.neverPrompt))
         #expect(request.timeout == 30)
     }
 
@@ -127,6 +133,7 @@ struct MailEventsTests {
         #expect(request.event == .reply)
         #expect(request.sendOptions.contains(.waitForReply))
         #expect(!request.sendOptions.contains(.neverInteract))
+        #expect(request.sendOptions.contains(MailEvents.Request.neverPrompt))
         #expect(request.timeout == 10)
     }
 
@@ -182,6 +189,21 @@ struct MailEventsTests {
         #expect(Value(list) == .list([.text("a@harbor.example"), .list([]), .integer(7)]))
     }
 
+    /// The key data of a specifier from Mail is a type, a number or text. A specifier there is
+    /// never read, so a reply never nests deeper than the limit.
+    @Test func aSpecifierAsKeyDataIsOther() throws {
+        var data = try Self.message.descriptor()
+        for form in [formName, formUniqueID, formAbsolutePosition, formPropertyID] {
+            let object = try #require(NSAppleEventDescriptor.record().coerce(toDescriptorType: typeObjectSpecifier))
+            object.setDescriptor(NSAppleEventDescriptor(typeCode: Code.mailbox), forKeyword: AEKeyword(keyAEDesiredClass))
+            object.setDescriptor(NSAppleEventDescriptor.null(), forKeyword: AEKeyword(keyAEContainer))
+            object.setDescriptor(NSAppleEventDescriptor(enumCode: DescType(form)), forKeyword: AEKeyword(keyAEKeyForm))
+            object.setDescriptor(data, forKeyword: AEKeyword(keyAEKeyData))
+            #expect(Value(object) == .other)
+            data = object
+        }
+    }
+
     @Test func listsDeeperThanProjectsAsksAreOther() {
         var deepest = NSAppleEventDescriptor.list()
         for _ in 0..<5 {
@@ -190,6 +212,56 @@ struct MailEventsTests {
             deepest = outer
         }
         #expect(Value(deepest) == .list([.list([.list([.list([.other])])])]))
+    }
+
+    // MARK: The send thread
+
+    /// A caller cancelled while an earlier request holds the thread gets CancellationError
+    /// at once, and its work never runs. The work here sends nothing. A thread that made the
+    /// caller wait for its turn would hang, and the time limit stops it.
+    @Test(.timeLimit(.minutes(1)))
+    func aCancelledRequestNeverRuns() async throws {
+        let thread = MailEvents.SendThread()
+        let (started, starting) = AsyncStream<Void>.makeStream()
+        let release = DispatchSemaphore(value: 0)
+        let ran = Ran()
+        let first = Task {
+            try await thread.run {
+                starting.yield()
+                release.wait()
+                return 1
+            }
+        }
+        var iterator = started.makeAsyncIterator()
+        await iterator.next()
+
+        let second = Task {
+            try await thread.run {
+                ran.mark()
+                return 2
+            }
+        }
+        second.cancel()
+        await #expect(throws: CancellationError.self) { try await second.value }
+
+        release.signal()
+        #expect(try await first.value == 1)
+        // The thread runs its work in order, so the second would have run before this.
+        #expect(try await thread.run { 3 } == 3)
+        #expect(!ran.happened)
+    }
+
+    /// Whether a piece of work ran, from any thread.
+    private final class Ran: Sendable {
+        private let value = Mutex(false)
+
+        var happened: Bool {
+            value.withLock { $0 }
+        }
+
+        func mark() {
+            value.withLock { $0 = true }
+        }
     }
 
     // MARK: Reading descriptors

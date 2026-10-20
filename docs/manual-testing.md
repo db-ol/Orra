@@ -3172,6 +3172,9 @@ mail.
   a Debug build.
 - [ ] With Mail not open, nothing asks, Mail stays closed, and the log says Mail is not
   running.
+- [ ] With Mail open and access not asked yet (after the `tccutil reset` above), reading
+  mail shows no prompt, and the log shows each event failed with -1744. Only Allow Mail
+  Access… shows the prompt.
 - [ ] Opening Settings > Projects or Report a Problem shows the last answer without a new
   check: no prompt, and no permission check line in the log.
 - [ ] Reading mail never marks a message as read and never moves one.

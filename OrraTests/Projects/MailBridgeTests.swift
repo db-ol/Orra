@@ -232,6 +232,10 @@ struct MailBridgeTests {
         ])
         #expect(mailboxes.map(\.name) == ["", "", "INBOX", "Archive", "Archive/2026", "Imported"])
         #expect(mailboxes.map(\.account) == [nil, nil, "Work", "Work", "Work", nil])
+        // A mailbox with no mailboxes in it takes one request, not two.
+        for leaf in [inbox, year, imported] {
+            #expect(!mail.asked.contains(.get(.property(Code.name, of: .every(Code.mailbox, of: leaf)))))
+        }
     }
 
     /// Mail may list a mailbox in its account and again in its parent. It shows once, under
@@ -247,6 +251,29 @@ struct MailBridgeTests {
 
         let mailboxes = try await MailBridge(events: mail.events()).mailboxes()
         #expect(mailboxes.map(\.name) == ["", "", "Archive", "Archive/2026"])
+    }
+
+    /// Mail may list every nested mailbox flat in its account, in any order. Each still takes
+    /// the names of all the mailboxes it sits in.
+    @Test(arguments: [false, true])
+    func aMailboxThreeLevelsDownKeepsEveryParent(reversed: Bool) async throws {
+        let mail = FakeMail()
+        let year = Specifier.name(Code.mailbox, "Archive/2026", of: Self.account)
+        let quarter = Specifier.name(Code.mailbox, "Archive/2026/Q1", of: Self.account)
+        let accounts = Specifier.every(Code.account, of: .application)
+        mail.answer(.get(accounts), with: .success(.list([.reference(Self.account)])))
+        mail.answer(.get(.property(Code.name, of: accounts)), with: .success(.list([.text("Work")])))
+        let flat = [(Self.archive, "Archive"), (year, "2026"), (quarter, "Q1")]
+        mail.answerMailboxes(in: Self.account, reversed ? flat.reversed() : flat)
+        mail.answerMailboxes(in: Self.archive, [(year, "2026")])
+        mail.answerMailboxes(in: year, [(quarter, "Q1")])
+
+        let mailboxes = try await MailBridge(events: mail.events()).mailboxes()
+        let names = Dictionary(mailboxes.map { ($0.reference, $0.name) }, uniquingKeysWith: { first, _ in first })
+        #expect(mailboxes.count == 5)
+        #expect(names[Self.archive] == "Archive")
+        #expect(names[year] == "Archive/2026")
+        #expect(names[quarter] == "Archive/2026/Q1")
     }
 
     @Test func attachmentsGiveNamesTypesSizesAndWhetherDownloaded() async throws {

@@ -30,16 +30,18 @@ nonisolated struct MailBridge: Sendable {
     /// How many messages a mailbox holds.
     var count: @Sendable (MailMailbox) async throws -> Int
     /// The list fields of the messages at these positions in a mailbox, the first being 1.
-    /// Mail lists the inbox newest first.
+    /// Mail lists the inbox newest first. A range past the last message may fail with
+    /// `notFound`, so read `count` first.
     var listing: @Sendable (MailMailbox, ClosedRange<Int>) async throws -> [MailListing]
     /// All the headers of a message, as Mail gives them.
     var headers: @Sendable (MailMessageRef) async throws -> String
-    /// The raw source of a message, headers and every MIME part.
+    /// The raw source of a message, headers and every MIME part. It all comes into memory,
+    /// so callers check the listing's `size` against their cap first.
     var source: @Sendable (MailMessageRef) async throws -> String
     /// The names, types and sizes of a message's attachments. Never their content.
     var attachments: @Sendable (MailMessageRef) async throws -> [MailAttachmentInfo]
     /// The mailbox a message is filed in, which for a message in the inbox of all accounts
-    /// is the inbox of its account.
+    /// is the inbox of its account. So it never equals `MailMailbox.inbox` or `.sent`.
     var mailbox: @Sendable (MailMessageRef) async throws -> MailMailbox
     /// The messages selected in Mail. Read only on the user's click.
     var selection: @Sendable () async throws -> [MailMessageRef]
@@ -49,7 +51,7 @@ nonisolated struct MailBridge: Sendable {
 }
 
 /// Whether Orra may send Apple Events to Mail, as macOS answers it.
-nonisolated enum MailPermission: String, Sendable, Codable, CaseIterable {
+nonisolated enum MailPermission: Sendable {
     /// 0: allowed.
     case allowed
     /// -1743: the user said no, or turned Orra off for Mail under Privacy & Security,
@@ -85,7 +87,7 @@ nonisolated enum MailBridgeError: Error, Equatable, Sendable {
     case timedOut
     /// -1743: the user does not allow Orra to control Mail.
     case denied
-    /// -1744: macOS has not asked the user yet, and get and count never let it ask.
+    /// -1744: macOS has not asked the user yet, and no event lets it ask.
     case notAsked
     /// -1728: the message or mailbox is no longer there.
     case notFound
@@ -376,33 +378,43 @@ nonisolated extension MailBridge {
 
         /// The mailboxes in an account or On My Mac, level by level, each with the names of
         /// the mailboxes it sits in. Mail may list a mailbox both in its account and in its
-        /// parent. It is listed once, under the longest name.
+        /// parent. It is listed once, under its parent.
         private func mailboxes(in container: Specifier, account: String?, room: Int) async throws -> [MailMailbox] {
             var order: [Specifier] = []
-            var names: [Specifier: String] = [:]
-            var parents: [(reference: Specifier, name: String)] = [(container, "")]
+            var ownNames: [Specifier: String] = [:]
+            var parentOf: [Specifier: Specifier] = [:]
+            var parents = [container]
             for _ in 0..<Self.deepestMailbox where !parents.isEmpty && order.count < room {
-                var children: [(reference: Specifier, name: String)] = []
+                var children: [Specifier] = []
                 for parent in parents where order.count < room {
-                    let every = Specifier.every(Code.mailbox, of: parent.reference)
+                    let every = Specifier.every(Code.mailbox, of: parent)
                     let references = try await items(.get(every))
-                    let ownNames = try await texts(.get(.property(Code.name, of: every)), count: references.count)
-                    for (item, ownName) in zip(references, ownNames) {
+                    guard !references.isEmpty else { continue }
+                    let names = try await texts(.get(.property(Code.name, of: every)), count: references.count)
+                    for (item, name) in zip(references, names) {
                         guard case .reference(let reference) = item else { throw MailBridgeError.unexpectedReply }
-                        let name = parent.name.isEmpty ? ownName : parent.name + "/" + ownName
-                        if let known = names[reference] {
-                            if name.count > known.count { names[reference] = name }
-                            continue
-                        }
+                        if parent != container { parentOf[reference] = parent }
+                        guard ownNames[reference] == nil else { continue }
                         guard order.count < room else { break }
                         order.append(reference)
-                        names[reference] = name
-                        children.append((reference, name))
+                        ownNames[reference] = name
+                        children.append(reference)
                     }
                 }
                 parents = children
             }
-            return order.map { MailMailbox(kind: .mailbox, reference: $0, name: names[$0] ?? "", account: account) }
+            // Each name with the names of its parents, built once every level is known.
+            func path(_ reference: Specifier) -> String {
+                var names = [ownNames[reference] ?? ""]
+                var seen: Set = [reference]
+                var current = reference
+                while let parent = parentOf[current], seen.insert(parent).inserted {
+                    names.append(ownNames[parent] ?? "")
+                    current = parent
+                }
+                return names.reversed().joined(separator: "/")
+            }
+            return order.map { MailMailbox(kind: .mailbox, reference: $0, name: path($0), account: account) }
         }
 
         func listing(_ mailbox: MailMailbox, _ positions: ClosedRange<Int>) async throws -> [MailListing] {
