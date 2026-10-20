@@ -107,7 +107,7 @@ trusted once in Xcode. docs/dependencies.md has the details.
   TextInserter, post keyboard events, perform Accessibility actions, open URLs or run
   processes. The Mail bridge must send only its fixed read requests and `reply` with
   `opening window`, with every value passed as an Apple Event parameter, never inside script
-  text. The first Projects code adds a check for these rules to Tools/ci/check_rules.py.
+  text. Tools/ci/check_rules.py checks these rules.
 - Dictation goes first. Projects code must have the model read a long prompt in slices, and
   must start no model call from the press of the talk key or the translation key until the
   dictation is pasted or cancelled, as captions do, see EngineTurns. Every Projects model call
@@ -151,7 +151,13 @@ docs/privacy.md, as docs/website.md describes.
   linked products, and the packages and revisions in Package.resolved. It also fails on an
   .xcconfig file and when docs/dependencies.md does not name a pinned package. It covers the
   settings it lists, not every way to change signing, so review signing changes by hand too.
-  The same job runs the tests of the speech evaluation scorer in Tools/speech-eval.
+  It also checks the Projects source rules of Runtime rules: the names code in Orra/Projects
+  must not use, where NSAttributedString may appear, that Orra/Projects holds Swift files
+  only, Apple Events built or sent in Orra outside the files it allows or sent from tests,
+  script text in any file under Orra, OrraTests or Tools, and where SQLite, removing files
+  and UserDefaults may appear. It reads names in code, not every way around them, so review
+  Projects changes by hand too. The same job runs the tests of the rules check in Tools/ci
+  and of the speech evaluation scorer in Tools/speech-eval.
 - Build and test, on the xcode-27 runner, a GitHub hosted Mac with Xcode 27.0. It runs the test
   command above with code signing off and plugin validation skipped, downloads the Metal Toolchain
   when the runner lacks it, and skips RealModelTests, which need the model. The wired input test

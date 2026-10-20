@@ -9,15 +9,20 @@ keys with Orra/Info.plist, and checks that docs/dependencies.md names every pinn
 not every way a build can change signing. When the maintainer approves a change, the same
 commit updates the expected values here.
 
+It also checks the source rules for Projects code in AGENTS.md (Runtime rules and
+Continuous integration), see check_sources. Tools/ci/test_check_rules.py tests that check.
+
 Run from anywhere, with Python 3.8 or later and nothing outside the standard library:
 
     python3 Tools/ci/check_rules.py [repository folder]
 """
 
 import json
+import os
 import plistlib
 import re
 import sys
+from collections import namedtuple
 from pathlib import Path
 
 # The expected values, all in one place.
@@ -466,6 +471,620 @@ def check_dependency_doc(doc, pins):
     return problems
 
 
+# The source rules for Projects code (AGENTS.md, Runtime rules and Continuous integration).
+#
+# check_sources reads every file under Orra/, OrraTests/ and Tools/. It reads Swift files
+# through swift_views, so a name in a comment never counts. Rules 1 to 4 and 6 to 8 look at
+# code only, outside string literals, so English words in a prompt never trip them. Rule 5
+# also looks inside string literals, and reads every other file whole. Names match on word
+# boundaries. A rule names paths only, never the syntax of a file it allows, so a file that
+# does not exist yet passes. A failure names the file, the line, the rule and the name it
+# matched, never the rest of the line.
+
+PROJECTS_FOLDER = "Orra/Projects/"
+PROJECTS_TESTS_FOLDER = "OrraTests/Projects/"
+
+# The only Swift files under Orra/ that may build or send an Apple Event (rule 3). The Mail
+# bridge adds Orra/Projects/Mail/MailEvents.swift.
+APPLE_EVENT_FILES = frozenset()
+
+# The only file in Orra/Projects that may make an NSAttributedString (rule 2).
+FILE_TEXT_FILE = "Orra/Projects/Index/FileText.swift"
+# The only file in Orra/Projects that may remove, move, replace or trash files (rule 7).
+STORAGE_FILE = "Orra/Projects/ProjectsStorage.swift"
+# The only files in Orra/Projects that may use UserDefaults (rule 8).
+DEFAULTS_FILES = frozenset({"Orra/Projects/ProjectsSwitch.swift", "Orra/Projects/Mail/MailChoice.swift"})
+# This check and its tests name the script words of rule 5.
+SCRIPT_RULE_EXCEPTIONS = frozenset({"Tools/ci/check_rules.py", "Tools/ci/test_check_rules.py"})
+
+SOURCE_FOLDERS = ("Orra", "OrraTests", "Tools")
+# Python caches and build output under Tools/, which git ignores. Nothing is skipped under
+# Orra/ or OrraTests/, since Xcode builds whatever is there.
+SKIPPED_TOOLS_FOLDERS = frozenset({"__pycache__", ".build", "build", "DerivedData", ".swiftpm"})
+# Finder's folder settings, which git ignores.
+SKIPPED_FILES = frozenset({".DS_Store"})
+
+SOURCE_RULES = {
+    1: "Code in Orra/Projects never types, uses Accessibility or the pasteboard, runs a process, "
+       "loads code by name, shows web content, Markdown or remote images, opens a URL, connects "
+       "to the network, quits an app or removes a file with a C call. No member there may be "
+       "named html or webArchive, the document types that read through WebKit.",
+    2: "In Orra/Projects only Index/FileText.swift makes an NSAttributedString, from data with the "
+       "documentType named in the same call, never from a URL, a path or HTML.",
+    3: "In Orra only the files in APPLE_EVENT_FILES build or send an Apple Event. Reading the launch event is fine.",
+    4: "Tests never send an Apple Event or use the live Mail bridge. Building a descriptor is fine.",
+    5: "No file in Orra, OrraTests or Tools runs or holds script text.",
+    6: "Only Orra/Projects and OrraTests/Projects use SQLite.",
+    7: "In Orra/Projects only ProjectsStorage.swift removes, moves, replaces or trashes files.",
+    8: "In Orra/Projects only ProjectsSwitch.swift and Mail/MailChoice.swift use UserDefaults.",
+    9: "Orra/Projects holds Swift files only, since Xcode would copy any other file into the app.",
+}
+
+
+def _import(module):
+    """An import of the module, also with an attribute such as @preconcurrency, an access
+    level, or a kind such as import class WebKit.WKWebView."""
+    return r"\bimport\s+(?:(?:typealias|struct|class|enum|protocol|let|var|func)\s+)?" + module + r"\b"
+
+
+def _system_call(code, match):
+    """system( counts unless it is a member, such as .font(.system(size: 12)). Darwin.system(
+    and its like still count."""
+    before = code[max(0, match.start() - 200):match.start()].rstrip()
+    if not before.endswith("."):
+        return True
+    owner = re.search(r"(\w+)\s*$", before[:-1])
+    return owner is not None and owner.group(1) in ("Darwin", "Foundation", "Glibc")
+
+
+def _c_call(code, match):
+    """remove(, rename( and kill( count as the C calls, as system( does, unless they declare
+    a function or pass no argument or a labeled one, which no C call does. So
+    projects.remove(at: 0), func remove(_ id: UUID) and remove(project: id) pass."""
+    if not _system_call(code, match):
+        return False
+    if re.search(r"\bfunc\s*$", code[max(0, match.start() - 200):match.start()]):
+        return False
+    arguments = _arguments(code, match.end() - 1)
+    if arguments is None:
+        return True
+    return bool(arguments.strip()) and all(label is None for label in _labels(arguments))
+
+
+def _rule(*patterns, flags=0):
+    """Compiles the patterns of a rule. A pattern is a regular expression, or a pair of one
+    and a function of the view and the match that says whether the match counts."""
+    compiled = []
+    for pattern in patterns:
+        check = None
+        if isinstance(pattern, tuple):
+            pattern, check = pattern
+        compiled.append((re.compile(pattern, flags), check))
+    return compiled
+
+
+# Rule 1, in the code of Orra/Projects.
+PROJECTS_BANNED = _rule(
+    r"\bTextInserter\b",
+    r"\bCGEvent\w*",
+    r"\bk?AX[A-Z]\w*",
+    r"\bNSWorkspace\b",
+    r"\bNSPasteboard\b",
+    r"\bProcess\b",
+    r"\bNSTask\b",
+    r"\bposix_spawnp?\b",
+    (r"\bsystem\s*\(", _system_call),
+    r"\bpopen\b",
+    r"\bexecv\w*",
+    r"\bfork\b",
+    r"\bdlopen\b",
+    r"\bdlsym\b",
+    r"\bNSClassFromString\b",
+    r"\bNSSelectorFromString\b",
+    # Every Selector initializer takes a string. #selector( is checked by the compiler.
+    r"\bSelector\s*\(",
+    r"\.\s*perform\s*\(",
+    r"\bperformSelector\w*",
+    # The Objective-C runtime and Bundle find a class by its name, and these attributes bind
+    # a C function by its name.
+    r"\bobjc_\w+",
+    r"\bclassNamed\b",
+    r"@_silgen_name\b",
+    r"@_extern\b",
+    r"\bWKWebView\b",
+    _import("WebKit"),
+    r"\bURLSession\b",
+    _import("Network"),
+    r"\bNWConnection\b",
+    r"\bAsyncImage\b",
+    r"\bLink\s*\(",
+    r"\bopenURL\b",
+    r"\bOpenURLAction\b",
+    r"\bLSOpen\w*",
+    r"\b(?:NS)?AttributedString\s*(?:\.\s*init\s*)?\(\s*markdown\b",
+    # The HTML and web archive document types, which read through WebKit, also when a
+    # value of the type comes from another file. ".html" in a string literal is fine. A
+    # document type made from its raw value could be either.
+    r"\.\s*html\b",
+    r"\.\s*webArchive\b",
+    r"\bDocumentType\s*(?:\.\s*init\s*)?\(",
+    r"\bterminate\s*\(",
+    r"\bforceTerminate\b",
+    (r"\bkill(?:pg)?\s*\(", _c_call),
+    r"\bunlink(?:at)?\b",
+    r"\brmdir\b",
+    (r"\b(?:remove|rename)\s*\(", _c_call),
+    r"\brename(?:at|x_np|atx_np)\b",
+    r"\bremovefile\b",
+)
+
+# Rule 2, in the code of Orra/Projects.
+ATTRIBUTED_STRING = re.compile(r"\bNS(?:Mutable)?AttributedString\s*(?:\.\s*init\s*)?\(")
+# The first argument labels FileText.swift may use: data with a documentType, text, or
+# no label, which converts an AttributedString. Every other one may read a file, a URL or
+# HTML, or guess the format.
+ATTRIBUTED_STRING_LABELS = frozenset({"data", "string", "attributedString", None})
+ARGUMENT_LABEL = re.compile(r"\s*(\w+)\s*:")
+
+# Scripting Bridge sends an Apple Event for each call on its objects. A sendEvent that is
+# not called right away, such as let send = event.sendEvent, could be called later with
+# any options. An NSEvent's sendEvent(_:) is always called and stays fine.
+SENDING = (
+    r"\bsendEvent\s*\(\s*options\b",
+    r"\bsendEvent\b(?!\s*\()",
+    _import("ScriptingBridge"),
+    r"\bSB(?:Application|Object|ElementArray)\b",
+    r"\bAESendMessage\b",
+    r"\bAESend\b",
+)
+
+# Rule 3, in the code of Orra/.
+APPLE_EVENT_BUILDING = _rule(
+    r"\bNSAppleEventDescriptor\s*\.\s*appleEvent\b",
+    r"\bappleEvent\s*\(\s*withEventClass\b",
+    r"\bNSAppleEventDescriptor\s*(?:\.\s*init\s*)?\(\s*eventClass\b",
+    *SENDING,
+    r"\bAECreateAppleEvent\b",
+    r"\bAEBuildAppleEvent\b",
+    r"\bAEDeterminePermissionToAutomateTarget\b",
+)
+
+# Rule 4, in the code of OrraTests/.
+APPLE_EVENT_SENDING = _rule(
+    *SENDING,
+    r"\bAEDeterminePermissionToAutomateTarget\b",
+    r"\bMailBridge\s*\.\s*live\b",
+    r"\bMailEvents\s*\.\s*live\b",
+)
+
+# Rule 5, in code and string literals, and in every other file. AppleScript ignores case.
+SCRIPT_TEXT = _rule(
+    r"\bNSAppleScript\b",
+    r"\bOSAScript\b",
+    _import("OSAKit"),
+    r"\bosacompile\b",
+    r"\btell\s+application\b",
+    r"\bNSUser(?:AppleScript|Unix|Automator|Script)Task\b",
+    flags=re.IGNORECASE,
+)
+
+# Rule 6, in the code of Orra/ and OrraTests/ outside the Projects folders.
+SQLITE = _rule(_import("SQLite3"), r"\bsqlite3_\w*")
+
+# Rule 7, in the code of Orra/Projects.
+FILE_REMOVAL = _rule(r"\bremoveItem\b", r"\bmoveItem\b", r"\breplaceItem\w*", r"\btrashItem\b")
+
+# Rule 8, in the code of Orra/Projects. @AppStorage, CFPreferences and
+# NSUserDefaultsController reach the same values.
+DEFAULTS = _rule(r"\bUserDefaults\b", r"\bAppStorage\b", r"\bCFPreferences\w*", r"\bNSUserDefaults\w*")
+
+SourceProblem = namedtuple("SourceProblem", "path line rule name")
+
+
+class SwiftLexError(Exception):
+    def __init__(self, offset, message):
+        super().__init__(message)
+        self.offset = offset
+        self.message = message
+
+
+# Where the lexer stops in code, in the code of an interpolation, in a block comment and in
+# a literal. #" starts a raw string and #/ a regex literal, each with any number of #. A
+# slash alone may start a /.../ regex literal. A backtick starts a name such as `default`
+# or a raw identifier such as `drops https:// links`, which may hold //, /* and quotes.
+_CODE_STOP = re.compile(r'//|/\*|#+["/]|"|[/`]')
+_INTERPOLATION_STOP = re.compile(r'//|/\*|#+["/]|"|[()/`]')
+_COMMENT_STOP = re.compile(r"/\*|\*/")
+_STRING_STOP = re.compile(r'[\\"\n]')
+_MULTILINE_STRING_STOP = re.compile(r'[\\"]')
+_REGEX_STOP = re.compile(r"[\\/\n]")
+_MULTILINE_REGEX_STOP = re.compile(r"[\\/]")
+_NOT_NEWLINE = re.compile(r"[^\n]")
+# Swift's operator characters, without the dot, which only an operator that starts with a
+# dot holds.
+_OPERATOR_CHARACTERS = frozenset("/=-+!*%<>&|^~?")
+# What may stand right before a /.../ regex literal, and what makes the operator before it
+# end, as Swift binds operators.
+_BEFORE_PREFIX = frozenset(" \t\r\n([{,;:") | _OPERATOR_CHARACTERS
+_AFTER_OPERATOR_END = frozenset(" \t\r\n)]},;:")
+# Keywords after which an expression starts, so a slash right after one starts a regex
+# literal, as in return/"/. Words such as then and yield are names outside a few places,
+# and a slash after a name divides.
+_KEYWORDS_BEFORE_EXPRESSION = frozenset(
+    {"return", "throw", "try", "await", "case", "in", "where", "if", "guard", "while", "switch", "repeat", "else"}
+)
+# What may end an expression right before a postfix ! or ?, as in a!/2, where the slash
+# divides.
+_EXPRESSION_END = frozenset(')]}"`')
+
+
+def swift_views(text):
+    """Returns (code, uncommented), two copies of a Swift file with its length and lines.
+
+    code blanks the comments and the text of string and regex literals, and keeps the code
+    of string interpolations. uncommented blanks the comments only. Comments nest. Strings
+    may be raw, with any number of #, and multi-line. A literal or comment without an end
+    raises SwiftLexError, so the lexer can never be led to skip code. A #/.../# regex literal
+    is a literal. A /.../ regex literal stays in the code view, since telling it from a
+    division takes Swift's rules for operators, see _bare_regex_end. The lexer only steps
+    over it, so a quote in it starts no string. A name in backticks stays in the code view
+    too, and the lexer steps over it the same way.
+    """
+    comments = []
+    literals = []
+    # One entry per open interpolation: the hashes and the kind of its string, and the
+    # parenthesis depth of the code around the string.
+    open_strings = []
+    depth = 0
+    pos = 0
+    while True:
+        stop = (_INTERPOLATION_STOP if open_strings else _CODE_STOP).search(text, pos)
+        if stop is None:
+            if open_strings:
+                raise SwiftLexError(len(text), "string literal without an end")
+            break
+        token = stop.group()
+        start = stop.start()
+        if token == "//":
+            end = text.find("\n", start)
+            pos = len(text) if end < 0 else end
+            comments.append((start, pos))
+        elif token == "/*":
+            pos = _block_comment_end(text, start)
+            comments.append((start, pos))
+        elif token == "(":
+            depth += 1
+            pos = stop.end()
+        elif token == ")":
+            if depth > 0:
+                depth -= 1
+                pos = stop.end()
+                continue
+            # The end of an interpolation. Its string goes on.
+            hashes, multiline, depth = open_strings.pop()
+            pos, interpolation = _string_end(text, start, start + 1, hashes, multiline, literals)
+            if interpolation:
+                open_strings.append((hashes, multiline, depth))
+                depth = 0
+        elif token == "`":
+            pos = _backtick_name_end(text, start)
+        elif token == "/":
+            pos = _bare_regex_end(text, start) or start + 1
+        elif token.endswith("/"):
+            pos = _regex_end(text, start, len(token) - 1, literals)
+        else:
+            hashes = len(token) - 1
+            content = stop.end()
+            multiline = text.startswith('""', content)
+            if multiline:
+                content += 2
+                line_end = text.find("\n", content)
+                if line_end < 0 or text[content:line_end].strip(" \t\r"):
+                    raise SwiftLexError(start, "multi-line string literal that does not start on a new line")
+            pos, interpolation = _string_end(text, start, content, hashes, multiline, literals)
+            if interpolation:
+                open_strings.append((hashes, multiline, depth))
+                depth = 0
+    return _blanked(text, comments + literals), _blanked(text, comments)
+
+
+def _block_comment_end(text, start):
+    depth = 0
+    pos = start
+    while True:
+        stop = _COMMENT_STOP.search(text, pos)
+        if stop is None:
+            raise SwiftLexError(start, "block comment without an end")
+        depth += 1 if stop.group() == "/*" else -1
+        pos = stop.end()
+        if depth == 0:
+            return pos
+
+
+def _string_end(text, start, pos, hashes, multiline, literals):
+    """Reads string text from pos up to the end of the literal or an interpolation.
+
+    Returns the position after it and whether it was an interpolation. Adds the literal
+    text from start to literals.
+    """
+    closer = ('"""' if multiline else '"') + "#" * hashes
+    escape = "\\" + "#" * hashes
+    stops = _MULTILINE_STRING_STOP if multiline else _STRING_STOP
+    while True:
+        stop = stops.search(text, pos)
+        if stop is None or stop.group() == "\n":
+            raise SwiftLexError(start, "string literal without an end")
+        index = stop.start()
+        if stop.group() == "\\":
+            if not text.startswith(escape, index):
+                pos = index + 1
+                continue
+            after = index + len(escape)
+            if text.startswith("(", after):
+                literals.append((start, after + 1))
+                return after + 1, True
+            if not multiline and text.startswith("\n", after):
+                raise SwiftLexError(start, "string literal without an end")
+            pos = after + 1
+        elif text.startswith(closer, index):
+            literals.append((start, index + len(closer)))
+            return index + len(closer), False
+        else:
+            pos = index + 1
+
+
+def _regex_end(text, start, hashes, literals):
+    """Reads a #/.../# regex literal and returns the position after it. One whose #/ ends
+    its line may span lines."""
+    content = start + hashes + 1
+    closer = "/" + "#" * hashes
+    line_end = text.find("\n", content)
+    multiline = line_end >= 0 and not text[content:line_end].strip(" \t\r")
+    stops = _MULTILINE_REGEX_STOP if multiline else _REGEX_STOP
+    pos = content
+    while True:
+        stop = stops.search(text, pos)
+        if stop is None or stop.group() == "\n":
+            raise SwiftLexError(start, "regex literal without an end")
+        index = stop.start()
+        if stop.group() == "\\":
+            if not multiline and text.startswith("\n", index + 1):
+                raise SwiftLexError(start, "regex literal without an end")
+            pos = index + 2
+        elif text.startswith(closer, index):
+            literals.append((start, index + len(closer)))
+            return index + len(closer)
+        else:
+            pos = index + 1
+
+
+def _backtick_name_end(text, start):
+    """The position after a name in backticks at start. Swift ends it at the next backtick
+    on the same line."""
+    end = text.find("`", start + 1)
+    if end < 0 or "\n" in text[start + 1:end]:
+        raise SwiftLexError(start, "name in backticks without an end")
+    return end + 1
+
+
+def _word_before(text, end):
+    """The word that ends at end, and where it starts."""
+    start = end
+    while start > 0 and (text[start - 1].isalnum() or text[start - 1] == "_"):
+        start -= 1
+    return text[start:end], start
+
+
+def _is_keyword_before(text, end):
+    """Whether a keyword that starts an expression ends at end. After a dot, as in
+    .return, it is a member name."""
+    word, start = _word_before(text, end)
+    return word in _KEYWORDS_BEFORE_EXPRESSION and (start == 0 or text[start - 1] not in ".$#@`")
+
+
+def _bare_regex_end(text, start):
+    """The position after a /.../ regex literal at start, or None where the slash is an
+    operator.
+
+    As in Swift, the slash starts a regex literal only where an operator would be a prefix
+    operator: nothing that ends an expression right before it, such as a name, a number or
+    a closing bracket, and no white space or closing punctuation right after the operator
+    it starts, such as /= in x /= y. A keyword such as return does not end an expression,
+    while a postfix ! or ?, as in a!/2, does. The literal ends at the next slash without a
+    backslash before it, on the same line.
+    """
+    if start > 0 and text[start - 1] not in _BEFORE_PREFIX and not _is_keyword_before(text, start):
+        return None
+    postfix = start
+    while postfix > 0 and text[postfix - 1] in "!?":
+        postfix -= 1
+    if 0 < postfix < start:
+        before = text[postfix - 1]
+        if (before.isalnum() or before == "_" or before in _EXPRESSION_END) and not _is_keyword_before(text, postfix):
+            return None
+    operator_end = start + 1
+    while operator_end < len(text) and text[operator_end] in _OPERATOR_CHARACTERS:
+        operator_end += 1
+    if operator_end >= len(text) or text[operator_end] in _AFTER_OPERATOR_END:
+        return None
+    pos = start + 1
+    while pos < len(text):
+        character = text[pos]
+        if character == "\n" or (character == "\\" and text.startswith("\n", pos + 1)):
+            return None
+        if character == "/":
+            return pos + 1
+        pos += 2 if character == "\\" else 1
+    return None
+
+
+def _blanked(text, spans):
+    """text with every character in the spans but line breaks turned into a space."""
+    parts = []
+    last = 0
+    for start, end in sorted(spans):
+        parts.append(text[last:start])
+        parts.append(_NOT_NEWLINE.sub(" ", text[start:end]))
+        last = end
+    parts.append(text[last:])
+    return "".join(parts)
+
+
+def _line(text, offset):
+    return text.count("\n", 0, offset) + 1
+
+
+def _find(view, path, rule, patterns):
+    """The names the patterns find in view, one problem for each place. Where two patterns
+    find the same place, such as NSAppleEventDescriptor.appleEvent(withEventClass:, the
+    first one counts."""
+    matches = []
+    for pattern, check in patterns:
+        for match in pattern.finditer(view):
+            if check is None or check(view, match):
+                matches.append(match)
+    matches.sort(key=lambda match: (match.start(), -match.end()))
+    problems = []
+    taken_up_to = -1
+    for match in matches:
+        if match.start() < taken_up_to:
+            continue
+        taken_up_to = match.end()
+        problems.append(SourceProblem(path, _line(view, match.start()), rule, " ".join(match.group().split())))
+    return problems
+
+
+def _arguments(code, opening):
+    """The text between the parenthesis at opening and the one that closes it, or None."""
+    depth = 0
+    for index in range(opening, len(code)):
+        character = code[index]
+        if character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+            if depth == 0:
+                return code[opening + 1:index]
+    return None
+
+
+def _labels(arguments):
+    """The label of each argument, None where it has none."""
+    segments = []
+    depth = 0
+    segment_start = 0
+    for index, character in enumerate(arguments):
+        if character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+        elif character == "," and depth == 0:
+            segments.append(arguments[segment_start:index])
+            segment_start = index + 1
+    segments.append(arguments[segment_start:])
+    labels = []
+    for segment in segments:
+        label = ARGUMENT_LABEL.match(segment)
+        labels.append(label.group(1) if label else None)
+    return labels
+
+
+def _attributed_strings(code, path):
+    """Rule 2 for one file of Orra/Projects."""
+    problems = []
+    for match in ATTRIBUTED_STRING.finditer(code):
+        name = match.group().split("(")[0].split(".")[0].strip() + "("
+        line = _line(code, match.start())
+        if path != FILE_TEXT_FILE:
+            problems.append(SourceProblem(path, line, 2, name))
+            continue
+        arguments = _arguments(code, match.end() - 1)
+        labels = _labels(arguments) if arguments is not None else []
+        first = labels[0] if labels else None
+        if arguments is None:
+            problems.append(SourceProblem(path, line, 2, name + " without an end"))
+        elif "url" in labels:
+            problems.append(SourceProblem(path, line, 2, name + "url:"))
+        elif first not in ATTRIBUTED_STRING_LABELS:
+            problems.append(SourceProblem(path, line, 2, name + first + ":"))
+        elif first == "data" and not re.search(r"\bdocumentType\b", arguments):
+            problems.append(SourceProblem(path, line, 2, name + "data: without documentType"))
+    return problems
+
+
+def source_files(root):
+    """(path relative to root, path) of every file the source rules read, in a fixed order."""
+    for top in SOURCE_FOLDERS:
+        folder = root / top
+        if not folder.is_dir():
+            continue
+        for folder_path, folder_names, file_names in os.walk(folder):
+            if top == "Tools":
+                folder_names[:] = [name for name in folder_names if name not in SKIPPED_TOOLS_FOLDERS]
+            folder_names.sort()
+            for name in sorted(file_names):
+                if name not in SKIPPED_FILES:
+                    path = Path(folder_path) / name
+                    yield path.relative_to(root).as_posix(), path
+
+
+def check_sources(root, apple_event_files=APPLE_EVENT_FILES):
+    """Checks the Projects source rules under root, the repository folder.
+
+    Returns the problems and the counts of Swift files and other files read.
+    """
+    problems = []
+    swift_count = 0
+    other_count = 0
+    for path, file in source_files(root):
+        in_projects = path.startswith(PROJECTS_FOLDER)
+        in_app = path.startswith("Orra/")
+        in_tests = path.startswith("OrraTests/")
+        scripts_checked = path not in SCRIPT_RULE_EXCEPTIONS
+        if not path.endswith(".swift"):
+            other_count += 1
+            if in_projects:
+                problems.append(SourceProblem(path, None, 9, Path(path).suffix or "a file without an extension"))
+            if scripts_checked:
+                text = file.read_bytes().decode("utf-8", errors="replace")
+                problems += _find(text, path, 5, SCRIPT_TEXT)
+            continue
+        swift_count += 1
+        try:
+            text = file.read_bytes().decode("utf-8")
+            code, uncommented = swift_views(text)
+        except UnicodeDecodeError:
+            problems.append(SourceProblem(path, None, None, "not UTF-8"))
+            continue
+        except SwiftLexError as error:
+            problems.append(SourceProblem(path, _line(text, error.offset), None, error.message))
+            continue
+        if scripts_checked:
+            problems += _find(uncommented, path, 5, SCRIPT_TEXT)
+        if in_projects:
+            problems += _find(code, path, 1, PROJECTS_BANNED)
+            problems += _attributed_strings(code, path)
+            if path != STORAGE_FILE:
+                problems += _find(code, path, 7, FILE_REMOVAL)
+            if path not in DEFAULTS_FILES:
+                problems += _find(code, path, 8, DEFAULTS)
+        if in_app and path not in apple_event_files:
+            problems += _find(code, path, 3, APPLE_EVENT_BUILDING)
+        if in_tests:
+            problems += _find(code, path, 4, APPLE_EVENT_SENDING)
+        if (in_app or in_tests) and not in_projects and not path.startswith(PROJECTS_TESTS_FOLDER):
+            problems += _find(code, path, 6, SQLITE)
+    problems.sort(key=lambda problem: (problem.path, problem.line or 0, problem.rule or 0, problem.name))
+    return problems, swift_count, other_count
+
+
+def format_source_problem(problem):
+    where = problem.path if problem.line is None else f"{problem.path} line {problem.line}"
+    if problem.rule is None:
+        return f"{where}: {problem.name}, so the source rules cannot read it"
+    return f"{where}: rule {problem.rule}, {problem.name}"
+
+
 def main(arguments):
     root = Path(arguments[1]) if len(arguments) > 1 else Path(__file__).resolve().parents[2]
     try:
@@ -478,6 +1097,7 @@ def main(arguments):
         pin_problems, pins = check_pins(resolved)
         doc_problems = check_dependency_doc(doc, pins)
         info_problems = check_info_plist(info)
+        source_problems, swift_count, other_count = check_sources(root)
     except (OSError, ValueError, KeyError, TypeError, AttributeError, ParseError, plistlib.InvalidFileException) as error:
         print(f"Rules check could not read the repository at {root}. {type(error).__name__}: {error}")
         return 2
@@ -489,12 +1109,24 @@ def main(arguments):
         print("These values change only with the maintainer's approval (AGENTS.md, Needs maintainer approval).")
         print("After approval, the same commit updates the expected values in Tools/ci/check_rules.py")
         print("and the list in docs/dependencies.md.")
+    if source_problems:
+        print("Source check failed:")
+        for problem in source_problems:
+            print(f"  {format_source_problem(problem)}")
+        for rule in sorted({problem.rule for problem in source_problems if problem.rule is not None}):
+            print(f"Rule {rule}: {SOURCE_RULES[rule]}")
+        print("AGENTS.md, Runtime rules, says what Projects code and the tests must not do.")
+    if problems or source_problems:
         return 1
     print(
         f"Rules check passed: {len(EXPECTED_BUILD_SETTINGS)} build settings in {configuration_count} "
         f"build configurations, {len(EXPECTED_PACKAGE_REFERENCES)} package references with their "
         f"linked products, {len(pins)} pinned packages, all named in {DEPENDENCIES_DOC}, and the "
         f"update keys in {INFO_PLIST_FILE}."
+    )
+    print(
+        f"Source check passed: the {len(SOURCE_RULES)} source rules in {swift_count} Swift files "
+        f"and {other_count} other files under {', '.join(SOURCE_FOLDERS)}."
     )
     return 0
 
