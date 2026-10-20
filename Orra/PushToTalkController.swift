@@ -251,8 +251,9 @@ final class PushToTalkController {
     @ObservationIgnored private var recordingLimitTask: Task<Void, Never>?
     /// True from a stop at the recording limit, when the key of the dictation waits for the
     /// press that was meant to finish it, see `TalkKeyDetector.stopAtLimit()`, until that
-    /// press comes, the wait ends, or another dictation starts.
-    @ObservationIgnored private var awaitsPressAfterLimit = false
+    /// press comes, the wait ends, or another dictation starts. Tests read it to press only
+    /// after the wait ended.
+    @ObservationIgnored private(set) var awaitsPressAfterLimit = false
     /// Ends that wait `limitNoticeWindow` after the notice showed.
     @ObservationIgnored private var limitNoticeTask: Task<Void, Never>?
     /// Starts the microphone off the main thread. Its value is when the start returned, or

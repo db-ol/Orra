@@ -405,7 +405,8 @@ final class MeetingCaptions {
         // offered, for captions that cannot hear anything, nor in Original only.
         wantModelIfTranslating()
         capture = .listening
-        Logger.captions.notice("Meeting captions started, showing \(self.displayMode.rawValue, privacy: .public)")
+        let target = CaptionTarget.effective(engines.target(), for: engines.language())
+        Logger.captions.notice("Meeting captions started, showing \(self.displayMode.rawValue, privacy: .public), into \(target.logName, privacy: .public)")
     }
 
     /// Asks for the local model once per run, when the display mode translates.

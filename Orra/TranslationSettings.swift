@@ -40,7 +40,7 @@ struct TranslationSettings: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Translation uses the local model of Clean Up Text on this Mac, with about 4 GB of memory, also while cleanup is off. A dictation that is too long, or a translation that fails Orra's checks, is pasted as you said it.")
-                    Text("Live Captions on the Meeting Interpretation page translate the same way.")
+                    Text("Live Captions have their own language, on the Meeting Interpretation page.")
                 }
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -111,15 +111,28 @@ private struct TranslationKeyRow: View {
     }
 }
 
-extension TranslationDirection {
-    /// The name in the picker.
+extension TranslationTarget {
+    /// The name in the pickers of Translate into, of the caption window and of Translate
+    /// captions into.
     var title: LocalizedStringKey {
         switch self {
-        case .automatic: "Automatic"
         case .english: "English"
         case .chinese: "Chinese"
         case .japanese: "Japanese"
         case .spanish: "Spanish"
+        }
+    }
+}
+
+extension TranslationDirection {
+    /// The name in the picker, Automatic or the language, see TranslationTarget.title.
+    var title: LocalizedStringKey {
+        switch self {
+        case .automatic: "Automatic"
+        case .english: TranslationTarget.english.title
+        case .chinese: TranslationTarget.chinese.title
+        case .japanese: TranslationTarget.japanese.title
+        case .spanish: TranslationTarget.spanish.title
         }
     }
 

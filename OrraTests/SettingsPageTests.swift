@@ -177,6 +177,8 @@ struct SettingsPageTests {
             liveCaptionsShortcut: LiveCaptionsShortcut.defaultShortcut(keyCodeForC: 0x08),
             dictationLanguage: dictating
         )
+        // As AppDelegate keeps them in step.
+        cleanup.setDictationLanguage(dictating)
         for word in ["Orra", "Qwen3-ASR", "克劳德"] {
             pushToTalk.addToVocabulary(word)
         }
@@ -197,7 +199,7 @@ struct SettingsPageTests {
             updater: AppUpdater(),
             captions: meeting ? MeetingCaptions(
                 source: SystemAudioSource(start: { _ in }, stop: {}),
-                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, direction: { .automatic }, translate: { text, _ in text })
+                engines: CaptionEngines(isSpeechReady: { true }, transcribe: { _, _ in "" }, canTranslate: { false }, target: { .chinese }, translate: { text, _ in text })
             ) : nil,
             speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,
             voiceModels: meeting ? VoiceModels(kind: .qwen3) { [temporary] manifest in

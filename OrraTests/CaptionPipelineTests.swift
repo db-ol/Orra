@@ -11,7 +11,8 @@ final class FakeCaptionModels {
     var transcripts: [String]
     var speechReady = true
     var translationReady = true
-    var direction = TranslationDirection.automatic
+    /// The caption target, the user's setting. Chinese, as for most users of Orra.
+    var target = TranslationTarget.chinese
     /// How long each transcription takes, by its turn, so a later one can finish first if
     /// the pipeline ever ran two at once.
     var recognitionDelays: [Duration] = []
@@ -38,6 +39,7 @@ final class FakeCaptionModels {
         "Good morning, everyone.": "Buenos días a todos.",
         "Gracias a todos.": "Thanks, everyone.",
         "ありがとうございます": "Thank you very much.",
+        "今日はありがとうございました。": "Thank you for today.",
     ]
 
     init(_ transcripts: [String]) {
@@ -54,7 +56,7 @@ final class FakeCaptionModels {
                 return try await transcribe(samples, language)
             },
             canTranslate: { [self] in translationReady },
-            direction: { [self] in direction },
+            target: { [self] in target },
             translate: { [self] text, route in
                 if let turns {
                     return try await turns.captionTranslationTurn { try await self.translate(text, route) }
@@ -131,7 +133,7 @@ func eventually(_ condition: () -> Bool) async throws {
 @MainActor
 struct CaptionPipelineTests {
     @Test func sentencesComeInOrderEachTranscriptBeforeItsTranslation() async throws {
-        let models = FakeCaptionModels(["Hello everyone.", "我们开始吧。", "Next slide please."])
+        let models = FakeCaptionModels(["Hello everyone.", "Let's look at the numbers.", "Next slide please."])
         // The first takes longest, so running them at once would swap the order.
         models.recognitionDelays = [.milliseconds(60), .milliseconds(5), .milliseconds(1)]
         var reports: [CaptionSentence] = []
@@ -140,10 +142,10 @@ struct CaptionPipelineTests {
         await pipeline.finish()
         #expect(models.mostRunning == 1)
         #expect(reports.map(\.id) == [1, 1, 2, 2, 3, 3])
-        #expect(reports.map(\.original) == ["Hello everyone.", "Hello everyone.", "我们开始吧。", "我们开始吧。", "Next slide please.", "Next slide please."])
+        #expect(reports.map(\.original) == ["Hello everyone.", "Hello everyone.", "Let's look at the numbers.", "Let's look at the numbers.", "Next slide please.", "Next slide please."])
         #expect(reports.map(\.translation) == [
             .pending, .done("大家好。"),
-            .pending, .done("Let's get started."),
+            .pending, .done("我们来看看这些数字。"),
             .pending, .done("请看下一张幻灯片。"),
         ])
         // The times are where each sentence was in the audio.
@@ -153,17 +155,40 @@ struct CaptionPipelineTests {
         #expect(abs(starts[2] - 2.3) < 0.03)
     }
 
-    @Test func theTranslationFollowsTheSetDirection() async throws {
-        let models = FakeCaptionModels(["Hello everyone.", "我们开始吧。"])
-        models.direction = .english
+    /// Captions translate into the caption target. A sentence in it already is shown as it
+    /// was said, without running the model, on the Chinese routes too, and a change of
+    /// the target counts from the next sentence.
+    @Test func theTranslationFollowsTheCaptionTarget() async throws {
+        let models = FakeCaptionModels(["Hello everyone.", "我们开始吧。", "Next slide please.", "我们开始吧。"])
+        models.target = .english
         var reports: [CaptionSentence] = []
         let pipeline = CaptionPipeline(engines: models.engines()) { reports.append($0) }
         pipeline.feed(FakeCaptionModels.audio(sentences: 2))
+        try await eventually { reports.last?.translation == .done("Let's get started.") }
+        #expect(models.translated.map(\.route) == [.chinese(.english)])
+        // One report, with no translation to wait for.
+        #expect(reports.filter { $0.id == 1 }.map(\.translation) == [.none])
+        models.target = .chinese
+        pipeline.feed(FakeCaptionModels.audio(sentences: 2))
         await pipeline.finish()
-        // English into English gives the text back, which is no translation.
-        #expect(models.translated.map(\.route.target) == [.english, .english])
-        #expect(reports[1].translation == CaptionSentence.Translation.none)
-        #expect(reports.last?.translation == .done("Let's get started."))
+        #expect(models.translated.map(\.route) == [.chinese(.english), .chinese(.chinese)])
+        #expect(reports.filter { $0.id == 3 }.last?.translation == .done("请看下一张幻灯片。"))
+        #expect(reports.filter { $0.id == 4 }.map(\.translation) == [.none])
+    }
+
+    /// The captions ask for the caption target, never for the translation key's direction,
+    /// so changing Translate into leaves them alone and the other way round.
+    @Test func theTranslationKeysDirectionLeavesCaptionsAlone() async throws {
+        let cleanup = launchCleanup(direction: .english)
+        cleanup.setCaptionTarget(.chinese)
+        let engines = CaptionEngines.live(transcription: FakeSpeech().transcription, isSpeechReady: { true }, language: { .chinese }, cleanup: cleanup, turns: EngineTurns())
+        #expect(engines.target() == .chinese)
+        cleanup.setTranslationDirection(.chinese)
+        cleanup.setTranslationDirection(.automatic)
+        #expect(engines.target() == .chinese)
+        cleanup.setCaptionTarget(.english)
+        #expect(engines.target() == .english)
+        #expect(cleanup.translationDirection == .automatic)
     }
 
     @Test func withoutTheLocalModelSentencesComeWithoutTranslation() async throws {
@@ -210,12 +235,12 @@ struct CaptionPipelineTests {
         var wantsTranslation = true
         var reports: [CaptionSentence] = []
         var engines = models.engines()
-        let direction = engines.direction
-        // The pipeline asks for the direction after its first check and reads the language
+        let target = engines.target
+        // The pipeline asks for the target after its first check and reads the language
         // with it, so the switch lands between the two checks.
-        engines.direction = {
+        engines.target = {
             wantsTranslation = false
-            return direction()
+            return target()
         }
         let pipeline = CaptionPipeline(engines: engines, wantsTranslation: { wantsTranslation }) { reports.append($0) }
         pipeline.feed(FakeCaptionModels.audio(sentences: 1))
@@ -254,28 +279,69 @@ struct CaptionPipelineTests {
         #expect(Set(reports.filter { $0.id == 2 }.map(\.original)) == [LanguageGuardTests.japaneseInHan])
     }
 
-    /// A user who dictates in Spanish reads an English meeting in Spanish and a Spanish one
-    /// in English, also with a direction saved for Chinese, which acts as Automatic. One
-    /// who dictates in Japanese reads kana only Japanese in English.
+    /// A user who dictates in Spanish and reads Spanish sees an English meeting in Spanish
+    /// and a Spanish one as it was said, also with a target saved for Chinese, which acts
+    /// as Spanish. With English as the target, the Spanish meeting goes into English. One
+    /// who dictates in Japanese and reads English sees kana only Japanese in English.
     @Test func captionsTranslateBetweenTheDictationLanguageAndEnglish() async throws {
         let models = FakeCaptionModels(["Good morning, everyone.", "Gracias a todos."])
         models.language = .spanish
-        models.direction = .chinese
+        models.target = .chinese
         var reports: [CaptionSentence] = []
         let pipeline = CaptionPipeline(engines: models.engines()) { reports.append($0) }
         pipeline.feed(FakeCaptionModels.audio(sentences: 2))
         await pipeline.finish()
-        #expect(models.translated.map(\.route) == [TranslationRoute(.spanish, into: .spanish), TranslationRoute(.spanish, into: .english)])
-        #expect(reports.compactMap(\.translatedText) == ["Buenos días a todos.", "Thanks, everyone."])
+        #expect(models.translated.map(\.route) == [TranslationRoute(.spanish, into: .spanish)])
+        #expect(reports.compactMap(\.translatedText) == ["Buenos días a todos."])
+        #expect(reports.filter { $0.id == 2 }.map(\.translation) == [.none])
+
+        let english = FakeCaptionModels(["Good morning, everyone.", "Gracias a todos."])
+        english.language = .spanish
+        english.target = .english
+        var englishReports: [CaptionSentence] = []
+        let englishPipeline = CaptionPipeline(engines: english.engines()) { englishReports.append($0) }
+        englishPipeline.feed(FakeCaptionModels.audio(sentences: 2))
+        await englishPipeline.finish()
+        #expect(english.translated.map(\.route) == [TranslationRoute(.spanish, into: .english)])
+        #expect(englishReports.compactMap(\.translatedText) == ["Thanks, everyone."])
 
         let japanese = FakeCaptionModels(["ありがとうございます"])
         japanese.language = .japanese
+        japanese.target = .english
         var japaneseReports: [CaptionSentence] = []
         let japanesePipeline = CaptionPipeline(engines: japanese.engines()) { japaneseReports.append($0) }
         japanesePipeline.feed(FakeCaptionModels.audio(sentences: 1))
         await japanesePipeline.finish()
         #expect(japanese.translated.map(\.route) == [TranslationRoute(.japanese, into: .english)])
         #expect(japaneseReports.last?.translation == .done("Thank you very much."))
+    }
+
+    /// The rule of the dictation language takes Japanese with kanji for Chinese, and Chinese
+    /// for Japanese. Captions tell them apart by their kana, so a Chinese reader sees a
+    /// Japanese meeting in English, and a Japanese reader a Chinese one, as before captions
+    /// had their own target, instead of as it was said.
+    @Test func aMeetingTheRuleTakesForTheDictationLanguageGoesIntoEnglish() async throws {
+        let chinese = FakeCaptionModels(["今日はありがとうございました。", "我们开始吧。"])
+        chinese.target = .chinese
+        var reports: [CaptionSentence] = []
+        let pipeline = CaptionPipeline(engines: chinese.engines()) { reports.append($0) }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 2))
+        await pipeline.finish()
+        #expect(chinese.translated.map(\.route) == [.chinese(.english)])
+        #expect(reports.compactMap(\.translatedText) == ["Thank you for today."])
+        // Chinese is in the target already.
+        #expect(reports.filter { $0.id == 2 }.map(\.translation) == [.none])
+
+        let japanese = FakeCaptionModels(["我们开始吧。", "今日はありがとうございました。"])
+        japanese.language = .japanese
+        japanese.target = .japanese
+        var japaneseReports: [CaptionSentence] = []
+        let japanesePipeline = CaptionPipeline(engines: japanese.engines()) { japaneseReports.append($0) }
+        japanesePipeline.feed(FakeCaptionModels.audio(sentences: 2))
+        await japanesePipeline.finish()
+        #expect(japanese.translated.map(\.route) == [TranslationRoute(.japanese, into: .english)])
+        #expect(japaneseReports.compactMap(\.translatedText) == ["Let's get started."])
+        #expect(japaneseReports.filter { $0.id == 2 }.map(\.translation) == [.none])
     }
 
     @Test func silenceAndEmptyTranscriptsGiveNoSentence() async throws {
@@ -291,13 +357,14 @@ struct CaptionPipelineTests {
 
     @Test func aTranslationThatFailsItsCheckIsNotShown() async throws {
         let models = FakeCaptionModels(["请把这份报告发给我。"])
+        models.target = .english
         var reports: [CaptionSentence] = []
         let engines = models.engines()
         let failing = CaptionEngines(
             isSpeechReady: engines.isSpeechReady,
             transcribe: engines.transcribe,
             canTranslate: engines.canTranslate,
-            direction: engines.direction,
+            target: engines.target,
             // Chinese where English was asked for.
             translate: { _, _ in #"{"cleaned": "请把这份报告发给我。", "translation": "请把这份报告发给我吧。"}"# }
         )
@@ -362,7 +429,7 @@ struct EngineTurnsTests {
             isSpeechReady: { true },
             language: { .spanish },
             canTranslate: { false },
-            direction: { .automatic },
+            target: { .chinese },
             complete: { _, _ in "" },
             turns: EngineTurns()
         )

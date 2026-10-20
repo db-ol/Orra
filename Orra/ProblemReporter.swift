@@ -204,6 +204,7 @@ final class ProblemReporter {
         dockIcon: DockIcon,
         learning: CorrectionLearning,
         cleanup: TextCleanup,
+        captions: MeetingCaptions,
         updater: AppUpdater
     ) -> ProblemReporter {
         ProblemReporter(facts: {
@@ -237,6 +238,10 @@ final class ProblemReporter {
                 talkKeyActive: pushToTalk.isHotkeyActive,
                 talkKey: pushToTalk.talkKey.reportName + (pushToTalk.secondTalkKey.map { ", second key \($0.rawValue)" } ?? ""),
                 microphone: microphone,
+                dictationLanguage: pushToTalk.dictationLanguage.rawValue,
+                translateInto: ProblemReport.describe(cleanup.translationDirection, for: pushToTalk.dictationLanguage),
+                captionsShow: captions.displayMode.rawValue,
+                translateCaptionsInto: ProblemReport.describe(captionTarget: cleanup.captionTarget, picked: cleanup.pickedCaptionTarget != nil, for: pushToTalk.dictationLanguage),
                 settings: [
                     .init(name: "Recording indicator", on: feedback.showsIndicator),
                     .init(name: "Sounds", on: feedback.playsSounds),

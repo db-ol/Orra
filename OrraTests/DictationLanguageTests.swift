@@ -179,7 +179,7 @@ struct DictationLanguageFollowTests {
             var saved: [DictationLanguage] = []
             let controller = controller(follows: DictationLanguagePreference.follows(setUpBefore: false, in: defaults), in: defaults) { saved.append($0) }
             // The first launch saves the language and notes the new user.
-            LaunchMigrations.run(controller, in: defaults)
+            LaunchMigrations.run(controller, cleanup: launchCleanup(), setUpBefore: false, ownLanguage: nil, in: defaults)
             controller.followAppLanguage(.japanese, setupComplete: false, macLanguages: ["en-US"])
             #expect(controller.dictationLanguage == .japanese)
             controller.followAppLanguage(.spanish, setupComplete: false, macLanguages: ["en-US"])

@@ -20,6 +20,10 @@ struct ProblemReportTests {
         talkKeyActive: true,
         talkKey: "fn",
         microphone: "System default (MacBook Pro Microphone)",
+        dictationLanguage: "Chinese",
+        translateInto: "Automatic",
+        captionsShow: "originalAndTranslation",
+        translateCaptionsInto: "Chinese (default)",
         settings: [.init(name: "Sounds", on: true), .init(name: "Show in Dock", on: false), .init(name: "Clean up with a local model", on: true)],
         cleanupModelState: "installed, loaded",
         vocabularyCount: 12,
@@ -79,6 +83,7 @@ struct ProblemReportTests {
         #expect(report.contains("Folder size: 2.5 GB"))
         #expect(report.contains("Accessibility: granted"))
         #expect(report.contains("Talk key: fn"))
+        #expect(report.contains("Dictation language: Chinese\nTranslate into: Automatic\nLive Captions show: originalAndTranslation\nTranslate captions into: Chinese (default)"))
         #expect(report.contains("Clean up with a local model: on"))
         #expect(report.contains("Cleanup model: installed, loaded"))
         #expect(report.contains("Sounds: on"))
@@ -87,6 +92,20 @@ struct ProblemReportTests {
         #expect(report.contains("Learned word pairs: 3"))
         #expect(report.contains("## Log, last hour (log store)\nline one\nline two"))
         #expect(report.contains("### Orra-2026-10-09-120000.ips\n{\"crash\":1}"))
+    }
+
+    /// The language settings with their values: Translate into and the caption target as
+    /// saved, what each acts as for the dictation language when that differs, and whether
+    /// the caption target was picked or is the default.
+    @Test func reportNamesTheLanguageSettings() {
+        #expect(ProblemReport.describe(.automatic, for: .chinese) == "Automatic")
+        #expect(ProblemReport.describe(.english, for: .japanese) == "English")
+        #expect(ProblemReport.describe(.japanese, for: .japanese) == "Japanese")
+        #expect(ProblemReport.describe(.japanese, for: .chinese) == "Japanese, acts as Automatic")
+        #expect(ProblemReport.describe(captionTarget: .chinese, picked: true, for: .chinese) == "Chinese")
+        #expect(ProblemReport.describe(captionTarget: .english, picked: false, for: .spanish) == "English (default)")
+        #expect(ProblemReport.describe(captionTarget: .japanese, picked: true, for: .chinese) == "Japanese, acts as Chinese")
+        #expect(ProblemReport.describe(captionTarget: .spanish, picked: false, for: .japanese) == "Spanish (default), acts as Japanese")
     }
 
     @Test func reportKeepsTheNewestLogLines() {

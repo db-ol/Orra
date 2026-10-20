@@ -1127,7 +1127,10 @@ struct PushToTalkControllerTests {
         let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.toggle, limitNoticeWindow: .milliseconds(100))
         var now = initial
         #expect(cues.list.last == .stoppedAtLimit(message: Self.limitNotice))
-        try await Task.sleep(for: .milliseconds(300))
+        // The window ends on the main actor. A fixed wait of 300 ms was not enough on a
+        // busy CI runner, where the end of a 100 ms window came after the press.
+        try await waitUntil { !controller.awaitsPressAfterLimit }
+        #expect(!controller.awaitsPressAfterLimit)
         press(tap, at: &now)
         #expect(controller.state == .handsFree)
         try await waitUntil { mic.calls.count == 3 }

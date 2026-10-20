@@ -431,6 +431,60 @@ struct TextCleanupTests {
         }
     }
 
+    /// While captions run, the prompt into the caption target is read ahead first, as it
+    /// acts for the dictation language, then those of the translation key while translation
+    /// is on, each once. All stay within the two routes of the dictation language.
+    @Test func captionRoutesAreReadAhead() {
+        #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .chinese, .chinese) == [.chinese(.chinese)])
+        #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .english, .japanese) == [TranslationRoute(.japanese, into: .english)])
+        // A target saved for Chinese acts as Spanish for Spanish dictation.
+        #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .chinese, .spanish) == [TranslationRoute(.spanish, into: .spanish)])
+        #expect(TextCleanup.preparedRoutes(direction: .automatic, captionTarget: .chinese, .chinese) == [.chinese(.chinese), .chinese(.english)])
+        #expect(TextCleanup.preparedRoutes(direction: .english, captionTarget: .english, .chinese) == [.chinese(.english)])
+        #expect(TextCleanup.preparedRoutes(direction: .automatic, captionTarget: nil, .japanese) == TextCleanup.preparedRoutes(.automatic, .japanese))
+        #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: nil, .chinese).isEmpty)
+        for language in DictationLanguage.allCases {
+            for direction in TranslationDirection.allCases {
+                for target in TranslationTarget.allCases {
+                    let routes = TextCleanup.preparedRoutes(direction: direction, captionTarget: target, language)
+                    #expect(Set(routes).count == routes.count)
+                    #expect(Set(routes).isSubset(of: language.translationRoutes))
+                }
+            }
+        }
+    }
+
+    /// Captions running with translation off read the prompt of their target, not those of
+    /// the translation key's direction, and a change of dictation language reads it for the
+    /// new language.
+    @Test func captionsReadTheirOwnPromptAhead() async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = FakeEngine()
+        let cleanup = TextCleanup(
+            isOn: true,
+            save: { _ in },
+            translationDirection: .english,
+            captionTarget: .chinese,
+            models: ModelInstaller(
+                manifest: temporary.manifest,
+                folders: temporary.folders,
+                environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in }, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
+            ),
+            engine: fake.engine
+        )
+        await cleanup.start()
+        await cleanup.waitForLoad()
+        #expect(fake.preparedRoutes.isEmpty)
+        cleanup.captionsStarted()
+        await cleanup.waitForLoad()
+        #expect(fake.preparedRoutes == [.chinese(.chinese)])
+        cleanup.setDictationLanguage(.japanese)
+        await cleanup.waitForLoad()
+        #expect(fake.preparedRoutes.last == TranslationRoute(.japanese, into: .japanese))
+        #expect(fake.kept.last == Set(DictationLanguage.japanese.translationRoutes))
+    }
+
     /// A change of dictation language keeps only the prompts of the new language and reads
     /// them ahead, while translation is on and the model is loaded. Otherwise the next
     /// load reads them.

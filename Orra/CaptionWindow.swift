@@ -90,7 +90,7 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
 }
 
 /// The captions, newest at the bottom, with what is in the way above them, and the display
-/// mode and Copy at the top.
+/// mode, the caption target and Copy at the top.
 struct CaptionView: View {
     @Bindable var captions: MeetingCaptions
     let pushToTalk: PushToTalkController
@@ -119,6 +119,7 @@ struct CaptionView: View {
                         .pickerStyle(.menu)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                CaptionTargetMenu(captions: captions, cleanup: cleanup)
                 CaptionCopyButton(captions: captions)
             }
             CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
@@ -189,6 +190,42 @@ private struct CaptionModePicker: View {
         }
         .labelsHidden()
         .fixedSize()
+    }
+}
+
+/// The language captions translate into, as on the Meeting Interpretation page, with the
+/// choice checked. Off in Original, which does not translate.
+private struct CaptionTargetMenu: View {
+    let captions: MeetingCaptions
+    let cleanup: TextCleanup
+
+    var body: some View {
+        // A target saved for another dictation language shows as the one it acts as.
+        let target = cleanup.effectiveCaptionTarget
+        Menu {
+            Picker("Translate captions into", selection: Binding(get: { target }, set: { cleanup.pickCaptionTarget($0) })) {
+                ForEach(CaptionTarget.choices(for: cleanup.dictationLanguage), id: \.self) { choice in
+                    Text(choice.title).tag(choice)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            Label {
+                Text(target.title)
+            } icon: {
+                Image(systemName: "translate")
+            }
+            .labelStyle(.titleAndIcon)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.borderless)
+        .menuIndicator(.visible)
+        .fixedSize()
+        .help(Text("Translate captions into"))
+        .accessibilityLabel(Text("Translate captions into"))
+        .accessibilityValue(Text(target.title))
+        .disabled(!captions.displayMode.translates)
     }
 }
 

@@ -98,8 +98,21 @@ got worse than the baseline, see docs/release-gate.md.
     in temporary defaults: a first launch saves the modes of both keys and the dictation
     language they started with, only a new user's first launch notes that the dictation
     language follows the welcome window, an update keeps the translation key in Hold for a
-    user who turned Translation on before, a saved value stays, and running twice gives
-    what running once gives.
+    user who turned Translation on before, an update saves an earlier user's caption target
+    once and the captions take it at once while a new user's is not saved, a saved value
+    stays, and running twice gives what running once gives.
+  - CaptionTargetTests, added on 2026-10-19, covers the language Live Captions translate
+    into: the default from the user's own language for interface and Mac languages
+    (English with none of Chinese, Japanese and Spanish), that it follows the own language
+    until a pick, the choices English and the dictation language, a target saved for
+    another dictation language acting as the dictation language and staying saved,
+    choosing the target already shown keeping what is saved and leaving a default
+    unpicked, kana making a sentence the Chinese rule reads as Chinese Japanese, and one
+    in kana only too, and Han characters without kana making one the Japanese rule reads
+    as Japanese not Japanese, no translation for a sentence in the target on every route
+    and English for one in neither language, the target an earlier user keeps for each
+    Translate into, own language and dictation language, and that the step at the update
+    runs once and never for a new user, also at the second launch.
   - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
     for each translation direction and interface language, recording and stopping, too
     short, the stop at the time limit, a microphone that fails to start, a cancel while
@@ -931,12 +944,19 @@ got worse than the baseline, see docs/release-gate.md.
   - TextCleanupTests checks the routes read ahead for each language and direction, that a
     change of language keeps only the routes of the new one and reads them while
     translation is on, and that a direction saved for Chinese reads those of Automatic for
-    Spanish and its own again back in Chinese. PushToTalkControllerTests checks Japanese and
-    English both ways on their routes, Paste Original Text, a direction saved for Chinese
-    acting as Automatic for Spanish with its cue, and Japanese with Japanese fixed pasted as
-    heard without the model. CaptionPipelineTests checks that a Spanish user's English
-    meeting is shown in Spanish and a Spanish one in English, and kana only Japanese in
-    English. RecordingFeedbackTests checks the badges 訳, 日, ⇄ and ES and what VoiceOver
+    Spanish and its own again back in Chinese. Since 2026-10-19 it also checks that while
+    captions run the route into the caption target is read first, then those of the
+    translation key, all within the two routes of the dictation language, and
+    CaptionCleanupTests that a new caption target is read ahead while captions run.
+    PushToTalkControllerTests checks Japanese and English both ways on their routes, Paste
+    Original Text, a direction saved for Chinese acting as Automatic for Spanish with its
+    cue, and Japanese with Japanese fixed pasted as heard without the model.
+    CaptionPipelineTests checks that a Spanish user's English meeting is shown in Spanish
+    and a Spanish one as said with Spanish as the caption target, and in English with
+    English, kana only Japanese in English, and since 2026-10-19 that captions follow the
+    caption target and never the translation key's direction, and that a Chinese reader
+    sees Japanese with kana in English and a Japanese reader Chinese in English.
+    RecordingFeedbackTests checks the badges 訳, 日, ⇄ and ES and what VoiceOver
     reads, SettingsPageTests the choices and explanations of each language,
     WelcomeSuggestionTests the translation line, VoiceRecordingTests the Japanese and
     Spanish scripts, SpeechWordCheckTests Spanish accents, numbers and words written joined
@@ -1211,7 +1231,9 @@ got worse than the baseline, see docs/release-gate.md.
   and that only failed pieces count as missing.
 - ProblemReportTests covers the diagnostic report of Report a Problem…: the home folder,
   account name, full name and computer name are taken out, names under three characters
-  and other users' folders stay, the report lists the facts and only counts of the
+  and other users' folders stay, the report lists the facts, the dictation language,
+  Translate into, what the caption window shows and the caption target with what each
+  acts as and whether the caption target was picked, and only counts of the
   vocabulary and the learned pairs, keeps the newest 2000 log lines, picks at most three
   Orra crash reports from the last 7 days, and the issue link fills the form fields the
   bug report form defines, with what happened among them. The link stays under 6,000
@@ -2319,8 +2341,8 @@ but not seen in the running app:
   corrections, Forget Learned Corrections while there are learned ones, and Use names on
   screen (Beta).
 - [ ] Translation (翻译) shows the Translation switch with Translate into right under it,
-  and a footer that says what the model needs and that Live Captions on the Meeting
-  Interpretation page translate the same way.
+  and a footer that says what the model needs and, since 2026-10-19, "Live Captions have
+  their own language, on the Meeting Interpretation page." (实时字幕的语言在“会议同传”页面单独设置。)
 - [ ] Keys with the talk key in Press to start and stop or Double press and Translation
   off has no hands free row. Setting the talk key to Hold, or turning Translation on with
   its key in Hold, shows the row right after the mode pickers, with its switch as it was.
@@ -2379,7 +2401,8 @@ running app:
   (between General and Vocabulary before 2026-10-19),
   with a white captions bubble on orange. At the sidebar's first width the English name
   fits on one line or wraps to two, and is never cut off. Its page is titled Meeting
-  Interpretation and shows the intro, then Live captions and Captions show in one block,
+  Interpretation and shows the intro, then Live captions, Captions show and, since
+  2026-10-19, Translate captions into in one block,
   then Speak translations to others with all its options in a second block, with the
   note about recording your own voice under it. General has no Meeting Interpretation
   section.
@@ -2667,10 +2690,12 @@ it shows starts, stops, counts and failures, never text.
   Screen & System Audio Recording in Privacy & Security settings." after about 8 s, and
   the note goes away once sound comes in after the permission is given and captions are
   turned off and on.
-- [ ] A Google Meet call in English, with another person or a second device speaking:
-  each sentence shows within about two seconds of its end, first as the original in
-  small grey type, then replaced by the Chinese translation.
-- [ ] The same call in Chinese: the translations are in English.
+- [ ] A Google Meet call in English, with another person or a second device speaking and
+  Chinese as the caption target: each sentence shows within about two seconds of its
+  end, first as the original in small grey type, then replaced by the Chinese
+  translation.
+- [ ] The same call in Chinese shows each sentence as it was said. With English as the
+  caption target, the translations are in English.
 - [ ] A YouTube video with continuous speech: sentences are cut at pauses, none is
   longer than about 12 s, and music alone gives few or no captions.
 - [ ] Interim text: about a second after someone starts a sentence, its first words show
@@ -2699,6 +2724,38 @@ it shows starts, stops, counts and failures, never text.
   Switching to Both loads it, switching back to Original keeps it until captions stop, and
   turning captions off unloads it. Sentences heard in Original keep their original after a
   switch, and Copy Translation copies their original.
+- [ ] The caption target, added on 2026-10-19, not verified yet in the running app. The
+  window's top row shows the translate symbol (文A) with the target's name and an arrow
+  between the display mode and Copy. Its menu lists English and the dictation language
+  with a check mark at the chosen one, and VoiceOver reads "Translate captions into" with
+  the language. It is disabled in Original. Settings, Meeting Interpretation shows
+  Translate captions into (字幕翻译成) under Captions show with "The language you read in
+  the caption window. The translation key has its own setting, on the Translation
+  page." under it, and it is disabled in Original too. The window and Settings change
+  together, the next sentence follows a change, and the choice stays after a restart.
+  The log shows "Meeting captions started, showing translationOnly, into Chinese" and
+  "Meeting captions now translate into English" after a change while captions run.
+- [ ] Changing Translate into on the Translation page leaves captions alone, and
+  changing the caption target leaves the translation key alone. Speak translations to
+  others has a second line, "Speaks in the language the translation key translates into
+  (Translate into, on the Translation page)."
+- [ ] With Chinese dictation and Chinese as the target, a Japanese video goes into
+  English, not shown as heard. With Japanese dictation and Japanese as the target, a
+  Chinese video goes into English.
+- [ ] A target picked while dictating in Japanese shows as Chinese after switching the
+  dictation language to Chinese, and Japanese comes back after switching back.
+- [ ] A new user (a fresh account or `defaults delete io.github.db-ol.Orra`) with nothing
+  picked: an English interface with Chinese second starts with Chinese, an English
+  interface with Japanese second with Japanese, and an English only Mac with English.
+  Picking 日本語 in the welcome window makes it Japanese at once, until a target is
+  picked. Report a Problem shows "Translate captions into: Chinese (default)".
+- [ ] An update from 0.5.0: with Translate into on Automatic and Chinese dictation the
+  target is Chinese, with English fixed it is English. A Chinese meeting now shows as it
+  was said. The second launch of a new user is not taken for an update. Report a
+  Problem shows "Translate captions into: Chinese" without "(default)".
+- [ ] In 简体中文, 日本語 and Español the window's menu and the Settings row read 中文,
+  日本語 and Chino and so on, and the row and its line fit at 720 by 560. The window's
+  top row still fits at 300 pt with the display mode as a menu.
 - [ ] Scrolling: new sentences push older ones up. Scrolling up stops the window from
   moving, and "Jump to Latest" shows. New sentences meanwhile leave the view where it
   is. Scrolling back to the bottom, or Jump to Latest, makes it follow again.
@@ -2931,6 +2988,13 @@ measure the delay of each caption, and `TEST_RUNNER_ORRA_CAPTION_SETTINGS='{"pau
 to try other segmenter settings. With `TEST_RUNNER_ORRA_CAPTION_INTERIM=1` the real time
 run shows interim text every second, as the app does, and records when the first text of
 each sentence showed. A summary of counts and times goes to out.summary.txt.
+Since 2026-10-19 the run translates into a caption target, zh unless
+`TEST_RUNNER_ORRA_CAPTION_TARGET=en`, and sentences in the target already are not
+translated. So Chinese audio, such as stream_zh.wav and the Chinese parts of
+stream_mixed.wav, gets no translation and no translation times with the default. Run
+Chinese audio with `TEST_RUNNER_ORRA_CAPTION_TARGET=en` and English audio with the
+default. Runs before that date translated both languages in one run, so compare each
+language with a run in the same target.
 The output holds the text of the audio, so it goes outside the repository.
 
 Capture start, added on 2026-10-16, not verified yet. A key that waits records from its
