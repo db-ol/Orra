@@ -63,10 +63,10 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         allCases.filter { $0 != .projects || projectsVisible }
     }
 
-    /// The tab the window turns to when asked for this one: General in place of a tab the
-    /// sidebar does not show.
-    func shown(projectsVisible: Bool = ProjectsAvailability.isVisible) -> SettingsTab {
-        Self.visible(projectsVisible: projectsVisible).contains(self) ? self : .general
+    /// The tab the window turns to when asked for this one, with `tabs` in the sidebar:
+    /// General in place of a tab the sidebar does not show.
+    func shown(in tabs: [SettingsTab]) -> SettingsTab {
+        tabs.contains(self) ? self : .general
     }
 }
 
@@ -178,7 +178,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
             // A click on the empty part of the sidebar keeps the tab that is shown.
-            List(SettingsTab.visible(projectsVisible: projectsVisible), selection: Binding<SettingsTab?>(
+            List(tabs, selection: Binding<SettingsTab?>(
                 get: { tab },
                 set: { if let new = $0 { tab = new } }
             )) { tab in
@@ -202,14 +202,19 @@ struct SettingsView: View {
         .frame(minWidth: 680, idealWidth: SettingsWindow.defaultSize.width, maxWidth: .infinity, minHeight: 440, idealHeight: SettingsWindow.defaultSize.height, maxHeight: .infinity)
     }
 
-    /// Whether the sidebar shows Projects: in builds that show it, with its switch at hand.
-    private var projectsVisible: Bool {
-        projects?.isVisible ?? false
+    /// The tabs the sidebar shows: Projects only with its switch at hand, in a build that
+    /// shows it.
+    static func tabs(projects: ProjectsSwitch?) -> [SettingsTab] {
+        SettingsTab.visible(projectsVisible: projects?.isVisible ?? false)
+    }
+
+    private var tabs: [SettingsTab] {
+        Self.tabs(projects: projects)
     }
 
     private func takeRequest() {
         let request = SettingsWindow.takeRequest()
-        tab = request.tab.shown(projectsVisible: projectsVisible)
+        tab = request.tab.shown(in: tabs)
         scrollTarget = request.section
     }
 

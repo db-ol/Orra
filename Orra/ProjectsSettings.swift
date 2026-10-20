@@ -38,13 +38,13 @@ struct ProjectsSettings: View {
                         Image(systemName: "briefcase")
                     }
                 }
-                .disabled(!projects.isOn && !projects.canTurnOn)
+                .disabled(!projects.canTurnOn || projects.isDeleting)
                 if !projects.hasEnoughMemory {
                     Text("Projects needs \(CleanupDefault.gigabytes(CleanupDefault.minimumMemory)) GB of memory or more. This Mac has \(projects.memoryGigabytes) GB.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Link("Privacy details", destination: Self.privacyPage(for: Bundle.main.preferredLocalizations.first))
+                Link("Privacy details", destination: Self.privacyPage(for: AppLanguage.launchLocalization))
             } header: {
                 Text("Sorts your mail into projects and explains each email with the files of its project.")
                     .font(.subheadline)
@@ -81,6 +81,7 @@ struct ProjectsSettings: View {
                 Button("Delete All Projects Data…", role: .destructive) {
                     isConfirmingDelete = true
                 }
+                .disabled(!projects.holdsData || projects.isDeleting)
             } header: {
                 Text("Data")
             }
@@ -115,12 +116,7 @@ struct ProjectsSettings: View {
     /// and only when it keeps something.
     private func turnOff() {
         Task {
-            await projects.measureStorage()
-            if projects.holdsData {
-                isAskingKeepOrDelete = true
-            } else {
-                await projects.turnOff(keepingData: true)
-            }
+            isAskingKeepOrDelete = await projects.turnOffOrAsk()
         }
     }
 
@@ -142,7 +138,7 @@ struct ProjectsSettings: View {
     }
 
     /// The privacy page in the language of Orra's interface, English for any other.
-    static func privacyPage(for localization: String?) -> URL {
+    static func privacyPage(for localization: String) -> URL {
         let name = switch localization {
         case "zh-Hans": "privacy.zh-CN.md"
         case "ja": "privacy.ja.md"

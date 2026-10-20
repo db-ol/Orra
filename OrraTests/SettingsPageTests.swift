@@ -20,7 +20,6 @@ struct SettingsPageTests {
         #expect(SettingsTab.allCases == [.general, .dictation, .translation, .meeting, .vocabulary, .projects, .about])
         #expect(SettingsTab.visible(projectsVisible: false) == [.general, .dictation, .translation, .meeting, .vocabulary, .about])
         #expect(SettingsTab.visible(projectsVisible: true) == [.general, .dictation, .translation, .meeting, .vocabulary, .projects, .about])
-        #expect(SettingsTab.visible() == SettingsTab.visible(projectsVisible: ProjectsAvailability.isVisible))
         // Each page has its own icon in its own color.
         #expect(Set(SettingsTab.allCases.map(\.symbol)).count == SettingsTab.allCases.count)
         #expect(Set(SettingsTab.allCases.map(\.tint)).count == SettingsTab.allCases.count)
@@ -29,17 +28,29 @@ struct SettingsPageTests {
         #expect(SettingsTab.allCases.filter(\.isPreview) == [.projects])
     }
 
-    /// A request for Projects opens it where the sidebar shows it, and General where it does
-    /// not. Every other page opens as asked either way.
-    @Test func projectsOpensItsPageOnlyWhereItShows() {
+    /// The sidebar shows Projects only with a switch from a build that shows it. A request
+    /// for Projects opens its page there, and General everywhere else. Every other page opens
+    /// as asked either way.
+    @Test func projectsOpensItsPageOnlyWhereItShows() throws {
+        let suite = "io.github.db-ol.OrraTests.settings-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("SettingsPageTests-\(UUID().uuidString)", isDirectory: true))
+        let shown = SettingsView.tabs(projects: ProjectsSwitch(defaults: defaults, isVisible: true, storage: storage))
+        let hidden = SettingsView.tabs(projects: ProjectsSwitch(defaults: defaults, isVisible: false, storage: storage))
+        let missing = SettingsView.tabs(projects: nil)
+        #expect(shown == [.general, .dictation, .translation, .meeting, .vocabulary, .projects, .about])
+        #expect(hidden == [.general, .dictation, .translation, .meeting, .vocabulary, .about])
+        #expect(missing == hidden)
         SettingsWindow.show(.projects)
         let request = SettingsWindow.takeRequest()
         #expect(request == .init(tab: .projects, section: nil))
-        #expect(request.tab.shown(projectsVisible: true) == .projects)
-        #expect(request.tab.shown(projectsVisible: false) == .general)
+        #expect(request.tab.shown(in: shown) == .projects)
+        #expect(request.tab.shown(in: hidden) == .general)
+        #expect(request.tab.shown(in: missing) == .general)
         for tab in SettingsTab.allCases where tab != .projects {
-            #expect(tab.shown(projectsVisible: false) == tab)
-            #expect(tab.shown(projectsVisible: true) == tab)
+            #expect(tab.shown(in: hidden) == tab)
+            #expect(tab.shown(in: shown) == tab)
         }
     }
 
@@ -54,13 +65,12 @@ struct SettingsPageTests {
         #expect(ProjectsSettings.stored(nil) == "Checking…")
         #expect(ProjectsSettings.stored(0) == "Nothing")
         #expect(ProjectsSettings.stored(1_500_000) == "1.5 MB")
-        let pages = ["en", "zh-Hans", "ja", "es-419", "fr", nil].map { ProjectsSettings.privacyPage(for: $0).absoluteString }
+        let pages = ["en", "zh-Hans", "ja", "es-419", "fr"].map { ProjectsSettings.privacyPage(for: $0).absoluteString }
         #expect(pages == [
             "https://github.com/db-ol/Orra/blob/main/docs/privacy.md",
             "https://github.com/db-ol/Orra/blob/main/docs/privacy.zh-CN.md",
             "https://github.com/db-ol/Orra/blob/main/docs/privacy.ja.md",
             "https://github.com/db-ol/Orra/blob/main/docs/privacy.es.md",
-            "https://github.com/db-ol/Orra/blob/main/docs/privacy.md",
             "https://github.com/db-ol/Orra/blob/main/docs/privacy.md",
         ])
     }

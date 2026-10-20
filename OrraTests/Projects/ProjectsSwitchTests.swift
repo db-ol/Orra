@@ -21,6 +21,8 @@ struct ProjectsSwitchTests {
 
     private func cleanUp() {
         defaults.removePersistentDomain(forName: suite)
+        // A test may have left the index unwritable.
+        try? FileManager.default.setAttributes([.posixPermissions: ProjectsStorage.folderPermissions], ofItemAtPath: storage.indexFolder.path)
         try? FileManager.default.removeItem(at: storage.root)
     }
 
@@ -128,18 +130,36 @@ struct ProjectsSwitchTests {
         #expect(!projects.deleteFailed)
     }
 
-    /// With nothing kept, turning off has nothing to ask about.
-    @Test func withNothingKeptThereIsNoDataToAskAbout() async throws {
+    /// With nothing kept, the switch turns off without a question. Empty folders are no data
+    /// either.
+    @Test func withNothingKeptTurningOffAsksNothing() async throws {
         defer { cleanUp() }
         let projects = makeSwitch()
         projects.turnOn()
-        await projects.measureStorage()
+        #expect(await !projects.turnOffOrAsk())
+        #expect(!projects.isOn)
+        #expect(saved == false)
         #expect(projects.storedBytes == 0)
-        #expect(!projects.holdsData)
-        // Empty folders are no data either.
         try storage.create()
-        await projects.measureStorage()
-        #expect(!projects.holdsData)
+        projects.turnOn()
+        #expect(await !projects.turnOffOrAsk())
+        #expect(!projects.isOn)
+        #expect(FileManager.default.fileExists(atPath: storage.indexFolder.path))
+    }
+
+    /// With data kept, Projects stays on until the user chooses to keep or delete it.
+    @Test func withDataKeptTurningOffAsksFirst() async throws {
+        defer { cleanUp() }
+        try storeData(bytes: 1_000)
+        let projects = makeSwitch()
+        projects.turnOn()
+        #expect(await projects.turnOffOrAsk())
+        #expect(projects.isOn)
+        #expect(saved == true)
+        #expect(projects.storedBytes == 1_000)
+        await projects.turnOff(keepingData: false)
+        #expect(!projects.isOn)
+        #expect(!FileManager.default.fileExists(atPath: storage.folder.path))
     }
 
     /// Delete All Projects Data leaves the switch as it is.
@@ -155,5 +175,62 @@ struct ProjectsSwitchTests {
         // Nothing left to delete is no failure.
         await projects.deleteAllData()
         #expect(!projects.deleteFailed)
+    }
+
+    /// Two deletes at once, as two quick clicks would start, run as one and end without a
+    /// failure.
+    @Test func twoDeletesAtOnceEndWithoutAFailure() async throws {
+        defer { cleanUp() }
+        try storeData()
+        let projects = makeSwitch()
+        async let first: Void = projects.deleteAllData()
+        async let second: Void = projects.deleteAllData()
+        _ = await (first, second)
+        #expect(!projects.deleteFailed)
+        #expect(!projects.isDeleting)
+        #expect(projects.storedBytes == 0)
+        #expect(!FileManager.default.fileExists(atPath: storage.folder.path))
+    }
+
+    /// While a delete runs, the switch cannot be turned on, so Projects never starts on a
+    /// folder that is being deleted.
+    @Test func projectsCannotBeTurnedOnWhileADeleteRuns() async throws {
+        defer { cleanUp() }
+        try storeData()
+        let projects = makeSwitch()
+        projects.turnOn()
+        let turningOff = Task { await projects.turnOff(keepingData: false) }
+        var turns = 0
+        while !projects.isDeleting, turns < 1_000 {
+            await Task.yield()
+            turns += 1
+        }
+        try #require(projects.isDeleting)
+        projects.turnOn()
+        #expect(!projects.isOn)
+        #expect(saved == false)
+        await turningOff.value
+        #expect(!projects.isDeleting)
+        projects.turnOn()
+        #expect(projects.isOn)
+    }
+
+    /// A delete that leaves data behind says so and keeps the count. The message goes once a
+    /// later delete leaves nothing.
+    @Test func aDeleteThatLeavesDataBehindSaysSo() async throws {
+        defer { cleanUp() }
+        try storeData(bytes: 1_000)
+        // No file can be removed from the index.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: storage.indexFolder.path)
+        let projects = makeSwitch()
+        await projects.deleteAllData()
+        #expect(projects.deleteFailed)
+        #expect(projects.storedBytes == 1_000)
+        #expect(!projects.isDeleting)
+        try FileManager.default.setAttributes([.posixPermissions: ProjectsStorage.folderPermissions], ofItemAtPath: storage.indexFolder.path)
+        await projects.deleteAllData()
+        #expect(!projects.deleteFailed)
+        #expect(projects.storedBytes == 0)
+        #expect(!FileManager.default.fileExists(atPath: storage.folder.path))
     }
 }

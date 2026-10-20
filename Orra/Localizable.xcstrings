@@ -2294,13 +2294,13 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "すべてのプロジェクトデータを削除しますか?"
+            "value" : "“プロジェクト”のすべてのデータを削除しますか?"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要删除所有项目数据吗？"
+            "value" : "要删除“项目”的所有数据吗？"
           }
         }
       }
@@ -2316,13 +2316,13 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "すべてのプロジェクトデータを削除…"
+            "value" : "“プロジェクト”のすべてのデータを削除…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删除所有项目数据…"
+            "value" : "删除“项目”的所有数据…"
           }
         }
       }
@@ -8112,13 +8112,13 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "一部のプロジェクトデータを削除できませんでした。もう一度試してください。"
+            "value" : "“プロジェクト”のデータの一部を削除できませんでした。もう一度試してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有些“项目”数据未能删除。请再试一次。"
+            "value" : "“项目”的部分数据未能删除。请再试一次。"
           }
         }
       }

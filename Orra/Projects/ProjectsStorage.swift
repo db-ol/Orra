@@ -67,13 +67,14 @@ nonisolated struct ProjectsStorage: Sendable {
         return total
     }
 
-    /// Deletes everything Projects keeps, with its folder. Nothing to delete is no error.
-    /// Off the main actor, since an index can hold many files.
+    /// Deletes everything Projects keeps, with its folder. Nothing to delete is no error, but
+    /// a file gone midway while the folder stays is. Off the main actor, since an index can
+    /// hold many files.
     @concurrent
     func deleteAll() async throws {
         do {
             try FileManager.default.removeItem(at: folder)
-        } catch CocoaError.fileNoSuchFile {
+        } catch CocoaError.fileNoSuchFile where !FileManager.default.fileExists(atPath: folder.path) {
             return
         }
     }

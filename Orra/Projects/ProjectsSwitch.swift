@@ -27,8 +27,12 @@ final class ProjectsSwitch {
     let storage: ProjectsStorage
     /// The bytes Projects keeps on this Mac as last measured, nil before the first look.
     private(set) var storedBytes: Int64?
-    /// Whether the last delete left data behind, so Settings says so.
+    /// Whether the last delete left data behind, so Settings says so. Cleared once nothing
+    /// is left.
     private(set) var deleteFailed = false
+    /// Whether a delete runs. Projects cannot be turned on meanwhile, so it never starts on
+    /// a folder that is being deleted, and a second delete returns at once.
+    private(set) var isDeleting = false
     /// What the user chose, as saved.
     private var chosen: Bool
     @ObservationIgnored private let defaults: UserDefaults
@@ -74,24 +78,31 @@ final class ProjectsSwitch {
 
     /// Turns Projects on and saves it. It starts nothing else: no prompt, no index and no model.
     func turnOn() {
-        guard canTurnOn, !isOn else { return }
+        guard canTurnOn, !isOn, !isDeleting else { return }
         chosen = true
         defaults.set(true, forKey: Self.key)
         Logger.projects.notice("Projects on")
     }
 
+    /// Turns Projects off at once when it keeps nothing on this Mac, and returns false. When
+    /// it keeps something, Projects stays on and this returns true, so Settings asks first
+    /// whether to keep or delete it, see turnOff(keepingData:).
+    func turnOffOrAsk() async -> Bool {
+        await measureStorage()
+        guard !holdsData else { return true }
+        switchOff()
+        return false
+    }
+
     /// Turns Projects off and saves it, then keeps what it holds on this Mac for the next
     /// time, or deletes it.
     func turnOff(keepingData: Bool) async {
-        let wasOn = isOn
-        chosen = false
-        defaults.set(false, forKey: Self.key)
-        if wasOn {
-            Logger.projects.notice("Projects off")
-        }
+        switchOff()
         if keepingData {
             await measureStorage()
-            Logger.projects.notice("Projects data kept: \(self.storedBytes ?? 0, privacy: .public) bytes")
+            if holdsData {
+                Logger.projects.notice("Projects data kept: \(self.storedBytes ?? 0, privacy: .public) bytes")
+            }
         } else {
             await deleteAllData()
         }
@@ -100,20 +111,36 @@ final class ProjectsSwitch {
     /// Measures what Projects keeps on this Mac, for Settings.
     func measureStorage() async {
         storedBytes = await storage.size()
+        if !holdsData {
+            deleteFailed = false
+        }
     }
 
-    /// Deletes everything Projects keeps on this Mac, and measures again.
+    /// Deletes everything Projects keeps on this Mac, and measures again. Returns at once
+    /// while another delete runs.
     func deleteAllData() async {
+        guard !isDeleting else { return }
+        isDeleting = true
+        defer { isDeleting = false }
         let bytes = await storage.size()
         do {
             try await storage.deleteAll()
-            deleteFailed = false
             Logger.projects.notice("Projects data deleted: \(bytes, privacy: .public) bytes")
         } catch {
-            deleteFailed = true
             let code = (error as NSError).code
             Logger.projects.error("Deleting Projects data failed with error \(code, privacy: .public)")
         }
         await measureStorage()
+        deleteFailed = holdsData
+    }
+
+    /// Saves Projects as off.
+    private func switchOff() {
+        let wasOn = isOn
+        chosen = false
+        defaults.set(false, forKey: Self.key)
+        if wasOn {
+            Logger.projects.notice("Projects off")
+        }
     }
 }
