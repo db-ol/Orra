@@ -16,6 +16,8 @@ final class ScriptedField {
     private(set) var checks = 0
     var opens = true
     private(set) var reads = 0
+    /// A stand in for Orra's own process.
+    let ownProcess: pid_t = 9
 
     init(_ texts: [String?]) {
         self.texts = texts
@@ -23,6 +25,7 @@ final class ScriptedField {
 
     var environment: CorrectionWatcher.Environment {
         CorrectionWatcher.Environment(
+            ownProcess: ownProcess,
             open: { [self] _ in
                 guard opens else { return nil }
                 return { [self] in
@@ -45,15 +48,15 @@ final class ScriptedField {
 @MainActor
 struct CorrectionWatcherTests {
     /// The word the watch reported to learn, nil when it reported none or a word to offer.
-    private func watch(_ field: ScriptedField, pasted: String) async -> Correction? {
-        if case .word(let correction) = await finding(field, pasted: pasted) { return correction }
+    private func watch(_ field: ScriptedField, pasted: String, in pid: pid_t = 42) async -> Correction? {
+        if case .word(let correction) = await finding(field, pasted: pasted, in: pid) { return correction }
         return nil
     }
 
-    private func finding(_ field: ScriptedField, pasted: String) async -> Finding? {
+    private func finding(_ field: ScriptedField, pasted: String, in pid: pid_t = 42) async -> Finding? {
         let watcher = CorrectionWatcher(environment: field.environment)
         var found: Finding?
-        watcher.watch(pasted: pasted, in: 42) { found = $0; _ = $1 }
+        watcher.watch(pasted: pasted, in: pid) { found = $0; _ = $1 }
         // Waits until a correction comes, or the reads have stopped for a while, since the
         // comparison runs off the main actor.
         var lastReads = -1
@@ -76,6 +79,41 @@ struct CorrectionWatcherTests {
         field.frontmost = 7
         #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
         #expect(field.reads == 0)
+    }
+
+    @Test func aPasteIntoOrrasOwnWindowStartsNoWatch() async {
+        // Orra's own window is in front, so only the check of its process keeps the fix out.
+        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码"])
+        field.frontmost = field.ownProcess
+        #expect(await watch(field, pasted: "我在用克劳德写代码", in: field.ownProcess) == nil)
+        #expect(field.checks == 0)
+        #expect(field.reads == 0)
+    }
+
+    @Test func aPasteIntoOrraPushesOutNoWatch() async {
+        // Five watches in another app, then a paste into Orra before any of them starts.
+        // The first watch still runs all its readings. The four others each read once,
+        // since their text is not in the field.
+        let field = ScriptedField(["我在用克劳德写代码"])
+        let watcher = CorrectionWatcher(environment: field.environment)
+        watcher.watch(pasted: "我在用克劳德写代码", in: 42) { _, _ in }
+        for _ in 1..<CorrectionWatcher.maximumWatches {
+            watcher.watch(pasted: "不在这里", in: 42) { _, _ in }
+        }
+        watcher.watch(pasted: "我在用克劳德写代码", in: field.ownProcess) { _, _ in }
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
+        #expect(field.reads == 1 + CorrectionWatcher.readings + CorrectionWatcher.maximumWatches - 1)
+        watcher.stop()
+    }
+
+    @Test func theLiveEnvironmentNamesOrrasOwnProcess() {
+        #expect(CorrectionWatcher.Environment.live().ownProcess == getpid())
     }
 
     @Test func secureInputInTheAppEndsTheWatch() async {
