@@ -117,11 +117,12 @@ struct MailScanTests {
         let pass = await scan(choice([.inbox])).scan()
         #expect(pass.mailboxes == 2)
         #expect(pass.saved == 5)
-        // Each is counted again at its end, for messages that new mail moved past it.
-        #expect(mail.counted == [.inbox, .inbox, Self.archive, Self.archive])
+        // The linked ones first. Each is counted again at its end, for messages that new
+        // mail moved past it.
+        #expect(mail.counted == [Self.archive, Self.archive, .inbox, .inbox])
         #expect(Set(mail.calls.compactMap(\.mailbox)) == [.inbox, Self.archive])
         #expect(Set(mail.sourcesRead) == [1, 2, 3, 20, 21])
-        #expect(store.saved.map(\.reference.mailbox) == [.inbox, .inbox, .inbox, Self.archive, Self.archive])
+        #expect(store.saved.map(\.reference.mailbox) == [Self.archive, Self.archive, .inbox, .inbox, .inbox])
     }
 
     /// Each range shares its first 10 positions with the one before, and reads none of

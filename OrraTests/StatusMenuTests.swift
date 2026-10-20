@@ -6,7 +6,7 @@ import Testing
 
 /// The menu bar menu, read from the menu SwiftUI makes of StatusMenu: Live Captions under
 /// a Meeting Interpretation heading, when the copy items and Speak Translations to Others
-/// show, and what the Talk Key submenu holds.
+/// show, what the Talk Key submenu holds, and Projects… only while Projects is on.
 @MainActor
 struct StatusMenuTests {
     let mic = FakeMicrophone()
@@ -75,6 +75,104 @@ struct StatusMenuTests {
         #expect(lines.last == "Change Translation Key…")
     }
 
+    /// Projects… shows below Meeting Interpretation only while Projects is on, with the
+    /// count of mail waiting for a reply.
+    @Test func projectsShowsOnlyWhileItIsOnWithTheMailWaitingForAReply() async throws {
+        let suite = "io.github.db-ol.OrraTests.status-menu-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("StatusMenuTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let storage = ProjectsStorage(root: root)
+        let projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: 32 << 30, storage: storage)
+        let runtime = Self.projects(projects, storage: storage, defaults: defaults)
+        runtime.follow()
+        #expect(!Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime)).contains { $0.hasPrefix("Projects") })
+
+        projects.turnOn()
+        for _ in 0..<2_000 where runtime.phase != .on {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        var lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
+        let item = try #require(lines.firstIndex(of: "Projects…"))
+        #expect(Array(lines[(item - 3)...(item + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Projects…", "---", "Talk Key >"])
+
+        // An email that asks the user something waits for a reply once sorted.
+        let store = try #require(runtime.running?.store)
+        try await store.save([MailStore.Message(
+            messageID: "q@harbor.example", date: Date(timeIntervalSinceNow: -3_600),
+            sender: MailStore.Person(name: "Mei Tan", address: "mei@harbor.example"),
+            to: [MailStore.Person(address: "me@studio.example")], subject: "The plan",
+            text: "Could you send the plan by Friday?", visibleText: "Could you send the plan by Friday?"
+        )], ownAddresses: ["me@studio.example"], at: Date())
+        runtime.requestSort()
+        for _ in 0..<2_000 where runtime.replyDueCount == 0 {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
+        #expect(lines.contains("Projects (1 to Reply)…"))
+
+        await projects.turnOff(keepingData: false)
+        for _ in 0..<2_000 where runtime.phase != .off {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        lines = Self.lines(of: menu(translationOn: false, speakingOn: false, projects: runtime))
+        #expect(!lines.contains { $0.hasPrefix("Projects") })
+        #expect(!zip(lines, lines.dropFirst()).contains { $0 == "---" && $1 == "---" })
+    }
+
+    /// Projects with a Mail that never runs and a model that is never there.
+    private static func projects(_ projects: ProjectsSwitch, storage: ProjectsStorage, defaults: UserDefaults) -> ProjectsRuntime {
+        let mail = MailBridge(
+            isRunning: { false },
+            permission: { _ in .mailNotRunning },
+            lastPermission: { nil },
+            accounts: { throw MailBridgeError.mailNotRunning },
+            mailboxes: { throw MailBridgeError.mailNotRunning },
+            count: { _ in throw MailBridgeError.mailNotRunning },
+            listing: { _, _ in throw MailBridgeError.mailNotRunning },
+            headers: { _ in throw MailBridgeError.mailNotRunning },
+            source: { _ in throw MailBridgeError.mailNotRunning },
+            attachments: { _ in throw MailBridgeError.mailNotRunning },
+            mailbox: { _ in throw MailBridgeError.mailNotRunning },
+            selection: { throw MailBridgeError.mailNotRunning },
+            reply: { _, _ in throw MailBridgeError.mailNotRunning }
+        )
+        return ProjectsRuntime(projects: projects, dependencies: ProjectsRuntime.Dependencies(
+            storage: storage,
+            bridge: mail,
+            choice: MailChoice(defaults: defaults, suggestsInboxAndSent: false),
+            ownerOverride: { SortingService.Owner(addresses: ["me@studio.example"]) },
+            language: .en,
+            isDictating: { false },
+            modelEnvironment: { _ in
+                ProjectsModelEnvironment(
+                    startJob: { _, _ in throw RewriteError.notLoaded },
+                    readSlice: { _, _ in throw RewriteError.notLoaded },
+                    writeBurst: { _, _ in throw RewriteError.notLoaded },
+                    endJob: { _ in throw RewriteError.notLoaded },
+                    isDictating: { false },
+                    captionsOn: { false },
+                    memoryPressure: { .normal },
+                    voiceLoaded: { false },
+                    physicalMemory: 32 << 30,
+                    waitUntilLoaded: { false },
+                    holdModel: {},
+                    releaseModel: {},
+                    sleep: { try await Task.sleep(for: $0) }
+                )
+            },
+            modelIsInstalled: { false },
+            loadTokenCounter: { nil },
+            handoff: ReplyHandoff(copy: { _ in true }, mail: mail, isOrraActive: { true }, bringMailToFront: {}),
+            watchesMemoryPressure: false,
+            watchFolders: { _, _, _ in {} },
+            sleep: { _ in try await Task.sleep(for: .seconds(3_600)) }
+        ))
+    }
+
     /// The lines under the Meeting Interpretation heading, up to the divider after them.
     private func meetingLines(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore()) -> [String] {
         let lines = lines(translationOn: translationOn, speakingOn: speakingOn, voiceModel: voiceModel, store: store)
@@ -100,7 +198,11 @@ struct StatusMenuTests {
     }
 
     /// The menu SwiftUI makes of StatusMenu. No Live Captions shortcut unless one is given.
-    private func menu(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore(), shortcut: KeyCombination? = nil) -> NSMenu {
+    private func menu(translationOn: Bool, speakingOn: Bool, voiceModel: Bool = true, store: CaptionStore = CaptionStore(), shortcut: KeyCombination? = nil, projects: ProjectsRuntime? = nil) -> NSMenu {
+        // Projects off, in preferences of its own that nothing writes, removed at the end.
+        let offSuite = "io.github.db-ol.OrraTests.status-menu-off-\(UUID().uuidString)"
+        let offDefaults = UserDefaults(suiteName: offSuite)!
+        defer { offDefaults.removePersistentDomain(forName: offSuite) }
         let pushToTalk = PushToTalkController(capture: mic.capture, transcription: dictation.transcription, insert: inserter.insert, liveCaptionsShortcut: shortcut)
         pushToTalk.setTranslationKeyOn(translationOn)
         let speech = TranslationSpeech(
@@ -127,8 +229,14 @@ struct StatusMenuTests {
             clipboard: ClipboardWord(read: { nil }, isDictating: { false }, vocabulary: { [] }),
             updater: AppUpdater(),
             speech: speech,
+            projects: projects ?? Self.projects(
+                ProjectsSwitch(defaults: offDefaults, isVisible: false),
+                storage: ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("StatusMenuTests-off", isDirectory: true)),
+                defaults: offDefaults
+            ),
             showWelcome: {},
-            reportProblem: {}
+            reportProblem: {},
+            showProjects: {}
         )
         let menu = NSHostingMenu(rootView: view)
         menu.update()

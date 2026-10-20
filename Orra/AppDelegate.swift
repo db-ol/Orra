@@ -114,6 +114,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var projectsMail = ProjectsSettings.MailAccess(bridge: .live, choice: mailChoice) { [projects] in
         projects.isOn
     }
+    /// Projects while its switch is on: its database, index, mail scan, sorting and model
+    /// work. Starts nothing while it is off.
+    lazy var projectsRuntime = makeProjectsRuntime()
+    /// The Projects window, from Projects… in the menu while Projects is on.
+    lazy var projectsWindow = ProjectsWindow(runtime: projectsRuntime) { [dockIcon] in
+        dockIcon.willShowWindow()
+    } openSettings: { [dockIcon] in
+        SettingsWindow.show(.projects)
+        LaunchWindow.openSettings(dockIcon: dockIcon)
+    }
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
     let dockIcon = DockIcon.live()
@@ -150,7 +160,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cleanup: cleanup,
         captions: captions,
         updater: updater,
-        projects: projects
+        projects: projects,
+        projectCounts: { [projectsRuntime] in await projectsRuntime.counts() }
     ))
     lazy var learnedNotice: LearnedNoticePanel = LearnedNoticePanel(
         notice: LearnedNotice(),
@@ -179,6 +190,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.learnedNotice.offerKeyboardTip(key)
     }
     private var menuObserver: (any NSObjectProtocol)?
+    private var mailObservers: [any NSObjectProtocol] = []
+    /// Orra's access to Mail as the Projects page last learned it, see `followMailAccess()`.
+    private var mailAccess: ProjectsSettings.MailAccess.Access?
+
+    /// Projects with what it takes from the app: the live Mail bridge, the model of
+    /// TextCleanup, what pauses its model work, and the handoff of a draft through the
+    /// concealed clipboard.
+    private func makeProjectsRuntime() -> ProjectsRuntime {
+        let folders = ModelFolders.liveCleanup
+        return ProjectsRuntime(projects: projects, dependencies: ProjectsRuntime.Dependencies(
+            storage: .live,
+            bridge: .live,
+            choice: mailChoice,
+            ownerOverride: { ProjectsDebugOwner.load() },
+            language: ProjectsLanguage.forExplanations(interface: AppLanguage.launchLocalization),
+            isDictating: { [turns] in turns.isDictating },
+            modelEnvironment: { [cleanup, turns, captions, speech] memoryPressure in
+                cleanup.projectsEnvironment(
+                    isDictating: { turns.isDictating },
+                    captionsOn: { captions.isOn },
+                    memoryPressure: memoryPressure,
+                    voiceLoaded: { speech.isLoaded }
+                )
+            },
+            modelIsInstalled: { [cleanup] in
+                if case .installed = cleanup.models.state { true } else { false }
+            },
+            loadTokenCounter: { try await ProjectsTokenCounter.installed(in: folders)?.count },
+            handoff: ReplyHandoff(
+                copy: { ConcealedClipboard.copy($0, to: .general) },
+                mail: .live,
+                isOrraActive: { NSApp.isActive },
+                bringMailToFront: { ReplyHandoff.bringMailToFront() }
+            )
+        ))
+    }
 
     /// True when Xcode runs this process to host unit tests or SwiftUI previews.
     nonisolated static var isHostedByXcode: Bool {
@@ -249,6 +296,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 clipboard.refresh()
             }
         }
+    }
+
+    /// Tells Projects when Mail starts or quits, so its window says whether Mail is open and
+    /// the scan starts once Mail runs. Orra never opens Mail.
+    private func followMail() {
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
+            mailObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [projectsRuntime] notification in
+                let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                guard app?.bundleIdentifier == "com.apple.mail" else { return }
+                MainActor.assumeIsolated {
+                    projectsRuntime.mailRunningChanged()
+                }
+            })
+        }
+    }
+
+    /// Tells Projects when the Projects page learns a new answer about Orra's access to
+    /// Mail, such as after Allow Mail Access…, so a scan that waits after a refusal starts
+    /// at once. Reading the answer sends nothing to Mail.
+    private func followMailAccess() {
+        let access = withObservationTracking {
+            projectsMail.access
+        } onChange: { [weak self] in
+            DispatchQueue.main.async {
+                self?.followMailAccess()
+            }
+        }
+        if let mailAccess, access != mailAccess {
+            projectsRuntime.mailAccessChanged()
+        }
+        mailAccess = access
     }
 
     /// The Live Captions shortcut turns captions on, or off as closing the window does. The
@@ -373,6 +452,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pushToTalk.start()
         followReadiness()
         refreshWhenMenusOpen()
+        // Projects starts while its switch is on and stops when it goes off, which closes
+        // its window. Nothing of it runs while it is off.
+        projectsRuntime.closeWindow = { [projectsWindow] in projectsWindow.close() }
+        projectsRuntime.follow()
+        followMail()
+        followMailAccess()
         // Local files only. Launching never touches the network. The welcome window walks
         // a new user through what is missing, and comes back at launch until nothing is.
         // After that, a launch by the user opens Settings, see LaunchWindow.
@@ -408,6 +493,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             welcome.onClose = { [weak self] in self?.checkKeyboardTip() }
             externalKeyboards.start()
             followKeyboardTip()
+        }
+    }
+}
+
+extension AppDelegate {
+    /// The user's addresses and name for Projects in a Debug build, from two preferences
+    /// the test guide sets, so a Debug run treats a person of the synthetic mail as the user
+    /// and never reads the addresses of Mail's accounts (plan section 8). A release build
+    /// never reads them, whatever is saved.
+    enum ProjectsDebugOwner {
+        /// The user's addresses, an array of strings.
+        static let addressesKey = "projectsDebugOwnAddresses"
+        /// The user's name, a string.
+        static let nameKey = "projectsDebugOwnName"
+
+        /// Whether this build reads the two preferences: Debug builds only.
+        static var readsPreferences: Bool {
+            #if DEBUG
+            true
+            #else
+            false
+            #endif
+        }
+
+        /// The owner the two preferences give, or nil in a release build, or when they hold
+        /// no address.
+        static func load(from defaults: UserDefaults = .standard, readsPreferences: Bool = ProjectsDebugOwner.readsPreferences) -> SortingService.Owner? {
+            guard readsPreferences else { return nil }
+            let saved = defaults.array(forKey: addressesKey) as? [String] ?? defaults.string(forKey: addressesKey).map { [$0] } ?? []
+            var addresses: [String] = []
+            for address in saved.compactMap(ProjectsAddress.normalized) where !addresses.contains(address) {
+                addresses.append(address)
+            }
+            guard !addresses.isEmpty else { return nil }
+            let name = defaults.string(forKey: nameKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return SortingService.Owner(addresses: addresses, name: name.isEmpty ? nil : name)
         }
     }
 }

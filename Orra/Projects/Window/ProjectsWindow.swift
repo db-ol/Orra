@@ -1,0 +1,91 @@
+import AppKit
+import SwiftUI
+
+/// The Projects window, which Projects… in the menu opens while Projects is on. AppKit, like
+/// the welcome window, since an accessory app cannot open a SwiftUI window from AppKit code.
+///
+/// While it is open it holds the cleanup model, and closing it lets the model go and ends
+/// the background work, see ProjectsRuntime.windowOpened(). Orra shows in the Dock while it
+/// is open, as for Settings, see DockIcon. It closes when Projects turns off. Closing it
+/// lets go of the window with its lists and selection, so no mail it showed stays in
+/// memory, and the next open builds it anew where it was last.
+final class ProjectsWindow {
+    /// The size the window first opens at.
+    static let defaultSize = CGSize(width: 1_040, height: 640)
+    /// The smallest size, at which the three columns still fit.
+    static let minimumSize = CGSize(width: 760, height: 420)
+    /// The name its frame is kept under between launches.
+    private static let frameName = "ProjectsWindow"
+
+    private let runtime: ProjectsRuntime
+    /// Called before the window shows, see DockIcon.willShowWindow().
+    private let willShow: () -> Void
+    /// Opens Settings at the Projects page.
+    private let openSettings: () -> Void
+    private var window: NSWindow?
+    private var closeObserver: (any NSObjectProtocol)?
+
+    init(runtime: ProjectsRuntime, willShow: @escaping () -> Void, openSettings: @escaping () -> Void) {
+        self.runtime = runtime
+        self.willShow = willShow
+        self.openSettings = openSettings
+    }
+
+    /// Brings the window to the front, while Projects is on.
+    func show() {
+        guard runtime.showsMenuItem else { return }
+        let window = self.window ?? makeWindow()
+        self.window = window
+        willShow()
+        runtime.windowOpened()
+        NSApplication.shared.activate()
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+
+    /// Closes the window, such as when Projects turns off.
+    func close() {
+        window?.close()
+    }
+
+    private func makeWindow() -> NSWindow {
+        let model = ProjectsWindowModel(runtime: runtime)
+        let view = ProjectsWindowView(runtime: runtime, model: model, openSettings: openSettings)
+        let controller = NSHostingController(rootView: view)
+        controller.sceneBridgingOptions = [.toolbars, .title]
+        let window = NSWindow(contentViewController: controller)
+        window.title = String(localized: "Projects")
+        // The sidebar reaches the top of the window under one toolbar, as in Mail.
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+        window.setContentSize(Self.defaultSize)
+        window.contentMinSize = Self.minimumSize
+        if !window.setFrameUsingName(Self.frameName) {
+            window.center()
+        }
+        window.setFrameAutosaveName(Self.frameName)
+        closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.runtime.windowClosed()
+                self?.letGo()
+            }
+        }
+        return window
+    }
+
+    /// Lets go of the closing window, so the next `show()` builds a new one. The window is
+    /// kept until the close is done, since it may not go away inside its own notification.
+    private func letGo() {
+        let closing = window
+        window = nil
+        if let closeObserver {
+            NotificationCenter.default.removeObserver(closeObserver)
+        }
+        closeObserver = nil
+        DispatchQueue.main.async {
+            withExtendedLifetime(closing) {}
+        }
+    }
+}

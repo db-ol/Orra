@@ -80,7 +80,14 @@ got worse than the baseline, see docs/release-gate.md.
     other, and Speak Translations to Others only in a build with a voice model, while
     translation is on or while it is on itself. Since 2026-10-19 it also checks that the
     Talk Key submenu has no hands free switch, and that Live Captions shows its shortcut
-    as text after the name, with no key equivalent.
+    as text after the name, with no key equivalent. Since 2026-10-20 it also checks that
+    Projects… shows below Meeting Interpretation only while Projects is on, with the count
+    of mail waiting for a reply.
+  - ProjectsWindowViewTests, added on 2026-10-20, checks the marks and the date of a mail
+    row in the Projects window, and the project setup's checks of people and domains.
+    With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
+    window's parts to PNG files there, once per test language, which CI never does. The
+    sidebar does not draw offscreen, so it is not in them.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
