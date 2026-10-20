@@ -141,7 +141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         learning: learning,
         cleanup: cleanup,
         captions: captions,
-        updater: updater
+        updater: updater,
+        projects: projects
     ))
     lazy var learnedNotice: LearnedNoticePanel = LearnedNoticePanel(
         notice: LearnedNotice(),

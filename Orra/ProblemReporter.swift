@@ -218,7 +218,7 @@ final class ProblemReporter {
         cleanup: TextCleanup,
         captions: MeetingCaptions,
         updater: AppUpdater,
-        projects: ProjectsSwitch? = nil,
+        projects: ProjectsSwitch,
         projectCounts: @escaping () async -> ProblemReport.ProjectsCounts? = { nil }
     ) -> ProblemReporter {
         ProblemReporter(facts: {
@@ -273,7 +273,7 @@ final class ProblemReporter {
                 cleanupModelState: describe(cleanup.models.state, cleanup.engineState),
                 vocabularyCount: pushToTalk.vocabulary.count,
                 learnedPairCount: learning.store.entries.count,
-                projects: projects.flatMap { $0.isVisible ? ProblemReport.ProjectsFacts(isOn: $0.isOn) : nil }
+                projects: projects.isVisible ? ProblemReport.ProjectsFacts(isOn: projects.isOn) : nil
             )
         }, modelFolder: ModelFolders.live.installed(.qwen3), projectCounts: projectCounts)
     }
