@@ -279,11 +279,13 @@ got worse than the baseline, see docs/release-gate.md.
     leaving a password field and the pasteboard alone, leaving a field that cannot be
     described alone when the app in front holds secure input, pasting into plain text
     there, asking about the field only under secure input and only right before the paste,
-    telling fields apart by role and subrole, a concealed Copy Last Dictation, empty text,
-    two dictations in a row, restoring several items and types, reading the pasteboard off
-    the main actor, and finding the key for v in the current layout with and without
-    Command held. They use private named pasteboards and a fake key poster, so no real
-    event is posted.
+    telling fields apart by role and subrole, empty text, two dictations in a row,
+    restoring several items and types, reading the pasteboard off the main actor, and
+    finding the key for v in the current layout with and without Command held. They use
+    private named pasteboards and a fake key poster, so no real event is posted.
+  - ConcealedClipboardTests covers the copy that the paste, Copy Last Dictation, Live
+    Captions and the Projects reply use: concealed, staying, and in place of every earlier
+    item, on a private named pasteboard.
   - PushToTalkControllerTests runs the whole flow with a fake microphone, a fake speech
     model, a fake inserter and a fake frontmost app: model loading, trying a failed load again, and the ready gate,
     record, resample, transcribe and paste, a release or cancel that arrives before the

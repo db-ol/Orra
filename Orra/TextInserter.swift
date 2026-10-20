@@ -17,9 +17,8 @@ nonisolated enum InsertionResult: Equatable, Sendable {
 /// Puts dictated text into the frontmost app: write it to the pasteboard, post Command V,
 /// and put the old pasteboard back half a second later.
 ///
-/// The text is marked with org.nspasteboard.ConcealedType so clipboard managers skip it,
-/// and kept on this Mac, so Universal Clipboard does not offer it to other devices.
-/// The old contents come back only if nothing else changed the pasteboard meanwhile.
+/// The text goes on the pasteboard through ConcealedClipboard, concealed and kept on this
+/// Mac. The old contents come back only if nothing else changed the pasteboard meanwhile.
 /// Reading the old contents can wait on the app that copied them, so it happens off the
 /// main thread, where the keyboard tap runs.
 ///
@@ -32,8 +31,6 @@ nonisolated enum InsertionResult: Equatable, Sendable {
 /// the app that holds secure input itself. The pasteboard is then left alone, and the text
 /// stays under Copy Last Dictation.
 final class TextInserter {
-    nonisolated static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
-
     private let pasteboard: NSPasteboard
     private let postCommandShortcut: (CGKeyCode) -> Void
     private let secureInputHolder: () -> pid_t?
@@ -87,24 +84,6 @@ final class TextInserter {
         )
     }
 
-    /// Puts text on the pasteboard for the user to paste, as Copy Last Dictation does.
-    /// Marked concealed, so clipboard managers skip it, and kept on this Mac, so Universal
-    /// Clipboard does not offer it to other devices. Nothing restores the old contents.
-    static func copy(_ text: String, to pasteboard: NSPasteboard) {
-        write(text, to: pasteboard)
-    }
-
-    /// Writes text marked concealed and kept on this Mac, for the paste and for Copy Last
-    /// Dictation alike. Not followed by declareTypes, which would clear the host only
-    /// option again.
-    private static func write(_ text: String, to pasteboard: NSPasteboard) {
-        pasteboard.prepareForNewContents(with: .currentHostOnly)
-        let item = NSPasteboardItem()
-        item.setString(text, forType: .string)
-        item.setData(Data(), forType: concealedType)
-        pasteboard.writeObjects([item])
-    }
-
     @discardableResult
     func insert(_ text: String) async -> InsertionResult {
         guard !text.isEmpty else { return .nothingToInsert }
@@ -125,7 +104,7 @@ final class TextInserter {
         restoreTask?.cancel()
         pendingSnapshot = nil
 
-        Self.write(text, to: pasteboard)
+        ConcealedClipboard.copy(text, to: pasteboard)
 
         let writtenChangeCount = pasteboard.changeCount
         postCommandShortcut(keyCodeForV())
@@ -193,7 +172,7 @@ nonisolated struct PasteboardSnapshot: Sendable {
     /// let Universal Clipboard offer them to other devices afterwards. Internal for tests,
     /// since a pasteboard does not tell whether it is kept on this Mac.
     var restoreOptions: NSPasteboard.ContentsOptions {
-        let concealed = items.contains { $0.contains { $0.type == TextInserter.concealedType.rawValue } }
+        let concealed = items.contains { $0.contains { $0.type == ConcealedClipboard.concealedType.rawValue } }
         return concealed ? .currentHostOnly : []
     }
 

@@ -71,7 +71,7 @@ struct StatusMenu: View {
             }
             if let transcript = pushToTalk.lastTranscript {
                 Button("Copy Last Dictation") {
-                    TextInserter.copy(transcript, to: .general)
+                    ConcealedClipboard.copy(transcript, to: .general)
                 }
             }
             if pushToTalk.originalText != nil {

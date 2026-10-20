@@ -519,7 +519,8 @@ SOURCE_RULES = {
     2: "In Orra/Projects only Index/FileText.swift makes an NSAttributedString, from data with the "
        "documentType named in the same call, never from a URL, a path or HTML.",
     3: "In Orra only the files in APPLE_EVENT_FILES build or send an Apple Event. Reading the launch event is fine.",
-    4: "Tests never send an Apple Event or use the live Mail bridge. Building a descriptor is fine.",
+    4: "Tests never send an Apple Event, use the live Mail bridge or bring Mail to the front. "
+       "Building a descriptor is fine.",
     5: "No file in Orra, OrraTests or Tools runs or holds script text.",
     6: "Only Orra/Projects and OrraTests/Projects use SQLite.",
     7: "In Orra/Projects only ProjectsStorage.swift removes, moves, replaces or trashes files.",
@@ -624,6 +625,8 @@ PROJECTS_BANNED = _rule(
     r"\bk?AX[A-Z]\w*",
     r"\bNSWorkspace\b",
     r"\bNSPasteboard\b",
+    # The concealed copy of Orra/ConcealedClipboard.swift. Projects gets it as a closure.
+    r"\bConcealedClipboard\b",
     r"\bProcess\b",
     r"\bNSTask\b",
     r"\bposix_spawnp?\b",
@@ -709,6 +712,8 @@ APPLE_EVENT_SENDING = _rule(
     r"\bAEDeterminePermissionToAutomateTarget\b",
     r"\bMailBridge\s*\.\s*live\b",
     r"\bMailEvents\s*\.\s*live\b",
+    # The real activation of Mail, which tests replace with a fake.
+    r"\bReplyHandoff\s*\.\s*bringMailToFront\b",
 )
 
 # Rule 5, in code and string literals, and in every other file. AppleScript ignores case.
