@@ -41,14 +41,16 @@ final class MailChoice {
     /// Whether the user confirmed the choice once.
     private(set) var isConfirmed: Bool
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let suggestion: [MailMailbox]
 
     init(defaults: UserDefaults = .standard, suggestsInboxAndSent: Bool = MailChoice.suggestsInboxAndSentByDefault) {
         self.defaults = defaults
+        suggestion = suggestsInboxAndSent ? [.inbox, .sent] : []
         if let data = defaults.object(forKey: Self.mailboxesKey) {
             // A saved value that cannot be read chooses nothing, never the suggestion.
             mailboxes = (data as? Data).flatMap { try? JSONDecoder().decode([MailMailbox].self, from: $0) } ?? []
         } else {
-            mailboxes = suggestsInboxAndSent ? [.inbox, .sent] : []
+            mailboxes = suggestion
         }
         let savedDays = defaults.integer(forKey: Self.daysKey)
         days = Self.dayChoices.contains(savedDays) ? savedDays : Self.defaultDays
@@ -77,6 +79,18 @@ final class MailChoice {
         saveMailboxes()
         defaults.set(days, forKey: Self.daysKey)
         defaults.set(true, forKey: Self.confirmedKey)
+    }
+
+    /// Forgets the mailboxes, the days and the confirm, and removes their preferences, as
+    /// Delete All Projects Data should. Nothing is read again before the user confirms
+    /// anew, and the suggestion of this build comes back.
+    func forget() {
+        for key in [Self.mailboxesKey, Self.daysKey, Self.confirmedKey] {
+            defaults.removeObject(forKey: key)
+        }
+        mailboxes = suggestion
+        days = Self.defaultDays
+        isConfirmed = false
     }
 
     private func saveMailboxes() {

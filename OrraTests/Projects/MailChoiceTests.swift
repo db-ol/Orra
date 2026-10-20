@@ -107,6 +107,25 @@ struct MailChoiceTests {
         #expect(MailChoice(defaults: defaults, suggestsInboxAndSent: true).mailboxes == [])
     }
 
+    /// Forgetting removes the three preferences, so nothing is read again before a new
+    /// confirm, and the build's suggestion comes back.
+    @Test(arguments: [false, true])
+    func forgettingRemovesTheChoiceAndTheConfirm(suggests: Bool) {
+        defer { cleanUp() }
+        let choice = MailChoice(defaults: defaults, suggestsInboxAndSent: suggests)
+        choice.choose([Self.archive])
+        choice.choose(days: 365)
+        choice.confirm()
+        choice.forget()
+        #expect(!choice.isConfirmed)
+        #expect(choice.mailboxes == (suggests ? [.inbox, .sent] : []))
+        #expect(choice.days == 90)
+        #expect(saved.isEmpty)
+        let next = MailChoice(defaults: defaults, suggestsInboxAndSent: suggests)
+        #expect(!next.isConfirmed)
+        #expect(next.mailboxes == (suggests ? [.inbox, .sent] : []))
+    }
+
     /// The cleanup steps of the test guide list Orra's preferences that hold "projects".
     @Test func theKeysNameProjects() {
         for key in [MailChoice.mailboxesKey, MailChoice.daysKey, MailChoice.confirmedKey] {

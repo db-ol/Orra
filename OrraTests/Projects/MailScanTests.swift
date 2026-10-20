@@ -47,7 +47,7 @@ struct MailScanTests {
 
     private func scan(
         _ choice: MailChoice,
-        isOn: Bool = true,
+        isOn: @escaping () -> Bool = { true },
         owner: SortingService.Owner? = nil,
         sleep: @escaping (Duration) async throws -> Void = { _ in }
     ) -> MailScan {
@@ -58,7 +58,7 @@ struct MailScanTests {
             lookups: store.lookups,
             save: { store.save($0) },
             ownerOverride: owner,
-            isOn: { isOn },
+            isOn: isOn,
             now: { Self.now },
             sleep: sleep
         )
@@ -91,7 +91,7 @@ struct MailScanTests {
     @Test func nothingIsReadWhileProjectsIsOff() async {
         defer { cleanUp() }
         mail.put(Self.hourly(3), in: .inbox)
-        let scan = scan(choice([.inbox]), isOn: false)
+        let scan = scan(choice([.inbox]), isOn: { false })
         #expect(await scan.scan().skipped == .off)
         #expect(await scan.owner() == nil)
         #expect(mail.calls.isEmpty)
@@ -117,19 +117,22 @@ struct MailScanTests {
         let pass = await scan(choice([.inbox])).scan()
         #expect(pass.mailboxes == 2)
         #expect(pass.saved == 5)
-        #expect(mail.counted == [.inbox, Self.archive])
+        // Each is counted again at its end, for messages that new mail moved past it.
+        #expect(mail.counted == [.inbox, .inbox, Self.archive, Self.archive])
         #expect(Set(mail.calls.compactMap(\.mailbox)) == [.inbox, Self.archive])
         #expect(Set(mail.sourcesRead) == [1, 2, 3, 20, 21])
         #expect(store.saved.map(\.reference.mailbox) == [.inbox, .inbox, .inbox, Self.archive, Self.archive])
     }
 
+    /// Each range shares its first 10 positions with the one before, and reads none of
+    /// them twice.
     @Test func aMailboxIsReadInRangesOf200NewestFirst() async {
         defer { cleanUp() }
         mail.put(Self.hourly(450), in: .inbox)
         let pass = await scan(choice([.inbox])).scan()
-        #expect(mail.listings == [1...200, 201...400, 401...450])
+        #expect(mail.listings == [1...200, 191...390, 381...450])
         #expect(mail.sourcesRead == Array(1...450))
-        #expect(store.batches.map(\.count) == [200, 200, 50])
+        #expect(store.batches.map(\.count) == [200, 190, 60])
         #expect(store.saved.first?.messageID == "m1@harbor.example")
         #expect(pass.read == 450)
         #expect(pass.saved == 450)
@@ -144,14 +147,14 @@ struct MailScanTests {
         // reaches the cutoff and the third is never listed.
         mail.put(Self.hourly(600, hoursApart: 3), in: .inbox)
         let pass = await scan(choice([.inbox], days: 30)).scan()
-        #expect(mail.listings == [1...200, 201...400])
+        #expect(mail.listings == [1...200, 191...390])
         #expect(mail.sourcesRead == Array(1...240))
-        #expect(pass.older == 160)
+        #expect(pass.older == 150)
         #expect(store.saved.allSatisfy { ($0.dateReceived ?? .distantPast) >= Self.now - 30 * Self.day })
     }
 
-    /// Once a pass reached the days, the next one starts with the newest 20 and stops at
-    /// the first message it knows.
+    /// Once a pass reached the days, the next one starts with the newest 20 and ends after
+    /// the range that holds a message it knew before.
     @Test func aLaterPassStopsAtTheFirstKnownMessage() async {
         defer { cleanUp() }
         mail.put(Self.hourly(30), in: .inbox)
@@ -166,7 +169,7 @@ struct MailScanTests {
         let pass = await scan.scan()
         #expect(mail.listings == [1...20])
         #expect(mail.sourcesRead == [101, 102, 103])
-        #expect(pass.known == 1)
+        #expect(pass.known == 17)
         #expect(pass.saved == 3)
 
         // Nothing new: one short listing and no source.
@@ -186,7 +189,7 @@ struct MailScanTests {
         mail.clearCalls()
         mail.receive((0..<25).map { FakeMail.mail(200 + $0, in: .inbox, received: Self.now - Double($0 + 1)) }, in: .inbox)
         await scan.scan()
-        #expect(mail.listings == [1...20, 21...35])
+        #expect(mail.listings == [1...20, 11...35])
         #expect(mail.sourcesRead.count == 25)
     }
 
@@ -250,7 +253,7 @@ struct MailScanTests {
         mail.put(Self.hourly(250, in: Self.archive).reversed(), in: Self.archive)
         let scan = scan(choice([Self.archive]))
         await scan.scan()
-        #expect(mail.listings == [1...200, 51...250, 1...50])
+        #expect(mail.listings == [1...200, 51...250, 1...60])
         #expect(mail.sourcesRead == Array(1...250))
         #expect(store.saved.first?.messageID == "m1@harbor.example")
 
@@ -303,8 +306,7 @@ struct MailScanTests {
         #expect(pass.error == nil)
     }
 
-    /// A chosen mailbox that Mail no longer has skips only that mailbox.
-    /// A click while the loop's pass reads gets no second pass over the same mail.
+    /// A pass asked for while another reads gets no second pass over the same mail.
     @Test func aPassWhileAnotherReadsAsksNothing() async throws {
         defer { cleanUp() }
         mail.put(Self.hourly(3), in: .inbox)
@@ -323,12 +325,268 @@ struct MailScanTests {
         #expect(await scan.scan().skipped == nil)
     }
 
+    /// A chosen mailbox that Mail no longer has skips only that mailbox.
     @Test func aMailboxThatIsGoneSkipsOnlyItself() async {
         defer { cleanUp() }
         mail.put(Self.hourly(2), in: .inbox)
         let pass = await scan(choice([Self.receipts, .inbox])).scan()
         #expect(pass.error == .notFound)
         #expect(store.saved.count == 2)
+    }
+
+    /// The Inbox is newest first, as the spike found, whatever the dates of its first range.
+    @Test func theInboxIsReadNewestFirstWhateverItsDates() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(250).reversed(), in: .inbox)
+        await scan(choice([.inbox])).scan()
+        #expect(mail.listings == [1...200, 191...250])
+        #expect(mail.sourcesRead == Array((1...250).reversed()))
+    }
+
+    /// One message with an old date at the top, as one moved back into the mailbox might
+    /// have, does not turn the order of the mailbox.
+    @Test func oneDateOutOfPlaceDoesNotTurnAMailbox() async {
+        defer { cleanUp() }
+        var messages = Self.hourly(300, in: Self.archive, hoursApart: 12)
+        messages[0] = FakeMail.mail(1, in: Self.archive, received: Self.now - 200 * Self.day)
+        mail.put(messages, in: Self.archive)
+        let scan = scan(choice([Self.archive], days: 30))
+        await scan.scan()
+        #expect(mail.listings == [1...200])
+        #expect(Set(store.saved.map(\.reference.id)) == Set(2...60))
+        // New mail at the top is read.
+        mail.clearCalls()
+        mail.receive([FakeMail.mail(901, in: Self.archive, received: Self.now - 30)], in: Self.archive)
+        await scan.scan()
+        #expect(mail.listings == [1...20])
+        #expect(mail.sourcesRead == [901])
+    }
+
+    // MARK: Mail that changes while a pass reads
+
+    /// More new mail than the first short range of a poll, and more coming in while it
+    /// reads. Messages read in this pass moved down into the next range, which reads on.
+    @Test func newMailDuringAPollIsReadInFull() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(30), in: .inbox)
+        let scan = scan(choice([.inbox]))
+        await scan.scan()
+        mail.receive((0..<50).map { FakeMail.mail(1_001 + $0, in: .inbox, received: Self.now - Double($0 + 1)) }, in: .inbox)
+        store.afterSave = {
+            mail.receive((0..<10).map { FakeMail.mail(2_001 + $0, in: .inbox, received: Self.now + Double(10 - $0)) }, in: .inbox)
+        }
+        mail.clearCalls()
+        let pass = await scan.scan()
+        #expect(Set(1_001...1_050).isSubset(of: Set(store.saved.map(\.reference.id))))
+        #expect(pass.saved == 50)
+        // The ten that came in meanwhile, at the next poll.
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...20])
+        #expect(Set(mail.sourcesRead) == Set(2_001...2_010))
+        #expect(store.saved.count == 90)
+    }
+
+    /// An account that syncs late puts its new mail below mail already known.
+    @Test func aNewMessageBelowAKnownOneIsRead() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(30), in: .inbox)
+        let scan = scan(choice([.inbox]))
+        await scan.scan()
+        var messages = mail.messages(in: .inbox)
+        messages.insert(FakeMail.mail(501, in: .inbox, received: Self.now - 90 * 60), at: 1)
+        messages.insert(FakeMail.mail(500, in: .inbox, received: Self.now - 60), at: 0)
+        mail.put(messages, in: .inbox)
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...20])
+        #expect(mail.sourcesRead == [500, 501])
+    }
+
+    /// A message read a moment ago from another mailbox, as a label copy of the same mail,
+    /// does not end the poll of the next one. Only mail known before the pass does.
+    @Test func aMessageReadFromAnotherMailboxDoesNotEndAPoll() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(5), in: .inbox)
+        mail.put(Self.hourly(5, from: 11, in: Self.clients), in: Self.clients)
+        let scan = scan(choice([.inbox, Self.clients]))
+        await scan.scan()
+        let new = FakeMail.mail(100, in: .inbox, received: Self.now - 60)
+        var copy = FakeMail.mail(100, in: Self.clients, received: Self.now - 60)
+        copy.listing = MailListing(
+            message: MailMessageRef(id: 600, mailbox: Self.clients), messageID: copy.listing.messageID,
+            dateReceived: copy.listing.dateReceived, sender: copy.listing.sender, subject: copy.listing.subject,
+            to: copy.listing.to, cc: [], size: copy.listing.size
+        )
+        mail.receive([new], in: .inbox)
+        mail.receive([copy] + (0..<25).map { FakeMail.mail(300 + $0, in: Self.clients, received: Self.now - 120 - Double($0)) }, in: Self.clients)
+        mail.clearCalls()
+        let pass = await scan.scan()
+        #expect(mail.sourcesRead == [100] + Array(300...324))
+        #expect(pass.saved == 26)
+    }
+
+    /// The user archives five messages from the top while the first pass reads. The shared
+    /// positions keep the next range from jumping past any.
+    @Test func mailRemovedDuringAPassMovesNothingPastIt() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(1_000, hoursApart: 3), in: .inbox)
+        store.afterSave = {
+            mail.put(Array(mail.messages(in: .inbox).dropFirst(5)), in: .inbox)
+        }
+        let scan = scan(choice([.inbox], days: 30))
+        let pass = await scan.scan()
+        #expect(mail.listings == [1...200, 191...390])
+        #expect(Set(store.saved.map(\.reference.id)) == Set(1...240))
+        #expect(pass.error == nil)
+        // That pass was complete, so the next one polls.
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...20])
+    }
+
+    /// More mail removed than the shared positions: the pass may have moved past some, so
+    /// the next one reads the mailbox back to the days.
+    @Test func moreMailRemovedThanTheSharedPositionsIsReadAtTheNextPass() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(1_000, hoursApart: 3), in: .inbox)
+        store.afterSave = {
+            mail.put(Array(mail.messages(in: .inbox).dropFirst(50)), in: .inbox)
+        }
+        let scan = scan(choice([.inbox], days: 30))
+        await scan.scan()
+        #expect(store.saved.count == 200)
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...200])
+        #expect(mail.sourcesRead == Array(201...240))
+        #expect(store.saved.count == 240)
+    }
+
+    /// New mail on top while the first pass reads moves its oldest messages past the count
+    /// it started with. It counts again at the end and reads them.
+    @Test func newMailDuringAPassMovesNothingPastItsEnd() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(300), in: .inbox)
+        store.afterSave = {
+            mail.receive((0..<5).map { FakeMail.mail(901 + $0, in: .inbox, received: Self.now - Double($0 + 1)) }, in: .inbox)
+        }
+        let scan = scan(choice([.inbox]))
+        await scan.scan()
+        #expect(mail.listings == [1...200, 191...300, 291...305])
+        #expect(Set(store.saved.map(\.reference.id)) == Set(1...300))
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...20])
+        #expect(Set(mail.sourcesRead) == Set(901...905))
+    }
+
+    // MARK: Messages Mail cannot give
+
+    /// One message Mail fails to give blocks no other. The next passes read the mailbox
+    /// back for it a few times, then only poll it.
+    @Test func aMessageMailCannotGiveIsReadAgainLater() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(30), in: .inbox)
+        mail.failure = { call in call == .source(5) ? .failed(code: -10_000) : nil }
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.unreadable == 1)
+        #expect(first.error == nil)
+        #expect(store.saved.count == 29)
+        for _ in 1...MailScan.readsBack {
+            mail.clearCalls()
+            await scan.scan()
+            #expect(mail.listings == [1...30])
+            #expect(mail.sourcesRead == [5])
+        }
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...20])
+        // Once Mail gives it, it is saved.
+        mail.failure = { _ in nil }
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.sourcesRead == [5])
+        #expect(store.saved.count == 30)
+    }
+
+    /// No source is not an empty email: the message is not saved, so it stays new.
+    @Test func aMessageWithNoSourceIsNotSavedEmpty() async {
+        defer { cleanUp() }
+        var messages = Self.hourly(3)
+        let full = messages[1]
+        messages[1].source = ""
+        mail.put(messages, in: .inbox)
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.unreadable == 1)
+        #expect(first.read == 2)
+        #expect(store.saved.map(\.messageID) == ["m1@harbor.example", "m3@harbor.example"])
+        messages[1] = full
+        mail.put(messages, in: .inbox)
+        await scan.scan()
+        #expect(store.saved.map(\.messageID) == ["m1@harbor.example", "m3@harbor.example", "m2@harbor.example"])
+        #expect(store.saved.allSatisfy { $0.visible?.text.isEmpty == false })
+    }
+
+    /// A poll that Mail stops midway leaves the next pass to read back to the days, so the
+    /// rest of the new mail is not lost behind the messages it saved.
+    @Test func aPollThatStoppedMidwayReadsBackNextTime() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(10), in: .inbox)
+        let scan = scan(choice([.inbox]))
+        await scan.scan()
+        mail.receive((0..<25).map { FakeMail.mail(200 + $0, in: .inbox, received: Self.now - Double($0 + 1)) }, in: .inbox)
+        mail.failure = { call in call == .source(205) ? .notAnswered(code: -609) : nil }
+        let stopped = await scan.scan()
+        #expect(stopped.error == .notAnswered(code: -609))
+        #expect(stopped.saved == 5)
+        mail.failure = { _ in nil }
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...35])
+        #expect(mail.sourcesRead == Array(205...224))
+        #expect(store.saved.count == 35)
+    }
+
+    // MARK: Stopping
+
+    /// Projects turning off, or the confirm being forgotten, ends a pass under way. Nothing
+    /// more is listed, read or saved.
+    @Test(arguments: [MailScan.Pass.Skip.off, .notConfirmed])
+    func aPassEndsWhenItMayReadNoMore(reason: MailScan.Pass.Skip) async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(450), in: .inbox)
+        let projects = Switch()
+        let choice = choice([.inbox], days: 90)
+        store.afterSave = {
+            if reason == .off {
+                projects.isOn = false
+            } else {
+                choice.forget()
+            }
+        }
+        let pass = await scan(choice, isOn: { projects.isOn }).scan()
+        #expect(pass.skipped == reason)
+        #expect(mail.listings == [1...200])
+        #expect(mail.sourcesRead == Array(1...200))
+        #expect(store.saved.count == 200)
+    }
+
+    /// `stop()` ends a pass that it did not start too, and that pass saves nothing more.
+    @Test func stopEndsAPassUnderWay() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(450), in: .inbox)
+        let scan = scan(choice([.inbox], days: 90))
+        store.afterSave = { scan.stop() }
+        await scan.scan()
+        #expect(mail.listings == [1...200])
+        #expect(mail.sourcesRead == Array(1...200))
+        #expect(store.saved.count == 200)
+        // The next pass runs, and reads the rest.
+        mail.clearCalls()
+        #expect(await scan.scan().saved == 250)
     }
 
     // MARK: Mail not answering
@@ -353,7 +611,10 @@ struct MailScanTests {
         #expect(MailScan.wait(after: .notAnswered(code: -600), previous: .seconds(120)) == .seconds(240))
         #expect(MailScan.wait(after: .notAnswered(code: -609), previous: .seconds(960)) == .seconds(1_800))
         #expect(MailScan.wait(after: .timedOut, previous: .seconds(1_800)) == .seconds(1_800))
-        for other in [MailBridgeError.mailNotRunning, .denied, .notAsked, .notFound, .changedWhileReading] {
+        // While Orra may not control Mail, each event is refused, so it waits as long.
+        #expect(MailScan.wait(after: .denied, previous: minute) == .seconds(120))
+        #expect(MailScan.wait(after: .notAsked, previous: .seconds(120)) == .seconds(240))
+        for other in [MailBridgeError.mailNotRunning, .notFound, .changedWhileReading, .failed(code: -10_000)] {
             #expect(MailScan.wait(after: other, previous: .seconds(480)) == minute)
         }
     }
@@ -385,6 +646,25 @@ struct MailScanTests {
         scan.stop()
         try await waitUntil { clock.sleeping == 0 }
         #expect(clock.sleeping == 0)
+    }
+
+    /// A scan let go without `stop()` ends its loop at the next wake, and reads nothing
+    /// more.
+    @Test func theLoopLetsGoOfAScan() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(2), in: .inbox)
+        let clock = TestClock()
+        var scan: MailScan? = scan(choice([.inbox]), sleep: { try await clock.sleep(for: $0) })
+        weak let letGo = scan
+        scan?.start()
+        try await waitUntil { clock.sleeping == 1 }
+        #expect(store.saved.count == 2)
+        scan = nil
+        #expect(letGo == nil)
+        mail.clearCalls()
+        clock.advance(by: .seconds(60))
+        try await waitUntil { clock.sleeping == 0 }
+        #expect(mail.calls.isEmpty)
     }
 
     // MARK: The user
@@ -546,9 +826,14 @@ struct MailScanTests {
         let early = Self.now - Self.day
         #expect(MailScan.order(of: listing([Self.now, early])) == .newestFirst)
         #expect(MailScan.order(of: listing([early, nil, Self.now])) == .oldestFirst)
-        #expect(MailScan.order(of: listing([Self.now, Self.now])) == .newestFirst)
+        #expect(MailScan.order(of: listing([Self.now, Self.now])) == nil)
         #expect(MailScan.order(of: listing([Self.now, nil])) == nil)
         #expect(MailScan.order(of: []) == nil)
+        // One date out of place, such as of a message moved back into the mailbox, does
+        // not turn it.
+        let movedBack = [Self.now - 200 * Self.day] + (1...10).map { Self.now - Double($0) * Self.hour }
+        #expect(MailScan.order(of: listing(movedBack)) == .newestFirst)
+        #expect(MailScan.order(of: listing(movedBack.reversed())) == .oldestFirst)
     }
 
     // MARK: Fakes
@@ -579,10 +864,22 @@ struct MailScanTests {
             )
         }
 
+        /// Runs once, after the next save, as when the user or Mail acts while a pass reads.
+        var afterSave: (() -> Void)?
+
         func save(_ messages: [MailScan.Message]) {
             saved += messages
             batches.append(messages.map(\.messageID))
+            if let afterSave {
+                self.afterSave = nil
+                afterSave()
+            }
         }
+    }
+
+    /// Whether Projects is on, for a test that turns it off.
+    final class Switch {
+        var isOn = true
     }
 
     /// The waits the loop asked for.
