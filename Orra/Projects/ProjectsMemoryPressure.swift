@@ -20,16 +20,17 @@ final class ProjectsMemoryPressure {
     @ObservationIgnored private var source: (any DispatchSourceMemoryPressure)?
     @ObservationIgnored private let queue = DispatchQueue(label: "io.github.db-ol.Orra.projects-memory-pressure", qos: .utility)
 
-    /// Starts watching, from the level the system reports now.
+    /// Starts watching, from the level the system reports now. The source starts first, so
+    /// a change while the level is read is reported after it.
     func start() {
         guard source == nil else { return }
-        if let now = Self.currentLevel() {
-            update(now)
-        }
         source = Self.watch(on: queue) { [weak self] level in
             Task { @MainActor in
                 self?.update(level)
             }
+        }
+        if let now = Self.currentLevel() {
+            update(now)
         }
     }
 

@@ -51,6 +51,11 @@ struct ProjectsModelEnvironment {
     /// Whether the model can run a job now, after waiting for a load under way, see
     /// TextCleanup.waitUntilLoadedForProjects.
     var waitUntilLoaded: () async -> Bool
+    /// Takes a holder on the model for a request of the user, see
+    /// TextCleanup.projectsStarted.
+    var holdModel: () -> Void
+    /// Gives back a holder that `holdModel` took, see TextCleanup.projectsStopped.
+    var releaseModel: () -> Void
     /// Waits for a time. Tests pass a clock they move.
     var sleep: @Sendable (Duration) async throws -> Void
 }
@@ -59,21 +64,31 @@ struct ProjectsModelEnvironment {
 /// them.
 ///
 /// - One job runs at a time. Requests of the user go before background ones, and
-///   `cancelBackground()` drops the background ones when the Projects window closes.
+///   `cancelBackground()` drops the background ones when the Projects window closes. Each
+///   request of the user holds the model from when it comes until it ends, see
+///   `holdModel`, so closing the window does not unload the model under it.
 /// - The model reads a prompt in slices and writes the answer in bursts, each its own call
 ///   and its own entry at the model gate, see RewriteEngine.startJob. A cleanup or a
 ///   translation never waits for more than the slice or burst under way.
 /// - Before every slice and burst the job waits while a dictation is under way, from the
 ///   press of either key until the paste or cancel, while Live Captions run, while the
 ///   memory pressure is not normal, and on a Mac with less than 24 GiB while the voice
-///   model is loaded. The slice under way runs to its end. `pause` says why it waits. A
-///   key press pauses a job and never drops it.
+///   model is loaded. `pause` says why it waits. A key press pauses a job and never drops
+///   it.
+/// - While a call waits at the model gate or at the engine, the queue looks every
+///   `pollInterval` whether a pause began, and then cancels the call. It leaves without
+///   running and runs again after the pause, so a call that waited behind the voice model
+///   never starts during a dictation. A burst under way stops after its next token. A
+///   slice under way runs to its end.
 /// - Slices start at 256 tokens. A slice that ran longer than 0.2 s halves the next one,
 ///   down to 64 tokens, and one that ran under 0.1 s doubles it, up to 512, so every Mac
 ///   keeps a slice near 0.1 to 0.2 s. The time is the one the model ran, measured inside
-///   the engine, so a wait behind a dictation's cleanup never makes slices smaller.
-/// - Cancelling the caller's task ends the job and gives its memory back. A job that an
-///   unload dropped starts again once the model is loaded, and fails on a second drop.
+///   the engine, so a wait behind a dictation's cleanup never makes slices smaller. Other
+///   sizes can give another greedy answer to the same prompt, see RewriteEngine.readSlice,
+///   so a run that must repeat its answers needs slices of one size.
+/// - Cancelling the caller's task ends the job and gives its memory back. The end of a job
+///   waits while a dictation is under way, also for a cancelled job. A job that an unload
+///   dropped starts again once the model is loaded, and fails on a second drop.
 ///
 /// Why both: on an M5 Pro a prompt of 8,192 tokens read in one call made cleanups miss
 /// their time limit, and slices that did not pause for a dictation made every dictation
@@ -135,6 +150,9 @@ final class ProjectsModelQueue {
     @ObservationIgnored private var lastTicket = 0
     /// The job under way.
     @ObservationIgnored private var running: (priority: ProjectsModelRequest.Priority, task: Task<String, any Error>)?
+    /// Counts the calls of `cancelBackground()`, so a background request that was let in
+    /// before one and had not begun yet leaves too.
+    @ObservationIgnored private var backgroundGeneration = 0
 
     private struct Waiter {
         let ticket: Int
@@ -146,10 +164,12 @@ final class ProjectsModelQueue {
     private struct JobLog {
         var promptTokens = 0
         var slices: [Duration] = []
-        var bursts = 0
+        var bursts: [Duration] = []
         var written = 0
         var pauses = 0
         var paused: Duration = .zero
+        /// Calls cancelled for a pause before they began, which ran again after it.
+        var gaveWay = 0
         var restarts = 0
     }
 
@@ -163,7 +183,23 @@ final class ProjectsModelQueue {
     /// CancellationError when the caller's task is cancelled or `cancelBackground()` drops
     /// a background request.
     func run(_ request: ProjectsModelRequest) async throws -> String {
+        try Task.checkCancellation()
+        let isUsers = request.priority == .user
+        if isUsers {
+            environment.holdModel()
+        }
+        defer {
+            if isUsers {
+                environment.releaseModel()
+            }
+        }
+        let generation = backgroundGeneration
         try await waitInLine(request.priority)
+        // Let in, but `cancelBackground()` ran before this request got here.
+        if !isUsers, generation != backgroundGeneration {
+            passTheTurn()
+            throw CancellationError()
+        }
         defer { passTheTurn() }
         let job = Task { try await self.execute(request) }
         running = (request.priority, job)
@@ -174,9 +210,10 @@ final class ProjectsModelQueue {
         }
     }
 
-    /// Drops the background requests waiting and ends the background job under way, such
-    /// as when the Projects window closes.
+    /// Drops the background requests waiting, also one let in that has not begun, and ends
+    /// the background job under way, such as when the Projects window closes.
     func cancelBackground() {
+        backgroundGeneration += 1
         let dropped = line.filter { $0.priority == .background }
         line.removeAll { $0.priority == .background }
         for waiter in dropped {
@@ -185,6 +222,11 @@ final class ProjectsModelQueue {
         if let running, running.priority == .background {
             running.task.cancel()
         }
+    }
+
+    /// How many requests wait for the job under way. Internal for tests.
+    var waitingCount: Int {
+        line.count
     }
 
     // MARK: The line
@@ -251,16 +293,19 @@ final class ProjectsModelQueue {
 
     private func attempt(_ request: ProjectsModelRequest, _ log: inout JobLog) async throws -> String {
         try await waitForTurn(&log)
-        guard await modelIsLoaded() else { throw RewriteError.notLoaded }
-        try await waitForTurn(&log)
-        let job = try await environment.startJob(request.prompt, request.maximumTokens)
+        guard await modelIsLoaded() else {
+            try Task.checkCancellation()
+            throw RewriteError.notLoaded
+        }
+        let (startJob, readSlice, writeBurst) = (environment.startJob, environment.readSlice, environment.writeBurst)
+        let (prompt, maximumTokens) = (request.prompt, request.maximumTokens)
+        let job = try await call(&log) { try await startJob(prompt, maximumTokens) }
         log.promptTokens = job.promptTokens
         do {
             var remaining = 0
             repeat {
-                try await waitForTurn(&log)
                 let asked = sizer.tokens
-                let slice = try await environment.readSlice(job.id, asked)
+                let slice = try await call(&log) { try await readSlice(job.id, asked) }
                 sizer.record(slice, asked: asked)
                 log.slices.append(slice.ran)
                 // A slice that read nothing leaves the rest to the first burst.
@@ -268,19 +313,62 @@ final class ProjectsModelQueue {
             } while remaining > 0
             var finished = false
             repeat {
-                try await waitForTurn(&log)
-                let burst = try await environment.writeBurst(job.id, Self.burstTokens)
-                log.bursts += 1
+                let burst = try await call(&log) { try await writeBurst(job.id, Self.burstTokens) }
+                log.bursts.append(burst.ran)
                 log.written += burst.written
                 finished = burst.finished || burst.written == 0
             } while !finished
         } catch {
             // Gives the job's memory back, whatever ended it. After an unload the job is
             // gone already.
-            _ = try? await environment.endJob(job.id)
+            _ = try? await end(job.id)
             throw error
         }
-        return try await environment.endJob(job.id)
+        return try await end(job.id)
+    }
+
+    /// Runs one call of the job once it may go on, see `waitForTurn`, in a task of its own
+    /// that a pause cancels, see ProjectsModelQueue. A call cancelled before it began
+    /// throws CancellationError at the gate or at the engine and changes nothing, so it
+    /// runs again after the pause. A burst cancelled while it writes returns what it wrote.
+    private func call<T: Sendable>(_ log: inout JobLog, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        while true {
+            try await waitForTurn(&log)
+            let task = Task { try await work() }
+            let watch = Task { [weak self, sleep = environment.sleep] in
+                while (try? await sleep(Self.pollInterval)) != nil {
+                    if self?.pauseReason() != nil {
+                        task.cancel()
+                        return
+                    }
+                }
+            }
+            let result = await withTaskCancellationHandler {
+                await task.result
+            } onCancel: {
+                task.cancel()
+            }
+            watch.cancel()
+            try Task.checkCancellation()
+            do {
+                return try result.get()
+            } catch is CancellationError {
+                log.gaveWay += 1
+            }
+        }
+    }
+
+    /// Ends a job once no dictation is under way, also when the job's task was cancelled,
+    /// so a dictation never meets the end of a job and the job's memory always goes back.
+    private func end(_ id: Int) async throws -> String {
+        let endJob = environment.endJob
+        // A task of its own, which the caller's cancellation does not reach.
+        return try await Task {
+            while environment.isDictating() {
+                try? await environment.sleep(Self.pollInterval)
+            }
+            return try await endJob(id)
+        }.value
     }
 
     /// Returns once the job may run its next call, and throws when its task is cancelled.
@@ -326,7 +414,8 @@ final class ProjectsModelQueue {
     private static func summary(_ log: JobLog) -> String {
         let longest = log.slices.max() ?? .zero
         let reading = log.slices.reduce(Duration.zero, +)
-        return "\(log.promptTokens) prompt tokens in \(log.slices.count) slices that ran \(seconds(reading)) in all and \(seconds(longest)) at most, \(log.bursts) bursts wrote \(log.written) tokens, paused \(log.pauses) times for \(seconds(log.paused)), started again \(log.restarts) times"
+        let longestBurst = log.bursts.max() ?? .zero
+        return "\(log.promptTokens) prompt tokens in \(log.slices.count) slices that ran \(seconds(reading)) in all and \(seconds(longest)) at most, \(log.bursts.count) bursts wrote \(log.written) tokens and ran \(seconds(longestBurst)) at most, paused \(log.pauses) times for \(seconds(log.paused)), gave way \(log.gaveWay) times, started again \(log.restarts) times"
     }
 
     private static func seconds(_ duration: Duration) -> String {

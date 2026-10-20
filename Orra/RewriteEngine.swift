@@ -43,10 +43,11 @@ nonisolated extension ModelFolders {
     }
 }
 
-/// Owns the cleanup model, which also translates. An actor, so loading and generating run
-/// off the main actor and one cleanup or translation runs at a time. Loaded while cleanup
-/// or translation is on and the user dictates, unloaded when both are off or nobody
-/// dictated for a while, see TextCleanup.
+/// Owns the cleanup model, which also translates and runs Projects jobs. An actor, so
+/// loading and generating run off the main actor and one call runs at a time. Loaded while
+/// cleanup or translation is on and the user dictates, while captions translate, and while
+/// Projects holds it. Unloaded when none of them needs it or nobody dictated for a while,
+/// see TextCleanup.
 ///
 /// Written against mlx-swift-lm 3.31.4.
 actor RewriteEngine {
@@ -145,7 +146,11 @@ actor RewriteEngine {
         context = nil
         Memory.clearCache()
         let returned = malloc_zone_pressure_relief(nil, 0)
-        Logger.rewrite.notice("Cleanup model unloaded with \(droppedJobs, privacy: .public) Projects jobs dropped, malloc returned \(returned, privacy: .public) bytes")
+        if droppedJobs > 0 {
+            Logger.rewrite.notice("Cleanup model unloaded with \(droppedJobs, privacy: .public) Projects jobs dropped, malloc returned \(returned, privacy: .public) bytes")
+        } else {
+            Logger.rewrite.notice("Cleanup model unloaded, malloc returned \(returned, privacy: .public) bytes")
+        }
     }
 
     /// Gives the GPU buffers MLX keeps for reuse back, without unloading the model.
@@ -309,6 +314,14 @@ actor RewriteEngine {
     /// Reads up to `count` more tokens of a job's prompt into its cache, and leaves the
     /// last token for the first burst. Waits until the GPU is done and gives MLX's freed
     /// buffers back before it returns, so no work of the job is under way between calls.
+    ///
+    /// Each slice is one forward pass. Its size changes how bf16 values round, so where two
+    /// words are close the greedy answer can take the other one: the same prompt read in
+    /// other slices can get another answer. Slices that end where one call ends its windows
+    /// of 512 tokens give exactly the answer of one call. Reading every slice in pieces of
+    /// a fixed size would make the answer the same whatever the slices, but on an M5 Pro
+    /// pieces of 64 tokens took 35 to 42% longer to the first token than one call, pieces
+    /// of 128 took 13 to 15% longer, and slices of 256 in one pass 4 to 6%.
     func readSlice(_ id: Int, tokens count: Int) throws -> SliceRun {
         let started = ContinuousClock.now
         try Task.checkCancellation()

@@ -8,7 +8,9 @@ import Testing
 @MainActor
 struct ProjectsModelQueueTests {
     /// A stand in for RewriteEngine's job calls that counts tokens the way the engine does,
-    /// can hold a slice or a burst until the test lets it go, and records every call.
+    /// can hold a slice or a burst until the test lets it go, and records every call. Like
+    /// the engine, a call cancelled before it began throws CancellationError, a slice under
+    /// way runs to its end, and a burst under way stops after its next token.
     @MainActor
     final class FakeJobs {
         /// The prompt tokens of a prompt.
@@ -19,9 +21,6 @@ struct ProjectsModelQueueTests {
         /// How long each slice ran inside the engine, by the order of the slices. Later
         /// slices take the last value.
         var ran: [Duration] = [.milliseconds(150)]
-        /// Waits this long before a slice returns, as a slice that waited behind other work
-        /// at the engine.
-        var waitsBeforeEachSlice: Duration?
         var holdsSlices = false
         var holdsBursts = false
         /// The slices, counted from 1 over every job, that throw RewriteError.jobDropped
@@ -46,6 +45,9 @@ struct ProjectsModelQueueTests {
         private(set) var events: [String] = []
         private(set) var slicesBegun = 0
         private(set) var loadWaits = 0
+        /// The holders the queue has on the model now, and the most it had.
+        private(set) var holders = 0
+        private(set) var mostHolders = 0
         private var jobs: [Int: (prompt: Int, read: Int, written: Int)] = [:]
         private var lastJob = 0
         private var held: [CheckedContinuation<Void, Never>] = []
@@ -88,6 +90,7 @@ struct ProjectsModelQueueTests {
         }
 
         func start(_ prompt: String, _ maximumTokens: Int) throws -> RewriteEngine.JobStart {
+            try Task.checkCancellation()
             let tokens = promptTokens(prompt)
             guard tokens <= RewriteEngine.maximumJobPromptTokens else { throw RewriteError.promptTooLong }
             lastJob += 1
@@ -97,6 +100,7 @@ struct ProjectsModelQueueTests {
         }
 
         func slice(_ id: Int, _ tokens: Int) async throws -> RewriteEngine.SliceRun {
+            try Task.checkCancellation()
             slicesBegun += 1
             let number = slicesBegun
             if let gate {
@@ -105,9 +109,6 @@ struct ProjectsModelQueueTests {
             events.append("slice \(id) \(tokens)")
             if holdsSlices {
                 await withCheckedContinuation { held.append($0) }
-            }
-            if let waitsBeforeEachSlice {
-                try await Task.sleep(for: waitsBeforeEachSlice)
             }
             if dropsSlices.contains(number) {
                 jobs[id] = nil
@@ -122,6 +123,7 @@ struct ProjectsModelQueueTests {
         }
 
         func burst(_ id: Int, _ tokens: Int) async throws -> RewriteEngine.BurstRun {
+            try Task.checkCancellation()
             if let gate {
                 gateInside.append(gate.snapshot)
             }
@@ -130,7 +132,7 @@ struct ProjectsModelQueueTests {
                 await withCheckedContinuation { held.append($0) }
             }
             guard var job = jobs[id] else { throw RewriteError.jobDropped }
-            let written = min(tokens, answerTokens - job.written)
+            let written = min(Task.isCancelled ? 1 : tokens, answerTokens - job.written)
             job.written += written
             job.read = job.prompt
             jobs[id] = job
@@ -141,6 +143,15 @@ struct ProjectsModelQueueTests {
             events.append("end \(id)")
             guard jobs.removeValue(forKey: id) != nil else { throw RewriteError.jobDropped }
             return answer
+        }
+
+        func hold() {
+            holders += 1
+            mostHolders = max(mostHolders, holders)
+        }
+
+        func release() {
+            holders -= 1
         }
 
         func waitUntilLoaded() async -> Bool {
@@ -176,6 +187,8 @@ struct ProjectsModelQueueTests {
                 voiceLoaded: { [self] in voiceLoaded },
                 physicalMemory: physicalMemory,
                 waitUntilLoaded: { [self] in await waitUntilLoaded() },
+                holdModel: { [self] in hold() },
+                releaseModel: { [self] in release() },
                 sleep: { [clock] in try await clock.sleep(for: $0) }
             )
         }
@@ -290,6 +303,62 @@ struct ProjectsModelQueueTests {
         #expect(fake.bursts.count == 3)
     }
 
+    @Test func aSliceWaitingBehindTheVoiceModelGivesWayToADictation() async throws {
+        let gate = ModelGate()
+        let queue = makeQueue(gate: gate)
+        fake.holdsSlices = true
+        let job = Task { try await queue.run(Self.request()) }
+        try await eventually { fake.isHolding }
+        // A voice request comes during the first slice and runs after it, so the second
+        // slice waits at the gate behind it.
+        let voice = HeldWork()
+        let speaking = Task { try await gate.run(.exclusive) { await voice.run() } }
+        try await eventually { gate.snapshot.waiting == [.exclusive] }
+        fake.holdsSlices = false
+        fake.letGo()
+        try await eventually { voice.began == 1 && gate.snapshot.waiting == [.shared] }
+        // The talk key goes down: the dictation reserves the gate, which lets every shared
+        // call in once the voice is done. The queue cancels the slice that waits first.
+        let reservation = gate.reserve()
+        fake.isDictating = true
+        try await poll()
+        try await eventually { gate.snapshot.waiting.isEmpty && queue.pause == .dictation }
+        voice.release()
+        try await speaking.value
+        try await poll()
+        #expect(fake.slicesBegun == 1)
+        #expect(queue.pause == .dictation)
+        // The paste: the slice runs then, and the job loses nothing.
+        reservation.end()
+        fake.isDictating = false
+        try await poll()
+        #expect(try await job.value == "好的。")
+        #expect(fake.slices.count == 4)
+        #expect(fake.starts.count == 1)
+        #expect(gate.snapshot == ModelGate.Snapshot())
+    }
+
+    @Test func aBurstUnderWayStopsAfterItsNextTokenWhenADictationStarts() async throws {
+        let queue = makeQueue()
+        fake.holdsBursts = true
+        let job = Task { try await queue.run(Self.request()) }
+        try await eventually { fake.isHolding }
+        fake.isDictating = true
+        // The queue sees the dictation while the burst runs and cancels it, so the burst
+        // writes one more token and returns.
+        try await poll()
+        fake.holdsBursts = false
+        fake.letGo()
+        try await eventually { queue.pause == .dictation }
+        try await poll()
+        #expect(fake.bursts.count == 1)
+        fake.isDictating = false
+        try await poll()
+        #expect(try await job.value == "好的。")
+        // 1 token, then the 69 left in bursts of 32.
+        #expect(fake.bursts.count == 4)
+    }
+
     @Test func captionsPauseTheJob() async throws {
         let queue = makeQueue()
         fake.captionsOn = true
@@ -335,6 +404,15 @@ struct ProjectsModelQueueTests {
         memory.stop()
         #expect(memory.level == .normal)
         #expect(ProjectsMemoryPressure.level(of: []) == nil)
+    }
+
+    @Test func theKernelsLevelReadsLikeTheDispatchSource() {
+        // kern.memorystatus_vm_pressure_level gives the values of the dispatch source's
+        // events: 1 for normal, 2 for warning and 4 for critical.
+        #expect(ProjectsMemoryPressure.level(of: DispatchSource.MemoryPressureEvent(rawValue: 1)) == .normal)
+        #expect(ProjectsMemoryPressure.level(of: DispatchSource.MemoryPressureEvent(rawValue: 2)) == .warning)
+        #expect(ProjectsMemoryPressure.level(of: DispatchSource.MemoryPressureEvent(rawValue: 4)) == .critical)
+        #expect(ProjectsMemoryPressure.currentLevel() != nil)
     }
 
     @Test func theVoiceModelPausesJobsOnlyBelow24GiB() async throws {
@@ -383,10 +461,16 @@ struct ProjectsModelQueueTests {
 
     @Test func aWaitOutsideTheEngineDoesNotMakeSlicesSmaller() async throws {
         let queue = makeQueue()
-        // Each slice waits for other work first, far longer than 0.2 s with the wait, but
-        // runs 0.15 s itself.
-        fake.waitsBeforeEachSlice = .milliseconds(250)
-        _ = try await queue.run(Self.request(String(repeating: "x", count: 600)))
+        // Each slice is held, as if it waited for other work first, while a second passes,
+        // but ran 0.15 s inside the engine.
+        fake.holdsSlices = true
+        let job = Task { try await queue.run(Self.request(String(repeating: "x", count: 600))) }
+        for count in 1...3 {
+            try await eventually { fake.isHolding && fake.slices.count == count }
+            clock.advance(by: .seconds(1))
+            fake.letGo()
+        }
+        _ = try await job.value
         #expect(fake.sliceSizes == [256, 256, 256])
     }
 
@@ -402,6 +486,18 @@ struct ProjectsModelQueueTests {
         // At the budget it runs.
         _ = try await queue.run(Self.request(String(repeating: "x", count: RewriteEngine.maximumJobPromptTokens)))
         #expect(fake.slices.count == 32)
+    }
+
+    @Test func aCallerCancelledWhileTheModelLoadsIsCancelled() async throws {
+        let queue = makeQueue()
+        fake.loaded = false
+        fake.holdsTheLoad = true
+        let job = Task { try await queue.run(Self.request()) }
+        try await eventually { fake.isHolding }
+        job.cancel()
+        fake.letGo()
+        await #expect(throws: CancellationError.self) { try await job.value }
+        #expect(fake.events.isEmpty)
     }
 
     @Test func aMissingModelFailsTheRequestAndALoadIsWaitedFor() async throws {
@@ -438,7 +534,7 @@ struct ProjectsModelQueueTests {
         #expect(fake.ends == ["end 1"])
     }
 
-    @Test func cancellingTheCallerDuringAPauseEndsTheJob() async throws {
+    @Test func cancellingTheCallerDuringAPauseEndsTheJobAfterTheDictation() async throws {
         let queue = makeQueue()
         fake.holdsSlices = true
         let job = Task { try await queue.run(Self.request()) }
@@ -448,11 +544,16 @@ struct ProjectsModelQueueTests {
         fake.letGo()
         try await eventually { queue.pause == .dictation }
         job.cancel()
+        try await eventually { queue.pause == nil }
+        // The end of the job waits for the paste too.
+        try await poll()
+        #expect(fake.ends.isEmpty)
+        fake.isDictating = false
+        try await poll()
         await #expect(throws: CancellationError.self) { try await job.value }
         #expect(fake.ends == ["end 1"])
-        #expect(queue.pause == nil)
+        #expect(fake.slices.count == 1)
         // The next request runs.
-        fake.isDictating = false
         _ = try await queue.run(Self.request())
         #expect(fake.ends == ["end 1", "end 2"])
     }
@@ -485,9 +586,9 @@ struct ProjectsModelQueueTests {
         let first = Task { try await queue.run(Self.request("first", .background)) }
         try await eventually { fake.isHolding }
         let background = Task { try await queue.run(Self.request("background", .background)) }
-        try await settle()
+        try await eventually { queue.waitingCount == 1 }
         let user = Task { try await queue.run(Self.request("user", .user)) }
-        try await settle()
+        try await eventually { queue.waitingCount == 2 }
         // One job at a time.
         #expect(fake.starts == ["start first"])
         fake.holdsSlices = false
@@ -505,7 +606,7 @@ struct ProjectsModelQueueTests {
         try await eventually { fake.isHolding }
         let waiting = Task { try await queue.run(Self.request("waiting", .background)) }
         let user = Task { try await queue.run(Self.request("user", .user)) }
-        try await settle()
+        try await eventually { queue.waitingCount == 2 }
         queue.cancelBackground()
         await #expect(throws: CancellationError.self) { try await waiting.value }
         fake.holdsSlices = false
@@ -522,14 +623,63 @@ struct ProjectsModelQueueTests {
         let running = Task { try await queue.run(Self.request("running")) }
         try await eventually { fake.isHolding }
         let waiting = Task { try await queue.run(Self.request("waiting")) }
-        try await settle()
+        try await eventually { queue.waitingCount == 1 }
         waiting.cancel()
         await #expect(throws: CancellationError.self) { try await waiting.value }
+        #expect(queue.waitingCount == 0)
         fake.holdsSlices = false
         fake.letGo()
         _ = try await running.value
         _ = try await queue.run(Self.request("next"))
         #expect(fake.starts == ["start running", "start next"])
+    }
+
+    @Test func cancelBackgroundReachesARequestLetInThatHasNotBegun() async throws {
+        let queue = makeQueue()
+        fake.holdsSlices = true
+        let first = Task {
+            let answer = try await queue.run(Self.request("first"))
+            // The window closes right after the job, before the next request begins.
+            queue.cancelBackground()
+            return answer
+        }
+        try await eventually { fake.isHolding }
+        let background = Task { try await queue.run(Self.request("background", .background)) }
+        try await eventually { queue.waitingCount == 1 }
+        fake.holdsSlices = false
+        fake.letGo()
+        _ = try await first.value
+        await #expect(throws: CancellationError.self) { try await background.value }
+        #expect(fake.starts == ["start first"])
+        // The line is free again.
+        _ = try await queue.run(Self.request("next"))
+        #expect(fake.starts == ["start first", "start next"])
+    }
+
+    // MARK: Holding the model
+
+    @Test func aRequestOfTheUserHoldsTheModelWhileItWaitsAndRuns() async throws {
+        let queue = makeQueue()
+        fake.holdsSlices = true
+        let first = Task { try await queue.run(Self.request("first")) }
+        try await eventually { fake.isHolding }
+        #expect(fake.holders == 1)
+        let background = Task { try await queue.run(Self.request("background", .background)) }
+        let second = Task { try await queue.run(Self.request("second")) }
+        try await eventually { queue.waitingCount == 2 }
+        // Background work holds nothing, so closing the window lets the model go.
+        #expect(fake.holders == 2)
+        fake.holdsSlices = false
+        fake.letGo()
+        _ = try await first.value
+        _ = try await second.value
+        _ = try await background.value
+        #expect(fake.holders == 0)
+        #expect(fake.mostHolders == 2)
+        // A request that fails or is cancelled gives its holder back too.
+        fake.loaded = false
+        await #expect(throws: RewriteError.notLoaded) { try await queue.run(Self.request()) }
+        #expect(fake.holders == 0)
     }
 
     // MARK: The app's engine

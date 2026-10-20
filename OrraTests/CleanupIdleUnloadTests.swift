@@ -718,8 +718,8 @@ struct CleanupIdleUnloadTests {
     // MARK: Projects
 
     /// Cleanup and translation off unless asked, with or without the stand in model files,
-    /// started as at launch.
-    private func makeCleanupForProjects(isOn: Bool = false, installed: Bool = true) async throws -> TextCleanup {
+    /// started as at launch unless asked.
+    private func makeCleanupForProjects(isOn: Bool = false, installed: Bool = true, started: Bool = true) async throws -> TextCleanup {
         if installed {
             try temporary.writeAll(to: temporary.installed)
         }
@@ -736,8 +736,10 @@ struct CleanupIdleUnloadTests {
             loadWait: loadWait,
             sleep: { [clock] in try await clock.sleep(for: $0) }
         )
-        await cleanup.start()
-        await cleanup.waitForLoad()
+        if started {
+            await cleanup.start()
+            await cleanup.waitForLoad()
+        }
         return cleanup
     }
 
@@ -833,6 +835,53 @@ struct CleanupIdleUnloadTests {
         #expect(result == true)
     }
 
+    @Test func aCancelledProjectsWaitForALoadEndsAtOnce() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        fake.holdsLoads = true
+        cleanup.projectsStarted()
+        try await settle { fake.isHolding }
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.waitUntilLoadedForProjects()
+        }
+        try await settle()
+        #expect(result == nil)
+        waiting.cancel()
+        await waiting.value
+        #expect(result == false)
+        // The load goes on for the holder.
+        #expect(cleanup.engineState == .loading)
+        fake.letGo()
+        await cleanup.waitForLoad()
+        #expect(await cleanup.waitUntilLoadedForProjects())
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+    }
+
+    @Test func projectsWaitWhileOrraLooksForTheModelOnDisk() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects(started: false)
+        #expect(cleanup.models.state == .checking)
+        // The window opens at launch, before Orra has looked.
+        cleanup.projectsStarted()
+        #expect(cleanup.engineState == .unloaded)
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.waitUntilLoadedForProjects()
+        }
+        try await settle { clock.sleeping > 0 }
+        #expect(result == nil)
+        // Orra finds the model, which loads for the holder.
+        await cleanup.start()
+        clock.advance(by: .milliseconds(100))
+        await waiting.value
+        #expect(result == true)
+        #expect(fake.events == ["load"])
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+    }
+
     @Test func aLastHolderLeavingDuringALoadEndsTheWaitAndUnloads() async throws {
         defer { temporary.remove() }
         let cleanup = try await makeCleanupForProjects()
@@ -877,11 +926,15 @@ struct CleanupIdleUnloadTests {
         let environment = cleanup.projectsEnvironment(isDictating: { false }, captionsOn: { false }, memoryPressure: { .normal }, voiceLoaded: { false }, physicalMemory: 16 << 30)
         #expect(environment.physicalMemory == 16 << 30)
         #expect(await environment.waitUntilLoaded() == false)
-        cleanup.projectsStarted()
+        // A request of the user is a holder of its own.
+        environment.holdModel()
+        #expect(cleanup.projectsHolders == 1)
         #expect(await environment.waitUntilLoaded())
         // The stand in has no job calls.
         await #expect(throws: RewriteError.notLoaded) { try await environment.startJob("Hello", 8) }
-        cleanup.projectsStopped()
+        environment.releaseModel()
+        #expect(cleanup.projectsHolders == 0)
         await cleanup.waitForLoad()
+        #expect(fake.events == ["load", "unload"])
     }
 }

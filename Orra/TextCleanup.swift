@@ -411,29 +411,49 @@ final class TextCleanup {
         }
     }
 
-    /// Whether Projects can run a job on the model now. Waits for a load under way for as
-    /// long as it takes, since no dictation waits for this. False when no holder of
-    /// `projectsStarted()` remains, when the model is not on this Mac and when it failed
-    /// to load.
+    /// How often Projects looks again whether Orra has found the model on disk.
+    private static let projectsCheckInterval: Duration = .milliseconds(100)
+
+    /// Whether Projects can run a job on the model now. Waits while Orra looks for the
+    /// model on disk, at launch or after Try Again, and for a load under way, for as long
+    /// as they take, since no dictation waits for this. False when no holder of
+    /// `projectsStarted()` remains, when the model is not on this Mac, when it failed to
+    /// load, and at once when the task is cancelled.
     func waitUntilLoadedForProjects() async -> Bool {
+        // A model found on disk loads for the holders, see `load(from:)`.
+        while projectsNeedModel, models.state == .checking {
+            guard (try? await sleep(Self.projectsCheckInterval)) != nil else { return false }
+        }
         guard projectsNeedModel else { return false }
         if engineState == .unloadedWhileIdle {
             modelNeededNow(loadingAgainFrom: folder, for: "Projects")
         }
         if engineState == .loading {
             let started = ContinuousClock.now
-            await withCheckedContinuation { continuation in
-                nextWaiter += 1
-                loadWaiters[nextWaiter] = continuation
+            nextWaiter += 1
+            let id = nextWaiter
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    if Task.isCancelled {
+                        continuation.resume()
+                    } else {
+                        loadWaiters[id] = continuation
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in
+                    self?.resumeWaiter(id)
+                }
             }
             Logger.rewrite.notice("Waited \(started.duration(to: .now), privacy: .public) for the cleanup model for Projects, loaded: \(self.projectsNeedModel && self.isLoaded, privacy: .public)")
         }
-        return projectsNeedModel && isLoaded
+        return !Task.isCancelled && projectsNeedModel && isLoaded
     }
 
     /// The closures ProjectsModelQueue runs its jobs with: the model's job calls, each its
-    /// own entry at the model gate, and the wait for the model while Projects holds it.
-    /// The caller passes what makes a job pause, see ProjectsModelEnvironment.
+    /// own entry at the model gate, the wait for the model while Projects holds it, and a
+    /// holder for each request of the user. The caller passes what makes a job pause, see
+    /// ProjectsModelEnvironment.
     func projectsEnvironment(
         isDictating: @escaping () -> Bool,
         captionsOn: @escaping () -> Bool,
@@ -452,6 +472,8 @@ final class TextCleanup {
             voiceLoaded: voiceLoaded,
             physicalMemory: physicalMemory,
             waitUntilLoaded: { [weak self] in await self?.waitUntilLoadedForProjects() ?? false },
+            holdModel: { [weak self] in self?.projectsStarted() },
+            releaseModel: { [weak self] in self?.projectsStopped() },
             sleep: sleep
         )
     }

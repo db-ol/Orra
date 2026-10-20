@@ -13,7 +13,8 @@ import Testing
 ///
 /// The clips folder holds dictations made with macOS say, named zh… and en… .wav, each with
 /// a filler or a self correction so that the cleanup model always runs. Optional, with the
-/// same prefix: PARTS (latency, memory, default both) and ROUNDS (default 2).
+/// same prefix: PARTS (latency, memory, default both), ROUNDS (default 2) and ANSWER, the
+/// most answer tokens of a job (default 1,500, as an explanation with a draft may have).
 ///
 /// `latency` drives PushToTalkController as LatencyMeasurementTests does: a stand in
 /// microphone that returns a clip, held as long as the clip lasts, the real speech model,
@@ -21,7 +22,8 @@ import Testing
 /// a paste that only notes the time. Every model call shares one ModelGate, and the
 /// dictation tells an EngineTurns when it starts and ends, as in the app. Each round runs
 /// every clip on both keys without Projects work, and again while a worker keeps the queue
-/// busy with background jobs of 8,192 tokens, so every dictation meets a job under way.
+/// busy with background jobs of 8,192 tokens that ask for a long reply, so every dictation
+/// meets a job under way, reading its prompt or writing its answer.
 /// The bar: no cleanup or translation misses its limit, and release to paste stays within
 /// 0.1 s of the runs without Projects work at the median and at p90.
 ///
@@ -110,18 +112,22 @@ struct ProjectsLatencyMeasurementTests {
         }
     }
 
-    /// The slices the queue ran, for the report.
-    nonisolated final class SliceLog: Sendable {
-        private let slices = Mutex<[Double]>([])
+    /// How long the slices or the bursts the queue ran took inside the engine, and the
+    /// tokens they read or wrote, for the report.
+    nonisolated final class RunLog: Sendable {
+        private let runs = Mutex<(times: [Double], tokens: Int)>(([], 0))
 
-        func add(_ slice: RewriteEngine.SliceRun) {
-            slices.withLock { $0.append(slice.ran / .seconds(1)) }
+        func add(_ ran: Duration, tokens: Int) {
+            runs.withLock {
+                $0.times.append(ran / .seconds(1))
+                $0.tokens += tokens
+            }
         }
 
-        func take() -> [Double] {
-            slices.withLock {
+        func take() -> (times: [Double], tokens: Int) {
+            runs.withLock {
                 let taken = $0
-                $0 = []
+                $0 = ([], 0)
                 return taken
             }
         }
@@ -147,7 +153,7 @@ struct ProjectsLatencyMeasurementTests {
         ).gated(gate)
         let rewrite = RewriteEngine()
         let engine = CleanupEngine.live(rewrite, gate: gate)
-        let (cleanUp, translate, readSlice) = (engine.complete, engine.translate, engine.readSlice)
+        let (cleanUp, translate, readSlice, writeBurst) = (engine.complete, engine.translate, engine.readSlice, engine.writeBurst)
         let turns = EngineTurns()
         let calls = CallLog()
         let cleanup = CleanupModel(
@@ -163,15 +169,20 @@ struct ProjectsLatencyMeasurementTests {
         let memory = ProjectsMemoryPressure()
         memory.start()
         defer { memory.stop() }
-        let slices = SliceLog()
+        let slices = RunLog()
+        let bursts = RunLog()
         let queue = ProjectsModelQueue(environment: ProjectsModelEnvironment(
             startJob: engine.startJob,
             readSlice: { job, tokens in
                 let slice = try await readSlice(job, tokens)
-                slices.add(slice)
+                slices.add(slice.ran, tokens: slice.read)
                 return slice
             },
-            writeBurst: engine.writeBurst,
+            writeBurst: { job, tokens in
+                let burst = try await writeBurst(job, tokens)
+                bursts.add(burst.ran, tokens: burst.written)
+                return burst
+            },
             endJob: engine.endJob,
             isDictating: { turns.isDictating },
             captionsOn: { false },
@@ -179,6 +190,8 @@ struct ProjectsLatencyMeasurementTests {
             voiceLoaded: { false },
             physicalMemory: ProcessInfo.processInfo.physicalMemory,
             waitUntilLoaded: { true },
+            holdModel: {},
+            releaseModel: {},
             sleep: { try await Task.sleep(for: $0) }
         ))
         let mic = FakeMicrophone()
@@ -213,8 +226,8 @@ struct ProjectsLatencyMeasurementTests {
         await memoryReport.idle("speech and cleanup models")
 
         let tokenizer = try await CleanupTokenizer(folder: cleanupFolder)
-        let prompt = ProjectsModelJobTests.SyntheticThread.prompt(fitting: RewriteEngine.maximumJobPromptTokens, question: ProjectsModelJobTests.SyntheticThread.englishQuestion, tokenizer: tokenizer)
-        let job = ProjectsModelRequest(prompt: prompt, maximumTokens: 32, priority: .background)
+        let prompt = ProjectsModelJobTests.SyntheticThread.prompt(fitting: RewriteEngine.maximumJobPromptTokens, question: ProjectsModelJobTests.SyntheticThread.longReplyQuestion, tokenizer: tokenizer)
+        let job = ProjectsModelRequest(prompt: prompt, maximumTokens: Self.answerTokens, priority: .background)
 
         /// One dictation, held as long as its clip lasts, and waited for until the paste
         /// and until its model calls returned. A gap before the press lands it at another
@@ -266,11 +279,14 @@ struct ProjectsLatencyMeasurementTests {
         }
         _ = try await queue.run(ProjectsModelRequest(prompt: prompt, maximumTokens: 32, priority: .user))
         _ = slices.take()
+        _ = bursts.take()
 
         if parts.contains("latency") {
             var records: [Record] = []
             var jobs: [String: Int] = [:]
             var sliceTimes: [String: [Double]] = [:]
+            var burstTimes: [String: [Double]] = [:]
+            var tokens: [String: Int] = [:]
             var seconds: [String: Double] = [:]
             let conditions = ["no Projects work", "Projects queue"]
             for round in 0..<Self.rounds {
@@ -290,11 +306,14 @@ struct ProjectsLatencyMeasurementTests {
                     if let worker {
                         jobs[condition, default: 0] += await stop(worker)
                     }
-                    sliceTimes[condition, default: []] += slices.take()
+                    sliceTimes[condition, default: []] += slices.take().times
+                    let written = bursts.take()
+                    burstTimes[condition, default: []] += written.times
+                    tokens[condition, default: 0] += written.tokens
                     seconds[condition, default: 0] += started.duration(to: .now) / .seconds(1)
                 }
             }
-            let report = Self.latencyReport(records, conditions: conditions, jobs: jobs, slices: sliceTimes, seconds: seconds, clips: clips)
+            let report = Self.latencyReport(records, conditions: conditions, jobs: jobs, slices: sliceTimes, bursts: burstTimes, tokens: tokens, seconds: seconds, clips: clips)
             try Self.write(report, named: "latency.md")
             for path in Path.allCases {
                 let none = records.filter { $0.condition == conditions[0] && $0.path == path }.compactMap(\.total)
@@ -347,6 +366,10 @@ struct ProjectsLatencyMeasurementTests {
         Int(environment["ORRA_PROJECTS_LATENCY_ROUNDS"] ?? "") ?? 2
     }
 
+    static var answerTokens: Int {
+        Int(environment["ORRA_PROJECTS_LATENCY_ANSWER"] ?? "") ?? 1_500
+    }
+
     /// The say clips, as a 48 kHz microphone would deliver them, Chinese and English in
     /// turn.
     static func clips() throws -> [Clip] {
@@ -397,8 +420,8 @@ struct ProjectsLatencyMeasurementTests {
         return "\(M.f(M.percentile(values, 0.5), 3)) / \(M.f(M.percentile(values, 0.9), 3)) / \(M.f(values.max() ?? 0, 3))"
     }
 
-    static func latencyReport(_ records: [Record], conditions: [String], jobs: [String: Int], slices: [String: [Double]], seconds: [String: Double], clips: [Clip]) -> String {
-        var out = "# Dictation next to Projects work, chip \(SpeechCorpus.chip()), \(ProcessInfo.processInfo.physicalMemory) bytes of memory, \(clips.count) say clips, \(rounds) rounds, background jobs of 8,192 tokens\n\n"
+    static func latencyReport(_ records: [Record], conditions: [String], jobs: [String: Int], slices: [String: [Double]], bursts: [String: [Double]], tokens: [String: Int], seconds: [String: Double], clips: [Clip]) -> String {
+        var out = "# Dictation next to Projects work, chip \(SpeechCorpus.chip()), \(ProcessInfo.processInfo.physicalMemory) bytes of memory, \(clips.count) say clips, \(rounds) rounds, background jobs of 8,192 tokens with answers of up to \(answerTokens) tokens\n\n"
         out += "Cells are median / p90 / max in seconds. Release to paste is DictationTimings.total. A missed limit is a cleanup or translation that TimedCall cancelled at its limit.\n\n"
         for path in Path.allCases {
             let step: DictationTimings.Step = path == .cleanup ? .cleanup : .translation
@@ -412,12 +435,13 @@ struct ProjectsLatencyMeasurementTests {
             let busy = records.filter { $0.condition == conditions[1] && $0.path == path }.compactMap(\.total)
             out += "\nRelease to paste with Projects work against without: median \(M.f(M.percentile(busy, 0.5) - M.percentile(none, 0.5), 3)) s, p90 \(M.f(M.percentile(busy, 0.9) - M.percentile(none, 0.9), 3)) s. Bar: 0.1 s each.\n\n"
         }
-        out += "## Projects jobs during the dictations\n\n| condition | seconds | jobs done | jobs per minute | slices | slice median / p90 / max |\n|---|---|---|---|---|---|\n"
+        out += "## Projects jobs during the dictations\n\nSlices and bursts are the times they ran inside the engine. Reading and writing are their sums.\n\n| condition | seconds | jobs done | slices | slice median / p90 / max | reading s | bursts | tokens written | burst median / p90 / max | writing s |\n|---|---|---|---|---|---|---|---|---|---|\n"
         for condition in conditions {
             let time = seconds[condition] ?? 0
             let done = jobs[condition] ?? 0
             let mine = slices[condition] ?? []
-            out += "| \(condition) | \(M.f(time, 0)) | \(done) | \(M.f(Double(done) / max(time, 1) * 60, 1)) | \(mine.count) | \(cell(mine)) |\n"
+            let written = bursts[condition] ?? []
+            out += "| \(condition) | \(M.f(time, 0)) | \(done) | \(mine.count) | \(cell(mine)) | \(M.f(mine.reduce(0, +), 1)) | \(written.count) | \(tokens[condition] ?? 0) | \(cell(written)) | \(M.f(written.reduce(0, +), 1)) |\n"
         }
         let limits = records.flatMap(\.calls).map(\.limit)
         out += "\nTime limits seen: \(M.f(limits.min() ?? 0, 2)) to \(M.f(limits.max() ?? 0, 2)) s. Dictations without timings: \(records.filter { $0.timings == nil }.count).\n"

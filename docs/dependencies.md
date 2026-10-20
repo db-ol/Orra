@@ -188,8 +188,10 @@ of a prompt and each burst of an answer is its own shared call, see
 Orra/Projects/ProjectsModelQueue.swift, so a voice request waits for the slice or burst
 under way and never for a whole job. The end of a job waits for its turn even when its
 task is cancelled, like an unload. Shared calls never wait for each other, so the gate
-does not keep a job from slowing a dictation. The queue does that by starting no slice
-from the press of the talk key or the translation key until the paste.
+does not keep a job from slowing a dictation. The queue does that by starting no slice or
+burst from the press of the talk key or the translation key until the paste or cancel. It
+also cancels a call that still waits at the gate when a dictation begins, since the
+dictation's reservation lets every shared call in.
 
 Check this again on every update of speech-swift, mlx-swift-lm or mlx-swift, and before
 the speech or cleanup model changes: look for `compile(` in the code those models run,
