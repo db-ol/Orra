@@ -485,30 +485,57 @@ struct FolderIndexTests {
         }
     }
 
-    /// The new file that passes the text limit is the last new one read. A file the index
-    /// holds is still read again when it changes, so its old text never stays.
+    /// The new file that passes the text limit is the last new one read. A changed file's
+    /// old text counts only until its new text replaces it.
     @Test func aProjectStopsReadingNewFilesPastItsText() async throws {
-        try await withFixture(limits: FolderIndex.Limits(textBytes: 30)) { fixture in
+        try await withFixture(limits: FolderIndex.Limits(textBytes: 50)) { fixture in
             let old = Date(timeIntervalSince1970: 1_760_000_000)
-            for name in ["a.txt", "b.txt", "c.txt"] {
+            for name in ["a.txt", "b.txt"] {
                 try fixture.write(name, "Twenty bytes of text", modified: old)
             }
             await fixture.start()
             #expect(fixture.reads.all == ["a.txt", "b.txt"])
-            let report = try #require(fixture.index.reports[fixture.alpha])
-            #expect(report.indexed == 2)
-            #expect(report.textBytes == 40)
-            #expect(report.reachedTextLimit)
-            // A later sweep reads nothing more.
-            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
-            #expect(fixture.reads.all == ["a.txt", "b.txt"])
+            #expect(fixture.index.reports[fixture.alpha]?.reachedTextLimit == false)
 
             try fixture.write("a.txt", "Posters arrive today", modified: old.addingTimeInterval(60))
-            await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/a.txt"]))
+            for name in ["c.txt", "d.txt"] {
+                try fixture.write(name, "Twenty bytes of text", modified: old)
+            }
+            await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/a.txt", fixture.folder + "/c.txt", fixture.folder + "/d.txt"]))
+            // 20 bytes stay with b.txt and a.txt brings 20 again, so c.txt still fits and
+            // passes the limit, and d.txt waits.
+            #expect(fixture.reads.all == ["a.txt", "b.txt", "a.txt", "c.txt"])
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.indexed == 3)
+            #expect(report.textBytes == 60)
+            #expect(report.reachedTextLimit)
+
+            // A later sweep reads nothing more.
+            await fixture.deliverAndTick(FolderEvents.Changes(mustSweep: true))
+            #expect(fixture.reads.all.count == 4)
+        }
+    }
+
+    /// A file the index holds is read again when it changes, even when the files left as
+    /// they are already pass the limit, so its old text never stays.
+    @Test func aChangedFileIsReadAgainPastTheTextLimit() async throws {
+        try await withFixture(limits: FolderIndex.Limits(textBytes: 30)) { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            let large = "Forty bytes of text that the index holds"
+            try fixture.write("a.txt", "Lamps", modified: old)
+            try fixture.write("b.txt", large, modified: old)
+            await fixture.start()
+            #expect(fixture.reads.all == ["a.txt", "b.txt"])
+
+            try fixture.write("a.txt", "Posters", modified: old.addingTimeInterval(60))
+            try fixture.write("c.txt", "Twenty bytes of text", modified: old)
+            await fixture.deliverAndTick(FolderEvents.Changes(changed: [fixture.folder + "/a.txt", fixture.folder + "/c.txt"]))
             #expect(fixture.reads.all == ["a.txt", "b.txt", "a.txt"])
             #expect(try await fixture.search("posters").map(\.file.lastPathComponent) == ["a.txt"])
-            #expect(fixture.index.reports[fixture.alpha]?.textBytes == 40)
-            #expect(fixture.index.reports[fixture.alpha]?.reachedTextLimit == true)
+            #expect(try await fixture.search("lamps").isEmpty)
+            let report = try #require(fixture.index.reports[fixture.alpha])
+            #expect(report.textBytes == Int64("Posters".utf8.count + large.utf8.count))
+            #expect(report.reachedTextLimit)
         }
     }
 
