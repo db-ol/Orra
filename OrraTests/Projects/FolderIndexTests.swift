@@ -554,6 +554,24 @@ struct FolderIndexTests {
         }
     }
 
+    /// What sorting and the explanation read of a project's files: the names of the files
+    /// with text, and each with its date and the start of its text, never a skipped one.
+    @Test func sortingAndTheExplanationReadTheFilesWithText() async throws {
+        try await withFixture { fixture in
+            let old = Date(timeIntervalSince1970: 1_760_000_000)
+            try fixture.write("plan_v2.txt", "替代 v1\n\nThe print run is 500 calendars.", modified: old)
+            try fixture.write("sub/合同.md", "合同付款条款需要确认。", modified: old)
+            try fixture.write("budget.xlsx", "x")
+            await fixture.start()
+            #expect(try await fixture.index.fileNames(project: fixture.alpha) == ["plan_v2.txt", "合同.md"])
+            let files = try await fixture.index.versionFiles(project: fixture.alpha)
+            #expect(files.map(\.url.lastPathComponent) == ["plan_v2.txt", "合同.md"])
+            #expect(files.first?.head.hasPrefix("替代 v1") == true)
+            #expect(files.allSatisfy { abs($0.modified.timeIntervalSince(old)) < 1 })
+            #expect(try await fixture.index.fileNames(project: UUID()).isEmpty)
+        }
+    }
+
     /// A file removed to save space cannot be read without a download, so its text stays.
     @Test func aFileNoLongerOnThisMacKeepsItsText() async throws {
         try await withFixture { fixture in

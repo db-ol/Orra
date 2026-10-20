@@ -275,6 +275,28 @@ final class FolderIndex {
         ).compactMap { $0.first?.text.map { URL(fileURLWithPath: $0) } }
     }
 
+    /// The names of a project's files with text in the index, for the attachment names that
+    /// sorting compares, see SortingService.Lookups.fileNames.
+    func fileNames(project id: UUID) async throws -> [String] {
+        try await database.run(
+            "SELECT path FROM index_files WHERE project = ? AND skip IS NULL ORDER BY path",
+            [.text(id.uuidString)]
+        ).compactMap { $0.first?.text.map { URL(fileURLWithPath: $0).lastPathComponent } }
+    }
+
+    /// A project's files with text in the index, each with its modification date and the
+    /// start of its text, for FileVersions, see ExplainService.Lookups.files.
+    func versionFiles(project id: UUID) async throws -> [FileVersions.File] {
+        try await database.run("""
+            SELECT f.path, f.modified, (SELECT c.text FROM index_chunks c WHERE c.file = f.id ORDER BY c.id LIMIT 1)
+            FROM index_files f WHERE f.project = ? AND f.skip IS NULL ORDER BY f.path
+            """, [.text(id.uuidString)]
+        ).compactMap { row in
+            guard row.count == 3, let path = row[0].text, let modified = row[1].real else { return nil }
+            return FileVersions.File(url: URL(fileURLWithPath: path), modified: Date(timeIntervalSince1970: modified), head: row[2].text ?? "")
+        }
+    }
+
     // MARK: The worker
 
     private func startWorker() {

@@ -5,8 +5,8 @@ import os
 /// project, while Mail runs and Projects is on.
 ///
 /// - Nothing is read before the user confirmed the mailbox choice once, see MailChoice.
-///   Then only the chosen and the linked mailboxes are read, and in them only mail Mail
-///   received within the chosen days. Mail is never opened, and nothing is read while it
+///   Then only the linked and the chosen mailboxes are read, in that order, and in them only
+///   mail Mail received within the chosen days. Mail is never opened, and nothing is read while it
 ///   does not run. A pass checks again before each mailbox, range and message, and ends
 ///   when Projects goes off, the confirm is forgotten or `stop()` is called.
 /// - A mailbox is read in ranges of 200 positions, never with `whose`. The spike found the
@@ -325,7 +325,9 @@ final class MailScan {
         }
         let started = ContinuousClock.now
         var unique = Set<MailMailbox>()
-        let mailboxes = (choice.mailboxes + (await lookups.linkedMailboxes())).filter { unique.insert($0).inserted }
+        // The linked mailboxes first: a message in a linked account Inbox, which the inbox
+        // of all accounts lists too, is then saved with the mailbox that files it.
+        let mailboxes = ((await lookups.linkedMailboxes()) + choice.mailboxes).filter { unique.insert($0).inserted }
         let days = choice.days
         let cutoff = now().addingTimeInterval(-Double(days) * 86_400)
         var seen = Set<String>()

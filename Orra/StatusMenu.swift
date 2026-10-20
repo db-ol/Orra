@@ -10,8 +10,11 @@ struct StatusMenu: View {
     let clipboard: ClipboardWord
     let updater: AppUpdater
     let speech: TranslationSpeech
+    /// Projects, whose item shows only while it is on.
+    let projects: ProjectsRuntime
     let showWelcome: () -> Void
     let reportProblem: () -> Void
+    let showProjects: () -> Void
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -134,6 +137,15 @@ struct StatusMenu: View {
                     set: { speech.setOn($0) }
                 ))
             }
+        }
+
+        // Projects, only while it is on, with the count of mail waiting for a reply. The
+        // section above draws the divider before it.
+        if projects.showsMenuItem {
+            Button(ProjectsWindowText.menuTitle(replyDue: projects.replyDueCount)) {
+                showProjects()
+            }
+            Divider()
         }
 
         Menu("Talk Key") {

@@ -5,10 +5,12 @@ import SwiftUI
 
     var body: some Scene {
         MenuBarExtra {
-            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, captions: appDelegate.captions, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, clipboard: appDelegate.clipboard, updater: appDelegate.updater, speech: appDelegate.speech) {
+            StatusMenu(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, captions: appDelegate.captions, openAtLogin: appDelegate.openAtLogin, inputs: appDelegate.audioInputs, clipboard: appDelegate.clipboard, updater: appDelegate.updater, speech: appDelegate.speech, projects: appDelegate.projectsRuntime) {
                 appDelegate.welcome.show()
             } reportProblem: {
                 appDelegate.report.show()
+            } showProjects: {
+                appDelegate.projectsWindow.show()
             }
         } label: {
             MenuBarIcon(pushToTalk: appDelegate.pushToTalk, models: appDelegate.models, feedback: appDelegate.feedback)
