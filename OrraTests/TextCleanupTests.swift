@@ -416,6 +416,87 @@ struct TextCleanupTests {
         #expect(cleanup.isConfirmingProjectsDownload)
     }
 
+    /// Cancel Download on the Projects page stops only a download nothing else waits for,
+    /// and never turns cleanup or translation off. Under their switches it still does.
+    @Test func theProjectsPageCancelsOnlyItsOwnDownload() async {
+        defer { temporary.remove() }
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(50))])
+        defer { servers.close() }
+        var saved: [Bool] = []
+        let cleanup = makeCleanup(fetch: servers.fetch, saved: { saved.append($0) })
+        await cleanup.start()
+        cleanup.turnOn()
+        cleanup.confirmDownload()
+        cleanup.confirmProjectsDownload()
+        #expect(!cleanup.canCancelProjectsDownload)
+        cleanup.cancelProjectsDownload()
+        #expect(cleanup.isOn)
+        #expect(cleanup.projectsAgreedToDownload)
+        guard case .downloading = cleanup.models.state else {
+            Issue.record("The download for cleanup should go on, the state is \(cleanup.models.state)")
+            return
+        }
+        // Cleanup turns off, and the download goes on for Projects alone, which may now
+        // cancel it. Cleanup stays off.
+        cleanup.turnOff()
+        #expect(cleanup.canCancelProjectsDownload)
+        guard case .downloading = cleanup.models.state else {
+            Issue.record("The download for Projects should go on, the state is \(cleanup.models.state)")
+            return
+        }
+        cleanup.cancelProjectsDownload()
+        await cleanup.models.waitForDownload()
+        #expect(!cleanup.projectsAgreedToDownload)
+        #expect(!cleanup.isOn)
+        #expect(saved == [true, false])
+        guard case .missing = cleanup.models.state else {
+            Issue.record("Expected the download to stop, got \(cleanup.models.state)")
+            return
+        }
+    }
+
+    /// While captions run, the Projects page leaves the cancel to the caption window.
+    @Test func whileCaptionsRunTheProjectsPageCannotCancel() async {
+        defer { temporary.remove() }
+        let cleanup = makeCleanup(fetch: FileFetch { _, _, _, _, _, _ in })
+        await cleanup.start()
+        #expect(cleanup.canCancelProjectsDownload)
+        cleanup.captionsStarted()
+        #expect(!cleanup.canCancelProjectsDownload)
+        cleanup.captionsStopped()
+        #expect(cleanup.canCancelProjectsDownload)
+    }
+
+    /// A download that only captions agreed to stops when they do, so turning Projects on
+    /// meanwhile asks too. Once the user agrees, it goes on after captions stop.
+    @Test func turningProjectsOnDuringADownloadForCaptionsAsks() async {
+        defer { temporary.remove() }
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(50))])
+        defer { servers.close() }
+        let cleanup = makeCleanup(fetch: servers.fetch)
+        await cleanup.start()
+        cleanup.captionsStarted()
+        cleanup.confirmCaptionDownload()
+        guard case .downloading = cleanup.models.state else {
+            Issue.record("Expected a download for captions, got \(cleanup.models.state)")
+            return
+        }
+        #expect(cleanup.turnOnProjects() == false)
+        #expect(cleanup.isConfirmingProjectsDownload)
+        cleanup.confirmProjectsDownload()
+        cleanup.captionsStopped()
+        guard case .downloading = cleanup.models.state else {
+            Issue.record("The download for Projects should go on, the state is \(cleanup.models.state)")
+            return
+        }
+        cleanup.projectsTurnedOff()
+        await cleanup.models.waitForDownload()
+        guard case .missing = cleanup.models.state else {
+            Issue.record("Expected the download to stop, got \(cleanup.models.state)")
+            return
+        }
+    }
+
     /// Once the download for Projects is in place, the model loads only for a holder.
     @Test func aFinishedDownloadForProjectsLoadsOnlyForAHolder() async {
         defer { temporary.remove() }
