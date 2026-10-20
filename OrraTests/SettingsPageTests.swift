@@ -14,11 +14,65 @@ struct SettingsPageTests {
     let inserter = FakeInserter()
     let temporary = TemporaryModelFolders()
 
-    @Test func theSidebarHasSixPagesWithGeneralFirst() {
-        #expect(SettingsTab.allCases == [.general, .dictation, .translation, .meeting, .vocabulary, .about])
+    /// Seven pages with General first. A build that hides Projects shows the six without it,
+    /// and one that shows it has Projects after Vocabulary.
+    @Test func theSidebarHasSevenPagesWithGeneralFirst() {
+        #expect(SettingsTab.allCases == [.general, .dictation, .translation, .meeting, .vocabulary, .projects, .about])
+        #expect(SettingsTab.visible(projectsVisible: false) == [.general, .dictation, .translation, .meeting, .vocabulary, .about])
+        #expect(SettingsTab.visible(projectsVisible: true) == [.general, .dictation, .translation, .meeting, .vocabulary, .projects, .about])
         // Each page has its own icon in its own color.
         #expect(Set(SettingsTab.allCases.map(\.symbol)).count == SettingsTab.allCases.count)
         #expect(Set(SettingsTab.allCases.map(\.tint)).count == SettingsTab.allCases.count)
+        #expect(SettingsTab.projects.symbol == "briefcase.fill")
+        #expect(SettingsTab.projects.tint == .teal)
+        #expect(SettingsTab.allCases.filter(\.isPreview) == [.projects])
+    }
+
+    /// The sidebar shows Projects only with a switch from a build that shows it. A request
+    /// for Projects opens its page there, and General everywhere else. Every other page opens
+    /// as asked either way.
+    @Test func projectsOpensItsPageOnlyWhereItShows() throws {
+        let suite = "io.github.db-ol.OrraTests.settings-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("SettingsPageTests-\(UUID().uuidString)", isDirectory: true))
+        let shown = SettingsView.tabs(projects: ProjectsSwitch(defaults: defaults, isVisible: true, storage: storage))
+        let hidden = SettingsView.tabs(projects: ProjectsSwitch(defaults: defaults, isVisible: false, storage: storage))
+        let missing = SettingsView.tabs(projects: nil)
+        #expect(shown == [.general, .dictation, .translation, .meeting, .vocabulary, .projects, .about])
+        #expect(hidden == [.general, .dictation, .translation, .meeting, .vocabulary, .about])
+        #expect(missing == hidden)
+        SettingsWindow.show(.projects)
+        let request = SettingsWindow.takeRequest()
+        #expect(request == .init(tab: .projects, section: nil))
+        #expect(request.tab.shown(in: shown) == .projects)
+        #expect(request.tab.shown(in: hidden) == .general)
+        #expect(request.tab.shown(in: missing) == .general)
+        for tab in SettingsTab.allCases where tab != .projects {
+            #expect(tab.shown(in: hidden) == tab)
+            #expect(tab.shown(in: shown) == tab)
+        }
+    }
+
+    /// The lines of the Projects page: where the cleanup model stands, what Projects keeps,
+    /// and the privacy page in the interface language.
+    @Test func theProjectsPageSaysWhereTheModelAndTheDataStand() {
+        #expect(ProjectsSettings.modelStatus(.installed(URL(fileURLWithPath: "/"))) == "On this Mac")
+        #expect(ProjectsSettings.modelStatus(.missing(bytesPresent: 0)) == "Not on this Mac yet")
+        #expect(ProjectsSettings.modelStatus(.failed(.offline)) == "Not on this Mac yet")
+        #expect(ProjectsSettings.modelStatus(.downloading(bytes: 5, source: nil)) == "Downloading…")
+        #expect(ProjectsSettings.modelStatus(.checking) == "Checking…")
+        #expect(ProjectsSettings.stored(nil) == "Checking…")
+        #expect(ProjectsSettings.stored(0) == "Nothing")
+        #expect(ProjectsSettings.stored(1_500_000) == "1.5 MB")
+        let pages = ["en", "zh-Hans", "ja", "es-419", "fr"].map { ProjectsSettings.privacyPage(for: $0).absoluteString }
+        #expect(pages == [
+            "https://github.com/db-ol/Orra/blob/main/docs/privacy.md",
+            "https://github.com/db-ol/Orra/blob/main/docs/privacy.zh-CN.md",
+            "https://github.com/db-ol/Orra/blob/main/docs/privacy.ja.md",
+            "https://github.com/db-ol/Orra/blob/main/docs/privacy.es.md",
+            "https://github.com/db-ol/Orra/blob/main/docs/privacy.md",
+        ])
     }
 
     @Test func aTabAskedForOpensOnceAndSettingsOpensGeneral() {
@@ -137,8 +191,11 @@ struct SettingsPageTests {
         try await render(.meeting, meeting: true, name: "\(language)-3-meeting-interpretation")
         try await render(.meeting, translationOn: true, meeting: true, height: 1200, name: "\(language)-3-meeting-interpretation-full-height")
         try await render(.vocabulary, name: "\(language)-4-vocabulary")
-        try await render(.about, name: "\(language)-5-about")
-        try await render(.about, height: 900, name: "\(language)-5-about-full-height")
+        try await render(.projects, name: "\(language)-5-projects")
+        try await render(.projects, cleanupInstalled: true, projectsData: 1_500_000, name: "\(language)-5-projects-with-data")
+        try await render(.projects, physicalMemory: 8 << 30, name: "\(language)-5-projects-8-gb")
+        try await render(.about, name: "\(language)-6-about")
+        try await render(.about, height: 900, name: "\(language)-6-about-full-height")
     }
 
     private var folder: URL {
@@ -149,16 +206,35 @@ struct SettingsPageTests {
     /// the Meeting Interpretation page has its parts, with captions that hear nothing and a
     /// voice model that is not downloaded. `dictating` is the dictation language picked,
     /// `talkKey`, `talkMode` and `translationMode` the talk key and the modes of the keys, and
-    /// `section` the part the page scrolls to.
-    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
+    /// `section` the part the page scrolls to. The Projects page shows on a Mac with
+    /// `physicalMemory`, with a cleanup model in place when `cleanupInstalled`, and with
+    /// `projectsData` bytes kept, in folders of its own.
+    private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, cleanupInstalled: Bool = false, physicalMemory: UInt64 = 48 << 30, projectsData: Int = 0, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
-        // it is missing.
+        // it is missing, or the files of the test model in place.
         let models = ModelInstaller(
-            manifest: .qwen35Cleanup,
+            manifest: cleanupInstalled ? temporary.manifest : .qwen35Cleanup,
             folders: temporary.folders,
             environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
         )
+        if cleanupInstalled {
+            try temporary.write(Array(TestModel.sizes.keys), to: temporary.installed)
+        }
         await models.prepare()
+        let projectsRoot = FileManager.default.temporaryDirectory.appendingPathComponent("SettingsPageTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: projectsRoot) }
+        let storage = ProjectsStorage(root: projectsRoot)
+        if projectsData > 0 {
+            try storage.create()
+            try Data(count: projectsData).write(to: storage.indexFolder.appendingPathComponent("projects.sqlite"))
+        }
+        let suite = "io.github.db-ol.OrraTests.settings-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: physicalMemory, storage: storage)
+        if projectsData > 0 {
+            projects.turnOn()
+        }
         let cleanup = TextCleanup(
             isOn: cleanupOn,
             save: { _ in },
@@ -204,7 +280,8 @@ struct SettingsPageTests {
             speech: meeting ? TranslationSpeech(engines: .only(FakeSynthesizer()), playback: FakePlayback(), outputs: { [] }, folders: { nil }) : nil,
             voiceModels: meeting ? VoiceModels(kind: .qwen3) { [temporary] manifest in
                 ModelInstaller(manifest: manifest, folders: temporary.folders, environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in nil }, sleep: { _ in }))
-            } : nil
+            } : nil,
+            projects: projects
         )
         // The window's first size.
         let size = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)
@@ -212,7 +289,7 @@ struct SettingsPageTests {
         // next to the page in a plain column, at the sidebar's width.
         let content = HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(SettingsTab.allCases) { row in
+                ForEach(SettingsTab.visible(projectsVisible: true)) { row in
                     SettingsTabLabel(tab: row)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)

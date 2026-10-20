@@ -1801,6 +1801,28 @@
         }
       }
     },
+    "Cleanup model" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo de limpieza"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整文モデル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整理模型"
+          }
+        }
+      }
+    },
     "Cleanup stays off on this Mac because it has %lld GB of memory. You can turn it on later in Settings, Dictation." : {
       "localizations" : {
         "es-419" : {
@@ -2194,6 +2216,28 @@
         }
       }
     },
+    "Data" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数据"
+          }
+        }
+      }
+    },
     "Delete" : {
       "comment" : "A key name",
       "localizations" : {
@@ -2213,6 +2257,94 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Delete"
+          }
+        }
+      }
+    },
+    "Delete All" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar todo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべて削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部删除"
+          }
+        }
+      }
+    },
+    "Delete all Projects data?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Eliminar todos los datos de Proyectos?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”のすべてのデータを削除しますか?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要删除“项目”的所有数据吗？"
+          }
+        }
+      }
+    },
+    "Delete All Projects Data…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar todos los datos de Proyectos…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”のすべてのデータを削除…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除“项目”的所有数据…"
+          }
+        }
+      }
+    },
+    "Delete Data" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar datos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データを削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除数据"
           }
         }
       }
@@ -3572,6 +3704,28 @@
         }
       }
     },
+    "It never sends, moves or deletes mail, and never sends your mail or files anywhere." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nunca envía, mueve ni elimina correos, y nunca envía tus correos ni tus archivos a ninguna parte."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールを送信、移動、削除することはなく、メールやファイルをどこかに送信することもありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它从不发送、移动或删除邮件，也从不把你的邮件或文件发送到任何地方。"
+          }
+        }
+      }
+    },
     "Japanese" : {
       "localizations" : {
         "es-419" : {
@@ -3635,6 +3789,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳到最新"
+          }
+        }
+      }
+    },
+    "Keep Data" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conservar datos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "データを残す"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留数据"
+          }
+        }
+      }
+    },
+    "Keep your projects with their index, mail text and drafts on this Mac for when you turn Projects on again, or delete them now. Your mail in Mail and the files in your folders stay as they are." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conserva en esta Mac tus proyectos con su índice, el texto de los correos y los borradores para cuando vuelvas a activar Proyectos, o elimínalos ahora. Tu correo en Mail y los archivos de tus carpetas no cambian."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次に“プロジェクト”をオンにするときのために、プロジェクトと、そのインデックス、メールのテキスト、下書きをこのMacに残すか、今すぐ削除できます。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你可以把项目以及它们的索引、邮件文字和草稿留在这台 Mac 上，下次打开“项目”时接着用，也可以现在就删除。“邮件” App 里的邮件和你文件夹里的文件保持不变。"
           }
         }
       }
@@ -4436,6 +4634,28 @@
         }
       }
     },
+    "Model" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モデル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型"
+          }
+        }
+      }
+    },
     "Never used" : {
       "localizations" : {
         "es-419" : {
@@ -4722,6 +4942,50 @@
         }
       }
     },
+    "Not on this Mac yet" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todavía no está en esta Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだこのMacにありません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有"
+          }
+        }
+      }
+    },
+    "Nothing" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nada"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "なし"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无"
+          }
+        }
+      }
+    },
     "Now let me type for you. Allow Accessibility." : {
       "localizations" : {
         "es-419" : {
@@ -4851,6 +5115,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "屏幕提示"
+          }
+        }
+      }
+    },
+    "On this Mac" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En esta Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacにあります"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这台 Mac 上"
           }
         }
       }
@@ -6400,6 +6686,28 @@
         }
       }
     },
+    "Preview" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista previa"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビュー"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览版"
+          }
+        }
+      }
+    },
     "Privacy & Security" : {
       "localizations" : {
         "es-419" : {
@@ -6418,6 +6726,94 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "隐私与安全性"
+          }
+        }
+      }
+    },
+    "Privacy details" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detalles de privacidad"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プライバシーの詳細"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐私说明"
+          }
+        }
+      }
+    },
+    "Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目"
+          }
+        }
+      }
+    },
+    "Projects needs %lld GB of memory or more. This Mac has %lld GB." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos necesita %lld GB de memoria o más. Esta Mac tiene %lld GB."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”には%lld GB以上のメモリが必要です。このMacのメモリは%lld GBです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”需要 %lld GB 或以上的内存，这台 Mac 只有 %lld GB。"
+          }
+        }
+      }
+    },
+    "Projects works with the local model of Clean Up Text, on this Mac." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos usa el modelo local de Limpiar texto, en esta Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、“テキストを整える”のローカルモデルをこのMac上で使います。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”使用“整理文字”的本地模型，在这台 Mac 上运行。"
           }
         }
       }
@@ -6550,6 +6946,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "粘贴后 3 分钟内读取你听写的输入框，把你改正的听错的词加入个人词库。"
+          }
+        }
+      }
+    },
+    "Reads the mailboxes you choose in Mail and the folders you add. What it keeps stays on this Mac." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lee los buzones que elijas en Mail y las carpetas que agregues. Lo que guarda no sale de esta Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で選んだメールボックスと、追加したフォルダを読み取ります。保存した内容はこのMacから出ません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "读取你在“邮件” App 中选择的邮箱和你添加的文件夹。它保存的内容只留在这台 Mac 上。"
           }
         }
       }
@@ -7683,6 +8101,28 @@
         }
       }
     },
+    "Some Projects data could not be deleted. Try again." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron eliminar algunos datos de Proyectos. Vuelve a intentarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”のデータの一部を削除できませんでした。もう一度試してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”的部分数据未能删除。请再试一次。"
+          }
+        }
+      }
+    },
     "Sort by" : {
       "localizations" : {
         "es-419" : {
@@ -7701,6 +8141,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "排序方式"
+          }
+        }
+      }
+    },
+    "Sorts your mail into projects and explains each email with the files of its project." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clasifica tu correo en proyectos y explica cada correo con los archivos de su proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールをプロジェクトごとに振り分け、各メールをそのプロジェクトのファイルと合わせて説明します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "把你的邮件分到各个项目里，并结合项目里的文件解释每封邮件。"
           }
         }
       }
@@ -8032,6 +8494,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 秒后停止"
+          }
+        }
+      }
+    },
+    "Stored on this Mac" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardado en esta Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacに保存"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存在这台 Mac 上"
           }
         }
       }
@@ -9193,6 +9677,28 @@
         }
       }
     },
+    "This deletes your projects with their index, mail text and drafts from this Mac. Your mail in Mail and the files in your folders stay as they are." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se eliminarán de esta Mac tus proyectos con su índice, el texto de los correos y los borradores. Tu correo en Mail y los archivos de tus carpetas no cambian."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクトと、そのインデックス、メールのテキスト、下書きをこのMacから削除します。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会从这台 Mac 上删除你的项目，以及它们的索引、邮件文字和草稿。“邮件” App 里的邮件和你文件夹里的文件保持不变。"
+          }
+        }
+      }
+    },
     "This dictation was pasted without translation." : {
       "localizations" : {
         "es-419" : {
@@ -9740,6 +10246,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭实时字幕后才能录音。"
+          }
+        }
+      }
+    },
+    "Turn off Projects?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Desactivar Proyectos?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”をオフにしますか?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要关闭“项目”吗？"
           }
         }
       }

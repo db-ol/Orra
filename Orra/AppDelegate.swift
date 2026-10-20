@@ -103,6 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         saveDisplayMode: { $0.save() }
     )
     lazy var captionWindow = CaptionWindow(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
+    /// Projects, off until the user turns it on in Settings, and only in builds that show
+    /// it. Reading the switch starts nothing.
+    let projects = ProjectsSwitch()
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()
     let dockIcon = DockIcon.live()
