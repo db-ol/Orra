@@ -6,12 +6,17 @@ import Testing
 /// text index of the five project folders and the real cleanup model. Only when asked for,
 /// never in CI, in a Release build, since a Debug build runs MLX without optimization:
 ///
-///     TEST_RUNNER_ORRA_PROJECTS_SET=~/projects/orra-project/bench/projects-testset TEST_RUNNER_ORRA_PROJECTS_SORT_OUT=<folder> xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -configuration Release ENABLE_TESTABILITY=YES -testLanguage en -testRegion US test-without-building -only-testing:OrraTests/SortingEvaluationTests
+///     TEST_RUNNER_ORRA_PROJECTS_SET=~/projects/orra-project/bench/projects-testset \
+///     TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=<work address>,<home address> \
+///     TEST_RUNNER_ORRA_PROJECTS_OWN_NAME=<name> \
+///     TEST_RUNNER_ORRA_PROJECTS_SORT_OUT=<folder> \
+///     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -configuration Release ENABLE_TESTABILITY=YES -testLanguage en -testRegion US test-without-building -only-testing:OrraTests/SortingEvaluationTests
 ///
 /// As in phase 0, each mail sees the earlier mails filed as their labels say (gold
 /// history), so each number is one decision, and today is 2026-10-18, the day the labels
-/// hold for. The user's addresses and name are those of the set's owner, as the Debug
-/// override of the test guide gives them. The mails have no list headers, as in phase 0.
+/// hold for. The user's addresses (comma separated) and name are those of the set's owner,
+/// from its README, as the Debug override of the test guide gives them. They stay out of
+/// the repository with the rest of the set. The mails have no list headers, as in phase 0.
 ///
 /// A mail is right when it lands in its project, or in Set Aside when its label is none.
 /// Needs a Project counts apart, and anything else is wrong. The bar of the plan: at least
@@ -21,7 +26,7 @@ import Testing
 /// decisions, `{"id": "m001", "project": "<slug>", "none" or null}`, the report lists every
 /// mail where this run differs from phase 0. The report holds ids, project slugs, levels,
 /// reasons and the model's choices, never mail text, addresses or names.
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["ORRA_PROJECTS_SET"] != nil && RewriteTestModel.folder != nil))
+@Suite(.serialized, .enabled(if: ["ORRA_PROJECTS_SET", "ORRA_PROJECTS_OWN_ADDRESSES", "ORRA_PROJECTS_OWN_NAME"].allSatisfy { ProcessInfo.processInfo.environment[$0] != nil } && RewriteTestModel.folder != nil))
 @MainActor
 struct SortingEvaluationTests {
     static var setFolder: URL? {
@@ -30,8 +35,9 @@ struct SortingEvaluationTests {
 
     /// The day the labels hold for, noon in the set's time zone.
     nonisolated static let today = ISO8601DateFormatter().date(from: "2026-10-18T12:00:00+08:00")!
-    nonisolated static let ownAddresses = ["lin.zhou@qingshi.example", "linzhou@mailbox.example"]
-    nonisolated static let ownName = "林舟"
+    nonisolated static let ownAddresses = (ProcessInfo.processInfo.environment["ORRA_PROJECTS_OWN_ADDRESSES"] ?? "")
+        .split(separator: ",").compactMap { ProjectsAddress.normalized(String($0)) }
+    nonisolated static let ownName = ProcessInfo.processInfo.environment["ORRA_PROJECTS_OWN_NAME"]
     nonisolated static let bar = (right: 88, wrong: 6)
 
     @Test func sortTheSyntheticSet() async throws {
@@ -39,6 +45,7 @@ struct SortingEvaluationTests {
         let modelFolder = try #require(RewriteTestModel.folder)
         let set = try SyntheticSet(root: root)
         try #require(set.mails.count == 105)
+        try #require(!Self.ownAddresses.isEmpty, "TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES holds no address")
 
         // The index of the five folders, as FolderIndex keeps it.
         let storage = ProjectsStorage(root: FileManager.default.temporaryDirectory.appendingPathComponent("SortingEvaluation-\(UUID().uuidString)", isDirectory: true))
@@ -69,9 +76,15 @@ struct SortingEvaluationTests {
         var chosen: [String] = []
         let modelStarted = ContinuousClock.now
         let model = await Self.sort(set, fileNames: fileNames, scores: scores) { request in
-            let answer = try await queue.run(request)
-            chosen.append(Self.chosenName(answer))
-            return answer
+            // One entry for every ask, so the report pairs each choice with its mail.
+            do {
+                let answer = try await queue.run(request)
+                chosen.append(Self.chosenName(answer))
+                return answer
+            } catch {
+                chosen.append("error")
+                throw error
+            }
         }
         let modelTime = modelStarted.duration(to: .now)
         await engine.unload()
@@ -120,7 +133,10 @@ struct SortingEvaluationTests {
             tally: { _, _ in nil }
         )
         let saves = SortingService.Saves(
-            decision: { id, decision in run.decisions[set.id(of: id)] = decision },
+            decision: { id, decision in
+                run.decisions[set.id(of: id)] = decision
+                return true
+            },
             reply: { id, decision in run.replies[set.id(of: id)] = decision },
             move: { _, _ in },
             tally: { _, _, _ in }
@@ -380,6 +396,7 @@ struct SortingEvaluationTests {
             }
         }
         let invalid = chosen.filter { $0 == "invalid" }.count
+        let errors = chosen.filter { $0 == "error" }.count
         var text = """
             # Sorting the synthetic set, chip \(SpeechCorpus.chip())
 
@@ -398,7 +415,7 @@ struct SortingEvaluationTests {
 
             The bar: at least \(bar.right) right and at most \(bar.wrong) wrong.
 
-            The model was asked about \(model.asked.count) mails in \(seconds(modelTime)) with the run's other work, and \(invalid) answers were invalid. The reply due mark matches needs_reply for \(replyRight) of \(set.mails.count) mails.
+            The model was asked about \(model.asked.count) mails in \(seconds(modelTime)) with the run's other work, \(invalid) answers were invalid and \(errors) requests failed. The reply due mark matches needs_reply for \(replyRight) of \(set.mails.count) mails.
 
             ## Not right
 
