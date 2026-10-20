@@ -29,10 +29,11 @@ struct ProjectsTokenCounterTests {
             "白露你好，第二次打样已经好了，周三之前能寄到吗？",
             "<|im_start|>user\nExplain the email.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nWarnings:\n",
         ]
+        // The closure ExplainService takes.
+        let countTokens: @Sendable (String) -> Int = counter.count
         for text in texts {
             let expected = tokenizer.encode(text: text, addSpecialTokens: false).count
-            #expect(counter.count(text) == expected)
-            #expect(counter.countTokens(text) == expected)
+            #expect(countTokens(text) == expected)
         }
         // The chat template's markers are one token each, as the model reads them.
         #expect(counter.count("<|im_start|>") == 1)

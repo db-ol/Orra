@@ -47,6 +47,11 @@ nonisolated struct Explanation: Sendable, Equatable {
     /// The questions only the user can answer before replying.
     var questions: [String]
     var draft: Draft
+    /// What DraftCheck checks a draft of this reply with, so a revision is checked as the
+    /// first draft was. Set for every reply due in Chinese or English, also when the model
+    /// wrote no draft, and nil otherwise. Its draft is empty, since `draft` holds the
+    /// checked one.
+    var draftCheck: DraftCheckInput?
     /// What the source ids of the points stand for: 本邮件 or this email, F1, M1 and T1.
     var sources: [String: ExplainPrompt.Source]
     /// What PromptHygiene took out of each place of the prompt, for the user to see. Never
@@ -83,9 +88,12 @@ nonisolated struct Explanation: Sendable, Equatable {
 /// with hidden runs gives a hidden_text warning, and so does an email in which VisibleText
 /// found hidden text. A reply is checked for everyone a reply to all reaches. A recipient
 /// who is neither among the project's people nor at one of its domains gives the
-/// recipient_not_in_project_people warning, and the draft carries no project data to them.
+/// recipient_not_in_project_people warning, and the draft carries no project data to them
+/// that they do not already have.
 ///
-/// Nothing here waits for the store. The log holds counts and times only.
+/// Nothing here waits for the store. The log holds counts and times only. The service
+/// keeps the parsed tokenizer once it has loaded it, so the window creates the service
+/// when it opens and lets it go when it closes.
 final class ExplainService {
     /// The email to explain, as projects-mail-text gives it.
     nonisolated struct Email: Sendable, Equatable {
@@ -166,7 +174,9 @@ final class ExplainService {
     }
 
     /// The chunks asked for to fill up the prompt. ChunkSearch.newest gives a file's
-    /// chunks in a row, so this many cover the 3 newest files of most projects.
+    /// chunks in a row, so this many cover the 3 newest files of most projects. A newest
+    /// file longer than about 136,000 characters fills the whole list, and the fill up
+    /// then shows that file only.
     nonisolated static let newestChunks = 200
     /// The most of the project's other mail asked for, as many as the prompt shows.
     nonisolated static let projectMailLimit = 3
@@ -218,7 +228,7 @@ final class ExplainService {
             let thread = try await lookups.thread(email)
             var gathered = Gathered(email: email, known: known, project: project, thread: thread, today: now())
             if let project {
-                let query = Self.searchText(email)
+                let query = await Self.searchText(email)
                 gathered.hits = try await lookups.search(query, project.id, ExplainPrompt.chunkLimit)
                 if gathered.hits.count < ExplainPrompt.fillUpTo {
                     gathered.newest = try await lookups.newest(project.id, Self.newestChunks)
@@ -418,9 +428,12 @@ final class ExplainService {
     }
 
     /// The text search and the project's other mail are found with: the subject and the
-    /// email's own text, without what PromptHygiene takes out.
-    nonisolated static func searchText(_ email: Email) -> String {
-        PromptHygiene.withoutMarkers(PromptHygiene(email.subject + "\n" + email.text, source: .mail).text)
+    /// email's own text, without what PromptHygiene takes out, cut to the characters a
+    /// search reads. Off the main actor, since the hygiene reads the whole text.
+    @concurrent
+    nonisolated static func searchText(_ email: Email) async -> String {
+        let text = PromptHygiene.withoutMarkers(PromptHygiene(email.subject + "\n" + email.text, source: .mail).text)
+        return String(text.prefix(ChunkSearch.maximumQueryCharacters))
     }
 
     private nonisolated static func chunk(_ hit: ChunkSearch.Hit) -> TextChunker.Chunk {
@@ -451,31 +464,36 @@ final class ExplainService {
         }
 
         let draft: Explanation.Draft
+        var draftCheck: DraftCheckInput?
         switch prepared.reply {
         case .noReply(let reason):
             draft = .noReply(reason)
         case .reply(let language) where language == .other:
             draft = .noDraft
         case .reply(let language):
+            let own = gathered.known.ownAddresses.map { DraftCheckInput.Person(name: gathered.known.ownName, address: $0) }
+            let recipients = prepared.recipients.map { DraftCheckInput.Person(name: $0.name, address: $0.address) }
+            var people = gathered.project?.people.map { DraftCheckInput.Person(name: $0.name, address: $0.address) } ?? []
+            // People at the project's domains count as its people, as in phase 0.
+            if let project = gathered.project {
+                people += recipients.filter { isInProject($0.address, project) && !people.contains($0) }
+            }
+            let input = DraftCheckInput(
+                draft: "",
+                language: language,
+                recipients: recipients,
+                projectPeople: people,
+                own: own,
+                incomingText: texts.incoming,
+                sourceTexts: texts.other,
+                questionsForUser: answer.questions,
+                today: gathered.today
+            )
+            draftCheck = input
             if case .reply(let text) = answer.draft {
-                let own = gathered.known.ownAddresses.map { DraftCheckInput.Person(name: gathered.known.ownName, address: $0) }
-                let recipients = prepared.recipients.map { DraftCheckInput.Person(name: $0.name, address: $0.address) }
-                var people = gathered.project?.people.map { DraftCheckInput.Person(name: $0.name, address: $0.address) } ?? []
-                // People at the project's domains count as its people, as in phase 0.
-                if let project = gathered.project {
-                    people += recipients.filter { isInProject($0.address, project) && !people.contains($0) }
-                }
-                draft = .checked(await DraftCheck.check(DraftCheckInput(
-                    draft: text,
-                    language: language,
-                    recipients: recipients,
-                    projectPeople: people,
-                    own: own,
-                    incomingText: texts.incoming,
-                    sourceTexts: texts.other,
-                    questionsForUser: answer.questions,
-                    today: gathered.today
-                )))
+                var checked = input
+                checked.draft = text
+                draft = .checked(await DraftCheck.check(checked))
             } else {
                 draft = .missing
             }
@@ -492,6 +510,7 @@ final class ExplainService {
             points: points,
             questions: answer.questions,
             draft: draft,
+            draftCheck: draftCheck,
             sources: prompt.sources,
             removed: prompt.removed,
             problems: answer.problems,
@@ -501,13 +520,19 @@ final class ExplainService {
 
     /// The texts of the prompt for the checks after the model. `incoming` is what the
     /// recipients of a reply already have: the email with its quoted history, and the
-    /// earlier messages of its thread that one of them was on. `other` is the rest of what
-    /// the model read: the project's description, the excerpts of its files and the other
-    /// mail in the prompt.
+    /// earlier messages of its thread that every recipient outside the project was on.
+    /// `other` is the rest of what the model read: the project's description, the excerpts
+    /// of its files and the other mail in the prompt.
     nonisolated static func sourceTexts(_ prepared: Prepared) -> (incoming: String, other: [String]) {
         let gathered = prepared.gathered
         let email = gathered.email
-        let reached = Set(prepared.recipients.compactMap { ProjectsAddress.normalized($0.address) })
+        // DraftCheck lets project data go to the project's people anyway, so only the
+        // recipients outside the project decide what a reply may repeat. Without a project
+        // every recipient is outside. One whose address does not parse was on no earlier
+        // message, and a reply that reaches nobody counts as going outside, as in DraftCheck.
+        let outside = prepared.recipients.filter { recipient in
+            gathered.project.map { !isInProject(recipient.address, $0) } ?? true
+        }
         var messages: [String: ExplainPrompt.Mail] = [:]
         for mail in gathered.projectMail + gathered.thread {
             messages[mail.messageID] = mail
@@ -523,8 +548,11 @@ final class ExplainService {
                 other.append(chunk.text)
             case .message(let messageID):
                 guard messageID != email.messageID, let mail = messages[messageID] else { continue }
-                let people = ([mail.sender] + mail.to + mail.cc).compactMap { ProjectsAddress.normalized($0.address) }
-                let wasOnIt = gathered.thread.contains { $0.messageID == messageID } && mail.date <= email.date && !reached.isDisjoint(with: people)
+                let people = Set(([mail.sender] + mail.to + mail.cc).compactMap { ProjectsAddress.normalized($0.address) })
+                let wasOnIt = !prepared.recipients.isEmpty
+                    && gathered.thread.contains { $0.messageID == messageID }
+                    && mail.date <= email.date
+                    && outside.allSatisfy { ProjectsAddress.normalized($0.address).map(people.contains) ?? false }
                 if wasOnIt {
                     incoming.append(mail.text)
                 } else {

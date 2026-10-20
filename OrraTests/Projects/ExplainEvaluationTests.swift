@@ -4,11 +4,15 @@ import Testing
 
 /// Explains the mails of the synthetic Projects set with the real cleanup model, and writes
 /// the explanations for reading. Only when asked for, with TEST_RUNNER_ORRA_PROJECTS_EXPLAIN
-/// set to the set's folder and TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_OUT to a folder for the
-/// results, never in CI, in a Release build, since a Debug build runs MLX without
-/// optimization:
+/// set to the set's folder, the set owner's addresses and name from the set's README, and
+/// TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_OUT set to a folder for the results. Never in CI, and
+/// in a Release build, since a Debug build runs MLX without optimization:
 ///
-///     TEST_RUNNER_ORRA_PROJECTS_EXPLAIN=~/projects/orra-project/bench/projects-testset TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_OUT=<folder> xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -configuration Release ENABLE_TESTABILITY=YES -testLanguage en -testRegion US test-without-building -only-testing:OrraTests/ExplainEvaluationTests
+///     TEST_RUNNER_ORRA_PROJECTS_EXPLAIN=~/projects/orra-project/bench/projects-testset \
+///     TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES=<work address>,<home address> \
+///     TEST_RUNNER_ORRA_PROJECTS_OWN_NAME=<name> \
+///     TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_OUT=<folder> \
+///     xcodebuild -project Orra.xcodeproj -scheme Orra -destination 'platform=macOS,arch=arm64' -configuration Release ENABLE_TESTABILITY=YES -testLanguage en -testRegion US test -only-testing:OrraTests/ExplainEvaluationTests
 ///
 /// TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_FIRST and TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_COUNT pick a
 /// part of the 105 mails, by their place in mail.jsonl from 1, so a long evaluation runs in
@@ -18,16 +22,16 @@ import Testing
 /// It runs the mails as phase 0 did, with today pinned to 2026-10-18, the day the labels
 /// hold for: each mail in its labeled project, with that project's files indexed by
 /// FolderIndex and found by ChunkSearch, its thread from the set's thread ids and Message-ID
-/// links, the project's other mail ranked by the words it shares with the mail, and 林舟 as
-/// the user. The model runs through ProjectsModelQueue, as a request of the user. The set
+/// links, the project's other mail ranked by the words it shares with the mail, and the set
+/// owner as the user. The model runs through ProjectsModelQueue, as a request of the user. The set
 /// stays outside the repository, and so do the results, which hold its text.
-@Suite(.serialized, .enabled(if: ExplainEvaluationSet.folder != nil && RewriteTestModel.folder != nil))
+@Suite(.serialized, .enabled(if: ExplainEvaluationSet.folder != nil && !ExplainEvaluationSet.ownAddresses.isEmpty && RewriteTestModel.folder != nil))
 @MainActor
 struct ExplainEvaluationTests {
     private nonisolated static let today = ISO8601DateFormatter().date(from: "2026-10-18T20:00:00+08:00")!
     private nonisolated static let timeZone = TimeZone(identifier: "Asia/Shanghai")!
-    private nonisolated static let ownName = "林舟"
-    private nonisolated static let ownAddresses = ["lin.zhou@qingshi.example", "linzhou@mailbox.example"]
+    private nonisolated static let ownName = ExplainEvaluationSet.ownName
+    private nonisolated static let ownAddresses = ExplainEvaluationSet.ownAddresses
 
     @Test func explainTheSet() async throws {
         let root = try #require(ExplainEvaluationSet.folder)
@@ -59,7 +63,9 @@ struct ExplainEvaluationTests {
                 domains: project.domains
             )
         }
+        // The index holds the set's text, so it goes whichever way the run ends.
         let storageRoot = FileManager.default.temporaryDirectory.appendingPathComponent("ExplainEvaluationTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: storageRoot) }
         let storage = ProjectsStorage(root: storageRoot)
         let database = try await ProjectsDatabase.open(in: storage)
         let index = FolderIndex(database: database, isDictating: { false }, watch: { _, _, _ in {} })
@@ -94,18 +100,20 @@ struct ExplainEvaluationTests {
 
         let byMessageID = Dictionary(mails.map { (Self.bare($0.message_id), $0) }, uniquingKeysWith: { first, _ in first })
         let lookups = ExplainService.Lookups(
+            // Only mail dated before this one counts, since a later mail cannot make its
+            // sender known or hold a quote of the user.
             known: { email in
-                let current = byMessageID[email.messageID]?.id
+                let earlier = mails.filter { Self.date($0.date) < email.date }
                 var correspondents: [SenderChecks.Person] = []
                 var seen: Set<String> = []
-                for mail in mails where mail.id != current {
+                for mail in earlier {
                     for value in [mail.from] + mail.to + (mail.cc ?? []) {
                         let person = Self.person(value)
                         guard let address = ProjectsAddress.normalized(person.address), !Self.ownAddresses.contains(address), seen.insert(address).inserted else { continue }
                         correspondents.append(SenderChecks.Person(name: person.name, address: address))
                     }
                 }
-                let sent = mails.filter { Self.isOwn($0.from) }.map(\.body)
+                let sent = earlier.filter { Self.isOwn($0.from) }.map(\.body)
                 return ExplainService.Known(ownName: Self.ownName, ownAddresses: Self.ownAddresses, projects: projects, correspondents: correspondents, sentTexts: sent)
             },
             thread: { email in
@@ -141,7 +149,7 @@ struct ExplainEvaluationTests {
                 promptTokens = counter.count(request.prompt)
                 return try await queue.run(request)
             },
-            loadTokenCounter: { counter.countTokens },
+            loadTokenCounter: { counter.count },
             save: { _ in },
             language: language,
             timeZone: Self.timeZone,
@@ -161,25 +169,29 @@ struct ExplainEvaluationTests {
         var decisionsRight = 0
         var languagesRight = 0
         var dueReplies = 0
-        for mail in chosen {
-            let email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, in: mails, byMessageID: byMessageID)
-            let started = ContinuousClock.now
-            let explanation = try await service.explain(email)
-            let time = started.duration(to: .now)
-            times.append(time)
-            let needsReply: Bool = if case .reply = explanation.reply { true } else { false }
-            if needsReply == mail.labels.needs_reply { decisionsRight += 1 }
-            if mail.labels.needs_reply {
-                dueReplies += 1
-                if explanation.reply.draftLanguage?.rawValue == mail.labels.reply_language { languagesRight += 1 }
+        var failure: (any Error)?
+        do {
+            for mail in chosen {
+                let email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, in: mails, byMessageID: byMessageID)
+                let started = ContinuousClock.now
+                let explanation = try await service.explain(email)
+                let time = started.duration(to: .now)
+                times.append(time)
+                let needsReply: Bool = if case .reply = explanation.reply { true } else { false }
+                if needsReply == mail.labels.needs_reply { decisionsRight += 1 }
+                if mail.labels.needs_reply {
+                    dueReplies += 1
+                    if explanation.reply.draftLanguage?.rawValue == mail.labels.reply_language { languagesRight += 1 }
+                }
+                try report.write(contentsOf: Data(Self.section(mail, explanation, time: time, promptTokens: promptTokens).utf8))
+                try rows.write(contentsOf: Data((Self.row(mail, explanation, time: time, promptTokens: promptTokens) + "\n").utf8))
             }
-            try report.write(contentsOf: Data(Self.section(mail, explanation, time: time, promptTokens: promptTokens).utf8))
-            try rows.write(contentsOf: Data((Self.row(mail, explanation, time: time, promptTokens: promptTokens) + "\n").utf8))
+        } catch {
+            failure = error
         }
         await engine.unload()
         await database.close()
-        try await storage.deleteAll()
-        try FileManager.default.removeItem(at: storageRoot)
+        if let failure { throw failure }
 
         let sorted = times.sorted()
         let median = sorted[sorted.count / 2]
@@ -402,11 +414,21 @@ struct ExplainEvaluationTests {
     }
 }
 
-/// The folder of the synthetic set in TEST_RUNNER_ORRA_PROJECTS_EXPLAIN, when it holds the mail.
-private enum ExplainEvaluationSet {
+/// The synthetic set and its owner, from the environment, so neither is in the repository.
+nonisolated private enum ExplainEvaluationSet {
+    /// The set's folder in TEST_RUNNER_ORRA_PROJECTS_EXPLAIN, when it holds the mail.
     static var folder: URL? {
         guard let path = ProcessInfo.processInfo.environment["ORRA_PROJECTS_EXPLAIN"], !path.isEmpty else { return nil }
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
         return FileManager.default.fileExists(atPath: url.appendingPathComponent("mail.jsonl").path) ? url : nil
     }
+
+    /// The owner's addresses in TEST_RUNNER_ORRA_PROJECTS_OWN_ADDRESSES, comma separated and
+    /// normalized.
+    static let ownAddresses: [String] = (ProcessInfo.processInfo.environment["ORRA_PROJECTS_OWN_ADDRESSES"] ?? "")
+        .split(separator: ",")
+        .compactMap { ProjectsAddress.normalized(String($0)) }
+
+    /// The owner's name in TEST_RUNNER_ORRA_PROJECTS_OWN_NAME.
+    static let ownName = ProcessInfo.processInfo.environment["ORRA_PROJECTS_OWN_NAME"] ?? ""
 }

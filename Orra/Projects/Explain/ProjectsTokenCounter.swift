@@ -28,13 +28,9 @@ nonisolated struct ProjectsTokenCounter: Sendable {
     }
 
     /// The tokens of `text` inside a prompt, without the tokens a tokenizer adds at the
-    /// start of a whole text.
+    /// start of a whole text. `counter.count` is the closure ExplainPrompt and
+    /// ExplainService take.
     func count(_ text: String) -> Int {
         tokenizer.encode(text: text, addSpecialTokens: false).count
-    }
-
-    /// `count` as the closure ExplainPrompt and ExplainService take.
-    var countTokens: @Sendable (String) -> Int {
-        { [tokenizer] text in tokenizer.encode(text: text, addSpecialTokens: false).count }
     }
 }

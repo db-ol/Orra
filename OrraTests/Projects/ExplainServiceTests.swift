@@ -97,6 +97,12 @@ struct ExplainServiceTests {
 
     // MARK: Lookups
 
+    @Test func searchReadsTheCleanedTextUpToWhatASearchReads() async {
+        let text = await ExplainService.searchText(Fixture.email(String(repeating: "The proof and the calendar. ", count: 1_000)))
+        #expect(text.hasPrefix("Second proof\nThe proof and the calendar."))
+        #expect(text.count == ChunkSearch.maximumQueryCharacters)
+    }
+
     @Test func searchesTheProjectAndFillsUpWithTheNewestFilesOnlyWhenSearchFindsFewerThanThree() async throws {
         let few = Fakes(hits: [Fixture.quote], newest: [Fixture.hit("notes.md", "Meeting notes of 2026-10-02.")], answer: .success(Fixture.englishAnswer))
         _ = try await few.service().explain(Fixture.email())
@@ -119,7 +125,7 @@ struct ExplainServiceTests {
 
     @Test func anEmailWithoutAProjectReadsNoFilesAndNoProjectMail() async throws {
         let fakes = Fakes(answer: .success(Fixture.englishAnswer))
-        let explanation = try await fakes.service().explain(Fixture.email(from: Fixture.oliver, project: nil))
+        let explanation = try await fakes.service().explain(Fixture.email(from: Fixture.rufus, project: nil))
         #expect(fakes.callList == ["known", "thread"])
         #expect(explanation.project == nil)
         #expect(fakes.requestList.first?.prompt.contains("Project: none yet.") == true)
@@ -141,6 +147,7 @@ struct ExplainServiceTests {
         let explanation = try await fakes.service().explain(Fixture.email(from: .init(name: "Bai Lu", address: Fixture.own)))
         #expect(explanation.reply == .noReply(.sentByUser))
         #expect(explanation.draft == .noReply(.sentByUser))
+        #expect(explanation.draftCheck == nil)
         // The rest of the explanation is still read.
         #expect(explanation.points.count == 5)
     }
@@ -157,6 +164,7 @@ struct ExplainServiceTests {
         let explanation = try await fakes.service().explain(Fixture.email("白露さん、二回目の校正刷りができました。水曜日までに届きますか。"))
         #expect(explanation.reply == .reply(.other))
         #expect(explanation.draft == .noDraft)
+        #expect(explanation.draftCheck == nil)
     }
 
     @Test func aDueReplyWithoutADraftIsMissing() async throws {
@@ -176,6 +184,8 @@ struct ExplainServiceTests {
         let explanation = try await fakes.service().explain(Fixture.email())
         #expect(explanation.reply == .reply(.en))
         #expect(explanation.draft == .missing)
+        // The values a later draft is checked with are kept all the same.
+        #expect(explanation.draftCheck?.recipients.map(\.address) == ["iris.fang@printworks.example"])
     }
 
     @Test func aDraftInTheWrongLanguageIsHeldBack() async throws {
@@ -207,18 +217,18 @@ struct ExplainServiceTests {
     // MARK: Recipients and project data
 
     @Test func aReplyToSomeoneOutsideTheProjectIsFlaggedAndCarriesNoProjectData() async throws {
-        let text = "Hi Bai Lu,\n\nWe distribute calendars in the north. What does the Harbor print run cost you?\n\nOliver"
+        let text = "Hi Bai Lu,\n\nWe distribute calendars in the north. What does the Harbor print run cost you?\n\nRufus"
         let answer = """
             - None
 
             Points:
-            - Oliver asks what the print run costs. [this email]
+            - Rufus asks what the print run costs. [this email]
 
             Before you reply:
             - None
 
             Draft reply:
-            Hi Oliver,
+            Hi Rufus,
 
             The run costs ¥12,400 for 500 calendars.
 
@@ -226,39 +236,39 @@ struct ExplainServiceTests {
             Bai Lu
             """
         let fakes = Fakes(answer: .success(answer))
-        let explanation = try await fakes.service().explain(Fixture.email(text, from: Fixture.oliver))
+        let explanation = try await fakes.service().explain(Fixture.email(text, from: Fixture.rufus))
         #expect(explanation.warnings.contains(ExplainPrompt.Finding(warning: .recipientNotInProjectPeople, place: .email)))
         #expect(fakes.requestList.first?.prompt.contains("The reply would go to someone who is not among the project's people.") == true)
         guard case .checked(let result) = explanation.draft else {
             Issue.record("the draft is \(explanation.draft)")
             return
         }
-        #expect(result.outsideRecipients == ["oliver.grant@greenleaf.example"])
+        #expect(result.outsideRecipients == ["rufus.hale@northbrook.example"])
         let draft = try #require(result.draft)
         #expect(!draft.contains("12,400"))
         #expect(result.removals.contains { $0.kind == .projectData })
     }
 
     @Test func someoneAtAProjectDomainCountsAsTheProjectsPeople() async throws {
-        let colleague = ExplainPrompt.Person(name: "Ada Wen", address: "ada.wen@printworks.example")
+        let colleague = ExplainPrompt.Person(name: "Nora Quist", address: "nora.quist@printworks.example")
         let answer = """
             - None
 
             Points:
-            - Ada asks about the run. [this email]
+            - Nora asks about the run. [this email]
 
             Before you reply:
             - None
 
             Draft reply:
-            Hi Ada,
+            Hi Nora,
 
             The run costs ¥12,400 for 500 calendars.
 
             Bai Lu
             """
         let fakes = Fakes(answer: .success(answer))
-        let explanation = try await fakes.service().explain(Fixture.email("Hi Bai Lu, what was the price of the run again? Ada", from: colleague))
+        let explanation = try await fakes.service().explain(Fixture.email("Hi Bai Lu, what was the price of the run again? Nora", from: colleague))
         #expect(!explanation.warningKinds.contains(.recipientNotInProjectPeople))
         guard case .checked(let result) = explanation.draft else {
             Issue.record("the draft is \(explanation.draft)")
@@ -270,11 +280,11 @@ struct ExplainServiceTests {
 
     @Test func aReplyReachesTheReplyToAddressAndEveryoneElseButTheUser() {
         var email = Fixture.email()
-        email.replyTo = [Fixture.oliver]
+        email.replyTo = [Fixture.rufus]
         email.to = [.init(name: "Bai Lu", address: "Bai.Lu@Lumenhaus.example"), Fixture.iris]
-        email.cc = [Fixture.oliver, .init(name: "", address: "not an address")]
+        email.cc = [Fixture.rufus, .init(name: "", address: "not an address")]
         let recipients = ExplainService.replyRecipients(of: email, ownAddresses: [Fixture.own])
-        #expect(recipients.map(\.address) == ["oliver.grant@greenleaf.example", "iris.fang@printworks.example", "not an address"])
+        #expect(recipients.map(\.address) == ["rufus.hale@northbrook.example", "iris.fang@printworks.example", "not an address"])
     }
 
     @Test func theDraftCheckSeesWhatTheRecipientsAlreadyHad() async throws {
@@ -289,6 +299,92 @@ struct ExplainServiceTests {
         #expect(texts.other.contains("The budget is ¥40,000."))
         #expect(texts.other.contains(Fixture.quote.text))
         #expect(texts.other.contains(Fixture.project.description))
+    }
+
+    @Test func anEarlierMessageCountsAsKnownOnlyWhenEveryoneOutsideTheProjectWasOnIt() async throws {
+        // Bai Lu told Iris the deposit. Iris now writes with Rufus, who is outside the
+        // project, on Cc, and does not quote it.
+        let answer = """
+            - None
+
+            Points:
+            - The second proof is ready. [this email]
+
+            Before you reply:
+            - None
+
+            Draft reply:
+            Hi Iris,
+
+            Thanks for the proof. The deposit stays at ¥3,720.
+
+            Bai Lu
+            """
+        var email = Fixture.email()
+        email.cc = [Fixture.rufus]
+        let toIris = ExplainPrompt.Mail(messageID: "terms@lumenhaus.example", date: Fixture.date("2026-10-12T09:00:00+08:00"), sender: .init(name: "Bai Lu", address: Fixture.own), to: [Fixture.iris], subject: "Terms", text: "The deposit is ¥3,720.")
+        let fakes = Fakes(thread: [toIris], answer: .success(answer))
+        let explanation = try await fakes.service().explain(email)
+        let input = try #require(explanation.draftCheck)
+        #expect(!input.incomingText.contains("¥3,720"))
+        #expect(input.sourceTexts.contains("The deposit is ¥3,720."))
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.outsideRecipients == ["rufus.hale@northbrook.example"])
+        #expect(result.draft?.contains("3,720") == false)
+        #expect(result.removals.contains { $0.kind == .projectData })
+
+        // With Rufus on that message too, he already has the amount.
+        var toBoth = toIris
+        toBoth.cc = [Fixture.rufus]
+        let shared = Fakes(thread: [toBoth], answer: .success(answer))
+        let known = try await shared.service().explain(email)
+        #expect(known.draftCheck?.incomingText.contains("The deposit is ¥3,720.") == true)
+        guard case .checked(let kept) = known.draft else {
+            Issue.record("the draft is \(known.draft)")
+            return
+        }
+        #expect(kept.draft?.contains("¥3,720") == true)
+    }
+
+    @Test func aReplyThatReachesNobodyCountsNoEarlierMessageAsKnown() async {
+        let earlier = ExplainPrompt.Mail(messageID: "terms@lumenhaus.example", date: Fixture.date("2026-10-12T09:00:00+08:00"), sender: .init(name: "Bai Lu", address: Fixture.own), to: [Fixture.iris], subject: "Terms", text: "The deposit is ¥3,720.")
+        var email = Fixture.email()
+        email.sender = .init(name: "", address: "")
+        email.to = []
+        let gathered = ExplainService.Gathered(email: email, known: Fixture.known, project: Fixture.project, thread: [earlier], today: Fixture.today)
+        let prepared = await ExplainService.prepare(gathered, language: .en, timeZone: Fixture.shanghai) { $0.count / 3 }
+        #expect(prepared.recipients.isEmpty)
+        let texts = ExplainService.sourceTexts(prepared)
+        #expect(!texts.incoming.contains("¥3,720"))
+        #expect(texts.other.contains("The deposit is ¥3,720."))
+    }
+
+    @Test func theExplanationKeepsWhatTheDraftWasCheckedWithForARevision() async throws {
+        let fakes = Fakes(answer: .success(Fixture.englishAnswer))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        let input = try #require(explanation.draftCheck)
+        #expect(input.draft.isEmpty)
+        #expect(input.language == .en)
+        #expect(input.recipients == [.init(name: "Iris Fang", address: "iris.fang@printworks.example")])
+        #expect(input.projectPeople.map(\.address) == ["iris.fang@printworks.example"])
+        #expect(input.own == [.init(name: "Bai Lu", address: Fixture.own)])
+        #expect(input.incomingText.contains("The second proof is ready."))
+        #expect(input.sourceTexts.contains(Fixture.quote.text))
+        #expect(input.questionsForUser == explanation.questions)
+        #expect(input.today == Fixture.today)
+
+        // The same values check the same draft the same way.
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        let written = try #require(Fixture.englishAnswer.components(separatedBy: "Draft reply:\n").last)
+        var again = input
+        again.draft = written
+        #expect(await DraftCheck.check(again) == result)
     }
 
     // MARK: Sender and content checks
@@ -395,7 +491,7 @@ nonisolated private enum ExplainServiceFixture {
     static let today = date("2026-10-18T10:00:00+08:00")
     static let own = "bai.lu@lumenhaus.example"
     static let iris = ExplainPrompt.Person(name: "Iris Fang", address: "iris.fang@printworks.example")
-    static let oliver = ExplainPrompt.Person(name: "Oliver Grant", address: "oliver.grant@greenleaf.example")
+    static let rufus = ExplainPrompt.Person(name: "Rufus Hale", address: "rufus.hale@northbrook.example")
     static let projectID = UUID(uuidString: "6A0F8A52-6D0B-4E0E-9C55-3E2F4D7A1B01")!
     static let otherProjectID = UUID(uuidString: "6A0F8A52-6D0B-4E0E-9C55-3E2F4D7A1B02")!
     static let folder = URL(fileURLWithPath: "/Projects/Harbor/")
