@@ -17,8 +17,10 @@ import Foundation
 /// The checks read the email's visible text with its quoted history, since a forged quote
 /// sits there. They look for words, not intent, so a notice that mentions a password counts
 /// as well as a request for one. There is no pattern for script text in a subject or a
-/// name, since Orra never builds script text. The phase 0 prototype (common.py,
-/// `content_checks`) is the reference.
+/// name, since Orra never builds script text. They read the first `checkedLength`
+/// characters of the text and of the subject, and every pattern is bounded, so a hostile
+/// email cannot make them slow. The phase 0 prototype (common.py, `content_checks`) is the
+/// reference.
 nonisolated enum ContentChecks {
     nonisolated struct Input: Sendable, Equatable {
         /// An attachment's name and MIME type, as the email gives them.
@@ -42,10 +44,16 @@ nonisolated enum ContentChecks {
         var sentTexts: [String]? = nil
     }
 
-    /// The warnings about the email, in the order of `ProjectsWarning.allCases`.
-    static func warnings(for input: Input) -> [ProjectsWarning] {
-        let text = plain(input.text)
-        let subject = plain(input.subject)
+    /// The text and the subject are read this far. Mail text this long is rare, and a
+    /// warning in it is shown well before.
+    static let checkedLength = 65_536
+
+    /// The warnings about the email, in the order of `ProjectsWarning.allCases`. Off the
+    /// main actor, since the text may be long.
+    @concurrent
+    static func warnings(for input: Input) async -> [ProjectsWarning] {
+        let text = plain(String(input.text.prefix(checkedLength)))
+        let subject = plain(String(input.subject.prefix(checkedLength)))
         let flat = SortingText.matchingForm(subject + "\n" + text)
         var warnings: Set<ProjectsWarning> = []
         if !linkRanges(in: subject + "\n" + text).isEmpty {
@@ -79,15 +87,23 @@ nonisolated enum ContentChecks {
 
     /// Where `text` holds a link: a web address with a scheme or www, a host with a path,
     /// a host under a common top level domain, a Markdown link or image, or an HTML tag
-    /// that links or loads. Email addresses are no links. Overlapping finds are merged.
+    /// that links or loads. Email addresses are no links. A full stop or comma at the end
+    /// belongs to the sentence. Overlapping finds are merged.
     static func linkRanges(in text: String) -> [Range<String.Index>] {
         let whole = NSRange(text.startIndex..., in: text)
-        let ranges = linkPatterns
-            .flatMap { $0.matches(in: text, range: whole) }
-            .compactMap { Range($0.range, in: text) }
-            .sorted { $0.lowerBound < $1.lowerBound }
+        return merged(linkPatterns.flatMap { $0.matches(in: text, range: whole) }.compactMap { match in
+            guard var range = Range(match.range, in: text) else { return nil }
+            while range.upperBound > range.lowerBound, ".,;:!?".contains(text[text.index(before: range.upperBound)]) {
+                range = range.lowerBound..<text.index(before: range.upperBound)
+            }
+            return range.isEmpty ? nil : range
+        })
+    }
+
+    /// The ranges in the order of the text, with overlapping and touching ones joined.
+    static func merged(_ ranges: [Range<String.Index>]) -> [Range<String.Index>] {
         var merged: [Range<String.Index>] = []
-        for range in ranges {
+        for range in ranges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
             if let last = merged.last, range.lowerBound <= last.upperBound {
                 merged[merged.count - 1] = last.lowerBound..<max(last.upperBound, range.upperBound)
             } else {
@@ -104,17 +120,20 @@ nonisolated enum ContentChecks {
     private static let linkPatterns: [NSRegularExpression] = [
         // A scheme, such as https://, javascript: or mailto:
         #"(?<![A-Za-z0-9])(?:https?|ftps?|file|data|javascript|vbscript|mailto|tel|sms|webcal|hxxps?):"# + urlCharacters + "+",
-        // Markdown images and links, reference style too
-        #"!\[[^\]\n]*\]\s*[(\[][^)\]\n]*[)\]]"#,
-        #"\[[^\]\n]*\]\([^)\n]*\)"#,
-        // HTML tags that link or load
-        #"</?(?:a|img|iframe|object|embed|link|script|svg|video|audio|source|form|base|meta)\b[^>\n]*>"#,
+        // Markdown images and links, reference style too. The bounds keep the patterns
+        // fast on a hostile text, as one of many "![" in a row.
+        #"!\[[^\]\n]{0,200}+\]\s{0,3}+[(\[][^)\]\n]{0,500}+[)\]]"#,
+        #"\[[^\]\n]{0,200}+\]\([^)\n]{0,500}+\)"#,
+        // HTML tags that link or load, so not <a.mara@studio.example>
+        #"</?(?:a|img|iframe|object|embed|link|script|svg|video|audio|source|form|base|meta)(?=[\s>/])[^>\n]{0,500}+>"#,
         // www.
         #"(?<![A-Za-z0-9@.-])www\."# + urlCharacters + "+",
         // A host with a path
         #"(?<![A-Za-z0-9_@.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}(?::\d{1,5})?/"# + urlCharacters + "*",
-        // A host under a common top level domain
-        #"(?<![A-Za-z0-9_@.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+(?:com|net|org|cn|io|co|uk|de|jp|hk|tw|sg|info|biz|me|app|dev|xyz|top|site|online|example|edu|gov|ai|ly|gl|gg|to|cc|tv|link|click|shop|store|ru|us|ca|au|fr|nl|eu|vip|club|live)(?![A-Za-z0-9_@-])"#,
+        // A host under a common top level domain. Not ai, app or cc, which are also file
+        // names such as logo-v2.ai, Viewer.app and main.cc. With a scheme, www or a path they
+        // count.
+        #"(?<![A-Za-z0-9_@.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+(?:com|net|org|cn|io|co|uk|de|jp|hk|tw|sg|info|biz|me|dev|xyz|top|site|online|example|edu|gov|ly|gl|gg|to|tv|link|click|shop|store|ru|us|ca|au|fr|nl|eu|vip|club|live)(?![A-Za-z0-9_@-])"#,
     ].map { try! NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
     // MARK: Words
@@ -125,14 +144,15 @@ nonisolated enum ContentChecks {
         SortingText.withoutFormatCharacters(text.precomposedStringWithCompatibilityMapping)
     }
 
-    private static func matches(_ patterns: [NSRegularExpression], _ text: String) -> Bool {
+    /// Whether one of the patterns matches the text.
+    static func matches(_ patterns: [NSRegularExpression], _ text: String) -> Bool {
         let range = NSRange(text.startIndex..., in: text)
         return patterns.contains { $0.firstMatch(in: text, range: range) != nil }
     }
 
     /// Builds patterns that read the matching form of `SortingText`: lowercase, on one
     /// line, with full width punctuation such as ，and ！ made plain.
-    private static func patterns(_ sources: [String]) -> [NSRegularExpression] {
+    static func patterns(_ sources: [String]) -> [NSRegularExpression] {
         sources.map { try! NSRegularExpression(pattern: $0) }
     }
 
@@ -159,7 +179,7 @@ nonisolated enum ContentChecks {
 
     private static let paymentWords = patterns([
         #"发票|付款|转账|汇款|续费|账单|缴费|支付|收款|打款|欠费|逾期"#,
-        #"\b(?:invoices?|payments?|pay|paid|wire|bank transfer|remit|remittance|billing|bill|overdue|amount due|balance due)\b"#,
+        #"\b(?:invoices?|payments?|pay|paid|wire|bank transfer|remit|remittance|billing|(?:your|the|this) bill|bills? (?:for|of)|overdue|amount due|balance due)\b"#,
     ])
 
     private static let credentials = patterns([
@@ -210,24 +230,33 @@ nonisolated enum ContentChecks {
     // MARK: Quotes
 
     /// Whether the text gives words as the user's own that the user's sent mail does not
-    /// hold: a line such as "白露：同意" or "> Bai Lu: agreed", the quoted lines under an
-    /// "On … Bai Lu wrote:" line, the text of a forwarded message from the user, and words
-    /// in quotes after "you said" or "您说过". A claim matches when the first 20 letters and
-    /// digits of it stand in one sent text.
+    /// hold: a quoted line such as "> 白露：同意" or "> Bai Lu: agreed", the quoted lines
+    /// under an "On … Bai Lu wrote:" line, the text of a forwarded message from the user,
+    /// and words in quotes after "you said" or "您说过". A claim matches when the first 20
+    /// letters and digits of it stand in one sent text. A text with more than
+    /// `mostClaims` different claims counts as forged, since no real thread quotes the
+    /// user that often and comparing them all would take long.
     private static func hasForgedQuote(in text: String, own: [SenderChecks.Person], sent: [String]) -> Bool {
         let names = Set(own.flatMap { SenderChecks.nameForms($0.name) })
         let addresses = Set(own.compactMap { ProjectsAddress.normalized($0.address) })
-        let sentForms = sent.map(quoteForm)
+        var probes: Set<String> = []
         for claim in claims(in: text, names: names, addresses: addresses) {
             let form = quoteForm(claim)
-            guard form.count >= 4 else { continue }
-            let probe = String(form.prefix(20))
-            if !sentForms.contains(where: { $0.contains(probe) }) {
-                return true
+            if form.count >= 4 {
+                probes.insert(String(form.prefix(20)))
             }
         }
-        return false
+        guard probes.count <= mostClaims else { return true }
+        let sentForms = sent.map(quoteForm)
+        return probes.contains { probe in !sentForms.contains { $0.contains(probe) } }
     }
+
+    /// The most claims a text may hold before it counts as forged.
+    static let mostClaims = 100
+
+    /// The lines read after a quote header or a From line, enough for the 20 letters and
+    /// digits a claim is compared by.
+    private static let claimLines = 20
 
     /// The letters and digits of a text, lowercase, which ignores how a quote was wrapped
     /// and punctuated.
@@ -239,25 +268,29 @@ nonisolated enum ContentChecks {
     private static func claims(in text: String, names: Set<String>, addresses: Set<String>) -> [String] {
         let lines = text.lowercased().split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
         var claims: [String] = []
+        let terms = names.union(addresses)
         func namesUser(_ line: String) -> Bool {
-            names.union(addresses).contains { !SenderChecks.occurrences(of: $0, in: line).isEmpty }
+            terms.contains { !SenderChecks.occurrences(of: $0, in: line).isEmpty }
         }
         var index = 0
         while index < lines.count {
             let line = lines[index]
             let body = unquoted(line)
-            // 白露：同意 and > Bai Lu: agreed
-            for name in names where body.hasPrefix(name) {
-                let rest = body.dropFirst(name.count).drop(while: { $0 == " " })
-                if rest.first == ":" {
-                    claims.append(String(rest.dropFirst()))
+            // > 白露：同意 and > Bai Lu: agreed. Only a quoted line, since an unquoted one is
+            // more often a task list, as in 白露：确认瓷砖颜色.
+            if line.drop(while: \.isWhitespace).first == ">" {
+                for name in names where body.hasPrefix(name) {
+                    let rest = body.dropFirst(name.count).drop(while: { $0 == " " })
+                    if rest.first == ":" {
+                        claims.append(String(rest.dropFirst()))
+                    }
                 }
             }
             // On … Bai Lu <…> wrote:, then quoted lines
             if namesUser(line), matches([quoteHeader], body) {
                 var quoted: [String] = []
                 var next = index + 1
-                while next < lines.count, lines[next].trimmingCharacters(in: .whitespaces).hasPrefix(">") {
+                while next < min(lines.count, index + 1 + claimLines), lines[next].trimmingCharacters(in: .whitespaces).hasPrefix(">") {
                     quoted.append(unquoted(lines[next]))
                     next += 1
                 }
@@ -267,11 +300,12 @@ nonisolated enum ContentChecks {
             if let match = fromHeader.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)),
                let value = Range(match.range(at: 1), in: body), namesUser(String(body[value])) {
                 var next = index + 1
-                while next < lines.count, matches([messageHeader], unquoted(lines[next])) {
+                while next < min(lines.count, index + 1 + claimLines), matches([messageHeader], unquoted(lines[next])) {
                     next += 1
                 }
                 var message: [String] = []
-                while next < lines.count {
+                let last = min(lines.count, next + claimLines)
+                while next < last {
                     var part = unquoted(lines[next])
                     if part.isEmpty, !message.isEmpty { break }
                     if let label = bodyLabel.firstMatch(in: part, range: NSRange(part.startIndex..., in: part)),
@@ -289,7 +323,7 @@ nonisolated enum ContentChecks {
         }
         let speakers = (["you", "您", "你"] + names.map { NSRegularExpression.escapedPattern(for: $0) }).joined(separator: "|")
         let said = try! NSRegularExpression(pattern:
-            #"(?<![a-z])(?:"# + speakers + #")(?![a-z])\s*(?:之前|上次|昨天|前天|刚才|在邮件里|在信里|在电话里)?\s*(?:说过?|写过?|讲过?|答应过?|同意过?|确认过?|said|wrote|agreed|confirmed|promised|told (?:me|us))(?:\s*(?:that|了|的是))?\s*[:,：，]?\s*["“'‘「『]([^"”'’」』]{4,300})["”'’」』]"#)
+            #"(?<![a-z])(?:"# + speakers + #")(?![a-z])\s{0,3}(?:之前|上次|昨天|前天|刚才|在邮件里|在信里|在电话里)?\s{0,3}(?:说过?|写过?|讲过?|答应过?|同意过?|确认过?|said|wrote|agreed|confirmed|promised|told (?:me|us))(?:\s{0,3}(?:that|了|的是))?\s{0,3}[:,：，]?\s{0,3}["“'‘「『]([^"”'’」』]{4,300})["”'’」』]"#)
         let whole = text.lowercased()
         for match in said.matches(in: whole, range: NSRange(whole.startIndex..., in: whole)) {
             if let range = Range(match.range(at: 1), in: whole) {
@@ -304,7 +338,7 @@ nonisolated enum ContentChecks {
         String(line.drop(while: { $0 == ">" || $0.isWhitespace })).trimmingCharacters(in: .whitespaces)
     }
 
-    private static let quoteHeader = try! NSRegularExpression(pattern: #"(?:\bwrote|写道)\s*:?\s*$"#)
+    private static let quoteHeader = try! NSRegularExpression(pattern: #"(?:\bwrote|写道)\s{0,3}:?$"#)
     private static let fromHeader = try! NSRegularExpression(pattern: #"^(?:发件人|from)\s*:\s*(.+)$"#)
     private static let messageHeader = try! NSRegularExpression(pattern: #"^(?:发件人|收件人|抄送|主题|日期|时间|发送时间|from|to|cc|subject|date|sent)\s*:"#)
     private static let bodyLabel = try! NSRegularExpression(pattern: #"^(?:内容|正文|content|body)\s*:\s*"#)

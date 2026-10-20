@@ -11,7 +11,7 @@ import Foundation
 /// 十月十九日. The phase 0 prototype (numcheck.py) is the reference.
 nonisolated enum OutputChecks {
     nonisolated struct Finding: Sendable, Equatable {
-        nonisolated enum Kind: String, Sendable, Codable, CaseIterable {
+        nonisolated enum Kind: Sendable {
             /// A date written with a weekday it does not fall on, or a date that does not exist.
             case dateWeekdayMismatch
             /// An amount that none of the sources holds.
@@ -81,7 +81,7 @@ nonisolated enum OutputChecks {
     /// 730415 in BK-730415, are skipped unless `skippingDatesAndCodes` is false, which
     /// gives every value a source holds.
     static func numbers(in text: String, skippingDatesAndCodes: Bool = true) -> [Number] {
-        let skipped = skippingDatesAndCodes ? dates(in: text).map(\.range) + slashDates(in: text) + codes(in: text) : []
+        let skipped = skippingDatesAndCodes ? dates(in: text).map(\.range) + numericDates(in: text) + codes(in: text) : []
         var numbers: [Number] = []
         for match in numberPattern.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
             guard let range = Range(match.range, in: text),
@@ -108,11 +108,12 @@ nonisolated enum OutputChecks {
 
     /// A number, with an optional currency before it, and an optional multiplier, currency,
     /// percent sign or score mark after it. Digits come in groups of three after commas,
-    /// or in groups of three or four after spaces, as account and phone numbers do.
+    /// or in groups of three or four after spaces or hyphens, as account and phone numbers
+    /// do (138 0013 8000, 400-123-4567). Hyphens need two groups, so 2026-2027 stays two.
     private static let numberPattern = try! NSRegularExpression(pattern: [
         #"(?<![A-Za-z0-9_\x{FF10}-\x{FF19}\x{FF21}-\x{FF3A}\x{FF41}-\x{FF5A}])(?<!\d[.．,，])"#,
         #"(?:(?<currencyBefore>[¥￥$€£]|US\$|S\$|HK\$|RMB|CNY|USD|SGD|HKD|EUR|GBP) ?)?"#,
-        #"(?<digits>\d{3,}(?:[ \x{00A0}]\d{3,4})+(?!\d)|\d+(?:[,，]\d{3})+(?:[.．]\d+)?(?!\d)|\d+(?:[.．]\d+)?(?!\d))"#,
+        #"(?<digits>\d{3,}(?:[ \x{00A0}]\d{3,4})+(?!\d)|\d{3,}(?:-\d{3,4}){2,}(?!\d)|\d+(?:[,，]\d{3})+(?:[.．]\d+)?(?!\d)|\d+(?:[.．]\d+)?(?!\d))"#,
         #"(?<multiplier> ?(?:万|亿|千|[kK](?![A-Za-z])|million\b))?"#,
         #"(?<currencyAfter> ?(?:元|块|美元|港元|港币|欧元|英镑|日元|新元|新币|人民币|(?i:rmb|cny|usd|sgd|hkd|eur|gbp|dollars?|yuan)\b))?"#,
         #"(?<percent> ?(?:%|％|percent\b))?"#,
@@ -209,13 +210,13 @@ nonisolated enum OutputChecks {
         #"(?<![A-Za-z])(?<month>"# + monthNames + #") +(?<day>\d{1,2})(?:st|nd|rd|th)?(?:,? +(?<year>\d{4}))?(?![A-Za-z0-9])"#,
     ].map { try! NSRegularExpression(pattern: $0) }
 
-    /// Dates written with slashes, such as 19/10/2026, which may put the day or the month
-    /// first. They are no amounts, but their weekday is not checked.
-    private static func slashDates(in text: String) -> [Range<String.Index>] {
-        slashDatePattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text) }
+    /// Dates written with slashes or dots, such as 19/10/2026 and 19.10.2026, which may put
+    /// the day or the month first. They are no amounts, but their weekday is not checked.
+    private static func numericDates(in text: String) -> [Range<String.Index>] {
+        numericDatePattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text) }
     }
 
-    private static let slashDatePattern = try! NSRegularExpression(pattern: #"(?<![\d/])\d{1,2}/\d{1,2}/(?:\d{4}|\d{2})(?![\d/])"#)
+    private static let numericDatePattern = try! NSRegularExpression(pattern: #"(?<![\d/.])\d{1,2}([/.])\d{1,2}\1(?:\d{4}|\d{2})(?!\d|[/.]\d)"#)
 
     private static func monthNumber(_ name: String) -> Int? {
         let prefixes = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
@@ -246,8 +247,10 @@ nonisolated enum OutputChecks {
 
     private static let chineseDays: [Character: Int] = ["日": 1, "天": 1, "一": 2, "二": 3, "三": 4, "四": 5, "五": 6, "六": 7]
     private static let chineseWeekday = try! NSRegularExpression(pattern: #"(?:周|星期|礼拜)[一二三四五六日天]"#)
+    /// A weekday in full, or a short form that does not stand before a capitalized word
+    /// other than a month, since Sun is also a surname, as in 10月20日 Sun Wei.
     private static let englishWeekday = try! NSRegularExpression(
-        pattern: #"(?<![A-Za-z])(?:(?i:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(?:Mon|Tues?|Wed|Thu(?:rs?)?|Fri|Sat|Sun)\.?)(?![A-Za-z])"#
+        pattern: #"(?<![A-Za-z])(?:(?i:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(?:Mon|Tues?|Wed|Thu(?:rs?)?|Fri|Sat|Sun)(?:\.|(?![A-Za-z])(?!\s+(?!Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[A-Z])))(?![A-Za-z])"#
     )
 
     /// The weekday written right next to the date, as in 10月19日（周一）, 19 October

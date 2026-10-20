@@ -2,12 +2,12 @@ import Foundation
 
 /// Warnings about who sent an email, found in code, so the user sees them even when the
 /// model leaves them out:
-/// - `lookalikeDomain`: a sender domain that looks like the domain of a person the user
-///   works with, or of the user, without being it. Homoglyphs (a Cyrillic а for a Latin a,
-///   0 for o, rn for m), a punycode label that spells one, letters of two scripts in one
-///   label, another top level domain, the real domain as a part of a longer one
-///   (harborlights.example.verify.example, pike-build-pay.example), and one or two letters
-///   changed (harborlighs.example).
+/// - `lookalikeDomain`: a sender domain that looks like a project domain, or the user's,
+///   without being it. Homoglyphs (a Cyrillic а for a Latin a, 0 for o, rn for m), a
+///   punycode label that spells one, letters of two scripts in one label, another top level
+///   domain, the real domain as a part of a longer one (harborlights.example.verify.example,
+///   pike-build-pay.example), and one or two letters changed (harborlighs.example). The
+///   domains of everyone else the user knows are guarded against homoglyphs only.
 /// - `senderNameMismatch`: a display name that holds another address, or a known name, the
 ///   user's own included, on an address that person never used.
 ///
@@ -15,7 +15,7 @@ import Foundation
 /// the user's own addresses gets no warning.
 nonisolated enum SenderChecks {
     /// A person as the display name and the address of a mail header.
-    nonisolated struct Person: Sendable, Equatable, Hashable {
+    nonisolated struct Person: Sendable, Equatable {
         var name: String
         var address: String
     }
@@ -24,13 +24,16 @@ nonisolated enum SenderChecks {
         /// The sender, with the display name of the From header.
         var sender: Person
         /// The people the user listed for any project and everyone the user exchanged mail
-        /// with before. Their domains are guarded against lookalikes, and their names
-        /// against use on another address.
+        /// with before. Their names are guarded against use on another address, and their
+        /// domains against homoglyphs only, since shared mail providers are among them and
+        /// their regional domains, such as another top level domain, are no lookalikes.
         var people: [Person] = []
-        /// The domains the user listed for projects. A new address at one of them is still
-        /// the same organization, so a known name there gets no warning.
+        /// The domains guarded against every kind of lookalike: the domains the user listed
+        /// for projects, and those of project people that no other project shares. Shared
+        /// mail providers stay out, as in phase 0. A new address at one of them is still the
+        /// same organization, so a known name there gets no warning.
         var domains: [String] = []
-        /// The user's own names and addresses.
+        /// The user's own names and addresses. Their domains are guarded as `domains` are.
         var own: [Person] = []
     }
 
@@ -39,8 +42,10 @@ nonisolated enum SenderChecks {
         let ownAddresses = Set(input.own.compactMap { address($0.address) })
         guard let sender = address(input.sender.address), !ownAddresses.contains(sender) else { return [] }
         var warnings: Set<ProjectsWarning> = []
-        let guarded = Set((input.people + input.own).compactMap { address($0.address).map(domain) } + input.domains.map(normalizedDomain))
-        if isLookalike(domain(sender), of: guarded.filter { !$0.isEmpty }) {
+        let guarded = Set(input.own.compactMap { address($0.address).map(domain) } + input.domains.map(normalizedDomain))
+            .filter { !$0.isEmpty }
+        let known = Set(input.people.compactMap { address($0.address).map(domain) }).filter { !$0.isEmpty }
+        if isLookalike(domain(sender), of: guarded, homoglyphsOf: known) {
             warnings.insert(.lookalikeDomain)
         }
         if nameMismatches(input, sender: sender) {
@@ -52,11 +57,12 @@ nonisolated enum SenderChecks {
     // MARK: Domains
 
     /// Whether `domain` looks like one of the guarded domains without being it or a
-    /// subdomain of it.
-    static func isLookalike(_ domain: String, of guarded: Set<String>) -> Bool {
+    /// subdomain of it, or spells one of the `known` domains with letters that pass for
+    /// its own.
+    static func isLookalike(_ domain: String, of guarded: Set<String>, homoglyphsOf known: Set<String> = []) -> Bool {
         let domain = normalizedDomain(domain)
         guard !domain.isEmpty else { return false }
-        if guarded.contains(where: { domain == $0 || domain.hasSuffix("." + $0) }) {
+        if guarded.union(known).contains(where: { domain == $0 || domain.hasSuffix("." + $0) }) {
             return false
         }
         let labels = domain.split(separator: ".", omittingEmptySubsequences: false).map(decodedLabel)
@@ -64,6 +70,9 @@ nonisolated enum SenderChecks {
             return true
         }
         let shape = skeleton(labels.joined(separator: "."))
+        if known.contains(where: { skeleton($0) == shape }) {
+            return true
+        }
         let name = registeredName(shape)
         for known in guarded {
             let knownShape = skeleton(known)
@@ -108,7 +117,7 @@ nonisolated enum SenderChecks {
     }
 
     /// Whether a label holds ASCII letters and letters of another script that pass for
-    /// Latin ones, such as the Cyrillic а in shаnlan.
+    /// Latin ones, such as the Cyrillic а in hаrborlights.
     private static func mixesScripts(_ label: String) -> Bool {
         let scalars = label.unicodeScalars
         return scalars.contains { $0.isASCII && $0.properties.isAlphabetic }
@@ -225,7 +234,7 @@ nonisolated enum SenderChecks {
     /// Whether the display name holds an address other than the sender's, or names a known
     /// person, or the user, on an address that person never used.
     private static func nameMismatches(_ input: Input, sender: String) -> Bool {
-        let name = input.sender.name
+        let name = String(input.sender.name.prefix(longestName))
         for match in addressPattern.matches(in: name, range: NSRange(name.startIndex..., in: name)) {
             if let range = Range(match.range, in: name), let shown = address(String(name[range])), shown != sender {
                 return true
@@ -243,15 +252,20 @@ nonisolated enum SenderChecks {
         return !sameOrganization
     }
 
+    /// A display name longer than this is read only this far, which keeps the patterns
+    /// fast on a hostile header.
+    static let longestName = 200
+
     /// The forms a person's name is compared in: the whole name, and its Chinese and Latin
-    /// parts on their own, so 卢安琪 Amy Lu matches both 卢安琪 and Amy Lu.
+    /// parts on their own, so 顾晨 Chen Gu matches both 顾晨 and Chen Gu.
     ///
     /// Everything is in compatibility form, lowercase, without quotes, format characters
     /// or text in brackets, with one space between words and none between Chinese
-    /// characters. A Chinese part needs two characters and a Latin part two words, so a
-    /// lone given name such as Lin never stands for a person. An address is no name.
+    /// characters. Each form needs two Chinese characters or two words, so a lone given
+    /// name such as Owen, or a role such as Support, never stands for a person. An address
+    /// is no name.
     static func nameForms(_ name: String) -> [String] {
-        var text = SortingText.withoutFormatCharacters(name.precomposedStringWithCompatibilityMapping).lowercased()
+        var text = SortingText.withoutFormatCharacters(String(name.prefix(longestName)).precomposedStringWithCompatibilityMapping).lowercased()
         text = bracketed.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: " ")
         text = String(text.map { "\"'“”‘’`".contains($0) ? " " : $0 })
         let words = text.split(whereSeparator: \.isWhitespace)
@@ -263,7 +277,7 @@ nonisolated enum SenderChecks {
             whole += word
         }
         guard !whole.isEmpty, !whole.contains("@") else { return [] }
-        var forms = [whole]
+        var forms = whole.split(separator: " ").count >= 2 || whole.filter(\.isHan).count >= 2 ? [whole] : []
         var hanRun = ""
         var hanRuns: [String] = []
         for character in whole {
@@ -288,7 +302,8 @@ nonisolated enum SenderChecks {
 
     /// Where a name or an address stands in the text, ignoring case and width. A term that
     /// starts or ends with a Latin letter or digit is not found inside a longer word, so
-    /// Amy Lu is not found in Amy Luna, and Lin not in online.
+    /// Owen Pike is not found in Owen Pikes, and owen@pike-build.example not in
+    /// bowen@pike-build.example.
     static func occurrences(of term: String, in text: String) -> [Range<String.Index>] {
         guard !term.isEmpty else { return [] }
         var found: [Range<String.Index>] = []

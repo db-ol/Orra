@@ -76,10 +76,41 @@ struct DraftCheckTests {
         #expect(removed(result) == ["projectData: 3.6", "projectData: 7/10", "projectData: Owen Pike", "projectData: 4.4"])
     }
 
-    /// Names the tagger finds in the project files count as project data too.
+    /// Chinese names in the project files count as project data too, in Chinese and in
+    /// pinyin (a26). They are found by rules that need no tagger.
     @Test func namesFromTheFilesDoNotGoToSomeoneOutside() async {
-        let result = await check("Hi Nadia, the other finalist is 韩书言.", incoming: "Who else is in the final round?", sources: ["面试评分：韩书言 4.1 分，邓可欣 4.4 分。"])
-        #expect(result.draft == "Hi Nadia, the other finalist is [project data removed].")
+        let result = await check(
+            "Hi Nadia, the other finalists are 韩书言, Deng Kexin and Shuyan Han.",
+            incoming: "Who else is in the final round?", sources: ["面试评分：韩书言 4.1 分，邓可欣 4.4 分。"]
+        )
+        #expect(result.draft == "Hi Nadia, the other finalists are [project data removed], [project data removed] and [project data removed].")
+    }
+
+    /// A Chinese name in a source that stands next to its pinyin is found through the
+    /// Latin name, even where the rules miss it.
+    @Test func latinNamesFindTheirChineseNames() {
+        let text = "评分：韩书言 (Han Shuyan) 4.4，孟建华 4.1，张三。"
+        #expect(DraftCheck.hanNames(spelledBy: ["Han Shuyan", "Jianhua Meng"], in: text) == ["韩书言", "孟建华"])
+        #expect(DraftCheck.hanNames(spelledBy: ["Nadia Frost"], in: text).isEmpty)
+        #expect(DraftCheck.pinyinForms(of: "欧阳澈") == [["ou yang", "che"], ["che", "ou yang"]])
+        #expect(DraftCheck.pinyinForms(of: "Owen").isEmpty)
+    }
+
+    /// The project's people are caught however their names are written: with a no break
+    /// space, surname first, in pinyin or with spaces between Chinese characters.
+    @Test func everyFormOfAProjectPersonsNameGoes() async {
+        let draft = "Owen\u{00A0}Pike, Pike, Owen, Song Yutong, Yutong Song, song yu-tong and 宋 雨桐 will come."
+        let result = await check(draft)
+        let gone = "[project data removed]"
+        #expect(result.draft == "\(gone), \(gone), \(gone), \(gone), \(gone) and \(gone) will come.")
+        #expect(result.removals.count == 6)
+    }
+
+    /// A recipient's own name may stay in any form.
+    @Test func theRecipientsNameStaysInPinyin() async {
+        let songYutong = Person(name: "Song Yutong", address: "song.yutong@studio-mail.example")
+        let result = await check("Hi 宋雨桐, Owen Pike will come.", to: [songYutong])
+        #expect(result.draft == "Hi 宋雨桐, [project data removed] will come.")
     }
 
     /// Travel details asked for in a split instruction (a62) or by a lookalike hotel
@@ -110,11 +141,40 @@ struct DraftCheckTests {
         #expect(result.draft == draft)
     }
 
-    /// Dates, times, years and small counts are no project data.
+    /// Dates, times, years close to today and small counts are no project data.
     @Test func datesAndCountsStay() async {
-        let draft = "Hi Nadia, we meet on 2026-11-17 at 14:30 with 3 people for the 2027 calendar."
+        let draft = "Hi Nadia, we meet on 2026-11-17 at 14:30 with 3 people for the 2027 calendar, as in 2025."
         let result = await check(draft)
         #expect(result.draft == draft)
+    }
+
+    /// A four digit number further from today than a year may be a door code, and a phone
+    /// number may be written with hyphens.
+    @Test func otherYearsAndPhoneNumbersGo() async {
+        let result = await check("Hi Nadia, the door code is 2019 and my phone is 138-2019-2048.")
+        #expect(result.draft == "Hi Nadia, the door code is [project data removed] and my phone is [project data removed].")
+    }
+
+    /// Amounts in Chinese words go as amounts in digits do, and counts stay.
+    @Test func chineseAmountsInWordsGo() async {
+        let result = await check("合同金额是五万八千六百元，我们还需要两块瓷砖。", language: .zh, incoming: "请问合同金额？")
+        #expect(result.draft == "合同金额是[已删去项目资料]，我们还需要两块瓷砖。")
+        let held = await check("合同金额是五万八千六百元。", language: .zh, incoming: "合同金额是 58,600 元吗？")
+        #expect(held.draft == "合同金额是五万八千六百元。")
+    }
+
+    /// Codes and hosts in full width letters are caught as plain ones are, and the draft
+    /// keeps its own full width punctuation.
+    @Test func fullWidthCodesAndLinksGo() async {
+        let result = await check("Hi Nadia，booking ＢＫ７３０４１５ is fine，see ｗｗｗ．ｈａｒｂｏｒ－ｐａｙ．ｅｘａｍｐｌｅ．")
+        #expect(result.draft == "Hi Nadia，booking [project data removed] is fine，see [link removed]．")
+    }
+
+    /// With no recipient that parses, the reply counts as going outside.
+    @Test func noRecipientsCountAsOutside() async {
+        let result = await check("Hi Nadia, the total is ¥64,000.", to: [])
+        #expect(result.draft == "Hi Nadia, the total is [project data removed].")
+        #expect(result.outsideRecipients.isEmpty)
     }
 
     /// The user's own name and address may always go, and so may a recipient's.
@@ -141,6 +201,12 @@ struct DraftCheckTests {
         #expect(result.draft == "宋老师好，详情见[已删去链接]，谢谢。")
     }
 
+    /// Any dotted host goes from a draft, while file names stay.
+    @Test func hostsUnderAnyDomainGo() async {
+        let result = await check("Hi Owen, see harbor-pay.zone or pay.harbor.support, not plan_v3.pdf, logo-v2.ai or build.js.", to: [Self.owen])
+        #expect(result.draft == "Hi Owen, see [link removed] or [link removed], not plan_v3.pdf, logo-v2.ai or build.js.")
+    }
+
     // MARK: Action claims and assistant voice
 
     /// A request to forward (a22) is the user's to act on. A draft that says it is done goes.
@@ -159,10 +225,22 @@ struct DraftCheckTests {
         #expect(result.removals.map(\.kind) == [.actionClaim])
     }
 
+    /// Plans, requests, questions and what the recipient or someone else did are no claims.
     @Test(arguments: [
         "我们会把方案发给您，请查收后告诉我。",
         "请把合同发给我，好吗？",
+        "我稍后把合同发给您过目。",
+        "我会把修改后的文件发给您了解一下。",
+        "请将报价单发给我们过目。",
+        "谢谢，您已发送的文件我们收到了。",
+        "如您已支付，请忽略此提醒。",
+        "您那边已经付款了吗？",
         "I'll send the plan by Friday, and I have received your note.",
+        "Thanks, I see you already sent the invoice.",
+        "The files have been sent to the printer by your team.",
+        "We paid the deposit on 3 October as agreed.",
+        "As I sent you on Monday, the plan is attached.",
+        "Have you already sent it?",
     ])
     func plansAndRequestsStay(_ draft: String) async {
         let result = await check(draft, language: ProjectsLanguage.reading(draft), to: [Self.owen])
@@ -181,6 +259,19 @@ struct DraftCheckTests {
         let result = await check(draft, language: language, to: [Self.owen])
         #expect(result.draft == checked)
         #expect(result.removals.map(\.kind) == [.assistantVoice])
+    }
+
+    /// Drafts of contracts and job titles are ordinary business.
+    @Test(arguments: [
+        "Here is the draft agreement for your review.",
+        "Sure, here are the dates you asked for.",
+        "以下是修改后的合同草稿，请查收。",
+        "以下是合同草稿的修改意见。",
+        "我是王总的助理，负责这个项目。",
+    ])
+    func ordinarySentencesKeepTheirVoice(_ draft: String) async {
+        let result = await check(draft, language: ProjectsLanguage.reading(draft), to: [Self.owen])
+        #expect(result.draft == draft)
     }
 
     // MARK: Language
@@ -214,6 +305,10 @@ struct DraftCheckTests {
 
         let listed = await check("宋老师好，[待确认：日期]，预算【待确认】。", language: .zh, to: [Self.yutong], questions: questions)
         #expect(listed.flags.isEmpty)
+
+        // The total the explanation prompt leaves to the user is no question.
+        let total = await check("宋老师好，[待确认：日期]，合计 [待确认：合计]。", language: .zh, to: [Self.yutong], questions: questions)
+        #expect(total.flags == [.decidesQuestion(placeholders: 1, questions: 2)])
     }
 
     @Test func outputChecksFlagTheDraft() async {

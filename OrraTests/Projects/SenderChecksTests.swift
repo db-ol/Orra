@@ -56,9 +56,20 @@ struct SenderChecksTests {
         "ivy.tam@inbox.example",
         "friend@inbox.example",
         "hello@harborlightsmuseum.example",
+        // A shared provider's domain in another country is no lookalike of it.
+        "friend@inbox.co",
+        "friend@inbox.example.jp",
     ])
     func leavesOtherDomainsAlone(_ address: String) {
         #expect(!warnings(name: "", address: address).contains(.lookalikeDomain))
+    }
+
+    /// The domain of someone outside the guarded domains, such as a shared provider, is
+    /// guarded against homoglyphs only.
+    @Test func otherKnownDomainsAreGuardedAgainstHomoglyphs() {
+        #expect(warnings(name: "", address: "friend@inb0x.example") == [.lookalikeDomain])
+        #expect(warnings(name: "", address: "friend@lnbox.example") == [.lookalikeDomain])
+        #expect(warnings(name: "", address: "friend@inbax.example").isEmpty)
     }
 
     /// The punycode form in the test above is the Cyrillic а one, as the IDNA encoder
@@ -107,6 +118,15 @@ struct SenderChecksTests {
         #expect(warnings(name: "", address: "noreply@freemail.example").isEmpty)
     }
 
+    /// A one word name, such as a given name or a role, is no person, so two senders may
+    /// share it.
+    @Test func oneWordNamesStandForNobody() {
+        let people: [SenderChecks.Person] = [.init(name: "Support", address: "support@tiles-shop.example"), .init(name: "Ana", address: "ana@freemail.example")]
+        for sender in [SenderChecks.Person(name: "Support", address: "help@glass-shop.example"), .init(name: "Ana", address: "ana.r@studio.example")] {
+            #expect(SenderChecks.warnings(for: .init(sender: sender, people: people)).isEmpty)
+        }
+    }
+
     /// A free mail address is no organization, so a known name on another address there
     /// still warns.
     @Test func aSharedProviderIsNoOrganization() {
@@ -125,8 +145,10 @@ struct SenderChecksTests {
         #expect(SenderChecks.nameForms("顾晨 Chen Gu") == ["顾晨 chen gu", "顾晨", "chen gu"])
         #expect(SenderChecks.nameForms(" \"宋 雨桐\" (Harbor Lights) ") == ["宋雨桐"])
         #expect(SenderChecks.nameForms("Ｏｗｅｎ  Pike") == ["owen pike"])
-        #expect(SenderChecks.nameForms("Lin") == ["lin"])
+        #expect(SenderChecks.nameForms("Owen").isEmpty)
+        #expect(SenderChecks.nameForms("客服") == ["客服"])
         #expect(SenderChecks.nameForms("owen@pike-build.example").isEmpty)
         #expect(SenderChecks.nameForms("  ").isEmpty)
+        #expect(SenderChecks.nameForms(String(repeating: "(", count: 10_000) + " Owen Pike").isEmpty)
     }
 }

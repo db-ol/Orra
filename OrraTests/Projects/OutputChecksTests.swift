@@ -59,6 +59,19 @@ struct OutputChecksTests {
         #expect(findings("On 19 October we talk, and on Friday we ship.").isEmpty)
     }
 
+    /// Sun before a capitalized word other than a month is a surname, not Sunday.
+    @Test func sunBeforeANameIsNoWeekday() {
+        #expect(findings("10月20日 Sun Wei 会来现场。").isEmpty)
+        #expect(findings("Sun 18 Oct and Sun Oct 18 work.").isEmpty)
+        #expect(findings("10月20日 Sun.") == [.init(kind: .dateWeekdayMismatch, text: "10月20日 Sun.")])
+    }
+
+    /// Dates with dots or slashes may put the day first, so their weekday is not checked,
+    /// and they are no amounts.
+    @Test func numericDatesAreNoAmounts() {
+        #expect(findings("19.10.2026 (Monday) and 19/10/2026 (Tuesday) and 3.11.26.").isEmpty)
+    }
+
     /// A date without a year falls in the year that puts it closest to today, so early
     /// January dates in late December belong to the next year.
     @Test func aDateWithoutAYearTakesTheClosestYear() {
@@ -130,6 +143,8 @@ struct OutputChecksTests {
 
     @Test func accountNumbersInGroupsAreOneNumber() {
         #expect(OutputChecks.numbers(in: "账户 6217 0000 0000 0005").map(\.value) == ["6217000000000005"])
+        #expect(OutputChecks.numbers(in: "phone 138-2019-2048 or 400-123-4567").map(\.value) == ["13820192048", "4001234567"])
+        #expect(OutputChecks.numbers(in: "the 2026-2027 season").map(\.value) == ["2026", "2027"])
     }
 
     @Test func codesHoldLettersAndDigits() {
