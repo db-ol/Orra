@@ -1,0 +1,345 @@
+import Foundation
+import Testing
+@testable import Orra
+
+struct MIMEMessageTests {
+    private static let gb18030 = String.Encoding(
+        rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
+
+    /// A source with CRLF line breaks, as mail travels.
+    private static func source(_ lines: [String]) -> Data {
+        Data(lines.joined(separator: "\r\n").utf8)
+    }
+
+    private static func base64Lines(_ data: Data) -> String {
+        data.base64EncodedString(options: [.lineLength76Characters, .endLineWithCarriageReturn, .endLineWithLineFeed])
+    }
+
+    @Test func aPlainMessageWithoutMIMEHeaders() {
+        let message = MIMEMessage(source: Self.source([
+            "From: Mei Tan <mei.tan@orchard.example>",
+            "Subject: Proofs",
+            "Message-ID: <proofs.1@orchard.example>",
+            "",
+            "The proofs are ready.",
+            "See you Friday.",
+        ]))
+        #expect(message.headers.subject == "Proofs")
+        #expect(message.headers.messageID == "proofs.1@orchard.example")
+        #expect(message.bodies == [MIMEMessage.Body(format: .plain, text: "The proofs are ready.\nSee you Friday.")])
+        #expect(message.attachments.isEmpty)
+        #expect(!message.isCut)
+    }
+
+    @Test func quotedPrintableAndBase64BodiesDecodeInTheirCharsets() {
+        let qp = MIMEMessage(source: Self.source([
+            "Content-Type: text/plain; charset=\"UTF-8\"",
+            "Content-Transfer-Encoding: quoted-printable",
+            "",
+            "Caf=C3=A9 au lait at the studio, a long line that wraps =",
+            "here.",
+        ]))
+        #expect(qp.bodies.map(\.text) == ["Café au lait at the studio, a long line that wraps here."])
+
+        let text = "顾总，样书已经装箱，周五发出。镕"
+        let gbk = MIMEMessage(source: Self.source([
+            "Content-Type: text/plain; charset=gb2312",
+            "Content-Transfer-Encoding: base64",
+            "",
+            Self.base64Lines(text.data(using: Self.gb18030)!),
+        ]))
+        #expect(gbk.bodies.map(\.text) == [text])
+    }
+
+    @Test func eightBitBodiesKeepTheirCharset() {
+        let header = Array("Content-Type: text/plain; charset=GBK\r\nContent-Transfer-Encoding: 8bit\r\n\r\n".utf8)
+        let message = MIMEMessage(source: Data(header + [UInt8]("定金周三到账".data(using: Self.gb18030)!)))
+        #expect(message.bodies.map(\.text) == ["定金周三到账"])
+    }
+
+    @Test func aTextSourceReadsAsBytesOrAsDecodedText() {
+        // Characters that all fit in a byte are the source's bytes, so the GBK body decodes.
+        let gbkBytes = [UInt8]("定金".data(using: Self.gb18030)!)
+        let latin = "Content-Type: text/plain; charset=gbk\r\n\r\n" + String(String.UnicodeScalarView(gbkBytes.map { Unicode.Scalar($0) }))
+        #expect(MIMEMessage(source: latin).bodies.map(\.text) == ["定金"])
+        // A source that Mail decoded already reads its 8 bit part as UTF-8, whatever the label.
+        let decoded = "Content-Type: text/plain; charset=gbk\r\nContent-Transfer-Encoding: 8bit\r\n\r\n定金周三到账"
+        #expect(MIMEMessage(source: decoded).bodies.map(\.text) == ["定金周三到账"])
+        // A base64 part still decodes in its charset.
+        let encoded = "Content-Type: text/plain; charset=gbk\r\nContent-Transfer-Encoding: base64\r\nX-Note: 已解码\r\n\r\n"
+            + "定金".data(using: Self.gb18030)!.base64EncodedString()
+        #expect(MIMEMessage(source: encoded).bodies.map(\.text) == ["定金"])
+    }
+
+    @Test func alternativeKeepsTheLastPartWithText() {
+        let htmlLast = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/alternative; boundary=\"b1\"",
+            "",
+            "--b1",
+            "Content-Type: text/plain; charset=utf-8",
+            "",
+            "Plain version",
+            "--b1",
+            "Content-Type: text/html; charset=utf-8",
+            "",
+            "<p>Rich version</p>",
+            "--b1--",
+            "",
+        ]))
+        #expect(htmlLast.bodies == [MIMEMessage.Body(format: .markup, text: "<p>Rich version</p>")])
+
+        let plainLast = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/alternative; boundary=b2",
+            "",
+            "preamble that no one reads",
+            "--b2",
+            "Content-Type: text/html",
+            "",
+            "<p>Rich</p>",
+            "--b2",
+            "Content-Type: text/plain",
+            "",
+            "Plain",
+            "--b2--",
+            "epilogue",
+        ]))
+        #expect(plainLast.bodies == [MIMEMessage.Body(format: .plain, text: "Plain")])
+    }
+
+    @Test func mixedGivesTextInOrderAndListsAttachments() {
+        let message = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/mixed; boundary=\"outer\"",
+            "",
+            "--outer",
+            "Content-Type: multipart/alternative; boundary=\"inner\"",
+            "",
+            "--inner",
+            "Content-Type: text/plain",
+            "",
+            "First",
+            "--inner",
+            "Content-Type: multipart/related; boundary=\"rel\"",
+            "",
+            "--rel",
+            "Content-Type: text/html",
+            "",
+            "<p>First</p><img src=\"cid:logo\">",
+            "--rel",
+            "Content-Type: image/png; name=logo.png",
+            "Content-ID: <logo>",
+            "Content-Transfer-Encoding: base64",
+            "",
+            "iVBORw0KGgo=",
+            "--rel--",
+            "--inner--",
+            "--outer",
+            "Content-Type: application/pdf; name=\"quote.pdf\"",
+            "Content-Disposition: attachment; filename*=UTF-8''%E6%8A%A5%E4%BB%B7%E5%8D%95.pdf",
+            "Content-Transfer-Encoding: base64",
+            "",
+            "JVBERi0xLjQK",
+            "--outer",
+            "Content-Type: text/plain",
+            "",
+            "Second",
+            "--outer",
+            "Content-Type: TEXT/PLAIN; name=\"notes.txt\"",
+            "",
+            "an attached text file",
+            "--outer",
+            "Content-Type: message/rfc822",
+            "Content-Disposition: attachment; filename=\"=?UTF-8?B?5Y6f6YKu5Lu2?=.eml\"",
+            "",
+            "Subject: inner",
+            "",
+            "inner text",
+            "--outer--",
+        ]))
+        #expect(message.bodies == [
+            MIMEMessage.Body(format: .markup, text: "<p>First</p><img src=\"cid:logo\">"),
+            MIMEMessage.Body(format: .plain, text: "Second"),
+        ])
+        #expect(message.attachments == [
+            MIMEMessage.Attachment(name: "logo.png", mimeType: "image/png", isInline: true),
+            MIMEMessage.Attachment(name: "报价单.pdf", mimeType: "application/pdf", isInline: false),
+            MIMEMessage.Attachment(name: "notes.txt", mimeType: "text/plain", isInline: false),
+            MIMEMessage.Attachment(name: "原邮件.eml", mimeType: "message/rfc822", isInline: false),
+        ])
+    }
+
+    @Test func signedMailGivesItsTextAndNoSignature() {
+        let message = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/signed; protocol=\"application/pkcs7-signature\"; boundary=s",
+            "",
+            "--s",
+            "Content-Type: text/plain",
+            "",
+            "Signed text",
+            "--s",
+            "Content-Type: application/pkcs7-signature; name=smime.p7s",
+            "Content-Disposition: attachment; filename=smime.p7s",
+            "",
+            "MIAGCSqGSIb3DQEHAqCAMIACAQEx",
+            "--s--",
+        ]))
+        #expect(message.bodies.map(\.text) == ["Signed text"])
+        #expect(message.attachments.isEmpty)
+    }
+
+    @Test func encryptedMailGivesNothing() {
+        let message = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/encrypted; boundary=e",
+            "",
+            "--e",
+            "Content-Type: application/pgp-encrypted",
+            "",
+            "Version: 1",
+            "--e--",
+        ]))
+        #expect(message.bodies.isEmpty)
+        #expect(message.attachments.isEmpty)
+    }
+
+    @Test func brokenStructureReadsAsFarAsItCan() {
+        // No closing delimiter: the last part runs to the end.
+        let unclosed = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/mixed; boundary=u",
+            "",
+            "--u",
+            "",
+            "Part one",
+            "--u",
+            "Content-Type: text/plain",
+            "",
+            "Part two",
+        ]))
+        #expect(unclosed.bodies.map(\.text) == ["Part one", "Part two"])
+
+        // A boundary that never shows: the body reads as plain text.
+        let missing = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/mixed; boundary=never",
+            "",
+            "Just text",
+        ]))
+        #expect(missing.bodies.map(\.text) == ["Just text"])
+
+        // A multipart without a boundary reads as plain text.
+        let noBoundary = MIMEMessage(source: Self.source(["Content-Type: multipart/mixed", "", "Text"]))
+        #expect(noBoundary.bodies.map(\.text) == ["Text"])
+
+        // A line that only starts like a delimiter is text.
+        let lookalike = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/mixed; boundary=ab",
+            "",
+            "--ab",
+            "",
+            "--abc is not a delimiter",
+            "--ab--",
+        ]))
+        #expect(lookalike.bodies.map(\.text) == ["--abc is not a delimiter"])
+
+        // No blank line after the headers.
+        let headersOnly = MIMEMessage(source: Self.source(["Subject: only headers"]))
+        #expect(headersOnly.headers.subject == "only headers")
+        #expect(headersOnly.bodies.map(\.text) == [""])
+    }
+
+    @Test func aPartWithoutHeadersIsPlainText() {
+        let message = MIMEMessage(source: Self.source([
+            "Content-Type: multipart/mixed; boundary=p",
+            "",
+            "--p",
+            "no headers here, just text",
+            "--p--",
+        ]))
+        #expect(message.bodies.map(\.text) == ["no headers here, just text"])
+    }
+
+    @Test func anMboxFromLineIsSkipped() {
+        let message = MIMEMessage(source: Self.source([
+            "From mei.tan@orchard.example Mon Oct 12 09:30:00 2026",
+            "Subject: From an export",
+            "",
+            "Body",
+        ]))
+        #expect(message.headers.subject == "From an export")
+        #expect(message.bodies.map(\.text) == ["Body"])
+    }
+
+    @Test func flowedTextJoinsItsSoftBreaks() {
+        let message = MIMEMessage(source: Self.source([
+            "Content-Type: text/plain; charset=utf-8; format=flowed; delsp=no",
+            "",
+            "This line goes on ",
+            "in the next one.",
+            " From here, stuffed.",
+            "> quoted and ",
+            "> joined",
+            "-- ",
+            "Mei",
+        ]))
+        #expect(message.bodies.map(\.text) == ["This line goes on in the next one.\nFrom here, stuffed.\n> quoted and joined\n-- \nMei"])
+        let delsp = MIMEMessage(source: Self.source([
+            "Content-Type: text/plain; format=flowed; delsp=yes",
+            "",
+            "工作 ",
+            "室",
+        ]))
+        #expect(delsp.bodies.map(\.text) == ["工作室"])
+    }
+
+    @Test func limitsCutTheWork() {
+        let parts = (1...10).flatMap { ["--m", "Content-Type: text/plain", "", "Part \($0)"] }
+        let many = Self.source(["Content-Type: multipart/mixed; boundary=m", ""] + parts + ["--m--"])
+        let fewParts = MIMEMessage(source: many, limits: MIMEMessage.Limits(maximumParts: 3))
+        #expect(fewParts.bodies.map(\.text) == ["Part 1", "Part 2", "Part 3"])
+        #expect(fewParts.isCut)
+
+        var nested = ["Content-Type: multipart/mixed; boundary=d0", ""]
+        for depth in 1...6 {
+            nested += ["--d\(depth - 1)", "Content-Type: multipart/mixed; boundary=d\(depth)", ""]
+        }
+        nested += ["--d6", "", "Deep text"]
+        let shallow = MIMEMessage(source: Self.source(nested), limits: MIMEMessage.Limits(maximumDepth: 3))
+        #expect(shallow.bodies.isEmpty)
+        #expect(shallow.isCut)
+        #expect(MIMEMessage(source: Self.source(nested)).bodies.map(\.text) == ["Deep text"])
+
+        let long = Self.source(["Content-Type: text/plain; charset=utf-8", "", String(repeating: "工", count: 100)])
+        let shortText = MIMEMessage(source: long, limits: MIMEMessage.Limits(maximumTextBytes: 31))
+        #expect(shortText.bodies.map(\.text) == [String(repeating: "工", count: 10)])
+        #expect(shortText.isCut)
+
+        let shortSource = MIMEMessage(source: long, limits: MIMEMessage.Limits(maximumSourceBytes: 48))
+        #expect(shortSource.isCut)
+        #expect(shortSource.bodies.first.map { $0.text.count < 100 } == true)
+
+        let fewSteps = MIMEMessage(source: many, limits: MIMEMessage.Limits(maximumSteps: 20))
+        #expect(fewSteps.isCut)
+        #expect(fewSteps.steps <= 20 + many.count)
+    }
+
+    @Test func stepsGrowWithTheSize() {
+        let lines = (1...200).map { "Line \($0) of the letter." }
+        let small = MIMEMessage(source: Self.source(["Subject: s", ""] + lines.prefix(20)))
+        let large = MIMEMessage(source: Self.source(["Subject: s", ""] + lines))
+        #expect(small.steps > 0)
+        #expect(large.steps > small.steps)
+        #expect(large.steps <= 4 * Self.source(["Subject: s", ""] + lines).count)
+    }
+
+    @Test func parsingOffTheMainActorGivesTheSameMessage() async {
+        let source = Self.source(["Subject: async", "", "Body"])
+        #expect(await MIMEMessage.parsed(source) == MIMEMessage(source: source))
+        #expect(await MIMEMessage.parsed("Subject: async\r\n\r\nBody") == MIMEMessage(source: source))
+    }
+
+    @Test func headerValuesReadParametersOfEveryForm() {
+        let value = MIMEMessage.HeaderValue(#"Attachment ; filename*0*=utf-8''%E6%8A%A5; filename*1="价单.pdf"; size=12; x="a;b\"c""#)
+        #expect(value.value == "attachment")
+        #expect(value.parameters["filename"] == "报价单.pdf")
+        #expect(value.parameters["size"] == "12")
+        #expect(value.parameters["x"] == #"a;b"c"#)
+        #expect(MIMEMessage.HeaderValue("text/plain").parameters.isEmpty)
+    }
+}
