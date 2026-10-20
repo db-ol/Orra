@@ -79,8 +79,9 @@ nonisolated struct SortingProjects: Sendable {
     let ownAddresses: [String]
     /// The own words of each candidate, see `distinctiveWords(_:ownAddresses:)`.
     let words: [UUID: [String]]
-    /// The people seen in each candidate before, lowercased.
-    let seen: [UUID: Set<String>]
+    /// The people seen in each candidate before, lowercased. A caller that looks them up
+    /// for each email, as SortingService does, sets them without preparing again.
+    var seen: [UUID: Set<String>]
     /// The file names of each candidate, in their matching form.
     let fileNames: [UUID: Set<String>]
 
