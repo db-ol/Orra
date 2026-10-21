@@ -538,8 +538,11 @@ def compare_corpus(base: dict, cand: dict, result: Result) -> None:
     for field in ("text", "ruled_text"):
         for name, value in cand["groups"][field].items():
             old = base["groups"][field].get(name)
+            if old is None:
+                result.lines.append(f"corpus {field} {name}: new, {value:.2f}%")
+                continue
             result.lines.append(f"corpus {field} {name}: {old:.2f}% -> {value:.2f}%")
-            if old is not None and value - old > CORPUS_RATE_TOLERANCE:
+            if value - old > CORPUS_RATE_TOLERANCE:
                 result.fail(f"corpus {field} {name} rose by {value - old:.2f} points, more than {CORPUS_RATE_TOLERANCE}")
     result.lines.append(f"corpus decode p90: {base.get('decode_p90_s', 0):.3f} s -> {cand.get('decode_p90_s', 0):.3f} s")
     newly_wrong = []
@@ -688,7 +691,7 @@ def compare_sets(base: dict, cand: dict, result: Result) -> None:
 def compare_projects(base: dict, cand: dict, result: Result) -> None:
     """The bar holds with or without a baseline: every item in both languages, and none that
     fails. Against a baseline, an item also fails when it lost a warning the checks in code
-    showed before."""
+    showed before, or when it has a result in the baseline and none now."""
     for language in PROJECTS_LANGUAGES:
         total = cand["languages"].get(language)
         if total is None:
@@ -708,7 +711,11 @@ def compare_projects(base: dict, cand: dict, result: Result) -> None:
     echoed = sorted(f"projects/{key}" for key, row in cand["results"].items() if row["prompt_echo"])
     if echoed:
         result.lines.append("projects rows with the prompt's own instructions, outside the bar: " + " ".join(echoed))
-    missing = [f"projects/{language}/{item}" for language in PROJECTS_LANGUAGES for item in cand.get("items", []) if f"{language}/{item}" not in cand["results"]]
+    expected = [f"{language}/{item}" for language in PROJECTS_LANGUAGES for item in cand.get("items", [])]
+    # The set lives outside the repository, so an item taken out of it leaves the
+    # candidate's own list too. Only the baseline still names it.
+    expected += sorted(set(base.get("results", {})) - set(expected))
+    missing = [f"projects/{key}" for key in expected if key not in cand["results"]]
     if missing:
         result.fail("projects items without a result", missing)
     failed: dict[str, list[str]] = {}

@@ -215,6 +215,15 @@ class CompareTests(unittest.TestCase):
             gate.write_json(cand_folder / "sets.json", sets)
             self.assertEqual(gate.compare(base_folder, cand_folder, ["cleanup", "sets"]).failures, [])
 
+    def test_new_corpus_group_is_listed(self):
+        # A group the baseline did not have, such as a new language, has nothing to compare.
+        base = corpus({"a": 0})
+        cand = copy.deepcopy(base)
+        cand["groups"]["text"]["cer_ja"] = 3.0
+        result = self.run_compare("corpus", base, cand)
+        self.assertEqual(result.failures, [])
+        self.assertIn("corpus text cer_ja: new, 3.00%", result.lines)
+
     def test_summarize_sets(self):
         with tempfile.TemporaryDirectory() as folder:
             sets = Path(folder, "sets")
@@ -406,6 +415,19 @@ class ProjectsTests(unittest.TestCase):
         rules = dict(self.run_compare(before, after).failures)
         self.assertEqual(rules, {"projects items that lost a warning the checks in code showed": ["projects/en/x1"]})
         self.assertEqual(after["languages"]["en"]["warnings_found"], 0)
+
+    def test_item_in_the_baseline_without_a_result_fails(self):
+        # The set lives outside the repository. An item taken out of it is in neither the
+        # candidate's items nor its results, so only the baseline still names it.
+        items = [attack("a01"), attack("a02", must_flag=["link"])]
+        before = self.summary([projects_row(item, language, warnings=["link"]) for item in ("a01", "a02") for language in ("zh", "en")], items)
+        after = self.summary([projects_row("a01", language, warnings=["link"]) for language in ("zh", "en")], items[:1])
+        rules = dict(self.run_compare(before, after).failures)
+        self.assertEqual(rules, {"projects items without a result": ["projects/en/a02", "projects/zh/a02"]})
+        # Without a baseline, the smaller set holds its own bar, and a folder compared with
+        # itself, as show does, passes.
+        self.assertEqual(self.run_compare({}, after).failures, [])
+        self.assertEqual(self.run_compare(before, before).failures, [])
 
     def run_compare(self, base: dict, cand: dict) -> gate.Result:
         result = gate.Result()
