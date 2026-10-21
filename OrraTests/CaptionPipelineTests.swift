@@ -121,13 +121,16 @@ final class FakeCaptionModels {
     }
 }
 
-/// Waits until the condition holds, for at most a few seconds.
+/// Waits until the condition holds, for at most a minute, and fails the test at the caller's
+/// line when it does not. The limit is time, not a count of turns, since 2,000 turns of
+/// 2 ms ran out on the busy CI runner before the work a test waited for was done.
 @MainActor
-func eventually(_ condition: () -> Bool) async throws {
-    for _ in 0..<2_000 where !condition() {
+func eventually(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+    let deadline = ContinuousClock.now + .seconds(60)
+    while !condition(), ContinuousClock.now < deadline {
         try await Task.sleep(for: .milliseconds(2))
     }
-    #expect(condition())
+    #expect(condition(), sourceLocation: sourceLocation)
 }
 
 @MainActor
