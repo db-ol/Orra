@@ -156,9 +156,14 @@ struct AudioRecorderTests {
         #expect(HostTime.instant(0, now: now, hostNow: 100_000_000, timebase: timebase) == nil)
         // A stamp after the reading counts as now.
         #expect(HostTime.instant(100_000_010, now: now, hostNow: 100_000_000, timebase: timebase) == now)
-        // With this Mac's own clocks, a stamp taken now is now, within a millisecond.
+        // With this Mac's own clocks, a stamp taken now lands between readings taken
+        // around the call. The window grows with any pause of the test thread, so a busy
+        // runner cannot fail it.
+        let before = ContinuousClock.now
         let live = try #require(HostTime.instant(mach_absolute_time()))
-        #expect(abs(DictationTimings.milliseconds(live.duration(to: .now))) <= 1)
+        let after = ContinuousClock.now
+        #expect(live <= after)
+        #expect(live >= before - before.duration(to: after) - .milliseconds(1))
     }
 
     // MARK: Keeping a chosen microphone's unit

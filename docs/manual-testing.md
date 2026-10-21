@@ -288,10 +288,12 @@ got worse than the baseline, see docs/release-gate.md.
     leaving a password field and the pasteboard alone, leaving a field that cannot be
     described alone when the app in front holds secure input, pasting into plain text
     there, asking about the field only under secure input and only right before the paste,
-    telling fields apart by role and subrole, empty text, two dictations in a row,
-    restoring several items and types, reading the pasteboard off the main actor, and
-    finding the key for v in the current layout with and without Command held. They use
-    private named pasteboards and a fake key poster, so no real event is posted.
+    pasting nothing when another app comes to the front while the old contents are read or
+    the field is asked about, telling fields apart by role and subrole, empty text, two
+    dictations in a row, restoring several items and types, reading the pasteboard off the
+    main actor, and finding the key for v in the current layout with and without Command
+    held. They use private named pasteboards and a fake key poster, so no real event is
+    posted.
   - ConcealedClipboardTests covers the copy that the paste, Copy Last Dictation, Live
     Captions and the Projects reply use: concealed, staying, and in place of every earlier
     item, on a private named pasteboard.
@@ -373,7 +375,9 @@ got worse than the baseline, see docs/release-gate.md.
     without losing a word, that every save also writes that list, so words added after
     going back to 0.1.0 and the words of an unreadable save are kept, and the rows, search,
     header and removal of the table in Settings, where removing a learned word lets
-    learning add it again. PushToTalkControllerTests checks that every
+    learning add it again. It checks that the copied word the menu offers is read without
+    holding the main actor, never while Orra dictates, and only from the latest menu's
+    read. PushToTalkControllerTests checks that every
     dictation passes the vocabulary to the model, nil when it is empty, only the 200 most
     recent of a longer list, that a paste dates the words it holds while a text that was not
     pasted dates none, that a change is saved, and that learning is refused only at the cap.
@@ -385,7 +389,8 @@ got worse than the baseline, see docs/release-gate.md.
     widened to its unchanged characters, and the cap of 8 Chinese characters.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
-    after leaving the app, under secure input, or in a field without the pasted text.
+    after leaving the app, under secure input, in a field without the pasted text, or in a
+    field that got the focus while the paste landed.
     CorrectionLearningTests checks that nothing is read while learning is off, that the
     first fix adds the word and tells the user, a quiet new mishearing, Undo, that a
     learned word removed from the vocabulary is learned again, that after a cleanup only
@@ -1544,6 +1549,9 @@ are in place since 2026-10-05:
   dictate. Typing on the Mac does not stall while Orra saves the old clipboard.
 - [ ] Release the talk key and switch to another app at once. The text is not pasted
   there, the menu says so, and "Copy Last Dictation" copies it.
+- [ ] Copy a large range in Excel, or copy something on an iPhone, then dictate and press
+  Command Tab while Orra saves the old clipboard. The text is not pasted in the other app,
+  and the menu says another app came to the front.
 - [ ] Pasting works in Notes, a browser text field, VS Code and Terminal.
 - [x] In the password field of a login form in Safari and in Chrome, nothing is pasted,
   the clipboard keeps what it had, the menu says "Orra does not paste into password
@@ -1979,8 +1987,14 @@ corrections under Recognition in Settings, Dictation first:
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the
   right word there: the Orra menu offers to add it to the vocabulary.
+- [ ] Copy a word in a remote desktop or virtual machine window, then open the Orra menu.
+  The menu opens at once, typing in other apps does not stall, and the offer to add the
+  word comes a moment later.
 - [ ] In Messages or WeChat, fix a misheard name and press Return to send: the fix still
   counts. Click into another field during the watch: nothing is read from it.
+- [ ] Dictate into one field and press Tab into another field of the same app as soon as
+  the text appears. Nothing is read from that field, and the learning log says the field
+  lost the focus.
 - [ ] Dictating into a password field, or switching apps right after the paste, records
   nothing.
 - [ ] Dictate into a text field in Orra's own Settings window, such as the new word field

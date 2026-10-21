@@ -16,6 +16,12 @@ final class ScriptedField {
     private(set) var checks = 0
     var opens = true
     private(set) var reads = 0
+    /// Which field of the app has the focus. A reader gives nil while the field it opened
+    /// does not have it, as FieldReader.text does.
+    var focus = 1
+    /// The field that gets the focus while the paste lands, as when the user presses Tab
+    /// right after the release.
+    var focusAfterPaste: Int?
     /// A stand in for Orra's own process.
     let ownProcess: pid_t = 9
 
@@ -28,7 +34,9 @@ final class ScriptedField {
             ownProcess: ownProcess,
             open: { [self] _ in
                 guard opens else { return nil }
+                let opened = focus
                 return { [self] in
+                    guard focus == opened else { return nil }
                     defer { reads += 1 }
                     return texts[min(reads, texts.count - 1)]
                 }
@@ -40,7 +48,13 @@ final class ScriptedField {
                 return frontmost
             },
             secureInputHolder: { [self] in secureInputHolder },
-            sleep: { _ in await Task.yield() }
+            sleep: { [self] duration in
+                // The wait for the paste to land.
+                if duration == .milliseconds(900), let focusAfterPaste {
+                    focus = focusAfterPaste
+                }
+                await Task.yield()
+            }
         )
     }
 }
@@ -336,6 +350,15 @@ struct CorrectionWatcherTests {
         let field = ScriptedField(["别的内容", "别的内容改了"])
         #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
         #expect(field.reads == 1)
+    }
+
+    @Test func aFieldFocusedWhileThePasteLandsIsNeverRead() async {
+        // The user moves to another field of the same app before the paste lands. That field
+        // holds the pasted words too.
+        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码"])
+        field.focusAfterPaste = 2
+        #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
+        #expect(field.reads == 0)
     }
 }
 

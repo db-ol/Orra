@@ -10,10 +10,12 @@ final class InserterFixture {
     /// The process that holds secure input, nil while none does.
     var secureInputHolder: pid_t?
     /// The app in front.
-    let frontmost: pid_t = 100
+    var frontmost: pid_t = 100
     var field: FocusedField.Kind = .plainText
     /// Runs each time the inserter reads the old pasteboard contents.
     var whileReading: () -> Void = {}
+    /// Runs each time the inserter asks about the focused field.
+    var whileAskingAboutTheField: () -> Void = {}
     private(set) var postedKeyCodes: [CGKeyCode] = []
     /// How often the inserter asked about the focused field.
     private(set) var fieldChecks = 0
@@ -26,6 +28,7 @@ final class InserterFixture {
             frontmostApp: { self.frontmost },
             focusedField: { _ in
                 self.fieldChecks += 1
+                self.whileAskingAboutTheField()
                 return self.field
             },
             readSnapshot: { name in
@@ -167,6 +170,76 @@ struct TextInserterTests {
         #expect(await inserter.insert("new") == .skippedPasswordField)
         #expect(fixture.postedKeyCodes.isEmpty)
         #expect(fixture.pasteboard.string(forType: .string) == "old")
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func anAppThatComesToTheFrontWhileTheOldContentsAreReadGetsNothing() async {
+        let fixture = InserterFixture()
+        defer { fixture.release() }
+        fixture.put("old")
+        let changeCount = fixture.pasteboard.changeCount
+        // The app that copied the old contents is slow to give them, and the user switches
+        // to another app meanwhile.
+        fixture.whileReading = { fixture.frontmost = 200 }
+        let inserter = fixture.makeInserter()
+        #expect(await inserter.insert("new") == .skippedAppChanged)
+        await inserter.waitForRestore()
+        #expect(fixture.postedKeyCodes.isEmpty)
+        #expect(fixture.pasteboard.string(forType: .string) == "old")
+        #expect(fixture.pasteboard.changeCount == changeCount)
+    }
+
+    @Test func anAppWithSecureInputThatComesToTheFrontIsNotAskedAndGetsNothing() async {
+        let fixture = InserterFixture()
+        defer { fixture.release() }
+        fixture.put("old")
+        // The new app holds secure input, and its focused field is plain text.
+        fixture.field = .plainText
+        fixture.whileReading = {
+            fixture.frontmost = 200
+            fixture.secureInputHolder = 200
+        }
+        let inserter = fixture.makeInserter()
+        #expect(await inserter.insert("new") == .skippedAppChanged)
+        #expect(fixture.fieldChecks == 0)
+        #expect(fixture.postedKeyCodes.isEmpty)
+        #expect(fixture.pasteboard.string(forType: .string) == "old")
+    }
+
+    @Test func anAppThatComesToTheFrontWhileOrraAsksAboutTheFieldGetsNothing() async {
+        let fixture = InserterFixture()
+        defer { fixture.release() }
+        fixture.put("old")
+        // Terminal with Secure Keyboard Entry, which is slow to describe its field.
+        fixture.secureInputHolder = fixture.frontmost
+        fixture.field = .plainText
+        fixture.whileAskingAboutTheField = { fixture.frontmost = 200 }
+        let inserter = fixture.makeInserter()
+        #expect(await inserter.insert("new") == .skippedAppChanged)
+        #expect(fixture.fieldChecks == 1)
+        #expect(fixture.postedKeyCodes.isEmpty)
+        #expect(fixture.pasteboard.string(forType: .string) == "old")
+    }
+
+    @Test func anAppThatComesToTheFrontWhileANewCopyIsReadGetsNothing() async {
+        let fixture = InserterFixture()
+        defer { fixture.release() }
+        fixture.put("old")
+        fixture.secureInputHolder = fixture.frontmost
+        fixture.field = .plainText
+        // Something is copied while Orra asks about the field, so the new contents are
+        // read, and the user switches apps during that second read.
+        fixture.whileAskingAboutTheField = { fixture.put("copied meanwhile") }
+        var reads = 0
+        fixture.whileReading = {
+            reads += 1
+            if reads == 2 { fixture.frontmost = 200 }
+        }
+        let inserter = fixture.makeInserter()
+        #expect(await inserter.insert("new") == .skippedAppChanged)
+        #expect(reads == 2)
+        #expect(fixture.postedKeyCodes.isEmpty)
+        #expect(fixture.pasteboard.string(forType: .string) == "copied meanwhile")
     }
 
     @Test(.timeLimit(.minutes(1)))
