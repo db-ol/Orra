@@ -584,15 +584,20 @@ nonisolated struct MailStore: Sendable {
             [.text(query.project.uuidString)]
         )
         let ids = await Self.rankedIDs(candidates, words: words, excluding: query.excluding, limit: query.limit)
-        return try await projectMail(ids: ids)
+        return try await projectMail(ids: ids, in: query.project)
     }
 
-    /// The emails of `ids` in that order. An email that is gone, or whose text Retention
+    /// The emails of `ids` in that order that are still in `project`. An email that is
+    /// gone, that moved to another project or to Needs a Project, or whose text Retention
     /// removed, since `rankedIDs` chose it is left out. Internal for tests.
-    func projectMail(ids: [Int64]) async throws -> [ExplainPrompt.Mail] {
+    func projectMail(ids: [Int64], in project: UUID) async throws -> [ExplainPrompt.Mail] {
         guard !ids.isEmpty else { return [] }
         return try await database.transaction { database in
-            let rows = try Self.rows(where: "id IN (SELECT value FROM json_each(?)) AND text IS NOT NULL", [.text(try Self.json(ids))], in: database)
+            let rows = try Self.rows(
+                where: "id IN (SELECT value FROM json_each(?)) AND project = ? AND text IS NOT NULL",
+                [.text(try Self.json(ids)), .text(project.uuidString)],
+                in: database
+            )
             let byID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             return ids.compactMap { byID[$0]?.promptMail }
         }

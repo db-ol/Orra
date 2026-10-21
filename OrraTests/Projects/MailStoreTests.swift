@@ -438,24 +438,32 @@ struct MailStoreTests {
         #expect(await MailStore.rankedIDs(rows, words: ["invoice"], excluding: [], limit: 0).isEmpty)
     }
 
-    /// Project mail is ranked off the database's actor, then read. An email whose text
-    /// Retention removed, or that Forget Project removed, in between is left out.
-    @Test func projectMailLeavesOutAnEmailThatLostItsTextAfterTheRanking() async throws {
+    /// Project mail is ranked off the database's actor, then read. An email that moved to
+    /// another project or to Needs a Project, whose text Retention removed, or that Forget
+    /// Project removed, in between is left out.
+    @Test func projectMailLeavesOutAnEmailThatChangedAfterTheRanking() async throws {
         defer { cleanUp() }
         let store = try await openStore()
+        let messageIDs = ["both@test.example", "grout@test.example", "floor@test.example", "tiles@test.example"]
         try await store.save([
             Self.message("tiles@test.example", from: "owen@pike-build.example", subject: "Tiles", text: "The grey floor tiles arrive Monday."),
             Self.message("both@test.example", from: "owen@pike-build.example", day: 1, subject: "Tiles and grout", text: "Grey tiles need white grout."),
-        ], ownAddresses: [Self.work], at: Self.date(2))
+            Self.message("grout@test.example", from: "owen@pike-build.example", day: 2, subject: "Grout", text: "White grout only."),
+            Self.message("floor@test.example", from: "owen@pike-build.example", day: 3, subject: "Floor", text: "The floor is ready for tiles."),
+        ], ownAddresses: [Self.work], at: Self.date(4))
         var ids: [Int64] = []
-        for messageID in ["both@test.example", "tiles@test.example"] {
+        for messageID in messageIDs {
+            #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: messageID))
             let id = try await store.database.run("SELECT id FROM mail_messages WHERE message_id = ?", [.text(messageID)]).first?.first?.integer
             ids.append(try #require(id))
         }
-        #expect(try await store.projectMail(ids: ids).map(\.messageID) == ["both@test.example", "tiles@test.example"])
+        #expect(try await store.projectMail(ids: ids, in: Self.maple).map(\.messageID) == messageIDs)
+        #expect(try await store.projectMail(ids: ids, in: Self.harbor).isEmpty)
         _ = try await store.database.run("UPDATE mail_messages SET text = NULL, visible_text = NULL, words = NULL WHERE message_id = ?", [.text("both@test.example")])
-        #expect(try await store.projectMail(ids: ids + [999]).map(\.messageID) == ["tiles@test.example"])
-        #expect(try await store.projectMail(ids: []).isEmpty)
+        #expect(try await store.move("grout@test.example", to: Self.harbor))
+        #expect(try await store.move("floor@test.example", to: nil))
+        #expect(try await store.projectMail(ids: ids + [999], in: Self.maple).map(\.messageID) == ["tiles@test.example"])
+        #expect(try await store.projectMail(ids: [], in: Self.maple).isEmpty)
         await store.close()
     }
 
