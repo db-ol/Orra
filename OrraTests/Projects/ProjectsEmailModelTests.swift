@@ -149,7 +149,8 @@ struct ProjectsEmailModelTests {
         userLanguage: ProjectsLanguage = .en,
         reference: MailMessageRef? = MailMessageRef(id: 4, mailbox: .inbox),
         referenceFailure: MailBridgeError? = nil,
-        handoffs: ProjectsEmailModel.Handoffs = ProjectsEmailModel.Handoffs()
+        handoffs: ProjectsEmailModel.Handoffs = ProjectsEmailModel.Handoffs(),
+        email original: ExplainService.Email? = nil
     ) -> ProjectsEmailModel {
         let fakes = fakes
         return ProjectsEmailModel(messageID: Self.id, actions: ProjectsEmailModel.Actions(
@@ -183,6 +184,9 @@ struct ProjectsEmailModelTests {
                 try await request()
             },
             email: { id in
+                if id == Self.id, let original {
+                    return original
+                }
                 guard id == Self.id || id == "lamps-1@harbor.example" else { return nil }
                 return ExplainService.Email(
                     messageID: id, date: Self.today.addingTimeInterval(-86_400 * 3),
@@ -255,6 +259,65 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsWindowText.source(model.sources["T1"]!).hasPrefix("Mei Tan, "))
         #expect(ProjectsEmailArea.SourceChip.isGone(.mail(messageID: "gone@harbor.example", sender: nil, date: nil)))
         #expect(!ProjectsEmailArea.SourceChip.isGone(.thisEmail))
+    }
+
+    // MARK: The email itself
+
+    /// A forward with a signature, an attachment and quoted history, as the store gives it.
+    static let forwardEmail = ExplainService.Email(
+        messageID: id, date: today, sender: ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example"),
+        to: [ExplainPrompt.Person(name: "Lin", address: "me@studio.example")], cc: [ExplainPrompt.Person(address: "kai@kiln.example")],
+        subject: "Fwd: Lamps", attachments: [ContentChecks.Input.Attachment(name: "lamps.pdf", type: "application/pdf")],
+        text: "Lin, see Kai's note.",
+        visibleText: "Lin, see Kai's note.\n\n-- \nMei\n\n---------- Forwarded message ---------\nFrom: Kai Moss <kai@kiln.example>\nDate: Mon, Oct 12, 2026 at 9:30 AM\nSubject: Lamps\n\nTwelve lamps, delivery in week 47.\n\nOn Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?")
+
+    @Test func theEmailShowsAsMailShowsItBeforeAndAfterItsExplanation() async {
+        var current: Explanation?
+        let model = model(explanation: { current }, email: Self.forwardEmail)
+        await model.load()
+        #expect(model.original == ProjectsEmailOriginal.Content(
+            to: ["Lin <me@studio.example>"], cc: ["kai@kiln.example"], attachments: ["lamps.pdf"],
+            note: "Lin, see Kai's note.", signature: "Mei",
+            forwards: [QuotedHistory.Forward(sender: "Kai Moss <kai@kiln.example>", date: "Mon, Oct 12, 2026 at 9:30 AM", subject: "Lamps", text: "Twelve lamps, delivery in week 47.")],
+            quoted: "On Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?"))
+
+        // Explained: the explanation shows, and the email stays one click away.
+        current = Self.explanation()
+        await model.load()
+        #expect(!model.showsOriginal)
+        model.showsOriginal = true
+        await model.load()
+        #expect(model.showsOriginal)
+        #expect(model.original?.note == "Lin, see Kai's note.")
+        #expect(model.text == Self.draft)
+
+        // Explained again: the new explanation shows.
+        current = Self.explanation(draft: "Hi Mei,\n\nNoted.\n\nLin")
+        await model.load()
+        #expect(!model.showsOriginal)
+        #expect(model.original?.forwards.count == 1)
+    }
+
+    @Test func anEmailWithoutTextShowsNothingAndALongOneSaysMailHasTheRest() {
+        var email = Self.forwardEmail
+        email.text = ""
+        email.visibleText = "  \n"
+        #expect(ProjectsEmailOriginal.Content.of(email) == nil)
+        // Without the visible text, the own text shows.
+        email.text = "Lin, see Kai's note."
+        #expect(ProjectsEmailOriginal.Content.of(email)?.note == "Lin, see Kai's note.")
+        #expect(ProjectsEmailOriginal.Content.of(email)?.isCut == false)
+        email.visibleText = String(repeating: "灯", count: MailStore.readLength)
+        #expect(ProjectsEmailOriginal.Content.of(email)?.isCut == true)
+        // The view shows the first characters of a long email, and Mail has the rest.
+        email.visibleText = String(repeating: "灯", count: 30_000)
+        let long = ProjectsEmailOriginal.Content.of(email)
+        #expect(long?.note.count == ProjectsEmailOriginal.Content.shownLength)
+        #expect(long?.isCut == true)
+        // A marker with neither a header nor text shows no forwarded message.
+        email.visibleText = "Lin, see below.\n\n---------- Forwarded message ---------"
+        #expect(ProjectsEmailOriginal.Content.of(email)?.forwards == [])
+        #expect(ProjectsEmailOriginal.Content.of(email)?.note == "Lin, see below.")
     }
 
     // MARK: Changes

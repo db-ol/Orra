@@ -97,6 +97,18 @@ got worse than the baseline, see docs/release-gate.md.
     prefilled sheet with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in
     ProjectSuggestionsEvaluationTests runs it on the synthetic set with the real model in
     a Release build, see its comment for the command.
+  - QuotedHistoryTests, MailScanTests, ExplainPromptTests, ReplyRuleTests,
+    SortingSignalsTests, MailStoreTests and ProjectsEmailModelTests, since 2026-10-21,
+    cover forwarded messages with made up mail: the forwards of Gmail, Apple Mail (quoted
+    and not), iPhone, Thunderbird, Yahoo, NetEase, Outlook, QQ Mail and Foxmail in their
+    languages, a forward of a forward, history inside a forward, at most 10 forwards, the
+    <forwarded> part of the prompt with its own header and its rule, the tags of the
+    prompt in it, the reply language and the list footer of a forward, mail stored before
+    this change, and the email view's content before and after Explain.
+    ProjectsWindowViewTests renders projects-email-original and projects-email-forward
+    with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in ExplainEvaluationTests takes
+    TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_IDS for a few mails and
+    TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TEXT=own for each mail's own text as the app keeps it.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
@@ -3270,6 +3282,28 @@ synthetic mail imported and no project made, as in the test guide.
   after the window closes and after Orra starts again.
 - [ ] Without the cleanup model, the suggestions show with a domain or a name as their
   name.
+
+The email itself in the Projects window, added on 2026-10-21, not verified yet. Check in a
+Debug build with the synthetic mail imported, as in the test guide. Mail read before this
+change keeps its old text in the store for sorting, so for a clean check use Delete All
+Projects Data and Start Reading Mail again first.
+
+- [ ] Before Explain, the email view shows the whole email: To and Cc, the attachment
+  names, the sender's words and signature, each forwarded message under its own header
+  block with a bar on its side, and Quoted Text folded. 转发：宋佳关于入职时间 shows the
+  forwarded message from 宋佳 with its date.
+- [ ] After Explain, Explanation and Original Email switch between the explanation and
+  the email at any time. The warnings and the draft stay in both, and a line sets the
+  draft apart from the email. Explain Again shows the explanation again.
+- [ ] The explanation of 转发：宋佳关于入职时间 names the request to move the start to 23
+  November and cites this email.
+- [ ] Clicking an address or a web address in the email opens nothing. Text can be
+  selected and copied.
+- [ ] An email longer than the view shows ends with The rest of this email is in Mail.
+- [ ] VoiceOver reads Explanation and Original Email as one control, reads each header
+  row of a forwarded message in one stop, and names the Forwarded Message group.
+- [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
+  email view shows it as a forwarded message, and its explanation uses what it says.
 
 ## Not implemented
 

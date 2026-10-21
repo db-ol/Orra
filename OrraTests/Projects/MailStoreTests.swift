@@ -373,6 +373,22 @@ struct MailStoreTests {
         await store.close()
     }
 
+    /// An email saved while QuotedHistory took a kind of forward for quoted history keeps
+    /// that own text in the store. It is read with the own text its visible text gives now,
+    /// so the forward reaches the explanation.
+    @Test func anEmailIsReadWithTheOwnTextItsVisibleTextGivesNow() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let visible = "Lin, see the note below.\n\nAmy\n\n---------- 转发的消息 ----------\n发件人：Kai Moss <kai@kiln.example>\n时间：2026-10-16 09:30\n\nThe start moves to 23 November."
+        var message = Self.message("fwd@test.example", from: "amy@quay.example", subject: "转发：Start date", text: "Lin, see the note below.\n\nAmy")
+        message.visibleText = visible
+        try await store.save([message], ownAddresses: [Self.work], at: Self.start)
+        let email = try #require(try await store.explainEmail("fwd@test.example"))
+        #expect(email.text == visible)
+        #expect(email.visibleText == visible)
+        await store.close()
+    }
+
     @Test func threadMailHoldsTheOtherMessagesWithTheirText() async throws {
         defer { cleanUp() }
         let store = try await openStore()

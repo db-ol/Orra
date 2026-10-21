@@ -9,6 +9,10 @@ import Foundation
 /// text, Chinese or English, read with `ProjectsLanguage.reading(_:)` without the lines that
 /// PromptHygiene takes out, so a fake English system line in a Chinese email does not turn
 /// the reply into English. An email in another language needs a reply but gets no draft.
+/// Of an email that forwards a message, only the sender's own words count, see
+/// `QuotedHistory.sendersWords(in:subject:)`, so a Chinese note over a forwarded English
+/// mail gets a Chinese draft, and the footer of a forwarded newsletter makes it no list
+/// mail.
 nonisolated struct ReplyRule: Sendable, Equatable {
     /// Another message of the email's thread.
     nonisolated struct Message: Sendable, Equatable {
@@ -65,7 +69,8 @@ nonisolated struct ReplyRule: Sendable, Equatable {
         if thread.contains(where: { $0.date > date && isOwn(ProjectsAddress.normalized($0.sender)) }) {
             return .noReply(.answeredLater)
         }
-        let readable = PromptHygiene.withoutMarkers(PromptHygiene(text, source: .mail).text)
+        let words = QuotedHistory.sendersWords(in: text, subject: subject)
+        let readable = PromptHygiene.withoutMarkers(PromptHygiene(words, source: .mail).text)
         if list.sign(sender: address ?? "", text: readable) != nil {
             return .noReply(.listMail)
         }

@@ -4,6 +4,8 @@ import SwiftUI
 /// (plan section 5, projects-email-view), top to bottom:
 /// - the sender, date and subject, the marks, and Explain or Explain Again
 /// - the project chip with its reasons, whose menu moves the email to another project
+/// - once the email is explained, the choice between the explanation and the email itself,
+///   see ProjectsEmailOriginal. Before that the email itself shows under its warnings.
 /// - the warnings, always with those the code found, and what was taken out of the text
 ///   before the model read it
 /// - What it says: the points, each with chips for its sources. A file's chip shows the
@@ -40,26 +42,39 @@ struct ProjectsEmailArea: View {
     }
 
     var body: some View {
-        let emailModel = model.emailModel(for: email.messageID)
+        @Bindable var emailModel = model.emailModel(for: email.messageID)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 ProjectChip(runtime: runtime, model: model, email: email)
                 Divider()
                 if let explanation = emailModel.explanation {
-                    ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
+                    Picker("Show", selection: $emailModel.showsOriginal) {
+                        Text("Explanation").tag(false)
+                        Text("Original Email").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    if emailModel.showsOriginal {
+                        let warnings = ExplanationSections.warnings(explanation, listed: email.warnings)
+                        if !warnings.isEmpty {
+                            WarningList(items: warnings, model: model, emailModel: emailModel)
+                        }
+                        original(emailModel)
+                        // The draft is the model's text, so a line sets it apart from the mail's.
+                        Divider()
+                    } else {
+                        ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
+                    }
                     DraftSection(runtime: runtime, emailModel: emailModel, explanation: explanation)
                 } else {
-                    // Before it is explained: the rule findings, and the first sentence.
+                    // Before it is explained: the rule findings, and the email itself.
                     let warnings = ProjectsWarning.allCases.filter(email.warnings.contains).map { ExplanationSections.Item(warning: $0, places: []) }
                     if !warnings.isEmpty {
                         WarningList(items: warnings, model: model, emailModel: emailModel)
                     }
-                    if !email.summary.isEmpty {
-                        Text(verbatim: email.summary)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    original(emailModel)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -69,6 +84,18 @@ struct ProjectsEmailArea: View {
             // The answer check runs on its own only for a draft made in this window, see
             // ProjectsWindowModel.explain(_:).
             await emailModel.load()
+        }
+    }
+
+    /// The email itself, or its first sentence while it is read.
+    @ViewBuilder
+    private func original(_ emailModel: ProjectsEmailModel) -> some View {
+        if let content = emailModel.original {
+            ProjectsEmailOriginal(content: content)
+        } else if !email.summary.isEmpty {
+            Text(verbatim: email.summary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
