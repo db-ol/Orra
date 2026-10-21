@@ -10,7 +10,7 @@ struct CaptionCleanupTests {
     let clock = TestClock()
     let fake = HoldingEngine()
 
-    private func makeCleanup(isOn: Bool = false, installed: Bool = true, captionTarget: TranslationTarget? = nil) async throws -> TextCleanup {
+    private func makeCleanup(isOn: Bool = false, installed: Bool = true, captionTarget: TranslationTarget? = nil, fetch: FileFetch = FileFetch { _, _, _, _, _, _ in }) async throws -> TextCleanup {
         if installed {
             try temporary.writeAll(to: temporary.installed)
         }
@@ -21,7 +21,7 @@ struct CaptionCleanupTests {
             models: ModelInstaller(
                 manifest: temporary.manifest,
                 folders: temporary.folders,
-                environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in }, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
+                environment: ModelDownload.Environment(fetch: fetch, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
             ),
             engine: fake.engine,
             idleUnloadDelay: .seconds(900),
@@ -111,6 +111,31 @@ struct CaptionCleanupTests {
         cleanup.confirmCaptionDownload()
         guard case .missing = cleanup.models.state else {
             Issue.record("Nothing should download after captions stopped")
+            return
+        }
+        #expect(!cleanup.isOn)
+        #expect(!cleanup.translationIsOn)
+    }
+
+    /// A download the user agrees to in the caption window turns on neither cleanup nor
+    /// translation, and stops when captions stop before it ends, as docs/privacy.md says.
+    @Test func aDownloadAgreedToInCaptionsTurnsNothingOnAndStopsWithThem() async throws {
+        defer { temporary.remove() }
+        let servers = StubServers(behaviors: [.huggingFace: StubBehavior(chunkDelay: .milliseconds(50))])
+        defer { servers.close() }
+        let cleanup = try await makeCleanup(installed: false, fetch: servers.fetch)
+        cleanup.captionsStarted()
+        cleanup.confirmCaptionDownload()
+        guard case .downloading = cleanup.models.state else {
+            Issue.record("Expected a download for captions, got \(cleanup.models.state)")
+            return
+        }
+        #expect(!cleanup.isOn)
+        #expect(!cleanup.translationIsOn)
+        cleanup.captionsStopped()
+        await cleanup.models.waitForDownload()
+        guard case .missing = cleanup.models.state else {
+            Issue.record("Expected the download to stop with captions, got \(cleanup.models.state)")
             return
         }
         #expect(!cleanup.isOn)
