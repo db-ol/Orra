@@ -81,8 +81,9 @@ got worse than the baseline, see docs/release-gate.md.
     translation is on or while it is on itself. Since 2026-10-19 it also checks that the
     Talk Key submenu has no hands free switch, and that Live Captions shows its shortcut
     as text after the name, with no key equivalent. Since 2026-10-20 it also checks that
-    Projects… shows below Meeting Interpretation only while Projects is on, with the count
-    of mail waiting for a reply.
+    Open Projects Window shows with its icon below Meeting Interpretation only while
+    Projects is on, with the count of mail waiting for a reply, and that the Dock menu
+    offers the same item at the same times.
   - ProjectsWindowViewTests, added on 2026-10-20, checks the marks and the date of a mail
     row in the Projects window, and the project setup's checks of people and domains.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
@@ -3209,6 +3210,27 @@ mail.
   only while cleanup and translation are off and captions do not run. Turning Projects
   off stops the download unless cleanup, translation or captions wait for it.
 - [ ] Reading mail never marks a message as read and never moves one.
+
+The way to the Projects window, added on 2026-10-20, not verified yet. Check in a Debug
+build.
+
+- [ ] With Projects on, Settings > Projects starts with Open Projects Window, and the
+  title of the Settings window reads Projects Settings, while the window it opens reads
+  Projects.
+- [ ] Start Reading Mail opens the Projects window, and the mail shows there as Projects
+  reads it. Turning Projects off with Keep Data and on again opens it too. Turning
+  Projects on before any mailbox choice opens nothing, and launching Orra with Projects
+  on opens nothing.
+- [ ] The menu bar menu shows Open Projects Window with the briefcase icon, below
+  Meeting Interpretation, with the count of mail waiting for a reply. On macOS 15, note
+  whether the icon shows.
+- [ ] While Orra shows in the Dock, Control-click its icon: the menu offers Open Projects
+  Window while Projects is on, and nothing of Projects while it is off.
+- [ ] Keep Settings > Projects open while Projects reads mail. Stored on this Mac grows
+  within a few seconds of the mail showing in the Projects window, and never stays at
+  Nothing.
+- [ ] While Delete All Projects Data runs with Projects on, Open Projects Window is dimmed
+  and the Projects window stays closed.
 
 ## Not implemented
 

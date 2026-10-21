@@ -37,9 +37,9 @@ struct ProjectsRuntimeTests {
     }
 
     /// The runtime with fakes, and its switch and mailbox choice. `installed` says whether
-    /// the cleanup model is on this Mac, and `countsTokens` gives the explain service a
-    /// tokenizer.
-    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    /// the cleanup model is on this Mac, `countsTokens` gives the explain service a
+    /// tokenizer, and `openFails` makes the start fail at the database.
+    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: isVisible, physicalMemory: 32 << 30, storage: storage)
         if isOn {
             projects.turnOn()
@@ -62,6 +62,10 @@ struct ProjectsRuntimeTests {
             watchFolders: { _, _, _ in {} },
             openDatabase: { storage in
                 opens?.add()
+                if openFails {
+                    // SQLITE_CANTOPEN.
+                    throw ProjectsDatabase.Failure(step: .open, code: 14)
+                }
                 return try await ProjectsDatabase.open(in: storage)
             },
             now: { Self.today },
@@ -224,6 +228,69 @@ struct ProjectsRuntimeTests {
         #expect(model.holds.value == 1)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
+        #expect(model.holds.value == 0)
+    }
+
+    /// Settings opens the window right after the switch goes on, before Projects runs and
+    /// before the menus show it. Not while the switch is off.
+    @Test func theWindowCanOpenOnceTheSwitchIsOnBeforeProjectsRuns() {
+        defer { cleanUp() }
+        let (runtime, projects, _) = make(isOn: false)
+        #expect(!runtime.canOpenWindow)
+        projects.turnOn()
+        #expect(runtime.phase == .off)
+        #expect(!runtime.showsMenuItem)
+        #expect(runtime.canOpenWindow)
+    }
+
+    /// Delete All Projects Data stops Projects and closes the window while the switch stays
+    /// on, so the window cannot open again until Projects runs anew.
+    @Test(.timeLimit(.minutes(1))) func theWindowCannotOpenWhileADeleteRuns() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        var windowCloses = 0
+        runtime.closeWindow = { windowCloses += 1 }
+        runtime.windowOpened()
+        let (closing, closed) = AsyncStream.makeStream(of: Void.self)
+        let (released, release) = AsyncStream.makeStream(of: Void.self)
+        projects.closeBeforeDelete = {
+            await runtime.closeBeforeDelete()
+            closed.yield()
+            for await _ in released { break }
+        }
+        let deleting = Task { await projects.deleteAllData() }
+        for await _ in closing { break }
+        #expect(projects.isOn)
+        #expect(projects.isDeleting)
+        #expect(windowCloses == 1)
+        #expect(!runtime.isWindowOpen)
+        #expect(!runtime.canOpenWindow)
+        release.yield()
+        await deleting.value
+        #expect(runtime.canOpenWindow)
+        try await waitUntil { runtime.phase == .on }
+        // The delete at off must not wait for a release again.
+        projects.closeBeforeDelete = { await runtime.closeBeforeDelete() }
+        await projects.turnOff(keepingData: false)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A window opened before Projects started closes when Projects turns off, also when
+    /// the start failed, so it never stays open with Projects off.
+    @Test func aWindowOpenAfterAFailedStartClosesWhenProjectsTurnsOff() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = make(openFails: true)
+        var closed = 0
+        runtime.closeWindow = { closed += 1 }
+        runtime.windowOpened()
+        runtime.follow()
+        try await waitUntil { runtime.phase == .failed }
+        #expect(runtime.isWindowOpen)
+        #expect(closed == 0)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        #expect(closed == 1)
+        #expect(!runtime.isWindowOpen)
         #expect(model.holds.value == 0)
     }
 
@@ -934,8 +1001,12 @@ struct ProjectsRuntimeTests {
 
     @Test func theMenuTitleCountsTheMailWaitingForAReply() {
         let english = Locale(identifier: "en")
-        #expect(ProjectsWindowText.menuTitle(replyDue: 0, locale: english) == "Projects…")
-        #expect(ProjectsWindowText.menuTitle(replyDue: 3, locale: english) == "Projects (3 to Reply)…")
+        #expect(ProjectsWindowText.menuTitle(replyDue: 0, locale: english) == "Open Projects Window")
+        #expect(ProjectsWindowText.menuTitle(replyDue: 3, locale: english) == "Open Projects Window (3 to Reply)")
+        // The window's name, as the catalog gives it elsewhere.
+        let chinese = Locale(identifier: "zh-Hans")
+        #expect(ProjectsWindowText.menuTitle(replyDue: 0, locale: chinese) == "打开“项目”窗口")
+        #expect(ProjectsWindowText.menuTitle(replyDue: 3, locale: chinese) == "打开“项目”窗口（3 封待回复）")
     }
 
     // MARK: Helpers

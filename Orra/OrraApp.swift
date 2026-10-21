@@ -21,7 +21,9 @@ import SwiftUI
         // a restart or at login. AppDelegate opens it at launch when the user opened Orra,
         // see LaunchWindow.
         Window("Orra Settings", id: SettingsWindow.id) {
-            SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater, captions: appDelegate.captions, speech: appDelegate.speech, voiceModels: appDelegate.voiceModels, projects: appDelegate.projects, projectsMail: appDelegate.projectsMail)
+            SettingsView(pushToTalk: appDelegate.pushToTalk, inputs: appDelegate.audioInputs, feedback: appDelegate.feedback, openAtLogin: appDelegate.openAtLogin, models: appDelegate.models, cleanup: appDelegate.cleanup, learning: appDelegate.learning, dockIcon: appDelegate.dockIcon, updater: appDelegate.updater, captions: appDelegate.captions, speech: appDelegate.speech, voiceModels: appDelegate.voiceModels, projects: appDelegate.projects, projectsMail: appDelegate.projectsMail, openProjectsWindow: {
+                appDelegate.projectsWindow.show()
+            })
         }
         .windowResizability(.contentMinSize)
         .defaultSize(SettingsWindow.defaultSize)

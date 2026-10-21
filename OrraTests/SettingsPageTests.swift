@@ -329,7 +329,8 @@ struct SettingsPageTests {
                 ModelInstaller(manifest: manifest, folders: temporary.folders, environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in throw URLError(.notConnectedToInternet) }, freeSpace: { _ in nil }, sleep: { _ in }))
             } : nil,
             projects: projects,
-            projectsMail: projectsMail
+            projectsMail: projectsMail,
+            openProjectsWindow: {}
         )
         // The window's first size.
         let size = NSSize(width: SettingsWindow.defaultSize.width, height: height ?? SettingsWindow.defaultSize.height)
