@@ -16,11 +16,13 @@ import Testing
 ///
 /// TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_FIRST and TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_COUNT pick a
 /// part of the 105 mails, by their place in mail.jsonl from 1, so a long evaluation runs in
-/// parts. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_LANGUAGE is zh (the default) or en, the language
-/// of the explanations.
+/// parts. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_IDS picks mails by their ids in the set instead,
+/// comma separated. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_LANGUAGE is zh (the default) or en, the
+/// language of the explanations. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TEXT=own gives every mail
+/// its own text as the store keeps it, without its quoted history, as the app does.
 ///
-/// It runs the mails as phase 0 did, with today pinned to 2026-10-18, the day the labels
-/// hold for: each mail in its labeled project, with that project's files indexed by
+/// Otherwise it runs the mails as phase 0 did, with today pinned to 2026-10-18, the day the
+/// labels hold for: each mail in its labeled project, with that project's files indexed by
 /// FolderIndex and found by ChunkSearch, its thread from the set's thread ids and Message-ID
 /// links, the project's other mail ranked by the words it shares with the mail, and the set
 /// owner as the user. The model runs through ProjectsModelQueue, as a request of the user. The set
@@ -47,8 +49,10 @@ struct ExplainEvaluationTests {
         let setProjects = try JSONDecoder().decode([SetProject].self, from: Data(contentsOf: root.appendingPathComponent("projects/projects.json")))
         let first = max(1, Int(environment["ORRA_PROJECTS_EXPLAIN_FIRST"] ?? "") ?? 1)
         let count = Int(environment["ORRA_PROJECTS_EXPLAIN_COUNT"] ?? "") ?? mails.count
-        let chosen = Array(mails.dropFirst(first - 1).prefix(count))
+        let picked = Set((environment["ORRA_PROJECTS_EXPLAIN_IDS"] ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+        let chosen = picked.isEmpty ? Array(mails.dropFirst(first - 1).prefix(count)) : mails.filter { picked.contains($0.id) }
         try #require(!chosen.isEmpty)
+        let ownText = environment["ORRA_PROJECTS_EXPLAIN_TEXT"] == "own"
 
         // The projects, with their files indexed in a folder of their own.
         let ids = Dictionary(uniqueKeysWithValues: setProjects.enumerated().map { index, project in
@@ -157,14 +161,16 @@ struct ExplainEvaluationTests {
         )
 
         // Written after each mail, so a run stopped early keeps what it explained.
-        let name = "explain-\(language.rawValue)-\(String(format: "%03d", first))-\(String(format: "%03d", first + chosen.count - 1))"
+        let part = picked.isEmpty ? "\(String(format: "%03d", first))-\(String(format: "%03d", first + chosen.count - 1))" : "picked"
+        let name = "explain-\(language.rawValue)-\(part)" + (ownText ? "-own" : "")
         let report = try Self.file(out.appendingPathComponent(name + ".md"))
         let rows = try Self.file(out.appendingPathComponent(name + ".jsonl"))
         defer {
             try? report.close()
             try? rows.close()
         }
-        try report.write(contentsOf: Data("# Explanations of the synthetic set\n\nLanguage \(language.rawValue), mails \(first) to \(first + chosen.count - 1), today 2026-10-18, chip \(SpeechCorpus.chip()). Indexing the 5 project folders took \(Self.seconds(indexTime)).\n".utf8))
+        let which = picked.isEmpty ? "mails \(first) to \(first + chosen.count - 1)" : "mails \(chosen.map(\.id).joined(separator: ", "))"
+        try report.write(contentsOf: Data("# Explanations of the synthetic set\n\nLanguage \(language.rawValue), \(which)\(ownText ? ", each with its own text only" : ""), today 2026-10-18, chip \(SpeechCorpus.chip()). Indexing the 5 project folders took \(Self.seconds(indexTime)).\n".utf8))
         var times: [Duration] = []
         var decisionsRight = 0
         var languagesRight = 0
@@ -172,7 +178,7 @@ struct ExplainEvaluationTests {
         var failure: (any Error)?
         do {
             for mail in chosen {
-                let email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, in: mails, byMessageID: byMessageID)
+                let email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, ownText: ownText, in: mails, byMessageID: byMessageID)
                 let started = ContinuousClock.now
                 let explanation = try await service.explain(email)
                 let time = started.duration(to: .now)
@@ -289,11 +295,12 @@ struct ExplainEvaluationTests {
     }
 
     /// The email as projects-mail-text gives it: its own text without the quoted history
-    /// when the message it answers is in its thread, as in phase 0.
-    private nonisolated static func email(_ mail: SetMail, project: UUID?, in mails: [SetMail], byMessageID: [String: SetMail]) -> ExplainService.Email {
+    /// when the message it answers is in its thread, as in phase 0, or always with
+    /// `ownText`, as the store keeps it for the app.
+    private nonisolated static func email(_ mail: SetMail, project: UUID?, ownText: Bool, in mails: [SetMail], byMessageID: [String: SetMail]) -> ExplainService.Email {
         let parentKnown = mail.in_reply_to.map { byMessageID[bare($0)] != nil } ?? false
         let split = QuotedHistory(splitting: mail.body)
-        let text = parentKnown && !split.quotedText.isEmpty ? split.ownText : mail.body
+        let text = ownText || (parentKnown && !split.quotedText.isEmpty) ? split.ownText : mail.body
         return ExplainService.Email(
             messageID: bare(mail.message_id),
             date: date(mail.date),
