@@ -325,7 +325,9 @@ struct FolderIndexTests {
     @Test func longHeadingsKeepTheIndexInProportion() async throws {
         try await withFixture { fixture in
             let body = String(repeating: "The studio prints the calendar. ", count: 200)
-            let longest = "# " + String(repeating: "plan ", count: 23) + "\n\n" + body
+            let heading = "# " + String(repeating: "plan ", count: 23) + "due"
+            #expect(heading.count == TextChunker.maximumHeadingCharacters)
+            let longest = heading + "\n\n" + body
             let tooLong = "# " + String(repeating: "word ", count: 2_000) + "\n\n" + body
             try fixture.write("longest.md", longest)
             try fixture.write("too-long.md", tooLong)
