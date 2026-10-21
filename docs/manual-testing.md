@@ -3246,7 +3246,10 @@ Welcome window above, then choose Hold for the talk key in the welcome window:
   records only while you hold the talk key."
 - [ ] Allow Microphone Access… shows the macOS prompt with "Orra uses the microphone when
   you start a dictation or a translation, or record a voice sample, and turns your voice
-  into text on this Mac." Check it in English, Chinese, Japanese and Spanish.
+  into text on this Mac." Check it in English, Chinese, Japanese and Spanish. English
+  shows this text only after the build setting INFOPLIST_KEY_NSMicrophoneUsageDescription
+  has it too. LocalizationTests.theEnglishMicrophonePromptMatchesTheCatalog marks the
+  old text as a known issue until then.
 - [ ] Settings > About reads "Orra goes online only to download the models you ask for,
   and to check for updates when you allow it."
 
