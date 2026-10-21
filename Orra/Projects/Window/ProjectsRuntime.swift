@@ -1159,7 +1159,9 @@ final class ProjectsRuntime {
             incomingText: check.incomingText,
             sourceTexts: check.sourceTexts,
             today: dependencies.now(),
-            timeZone: .current
+            timeZone: .current,
+            imitatingDomains: check.imitatingDomains,
+            asksForData: check.asksForData
         )
     }
 

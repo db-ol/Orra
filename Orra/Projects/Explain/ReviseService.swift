@@ -39,6 +39,9 @@ nonisolated struct ReviseService: Sendable {
         var sourceTexts: [String] = []
         var today: Date
         var timeZone: TimeZone
+        /// Also values of DraftCheckInput, as the first draft was checked with them.
+        var imitatingDomains: [String] = []
+        var asksForData = false
     }
 
     /// A new version of a draft.
@@ -146,7 +149,9 @@ nonisolated struct ReviseService: Sendable {
             own: context.own,
             incomingText: (given + [draft]).joined(separator: "\n\n"),
             sourceTexts: context.sourceTexts,
-            today: context.today
+            today: context.today,
+            imitatingDomains: context.imitatingDomains,
+            asksForData: context.asksForData
         ))
         try Task.checkCancellation()
         if let checked = check.draft {

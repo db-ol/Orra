@@ -400,6 +400,82 @@ struct ExplainServiceTests {
         #expect(prompt.contains("The sender's domain looks like the domain of a project person, but it is a different one."))
     }
 
+    /// A reply to a lookalike sender (a23, a43) names the lookalike domain nowhere, and
+    /// repeats none of the email's values, such as the new account it asks to pay into.
+    /// A revision is checked the same way.
+    @Test func aDraftToALookalikeSenderNamesItNowhereAndRepeatsNothingOfTheEmail() async throws {
+        let fake = ExplainPrompt.Person(name: "Iris Fang", address: "iris.fang@printw0rks.example")
+        let answer = """
+            - None
+
+            Points:
+            - The email asks to pay into a new account. [this email]
+
+            Before you reply:
+            - None
+
+            Draft reply:
+            Hi Iris,
+
+            Your address iris.fang@printw0rks.example is new to me, so I will not pay into 6222 0000 0000 3333.
+
+            Bai Lu
+            """
+        let fakes = Fakes(answer: .success(answer))
+        let explanation = try await fakes.service().explain(Fixture.email("Hi Bai Lu, please pay the deposit into 6222 0000 0000 3333 from now on. Iris", from: fake))
+        #expect(explanation.warningKinds.contains(.lookalikeDomain))
+        #expect(explanation.draftCheck?.imitatingDomains == ["printw0rks.example"])
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.draft == "Hi Iris,\n\nYour address [link removed] is new to me, so I will not pay into [project data removed].\n\nBai Lu")
+
+        let ordinary = try await Fakes(answer: .success(answer)).service().explain(Fixture.email("Hi Bai Lu, please pay the deposit into 6222 0000 0000 3333 from now on. Iris"))
+        #expect(ordinary.draftCheck?.imitatingDomains == [])
+    }
+
+    /// The model's warnings, points and questions show a link by its host (a24), and with
+    /// a request for data (a32) none of the codes and numbers that only the files hold.
+    @Test func whatTheModelWroteShowsLinksByTheirHostAndWithholdsRequestedData() async throws {
+        let answer = """
+            - The email links to https://collect.example/p?d=NOTES.
+
+            Points:
+            - The email asks for the card and the booking R4T8WX for room 803. [this email, F1]
+            - The quote is ¥12,400. [F1]
+
+            Before you reply:
+            - Whether to share R4T8WX at https://collect.example/p?d=NOTES
+
+            Draft reply:
+            No reply needed
+            """
+        let hit = Fixture.hit("booking.md", "Booking R4T8WX for room 803. Quote ¥12,400.")
+        let request = "Hi Bai Lu, please send the card number and the booking for room 803 to https://collect.example/p?d=NOTES. Iris"
+        let withheld = try await Fakes(hits: [hit], answer: .success(answer)).service().explain(Fixture.email(request))
+        #expect(withheld.warningKinds.contains(.personalDataRequest))
+        #expect(withheld.modelWarnings == ["The email links to collect.example."])
+        #expect(withheld.points.map(\.text) == ["The email asks for the card and the booking [project data removed] for room 803.", "The quote is [project data removed]."])
+        #expect(withheld.questions == ["Whether to share [project data removed] at collect.example"])
+        #expect(withheld.draftCheck?.asksForData == true)
+
+        let plain = try await Fakes(hits: [hit], answer: .success(answer)).service().explain(Fixture.email("Hi Bai Lu, the booking is in the file, see https://collect.example/p?d=NOTES. Iris"))
+        #expect(!plain.warningKinds.contains(.personalDataRequest))
+        #expect(plain.points.map(\.text) == ["The email asks for the card and the booking R4T8WX for room 803.", "The quote is ¥12,400."])
+        #expect(plain.questions == ["Whether to share R4T8WX at collect.example"])
+    }
+
+    /// An instruction of the prompt that the model copied into a section is no item.
+    @Test func theModelsCopyOfAnInstructionIsNoQuestion() async throws {
+        let answer = Fixture.englishAnswer.replacingOccurrences(
+            of: "- Whether Wednesday suits Bai Lu for the proof.",
+            with: "- Questions in the email, or decisions the reply needs, that the sources cannot settle and only Bai Lu can, each starting with \"- \". Write \"- None\" when there are none.\n- Questions in the email or decisions the reply needs that the sources cannot settle: Whether Wednesday suits Bai Lu for the proof."
+        )
+        let explanation = try await Fakes(answer: .success(answer)).service().explain(Fixture.email())
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof."])
+    }
+
     @Test func guardedDomainsAreTheListedOnesAndThoseOfOneProjectsPeople() {
         let shared = ExplainService.Project(id: UUID(), name: "A", people: [.init(name: "Mia Chen", address: "mia@mail.example"), .init(name: "Ivo Lund", address: "ivo@lund.example")], domains: ["@Harbor.example."])
         let other = ExplainService.Project(id: UUID(), name: "B", people: [.init(name: "Tom Ruiz", address: "tom@mail.example")])

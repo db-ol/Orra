@@ -9,6 +9,8 @@ import Foundation
 /// flagged, whether the model added it up or made it up. Chinese numerals count as digits
 /// wherever `NumberRules.writingNumbersAsDigits` writes them so, as in 五万八千六百元 and
 /// 十月十九日. The phase 0 prototype (numcheck.py) is the reference.
+///
+/// It also gives what the window may show of a text the model wrote, see `shown`.
 nonisolated enum OutputChecks {
     nonisolated struct Finding: Sendable, Equatable, Codable {
         nonisolated enum Kind: Sendable, Codable {
@@ -58,6 +60,153 @@ nonisolated enum OutputChecks {
             seen.append(finding)
         }
         return seen
+    }
+
+    // MARK: What the window shows
+
+    /// A text the model wrote, as the window may show it: a point, a question, one of the
+    /// model's own warnings, or what the draft check took out of a draft.
+    /// - Each link shows as its host only, such as collect.example. A link's path and
+    ///   query are where an email puts the data it wants carried out, as in EchoLeak, and
+    ///   the model may fill them in. The host still says where the link goes. A link
+    ///   without a host becomes `placeholders.link`.
+    /// - With `withholding`, codes and numbers that it does not hold become
+    ///   `placeholders.data`: booking, account and ID numbers, amounts and scores. The
+    ///   explanation passes what the recipients already have when the email asks for
+    ///   personal data, a credential or confidential project data, so the window never
+    ///   sets out the values such a request asks for, from the files or other mail. Hosts
+    ///   and mail addresses stay whole, so a lookalike such as pic-c0nf.example still shows.
+    static func shown(_ text: String, withholding: String? = nil, placeholders: Placeholders) -> String {
+        let original = SortingText.withoutFormatCharacters(text)
+        let folded = Folded(original)
+        var edits: [(Range<String.Index>, String)] = []
+        let links = linkRanges(in: original)
+        for link in links {
+            edits.append((link, host(of: String(original[link])) ?? placeholders.link))
+        }
+        if let withholding {
+            let known = withholding.precomposedStringWithCompatibilityMapping
+            let knownValues = Set(
+                numbers(in: known, skippingDatesAndCodes: false).map(\.value)
+                    + numbers(in: NumberRules.writingNumbersAsDigits(in: known), skippingDatesAndCodes: false).map(\.value)
+            )
+            let knownCodes = Set(codes(in: known).map { codeValue(known[$0]) })
+            var found: [Range<String.Index>] = []
+            for code in codes(in: folded.text) where !knownCodes.contains(codeValue(folded.text[code])) {
+                found.append(code)
+            }
+            for number in numbers(in: folded.text) where (number.isAmount || number.isScore) && !knownValues.contains(number.value) {
+                found.append(number.range)
+            }
+            let addresses = mailAddress.matches(in: folded.text, range: NSRange(folded.text.startIndex..., in: folded.text))
+                .compactMap { Range($0.range, in: folded.text).flatMap(folded.original) }
+            for range in ContentChecks.merged(found.compactMap(folded.original)) where !(links + addresses).contains(where: { $0.overlaps(range) }) {
+                edits.append((range, placeholders.data))
+            }
+        }
+        guard !edits.isEmpty else { return original }
+        var result = ""
+        var cursor = original.startIndex
+        for (range, replacement) in edits.sorted(by: { $0.0.lowerBound < $1.0.lowerBound }) where range.lowerBound >= cursor {
+            result += original[cursor..<range.lowerBound]
+            result += replacement
+            cursor = range.upperBound
+        }
+        result += original[cursor...]
+        return result
+    }
+
+    /// What stands in a text the window shows where `shown` took something out, in the
+    /// language of the text.
+    nonisolated struct Placeholders: Sendable, Equatable {
+        var link: String
+        var data: String
+
+        init(_ language: ProjectsLanguage) {
+            link = language == .zh ? "[已删去链接]" : "[link removed]"
+            data = language == .zh ? "[已删去项目资料]" : "[project data removed]"
+        }
+    }
+
+    /// The host a link goes to, lowercased, such as collect.example for
+    /// ![x](https://collect.example/p?d=…), or nil when it names none.
+    static func host(of link: String) -> String? {
+        let text = link.precomposedStringWithCompatibilityMapping
+        guard let match = hostPattern.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range, in: text) else { return nil }
+        return text[range].lowercased()
+    }
+
+    /// A mail address, as the model writes one.
+    private static let mailAddress = try! NSRegularExpression(pattern: #"[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24}"#)
+
+    /// A dotted host, after a scheme, a slash, an at sign or the start, and not a file name.
+    private static let hostPattern = try! NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}(?![A-Za-z0-9_-])"#
+    )
+
+    // MARK: Links
+
+    /// Where the text holds a link: what `ContentChecks.linkRanges(in:)` finds, and any
+    /// other dotted host, such as harbor-pay.zone, unless it ends in a file extension, as
+    /// plan_v3.pdf, build.js and setup.exe do. Read in compatibility form, so a host in
+    /// full width letters counts too.
+    static func linkRanges(in text: String) -> [Range<String.Index>] {
+        let folded = Folded(text)
+        var found = ContentChecks.linkRanges(in: folded.text)
+        for match in bareHost.matches(in: folded.text, range: NSRange(folded.text.startIndex..., in: folded.text)) {
+            guard let range = Range(match.range, in: folded.text), let last = Range(match.range(at: 1), in: folded.text),
+                  !fileExtensions.contains(folded.text[last].lowercased()) else { continue }
+            found.append(range)
+        }
+        return ContentChecks.merged(found.compactMap(folded.original))
+    }
+
+    private static let bareHost = try! NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9_@.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+([A-Za-z]{2,24})(?![A-Za-z0-9_@-])"#
+    )
+
+    /// The extensions of file names, which are no hosts. Programs are among them, so an
+    /// attachment named 报价单fdp.exe reads as a file.
+    private static let fileExtensions: Set<String> = [
+        "pdf", "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx", "key", "pages", "numbers", "txt", "rtf", "md", "csv",
+        "json", "xml", "html", "htm", "jpg", "jpeg", "png", "gif", "heic", "webp", "tif", "tiff", "bmp", "svg", "psd", "ai",
+        "eps", "indd", "sketch", "fig", "dwg", "dxf", "skp", "rvt", "zip", "rar", "gz", "tar", "mp3", "mp4", "m4a", "mov",
+        "wav", "avi", "ics", "vcf", "eml", "msg", "log", "js", "ts", "py", "swift", "cc", "cpp", "java", "app",
+        "exe", "msi", "bat", "cmd", "scr", "dmg", "pkg", "apk", "iso", "jar", "vbs", "lnk", "ps1",
+    ]
+
+    /// A text in compatibility form, so full width letters, digits and dots and the no
+    /// break space read as plain ones, with the way back to the text it came from. The
+    /// checks find links, codes, numbers and names here and remove them from the original,
+    /// which keeps the text's own full width punctuation.
+    nonisolated struct Folded {
+        let text: String
+        /// For each UTF-16 unit of `text`, the character of the original it came from.
+        private let origins: [Range<String.Index>]
+
+        init(_ original: String) {
+            var text = ""
+            var origins: [Range<String.Index>] = []
+            var index = original.startIndex
+            while index < original.endIndex {
+                let next = original.index(after: index)
+                let piece = String(original[index..<next]).precomposedStringWithCompatibilityMapping
+                text += piece
+                origins += repeatElement(index..<next, count: piece.utf16.count)
+                index = next
+            }
+            self.text = text
+            self.origins = origins
+        }
+
+        /// The range of the original that a range of `text` came from.
+        func original(_ range: Range<String.Index>) -> Range<String.Index>? {
+            let start = range.lowerBound.utf16Offset(in: text)
+            let end = range.upperBound.utf16Offset(in: text)
+            guard start < end, end <= origins.count else { return nil }
+            return origins[start].lowerBound..<origins[end - 1].upperBound
+        }
     }
 
     // MARK: Numbers

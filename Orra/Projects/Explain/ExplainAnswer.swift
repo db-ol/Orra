@@ -10,8 +10,10 @@ import Foundation
 /// stays in the draft. A point ends with its sources in brackets, such as [本邮件], [F2] or
 /// [M1, T1]. Sources that are not in the prompt's table are dropped and flagged, and so are
 /// missing and repeated sections. A repeated section's second copy is not read, but the
-/// heading written again right after itself, as after the prefill, is not a copy. The
-/// answer is data, and nothing here follows it: the window shows it as plain text only.
+/// heading written again right after itself, as after the prefill, is not a copy. An item
+/// copied from the prompt's own instructions is left out, and so is a lead in copied from
+/// them before a colon, see `Echo`. The answer is data, and nothing here follows it: the
+/// window shows it as plain text only.
 nonisolated struct ExplainAnswer: Sendable, Equatable {
     nonisolated enum Section: String, Sendable, CaseIterable, Codable {
         case warnings
@@ -53,9 +55,11 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     var problems: [Problem] = []
 
     /// Reads `answer`, which starts with the prompt's prefill. `sources` holds the ids of
-    /// the prompt's source table, such as 本邮件, F1 and M1.
-    init(_ answer: String, sources: some Collection<String>) {
+    /// the prompt's source table, such as 本邮件, F1 and M1, and `instructions` the
+    /// prompt's own instructions.
+    init(_ answer: String, sources: some Collection<String>, instructions: String = "") {
         let known = Set(sources)
+        let echo = Echo(instructions)
         var sections: [Section: [String]] = [:]
         var current: Section?
         let text = answer
@@ -91,9 +95,9 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         for section in Section.allCases where sections[section] == nil {
             problems.append(.missing(section))
         }
-        warnings = Self.items(sections[.warnings] ?? [])
-        questions = Self.items(sections[.questions] ?? [])
-        for item in Self.items(sections[.points] ?? []) {
+        warnings = Self.items(sections[.warnings] ?? []).compactMap(echo.withoutCopy)
+        questions = Self.items(sections[.questions] ?? []).compactMap(echo.withoutCopy)
+        for item in Self.items(sections[.points] ?? []).compactMap(echo.withoutCopy) {
             let (point, unknown) = Self.point(item, known: known)
             for id in unknown where !unknownSources.contains(id) {
                 unknownSources.append(id)
@@ -164,9 +168,83 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     private static let bulletPattern = try! NSRegularExpression(pattern: #"^(?:[-•*·・–]|\d{1,2}[.、)]|[（(]\d{1,2}[)）])\s*(.*)$"#)
 
     /// Whether an item says there is nothing: 无, None, N/A.
-    private static func isNothing(_ item: String) -> Bool {
+    static func isNothing(_ item: String) -> Bool {
         let word = item.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces)).lowercased()
         return ["无", "没有", "暂无", "none", "nothing", "n/a", "na"].contains(word)
+    }
+
+    // MARK: Echo
+
+    /// What a small model copies from the prompt's own instructions into a section, such
+    /// as "Questions in the email, or decisions the reply needs, that the sources cannot
+    /// settle …" as the first question. A run of `run` words of the instructions in a row
+    /// counts as copied. An item of at least `least` words that is mostly copied is no
+    /// item, and a lead in like that before a colon goes with the colon. Chinese counts by
+    /// character, so a Chinese item never matches the English instructions by chance.
+    nonisolated struct Echo: Sendable {
+        static let run = 5
+        static let least = 6
+        /// The share of an item's words in copied runs that makes it a copy.
+        static let share = 0.8
+
+        private let runs: Set<[String]>
+
+        init(_ instructions: String) {
+            let words = Self.words(instructions)
+            var runs: Set<[String]> = []
+            if words.count >= Self.run {
+                for start in 0...(words.count - Self.run) {
+                    runs.insert(Array(words[start..<(start + Self.run)]))
+                }
+            }
+            self.runs = runs
+        }
+
+        /// The item without what it copied, or nil when nothing of its own is left.
+        func withoutCopy(_ item: String) -> String? {
+            guard !runs.isEmpty else { return item }
+            if isCopied(item) {
+                return nil
+            }
+            if let colon = item.firstIndex(where: { $0 == ":" || $0 == "：" }), isCopied(String(item[..<colon])) {
+                let rest = item[item.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+                return rest.isEmpty || ExplainAnswer.isNothing(rest) ? nil : withoutCopy(rest)
+            }
+            return item
+        }
+
+        private func isCopied(_ text: String) -> Bool {
+            let words = Self.words(text)
+            guard words.count >= Self.least else { return false }
+            var copied = Array(repeating: false, count: words.count)
+            for start in 0...(words.count - Self.run) where runs.contains(Array(words[start..<(start + Self.run)])) {
+                for index in start..<(start + Self.run) {
+                    copied[index] = true
+                }
+            }
+            return Double(copied.filter { $0 }.count) >= Self.share * Double(words.count)
+        }
+
+        /// The words of a text, lowercased: runs of letters and digits, with each Chinese
+        /// character a word of its own.
+        static func words(_ text: String) -> [String] {
+            var words: [String] = []
+            var word = ""
+            for character in text.precomposedStringWithCompatibilityMapping.lowercased() {
+                if character.isHan {
+                    if !word.isEmpty { words.append(word) }
+                    word = ""
+                    words.append(String(character))
+                } else if character.isLetter || character.isNumber {
+                    word.append(character)
+                } else if !word.isEmpty {
+                    words.append(word)
+                    word = ""
+                }
+            }
+            if !word.isEmpty { words.append(word) }
+            return words
+        }
     }
 
     // MARK: Points

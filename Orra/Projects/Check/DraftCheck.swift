@@ -27,20 +27,63 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
     /// The questions the window lists for the user to decide.
     var questionsForUser: [String] = []
     var today: Date
+    /// The domains that imitate a domain the user knows: the sender's, when the sender
+    /// checks found it a lookalike. The draft names none of them, and repeats nothing from
+    /// the incoming mail that would count as project data.
+    var imitatingDomains: [String] = []
+    /// Whether the email asks for personal data, a credential or confidential project
+    /// data. What the window shows of the removals then holds no value the recipients do
+    /// not already have, see `OutputChecks.shown`.
+    var asksForData = false
+}
+
+nonisolated extension DraftCheckInput {
+    private enum CodingKeys: String, CodingKey {
+        case draft, language, recipients, projectPeople, own, incomingText, sourceTexts, questionsForUser, today
+        case imitatingDomains, asksForData
+    }
+
+    /// Reads the values, with no imitating domains and no data request in what an earlier
+    /// build saved.
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            draft: try values.decode(String.self, forKey: .draft),
+            language: try values.decode(ProjectsLanguage.self, forKey: .language),
+            recipients: try values.decode([Person].self, forKey: .recipients),
+            projectPeople: try values.decode([Person].self, forKey: .projectPeople),
+            own: try values.decode([Person].self, forKey: .own),
+            incomingText: try values.decode(String.self, forKey: .incomingText),
+            sourceTexts: try values.decode([String].self, forKey: .sourceTexts),
+            questionsForUser: try values.decode([String].self, forKey: .questionsForUser),
+            today: try values.decode(Date.self, forKey: .today),
+            imitatingDomains: try values.decodeIfPresent([String].self, forKey: .imitatingDomains) ?? [],
+            asksForData: try values.decodeIfPresent(Bool.self, forKey: .asksForData) ?? false
+        )
+    }
 }
 
 /// Checks a draft after the model and before the user sees it (code step 5 of the phase 0
 /// report).
 ///
 /// It removes, each with a placeholder in the reply's language:
-/// - links, Markdown and HTML image and link syntax, and web addresses
-/// - sentences that claim an action, such as "already forwarded", 已转发 or "I have moved
-///   or sent", since Orra sends, forwards and moves nothing
-/// - sentences that speak as an assistant or name Orra
+/// - links, Markdown and HTML image and link syntax, and web addresses, and any address,
+///   host or name of a domain that imitates one the user knows, as the sender checks found
+/// - sentences that claim an action, such as "already forwarded", 已转发, "I have moved or
+///   sent" or 我已通知, since Orra sends, forwards, moves and tells no one anything, and
+///   the model cannot know what the user did
+/// - sentences that speak as an assistant, name Orra, or talk about the checks: text that
+///   was removed or hidden, words to an assistant, an AI or a model, or commands to run.
+///   A person writing their own reply says none of these.
 /// - project data when the reply goes to someone outside the project's people: amounts in
 ///   digits or in Chinese words, scores, codes such as booking, ID and account numbers,
 ///   years that are not this year or the next or last, and the names and addresses of other
-///   people, unless the incoming mail already holds them
+///   people, unless the incoming mail already holds them. Mail from a domain that imitates
+///   a known one holds nothing a reply may repeat, so a refusal never quotes the account
+///   it was asked to pay into.
+///
+/// What it took out shows in the window as `OutputChecks.shown` gives it: a link as its
+/// host only, and with a data request no value the recipients do not already have.
 ///
 /// It reads full width letters and digits as plain ones, and names with any spaces in
 /// them. Names of the project's people are always caught, in Chinese and in pinyin. Other
@@ -96,7 +139,7 @@ nonisolated enum DraftCheck {
         let style: ProjectsLanguage = input.language == .zh ? .zh : .en
         var removals: [Removal] = []
 
-        let links = linkRanges(in: original)
+        let links = ContentChecks.merged(OutputChecks.linkRanges(in: original) + imitationRanges(in: original, domains: input.imitatingDomains))
         removals += links.map { Removal(kind: .link, text: String(original[$0])) }
         let language = ProjectsLanguage.reading(replacing(links.map { ($0, " ") }, in: original))
         var draft = replacing(links.map { ($0, placeholder(.link, style)) }, in: original)
@@ -105,7 +148,7 @@ nonisolated enum DraftCheck {
         for range in sentenceRanges(in: draft) {
             let form = SortingText.matchingForm(String(draft[range]))
             let kind: Removal.Kind
-            if ContentChecks.matches(assistantVoice, form) {
+            if speaksAsAssistant(String(draft[range]), form: form) {
                 kind = .assistantVoice
             } else if claimsAction(form) {
                 kind = .actionClaim
@@ -131,17 +174,21 @@ nonisolated enum DraftCheck {
             flags.append(.decidesQuestion(placeholders: placeholders, questions: input.questionsForUser.count))
         }
         let kept = input.language != .other && language == input.language
-        return Result(draft: kept ? draft : nil, language: language, removals: removals, flags: flags, outsideRecipients: outside)
+        let withholding = input.asksForData ? input.incomingText : nil
+        let shown = removals.map { removal in
+            Removal(kind: removal.kind, text: OutputChecks.shown(removal.text, withholding: withholding, placeholders: OutputChecks.Placeholders(style)))
+        }
+        return Result(draft: kept ? draft : nil, language: language, removals: shown, flags: flags, outsideRecipients: outside)
     }
 
     // MARK: Placeholders
 
     private static func placeholder(_ kind: Removal.Kind, _ language: ProjectsLanguage) -> String {
         switch kind {
-        case .link: language == .zh ? "[已删去链接]" : "[link removed]"
+        case .link: OutputChecks.Placeholders(language).link
         case .actionClaim: language == .zh ? "[已删去一句：声称已经办了某事]" : "[sentence removed: it claims an action]"
         case .assistantVoice: language == .zh ? "[已删去一句：以助手的口吻]" : "[sentence removed: it speaks as an assistant]"
-        case .projectData: language == .zh ? "[已删去项目资料]" : "[project data removed]"
+        case .projectData: OutputChecks.Placeholders(language).data
         }
     }
 
@@ -153,33 +200,31 @@ nonisolated enum DraftCheck {
         options: .caseInsensitive
     )
 
-    // MARK: Links
+    // MARK: Imitating domains
 
-    /// Where the draft holds a link: what `ContentChecks.linkRanges(in:)` finds, and any
-    /// other dotted host, such as harbor-pay.zone, unless it ends in a file extension, as
-    /// plan_v3.pdf and build.js do. Read in compatibility form, so a host in full width
-    /// letters counts too.
-    private static func linkRanges(in text: String) -> [Range<String.Index>] {
-        let folded = Folded(text)
-        var found = ContentChecks.linkRanges(in: folded.text)
-        for match in bareHost.matches(in: folded.text, range: NSRange(folded.text.startIndex..., in: folded.text)) {
-            guard let range = Range(match.range, in: folded.text), let last = Range(match.range(at: 1), in: folded.text),
-                  !fileExtensions.contains(folded.text[last].lowercased()) else { continue }
-            found.append(range)
+    /// Where the text names a domain that imitates a known one: an address there, the
+    /// domain or a subdomain of it, or its name without the top level label, such as
+    /// pic-c0nf for pic-c0nf.example. Mail programs make an address or a host into a link,
+    /// and the name alone still points the reader there. Read in compatibility form, so
+    /// full width letters count too.
+    private static func imitationRanges(in text: String, domains: [String]) -> [Range<String.Index>] {
+        let names = domains.map { $0.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "@."))).lowercased() }.filter { $0.contains(".") }
+        guard !names.isEmpty else { return [] }
+        let folded = OutputChecks.Folded(text)
+        let whole = NSRange(folded.text.startIndex..., in: folded.text)
+        var found: [Range<String.Index>] = []
+        for domain in Set(names) {
+            var patterns = [#"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9._%+-]+@)?(?:[A-Za-z0-9-]+\.)*"# + NSRegularExpression.escapedPattern(for: domain) + #"(?![A-Za-z0-9_-])"#]
+            if let dot = domain.lastIndex(of: "."), domain.distance(from: domain.startIndex, to: dot) >= 4 {
+                patterns.append(#"(?<![A-Za-z0-9_-])"# + NSRegularExpression.escapedPattern(for: String(domain[..<dot])) + #"(?![A-Za-z0-9_-])"#)
+            }
+            for pattern in patterns {
+                let expression = try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+                found += expression.matches(in: folded.text, range: whole).compactMap { Range($0.range, in: folded.text) }
+            }
         }
         return ContentChecks.merged(found.compactMap(folded.original))
     }
-
-    private static let bareHost = try! NSRegularExpression(
-        pattern: #"(?<![A-Za-z0-9_@.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+([A-Za-z]{2,24})(?![A-Za-z0-9_@-])"#
-    )
-
-    private static let fileExtensions: Set<String> = [
-        "pdf", "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx", "key", "pages", "numbers", "txt", "rtf", "md", "csv",
-        "json", "xml", "html", "htm", "jpg", "jpeg", "png", "gif", "heic", "webp", "tif", "tiff", "bmp", "svg", "psd", "ai",
-        "eps", "indd", "sketch", "fig", "dwg", "dxf", "skp", "rvt", "zip", "rar", "gz", "tar", "mp3", "mp4", "m4a", "mov",
-        "wav", "avi", "ics", "vcf", "eml", "msg", "log", "js", "ts", "py", "swift", "cc", "cpp", "java", "app",
-    ]
 
     // MARK: Sentences
 
@@ -229,8 +274,20 @@ nonisolated enum DraftCheck {
     private static let sentenceEnds: Set<Character> = ["。", "！", "？", "!", "?", "…"]
     private static let closers: Set<Character> = ["”", "’", "\"", "'", ")", "）", "」", "』", "]", "】"]
 
-    /// A sentence that speaks as an assistant, or names Orra. Not a job title, as in
-    /// 我是王总的助理, and not a draft of a contract, as in "here is the draft agreement".
+    /// Whether a sentence speaks as an assistant, names Orra, or talks about the checks:
+    /// the voice patterns read its matching form, and AI in capitals counts as a word of
+    /// its own, since ai in lower case is also a name in pinyin.
+    private static func speaksAsAssistant(_ sentence: String, form: String) -> Bool {
+        ContentChecks.matches(assistantVoice, form) || ContentChecks.matches([capitalAI], sentence.precomposedStringWithCompatibilityMapping)
+    }
+
+    private static let capitalAI = try! NSRegularExpression(pattern: #"(?<![A-Za-z])(?:AI|A\.I\.)(?![A-Za-z])"#)
+
+    /// A sentence that speaks as an assistant, names Orra, or talks about an assistant or
+    /// the checks: text removed or hidden, words to an assistant or a model, and commands
+    /// to run. Not a job title, as in 我是王总的助理, my assistant or an assistant manager,
+    /// and not a draft of a contract, as in "here is the draft agreement". The checks name
+    /// an assistant 助手 in Chinese, while a person's assistant is 助理.
     private static let assistantVoice = ContentChecks.patterns([
         #"(?<![a-z])orra(?![a-z])"#,
         #"\bas (?:an? )?(?:ai|a\.i\.|artificial intelligence|(?:ai |virtual |digital |email )?assistant|language model|chatbot|bot)\b"#,
@@ -244,12 +301,22 @@ nonisolated enum DraftCheck {
         #"ai ?(?:助手|助理)|语言模型"#,
         #"自动(?:生成|回复|撰写|起草)"#,
         #"(?:以下|下面)是[^。!?]{0,8}(?:回复|回信|邮件)的?草稿|(?:回复|回信|邮件)草稿如下|^(?:以下|下面)是(?:草稿|回复|回信):?$"#,
+        // An assistant as someone the email or the checks address, not a job title.
+        #"\b(?:an?|the|any) (?:ai |virtual |digital |email |automated )?assistants?\b(?! (?:professor|manager|director|editor|engineer|coach|principal|producer|curator|designer|architect|accountant|teacher|coordinator|planner|buyer|to the)\b)"#,
+        #"\bchatbots?\b|\blanguage models?\b|\bartificial intelligence\b"#,
+        // What the checks did: text removed or hidden, and commands to run.
+        #"\b(?:removed|hidden|stripped) (?:text|instructions?|content|words|passages?|commands?|comments?|characters|sections? (?:of|in|from) (?:your|the|this|my) (?:e-?mail|message|mail|note))\b"#,
+        #"\b(?:text|instructions?|content|words|passages?|commands?) (?:\w+ )?(?:was|were|has been|have been|had been) (?:removed|hidden|stripped|taken out|filtered out)\b"#,
+        #"\bexecute (?:the |any |such |these |those |your |this |that )?(?:commands?|instructions?|scripts?)\b|\bruns? (?:the |any |such |these |those |your |this |that )?commands?\b"#,
+        #"助手|人工智能|大模型"#,
+        #"隐藏(?:的)?(?:文字|内容|字符|信息|指令|段落)|(?:看不到|看不见|不可见)的(?:文字|内容|字符|信息)|写给(?:助手|模型|ai|机器人)"#,
+        #"执行(?:这些|这条|此|该|任何|您的|你的)?(?:命令|指令|脚本)"#,
     ])
 
     /// Whether a sentence, in its matching form, says that the writer forwarded, sent,
-    /// moved, deleted, filed, shared or paid something, or is doing so now. A question
-    /// claims nothing, and neither does a sentence about what the recipient or someone else
-    /// did.
+    /// moved, deleted, filed, shared or paid something, told someone or set something up,
+    /// or is doing so now. A question claims nothing, and neither does a sentence about
+    /// what the recipient or someone else did.
     private static func claimsAction(_ sentence: String) -> Bool {
         guard !sentence.hasSuffix("?") else { return false }
         if ContentChecks.matches(actionClaims, sentence) {
@@ -259,11 +326,19 @@ nonisolated enum DraftCheck {
     }
 
     /// Actions with the writer as the actor. The 已 forms skip the recipient or another
-    /// person as the actor, as in 您已发送的文件 and 如已支付. The 将 and 把 forms need 了 or
-    /// 过 at the end of a clause, so 发给您过目 and 发给您了解 are plans.
+    /// person as the actor, as in 您已发送的文件 and 如已支付, and a question, as in
+    /// 请确认第二期款是否已支付. The 将 and 把 forms need 了 or
+    /// 过 at the end of a clause, so 发给您过目 and 发给您了解 are plans. Telling someone or
+    /// setting something up counts in the first person or done for the reader, since
+    /// 王经理已通知我们 is what someone else did, and 已设置 alone may say a password is set.
     private static let actionClaims = ContentChecks.patterns([
-        #"(?<!您|你|贵司|贵方|对方|他|她|如|若|如果|若是)(?:已经|已)(?:为您|为你|帮您|帮你|替您|替你|给您|给你|向您|向你)?(?:转发|转交|转给|转到|发送|发出|发给|发过去|发到|寄出|寄给|寄到|删除|删掉|归档|移动|移到|移至|挪到|标记|抄送|付款|付清|转账|汇款|打款|支付|上传|分享|提交)"#,
-        #"(?<!您|你|贵司|贵方|对方|他|她|如|若|如果|若是)(?:已经|已)(?:将|把)[^。!?]{0,30}(?:转发|转交|转给|发送|发给|寄给|删除|归档|移到|移至|移动到|挪到|抄送|上传|分享)"#,
+        #"(?:我|我们|本人)(?:这边|这里)?(?:已经|已)(?:为您|为你|帮您|帮你|替您|替你|给您|给你|向您|向你)?(?:通知|告知|知会|转告|联系|联络|上报|报告|反馈给|设置|设定|更新)"#,
+        #"(?:已经|已)(?:为您|为你|帮您|帮你|替您|替你)(?:通知|告知|知会|转告|联系|联络|上报|报告|设置|设定|更新|回复)"#,
+        #"(?<!您|你|贵司|贵方|对方|他|她|如|若|如果|若是|是否|是不是|有没有)(?:已经|已)(?:设置|设定|更新|添加|建立|创建)(?:好)?(?:了)?(?:一条)?(?:自动)?(?:转发|过滤|规则)"#,
+        #"\b(?:i|we)(?:(?:'ve|’ve| have| had)(?: already| just| now| also)?| already| just) (?:set up|updated|notified|informed|told|alerted|contacted|reported|escalated|reached out to|let (?:\w+ ){1,3}know)\b"#,
+        #"\b(?:i|we)(?:'m|’m|'re|’re| am| are) (?:now )?(?:notifying|informing|alerting|contacting|reporting|escalating)\b"#,
+        #"(?<!您|你|贵司|贵方|对方|他|她|如|若|如果|若是|是否|是不是|有没有)(?:已经|已)(?:为您|为你|帮您|帮你|替您|替你|给您|给你|向您|向你)?(?:转发|转交|转给|转到|发送|发出|发给|发过去|发到|寄出|寄给|寄到|删除|删掉|归档|移动|移到|移至|挪到|标记|抄送|付款|付清|转账|汇款|打款|支付|上传|分享|提交)"#,
+        #"(?<!您|你|贵司|贵方|对方|他|她|如|若|如果|若是|是否|是不是|有没有)(?:已经|已)(?:将|把)[^。!?]{0,30}(?:转发|转交|转给|发送|发给|寄给|删除|归档|移到|移至|移动到|挪到|抄送|上传|分享)"#,
         #"(?<!请|麻烦|会|可以|能否|可否|要|需要|想)(?:将|把)[^。!?]{0,30}(?:转发|转交|转给|发送|发给|寄给|删除|归档|移到|移至|移动到|挪到|抄送|上传|分享)[^。!?,]{0,20}?(?:了|过)(?=$|[\s。!?,;:…]|吧|啊|哦)"#,
         #"\b(?:i|we)(?:(?:'ve|’ve| have| had)(?: already| just| now| also)?| already| just) (?:forwarded|sent|moved|deleted|archived|filed|shared|uploaded|paid|transferred|wired|cc'?d)\b"#,
         #"\b(?:i|we)(?:'m|’m|'re|’re| am| are) (?:now )?(?:forwarding|sending|moving|deleting|archiving|sharing|transferring)\b"#,
@@ -300,11 +375,11 @@ nonisolated enum DraftCheck {
     /// Where the draft holds project data that the incoming mail does not: amounts and
     /// scores, years other than this one and the next and last, codes, and the names and
     /// addresses of people other than the recipients and the user. Overlapping finds are
-    /// merged.
+    /// merged. Mail from a domain that imitates a known one counts as holding nothing.
     private static func projectData(in draft: String, input: DraftCheckInput) -> [Range<String.Index>] {
-        let folded = Folded(draft)
+        let folded = OutputChecks.Folded(draft)
         let text = folded.text
-        let incoming = input.incomingText.precomposedStringWithCompatibilityMapping
+        let incoming = input.imitatingDomains.isEmpty ? input.incomingText.precomposedStringWithCompatibilityMapping : ""
         let incomingValues = Set(
             OutputChecks.numbers(in: incoming, skippingDatesAndCodes: false).map(\.value)
                 + OutputChecks.numbers(in: NumberRules.writingNumbersAsDigits(in: incoming), skippingDatesAndCodes: false).map(\.value)
@@ -476,38 +551,5 @@ nonisolated enum DraftCheck {
         }
         result += text[cursor...]
         return result
-    }
-
-    /// A text in compatibility form, so full width letters, digits and dots and the no
-    /// break space read as plain ones, with the way back to the text it came from. The
-    /// checks find links, codes, numbers and names here and remove them from the original,
-    /// which keeps the draft's own full width punctuation.
-    nonisolated private struct Folded {
-        let text: String
-        /// For each UTF-16 unit of `text`, the character of the original it came from.
-        private let origins: [Range<String.Index>]
-
-        init(_ original: String) {
-            var text = ""
-            var origins: [Range<String.Index>] = []
-            var index = original.startIndex
-            while index < original.endIndex {
-                let next = original.index(after: index)
-                let piece = String(original[index..<next]).precomposedStringWithCompatibilityMapping
-                text += piece
-                origins += repeatElement(index..<next, count: piece.utf16.count)
-                index = next
-            }
-            self.text = text
-            self.origins = origins
-        }
-
-        /// The range of the original that a range of `text` came from.
-        func original(_ range: Range<String.Index>) -> Range<String.Index>? {
-            let start = range.lowerBound.utf16Offset(in: text)
-            let end = range.upperBound.utf16Offset(in: text)
-            guard start < end, end <= origins.count else { return nil }
-            return origins[start].lowerBound..<origins[end - 1].upperBound
-        }
     }
 }

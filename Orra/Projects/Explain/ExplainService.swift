@@ -83,6 +83,11 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
 ///   request of the user with at most `ExplainPrompt.maximumTokens` tokens.
 /// - reads the answer with ExplainAnswer, runs OutputChecks on every point and DraftCheck
 ///   on the draft, and saves the Explanation through a closure before it returns it.
+/// - shows the model's warnings, points and questions as `OutputChecks.shown` gives them:
+///   links by their host only, and when the email asks for personal data, a credential or
+///   confidential project data, none of the codes and numbers the recipients do not
+///   already have. A sender whose domain imitates a known one gets a draft that names
+///   that domain nowhere and repeats nothing from the email.
 ///
 /// The warnings found in code go into the prompt's checks by kind only. A project file
 /// with hidden runs gives a hidden_text warning, and so does an email in which VisibleText
@@ -416,6 +421,11 @@ final class ExplainService {
         return project.people.contains { ProjectsAddress.normalized($0.address) == address } || isAtDomain(address, project.domains)
     }
 
+    /// The domain of an address, lowercased, or nil when the address does not parse.
+    private nonisolated static func domain(of address: String) -> String? {
+        ProjectsAddress.normalized(address)?.split(separator: "@").last.map(String.init)
+    }
+
     private nonisolated static func isAtDomain(_ address: String, _ domains: [String]) -> Bool {
         guard let domain = address.split(separator: "@").last.map(String.init) else { return false }
         return domains.map(domainForm).contains { !$0.isEmpty && (domain == $0 || domain.hasSuffix("." + $0)) }
@@ -449,17 +459,28 @@ final class ExplainService {
         let gathered = prepared.gathered
         let email = gathered.email
         let prompt = prepared.prompt
-        let answer = ExplainAnswer(ExplainPrompt.prefill(prompt.language) + written, sources: prompt.sources.keys)
+        let answer = ExplainAnswer(ExplainPrompt.prefill(prompt.language) + written, sources: prompt.sources.keys, instructions: prompt.instructions)
         let texts = sourceTexts(prepared)
+
+        // What the window shows of the model's text: links by their host, and with a
+        // request for data none of the values the recipients do not already have.
+        let found = Set(prompt.checks.filter { $0.place == .email }.map(\.warning))
+        let asksForData = !found.isDisjoint(with: [.personalDataRequest, .credentialRequest, .confidentialDataRequest])
+        let imitating = found.contains(.lookalikeDomain) ? domain(of: email.sender.address).map { [$0] } ?? [] : []
+        let placeholders = OutputChecks.Placeholders(prompt.language)
+        func shown(_ text: String) -> String {
+            OutputChecks.shown(text, withholding: asksForData ? texts.incoming : nil, placeholders: placeholders)
+        }
 
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let allSources = [texts.incoming] + texts.other
         let points = answer.points.map { point in
-            Explanation.Point(
-                text: point.text,
+            let text = shown(point.text)
+            return Explanation.Point(
+                text: text,
                 sources: point.sources,
-                flags: OutputChecks.findings(in: point.text, sources: allSources, today: gathered.today, calendar: calendar)
+                flags: OutputChecks.findings(in: text, sources: allSources, today: gathered.today, calendar: calendar)
             )
         }
 
@@ -486,8 +507,10 @@ final class ExplainService {
                 own: own,
                 incomingText: texts.incoming,
                 sourceTexts: texts.other,
-                questionsForUser: answer.questions,
-                today: gathered.today
+                questionsForUser: answer.questions.map(shown),
+                today: gathered.today,
+                imitatingDomains: imitating,
+                asksForData: asksForData
             )
             draftCheck = input
             if case .reply(let text) = answer.draft {
@@ -506,9 +529,9 @@ final class ExplainService {
             today: gathered.today,
             reply: prepared.reply,
             warnings: prompt.checks,
-            modelWarnings: answer.warnings,
+            modelWarnings: answer.warnings.map(shown),
             points: points,
-            questions: answer.questions,
+            questions: answer.questions.map(shown),
             draft: draft,
             draftCheck: draftCheck,
             sources: prompt.sources,

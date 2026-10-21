@@ -196,6 +196,18 @@ struct ExplainPromptTests {
         #expect(!text.contains("Orra"))
     }
 
+    /// The instruction for the questions starts with a verb, so it does not read as a
+    /// question to copy, and the draft is written to a person. The instructions are the
+    /// system part of the prompt, which ExplainAnswer reads.
+    @Test(arguments: [ProjectsLanguage.zh, .en])
+    func theInstructionsReadAsInstructions(_ language: ProjectsLanguage) {
+        let result = prompt(input(language: language))
+        let headings = ExplainPrompt.Headings(language)
+        #expect(result.instructions.contains("\n\(headings.questions)\nList the questions in the email, or decisions the reply needs, that the sources cannot settle and only Bai Lu can"))
+        #expect(result.instructions.contains("Bai Lu writes it to a person: it never mentions the checks, text that was removed or hidden, an assistant, an AI, a model or commands, and never says that Bai Lu already sent, forwarded or paid anything, told anyone, or set anything up."))
+        #expect(result.text.hasPrefix("<|im_start|>system\n" + result.instructions + "<|im_end|>\n"))
+    }
+
     @Test func theChineseVariantUsesChineseHeadingsAndLabels() {
         let result = prompt(input(reply: .reply(.zh), language: .zh))
         let text = result.text
