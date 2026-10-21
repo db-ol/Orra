@@ -109,8 +109,23 @@ struct ProjectsSwitchTests {
         #expect(!makeSwitch().revisesAfterDictation)
     }
 
-    /// Debug and release builds share the preferences. A release build that hides Projects
-    /// never has it on, even after a Debug run saved it as on, and cannot turn it on.
+    /// Projects ships as a preview, so every build shows it, release builds too, and the
+    /// defaults of the switch and the sidebar follow (decision 12). It stays off until the
+    /// user turns it on.
+    @Test func everyBuildShowsProjectsAndKeepsItOffByDefault() {
+        defer { cleanUp() }
+        #expect(ProjectsAvailability.isVisible)
+        let projects = ProjectsSwitch(defaults: defaults, physicalMemory: Self.sixteenGB, storage: storage)
+        #expect(projects.isVisible)
+        #expect(projects.canTurnOn)
+        #expect(!projects.isOn)
+        #expect(SettingsTab.visible().contains(.projects))
+        #expect(SettingsTab.projects.isPreview)
+    }
+
+    /// Debug and release builds share the preferences. A build that hides Projects, as
+    /// release builds did before the preview, never has it on, even after a Debug run saved
+    /// it as on, and cannot turn it on.
     @Test func projectsIsNeverOnWhileTheBuildHidesIt() {
         defer { cleanUp() }
         defaults.set(true, forKey: ProjectsSwitch.key)

@@ -13,8 +13,8 @@ and 2 that the build or a suite did not run. Without `--baseline` it runs and pr
 numbers, which is how a baseline is made, and exits 1 only when the projects bar fails,
 since that bar needs no baseline. The results go to `--out`, by default
 `~/projects/orra-project/bench/gate-runs/<commit>-<date and time>`, never into the
-repository. Without `--only` it runs every suite but projects, which runs only when named,
-as in `--only projects`, until Projects shows in release builds.
+repository. Without `--only` it runs every suite, projects too since release builds show
+Projects, so the projects variables below must be set.
 
 ## Suites
 
