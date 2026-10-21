@@ -88,6 +88,10 @@ got worse than the baseline, see docs/release-gate.md.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
     window's parts to PNG files there, once per test language, which CI never does. The
     sidebar does not draw offscreen, so it is not in them.
+  - ProjectsSwitchTests checks since 2026-10-20 that every build shows Projects, release
+    builds too, with its page in the sidebar marked as a preview and the switch off until
+    the user turns it on, and that a build that hides Projects never has it on, whatever a
+    Debug run saved.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
@@ -3154,6 +3158,55 @@ or press the key to start and again to finish where they say hold:
   that it does not speak Japanese, and pastes the Japanese one with Also paste the
   translated text off.
 - [ ] The welcome window's translation line names the dictation language.
+
+Projects as a preview in release builds, added on 2026-10-20, not verified yet. Every build
+shows Projects since then. Check in a Release build (docs/development.md, A faster build for
+daily use), after Delete All Projects Data… and the cleanup steps of Projects in a Debug
+build in docs/development.md, so nothing of a Debug run carries over. Import a test mailbox
+into Mail (File > Import Mailboxes…) and tick only it under Mailboxes, so Projects reads no
+real mail. The checks of Mail access below hold for a release build too.
+
+- [ ] Settings shows Projects after Vocabulary with Preview under its name, and its page
+  shows Preview beside the switch, in English, Chinese, Japanese and Spanish. The switch is
+  off, and on a Mac with less than 16 GB the page says why it cannot turn on.
+- [ ] Start Reading Mail opens the Projects window. The test mail lands in projects, in
+  Needs a Project and in Set Aside, and the menu item shows the count of mail to reply to.
+- [ ] With no project made yet, suggested projects show under Needs a Project with the
+  number of emails each would take, once the model named them. A click opens New Project
+  filled in. Saving it sorts the mail again, and dismissing one removes it. Nothing is made
+  without a click.
+- [ ] A new project with a folder: its page shows how many files were read and skipped, why,
+  and the files with hidden text. Add a folder inside Documents, Desktop or Downloads and
+  note whether macOS asks for access to it.
+- [ ] Move two emails of one sender to a project. Orra offers a rule, and Add Rule files the
+  sender's next email there.
+- [ ] Explain an email: Warnings, What it says with source chips, Before you reply and the
+  draft. A file's chip shows the passage with its page inside Orra, an attachment's chip
+  its passage, and an earlier email's chip that email. Nothing opens outside Orra.
+  Explanation and Original Email switch, and the original shows To, Cc, the attachments,
+  each forwarded message under its own header and Quoted Text folded.
+- [ ] An email with a PDF or docx attachment lists it as read, and an explanation can cite
+  it. An attachment Mail has not downloaded keeps its name only and says so.
+- [ ] Tone, Show in Chinese or Show in English, the answer check, Change Draft and Undo
+  Change each make or show a version. With the cursor in the change box, the talk key's
+  words go into the box and the draft changes when you finish speaking. With Change the
+  draft when you finish speaking off, the words wait for Change Draft. The translation key
+  pastes into the draft as in any app.
+- [ ] Open Reply in Mail opens Mail's reply window and brings Mail to the front, and Command V
+  pastes the draft. Never click Send, and close the reply without saving it. Copy only
+  copies.
+- [ ] Dictate while the window explains an email. The window says Projects is paused, and
+  the dictation is pasted as fast as with the window closed.
+- [ ] Forget Project… and Delete All Projects Data… remove what they say, and Stored on this
+  Mac goes down. Turning Projects off asks Keep Data or Delete Data.
+- [ ] Report a Problem shows one Projects line with counts only.
+- [ ] Before the first release that shows Projects: Tools/release-gate/run.sh, which runs
+  the projects suite by default since then, passes the projects bar in both content
+  languages, and ProjectsLatencyMeasurementTests passes on a 16 GB Mac with Mail and a
+  browser open.
+- [ ] The README, the privacy page and the user guide in four languages say what the app
+  does. The site shows the Projects section with its Preview label in light and dark mode,
+  at 375 pixels and on a wide window, and its link opens the Projects part of the guide.
 
 Mail access for Projects, added on 2026-10-19, not verified yet. Projects reads mail in the
 Mail app through three Apple Events, see Orra/Projects/Mail/MailEvents.swift: get and count,
