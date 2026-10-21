@@ -507,7 +507,9 @@ final class ProjectsEmailModel {
     }
 
     /// Undo of the newest change: removes the newest version and puts back the text it was
-    /// made from. The talk key's words that came meanwhile then change the draft, see
+    /// made from. It stays busy until the versions, the highlight and the text are all in
+    /// place, so neither the editor nor another request works on the version it removes.
+    /// The talk key's words that came meanwhile then change the draft, see
     /// `takeDictation(_:revises:)`.
     func undo() async {
         guard let last = versions.last, !isBusy else { return }
@@ -516,17 +518,18 @@ final class ProjectsEmailModel {
         handoffNote = nil
         let removed = await actions.removeNewestVersion(messageID)
         let saved = await actions.versions(messageID)
+        let undone = removed && !saved.contains { $0.number == last.number }
+        if undone {
+            let before = madeFrom.removeValue(forKey: last.number)
+            await take(saved)
+            text = before ?? modelDraft ?? ""
+        } else {
+            await load()
+        }
         isUndoing = false
         let changesAgain = changesWhenFree
         changesWhenFree = false
-        guard removed, !saved.contains(where: { $0.number == last.number }) else {
-            await load()
-            return
-        }
-        let before = madeFrom.removeValue(forKey: last.number)
-        await take(saved)
-        text = before ?? modelDraft ?? ""
-        if changesAgain {
+        if undone, changesAgain {
             await applyInstruction()
         }
     }

@@ -51,6 +51,9 @@ actor Qwen3Engine {
     ///     vocabulary. ContextEvaluationTests measures what a vocabulary does.
     ///   - language: The language the model must write, or nil to let it choose.
     func transcribe(_ samples: [Float], context: String? = nil, language: SpeechLanguage? = nil) throws -> String {
+        // A call cancelled while it waited for the actor, such as a caption call at the
+        // press of the talk key, starts no pass that cannot be stopped, see EngineTurns.
+        try Task.checkCancellation()
         guard let model else { throw TranscriptionError.modelMissing }
         guard !samples.isEmpty else { throw TranscriptionError.noAudio }
         return run(model, on: samples, context: context, language: language)

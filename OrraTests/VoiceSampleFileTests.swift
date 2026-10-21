@@ -297,6 +297,30 @@ struct VoiceSampleFileTests {
         #expect(speech.voiceSeconds == 4)
     }
 
+    /// The switch turned on and off again in Settings while the sheet's sample is written
+    /// down ends where it started, and still wins over the sheet's checkbox.
+    @Test func aSwitchTurnedOnAndOffMeanwhileWinsOverTheCheckbox() async throws {
+        defer { cleanUp() }
+        let gate = AsyncStream<Void>.makeStream()
+        let speech = makeSpeech(remembers: false, transcribeVoice: { _ in
+            for await _ in gate.stream { break }
+            return "We met at noon."
+        })
+        let use = Task { await speech.useVoice(Self.fourSeconds, remember: true) }
+        for _ in 0..<400 where !speech.isListeningToVoice {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(speech.isListeningToVoice)
+        speech.setRemembersVoice(true)
+        speech.setRemembersVoice(false)
+        gate.continuation.yield()
+        #expect(await use.value == .used)
+        await speech.waitForVoiceFile()
+        #expect(!speech.remembersVoice)
+        #expect(!file.exists)
+        #expect(speech.voiceSeconds == 4)
+    }
+
     @Test func theFolderAndFileAreForTheUserAloneAndOutOfBackups() async throws {
         defer { cleanUp() }
         let speech = makeSpeech(remembers: true)
