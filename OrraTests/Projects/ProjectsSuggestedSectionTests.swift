@@ -30,7 +30,8 @@ struct ProjectsSuggestedSectionTests {
         message("k3@kiln.example", from: "kai@kiln.example", name: "Kai Moss", subject: "Kiln schedule", day: -4),
     ]
 
-    @Test func aSuggestionBecomesAProjectOnlyWithTheUsersClick() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func aSuggestionBecomesAProjectOnlyWithTheUsersClick() async throws {
         let fixture = try await Fixture()
         defer { fixture.cleanUp() }
         let runtime = fixture.runtime
@@ -65,25 +66,25 @@ struct ProjectsSuggestedSectionTests {
         #expect(project.people.map(\.address) == ["mei@harbor.example", "lu@harbor.example"])
         #expect(project.domains == ["harbor.example"])
 
-        // Created: sorting files its mail, and the suggestion goes.
+        // Created: sorting files its mail, and the suggestion goes. The test waits until it
+        // did, however long sorting takes on a busy test runner, and its time limit bounds
+        // the wait.
         try await runtime.add(project)
-        var waited = 0
-        while await runtime.list(.project(project.id)).count < 3, waited < 2_000 {
+        while await runtime.list(.project(project.id)).count < 3 {
             try await Task.sleep(for: .milliseconds(5))
-            waited += 1
         }
         #expect(Set(await runtime.list(.project(project.id)).map(\.messageID)) == ["h1@harbor.example", "h2@harbor.example", "h3@harbor.example"])
         await service.refresh()
         #expect(service.suggestions.map(\.name) == ["kiln.example"])
 
-        // Dismissed: it goes, also from a new window, and the project list keeps a hash only.
+        // Dismissed: it goes at once, also from a new window, and the project list keeps a
+        // hash only. The list has the dismissal before projects.json does, so the file is
+        // read once the dismissal is saved, however long a busy test runner takes for it.
         let kiln = try #require(service.suggestions.first)
-        ProjectsSuggestedSection.dismiss(kiln, from: service, runtime: runtime)
+        let saving = ProjectsSuggestedSection.dismiss(kiln, from: service, runtime: runtime)
         #expect(service.suggestions.isEmpty)
+        await saving.value
         let list = try #require(runtime.running?.list)
-        for _ in 0..<2_000 where list.dismissedSuggestions.isEmpty {
-            try await Task.sleep(for: .milliseconds(5))
-        }
         #expect(list.dismissedSuggestions == [ProjectSuggestions.dismissalKey(.domain("kiln.example"))])
         let again = runtime.suggestionService()
         await again.refresh()
