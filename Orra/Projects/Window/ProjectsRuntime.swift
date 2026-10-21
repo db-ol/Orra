@@ -543,6 +543,7 @@ final class ProjectsRuntime {
             save: { [weak self] messages in await self?.saveScanned(messages) },
             ownerOverride: dependencies.ownerOverride(),
             isOn: { [projects] in projects.isOn },
+            isDictating: dependencies.isDictating,
             now: dependencies.now,
             sleep: dependencies.sleep
         )
@@ -1518,8 +1519,9 @@ final class ProjectsRuntime {
             text: message.history?.ownText ?? "",
             visibleText: message.visible?.text ?? "",
             hiddenText: hidden,
-            attachments: message.attachments.map { MailStore.Attachment(name: $0.name, type: $0.mimeType) },
-            warnings: hidden.isEmpty ? [] : [.hiddenText]
+            attachments: message.attachments,
+            // Hidden text in the email or in an attachment shows before it is explained.
+            warnings: hidden.isEmpty && !message.attachments.contains { $0.hiddenRuns > 0 } ? [] : [.hiddenText]
         )
     }
 

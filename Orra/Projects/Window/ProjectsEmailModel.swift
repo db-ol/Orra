@@ -95,6 +95,8 @@ final class ProjectsEmailModel {
         case mail(messageID: String, sender: String?, date: Date?)
         /// The excerpt of a project file the model read.
         case file(TextChunker.Chunk)
+        /// An attachment of the email, with the excerpt of its text the model read.
+        case attachment(name: String, excerpt: String)
     }
 
     /// Why a change, a translation or the answer check gave nothing new.
@@ -369,6 +371,8 @@ final class ProjectsEmailModel {
                 sources[id] = .mail(messageID: messageID, sender: sender, date: email?.date)
             case .file(let chunk):
                 sources[id] = .file(chunk)
+            case .attachment(let name, let excerpt):
+                sources[id] = .attachment(name: name, excerpt: excerpt)
             }
         }
         self.sources = sources

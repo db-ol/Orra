@@ -36,12 +36,6 @@ nonisolated struct MailStore: Sendable {
         var address: String
     }
 
-    /// An attachment's name and MIME type. Phase 1 reads no attachment text (decision 14).
-    nonisolated struct Attachment: Sendable, Equatable, Codable {
-        var name: String
-        var type: String
-    }
-
     /// One email as the scan read it, through MIMEMessage, VisibleText and QuotedHistory.
     nonisolated struct Message: Sendable, Equatable {
         /// The Message-ID, without angle brackets.
@@ -66,7 +60,9 @@ nonisolated struct MailStore: Sendable {
         var visibleText: String
         /// The kinds of text the email hides from its reader, as VisibleText found them.
         var hiddenText: [ProjectsHiddenText] = []
-        var attachments: [Attachment] = []
+        /// The attachments with the text of those the scan read, which is kept apart from
+        /// their names, types and states, for Retention.
+        var attachments: [MailAttachment] = []
         /// What the user sees about the email before it is explained. An explanation adds
         /// its own warnings.
         var warnings: [ProjectsWarning] = []
@@ -103,6 +99,8 @@ nonisolated struct MailStore: Sendable {
         /// first sentence of the email's own text until it is explained. Empty once
         /// Retention removed both.
         var summary: String
+        /// The attachments with their states, without their text.
+        var attachments: [MailAttachment] = []
     }
 
     /// A version of a draft, from the user's instruction or a tone. The explanation holds
@@ -129,6 +127,8 @@ nonisolated struct MailStore: Sendable {
     /// - mail_tallies: the moves of one kind to a project, see SortingService.Tally.
     /// - mail_gone: the hash of each Message-ID that Forget Project or Retention removed,
     ///   until the scan can no longer reach it, see `goneKey(_:)` and `Retention.goneIDs`.
+    ///
+    /// `attachmentTextMigration` adds the text of the attachments, the third step.
     static let migration = ProjectsDatabase.Migration(version: 2, sql: """
         CREATE TABLE mail_projects (
             id TEXT PRIMARY KEY
@@ -201,6 +201,14 @@ nonisolated struct MailStore: Sendable {
             id_hash TEXT PRIMARY KEY,
             until REAL NOT NULL
         ) WITHOUT ROWID;
+        """)
+
+    /// The third step of ProjectsDatabase.migrations: the text of each email's attachments,
+    /// as a JSON array with the text of each attachment of the `attachments` column in its
+    /// place, or null where none was read. Retention removes it with the email's text. Mail
+    /// saved before keeps its attachments' names only.
+    static let attachmentTextMigration = ProjectsDatabase.Migration(version: 3, sql: """
+        ALTER TABLE mail_messages ADD COLUMN attachment_text TEXT;
         """)
 
     /// The most messages of a subject looked at to join a reply to its thread by subject.
@@ -550,8 +558,16 @@ nonisolated struct MailStore: Sendable {
     /// Its own text is split again from its visible text, see `splitAgain(_:)`, so an email
     /// saved before QuotedHistory knew a kind of forward is explained with that forward.
     func explainEmail(_ messageID: String) async throws -> ExplainService.Email? {
-        let email = try await database.transaction { database in
-            try Self.rows(where: "message_id = ?", [.text(messageID)], in: database).first?.explainEmail
+        let email = try await database.transaction { database -> ExplainService.Email? in
+            guard var email = try Self.rows(where: "message_id = ?", [.text(messageID)], in: database).first?.explainEmail else { return nil }
+            // The text of the attachments, until Retention removes it.
+            if let value = try database.run("SELECT attachment_text FROM mail_messages WHERE message_id = ?", [.text(messageID)]).first?.first,
+               let texts = Self.decoded([String?].self, value), texts.count == email.attachments.count {
+                for index in texts.indices {
+                    email.attachments[index].text = texts[index]
+                }
+            }
+            return email
         }
         guard let email else { return nil }
         return await Self.splitAgain(email)
@@ -863,7 +879,7 @@ nonisolated struct MailStore: Sendable {
         var inReplyTo: [String]
         var references: [String]
         var list: ListMail
-        var attachments: [Attachment]
+        var attachments: [MailAttachment]
         var hiddenText: [ProjectsHiddenText]
         var warnings: [ProjectsWarning]
         var project: UUID?
@@ -894,7 +910,7 @@ nonisolated struct MailStore: Sendable {
             ExplainService.Email(
                 messageID: messageID, date: date, sender: MailStore.promptPerson(sender),
                 replyTo: replyTo.map(MailStore.promptPerson), to: to.map(MailStore.promptPerson), cc: cc.map(MailStore.promptPerson),
-                subject: subject, attachments: attachments.map { ContentChecks.Input.Attachment(name: $0.name, type: $0.type) },
+                subject: subject, attachments: attachments,
                 text: text ?? "", visibleText: visibleText ?? "", hiddenText: hiddenText, list: list, project: project)
         }
 
@@ -911,7 +927,8 @@ nonisolated struct MailStore: Sendable {
                 messageID: messageID, date: date, sender: sender, subject: subject, project: project,
                 level: level, reasons: reasons, movedByUser: movedByUser, reply: reply, warnings: warnings,
                 isExplained: isExplained, hasText: text != nil,
-                summary: point.isEmpty ? MailStore.firstSentence(text ?? "") : String(point.prefix(MailStore.summaryLength)))
+                summary: point.isEmpty ? MailStore.firstSentence(text ?? "") : String(point.prefix(MailStore.summaryLength)),
+                attachments: attachments)
         }
     }
 
@@ -963,7 +980,7 @@ nonisolated struct MailStore: Sendable {
             inReplyTo: decoded([String].self, values[7]) ?? [],
             references: decoded([String].self, values[8]) ?? [],
             list: ListMail(listID: values[9].text, listUnsubscribe: values[10].text, precedence: values[11].text),
-            attachments: decoded([Attachment].self, values[12]) ?? [],
+            attachments: decoded([MailAttachment].self, values[12]) ?? [],
             hiddenText: (decoded([String].self, values[13]) ?? []).compactMap(ProjectsHiddenText.init(rawValue:)),
             warnings: (decoded([String].self, values[14]) ?? []).compactMap(ProjectsWarning.init(rawValue:)),
             project: values[15].text.flatMap(UUID.init(uuidString:)),
@@ -983,8 +1000,8 @@ nonisolated struct MailStore: Sendable {
             INSERT INTO mail_messages (
                 message_id, mailbox, date, saved, sender_name, sender, sender_key, subject, subject_key, thread_root,
                 in_reply_to, refs, list_id, list_unsubscribe, precedence, attachments, hidden_text, warnings,
-                text, visible_text, words)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+                text, visible_text, words, attachment_text)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
             RETURNING id
             """, [
                 .text(message.messageID),
@@ -1008,6 +1025,7 @@ nonisolated struct MailStore: Sendable {
                 .text(message.text),
                 .text(message.visibleText),
                 .text(words),
+                message.attachments.contains { $0.text != nil } ? .text(try json(message.attachments.map(\.text))) : .null,
             ]).first?.first?.integer else { return }
         let people: [(role: String, people: [Person])] = [
             ("from", [message.sender]), ("to", message.to), ("cc", message.cc), ("replyTo", message.replyTo),

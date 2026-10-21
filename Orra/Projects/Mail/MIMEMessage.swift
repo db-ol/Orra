@@ -14,8 +14,10 @@ import Foundation
 /// - Quoted printable, base64 and the charsets of `MailHeaders.text(_:charset:)` are
 ///   decoded, and format=flowed text is joined back into its lines.
 /// - A text part named as an attachment, every other type and attached emails
-///   (message/rfc822) are attachments, listed by name and type and never decoded. Signatures
-///   of signed mail are not listed.
+///   (message/rfc822) are attachments, listed by name and type. Signatures of signed mail
+///   are not listed. An attachment's content is decoded only when the limits ask for it,
+///   by its name's extension or its type, and only up to `Limits.attachmentBytes`, see
+///   `Attachment.content`.
 /// - Parsing never fails. Broken structure reads as far as it can, and the limits cap the
 ///   size, the parts, the depth, the text and the steps, so a hostile message costs a
 ///   bounded amount of work. One step is one line looked at, one byte decoded or one byte
@@ -38,12 +40,33 @@ nonisolated struct MIMEMessage: Sendable, Equatable {
     }
 
     nonisolated struct Attachment: Sendable, Equatable {
+        /// What the part holds, when the limits asked for it.
+        nonisolated enum Content: Sendable, Equatable {
+            /// The decoded bytes.
+            case data(Data)
+            /// The part holds nothing, as a part Mail has not downloaded may (unverified).
+            /// Its size is then the one X-Apple-Content-Length gives, if any.
+            case notDownloaded
+            /// Over `Limits.attachmentBytes`, so it was not decoded.
+            case tooLarge
+        }
+
         /// The file name from Content-Disposition or Content-Type, decoded, or nil.
         var name: String?
         /// The MIME type in lowercase, such as application/pdf.
         var mimeType: String
         /// Whether the part asks to show inline, as an image in the text does.
         var isInline: Bool
+        /// Its size in bytes once decoded, counted without decoding it. Nil unless
+        /// `Limits.attachmentBytes` is above zero.
+        var size: Int? = nil
+        /// What it holds: the bytes of a part the limits name, or why they are not given.
+        /// A part that holds nothing says so whatever its type. Nil for every other part, and
+        /// for every part while `Limits.attachmentBytes` is zero.
+        var content: Content? = nil
+        /// The charset its Content-Type names, as written, which says how to read the bytes
+        /// of a text file. Nil without one, and while `Limits.attachmentBytes` is zero.
+        var charset: String? = nil
     }
 
     nonisolated struct Limits: Sendable, Equatable {
@@ -59,6 +82,14 @@ nonisolated struct MIMEMessage: Sendable, Equatable {
         var maximumHeaderBytes = 256 << 10
         /// Parsing stops after this many steps.
         var maximumSteps = 64 << 20
+        /// The content of an attachment is decoded up to this many bytes, and only for the
+        /// extensions and types below. Zero decodes none and counts no sizes.
+        var attachmentBytes = 0
+        /// The file name extensions, in lowercase, whose attachments are decoded.
+        var attachmentExtensions: Set<String> = []
+        /// The MIME types, in lowercase, whose attachments are decoded when their name has
+        /// none of the extensions above or no extension at all.
+        var attachmentTypes: Set<String> = []
     }
 
     var headers: MailHeaders
@@ -121,6 +152,20 @@ nonisolated struct MIMEMessage: Sendable, Equatable {
 }
 
 nonisolated extension MIMEMessage {
+    /// The extension of a file name in lowercase, such as pdf, or empty.
+    static func fileExtension(of name: String?) -> String {
+        name.map { ($0 as NSString).pathExtension.lowercased() } ?? ""
+    }
+
+    /// Whether a file name extension names a format of its own, so the MIME type of the part
+    /// does not decide it: letters and digits, at most 8 of them, with a letter. The 0 of
+    /// "Report v2.0" names none.
+    static func namesAFormat(_ fileExtension: String) -> Bool {
+        !fileExtension.isEmpty && fileExtension.count <= 8
+            && fileExtension.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+            && fileExtension.contains(where: \.isLetter)
+    }
+
     /// How the bytes of the source were made.
     private enum SourceForm {
         /// The raw bytes.
@@ -421,12 +466,95 @@ nonisolated extension MIMEMessage {
             default:
                 break
             }
-            attachments.append(Attachment(
+            var attachment = Attachment(
                 name: name.map(MailHeaders.oneLine).flatMap { $0.isEmpty ? nil : $0 },
                 mimeType: mimeType,
-                isInline: disposition?.value == "inline"))
+                isInline: disposition?.value == "inline")
+            if limits.attachmentBytes > 0 {
+                attachment.charset = type.parameters["charset"]
+                content(of: &attachment, body: body, transfer: transfer, headers: entity.headers)
+            }
+            attachments.append(attachment)
             return entity
         }
+
+        /// Counts the size of an attachment, and decodes its content when the limits name
+        /// its extension or type and it fits `Limits.attachmentBytes`.
+        mutating func content(of attachment: inout Attachment, body: Range<Int>, transfer: String, headers: MailHeaders) {
+            guard step(body.count) else { return }
+            let size = Self.decodedSize(bytes[body], transfer: transfer)
+            attachment.size = size
+            if size == 0, bytes[body].allSatisfy({ $0 == 0x20 || $0 == 0x09 || $0 == 0x0D || $0 == 0x0A }) {
+                // Mail writes the length of a part it left out of a partial message in this
+                // header (unverified for the source it gives).
+                if let length = headers["X-Apple-Content-Length"].flatMap({ Int($0.trimmingCharacters(in: .whitespaces)) }), length > 0 {
+                    attachment.size = length
+                }
+                attachment.content = .notDownloaded
+                return
+            }
+            let fileExtension = MIMEMessage.fileExtension(of: attachment.name)
+            let named = limits.attachmentExtensions.contains(fileExtension)
+                || (limits.attachmentTypes.contains(attachment.mimeType) && !MIMEMessage.namesAFormat(fileExtension))
+            guard named else { return }
+            guard size <= limits.attachmentBytes else {
+                attachment.content = .tooLarge
+                return
+            }
+            guard step(body.count) else { return }
+            let decoded: [UInt8] = switch transfer {
+            case "base64": MailHeaders.base64(bytes[body])
+            case "quoted-printable": MailHeaders.quotedPrintable(bytes[body])
+            default: Array(bytes[body])
+            }
+            guard decoded.count <= limits.attachmentBytes else {
+                attachment.content = .tooLarge
+                return
+            }
+            attachment.size = decoded.count
+            attachment.content = .data(Data(decoded))
+        }
+
+        /// The bytes a part gives once decoded, counted without decoding: the characters of
+        /// the alphabet up to the first = for base64, the bytes less the escapes and soft line
+        /// breaks for quoted printable, else the bytes.
+        static func decodedSize(_ encoded: ArraySlice<UInt8>, transfer: String) -> Int {
+            switch transfer {
+            case "base64":
+                var characters = 0
+                for byte in encoded {
+                    switch byte {
+                    case 0x41...0x5A, 0x61...0x7A, 0x30...0x39, 0x2B, 0x2D, 0x2F, 0x5F: characters += 1
+                    case 0x3D: return characters * 3 / 4
+                    default: continue
+                    }
+                }
+                return characters * 3 / 4
+            case "quoted-printable":
+                // =XX is one byte, and = before the end of a line joins the lines.
+                var size = 0
+                var index = encoded.startIndex
+                while index < encoded.endIndex {
+                    guard encoded[index] == 0x3D else {
+                        size += 1
+                        index += 1
+                        continue
+                    }
+                    if index + 1 < encoded.endIndex, encoded[index + 1] == 0x0A {
+                        index += 2
+                    } else if index + 2 < encoded.endIndex, encoded[index + 1] == 0x0D, encoded[index + 2] == 0x0A {
+                        index += 3
+                    } else {
+                        size += 1
+                        index += 3
+                    }
+                }
+                return size
+            default:
+                return encoded.count
+            }
+        }
+
 
         /// The parts of a multipart body and the bodies they give.
         mutating func multipart(_ body: Range<Int>, subtype: String, boundary: String, depth: Int) -> [Body] {

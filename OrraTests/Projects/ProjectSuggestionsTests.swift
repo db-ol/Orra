@@ -349,7 +349,7 @@ struct ProjectSuggestionsTests {
                 to: [MailStore.Person(name: "Me", address: Self.me)], cc: [MailStore.Person(name: "Lu", address: "lu@harbor.example")],
                 subject: "Lobby", inReplyTo: parent.map { [$0] } ?? [], references: parent.map { [$0] } ?? [],
                 list: ListMail(listID: "<list.harbor.example>"), text: text, visibleText: text,
-                attachments: [MailStore.Attachment(name: "plan.pdf", type: "application/pdf")])
+                attachments: [MailAttachment(name: "plan.pdf", type: "application/pdf", state: .notRead)])
         }
         try await store.save([
             message("a@x.example", day: 1),
