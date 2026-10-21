@@ -546,10 +546,28 @@ nonisolated struct MailStore: Sendable {
 
     /// An email as the explanation reads it, or nil when the store does not hold it. Its
     /// text is empty once Retention removed it.
+    ///
+    /// Its own text is split again from its visible text, see `splitAgain(_:)`, so an email
+    /// saved before QuotedHistory knew a kind of forward is explained with that forward.
     func explainEmail(_ messageID: String) async throws -> ExplainService.Email? {
-        try await database.transaction { database in
+        let email = try await database.transaction { database in
             try Self.rows(where: "message_id = ?", [.text(messageID)], in: database).first?.explainEmail
         }
+        guard let email else { return nil }
+        return await Self.splitAgain(email)
+    }
+
+    /// The email with the own text that QuotedHistory finds in its visible text now. The
+    /// store keeps the own text as the scan split it when it saved the email, and splitting
+    /// the same visible text again gives the same own text unless QuotedHistory changed
+    /// since. An email whose visible text is gone keeps its text. Off the main actor and the
+    /// database's, since the split reads the whole text.
+    @concurrent
+    private static func splitAgain(_ email: ExplainService.Email) async -> ExplainService.Email {
+        guard !email.visibleText.allSatisfy(\.isWhitespace) else { return email }
+        var email = email
+        email.text = QuotedHistory(splitting: email.visibleText, subject: email.subject).ownText
+        return email
     }
 
     /// The other messages of the email's thread with their own text, oldest first, at most
