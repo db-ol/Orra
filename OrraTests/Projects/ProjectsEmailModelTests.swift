@@ -645,8 +645,10 @@ struct ProjectsEmailModelTests {
 
     /// The undo of the newer of two versions stays busy while it works out the highlight of
     /// the older one, which is then the newest. Another undo, a change and the editor wait,
-    /// and words said meanwhile change the draft it put back once it is done.
-    @Test func theUndoOfOneOfTwoVersionsWaitsForItsHighlight() async throws {
+    /// and words said meanwhile change the draft it put back once it is done. A change that
+    /// did not wait would wait for the held highlight, so the time limit ends the test.
+    @Test(.timeLimit(.minutes(1)))
+    func theUndoOfOneOfTwoVersionsWaitsForItsHighlight() async throws {
         let model = model()
         await model.load()
         let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
