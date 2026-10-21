@@ -94,6 +94,8 @@ final class FakeSpeechOutput: SpeechOutput {
 struct SpeechPlayerTests {
     static let speakers = AudioOutput(id: 1, uid: "BuiltInSpeakerDevice", name: "MacBook Pro Speakers")
     static let piece = SpokenAudio(samples: [Float](repeating: 0, count: 2_400), sampleRate: 24_000)
+    /// The same samples at one a second, which SpeechPlayer counts as 40 minutes of audio.
+    static let fortyMinutes = SpokenAudio(samples: [Float](repeating: 0, count: 2_400), sampleRate: 1)
 
     /// A device that is slow to open leaves the main actor free, where the keyboard tap runs.
     /// No call to the device runs on the main thread.
@@ -178,19 +180,20 @@ struct SpeechPlayerTests {
 
     /// A device that goes away while it plays stops the speech, so finish does not wait for
     /// pieces that never report.
-    @Test func aDeviceThatGoesAwayStopsTheSpeech() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func aDeviceThatGoesAwayStopsTheSpeech() async throws {
         let output = FakeSpeechOutput()
         let player = SpeechPlayer(output: output)
         try await player.start(on: Self.speakers)
-        player.play(Self.piece)
+        // The watchdog of finish waits the queued seconds plus three, here 40 minutes, so
+        // only the device going away ends the wait within the time limit, however busy the
+        // test runner is.
+        player.play(Self.fortyMinutes)
         try await waitUntil { output.calls.last == "schedule 2400" }
-        let began = ContinuousClock.now
         let finishing = Task { await player.finish() }
         try await Task.sleep(for: .milliseconds(20))
         output.deviceGoesAway()
         await finishing.value
-        // Well before the watchdog of finish, which waits the queued seconds plus three.
-        #expect(began.duration(to: .now) < .seconds(2))
         try await waitUntil { output.calls.last == "stop" }
         #expect(output.calls == ["start MacBook Pro Speakers", "started", "schedule 2400", "stop"])
     }
