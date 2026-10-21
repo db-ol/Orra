@@ -301,6 +301,43 @@ struct ExplainServiceTests {
         #expect(texts.other.contains(Fixture.project.description))
     }
 
+    /// The prompt shows the people of the other mail's headers, so a draft to someone
+    /// outside the project gives none of their addresses away. The user is not among them.
+    @Test func theDraftCheckProtectsThePeopleOfTheOtherMailsHeaders() async {
+        let other = ExplainPrompt.Mail(messageID: "board@lumenhaus.example", date: Fixture.date("2026-10-11T09:00:00+08:00"), sender: .init(name: "Bai Lu", address: Fixture.own), to: [.init(address: "ken.ito@movers.example")], cc: [.init(name: "Deng Kexin", address: "deng.kexin@client.example")], subject: "Budget", text: "The budget is set.")
+        var email = Fixture.email()
+        email.cc = [Fixture.rufus]
+        let gathered = ExplainService.Gathered(email: email, known: Fixture.known, project: Fixture.project, thread: [], today: Fixture.today, projectMail: [other])
+        let prepared = await ExplainService.prepare(gathered, language: .en, timeZone: Fixture.shanghai) { $0.count / 3 }
+        let texts = ExplainService.sourceTexts(prepared)
+        #expect(texts.other.contains("ken.ito@movers.example\nDeng Kexin <deng.kexin@client.example>"))
+        #expect(!texts.other.contains { $0.contains(Fixture.own) })
+
+        let answer = """
+            - None
+
+            Points:
+            - The second proof is ready. [this email]
+
+            Before you reply:
+            - None
+
+            Draft reply:
+            Hi Iris,
+
+            Thanks for the proof. For the budget, write to deng.kexin@client.example.
+
+            Bai Lu
+            """
+        let explanation = await ExplainService.finish(prepared, written: answer, timeZone: Fixture.shanghai)
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.outsideRecipients == ["rufus.hale@northbrook.example"])
+        #expect(result.draft?.contains("Thanks for the proof. For the budget, write to [project data removed].") == true)
+    }
+
     @Test func anEarlierMessageCountsAsKnownOnlyWhenEveryoneOutsideTheProjectWasOnIt() async throws {
         // Bai Lu told Iris the deposit. Iris now writes with Rufus, who is outside the
         // project, on Cc, and does not quote it.

@@ -550,10 +550,11 @@ final class ExplainService {
     /// recipients of a reply already have: the email with its quoted history, and the
     /// earlier messages of its thread that every recipient outside the project was on.
     /// `other` is the rest of what the model read: the project's description, the excerpts
-    /// of its files and the other mail in the prompt.
+    /// of its files and the other mail in the prompt, with the people of its headers.
     nonisolated static func sourceTexts(_ prepared: Prepared) -> (incoming: String, other: [String]) {
         let gathered = prepared.gathered
         let email = gathered.email
+        let own = Set(gathered.known.ownAddresses.compactMap(ProjectsAddress.normalized))
         // DraftCheck lets project data go to the project's people anyway, so only the
         // recipients outside the project decide what a reply may repeat. Without a project
         // every recipient is outside. One whose address does not parse was on no earlier
@@ -585,12 +586,25 @@ final class ExplainService {
                     incoming.append(mail.text)
                 } else {
                     other.append(mail.text)
+                    let header = headerPeople(of: mail, own: own)
+                    if !header.isEmpty { other.append(header) }
                 }
             case nil:
                 continue
             }
         }
         return (incoming.joined(separator: "\n\n"), other)
+    }
+
+    /// The people of a mail's header, which the prompt shows with it, one a line and
+    /// without the user, so the draft check protects their names and addresses as it does
+    /// those in the mail's text.
+    private nonisolated static func headerPeople(of mail: ExplainPrompt.Mail, own: Set<String>) -> String {
+        ([mail.sender] + mail.to + mail.cc)
+            .filter { person in ProjectsAddress.normalized(person.address).map { !own.contains($0) } ?? true }
+            .map { $0.name.isEmpty ? $0.address : "\($0.name) <\($0.address)>" }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
     }
 
     // MARK: Log

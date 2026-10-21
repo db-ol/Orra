@@ -320,6 +320,90 @@ struct MIMEMessageTests {
         #expect(fewSteps.steps <= 20 + many.count)
     }
 
+    /// An alternative that a limit cut or left unread may be the one Mail shows, so no
+    /// earlier alternative stands in for it, whatever the limit. A sender could otherwise
+    /// show one text in Mail and give the model another.
+    @Test func anAlternativeCutAtALimitGivesNoEarlierOne() throws {
+        let source = Self.source([
+            "Content-Type: multipart/alternative; boundary=b",
+            "",
+            "--b",
+            "Content-Type: text/plain",
+            "",
+            "Plain only words",
+            "--b",
+            "Content-Type: text/html",
+            "",
+            "<p>Rich</p>",
+            "--b--",
+            "",
+        ])
+        let whole = MIMEMessage(source: source)
+        #expect(whole.bodies == [MIMEMessage.Body(format: .markup, text: "<p>Rich</p>")])
+        #expect(!whole.isCut)
+
+        let inPlain = try #require(source.range(of: Data("only".utf8))).lowerBound
+        let cut = [
+            // The plain part spends the whole text budget.
+            MIMEMessage.Limits(maximumTextBytes: 16),
+            MIMEMessage.Limits(maximumParts: 1),
+            MIMEMessage.Limits(maximumSteps: whole.steps - 1),
+            // The source ends in the plain part.
+            MIMEMessage.Limits(maximumSourceBytes: inPlain),
+        ]
+        for limits in cut {
+            let message = MIMEMessage(source: source, limits: limits)
+            #expect(message.bodies.isEmpty, "\(limits)")
+            #expect(message.isCut, "\(limits)")
+        }
+
+        let nested = Self.source([
+            "Content-Type: multipart/alternative; boundary=b",
+            "",
+            "--b",
+            "Content-Type: text/plain",
+            "",
+            "Plain only words",
+            "--b",
+            "Content-Type: multipart/mixed; boundary=m1",
+            "",
+            "--m1",
+            "Content-Type: multipart/mixed; boundary=m2",
+            "",
+            "--m2",
+            "Content-Type: text/html",
+            "",
+            "<p>Rich</p>",
+            "--m2--",
+            "--m1--",
+            "--b--",
+            "",
+        ])
+        #expect(MIMEMessage(source: nested).bodies == [MIMEMessage.Body(format: .markup, text: "<p>Rich</p>")])
+        let shallow = MIMEMessage(source: nested, limits: MIMEMessage.Limits(maximumDepth: 2))
+        #expect(shallow.bodies.isEmpty)
+        #expect(shallow.isCut)
+
+        // A cut plain part is still the one shown when no later alternative has text.
+        let image = Self.source([
+            "Content-Type: multipart/alternative; boundary=b",
+            "",
+            "--b",
+            "Content-Type: text/plain",
+            "",
+            "Plain only words",
+            "--b",
+            "Content-Type: image/png",
+            "",
+            "iVBORw0KGgo=",
+            "--b--",
+            "",
+        ])
+        let cutPlain = MIMEMessage(source: image, limits: MIMEMessage.Limits(maximumTextBytes: 10))
+        #expect(cutPlain.bodies == [MIMEMessage.Body(format: .plain, text: "Plain only")])
+        #expect(cutPlain.isCut)
+    }
+
     @Test func stepsGrowWithTheSize() {
         let lines = (1...200).map { "Line \($0) of the letter." }
         let small = MIMEMessage(source: Self.source(["Subject: s", ""] + lines.prefix(20)))

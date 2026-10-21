@@ -203,7 +203,7 @@ nonisolated enum OutputChecks {
     )
 
     /// A mail address, as the model writes one.
-    private static let mailAddress = try! NSRegularExpression(pattern: #"[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24}"#)
+    static let mailAddress = try! NSRegularExpression(pattern: #"[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24}"#)
 
     // MARK: Links
 
