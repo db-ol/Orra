@@ -84,4 +84,26 @@ struct ReplyRuleTests {
         #expect(decide(text: "[已去掉一段写给助手的话]", subject: "Signed contract") == .reply(.en))
         #expect(decide(text: "2026-10-19", subject: "") == .reply(.other))
     }
+
+    // MARK: Forwards
+
+    /// A reply goes to the sender, so only the sender's note counts, not the message it
+    /// forwards: a Chinese note over an English mail with a list footer gets a Chinese draft.
+    @Test func aForwardIsAnsweredInTheLanguageOfItsNote() {
+        let forward = """
+            白露，请看下面纸厂的邮件，周五前回复。
+
+            ---------- Forwarded message ---------
+            From: Mill Sales <sales@papermill.example>
+            Date: Thu, Oct 15, 2026 at 4:10 PM
+
+            From 1 November the 200 g matte costs 6% more. Please confirm the quantities for the calendar and the posters by Friday, so we can hold the stock for you.
+
+            Unsubscribe from these mails
+            """
+        #expect(decide(text: forward, subject: "Fwd: Paper price") == .reply(.zh))
+        // A forward with no note of its own reads the forwarded message.
+        let bare = forward.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
+        #expect(decide(text: bare, subject: "Fwd: Paper price") == .noReply(.listMail))
+    }
 }
