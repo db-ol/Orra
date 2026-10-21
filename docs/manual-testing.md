@@ -153,7 +153,7 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     keeps no older sample, the folder is 0700 and left out of backups and the file 0600,
     what a cut write left is deleted, Remove or the switch turned off right before Quit
     deletes the file at once, and the recording sheet's checkbox applies only with the
-    sample. At launch the saved sample loads once the speech model is ready, and only while
+    sample and never undoes a change of the switch made meanwhile. At launch the saved sample loads once the speech model is ready, and only while
     Speak translations is on, a file that is not a sample, is too short or has no speech
     is deleted with one message that stays while Speak translations is turned off and on,
     the switch turned off and on or Remove while it waits ends the load for good, a sample
