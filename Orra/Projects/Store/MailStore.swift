@@ -571,27 +571,57 @@ nonisolated struct MailStore: Sendable {
     /// The project's other mail that shares the most words with the query, best first, then
     /// the newest, at most `query.limit`. Mail without a shared word, or without its text,
     /// is left out, as in phase 0.
+    ///
+    /// Splitting and comparing the words of every email of the project runs off the
+    /// database's actor, see `rankedIDs`, so other reads and writes wait only for the two
+    /// reads.
     func projectMail(_ query: ExplainService.MailQuery) async throws -> [ExplainPrompt.Mail] {
         guard query.limit > 0 else { return [] }
+        let words = await Self.queryWords(in: query.text)
+        guard !words.isEmpty else { return [] }
+        let candidates = try await database.run(
+            "SELECT id, message_id, words, date FROM mail_messages WHERE project = ? AND text IS NOT NULL AND words IS NOT NULL",
+            [.text(query.project.uuidString)]
+        )
+        let ids = await Self.rankedIDs(candidates, words: words, excluding: query.excluding, limit: query.limit)
+        return try await projectMail(ids: ids)
+    }
+
+    /// The emails of `ids` in that order. An email that is gone, or whose text Retention
+    /// removed, since `rankedIDs` chose it is left out. Internal for tests.
+    func projectMail(ids: [Int64]) async throws -> [ExplainPrompt.Mail] {
+        guard !ids.isEmpty else { return [] }
         return try await database.transaction { database in
-            let words = Set(ChunkSearch.words(in: query.text).filter { $0.count > 1 })
-            guard !words.isEmpty else { return [] }
-            let ranked = try database.run(
-                "SELECT id, message_id, words, date FROM mail_messages WHERE project = ? AND text IS NOT NULL AND words IS NOT NULL",
-                [.text(query.project.uuidString)]
-            ).compactMap { row -> (id: Int64, shared: Int, date: Double)? in
-                guard row.count == 4, let id = row[0].integer, let messageID = row[1].text, !query.excluding.contains(messageID),
-                      let stored = row[2].text, let date = row[3].real else { return nil }
-                let shared = words.intersection(stored.split(separator: "\n").map(String.init)).count
-                return shared > 0 ? (id, shared, date) : nil
-            }
-            .sorted { ($0.shared, $0.date, $0.id) > ($1.shared, $1.date, $1.id) }
-            .prefix(query.limit)
-            let ids = ranked.map(\.id)
-            let rows = try Self.rows(where: "id IN (SELECT value FROM json_each(?))", [.text(try Self.json(ids))], in: database)
+            let rows = try Self.rows(where: "id IN (SELECT value FROM json_each(?)) AND text IS NOT NULL", [.text(try Self.json(ids))], in: database)
             let byID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             return ids.compactMap { byID[$0]?.promptMail }
         }
+    }
+
+    /// The words of an explain query that count for project mail: those longer than one
+    /// character. Off the main actor and the database's, since the tokenizer reads long
+    /// text.
+    @concurrent
+    private static func queryWords(in text: String) async -> Set<String> {
+        Set(ChunkSearch.words(in: text).filter { $0.count > 1 })
+    }
+
+    /// The ids of the rows (id, Message-ID, words, date) that share the most `words`, then
+    /// the newest, then the highest id, at most `limit`. A row without a shared word, or
+    /// with a Message-ID in `excluding`, is left out. Off the main actor and the
+    /// database's, since it splits the words of every email of a project. Internal for
+    /// tests.
+    @concurrent
+    static func rankedIDs(_ rows: [[ProjectsDatabase.Value]], words: Set<String>, excluding: Set<String>, limit: Int) async -> [Int64] {
+        rows.compactMap { row -> (id: Int64, shared: Int, date: Double)? in
+            guard row.count == 4, let id = row[0].integer, let messageID = row[1].text, !excluding.contains(messageID),
+                  let stored = row[2].text, let date = row[3].real else { return nil }
+            let shared = words.intersection(stored.split(separator: "\n").map(String.init)).count
+            return shared > 0 ? (id, shared, date) : nil
+        }
+        .sorted { ($0.shared, $0.date, $0.id) > ($1.shared, $1.date, $1.id) }
+        .prefix(max(limit, 0))
+        .map(\.id)
     }
 
     /// For ExplainService.Known, from the mail the user sent dated before the email:
