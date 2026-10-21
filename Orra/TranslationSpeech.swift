@@ -115,6 +115,10 @@ final class TranslationSpeech {
     /// so a saved sample still waiting to load does not take the place of what the user
     /// chose. A sample the speech model could not take does not count.
     @ObservationIgnored private var voiceChoice = 0
+    /// Counts the changes of Remember my voice, so the recording sheet's checkbox does not
+    /// undo a change made in Settings while its sample was being written down, even one
+    /// that ends where it started.
+    @ObservationIgnored private var rememberChange = 0
     /// Where Remember my voice keeps the voice sample, nil to keep it in memory only.
     @ObservationIgnored private let voiceFile: VoiceSampleFile?
     /// The writes and deletions of the voice sample's file, one after another.
@@ -268,6 +272,7 @@ final class TranslationSpeech {
     func setRemembersVoice(_ on: Bool) {
         guard on != remembersVoice else { return }
         remembersVoice = on
+        rememberChange += 1
         voiceFileProblem = nil
         save(settings)
         if !on {
@@ -365,15 +370,16 @@ final class TranslationSpeech {
     /// sets Remember my voice as the sheet's checkbox says, nil to leave it. Off applies
     /// first, so the old file is deleted before anything else. On applies once the sample
     /// is used, so the new sample is written and not the one before it, unless the speech
-    /// model heard no speech in the new one. A change in Settings meanwhile wins.
+    /// model heard no speech in the new one. Any change of the switch in Settings meanwhile
+    /// wins, also one turned on and off again.
     @discardableResult
     func useVoice(_ sample: VoiceSample, remember: Bool?) async -> VoiceUse {
         if remember == false {
             setRemembersVoice(false)
         }
-        let before = remembersVoice
+        let change = rememberChange
         let use = await useVoice(sample)
-        if remember == true, remembersVoice == before {
+        if remember == true, rememberChange == change {
             setRemembersVoice(true)
         }
         return use

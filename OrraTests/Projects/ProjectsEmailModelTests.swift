@@ -482,6 +482,45 @@ struct ProjectsEmailModelTests {
         #expect(model.instruction.isEmpty)
     }
 
+    /// An undo stays busy until the versions, the highlight of the version left and the
+    /// text are all in place, so a second undo, a change or a keystroke never works on the
+    /// version it removes. The highlight of the version left is worked out off the main
+    /// actor, and a poller on the main actor looks while it is.
+    @Test func anUndoStaysBusyUntilItPutsTheTextBack() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let monday = "Hi Mei,\n\nThe lamp order is [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, monday]
+            $0.checks = [Self.bothAnswered, Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        model.instruction = "Say Monday."
+        await model.applyInstruction()
+        #expect(model.versions.map(\.number) == [1, 2])
+        #expect(model.text == monday)
+
+        // The removal waits until the undo has started, so the poller below never meets
+        // the moment before it starts.
+        fakes.update { $0.removeWaits = true }
+        model.perform { await $0.undo() }
+        try await waitUntil { model.isBusy }
+        fakes.update { $0.removeWaits = false }
+        while model.isWorking {
+            if !model.isBusy {
+                // Free while the undo still works: what a click or a keystroke would meet.
+                #expect(model.versions.map(\.number) == [1])
+                #expect(model.text == firmer)
+                await model.undo()
+            }
+            await Task.yield()
+        }
+        #expect(fakes.value.versions.map(\.number) == [1])
+        #expect(model.versions.map(\.number) == [1])
+        #expect(model.text == firmer)
+    }
+
     /// Words said while a change runs wait in the box with the setting off, and when the
     /// change gives no new draft, so a failed change is never tried again on its own.
     @Test func wordsSaidWhileAChangeRunsWaitWithTheSettingOffOrAfterAFailure() async throws {

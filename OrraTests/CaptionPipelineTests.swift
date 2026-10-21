@@ -417,6 +417,7 @@ struct EngineTurnsTests {
         var ran = false
         var attempts = 0
         var started = false
+        var languages: [SpeechLanguage?] = []
     }
 
     /// The captions check the language of each sentence with the dictation language they
@@ -440,6 +441,41 @@ struct EngineTurnsTests {
         #expect(try await interim([0.1], .spanish) == LanguageGuardTests.spanish)
         #expect(try await engines.transcribe([0.1], .spanish) == LanguageGuardTests.spanish)
         #expect(speech.receivedLanguages == [nil, .chinese, .english, nil, nil])
+    }
+
+    /// A key that goes down while a caption's first pass runs keeps the passes in the
+    /// dictation language and English from starting until the dictation is over. The
+    /// sentence then runs again from its first pass.
+    @Test func aDictationDuringTheFirstPassStartsNoLanguagePass() async throws {
+        let turns = EngineTurns(pollInterval: .milliseconds(2))
+        let probe = Probe()
+        let transcription = Transcription(load: {}, transcribe: { _, _, language in
+            probe.languages.append(language)
+            if probe.languages.count == 1 {
+                // The key goes down while the first pass runs.
+                turns.dictationStarted()
+            }
+            return LanguageGuardTests.swedish
+        })
+        let engines = CaptionEngines.shared(
+            transcription: transcription,
+            isSpeechReady: { true },
+            canTranslate: { false },
+            target: { .chinese },
+            complete: { _, _ in "" },
+            turns: turns
+        )
+        let call = Task { try await engines.transcribe([0.1], .chinese) }
+        defer { call.cancel() }
+        // The key must be down before it goes up, or the caption would wait for good.
+        try await waitUntil { turns.isDictating }
+        try #require(turns.isDictating)
+        // Time for a language pass that must wait for the dictation.
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(probe.languages == [nil])
+        turns.dictationEnded()
+        #expect(try await call.value == LanguageGuardTests.swedish)
+        #expect(probe.languages == [nil, nil, .chinese, .english])
     }
 
     @Test func aCaptionCallWaitsWhileADictationRuns() async throws {
