@@ -5,7 +5,8 @@ import Observation
 /// sidebar, its mail with the deadline marks of the explained ones, the selected email, a
 /// move that waits for the user's yes, the rule offered after moves, the explanations under
 /// way, the email view of each email the user opened with the window's one handoff at a
-/// time, and the line after Explain Selected Message. ProjectsRuntime does the work.
+/// time, the line after Explain Selected Message, and Suggested Projects. ProjectsRuntime
+/// does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -92,10 +93,13 @@ final class ProjectsWindowModel {
     @ObservationIgnored let handoffs = ProjectsEmailModel.Handoffs()
     /// Makes the actions of an email view, the runtime's in the app.
     @ObservationIgnored private let emailActions: () -> ProjectsEmailModel.Actions
+    /// Suggested Projects in the sidebar, while the window is open.
+    @ObservationIgnored let suggestions: ProjectSuggestionService
 
     init(runtime: ProjectsRuntime, emailActions: (() -> ProjectsEmailModel.Actions)? = nil) {
         self.runtime = runtime
         self.emailActions = emailActions ?? { .live(runtime) }
+        suggestions = runtime.suggestionService()
     }
 
     /// The email view of an email, the same one each time while the window is open.

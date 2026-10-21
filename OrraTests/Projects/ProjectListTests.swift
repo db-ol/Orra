@@ -245,6 +245,90 @@ struct ProjectListTests {
         await store.close()
     }
 
+    // MARK: Dismissed suggestions
+
+    /// The suggestions of Suggested Projects the user dismissed are kept with the projects,
+    /// each once, and a change of the projects keeps them.
+    @Test func dismissedSuggestionsAreKeptWithTheProjects() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let list = ProjectList(storage: storage)
+        try await list.load()
+        try await list.dismissSuggestion("first")
+        try await list.dismissSuggestion("first")
+        try await list.add(Self.harbor, mail: store)
+        try await list.dismissSuggestion("second")
+        var changed = Self.harbor
+        changed.description = "Changed"
+        try await list.update(changed)
+        try await list.add(Self.maple, mail: store)
+        #expect(list.dismissedSuggestions == ["first", "second"])
+
+        let again = ProjectList(storage: storage)
+        try await again.load()
+        #expect(again.dismissedSuggestions == ["first", "second"])
+        #expect(again.projects == [changed, Self.maple])
+        await store.close()
+    }
+
+    /// A file written before Suggested Projects has no dismissed suggestions, and the next
+    /// write keeps its projects.
+    @Test func aFileFromBeforeSuggestionsHasNoDismissal() async throws {
+        defer { cleanUp() }
+        try storage.create()
+        let file = storage.folder.appendingPathComponent(ProjectList.fileName)
+        let older = ProjectList(storage: storage)
+        try await older.load()
+        let store = try await openStore()
+        try await older.add(Self.maple, mail: store)
+        var stored = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        stored["dismissedSuggestions"] = nil
+        try JSONSerialization.data(withJSONObject: stored).write(to: file)
+
+        let list = ProjectList(storage: storage)
+        try await list.load()
+        #expect(list.projects == [Self.maple])
+        #expect(list.dismissedSuggestions.isEmpty)
+        try await list.dismissSuggestion("first")
+        let again = ProjectList(storage: storage)
+        try await again.load()
+        #expect(again.projects == [Self.maple])
+        #expect(again.dismissedSuggestions == ["first"])
+        await store.close()
+    }
+
+    /// At most `maximumDismissedSuggestions` are kept, the newest.
+    @Test func theNewestDismissalsAreKept() async throws {
+        defer { cleanUp() }
+        let list = ProjectList(storage: storage)
+        try await list.load()
+        let count = ProjectList.maximumDismissedSuggestions + 2
+        for index in 0..<count {
+            try await list.dismissSuggestion("key-\(index)")
+        }
+        #expect(list.dismissedSuggestions.count == ProjectList.maximumDismissedSuggestions)
+        #expect(list.dismissedSuggestions.first == "key-2")
+        #expect(list.dismissedSuggestions.last == "key-\(count - 1)")
+        let again = ProjectList(storage: storage)
+        try await again.load()
+        #expect(again.dismissedSuggestions == list.dismissedSuggestions)
+    }
+
+    /// A dismissal that cannot be written is not kept, so the list stays as the file has it.
+    @Test func aDismissalThatCannotBeSavedIsUndone() async throws {
+        defer { cleanUp() }
+        let list = ProjectList(storage: storage)
+        try await list.load()
+        try await list.dismissSuggestion("first")
+        // A folder in the place of the file makes every write fail.
+        try FileManager.default.removeItem(at: list.file)
+        try FileManager.default.createDirectory(at: list.file.appendingPathComponent("blocked", isDirectory: true), withIntermediateDirectories: true)
+        await #expect(throws: (any Error).self) {
+            try await list.dismissSuggestion("second")
+        }
+        #expect(list.dismissedSuggestions == ["first"])
+    }
+
     @Test func aProjectMapsOntoSortingAndTheExplanation() {
         let candidate = Self.harbor.candidate
         #expect(candidate == SortingCandidate(

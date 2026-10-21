@@ -1093,11 +1093,13 @@ nonisolated struct MailStore: Sendable {
         text.map(ProjectsDatabase.Value.text) ?? .null
     }
 
-    private static func json(_ value: some Encodable) throws -> String {
+    /// The value as JSON text, for a column or a query parameter.
+    static func json(_ value: some Encodable) throws -> String {
         String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
     }
 
-    private static func decoded<T: Decodable>(_ type: T.Type, _ value: ProjectsDatabase.Value) -> T? {
+    /// The JSON in a column, nil when it holds none.
+    static func decoded<T: Decodable>(_ type: T.Type, _ value: ProjectsDatabase.Value) -> T? {
         let data: Data
         switch value {
         case .text(let text): data = Data(text.utf8)
