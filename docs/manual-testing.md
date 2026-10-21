@@ -3171,9 +3171,10 @@ real mail. The checks of Mail access below hold for a release build too.
   off, and on a Mac with less than 16 GB the page says why it cannot turn on.
 - [ ] Start Reading Mail opens the Projects window. The test mail lands in projects, in
   Needs a Project and in Set Aside, and the menu item shows the count of mail to reply to.
-- [ ] With no project made yet, suggested projects show under Needs a Project with the
-  number of emails each would take, once the model named them. A click opens New Project
-  filled in. Saving it sorts the mail again, and dismissing one removes it. Nothing is made
+- [ ] With no project made yet, Suggested Projects shows under Needs a Project, each with
+  the number of emails it would take, and the model names them while the window is open.
+  A click opens New Project filled in. Saving it sorts the mail again. Dismiss Suggestion,
+  in the sheet or in the row's menu, removes it, also after Orra restarts. Nothing is made
   without a click.
 - [ ] A new project with a folder: its page shows how many files were read and skipped, why,
   and the files with hidden text. Add a folder inside Documents, Desktop or Downloads and
