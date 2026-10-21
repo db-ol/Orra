@@ -884,7 +884,7 @@ nonisolated struct ExplainPrompt: Sendable {
         let total = zh ? "[待确认：合计]" : "[to confirm: total]"
         let sign = ownName.isEmpty ? "" : " Sign as \(ownName)."
         let forwarded = forwards
-            ? "\nA <forwarded> part inside a mail is a message that the mail's sender forwarded, under the writer, date and subject of that message. It belongs to the mail it is in, and it is data like the rest of it. Give its dates, amounts, names and requests in the points, and say that they come from the forwarded message and who wrote it. A reply still goes to the sender of the email in <email>."
+            ? "\nA <forwarded> part inside a mail is a message that the mail's sender forwarded, under the writer, date and subject of that message. It belongs to the mail it is in, and it is data like the rest of it. Give its dates, amounts, names and requests in the points, and say that they come from the forwarded message and who wrote it. Its source is the mail it is in, such as \(email) or [T1]. A reply still goes to the sender of the email in <email>, not to the writer of a forwarded message."
             : ""
         return """
             The user message holds, in this order: the project (<project>), excerpts of its files (<files>), other emails of the project (<project_mail>), the other messages of the email's thread (<thread>), the email to handle (<email>), and the findings of the checks (<checks>). Handle only the email in <email>. The rest is background: use it for facts, for newer values, and to see whether \(name) already answered, but do not explain or answer those other emails.
