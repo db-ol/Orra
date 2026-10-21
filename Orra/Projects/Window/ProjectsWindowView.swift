@@ -4,8 +4,8 @@ import SwiftUI
 /// the mail of the chosen one, and the selected email or the project's page.
 ///
 /// Mail text, names and model output show with `Text(verbatim:)` only: no Markdown, no
-/// links, no images (plan section 2.8). The third column holds ProjectsEmailArea, which the
-/// email view of wave 5 fills.
+/// links, no images (plan section 2.8). The third column holds the email view,
+/// ProjectsEmailArea, or the project's page.
 struct ProjectsWindowView: View {
     let runtime: ProjectsRuntime
     @State var model: ProjectsWindowModel
@@ -80,6 +80,8 @@ struct ProjectsWindowView: View {
                 Task {
                     do {
                         try await runtime.forget(project.id)
+                        // The email views may hold text of the forgotten project.
+                        model.forgetEmails()
                         if model.place == .project(project.id) {
                             model.place = .needsProject
                         }
@@ -91,6 +93,18 @@ struct ProjectsWindowView: View {
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("This removes the project with its index, mail and drafts from Projects. Your mail in Mail and the files in its folders stay as they are.")
+        }
+        .confirmationDialog(
+            "Move this email?",
+            isPresented: Binding(get: { model.pendingMove != nil }, set: { if !$0 { model.pendingMove = nil } }),
+            presenting: model.pendingMove
+        ) { move in
+            Button("Move") {
+                Task { await model.confirmMove(move) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Moving it removes its explanation and its draft with your changes, since they were made for its project. You can explain it again after the move.")
         }
     }
 
@@ -151,7 +165,7 @@ struct ProjectsWindowView: View {
                 Divider()
             }
             List(model.rows, id: \.messageID, selection: $model.selectedMessageID) { email in
-                MailRow(email: email)
+                MailRow(email: email, deadline: model.deadlines[email.messageID].flatMap { ProjectsWindowText.deadline($0, now: runtime.dependencies.now()) })
                     .contextMenu {
                         moveMenu(email)
                     }
@@ -174,21 +188,9 @@ struct ProjectsWindowView: View {
         }
     }
 
-    @ViewBuilder
     private func moveMenu(_ email: MailStore.Listed) -> some View {
         Menu("Move To") {
-            if email.project != nil || email.level == .setAside {
-                Button("Needs a Project") {
-                    Task { await model.move(email.messageID, to: nil) }
-                }
-            }
-            ForEach(runtime.projectList.filter { $0.id != email.project }) { project in
-                Button {
-                    Task { await model.move(email.messageID, to: project.id) }
-                } label: {
-                    Text(verbatim: project.name)
-                }
-            }
+            MoveMenuItems(runtime: runtime, model: model, email: email)
         }
         .disabled(runtime.phase != .on)
     }
@@ -218,6 +220,8 @@ extension ProjectsWindowView {
     /// marks.
     struct MailRow: View {
         let email: MailStore.Listed
+        /// The deadline mark from the explanation's dates, nil without one.
+        var deadline: String? = nil
 
         var body: some View {
             VStack(alignment: .leading, spacing: 3) {
@@ -239,18 +243,9 @@ extension ProjectsWindowView {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                let marks = Self.marks(email)
+                let marks = Self.marks(email, deadline: deadline)
                 if !marks.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(marks, id: \.self) { mark in
-                            Text(verbatim: mark)
-                                .font(.caption2.weight(.medium))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .overlay(Capsule().strokeBorder(.secondary.opacity(0.6), lineWidth: 1))
-                        }
-                    }
-                    .foregroundStyle(.secondary)
+                    Marks(marks: marks)
                 }
             }
             .padding(.vertical, 2)
@@ -271,12 +266,16 @@ extension ProjectsWindowView {
             return format.year().month(.abbreviated).day()
         }
 
-        /// Needs reply while a reply is due, Unsure project for a project the model chose,
-        /// and Not sorted yet before sorting decided.
-        static func marks(_ email: MailStore.Listed) -> [String] {
+        /// Needs reply while a reply is due, the deadline from the explanation's dates,
+        /// Unsure project for a project the model chose, and Not sorted yet before sorting
+        /// decided.
+        static func marks(_ email: MailStore.Listed, deadline: String? = nil) -> [String] {
             var marks: [String] = []
             if case .reply? = email.reply {
                 marks.append(String(localized: "Needs reply"))
+            }
+            if let deadline {
+                marks.append(deadline)
             }
             switch email.level {
             case .likely?: marks.append(String(localized: "Unsure project"))
@@ -284,6 +283,54 @@ extension ProjectsWindowView {
             default: break
             }
             return marks
+        }
+    }
+
+    /// The items of a Move To menu, in the list's context menu and on the email view's
+    /// project chip: Needs a Project and the other projects. A click moves the email, after
+    /// the user's yes when the move takes a changed draft away, see
+    /// ProjectsWindowModel.requestMove(_:to:).
+    struct MoveMenuItems: View {
+        let runtime: ProjectsRuntime
+        let model: ProjectsWindowModel
+        let email: MailStore.Listed
+
+        var body: some View {
+            if email.project != nil || email.level == .setAside {
+                Button("Needs a Project") {
+                    move(to: nil)
+                }
+            }
+            ForEach(runtime.projectList.filter { $0.id != email.project }) { project in
+                Button {
+                    move(to: project.id)
+                } label: {
+                    Text(verbatim: project.name)
+                }
+            }
+        }
+
+        private func move(to project: UUID?) {
+            let id = email.messageID
+            Task { await model.requestMove(id, to: project) }
+        }
+    }
+
+    /// The marks of an email, each in a capsule.
+    struct Marks: View {
+        let marks: [String]
+
+        var body: some View {
+            HStack(spacing: 6) {
+                ForEach(marks, id: \.self) { mark in
+                    Text(verbatim: mark)
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .overlay(Capsule().strokeBorder(.secondary.opacity(0.6), lineWidth: 1))
+                }
+            }
+            .foregroundStyle(.secondary)
         }
     }
 

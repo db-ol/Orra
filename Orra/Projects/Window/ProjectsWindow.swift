@@ -7,8 +7,9 @@ import SwiftUI
 /// While it is open it holds the cleanup model, and closing it lets the model go and ends
 /// the background work, see ProjectsRuntime.windowOpened(). Orra shows in the Dock while it
 /// is open, as for Settings, see DockIcon. It closes when Projects turns off. Closing it
-/// lets go of the window with its lists and selection, so no mail it showed stays in
-/// memory, and the next open builds it anew where it was last.
+/// ends the requests of its email views and lets go of the window with its lists,
+/// selection and edited drafts, so no mail it showed stays in memory, and the next open
+/// builds it anew where it was last.
 final class ProjectsWindow {
     /// The size the window first opens at.
     static let defaultSize = CGSize(width: 1_040, height: 640)
@@ -66,9 +67,11 @@ final class ProjectsWindow {
             window.center()
         }
         window.setFrameAutosaveName(Self.frameName)
-        closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+        closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self, weak model] _ in
             MainActor.assumeIsolated {
                 self?.runtime.windowClosed()
+                // A change or a check the user can no longer see ends with the window.
+                model?.forgetEmails()
                 self?.letGo()
             }
         }

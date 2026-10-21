@@ -109,6 +109,240 @@ nonisolated enum ProjectsWindowText {
         name.hasPrefix("/") ? String(localized: "On My Mac") + name : name
     }
 
+    // MARK: The email view
+
+    /// Why sorting put an email where it is, for the project chip, strongest first.
+    static func reason(_ reason: SortingReason) -> String {
+        switch reason {
+        case .thread: String(localized: "Same thread as an email in the project")
+        case .rule: String(localized: "A rule you made")
+        case .person: String(localized: "A person you listed for the project")
+        case .domain: String(localized: "A domain you listed for the project")
+        case .mailbox: String(localized: "A Mail mailbox linked to the project")
+        case .peopleSeen: String(localized: "Someone in it wrote in the project before")
+        case .attachment: String(localized: "An attachment has the name of a project file")
+        case .words: String(localized: "It uses the project's own words")
+        case .model: String(localized: "The model chose the project")
+        case .listMail: String(localized: "List mail with none of the project's people")
+        case .noSignal: String(localized: "Nothing pointed to a project")
+        case .signalsDisagree: String(localized: "The signs point to more than one project")
+        case .peopleInSeveralProjects: String(localized: "People in it wrote in more than one project")
+        case .modelSaidNone: String(localized: "The model found no project")
+        case .modelDisagreed: String(localized: "The model chose another project than the rules")
+        case .modelAnswerInvalid: String(localized: "The model's answer was none of the projects")
+        case .tooLongForModel: String(localized: "Too long for the model to sort")
+        case .waitingForModel: String(localized: "Waits for the model, which sorts while this window is open")
+        }
+    }
+
+    /// Why the email is where it is: the user's move, or sorting's reasons.
+    static func reasons(_ email: MailStore.Listed) -> [String] {
+        if email.movedByUser {
+            return [String(localized: "You moved it here")]
+        }
+        return email.reasons.map(reason)
+    }
+
+    /// A warning about the email, a project file or a reply, whatever found it.
+    static func warning(_ warning: ProjectsWarning) -> String {
+        switch warning {
+        case .hiddenText: String(localized: "It hides text from its reader.")
+        case .instructionToAssistant: String(localized: "A line in it speaks to an assistant.")
+        case .documentInstruction: String(localized: "A line in a project file speaks to an assistant.")
+        case .claimsToBeOrra: String(localized: "Text in it claims to come from Orra.")
+        case .lookalikeDomain: String(localized: "The sender's domain looks like the domain of a project person.")
+        case .senderNameMismatch: String(localized: "The sender's name does not match the address.")
+        case .forgedQuote: String(localized: "It quotes you with words you never sent.")
+        case .paymentChange: String(localized: "It changes where to pay.")
+        case .paymentTermsChange: String(localized: "It changes amounts, dates or other terms of payment.")
+        case .unknownSenderPayment: String(localized: "It asks for payment, and the sender is not one of the project's people.")
+        case .falseUrgency: String(localized: "It pushes you to act at once.")
+        case .link: String(localized: "It holds a link.")
+        case .forwardRequest: String(localized: "It asks you to forward mail or files.")
+        case .confidentialDataRequest: String(localized: "It asks for confidential project data.")
+        case .personalDataRequest: String(localized: "It asks for personal data, such as an ID number.")
+        case .credentialRequest: String(localized: "It asks for a password, a code or another credential.")
+        case .recipientNotInProjectPeople: String(localized: "A reply reaches someone who is not one of the project's people.")
+        case .attachmentNameSpoofing: String(localized: "An attachment's name hides its real type.")
+        }
+    }
+
+    /// What PromptHygiene took out of a text before the model read it.
+    static func takenOut(_ kind: PromptHygiene.Finding.Kind) -> String {
+        switch kind {
+        case .hidden: String(localized: "Hidden from the reader")
+        case .addressesAssistant: String(localized: "Speaks to an assistant")
+        }
+    }
+
+    /// What OutputChecks found in a point or a draft.
+    static func finding(_ finding: OutputChecks.Finding) -> String {
+        switch finding.kind {
+        case .dateWeekdayMismatch: String(localized: "Check this date, its weekday is wrong: \(finding.text)")
+        case .amountWithoutSource: String(localized: "No source holds this amount: \(finding.text)")
+        }
+    }
+
+    /// A flag of DraftCheck on the draft.
+    static func flag(_ flag: DraftCheck.Flag) -> String {
+        switch flag {
+        case .output(let found): finding(found)
+        case .decidesQuestion: String(localized: "The draft may decide something only you can. Compare it with Before you reply.")
+        }
+    }
+
+    /// What DraftCheck took out of the draft, where its placeholder now stands.
+    static func removal(_ kind: DraftCheck.Removal.Kind) -> String {
+        switch kind {
+        case .link: String(localized: "A link was taken out.")
+        case .actionClaim: String(localized: "A sentence that claims something was done was taken out. Orra does nothing in Mail for you.")
+        case .assistantVoice: String(localized: "A sentence that speaks as an assistant was taken out.")
+        case .projectData: String(localized: "Project data was taken out, since the reply reaches someone outside the project.")
+        }
+    }
+
+    /// Why the explanation holds no draft to change.
+    static func noDraft(_ draft: Explanation.Draft) -> String? {
+        switch draft {
+        case .checked(let result): result.draft == nil ? String(localized: "The model wrote the draft in another language, so it was held back.") : nil
+        case .noReply(.sentByUser): String(localized: "No reply needed. You sent this email.")
+        case .noReply(.answeredLater): String(localized: "No reply needed. You answered it later in the thread.")
+        case .noReply(.listMail): String(localized: "No reply needed. It went to a list or came from a machine.")
+        case .noDraft: String(localized: "This email is in a language Projects writes no drafts in.")
+        case .missing: String(localized: "The model wrote no draft. Explain the email again to try once more.")
+        }
+    }
+
+    /// Why a change, a translation or the answer check gave nothing new.
+    static func note(_ note: ProjectsEmailModel.Note, for work: EmailWork) -> String {
+        switch note {
+        case .noModel: return String(localized: "The cleanup model is not on this Mac.")
+        case .emptyDraft: return String(localized: "The draft is empty.")
+        case .heldBack: return String(localized: "The new version came back in another language, so the draft stays as it was.")
+        case .notKept: return String(localized: "The email changed meanwhile, so the new version was not kept.")
+        case .tooLong, .noAnswer, .other: break
+        }
+        switch (work, note) {
+        case (.change, .tooLong): return String(localized: "The draft or the change is too long for the model.")
+        case (.change, .noAnswer): return String(localized: "The model gave no usable version. Try again.")
+        case (.change, _): return String(localized: "The draft could not be changed. Try again.")
+        case (.translation, .tooLong): return String(localized: "The draft is too long to translate.")
+        case (.translation, _): return String(localized: "The draft could not be translated. Try again.")
+        case (.answers, _): return String(localized: "The answer check did not work. Try again.")
+        }
+    }
+
+    /// The request on the draft a note is about.
+    nonisolated enum EmailWork {
+        case change
+        case translation
+        case answers
+    }
+
+    /// The placeholders a new version left out of the draft before it.
+    static func dropped(_ placeholders: [String], tone: Bool) -> String {
+        let list = placeholders.joined(separator: ", ")
+        return tone
+            ? String(localized: "The new tone left out \(list). Put it back before you send.")
+            : String(localized: "This version leaves out \(list). Check that your change settled it.")
+    }
+
+    /// The people outside the project whom a reply to all reaches, see
+    /// DraftCheck.Result.outsideRecipients.
+    static func outsideRecipients(_ addresses: [String]) -> String {
+        String(localized: "A reply to all reaches people outside the project: \(addresses.joined(separator: ", "))")
+    }
+
+    /// The label of Show in My Language, which names the language: the one the user reads
+    /// explanations in (decision 8).
+    static func showTranslation(in language: ProjectsLanguage) -> String {
+        language == .zh ? String(localized: "Show in Chinese") : String(localized: "Show in English")
+    }
+
+    /// What a change took out and put in, for VoiceOver, which does not read the highlight.
+    static func changeSummary(_ segments: [ProjectsDraftDiff.Segment]) -> String {
+        segments.compactMap { segment in
+            switch segment.kind {
+            case .same: nil
+            case .removed: String(localized: "Removed: \(segment.text)")
+            case .added: String(localized: "Added: \(segment.text)")
+            }
+        }
+        .joined(separator: "\n")
+    }
+
+    /// The answer check: how many questions the email asks and how many the draft answers.
+    static func answers(asked: Int, answered: Int) -> String {
+        asked == 1
+            ? String(localized: "They asked 1 thing, your draft answers \(answered).")
+            : String(localized: "They asked \(asked) things, your draft answers \(answered).")
+    }
+
+    static func status(_ status: RevisePrompt.AnswerCheck.Status) -> String {
+        switch status {
+        case .answered: String(localized: "Answered")
+        case .toConfirm: String(localized: "Left for you to confirm")
+        case .notAnswered: String(localized: "Not answered")
+        }
+    }
+
+    static func tone(_ tone: RevisePrompt.Tone) -> String {
+        switch tone {
+        case .formal: String(localized: "Formal")
+        case .warm: String(localized: "Warm")
+        case .firm: String(localized: "Firm")
+        }
+    }
+
+    /// What the last handoff did, with the hint to press Command V in Mail.
+    static func handoff(_ note: ProjectsEmailModel.HandoffNote) -> String {
+        switch note {
+        case .messageNotFound: String(localized: "Projects cannot find this email in Mail now, so the draft is only on the clipboard. Reply to it in Mail and press ⌘V.")
+        case .outcome(.replyOpened): String(localized: "Mail opened the reply, and the draft is on the clipboard. Press ⌘V in the reply window.")
+        case .outcome(.copied): String(localized: "The draft is on the clipboard.")
+        case .outcome(.copiedMailNotRunning): String(localized: "Mail is not open, so the draft is only on the clipboard.")
+        case .outcome(.copiedReplyFailed(.timedOut)): String(localized: "Mail is slow to answer. The reply may still open. The draft is on the clipboard.")
+        case .outcome(.copiedReplyFailed(.denied)), .outcome(.copiedReplyFailed(.notAsked)): String(localized: "Orra may not control Mail, so the draft is only on the clipboard. Allow it in Settings.")
+        case .outcome(.copiedReplyFailed(.notFound)): String(localized: "Mail no longer has this email. The draft is on the clipboard.")
+        case .outcome(.copiedReplyFailed): String(localized: "Mail did not open the reply. The draft is on the clipboard.")
+        case .outcome(.emptyDraft): String(localized: "The draft is empty.")
+        case .outcome(.notCopied): String(localized: "The draft could not be copied. Try again.")
+        }
+    }
+
+    /// The label of a source chip.
+    static func source(_ source: ProjectsEmailModel.Source) -> String {
+        switch source {
+        case .thisEmail:
+            return String(localized: "This email")
+        case .mail(_, let sender?, let date?):
+            let day = date.formatted(.dateTime.month(.abbreviated).day().locale(.interface))
+            return String(localized: "\(sender), \(day)")
+        case .mail:
+            return String(localized: "An earlier email")
+        case .file(let chunk):
+            let name = chunk.file.lastPathComponent
+            guard let page = chunk.page else { return name }
+            return String(localized: "\(name), page \(page)")
+        }
+    }
+
+    /// The deadline mark: today, the weekday within the next 6 days, or the day. Nil once the
+    /// day has passed, such as in a window left open past midnight.
+    static func deadline(_ date: Date, now: Date, calendar: Calendar = .current) -> String? {
+        guard let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: date)).day, days >= 0 else {
+            return nil
+        }
+        if days == 0 {
+            return String(localized: "Deadline today")
+        }
+        var format = Date.FormatStyle.dateTime.locale(.interface)
+        format.calendar = calendar
+        format.timeZone = calendar.timeZone
+        let day = days < 7 ? date.formatted(format.weekday(.wide)) : date.formatted(format.month(.abbreviated).day())
+        return String(localized: "Deadline \(day)")
+    }
+
     /// Why an added folder is not indexed.
     static func refusal(_ refusal: FolderWalk.Refusal) -> String {
         switch refusal {

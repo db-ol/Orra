@@ -326,6 +326,26 @@ struct MailScanTests {
         #expect(await scan.scan().skipped == nil)
     }
 
+    /// A pass after `stop()`, such as when Mail opens again, waits for the pass that `stop()`
+    /// cancelled, which saves nothing more, and then reads, rather than skip as busy until
+    /// the next poll.
+    @Test func aPassAfterStopWaitsForTheCancelledOne() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(3), in: .inbox)
+        store.holdsKnown = true
+        let scan = scan(choice([.inbox]))
+        let first = Task { await scan.scan() }
+        try await waitUntil { store.heldKnown != nil }
+        scan.stop()
+        let second = Task { await scan.scan() }
+        store.holdsKnown = false
+        store.heldKnown?.resume()
+        #expect(await first.value.saved == 0)
+        let pass = await second.value
+        #expect(pass.skipped == nil)
+        #expect(pass.saved == 3)
+    }
+
     /// A chosen mailbox that Mail no longer has skips only that mailbox.
     @Test func aMailboxThatIsGoneSkipsOnlyItself() async {
         defer { cleanUp() }

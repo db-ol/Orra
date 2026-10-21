@@ -295,6 +295,14 @@ final class MailScan {
     /// right after `stop()`, while the stopped pass still waits for Mail's answer.
     @discardableResult
     func scan() async -> Pass {
+        // A pass that `stop()` cancelled ends at its next step. A pass after `start()`, such
+        // as when Mail opens again, waits for it rather than skip as busy for a poll interval.
+        if let previous = current, previous.isCancelled {
+            _ = await previous.value
+            if current == previous {
+                current = nil
+            }
+        }
         guard current == nil else {
             return Pass(skipped: .busy)
         }
@@ -305,7 +313,10 @@ final class MailScan {
         } onCancel: {
             task.cancel()
         }
-        current = nil
+        // A pass that waited for this one may run already.
+        if current == task {
+            current = nil
+        }
         return pass
     }
 

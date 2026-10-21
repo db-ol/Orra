@@ -48,6 +48,8 @@ nonisolated enum SortingReason: String, Sendable, Codable, CaseIterable {
     case modelDisagreed
     /// The model's answer was not one of the choices.
     case modelAnswerInvalid
+    /// The email does not fit into the model's prompt, so the model was never asked.
+    case tooLongForModel
     /// The rules leave it to the model, which has not answered yet.
     case waitingForModel
 }
