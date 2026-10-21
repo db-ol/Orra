@@ -74,6 +74,9 @@ struct ProjectsEmailModelTests {
             var requestWaits = false
             /// Whether the removal of a version waits until the test lets it go.
             var removeWaits = false
+            /// Whether working out what a change changed waits until the test lets it go.
+            var diffWaits = false
+            var diffStarted = false
         }
 
         let state = Mutex(State())
@@ -208,7 +211,14 @@ struct ProjectsEmailModelTests {
                 bringMailToFront: { fakes.update { $0.broughtForward += 1 } }
             ),
             userLanguage: userLanguage,
-            now: { Self.today }
+            now: { Self.today },
+            highlight: { before, after in
+                fakes.update { $0.diffStarted = true }
+                while fakes.value.diffWaits {
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                return ProjectsDraftDiff.segments(from: before, to: after)
+            }
         ), handoffs: handoffs)
     }
 
@@ -631,6 +641,51 @@ struct ProjectsEmailModelTests {
         #expect(fakes.value.versions.map(\.number) == [1])
         #expect(model.versions.map(\.number) == [1])
         #expect(model.text == firmer)
+    }
+
+    /// The undo of the newer of two versions stays busy while it works out the highlight of
+    /// the older one, which is then the newest. Another undo, a change and the editor wait,
+    /// and words said meanwhile change the draft it put back once it is done.
+    @Test func theUndoOfOneOfTwoVersionsWaitsForItsHighlight() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let monday = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        let priced = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. The price stays. I will send the floor plan today.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, monday, priced]
+            $0.checks = [Self.bothAnswered, Self.bothAnswered, Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        model.instruction = "Say Monday."
+        await model.applyInstruction()
+        #expect(model.versions.map(\.version.change) == [.tone(.firm), .instruction("Say Monday.")])
+        #expect(model.text == monday)
+
+        fakes.update {
+            $0.diffWaits = true
+            $0.diffStarted = false
+        }
+        model.perform { await $0.undo() }
+        try await waitUntil { fakes.value.diffStarted }
+        // The store removed the newer version, and the highlight of the older one waits.
+        #expect(model.isBusy)
+        #expect(fakes.value.versions.count == 1)
+        let prompts = fakes.value.prompts.count
+        await model.undo()
+        #expect(fakes.value.versions.count == 1)
+        #expect(await model.makeChange(.tone(.warm)) == false)
+        #expect(model.takeDictation("Keep the price.", revises: true))
+        #expect(fakes.value.prompts.count == prompts)
+
+        fakes.update { $0.diffWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.versions == fakes.value.versions)
+        #expect(model.versions.map(\.version.change) == [.tone(.firm), .instruction("Keep the price.")])
+        #expect(model.text == priced)
+        let revision = try #require(fakes.value.prompts.last(where: { !$0.contains("<questions>") }))
+        #expect(revision.contains(firmer))
+        #expect(!revision.contains(monday))
     }
 
     /// Words said while a change runs wait in the box with the setting off, and when the

@@ -61,6 +61,9 @@ final class ProjectsEmailModel {
         /// The language the user reads explanations in.
         var userLanguage: ProjectsLanguage
         var now: () -> Date
+        /// What a change changed, worked out off the main actor, ProjectsDraftDiff.highlight
+        /// in the app.
+        var highlight: (_ before: String, _ after: String) async -> [ProjectsDraftDiff.Segment]
 
         /// The actions of the running app.
         static func live(_ runtime: ProjectsRuntime) -> Actions {
@@ -81,7 +84,8 @@ final class ProjectsEmailModel {
                 mailReference: { [weak runtime] id, all in try await runtime?.checkedMailReference(for: id, all: all) },
                 handoff: runtime.handoff,
                 userLanguage: runtime.userLanguage,
-                now: runtime.dependencies.now
+                now: runtime.dependencies.now,
+                highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) }
             )
         }
     }
@@ -295,7 +299,7 @@ final class ProjectsEmailModel {
         if before == nil, case .checked(let result)? = explanation?.draft {
             before = result.draft
         }
-        return LastChange(version: last, segments: await ProjectsDraftDiff.highlight(from: before ?? "", to: after))
+        return LastChange(version: last, segments: await actions.highlight(before ?? "", after))
     }
 
     /// Takes the versions as they are now, with the highlight of the newest. Nothing changes
