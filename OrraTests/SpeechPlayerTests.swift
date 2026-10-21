@@ -153,6 +153,22 @@ struct SpeechPlayerTests {
         #expect(finished.withLock { $0 })
     }
 
+    /// A player let go of without a stop lets go of its device side too, so the device is
+    /// not held for good. The fake keeps the change callback, as NotificationCenter does
+    /// for the real engine until it stops.
+    @Test func aPlayerLetGoWithoutAStopLetsGoOfTheDevice() async throws {
+        weak var released: FakeSpeechOutput?
+        do {
+            let output = FakeSpeechOutput()
+            released = output
+            let player = SpeechPlayer(output: output)
+            try await player.start(on: Self.speakers)
+            #expect(output.isRunning)
+        }
+        try await waitUntil { released == nil }
+        #expect(released == nil)
+    }
+
     /// A device that goes away while it plays stops the speech, so finish does not wait for
     /// pieces that never report.
     @Test func aDeviceThatGoesAwayStopsTheSpeech() async throws {

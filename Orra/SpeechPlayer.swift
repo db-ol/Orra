@@ -76,8 +76,11 @@ final class SpeechPlayer: SpeechPlayback {
         let output = output
         let queue = queue
         holdsDevice = true
-        // AVAudioEngine stops itself when its device goes away or changes its format.
-        let changed: @Sendable () -> Void = { [weak self] in
+        // AVAudioEngine stops itself when its device goes away or changes its format. The
+        // output keeps this callback until it stops, so the callback holds the output only
+        // weakly. A player let go of without a stop then lets go of its device too.
+        let changed: @Sendable () -> Void = { [weak self, weak output] in
+            guard let output else { return }
             queue.async {
                 guard !output.isRunning else { return }
                 DispatchQueue.main.async {
