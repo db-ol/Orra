@@ -200,6 +200,7 @@ struct OutputChecksTests {
         #expect(OutputChecks.host(of: "javascript:alert(1)") == nil)
         #expect(OutputChecks.host(of: "</a>") == nil)
         #expect(OutputChecks.shown("Confirm at https://p\u{0456}c-conf.example/confirm today.", language: .en) == "Confirm at [link removed]\u{0456}[link removed] today.")
+        #expect(OutputChecks.shown("It is from zheng@sh\u{0430}nlan-tea.example, not shanlan-tea.example.", language: .en) == "It is from zheng@sh\u{0430}nlan-tea.example, not shanlan-tea.example.")
         #expect(OutputChecks.shown("确认链接collect.example/p?d=1已过期。", language: .zh) == "确认链接collect.example已过期。")
     }
 

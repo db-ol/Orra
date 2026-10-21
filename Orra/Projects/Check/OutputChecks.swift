@@ -70,9 +70,11 @@ nonisolated enum OutputChecks {
     /// - Each link shows as its host only, such as collect.example. A link's path and
     ///   query are where an email puts the data it wants carried out, as in EchoLeak, and
     ///   the model may fill them in. The host says where the link goes, see `host(of:)`.
-    ///   A link without a plain host shows as the link placeholder, and so does one that
-    ///   a letter outside ASCII and Chinese touches, as the Cyrillic і of pіc-conf.example
-    ///   does, since the link was cut there and its host would show only a part.
+    ///   A link without a plain host shows as the link placeholder. So does one that a
+    ///   letter outside ASCII and Chinese touches, as the Cyrillic і of
+    ///   https://pіc-conf.example/x does, since the link was cut there and its host would
+    ///   show only a part. A link that is only a host stays as it is, so a lookalike such
+    ///   as shаnlan-tea.example still shows whole.
     /// - With `withholding`, codes and numbers that it does not hold become the project
     ///   data placeholder: booking, account and ID numbers, amounts and scores. The
     ///   explanation passes what the recipients already have when the email asks someone
@@ -89,7 +91,11 @@ nonisolated enum OutputChecks {
         var edits: [(Range<String.Index>, String)] = []
         let links = linkRanges(in: original)
         for link in links {
-            var shownHost = touchesForeignLetter(link, in: original) ? nil : host(of: String(original[link]))
+            let linkText = String(original[link])
+            var shownHost = host(of: linkText)
+            if shownHost != linkText.precomposedStringWithCompatibilityMapping.lowercased(), touchesForeignLetter(link, in: original) {
+                shownHost = nil
+            }
             if let found = shownHost, let knownCodes {
                 let subdomain = found.split(separator: ".").dropLast(2).joined(separator: ".")
                 if codes(in: subdomain).contains(where: { !knownCodes.contains(codeValue(subdomain[$0])) }) {
