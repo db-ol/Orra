@@ -5,10 +5,12 @@ import Foundation
 ///
 /// - Multipart parts are split by their boundaries. Of the parts of multipart/alternative,
 ///   the last one with text counts, as RFC 2046 orders them from plainest to richest and as
-///   Mail shows them. Of multipart/related only the first part is text, the rest are inline
-///   resources. multipart/signed gives its first part, and multipart/encrypted nothing.
-///   Every other multipart gives its text parts in order, as Mail shows them one after the
-///   other.
+///   Mail shows them. When a limit cuts a later alternative or leaves it unread, that one
+///   counts with what was read of it, which may be nothing, since an earlier one may say
+///   something other than what Mail shows. Of multipart/related only the first part is
+///   text, the rest are inline resources. multipart/signed gives its first part, and
+///   multipart/encrypted nothing. Every other multipart gives its text parts in order, as
+///   Mail shows them one after the other.
 /// - Quoted printable, base64 and the charsets of `MailHeaders.text(_:charset:)` are
 ///   decoded, and format=flowed text is joined back into its lines.
 /// - A text part named as an attachment, every other type and attached emails
@@ -108,8 +110,7 @@ nonisolated struct MIMEMessage: Sendable, Equatable {
     }
 
     private init(bytes: [UInt8], form: SourceForm, isLonger: Bool, limits: Limits) {
-        var parser = Parser(bytes: bytes, form: form, limits: limits)
-        if isLonger { parser.isCut = true }
+        var parser = Parser(bytes: bytes, form: form, isLonger: isLonger, limits: limits)
         let entity = parser.entity(0..<bytes.count, depth: 0)
         headers = entity.headers
         bodies = entity.bodies
@@ -305,24 +306,32 @@ nonisolated extension MIMEMessage {
     private struct Parser {
         let bytes: [UInt8]
         let form: SourceForm
+        /// Whether the source goes on past `bytes`, cut at its limit.
+        let isLonger: Bool
         let limits: Limits
         var steps = 0
         var parts = 0
         var textBytes = 0
-        var isCut = false
+        /// How many times a limit left something out, so a part can tell whether a limit
+        /// cut it.
+        var cuts = 0
         var attachments: [Attachment] = []
 
-        init(bytes: [UInt8], form: SourceForm, limits: Limits) {
+        var isCut: Bool { cuts > 0 }
+
+        init(bytes: [UInt8], form: SourceForm, isLonger: Bool, limits: Limits) {
             self.bytes = bytes
             self.form = form
+            self.isLonger = isLonger
             self.limits = limits
+            if isLonger { cuts = 1 }
         }
 
         /// Counts steps, and says false once there are too many.
         mutating func step(_ count: Int = 1) -> Bool {
             steps += count
             if steps > limits.maximumSteps {
-                isCut = true
+                cuts += 1
                 return false
             }
             return true
@@ -362,7 +371,7 @@ nonisolated extension MIMEMessage {
                 }
                 firstLine = false
                 if next - range.lowerBound > limits.maximumHeaderBytes {
-                    isCut = true
+                    cuts += 1
                     headerEnd = start
                     bodyStart = range.upperBound
                     break
@@ -373,7 +382,7 @@ nonisolated extension MIMEMessage {
             }
             guard step(headerEnd - range.lowerBound) else { return entity }
             entity.headers = MailHeaders(bytes: bytes[range.lowerBound..<headerEnd], readsCharacters: form == .characters)
-            if entity.headers.isCut { isCut = true }
+            if entity.headers.isCut { cuts += 1 }
             let body = bodyStart..<max(bodyStart, range.upperBound)
 
             let typeText = entity.headers["Content-Type"]
@@ -387,7 +396,7 @@ nonisolated extension MIMEMessage {
 
             if mimeType.hasPrefix("multipart/") {
                 guard let boundary = type.parameters["boundary"], !boundary.isEmpty, depth < limits.maximumDepth else {
-                    isCut = true
+                    cuts += 1
                     return entity
                 }
                 entity.bodies = multipart(body, subtype: String(mimeType.dropFirst("multipart/".count)), boundary: boundary, depth: depth)
@@ -456,15 +465,21 @@ nonisolated extension MIMEMessage {
             }
             // A multipart without one delimiter cannot be split.
             if ranges.isEmpty, !closed {
-                isCut = true
+                cuts += 1
                 return []
             }
 
+            // Whether parts may follow the last one read: past the parts limit, or past the
+            // end of a source cut at its limit.
+            var leftOut = !closed && isLonger && body.upperBound == bytes.count
             var children: [[Body]] = []
+            // Whether a limit cut each child.
+            var cutChildren: [Bool] = []
             var childAttachments: [Range<Int>] = []
             for (number, range) in ranges.enumerated() {
                 guard parts < limits.maximumParts else {
-                    isCut = true
+                    cuts += 1
+                    leftOut = true
                     break
                 }
                 parts += 1
@@ -472,6 +487,7 @@ nonisolated extension MIMEMessage {
                 if subtype == "signed", number > 0 { break }
                 let defaultType = subtype == "digest" ? "message/rfc822" : "text/plain"
                 let attachmentsBefore = attachments.count
+                let cutsBefore = cuts
                 let child = entity(range, depth: depth + 1, defaultType: defaultType)
                 if subtype == "related", number > 0 {
                     // Resources of the first part, such as its images, show inline.
@@ -479,11 +495,14 @@ nonisolated extension MIMEMessage {
                     continue
                 }
                 children.append(child.bodies)
+                cutChildren.append(cuts > cutsBefore)
                 childAttachments.append(attachmentsBefore..<attachments.count)
             }
             if subtype == "alternative" {
-                // Mail shows one alternative, so only its attachments count.
-                guard let shown = children.lastIndex(where: { !$0.isEmpty }) else { return [] }
+                // Mail shows one alternative, so only its attachments count. An alternative
+                // that a limit cut or left unread may be the one Mail shows, so no earlier
+                // one stands in for it. It gives what was read of it, which may be nothing.
+                guard !leftOut, let shown = children.indices.last(where: { !children[$0].isEmpty || cutChildren[$0] }) else { return [] }
                 let kept = attachments[childAttachments[shown]]
                 if let first = childAttachments.first?.lowerBound {
                     attachments.removeSubrange(first..<attachments.count)
@@ -498,7 +517,7 @@ nonisolated extension MIMEMessage {
         mutating func decodedText(_ range: Range<Int>, transfer: String, charset: String?) -> String? {
             let budget = limits.maximumTextBytes - textBytes
             guard budget > 0 else {
-                isCut = true
+                cuts += 1
                 return nil
             }
             guard step(range.count) else { return nil }
@@ -516,7 +535,7 @@ nonisolated extension MIMEMessage {
             let readsAsUTF8 = isRaw && form == .decoded
             if decoded.count > budget {
                 decoded.removeSubrange(budget...)
-                isCut = true
+                cuts += 1
                 // Drop a character cut in half, which is up to three bytes in any charset.
                 let encoding = readsAsUTF8 ? .utf8 : charset.flatMap(MailHeaders.encoding) ?? .utf8
                 for _ in 0..<3 where !decoded.isEmpty && String(bytes: decoded, encoding: encoding) == nil {
