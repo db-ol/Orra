@@ -300,10 +300,21 @@ struct ProjectListTests {
     /// At most `maximumDismissedSuggestions` are kept, the newest.
     @Test func theNewestDismissalsAreKept() async throws {
         defer { cleanUp() }
+        let count = ProjectList.maximumDismissedSuggestions + 2
+        // The file holds all but the last three dismissals, so the list fills up and drops
+        // the oldest with three writes of the file. A write for every dismissal took close
+        // to the time limit on a busy test runner.
+        try storage.create()
+        let stored: [String: Any] = [
+            "version": ProjectList.formatVersion,
+            "projects": [Any](),
+            "dismissedSuggestions": (0..<count - 3).map { "key-\($0)" },
+        ]
+        try JSONSerialization.data(withJSONObject: stored).write(to: storage.folder.appendingPathComponent(ProjectList.fileName))
         let list = ProjectList(storage: storage)
         try await list.load()
-        let count = ProjectList.maximumDismissedSuggestions + 2
-        for index in 0..<count {
+        #expect(list.dismissedSuggestions.count == count - 3)
+        for index in count - 3..<count {
             try await list.dismissSuggestion("key-\(index)")
         }
         #expect(list.dismissedSuggestions.count == ProjectList.maximumDismissedSuggestions)
