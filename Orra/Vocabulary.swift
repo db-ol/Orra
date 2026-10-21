@@ -334,19 +334,23 @@ enum VocabularyAddition: Equatable {
     case full
 }
 
-/// The copied word the menu offers to add to the vocabulary. Read once each time a menu
-/// opens, never while Orra dictates: the paste reads and restores the pasteboard off the
-/// main thread then, and NSPasteboard must not be used from two threads at once.
+/// The copied word the menu offers to add to the vocabulary. Read each time a menu opens,
+/// never while Orra dictates. The read waits for the app that copied the text when that app
+/// has not provided it yet, so it runs on PasteboardAccess, off the main thread, and the
+/// word comes a moment after the menu opens. A paste that starts meanwhile reads the
+/// pasteboard there after it.
 @Observable
 final class ClipboardWord {
     /// The copied text, when it can be a vocabulary word.
     private(set) var word: String?
 
-    @ObservationIgnored private let read: () -> String?
+    @ObservationIgnored private let read: @Sendable () async -> String?
     @ObservationIgnored private let isDictating: () -> Bool
     @ObservationIgnored private let vocabulary: () -> [String]
+    /// The read of the latest refresh. Only it may set the word.
+    @ObservationIgnored private var reading: Task<Void, Never>?
 
-    init(read: @escaping () -> String? = { NSPasteboard.general.string(forType: .string) },
+    init(read: @escaping @Sendable () async -> String? = { await ClipboardWord.readGeneral() },
          isDictating: @escaping () -> Bool,
          vocabulary: @escaping () -> [String]) {
         self.read = read
@@ -354,17 +358,37 @@ final class ClipboardWord {
         self.vocabulary = vocabulary
     }
 
-    func refresh() {
+    /// The text on the general pasteboard.
+    @PasteboardAccess
+    static func readGeneral() async -> String? {
+        NSPasteboard.general.string(forType: .string)
+    }
+
+    /// Reads the copied word again, and drops a read an earlier refresh started. Returns
+    /// the read it started, which tests wait for.
+    @discardableResult
+    func refresh() -> Task<Void, Never>? {
+        reading?.cancel()
+        reading = nil
         let terms = vocabulary()
         guard !isDictating(), terms.count < Vocabulary.maximumCount else {
             word = nil
-            return
+            return nil
         }
-        word = Vocabulary.candidate(fromClipboard: read(), in: terms)
+        let task = Task { [weak self, read] in
+            let text = await read()
+            // A newer refresh or a dictation started while the copying app was slow.
+            guard let self, !Task.isCancelled, !isDictating() else { return }
+            word = Vocabulary.candidate(fromClipboard: text, in: vocabulary())
+        }
+        reading = task
+        return task
     }
 
     /// Forgets the word once it was added.
     func clear() {
+        reading?.cancel()
+        reading = nil
         word = nil
     }
 }

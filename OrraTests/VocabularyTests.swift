@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Orra
 
@@ -150,19 +151,76 @@ struct VocabularyTests {
     }
 
     @MainActor
-    @Test func theClipboardIsNotReadWhileDictating() {
-        var reads = 0
+    @Test func theClipboardIsNotReadWhileDictating() async {
+        let reads = Mutex(0)
         var dictating = true
-        let clipboard = ClipboardWord(read: { reads += 1; return "KVLite-Nova" }, isDictating: { dictating }, vocabulary: { [] })
-        clipboard.refresh()
-        #expect(reads == 0)
+        let clipboard = ClipboardWord(read: { reads.withLock { $0 += 1 }; return "KVLite-Nova" }, isDictating: { dictating }, vocabulary: { [] })
+        #expect(clipboard.refresh() == nil)
+        #expect(reads.withLock { $0 } == 0)
         #expect(clipboard.word == nil)
         dictating = false
-        clipboard.refresh()
-        #expect(reads == 1)
+        await clipboard.refresh()?.value
+        #expect(reads.withLock { $0 } == 1)
         #expect(clipboard.word == "KVLite-Nova")
         clipboard.clear()
         #expect(clipboard.word == nil)
+    }
+
+    /// The app that copied the text provides it only when asked, and is slow. The menu
+    /// opens at once and offers the word once the text came.
+    @MainActor
+    @Test func aSlowClipboardDoesNotHoldTheMainActor() async {
+        let (stream, copied) = AsyncStream<String?>.makeStream()
+        let clipboard = ClipboardWord(read: {
+            for await text in stream { return text }
+            return nil
+        }, isDictating: { false }, vocabulary: { [] })
+        let read = clipboard.refresh()
+        #expect(clipboard.word == nil)
+        copied.yield("KVLite-Nova")
+        await read?.value
+        #expect(clipboard.word == "KVLite-Nova")
+    }
+
+    @MainActor
+    @Test func aReadThatEndsAfterDictationStartsIsDropped() async {
+        let (stream, copied) = AsyncStream<String?>.makeStream()
+        var dictating = false
+        let clipboard = ClipboardWord(read: {
+            for await text in stream { return text }
+            return nil
+        }, isDictating: { dictating }, vocabulary: { [] })
+        let read = clipboard.refresh()
+        dictating = true
+        copied.yield("KVLite-Nova")
+        await read?.value
+        #expect(clipboard.word == nil)
+    }
+
+    /// Two menus opened while the copying app was slow. The read of the first ends last
+    /// and changes nothing.
+    @MainActor
+    @Test func theReadOfTheLatestMenuWins() async {
+        let (firstStream, first) = AsyncStream<String?>.makeStream()
+        let (secondStream, second) = AsyncStream<String?>.makeStream()
+        let streams = Mutex([firstStream, secondStream])
+        let clipboard = ClipboardWord(read: {
+            let stream = streams.withLock { $0.removeFirst() }
+            // In a task of its own, so the read ignores the refresh that drops it, as a read
+            // that waits for another app does.
+            return await Task {
+                for await text in stream { return text }
+                return nil
+            }.value
+        }, isDictating: { false }, vocabulary: { [] })
+        let firstRead = clipboard.refresh()
+        let secondRead = clipboard.refresh()
+        second.yield("Qwen3-ASR")
+        await secondRead?.value
+        #expect(clipboard.word == "Qwen3-ASR")
+        first.yield("KVLite-Nova")
+        await firstRead?.value
+        #expect(clipboard.word == "Qwen3-ASR")
     }
 
     @Test func theVocabularyIsSavedOnThisMacWithItsDates() throws {

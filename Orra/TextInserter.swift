@@ -60,7 +60,7 @@ final class TextInserter {
         secureInputHolder: @escaping () -> pid_t?,
         frontmostApp: @escaping () -> pid_t?,
         focusedField: @escaping (pid_t) async -> FocusedField.Kind,
-        readSnapshot: @escaping (String) async -> PasteboardSnapshot = { await PasteboardSnapshot.read(pasteboardNamed: $0) },
+        readSnapshot: @escaping (String) async -> PasteboardSnapshot = { @Sendable name in await PasteboardSnapshot.read(pasteboardNamed: name) },
         keyCodeForV: @escaping () -> CGKeyCode,
         restoreDelay: Duration = .milliseconds(500)
     ) {
@@ -143,6 +143,16 @@ final class TextInserter {
     }
 }
 
+/// Where Orra reads the pasteboard off the main thread, where the keyboard tap runs. Asking
+/// for data the copying app has not provided yet waits for that app, up to two minutes
+/// when it hangs. NSPasteboard must not be used from two threads at once, so the paste's
+/// read of the old contents and the menu's read of the copied word run here one after the
+/// other.
+@globalActor
+actor PasteboardAccess {
+    nonisolated static let shared = PasteboardAccess()
+}
+
 /// A copy of everything on a pasteboard, so it can be put back.
 nonisolated struct PasteboardSnapshot: Sendable {
     nonisolated struct Entry: Sendable {
@@ -155,8 +165,8 @@ nonisolated struct PasteboardSnapshot: Sendable {
     let items: [[Entry]]
 
     /// Reads every type of every item. Asking for data the copying app has not provided
-    /// yet waits for that app, so this runs off the main actor.
-    @concurrent
+    /// yet waits for that app, so this runs on PasteboardAccess, off the main actor.
+    @PasteboardAccess
     static func read(pasteboardNamed name: String) async -> PasteboardSnapshot {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name(name))
         let changeCount = pasteboard.changeCount

@@ -372,7 +372,9 @@ got worse than the baseline, see docs/release-gate.md.
     without losing a word, that every save also writes that list, so words added after
     going back to 0.1.0 and the words of an unreadable save are kept, and the rows, search,
     header and removal of the table in Settings, where removing a learned word lets
-    learning add it again. PushToTalkControllerTests checks that every
+    learning add it again. It checks that the copied word the menu offers is read without
+    holding the main actor, never while Orra dictates, and only from the latest menu's
+    read. PushToTalkControllerTests checks that every
     dictation passes the vocabulary to the model, nil when it is empty, only the 200 most
     recent of a longer list, that a paste dates the words it holds while a text that was not
     pasted dates none, that a change is saved, and that learning is refused only at the cap.
@@ -1979,6 +1981,9 @@ corrections under Recognition in Settings, Dictation first:
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the
   right word there: the Orra menu offers to add it to the vocabulary.
+- [ ] Copy a word in a remote desktop or virtual machine window, then open the Orra menu.
+  The menu opens at once, typing in other apps does not stall, and the offer to add the
+  word comes a moment later.
 - [ ] In Messages or WeChat, fix a misheard name and press Return to send: the fix still
   counts. Click into another field during the watch: nothing is read from it.
 - [ ] Dictate into one field and press Tab into another field of the same app as soon as
