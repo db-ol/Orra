@@ -1001,7 +1001,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se quitó una oración escrita como si fuera un asistente."
+            "value" : "Se quitó una oración escrita con la voz de un asistente."
           }
         },
         "ja" : {
@@ -4065,7 +4065,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Los borradores necesitan revisión. Lee cada línea antes de enviar uno."
+            "value" : "Los borradores necesitan revisión. Lee cada línea del borrador antes de enviarlo."
           }
         },
         "ja" : {
@@ -7489,7 +7489,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No hace falta responder. Se envió a una lista o la envió una máquina."
+            "value" : "No hace falta responder. Se envió a una lista o lo envió una máquina."
           }
         },
         "ja" : {
@@ -10421,13 +10421,13 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proyectos todavía no leyó este mensaje. Lee el correo de los últimos %lld días en los buzones que elegiste."
+            "value" : "Proyectos no leyó este mensaje. Lee el correo de los últimos %lld días en los buzones que elegiste."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“プロジェクト”はこのメッセージをまだ読み取っていません。選んだメールボックスの過去%lld日間のメールを読み取ります。"
+            "value" : "“プロジェクト”はこのメッセージを読み取っていません。選んだメールボックスの過去%lld日間のメールを読み取ります。"
           }
         },
         "zh-Hans" : {
@@ -16242,7 +16242,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "モデル待ち。このウインドウが開いている間にモデルが振り分けます"
+            "value" : "モデル待ち（このウインドウが開いている間に振り分ける）"
           }
         },
         "zh-Hans" : {
