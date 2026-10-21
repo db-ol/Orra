@@ -103,10 +103,12 @@ struct ProjectsSuggestedSection: View {
     }
 
     /// Hides a suggestion at once and keeps the dismissal in the project list. When the list
-    /// cannot be saved, it stays hidden while the window is open.
-    static func dismiss(_ suggestion: ProjectSuggestionService.Suggestion, from suggestions: ProjectSuggestionService, runtime: ProjectsRuntime) {
+    /// cannot be saved, it stays hidden while the window is open. The task ends when
+    /// projects.json was written, or could not be.
+    @discardableResult
+    static func dismiss(_ suggestion: ProjectSuggestionService.Suggestion, from suggestions: ProjectSuggestionService, runtime: ProjectsRuntime) -> Task<Void, Never> {
         suggestions.dismiss(suggestion.id)
-        Task {
+        return Task {
             do {
                 try await runtime.dismissSuggestion(suggestion.group)
             } catch {
