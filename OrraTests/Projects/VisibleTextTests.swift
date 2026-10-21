@@ -376,6 +376,38 @@ struct VisibleTextTests {
         #expect(fewRules.isCut)
     }
 
+    /// Numbers past what a computer word holds, in an+b and in <font size>, read as WebKit
+    /// reads them and never stop the app.
+    @Test(arguments: [
+        ("<style>p:nth-child(n-9223372036854775808){display:none}</style><p>secret</p>", "", ["hiddenStyle: secret"]),
+        ("<style>p:nth-of-type(n-9223372036854775808){display:none}</style><p>secret</p>", "", ["hiddenStyle: secret"]),
+        ("<style>p:nth-last-child(2n-9223372036854775808){display:none}</style><p>one</p><p>two</p>", "two", ["hiddenStyle: one"]),
+        ("<style>p:nth-child(-n+9223372036854775807){display:none}</style><p>secret</p>", "", ["hiddenStyle: secret"]),
+        ("<p><font size=\"+9223372036854775807\">Hello</font></p>", "Hello", []),
+        ("<p><font size=\"-9223372036854775807\">Hello</font></p>", "Hello", []),
+    ])
+    func hugeNumbersInSelectorsAndFontSizes(_ markup: String, _ text: String, _ hidden: [String]) {
+        let read = Self.read(markup)
+        #expect(read.text == text)
+        #expect(read.hidden == hidden)
+    }
+
+    /// Selector lists inside :not(), :is(), :where() and nth-child of read only their own
+    /// part of the selector, so what follows them still counts.
+    @Test(arguments: [
+        ("<style>p:not(.keep){display:none}</style><p>secret</p><p class=\"keep\">shown</p>", "shown"),
+        ("<style>div:is(.a, .b) span{display:none}</style><div class=\"b\"><span>secret</span></div><div class=\"c\"><span>shown</span></div>", "shown"),
+        ("<style>li:nth-child(2 of .x){display:none}</style><ul><li class=\"x\">one</li><li>two</li><li class=\"x\">secret</li></ul>", "- one\n- two"),
+        ("<style>p:is(:not(.a), .b).c{display:none}</style><p class=\"c\">secret</p><p class=\"a c\">shown</p><p class=\"a b c\">secret</p>", "shown"),
+        ("<style>p:where(.a) + p:nth-last-child(1 of :is(.z)){display:none}</style><p class=\"a\">first</p><p class=\"z\">secret</p>", "first"),
+    ])
+    func nestedSelectorListsReadTheirOwnPart(_ markup: String, _ text: String) {
+        let read = Self.read(markup)
+        #expect(read.text == text)
+        #expect(read.hidden.allSatisfy { $0.hasPrefix("hiddenStyle: ") && $0.contains("secret") })
+        #expect(!read.hidden.isEmpty)
+    }
+
     @Test func everyBodyOfAMessageInOrder() async {
         let source = [
             "Content-Type: multipart/mixed; boundary=b",

@@ -386,6 +386,27 @@ struct MIMEFuzzTests {
         }
     }
 
+    /// Selectors nested thousands deep stop being read past a few levels. The rule may
+    /// match then, so it only hides, and the stack and the work stay small.
+    @Test func deeplyNestedSelectorsStayBounded() {
+        for open in [":is(", ":not(", ":where(", ":nth-child(1 of "] {
+            let selector = "p" + String(repeating: open, count: 5_000) + "b" + String(repeating: ")", count: 5_000)
+            let markup = "<style>\(selector) { display: none }</style><p>secret</p><b>shown</b>"
+            let visible = VisibleText(markup: markup)
+            #expect(!visible.text.contains("secret"), "\(open)")
+            #expect(visible.text.contains("shown"), "\(open)")
+            #expect(visible.findings.contains(.hiddenStyle), "\(open)")
+            #expect(visible.steps <= 16 * markup.utf8.count, "\(open)")
+        }
+        // Eight levels still read exactly, so a rule for another class leaves the text.
+        func nested(_ levels: Int) -> String {
+            "<style>p" + String(repeating: ":is(", count: levels) + ".other" + String(repeating: ")", count: levels)
+                + " { display: none }</style><p>words</p>"
+        }
+        #expect(VisibleText(markup: nested(8)).text == "words")
+        #expect(VisibleText(markup: nested(9)).text == "")
+    }
+
     @Test func manyDeclarationsPerRuleHitTheCaps() {
         // Each declaration of each rule applies to every element, so the caps count them.
         let declarations = (0..<64).map { _ in "color: #000" }.joined(separator: "; ")

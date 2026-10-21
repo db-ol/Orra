@@ -105,17 +105,35 @@ struct TextChunkerTests {
             ("第三条 交货", "第三条 交货"), ("1. Payment terms", "1. Payment terms"), ("1.2 Scope", "1.2 Scope"),
             ("3) Fees", "3) Fees"), ("（一）付款", "（一）付款"), ("Payment terms:", "Payment terms"), ("付款方式：", "付款方式"),
             ("Scope:\nThe studio designs the calendar.", "Scope"),
+            // A Markdown heading of 120 characters.
+            ("# " + String(repeating: "a", count: 118), String(repeating: "a", count: 118)),
         ]
         for (paragraph, heading) in headings {
             #expect(TextChunker.heading(in: paragraph) == heading, "\(paragraph)")
         }
+        // A letter with 100 accents is one character of 201 bytes.
+        let heavy = "a" + String(repeating: "\u{301}", count: 100)
         let notHeadings = [
             "1. Pay the deposit by Friday.", "The venue is booked.", "2026年10月18日", "#hashtag", "",
             "3.5 percent", "第一批台历已经发货，请查收", String(repeating: "Long title ", count: 5),
+            // Too long, or too many bytes, for a heading every chunk under it repeats.
+            "# " + String(repeating: "word ", count: 100), "# " + String(repeating: heavy, count: 3),
+            "Payment " + String(repeating: heavy, count: 3) + ":",
         ]
         for paragraph in notHeadings {
             #expect(TextChunker.heading(in: paragraph) == nil, "\(paragraph)")
         }
+    }
+
+    /// A Markdown heading line far longer than a heading stays text, so the chunks under it
+    /// do not each repeat it and keep all of its words once.
+    @Test func aVeryLongHeadingLineStaysText() {
+        let page = "# " + String(repeating: "budget invoice ", count: 20_000)
+        let chunks = chunk([page])
+        #expect(chunks.count > 100)
+        #expect(chunks.allSatisfy { $0.heading == nil && $0.text.count <= 800 })
+        #expect(chunks.first?.text.hasPrefix("# budget invoice") == true)
+        #expect(chunks.reduce(0) { $0 + $1.text.components(separatedBy: "invoice").count - 1 } >= 20_000)
     }
 
     // MARK: Helpers

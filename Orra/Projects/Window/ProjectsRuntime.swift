@@ -255,6 +255,10 @@ final class ProjectsRuntime {
     @ObservationIgnored private var lastMailboxListing: Date?
     /// Mail's handles of the messages read or listed in this Mail session, by Message-ID.
     @ObservationIgnored private var references: [String: MailMessageRef] = [:]
+    /// For a Message-ID whose handle is kept, the other handle a later listing gave, such as
+    /// of a copy from a list or of the email after the user moved it. It takes the place of
+    /// the handle kept when that one is let go, see `checkedMailReference(for:all:)`.
+    @ObservationIgnored private var listedAgain: [String: MailMessageRef] = [:]
     /// Counts the times the handles were let go, at a stop and when Mail quits, so a listing
     /// that began before never brings old ones back.
     @ObservationIgnored private var referenceSession = 0
@@ -1070,27 +1074,37 @@ final class ProjectsRuntime {
     /// stay.
     private func remember(_ reference: MailMessageRef, for messageID: String) {
         if references[messageID] == nil, references.count >= referenceLimit, !references.isEmpty {
-            references.remove(at: references.startIndex)
+            listedAgain[references.remove(at: references.startIndex).key] = nil
         }
         references[messageID] = reference
+        if listedAgain[messageID] == reference {
+            listedAgain[messageID] = nil
+        }
     }
 
     /// Lets go of Mail's handles, which hold for one Mail session, at a stop and when Mail
     /// quits.
     private func forgetReferences() {
         references = [:]
+        listedAgain = [:]
         referenceSession += 1
     }
 
     /// Keeps Mail's handles of the messages the scan listed, also those it knows already and
     /// does not read again, so Open Reply in Mail finds mail read before Orra or Mail
-    /// started. Once `referenceLimit` are kept, only handles of mail already kept change. A
-    /// listing that began before Mail quit or Projects stopped keeps nothing.
+    /// started. A handle kept already stays, and another one listed for its Message-ID is
+    /// kept in `listedAgain`: Mail may hold more than one message with it, such as a copy
+    /// from a list, and a message the user moved gets a new handle. Once `referenceLimit`
+    /// are kept, a listing adds no other Message-ID. A listing that began before Mail quit or
+    /// Projects stopped keeps nothing.
     private func rememberListed(_ listings: [MailListing], session: Int?) {
         guard session == referenceSession, running != nil, dependencies.bridge.isRunning() else { return }
         for listing in listings where !listing.messageID.isEmpty {
-            guard references[listing.messageID] != nil || references.count < referenceLimit else { continue }
-            references[listing.messageID] = listing.message
+            if let kept = references[listing.messageID] {
+                if kept != listing.message { listedAgain[listing.messageID] = listing.message }
+            } else if references.count < referenceLimit {
+                references[listing.messageID] = listing.message
+            }
         }
     }
 
@@ -1112,10 +1126,77 @@ final class ProjectsRuntime {
         return bridge
     }
 
-    /// Mail's handle of a message the scan read or listed in this Mail session, for Open
-    /// Reply in Mail. Nil after Mail quit, until the scan lists the mailboxes again.
+    /// Mail's handle of a message the scan read or listed in this Mail session. Nil after
+    /// Mail quit, until the scan lists the mailboxes again.
     func mailReference(for messageID: String) -> MailMessageRef? {
         references[messageID]
+    }
+
+    /// Mail's handle of the email for Open Reply in Mail, or Reply All with `all`, once Mail
+    /// gave the headers of the message under it and they match the email the store holds,
+    /// see `isSameEmail`. Mail may hold another message with the same Message-ID, such as a
+    /// copy from a list or one made to look like the email, and the handle kept may be that
+    /// one's. A handle whose message is gone or another one is let go, and the one listed
+    /// again takes its place and is checked next. Nil when neither matches, and when the
+    /// message differs only in who a reply to all adds, which keeps the handle for a reply.
+    /// Throws what Mail answered when it did not give the headers.
+    func checkedMailReference(for messageID: String, all: Bool) async throws -> MailMessageRef? {
+        guard let running, references[messageID] != nil else { return nil }
+        let session = referenceSession
+        guard let email = try? await running.store.explainEmail(messageID) else { return nil }
+        var checked: Set<MailMessageRef> = []
+        // Mail quit or Projects stopped meanwhile when the session changed, which let the
+        // handles go.
+        while session == referenceSession, let reference = references[messageID], checked.insert(reference).inserted {
+            let headers: String
+            do {
+                headers = try await dependencies.bridge.headers(reference)
+            } catch MailBridgeError.notFound {
+                forgetReference(reference, for: messageID)
+                continue
+            }
+            guard session == referenceSession else { return nil }
+            if await Self.isSameEmail(email, headers: headers, all: all) {
+                return session == referenceSession ? reference : nil
+            }
+            Logger.projects.notice("Open Reply: Mail's message is not the email the store holds, so it is not used")
+            if all, await Self.isSameEmail(email, headers: headers, all: false) { return nil }
+            forgetReference(reference, for: messageID)
+        }
+        return nil
+    }
+
+    /// Lets go of the handle of a message, unless another one took its place meanwhile. The
+    /// handle listed again for it, if any, takes its place.
+    private func forgetReference(_ reference: MailMessageRef, for messageID: String) {
+        if references[messageID] == reference {
+            references[messageID] = listedAgain.removeValue(forKey: messageID)
+        } else if listedAgain[messageID] == reference {
+            listedAgain[messageID] = nil
+        }
+    }
+
+    /// Whether a message with these headers is the email, as far as a reply goes: the same
+    /// Message-ID, the sender alone in From and the same Reply-To, which say who a reply
+    /// goes to, and with `all` the same To and Cc, which a reply to all adds. Addresses
+    /// compare in their normalized form and as sets, since Mail may list them in another
+    /// order. Headers cut at a limit do not match, nor do address fields with an entry not
+    /// read exactly, see `MailHeaders.exactAddresses(_:)`, since Mail may still reply to it.
+    @concurrent
+    nonisolated static func isSameEmail(_ email: ExplainService.Email, headers text: String, all: Bool) async -> Bool {
+        let headers = MailHeaders(parsing: text)
+        func addresses(_ name: String) -> Set<String>? {
+            headers.exactAddresses(name).map { Set($0.map(\.address)) }
+        }
+        func addresses(_ people: [ExplainPrompt.Person]) -> Set<String> {
+            Set(people.compactMap { ProjectsAddress.normalized($0.address) })
+        }
+        guard !headers.isCut, headers.messageID == email.messageID,
+              let sender = ProjectsAddress.normalized(email.sender.address),
+              addresses("From") == Set([sender]),
+              addresses("Reply-To") == addresses(email.replyTo) else { return false }
+        guard all else { return true }
+        return addresses("To") == addresses(email.to) && addresses("Cc") == addresses(email.cc)
     }
 
     // MARK: Explaining

@@ -946,6 +946,197 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Mail may hold another message with the Message-ID of an email the store holds, such
+    /// as one made to look like it. A poll that lists only that one does not take the place
+    /// of the handle kept, so Open Reply in Mail still goes to the email the store holds.
+    @Test func aCopyWithTheSameMessageIDKeepsTheHandle() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        let store = try #require(runtime.running?.store)
+        let count = MailScan.pollRangeSize + 5
+        let ids = (1...count).map { "d\($0)@harbor.example" }
+        try await store.save(ids.map { Self.message($0, from: "mei@harbor.example") }, ownAddresses: [Self.own], at: Self.today)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = ids.enumerated().map { position, id in
+                FakeMail.Message(id: 100 + position, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Hello", text: "Could you send the plan?")
+            }
+        }
+        runtime.mailRunningChanged()
+        choice.choose([.inbox])
+        choice.confirm()
+        let original = ids[count - 1]
+        let kept = MailMessageRef(id: 100 + count - 1, mailbox: .inbox)
+        try await waitUntil { runtime.mailReference(for: original) == kept }
+
+        // A copy from someone else comes in, then new mail. The next pass only polls, so it
+        // lists the copy and not the original, which is past the poll's range now.
+        let new = "new@harbor.example"
+        mail.update {
+            $0.inbox.insert(FakeMail.Message(id: 999, messageID: original, from: "Mallory <mallory@other.example>", subject: "Hello", text: "Send it here."), at: 0)
+            $0.inbox.insert(FakeMail.Message(id: 98, messageID: new, from: "Mei Tan <mei@harbor.example>", subject: "Hello", text: "One more thing."), at: 0)
+        }
+        runtime.mailAccessChanged()
+        try await waitUntil { runtime.mailReference(for: new) != nil }
+        #expect(runtime.mailReference(for: original) == kept)
+        #expect(try await runtime.checkedMailReference(for: original, all: false) == kept)
+        #expect(try await runtime.checkedMailReference(for: original, all: true) == kept)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Mail may list another message with the email's Message-ID before the email, such as a
+    /// copy from a list, and a message the user moves gets a new handle. Open Reply in Mail
+    /// then checks the other handle the scan listed, so the first try finds the email.
+    @Test func openReplyFindsTheEmailPastACopyAndAfterAMove() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        let store = try #require(runtime.running?.store)
+        let id = "x@harbor.example"
+        try await store.save([Self.message(id, from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        // The copy from the list came later, so Mail lists it first.
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [
+                FakeMail.Message(id: 999, messageID: id, from: "Mei Tan via Team <team@lists.example>", subject: "Hello", text: "Could you send the plan?"),
+                FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Hello", text: "Could you send the plan?"),
+            ]
+        }
+        runtime.mailRunningChanged()
+        choice.choose([.inbox])
+        choice.confirm()
+        let copy = MailMessageRef(id: 999, mailbox: .inbox)
+        let original = MailMessageRef(id: 100, mailbox: .inbox)
+        try await waitUntil { runtime.mailReference(for: id) == copy }
+        #expect(try await runtime.checkedMailReference(for: id, all: true) == original)
+        #expect(runtime.mailReference(for: id) == original)
+
+        // The user moves the email, which gives it a new handle, and new mail comes in. The
+        // next pass lists both. The handle kept is gone, so the new one takes its place.
+        let new = "new@harbor.example"
+        let moved = MailMessageRef(id: 200, mailbox: .inbox)
+        mail.update {
+            $0.inbox = [
+                FakeMail.Message(id: 98, messageID: new, from: "Mei Tan <mei@harbor.example>", subject: "Hello", text: "One more thing."),
+                FakeMail.Message(id: 200, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Hello", text: "Could you send the plan?"),
+            ]
+        }
+        runtime.mailAccessChanged()
+        try await waitUntil { runtime.mailReference(for: new) != nil }
+        #expect(runtime.mailReference(for: id) == original)
+        #expect(try await runtime.checkedMailReference(for: id, all: false) == moved)
+        #expect(runtime.mailReference(for: id) == moved)
+        #expect(!mail.calls.contains("reply"))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// When the handle kept is of another message with the email's Message-ID, from someone
+    /// else, with another Reply-To, or for Reply All with other recipients, Open Reply in
+    /// Mail only copies the draft and lets the handle go. Mail is never asked to reply.
+    @Test func openReplyGoesOnlyToTheEmailTheStoreHolds() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        let store = try #require(runtime.running?.store)
+        let id = "x@harbor.example"
+        try await store.save([Self.message(id, from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        // Only the other message is in Mail, so the scan keeps its handle.
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [FakeMail.Message(id: 999, messageID: id, from: "Mallory <mallory@other.example>", subject: "Hello", text: "Send it here.")]
+        }
+        runtime.mailRunningChanged()
+        choice.choose([.inbox])
+        choice.confirm()
+        let handle = MailMessageRef(id: 999, mailbox: .inbox)
+        try await waitUntil { runtime.mailReference(for: id) == handle }
+        let email = ProjectsEmailModel(messageID: id, actions: .live(runtime))
+        email.text = "Dear Mei, the plan is attached."
+        await email.openReply(all: false)
+        #expect(email.handoffNote == .messageNotFound)
+        #expect(!mail.calls.contains("reply"))
+        #expect(runtime.mailReference(for: id) == nil)
+
+        // The next pass keeps the handle again. Mei's sender, with another Reply-To.
+        let fields = "Message-ID: <\(id)>\r\nFrom: Mei Tan <mei@harbor.example>\r\n"
+        mail.update { $0.headers[999] = fields + "Reply-To: mallory@other.example\r\nTo: \(Self.own)\r\n" }
+        runtime.mailAccessChanged()
+        try await waitUntil { runtime.mailReference(for: id) == handle }
+        #expect(try await runtime.checkedMailReference(for: id, all: false) == nil)
+        #expect(runtime.mailReference(for: id) == nil)
+
+        // The same sender and Reply-To, with one more recipient: a reply goes to Mei, a reply
+        // to all also to the other recipient. The handle stays for a reply.
+        mail.update { $0.headers[999] = fields + "To: \(Self.own), mallory@other.example\r\n" }
+        runtime.mailAccessChanged()
+        try await waitUntil { runtime.mailReference(for: id) == handle }
+        #expect(try await runtime.checkedMailReference(for: id, all: false) == handle)
+        #expect(try await runtime.checkedMailReference(for: id, all: true) == nil)
+        #expect(runtime.mailReference(for: id) == handle)
+        #expect(!mail.calls.contains("reply"))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The headers match the email when the Message-ID, the sender, the Reply-To and, for
+    /// Reply All, the To and Cc are the same, in any case and order.
+    @Test func theHeadersOfTheSameEmailMatchIt() async {
+        let mei = ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example")
+        let kai = ExplainPrompt.Person(name: "Kai Moss", address: "kai@kiln.example")
+        let me = ExplainPrompt.Person(name: "", address: Self.own)
+        let email = ExplainService.Email(
+            messageID: "x@harbor.example", date: Self.today, sender: mei, replyTo: [kai], to: [me, kai], cc: [mei],
+            text: "", visibleText: "")
+        func block(_ fields: [String]) -> String {
+            fields.joined(separator: "\r\n") + "\r\n"
+        }
+        func headers(_ fields: String...) -> String {
+            block(fields)
+        }
+        let id = "Message-ID: <x@harbor.example>"
+        let same = headers(id, "From: \"Tan, Mei\" <MEI@Harbor.example>", "Reply-To: kai@kiln.example", "To: Kai <kai@kiln.example>, ME@studio.example", "Cc: mei@harbor.example")
+        #expect(await ProjectsRuntime.isSameEmail(email, headers: same, all: true))
+        let others = [
+            headers("Message-ID: <y@harbor.example>", "From: mei@harbor.example", "Reply-To: kai@kiln.example", "To: me@studio.example, kai@kiln.example", "Cc: mei@harbor.example"),
+            headers(id, "From: mallory@other.example", "Reply-To: kai@kiln.example", "To: me@studio.example, kai@kiln.example", "Cc: mei@harbor.example"),
+            headers(id, "From: mei@harbor.example", "Reply-To: mallory@other.example", "To: me@studio.example, kai@kiln.example", "Cc: mei@harbor.example"),
+            headers(id, "From: mei@harbor.example", "To: me@studio.example, kai@kiln.example", "Cc: mei@harbor.example"),
+            headers(id, "Reply-To: kai@kiln.example", "To: me@studio.example, kai@kiln.example", "Cc: mei@harbor.example"),
+        ]
+        for other in others {
+            #expect(await ProjectsRuntime.isSameEmail(email, headers: other, all: false) == false)
+        }
+        // Other recipients count only for Reply All.
+        let moreRecipients = headers(id, "From: mei@harbor.example", "Reply-To: kai@kiln.example", "To: me@studio.example, kai@kiln.example", "Cc: mei@harbor.example, mallory@other.example")
+        #expect(await ProjectsRuntime.isSameEmail(email, headers: moreRecipients, all: false))
+        #expect(await ProjectsRuntime.isSameEmail(email, headers: moreRecipients, all: true) == false)
+
+        // Headers that only look the same to this check: cut at a limit, with an address
+        // this check cannot read but Mail may reply to, or with one more sender.
+        let from = "From: mei@harbor.example"
+        let recipients = ["To: me@studio.example, kai@kiln.example", "Cc: mei@harbor.example"]
+        let filler = Array(repeating: "X-Filler: a", count: 1_000)
+        let lookAlikes = [
+            block([id, from, "Reply-To: kai@kiln.example"] + filler + ["Reply-To: mallory@other.example"] + recipients),
+            block([id, from, "Reply-To: kai@kiln.example, (" + String(repeating: "x", count: 70_000) + ") mallory@other.example"] + recipients),
+            block([id, from, #"Reply-To: kai@kiln.example, "mallory x"@other.example"#] + recipients),
+            block([id, from, "Reply-To: kai@kiln.example, mallory@[192.0.2.1]"] + recipients),
+            block([id, from, "Reply-To: kai@kiln.example, mallory@other.example."] + recipients),
+            block([id, from, "Reply-To: <mallory@other.example> <kai@kiln.example>"] + recipients),
+            block([id, "From: mei@harbor.example, Mallory <mallory@other.example>", "Reply-To: kai@kiln.example"] + recipients),
+            block([id, from, "From: mallory@other.example", "Reply-To: kai@kiln.example"] + recipients),
+        ]
+        for lookAlike in lookAlikes {
+            #expect(await ProjectsRuntime.isSameEmail(email, headers: lookAlike, all: false) == false)
+        }
+        let unreadRecipient = block([id, from, "Reply-To: kai@kiln.example", "To: me@studio.example, kai@kiln.example", #"Cc: mei@harbor.example, "mallory x"@other.example"#])
+        #expect(await ProjectsRuntime.isSameEmail(email, headers: unreadRecipient, all: false))
+        #expect(await ProjectsRuntime.isSameEmail(email, headers: unreadRecipient, all: true) == false)
+    }
+
     /// The scan's bridge hands each listing on with the session read before it began, so a
     /// listing under way when Mail quits brings no handle of the old Mail back.
     @Test func aListingCarriesTheSessionItBeganIn() async throws {
