@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 /// Sets up a new project or changes one: its name and description, its folders by the open
 /// panel or by drag, its people with their roles, its domains and a linked Mail mailbox.
 ///
+/// A suggestion of Suggested Projects opens it as a new project, prefilled with the
+/// suggestion's name, description, people, domains and mailbox, which the user can change,
+/// save or dismiss.
+///
 /// The names of Mail's mailboxes are read only when the user asks for them, and only while
 /// Mail runs. Folders are kept as plain bookmarks, see Project.bookmark(of:). Projects never
 /// writes, moves or deletes anything in them.
@@ -40,11 +44,24 @@ struct ProjectsSetupView: View {
         /// Kept as they are, since the sheet does not edit them.
         var rules: [Project.Rule] = []
         var otherMailboxes: [String] = []
+        /// The suggestion a new project was prefilled from, nil for any other.
+        var suggestion: SuggestionService.Suggestion?
 
         /// A new project.
         init() {
             id = UUID()
             isNew = true
+        }
+
+        /// A new project prefilled from a suggestion of Suggested Projects.
+        init(suggestion: SuggestionService.Suggestion) {
+            self.init()
+            self.suggestion = suggestion
+            name = suggestion.name
+            description = suggestion.description
+            people = suggestion.group.people.map { Person(name: $0.name, address: $0.address) }
+            domains = suggestion.group.domains.joined(separator: ", ")
+            mailbox = suggestion.group.mailbox
         }
 
         /// A project to change.
@@ -116,6 +133,9 @@ struct ProjectsSetupView: View {
     @State var draft: Draft
     /// Called with the project's ID once it is saved, or nil when the user cancels.
     let done: (UUID?) -> Void
+    /// Dismisses the suggestion the project was prefilled from. The sheet shows Dismiss
+    /// Suggestion only with it.
+    var dismissSuggestion: (() -> Void)? = nil
     @State private var isChoosingFolders = false
     /// Why the last folder added was refused.
     @State private var folderProblem: String?
@@ -137,6 +157,17 @@ struct ProjectsSetupView: View {
             .font(.headline)
             .padding(.top, 14)
             Form {
+                if let suggestion = draft.suggestion {
+                    Section {
+                        Label {
+                            Text("Suggested from your mail in Needs a Project, where it would take \(suggestion.group.takes.count) emails. Check the name, the people and the domains, and add the project's folders.")
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "folder.badge.plus")
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
                 Section {
                     TextField("Name", text: $draft.name)
                     TextField("Description", text: $draft.description, axis: .vertical)
@@ -163,6 +194,12 @@ struct ProjectsSetupView: View {
             .formStyle(.grouped)
             Divider()
             HStack {
+                if let dismissSuggestion {
+                    Button("Dismiss Suggestion") {
+                        dismissSuggestion()
+                        done(nil)
+                    }
+                }
                 if saveFailed {
                     Text(verbatim: ProjectsWindowText.notice(.projectNotSaved))
                         .foregroundStyle(.secondary)

@@ -49,13 +49,20 @@ struct ProjectsWindowView: View {
         .task(id: Reload(place: model.place, changes: runtime.mailChanges)) {
             await model.reload()
         }
+        .task(id: ProjectsSuggestedSection.Reload(changes: runtime.mailChanges, holdsModel: runtime.windowHoldsModel, modelIsInstalled: runtime.dependencies.modelIsInstalled())) {
+            try? await Task.sleep(for: ProjectsSuggestedSection.reloadDelay)
+            guard !Task.isCancelled else { return }
+            await model.suggestions.refresh()
+        }
         .sheet(item: $setup) { draft in
-            ProjectsSetupView(runtime: runtime, draft: draft) { saved in
+            ProjectsSetupView(runtime: runtime, draft: draft, done: { saved in
                 if let saved {
                     model.place = .project(saved)
                 }
                 setup = nil
-            }
+            }, dismissSuggestion: draft.suggestion.map { suggestion in
+                { ProjectsSuggestedSection.dismiss(suggestion, from: model.suggestions, runtime: runtime) }
+            })
         }
         .onChange(of: model.ruleOffer) { _, offer in
             // The offer shows above the list, so VoiceOver says it.
@@ -117,6 +124,9 @@ struct ProjectsWindowView: View {
                     .tag(MailStore.Place.needsProject)
                 Label("Set Aside", systemImage: "archivebox")
                     .tag(MailStore.Place.setAside)
+            }
+            ProjectsSuggestedSection(runtime: runtime, suggestions: model.suggestions) { suggestion in
+                setup = ProjectsSetupView.Draft(suggestion: suggestion)
             }
             Section("Projects") {
                 ForEach(runtime.projectList) { project in

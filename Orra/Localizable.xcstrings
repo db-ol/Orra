@@ -3218,6 +3218,28 @@
         }
       }
     },
+    "Create Project…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crear proyecto…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクトを作成…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建项目…"
+          }
+        }
+      }
+    },
     "Creating the report…" : {
       "localizations" : {
         "es-419" : {
@@ -3568,6 +3590,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "超过 %lld 个字符的听写不会翻译，会直接粘贴原文。"
+          }
+        }
+      }
+    },
+    "Dismiss Suggestion" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descartar sugerencia"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "候補を表示しない"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "忽略此建议"
           }
         }
       }
@@ -4144,6 +4188,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "电子邮件地址"
+          }
+        }
+      }
+    },
+    "Emails it would take from Needs a Project: %lld" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Correos que pasarían desde Sin proyecto: %lld"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト未定”から移るメール: %lld件"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将从“待归入项目”移入的邮件：%lld 封"
           }
         }
       }
@@ -6578,6 +6644,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "有密码保护"
+          }
+        }
+      }
+    },
+    "Looking for projects in your mail…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscando proyectos en tu correo…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールからプロジェクトを探しています…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在从你的邮件中查找项目…"
           }
         }
       }
@@ -12884,6 +12972,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存在这台 Mac 上"
+          }
+        }
+      }
+    },
+    "Suggested from your mail in Needs a Project, where it would take %lld emails. Check the name, the people and the domains, and add the project's folders." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sugerido a partir de tu correo en Sin proyecto, de donde pasarían %lld correos. Revisa el nombre, las personas y los dominios, y agrega las carpetas del proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト未定”のメールから提案されたプロジェクトです。作成すると、そこから%lld件のメールが移ります。名前、人物、ドメインを確認し、プロジェクトのフォルダを追加してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "根据“待归入项目”中的邮件建议，创建后会从中移入 %lld 封邮件。请检查名称、人员和域名，并添加项目的文件夹。"
+          }
+        }
+      }
+    },
+    "Suggested Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos sugeridos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクトの候補"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议的项目"
           }
         }
       }
