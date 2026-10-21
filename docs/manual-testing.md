@@ -19,7 +19,7 @@ Build and test commands, run in the repository root:
 
 Before a release, `Tools/release-gate/run.sh --baseline <folder>` runs the speech corpus,
 ContextASR, cleanup, latency and gate set evaluations in Release and fails on any case that
-got worse than the baseline, see docs/release-gate.md.
+got worse than the baseline or has no result, see docs/release-gate.md.
 
 ## Automatically verified
 
