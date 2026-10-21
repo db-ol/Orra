@@ -94,7 +94,7 @@ final class ProjectsWindowModel {
     /// Makes the actions of an email view, the runtime's in the app.
     @ObservationIgnored private let emailActions: () -> ProjectsEmailModel.Actions
     /// Suggested Projects in the sidebar, while the window is open.
-    @ObservationIgnored let suggestions: SuggestionService
+    @ObservationIgnored let suggestions: ProjectSuggestionService
 
     init(runtime: ProjectsRuntime, emailActions: (() -> ProjectsEmailModel.Actions)? = nil) {
         self.runtime = runtime

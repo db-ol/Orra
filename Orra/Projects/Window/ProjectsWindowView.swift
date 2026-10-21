@@ -49,7 +49,10 @@ struct ProjectsWindowView: View {
         .task(id: Reload(place: model.place, changes: runtime.mailChanges)) {
             await model.reload()
         }
-        .task(id: ProjectsSuggestedSection.Reload(changes: runtime.mailChanges, holdsModel: runtime.windowHoldsModel, modelIsInstalled: runtime.dependencies.modelIsInstalled())) {
+        .task(id: ProjectsSuggestedSection.Reload(
+            changes: runtime.mailChanges, holdsModel: runtime.windowHoldsModel,
+            modelIsInstalled: runtime.dependencies.modelIsInstalled(), mailIsRunning: runtime.mailIsRunning
+        )) {
             try? await Task.sleep(for: ProjectsSuggestedSection.reloadDelay)
             guard !Task.isCancelled else { return }
             await model.suggestions.refresh()
@@ -58,6 +61,9 @@ struct ProjectsWindowView: View {
             ProjectsSetupView(runtime: runtime, draft: draft, done: { saved in
                 if let saved {
                     model.place = .project(saved)
+                    if let suggestion = draft.suggestion {
+                        model.suggestions.projectCreated(from: suggestion.id)
+                    }
                 }
                 setup = nil
             }, dismissSuggestion: draft.suggestion.map { suggestion in

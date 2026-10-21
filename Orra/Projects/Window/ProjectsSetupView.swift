@@ -45,7 +45,7 @@ struct ProjectsSetupView: View {
         var rules: [Project.Rule] = []
         var otherMailboxes: [String] = []
         /// The suggestion a new project was prefilled from, nil for any other.
-        var suggestion: SuggestionService.Suggestion?
+        var suggestion: ProjectSuggestionService.Suggestion?
 
         /// A new project.
         init() {
@@ -54,7 +54,7 @@ struct ProjectsSetupView: View {
         }
 
         /// A new project prefilled from a suggestion of Suggested Projects.
-        init(suggestion: SuggestionService.Suggestion) {
+        init(suggestion: ProjectSuggestionService.Suggestion) {
             self.init()
             self.suggestion = suggestion
             name = suggestion.name

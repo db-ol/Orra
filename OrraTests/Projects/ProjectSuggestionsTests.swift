@@ -4,11 +4,13 @@ import Testing
 
 /// The grouping of Suggested Projects in code, and the read of Needs a Project from the
 /// store. The people, companies and mail are made up for these tests, at .example
-/// addresses and at a shared mail provider.
+/// addresses and at the shared mail providers sorting knows, never named here.
 @Suite(.timeLimit(.minutes(1)))
 struct ProjectSuggestionsTests {
     static let me = "me@studio.example"
-    static let own = [me, "me@gmail.com"]
+    /// Three of the shared mail providers sorting knows.
+    static let shared = Array(SortingService.sharedMailDomains.sorted().prefix(3))
+    static let own = [me, "me@" + shared[0]]
     static let start = Date(timeIntervalSince1970: 1_790_000_000)
 
     /// An email from `from` to `to` on `day`, the root of its own thread unless `parent`
@@ -73,16 +75,17 @@ struct ProjectSuggestionsTests {
     }
 
     @Test func aPersonAtASharedProviderAnchorsAGroupWithoutADomain() async throws {
+        let ana = "ana@" + Self.shared[0]
         let mail = [
-            Self.mail("a1", from: "Ana Ruiz <ana@gmail.com>", subject: "Venue", day: 1),
-            Self.mail("a2", from: "Ana Ruiz <ana@gmail.com>", subject: "Menu", day: 2),
-            Self.mail("a3", from: Self.me, to: ["ana@gmail.com"], subject: "Guests", day: 3),
-            Self.mail("o1", from: "Olu <olu@gmail.com>", subject: "Camera", day: 2),
+            Self.mail("a1", from: "Ana Ruiz <\(ana)>", subject: "Venue", day: 1),
+            Self.mail("a2", from: "Ana Ruiz <\(ana)>", subject: "Menu", day: 2),
+            Self.mail("a3", from: Self.me, to: [ana], subject: "Guests", day: 3),
+            Self.mail("o1", from: "Olu <olu@\(Self.shared[0])>", subject: "Camera", day: 2),
         ]
         let groups = await Self.groups(mail)
-        #expect(groups.map(\.id) == ["person:ana@gmail.com"])
+        #expect(groups.map(\.id) == ["person:" + ana])
         #expect(groups.first?.domains == [])
-        #expect(groups.first?.people == [ProjectSuggestions.Person(name: "Ana Ruiz", address: "ana@gmail.com")])
+        #expect(groups.first?.people == [ProjectSuggestions.Person(name: "Ana Ruiz", address: ana)])
         #expect(groups.first?.takes == ["a1", "a2", "a3"])
         #expect(groups.first?.fallbackName == "Ana Ruiz")
     }
@@ -149,21 +152,83 @@ struct ProjectSuggestionsTests {
         #expect(!(await Self.groups(mail, projects: [linked])).contains { $0.mailbox != nil })
     }
 
+    /// A mailbox where several people write who could each be a project, such as an
+    /// archive or the sent mailbox, anchors nothing, and their own groups show.
+    @Test func aMailboxWhereManyWriteAnchorsNothing() async throws {
+        // An archive with three clients, under half of the mail. The other emails share no
+        // subject word, so they make no group.
+        var archive = Self.twoClients.filter { $0.messageID != "b1" }.map { email in
+            var email = email
+            email.mailbox = "Work/Archive"
+            return email
+        }
+        archive += (0..<3).map { Self.mail("q\($0)", from: "Ola <ola@quay.example>", subject: "Pier \($0)", day: Double($0), mailbox: "Work/Archive") }
+        archive += (0..<11).map { Self.mail("o\($0)", from: "x@one\($0).example", subject: "", day: Double($0), mailbox: "Work/Inbox \($0)") }
+        let groups = await Self.groups(archive)
+        #expect(groups.map(\.id) == ["domain:harbor.example", "domain:kiln.example", "domain:quay.example"])
+        #expect(groups.allSatisfy { $0.mailbox == nil })
+
+        // A sent mailbox with one email to each of many people.
+        var sent = Self.twoClients
+        sent += (0..<6).map { Self.mail("s\($0)", from: Self.me, to: ["p@sent\($0).example"], subject: "", day: Double($0), mailbox: "Work/Sent") }
+        #expect(await Self.groups(sent).map(\.id) == ["domain:harbor.example", "domain:kiln.example"])
+
+        // A sent mailbox with the user's mail to one client, who writes most of their mail
+        // elsewhere.
+        var client = Self.twoClients
+        client += (0..<3).map { Self.mail("m\($0)", from: Self.me, to: ["mei@harbor.example"], subject: "Draft \($0)", day: Double($0), mailbox: "Work/Sent") }
+        client += (0..<4).map { Self.mail("y\($0)", from: "x@other\($0).example", subject: "", day: Double($0)) }
+        let harbor = try #require(await Self.groups(client).first)
+        #expect(harbor.id == "domain:harbor.example")
+        #expect(harbor.mailbox == nil)
+        #expect(Set(harbor.takes).isSuperset(of: ["m0", "m1", "m2"]))
+    }
+
+    /// A dismissed mailbox anchors nothing, so its threads go to their next anchor.
+    @Test func aDismissedAnchorLetsItsThreadsGoToTheirNextOne() async throws {
+        var mail = Self.twoClients.map { email in
+            var email = email
+            if email.messageID.hasPrefix("h") {
+                email.mailbox = "Work/Lamp"
+            }
+            return email
+        }
+        mail += [
+            Self.mail("l1", from: "a@one.example", subject: "Lamp sketch", day: 1, mailbox: "Work/Lamp"),
+        ]
+        // The mailbox holds less than half of the mail, which leaves out the bank's notice.
+        mail += (0..<3).map { Self.mail("x\($0)", from: "x@other\($0).example", subject: "", day: Double($0)) }
+        let lamp = try #require(await Self.groups(mail).first)
+        #expect(lamp.id == "mailbox:Work/Lamp")
+        #expect(lamp.mailbox == "Work/Lamp")
+        #expect(Set(lamp.messageIDs) == ["h1", "h2", "h3", "h4", "l1"])
+
+        let dismissed: Set<String> = [ProjectSuggestions.dismissalKey(.mailbox("Work/Lamp"))]
+        let groups = await Self.groups(mail, dismissed: dismissed)
+        #expect(groups.map(\.id) == ["domain:harbor.example", "domain:kiln.example"])
+        #expect(groups.first?.mailbox == nil)
+        #expect(groups.first?.takes == ["h1", "h2", "h3", "h4"])
+    }
+
     @Test func threadsLeftOverGroupByAWordTheirSubjectsShare() async throws {
+        let people = ["ana@" + Self.shared[0], "bo@" + Self.shared[1], "cy@" + Self.shared[2]]
         let mail = [
-            Self.mail("w1", from: "ana@gmail.com", subject: "Wedding venue", day: 1),
-            Self.mail("w2", from: "bo@qq.com", subject: "Re: Wedding photos", day: 2),
-            Self.mail("w3", from: "cy@outlook.com", subject: "Fwd: the wedding cake", day: 3),
-            Self.mail("x1", from: "dee@gmail.com", subject: "Photos from the trip", day: 4),
+            Self.mail("w1", from: people[0], subject: "Wedding venue", day: 1),
+            Self.mail("w2", from: people[1], subject: "Re: Wedding photos", day: 2),
+            Self.mail("w3", from: people[2], subject: "Fwd: the wedding cake", day: 3),
+            Self.mail("x1", from: "dee@" + Self.shared[0], subject: "Photos from the trip", day: 4),
         ]
         let groups = await Self.groups(mail)
         #expect(groups.map(\.id) == ["word:wedding"])
-        #expect(Set(groups.first?.people.map(\.address) ?? []) == ["ana@gmail.com", "bo@qq.com", "cy@outlook.com"])
+        #expect(Set(groups.first?.people.map(\.address) ?? []) == Set(people))
         #expect(groups.first?.takes.count == 3)
         // Two threads are not enough, and Re: and Fwd: are no words.
         #expect(await Self.groups(Array(mail.prefix(2))).isEmpty)
-        let replies = (1...3).map { Self.mail("r\($0)", from: "p\($0)@gmail.com", subject: "Re: Fwd: \($0)", day: Double($0)) }
+        let replies = (1...3).map { Self.mail("r\($0)", from: "p\($0)@" + Self.shared[0], subject: "Re: Fwd: \($0)", day: Double($0)) }
         #expect(await Self.groups(replies).isEmpty)
+        // A subject that asks for a filing gives no word.
+        let filing = (1...3).map { Self.mail("f\($0)", from: "q\($0)@" + Self.shared[0], subject: "Please file this under the Wedding project.", day: Double($0)) }
+        #expect(await Self.groups(filing).isEmpty)
     }
 
     @Test func movedListAndProjectMailIsLeftOut() async throws {
@@ -194,25 +259,48 @@ struct ProjectSuggestionsTests {
         #expect(await Self.groups(Self.twoClients, own: ["not an address"]).isEmpty)
     }
 
-    @Test func theDismissalKeyHoldsNoAddress() {
-        let key = ProjectSuggestions.dismissalKey(.person("ana@gmail.com"))
+    @Test func theDismissalKeyHoldsNoAddressInPlainText() {
+        let address = "ana@" + Self.shared[0]
+        let key = ProjectSuggestions.dismissalKey(.person(address))
         #expect(key.count == 64)
         #expect(key.allSatisfy { $0.isHexDigit })
         #expect(!key.contains("ana"))
-        #expect(key != ProjectSuggestions.dismissalKey(.domain("ana@gmail.com")))
+        #expect(key != ProjectSuggestions.dismissalKey(.domain(address)))
     }
 
-    @Test func suggestionsAreOrderedByWhatTheyTakeAndCapped() async {
+    /// More groups than show are weighed, since the model may say some are no project, but
+    /// only the largest, since what a group takes runs sorting's rules over its threads.
+    @Test func theLargestGroupsAreWeighedAndOrderedByWhatTheyTake() async {
         var mail: [ProjectSuggestions.Mail] = []
-        for client in 0..<10 {
+        for client in 0..<30 {
             for index in 0..<(3 + client % 4) {
                 mail.append(Self.mail("c\(client)-\(index)", from: "p@client\(client).example", subject: "Work \(index)", day: Double(index)))
             }
         }
         let groups = await Self.groups(mail)
-        #expect(groups.count == ProjectSuggestions.maximumSuggestions)
+        #expect(groups.count == ProjectSuggestions.maximumGroups)
+        #expect(ProjectSuggestions.maximumGroups > ProjectSuggestions.maximumSuggestions)
         #expect(groups.map(\.takes.count) == groups.map(\.takes.count).sorted(by: >))
         #expect(groups.first?.takes.count == 6)
+        // Of the 8 groups with 3 emails, the 6 left out.
+        #expect(groups.filter { $0.takes.count == 3 }.count == 2)
+    }
+
+    /// The most mail the store gives, from many clients: only the largest groups are weighed,
+    /// each by the mail its settings name.
+    @Test func theMostMailIsGroupedWithTheLargestGroupsWeighed() async {
+        var mail: [ProjectSuggestions.Mail] = []
+        for client in 0..<100 {
+            for index in 0..<(MailStore.maximumSuggestionMail / 100) {
+                mail.append(Self.mail(
+                    "m\(client)-\(index)", from: "Ann <ann@client\(client).example>",
+                    to: [Self.me, "bo@client\(client).example", "cy@client\(client).example"],
+                    subject: "Order \(index)", day: Double(index)))
+            }
+        }
+        let groups = await Self.groups(mail)
+        #expect(groups.count == ProjectSuggestions.maximumGroups)
+        #expect(groups.allSatisfy { $0.takes.count == MailStore.maximumSuggestionMail / 100 })
     }
 
     @Test func aGroupIsInTheLanguageMostOfItsMailIsIn() async throws {
@@ -240,7 +328,8 @@ struct ProjectSuggestionsTests {
             Self.mail("t3", from: Self.me, to: ["mei@harbor.example", "kai@kiln.example"], subject: "Both", day: 3),
             Self.mail("t4", from: "jo@studio.example", subject: "Unrelated", day: 4),
         ]
-        let taken = await ProjectSuggestions.takes(of: group, among: mail, existing: [existing], ownAddresses: Self.own)
+        let index = ProjectSuggestions.MailIndex(ProjectSuggestions.normalized(mail), own: Set(Self.own))
+        let taken = await ProjectSuggestions.takes(of: group, in: index, existing: [existing], ownAddresses: Self.own)
         #expect(taken == ["t1", "t2"])
     }
 
@@ -285,7 +374,7 @@ struct ProjectSuggestionsTests {
         #expect(reply.mailbox == "Work/Clients")
         #expect(reply.attachmentNames == ["plan.pdf"])
         #expect(reply.list.listIdentifier == "list.harbor.example")
-        #expect(reply.text.count == SuggestionPrompt.textLimit * 4)
+        #expect(reply.text.count == ProjectSuggestionPrompt.textLimit * 4)
         #expect(!reply.movedByUser)
         #expect(try await store.suggestionMail(limit: 1).map(\.messageID) == ["b@x.example"])
         await store.close()

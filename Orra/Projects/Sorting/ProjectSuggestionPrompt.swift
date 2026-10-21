@@ -7,16 +7,18 @@ import Foundation
 /// - It shows the group's people, its domains and its mailbox, then up to `mailCount` of
 ///   its emails, the newest of each thread first, each with its sender, its recipients when
 ///   the user sent it, its subject and the start of its own text.
-/// - The text goes through PromptHygiene first, so hidden text and lines that address an
-///   assistant never reach the model. Every value is cleaned of chat template tokens and of
-///   the tags of the prompt, see SortingPrompt.line(_:limit:).
+/// - The text, the subject, the names of people and of attachments go through PromptHygiene
+///   first, so hidden text and lines that address an assistant never reach the model. Lines
+///   that ask for a filing never reach it either, as in SortingPrompt, see FilingRequests.
+///   Every value is cleaned of chat template tokens and of the tags of the prompt, see
+///   SortingPrompt.line(_:limit:).
 /// - The answer is plain text on one line. A name or a description that PromptHygiene finds
 ///   anything in is not used, since the user may save it into a project, whose name and
 ///   description go into later prompts.
 ///
 /// Thinking is off, and the answer starts from the prefill. The caller puts the prefill in
 /// front of what the model wrote before it reads the answer.
-nonisolated struct SuggestionPrompt: Sendable, Equatable {
+nonisolated struct ProjectSuggestionPrompt: Sendable, Equatable {
     /// The model's answer.
     nonisolated enum Answer: Sendable, Equatable {
         /// A name and a description, which may be empty.
@@ -121,12 +123,16 @@ nonisolated struct SuggestionPrompt: Sendable, Equatable {
                 let recipients = email.recipients.prefix(5).map(person)
                 lines.append("To: " + (recipients.isEmpty ? "none" : recipients.joined(separator: ", ")))
             }
-            lines.append("Subject: " + SortingPrompt.line(email.subject, limit: 200))
-            let attachments = email.attachmentNames.prefix(5).map { SortingPrompt.line($0, limit: 80) }.filter { !$0.isEmpty }
+            let subject = cleaned(email.subject)
+            lines.append("Subject: " + (FilingRequests.isFilingRequest(subject) ? "" : SortingPrompt.line(subject, limit: 200)))
+            let attachments = email.attachmentNames.prefix(5).map(cleaned)
+                .filter { !FilingRequests.isFilingRequest($0) }
+                .map { SortingPrompt.line($0, limit: 80) }.filter { !$0.isEmpty }
             if !attachments.isEmpty {
                 lines.append("Attachments: " + attachments.joined(separator: ", "))
             }
-            let body = SortingPrompt.line(cleaned(String(email.text.prefix(textLimit * 4))), limit: textLimit)
+            let text = FilingRequests.removing(from: cleaned(String(email.text.prefix(textLimit * 4)))).text
+            let body = SortingPrompt.line(text, limit: textLimit)
             if !body.isEmpty {
                 lines.append(body)
             }
@@ -154,7 +160,7 @@ nonisolated struct SuggestionPrompt: Sendable, Equatable {
     }
 
     private static func person(_ person: ProjectSuggestions.Person) -> String {
-        let name = SortingPrompt.line(person.name, limit: 60)
+        let name = SortingPrompt.line(cleaned(person.name), limit: 60)
         let address = SortingPrompt.line(person.address, limit: 120)
         return name.isEmpty ? address : "\(name) <\(address)>"
     }

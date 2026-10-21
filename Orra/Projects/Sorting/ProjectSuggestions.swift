@@ -2,31 +2,32 @@ import CryptoKit
 import Foundation
 
 /// Suggested Projects: groups the mail in Needs a Project into projects the user may
-/// create, in code. SuggestionService then has the model name each group, and the user
-/// creates a project from one only with a click.
+/// create, in code. ProjectSuggestionService then has the model name each group, and the
+/// user creates a project from one only with a click.
 ///
 /// - Threads stay together, by the root the store found for each email.
 /// - The other side of a thread is the sender of the mail the user received and the
 ///   recipients of the mail the user sent, as for sorting. Each person there gives an
 ///   anchor: the domain of their address, or their address alone at a shared mail provider
 ///   such as gmail.com or qq.com. People at the user's own domains are colleagues, who
-///   write about every project, so they give none. A Mail mailbox the user files into, one
-///   linked to no project that holds less than half of the mail, gives an anchor too.
-/// - Each thread goes to the anchor of its own with the most mail, and to its mailbox
-///   always, since the user sorted that mail already. A group too small to suggest joins
-///   the group it shares a thread with, as a distributor who writes to a client joins the
-///   client's group.
+///   write about every project, so they give none.
+/// - A Mail mailbox the user files one party's mail into gives an anchor too, see
+///   `Grouping.projectMailboxes(total:)`. The inbox, the sent mailbox or an archive, where
+///   many people write who could each be a project, gives none.
+/// - Each thread goes to such a mailbox, else to the anchor of its own with the most mail.
+///   A group too small to suggest joins the group it shares a thread with, as a distributor
+///   who writes to a client joins the client's group.
 /// - Threads left over are grouped by a word their subjects share, such as the name of an
 ///   event, when at least `minimumWordThreads` share it.
 /// - New Project is prefilled from a group with its domain or mailbox and the people who
 ///   write in it: at its domain, or in none of the other groups. `takes` counts the emails
-///   sorting would then file in it by the rules alone, see
-///   `takes(of:among:existing:ownAddresses:)`.
+///   sorting would then file in it by the rules alone, see `takes(of:in:existing:ownAddresses:)`.
 ///
 /// Mail the user moved, list mail and anything an existing project names already are left
-/// out, and so are the suggestions the user dismissed and groups that would take fewer than
-/// `minimumMails`. Nothing is suggested before the user's own addresses are known, since
-/// their own mail would then look like one large group.
+/// out, and so are groups that would take fewer than `minimumMails`. An anchor the user
+/// dismissed anchors nothing, so its threads go to their next anchor, and a thread with no
+/// other one is left out. Nothing is suggested before the user's own addresses are known,
+/// since their own mail would then look like one large group.
 nonisolated enum ProjectSuggestions {
     /// A person in a mail header.
     nonisolated struct Person: Sendable, Hashable {
@@ -117,41 +118,101 @@ nonisolated enum ProjectSuggestions {
     static let minimumWordThreads = 3
     /// The most suggestions shown.
     static let maximumSuggestions = 8
+    /// The most groups weighed for what they would take, those with the most emails. More
+    /// than are shown, since the model may say some are no project.
+    static let maximumGroups = 3 * maximumSuggestions
     /// The most people New Project is prefilled with.
     static let maximumPeople = 8
     /// A mailbox anchors a group only while it holds less than this share of the mail.
     static let maximumMailboxShare = 0.5
+    /// How many anchors of a mailbox's threads must carry `mailboxCoverage` of its mail for
+    /// it to anchor a group, see `Grouping.projectMailboxes(total:)`.
+    static let mailboxParties = 3
+    static let mailboxCoverage = 0.8
     /// The To and Cc addresses read of an email, as many as sorting reads.
     static let maximumRecipients = SortingService.maximumRecipients
 
     /// The key a dismissal of the group is kept under: the SHA-256 of its anchor in hex, so
-    /// the project list never holds an address or a word of the mail.
+    /// the project list keeps no address or word of the mail in plain text. A guessed
+    /// address can still be checked against it.
     static func dismissalKey(_ anchor: Anchor) -> String {
         SHA256.hash(data: Data(anchor.key.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: Grouping
 
-    /// The groups to suggest, those that would take the most emails first, at most
-    /// `maximumSuggestions`. `projects` are the user's projects, `dismissed` the keys of
-    /// the suggestions the user dismissed, see `dismissalKey(_:)`. Off the main actor, since
-    /// it reads every email of Needs a Project.
+    /// The groups to suggest, those that would take the most emails first. Of the
+    /// `maximumGroups` groups with the most emails, those that would take at least
+    /// `minimumMails`. `projects` are the user's projects, `dismissed` the keys of the
+    /// suggestions the user dismissed, see `dismissalKey(_:)`. Off the main actor, since it
+    /// reads every email of Needs a Project.
     @concurrent
     static func groups(in mail: [Mail], ownAddresses: [String], projects: [SortingCandidate], dismissed: Set<String>) async -> [Group] {
         let own = Set(ownAddresses.compactMap(ProjectsAddress.normalized))
         guard !own.isEmpty else { return [] }
+        let mail = normalized(mail)
         let found = Grouping(mail: mail, own: own, projects: projects, dismissed: dismissed).groups
+        // What a group would take runs sorting's rules over its threads, so only the largest
+        // groups are weighed.
+        let largest = found
+            .sorted { ($0.messageIDs.count, $1.id) > ($1.messageIDs.count, $0.id) }
+            .prefix(maximumGroups)
+        let index = MailIndex(mail.filter { !$0.movedByUser }, own: own)
         var groups: [Group] = []
-        let movable = mail.filter { !$0.movedByUser }
-        for var group in found {
-            group.takes = await takes(of: group, among: movable, existing: projects, ownAddresses: own.sorted())
+        for var group in largest {
+            group.takes = await takes(of: group, in: index, existing: projects, ownAddresses: own.sorted())
             if group.takes.count >= minimumMails {
                 groups.append(group)
             }
         }
-        return Array(groups
-            .sorted { ($0.takes.count, $0.messageIDs.count, $1.id) > ($1.takes.count, $1.messageIDs.count, $0.id) }
-            .prefix(maximumSuggestions))
+        return groups.sorted { ($0.takes.count, $0.messageIDs.count, $1.id) > ($1.takes.count, $1.messageIDs.count, $0.id) }
+    }
+
+    /// The mail with every address in its one form, see ProjectsAddress.normalized(_:), so
+    /// each address is read once. A sender without one keeps an empty address. A recipient
+    /// without one, or past the `maximumRecipients` that sorting reads, is left out.
+    static func normalized(_ mail: [Mail]) -> [Mail] {
+        mail.map { email in
+            var email = email
+            email.sender.address = ProjectsAddress.normalized(email.sender.address) ?? ""
+            email.recipients = email.recipients.prefix(maximumRecipients).compactMap { person in
+                ProjectsAddress.normalized(person.address).map { Person(name: person.name, address: $0) }
+            }
+            return email
+        }
+    }
+
+    /// The mail sorting may still file, by what a project's settings name, so the takes of
+    /// a group look up its threads instead of reading every email.
+    nonisolated struct MailIndex: Sendable {
+        /// The emails, with their addresses in their one form, see `normalized(_:)`.
+        let mail: [Mail]
+        /// The emails by the addresses in their headers other than the user's.
+        private(set) var byAddress: [String: [Int]] = [:]
+        /// The emails by the domains of those addresses.
+        private(set) var byDomain: [String: [Int]] = [:]
+        private(set) var byMailbox: [String: [Int]] = [:]
+        private(set) var byRoot: [String: [Int]] = [:]
+
+        /// `mail` with its addresses in their one form, and the user's own addresses.
+        init(_ mail: [Mail], own: Set<String>) {
+            self.mail = mail
+            for (index, email) in mail.enumerated() {
+                byRoot[email.threadRoot, default: []].append(index)
+                if let mailbox = email.mailbox {
+                    byMailbox[mailbox, default: []].append(index)
+                }
+                var addresses = Set<String>()
+                var domains = Set<String>()
+                for address in [email.sender.address] + email.recipients.map(\.address)
+                where !address.isEmpty && !own.contains(address) && addresses.insert(address).inserted {
+                    byAddress[address, default: []].append(index)
+                    if let domain = ProjectSuggestions.domain(of: address), domains.insert(domain).inserted {
+                        byDomain[domain, default: []].append(index)
+                    }
+                }
+            }
+        }
     }
 
     /// The emails sorting would file by the rules alone in a project made from the group,
@@ -159,36 +220,36 @@ nonisolated enum ProjectSuggestions {
     /// before it, so a reply follows its thread into the new project, as when sorting runs
     /// again after the project is created. The model and the words of the project are left
     /// out, so the project may take more once the model agrees.
-    static func takes(of group: Group, among mail: [Mail], existing: [SortingCandidate], ownAddresses: [String]) async -> [String] {
+    static func takes(of group: Group, in index: MailIndex, existing: [SortingCandidate], ownAddresses: [String]) async -> [String] {
         let candidate = SortingCandidate(
             id: UUID(), name: "",
             people: group.people.map { SortingCandidate.Person(name: $0.name, address: $0.address) },
             domains: group.domains,
             mailboxes: group.mailbox.map { [$0] } ?? [])
         let projects = await SortingProjects.prepare(existing + [candidate], ownAddresses: ownAddresses)
-        let own = Set(ownAddresses)
         // Only threads with an email the new project's settings name can follow it.
-        let named = mail.filter { email in
-            group.mailbox.map { email.mailbox == $0 } == true
-                || ([email.sender] + email.recipients.prefix(maximumRecipients)).contains { person in
-                    guard let address = ProjectsAddress.normalized(person.address), !own.contains(address) else { return false }
-                    return group.people.contains { $0.address == address }
-                        || domain(of: address).map { domain in group.domains.contains { isDomain(domain, under: $0) } } == true
-                }
+        var named = Set<Int>()
+        if let mailbox = group.mailbox {
+            named.formUnion(index.byMailbox[mailbox] ?? [])
         }
-        let roots = Set(named.map(\.threadRoot))
-        let ordered = mail.enumerated()
-            .filter { roots.contains($0.element.threadRoot) }
-            .sorted { ($0.element.date, $0.offset) < ($1.element.date, $1.offset) }
-            .map(\.element)
+        for person in group.people {
+            named.formUnion(index.byAddress[person.address] ?? [])
+        }
+        for (domain, emails) in index.byDomain where group.domains.contains(where: { isDomain(domain, under: $0) }) {
+            named.formUnion(emails)
+        }
+        let roots = Set(named.map { index.mail[$0].threadRoot })
+        let ordered = roots.flatMap { index.byRoot[$0] ?? [] }
+            .sorted { (index.mail[$0].date, $0) < (index.mail[$1].date, $1) }
+            .map { index.mail[$0] }
         var filed: [String: UUID] = [:]
         var taken: [String] = []
         for email in ordered {
             let parent = (email.inReplyTo + email.references.reversed()).lazy.compactMap { filed[$0] }.first
             let input = SortingInput(
                 messageID: email.messageID,
-                sender: ProjectsAddress.normalized(email.sender.address) ?? "",
-                recipients: email.recipients.prefix(maximumRecipients).compactMap { ProjectsAddress.normalized($0.address) },
+                sender: email.sender.address,
+                recipients: email.recipients.map(\.address),
                 subject: email.subject,
                 text: "",
                 mailbox: email.mailbox,
@@ -230,19 +291,23 @@ nonisolated enum ProjectSuggestions {
 // MARK: The grouping
 
 nonisolated extension ProjectSuggestions {
-    /// One run of the grouping.
+    /// One run of the grouping, over mail with its addresses in their one form.
     private struct Grouping {
         /// A thread of Needs a Project.
         struct Thread {
             var mail: [Mail]
             /// The other side's addresses, each once.
             var otherSide: [String]
-            var anchors: [Anchor]
+            /// Its anchors, without those the user dismissed.
+            var anchors: [Anchor] = []
+            /// Whether all its anchors were dismissed, so it is left out.
+            var isDismissed = false
         }
 
         let own: Set<String>
         let ownDomains: Set<String>
         let projects: [SortingCandidate]
+        let dismissed: Set<String>
         var threads: [Thread] = []
         /// The most common name of each address.
         var names: [String: String] = [:]
@@ -252,25 +317,31 @@ nonisolated extension ProjectSuggestions {
             self.own = own
             ownDomains = Set(own.compactMap(ProjectSuggestions.domain(of:)))
             self.projects = projects
+            self.dismissed = dismissed
             let eligible = mail.filter { !$0.movedByUser && !isListMail($0) }
             names = Self.names(in: eligible)
             readThreads(eligible)
-            groups = makeGroups(dismissed: dismissed)
+            groups = makeGroups()
         }
 
         /// List mail: a newsletter or a notice the user received.
         private func isListMail(_ mail: Mail) -> Bool {
-            guard let sender = ProjectsAddress.normalized(mail.sender.address), !own.contains(sender) else { return false }
+            let sender = mail.sender.address
+            guard !sender.isEmpty, !own.contains(sender) else { return false }
             return mail.list.sign(sender: sender, text: mail.text) != nil
+        }
+
+        private func isDismissed(_ anchor: Anchor) -> Bool {
+            !dismissed.isEmpty && dismissed.contains(ProjectSuggestions.dismissalKey(anchor))
         }
 
         private static func names(in mail: [Mail]) -> [String: String] {
             var counts: [String: [String: Int]] = [:]
             for email in mail {
-                for person in [email.sender] + email.recipients.prefix(maximumRecipients) {
+                for person in [email.sender] + email.recipients {
                     let name = person.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !name.isEmpty, let address = ProjectsAddress.normalized(person.address) else { continue }
-                    counts[address, default: [:]][name, default: 0] += 1
+                    guard !name.isEmpty, !person.address.isEmpty else { continue }
+                    counts[person.address, default: [:]][name, default: 0] += 1
                 }
             }
             return counts.mapValues { names in names.max { ($0.value, $1.key) < ($1.value, $0.key) }!.key }
@@ -295,34 +366,51 @@ nonisolated extension ProjectSuggestions {
                         side.append(address)
                     }
                 }
-                threads.append(Thread(mail: emails, otherSide: side, anchors: []))
+                threads.append(Thread(mail: emails, otherSide: side))
             }
-            let mailboxes = narrowMailboxes(total: mail.count)
+            var dismissedAny = Array(repeating: false, count: threads.count)
             for index in threads.indices {
                 var anchors: [Anchor] = []
-                let thread = threads[index]
-                if let mailbox = thread.mail.first?.mailbox, mailboxes.contains(mailbox), thread.mail.allSatisfy({ $0.mailbox == mailbox }) {
-                    anchors.append(.mailbox(mailbox))
-                }
-                for address in thread.otherSide {
-                    if let anchor = anchor(for: address), !anchors.contains(anchor) {
+                for address in threads[index].otherSide {
+                    guard let anchor = anchor(for: address), !anchors.contains(anchor) else { continue }
+                    if isDismissed(anchor) {
+                        dismissedAny[index] = true
+                    } else {
                         anchors.append(anchor)
                     }
                 }
                 threads[index].anchors = anchors
             }
+            // A mailbox the user files one party's mail into goes first.
+            let mailboxes = projectMailboxes(total: mail.count)
+            for index in threads.indices {
+                guard let mailbox = Self.mailbox(of: threads[index]), mailboxes.contains(mailbox) else { continue }
+                if isDismissed(.mailbox(mailbox)) {
+                    dismissedAny[index] = true
+                } else {
+                    threads[index].anchors.insert(.mailbox(mailbox), at: 0)
+                }
+            }
+            for index in threads.indices {
+                threads[index].isDismissed = dismissedAny[index] && threads[index].anchors.isEmpty
+            }
+        }
+
+        /// The mailbox all of a thread's mail is in, nil when it is in several or none.
+        private static func mailbox(of thread: Thread) -> String? {
+            guard let mailbox = thread.mail.first?.mailbox, thread.mail.allSatisfy({ $0.mailbox == mailbox }) else { return nil }
+            return mailbox
         }
 
         /// The sender of mail the user received, or the recipients of mail the user sent,
         /// none of them the user.
         private func otherSide(of mail: Mail) -> [String] {
-            guard let sender = ProjectsAddress.normalized(mail.sender.address) else { return [] }
+            let sender = mail.sender.address
+            guard !sender.isEmpty else { return [] }
             guard own.contains(sender) else { return [sender] }
             var addresses: [String] = []
-            for person in mail.recipients.prefix(maximumRecipients) {
-                if let address = ProjectsAddress.normalized(person.address), !own.contains(address), !addresses.contains(address) {
-                    addresses.append(address)
-                }
+            for person in mail.recipients where !own.contains(person.address) && !addresses.contains(person.address) {
+                addresses.append(person.address)
             }
             return addresses
         }
@@ -354,26 +442,57 @@ nonisolated extension ProjectSuggestions {
             }
         }
 
-        /// The mailboxes the user files into: linked to no project, with at least
-        /// `minimumMails` emails and less than `maximumMailboxShare` of them.
-        private func narrowMailboxes(total: Int) -> Set<String> {
+        /// The mailboxes the user files one party's mail into, which anchor a group before
+        /// any other anchor. Such a mailbox is linked to no project and holds at least
+        /// `minimumMails` emails and less than `maximumMailboxShare` of them. Of the threads
+        /// wholly in it, at most `mailboxParties` anchors carry `mailboxCoverage` of the
+        /// mail, and at most one anchor carries `minimumMails` or more and has at least half
+        /// of its mail there. So the inbox, the sent mailbox or an archive, where many people
+        /// write who could each be a project, never takes their threads.
+        private func projectMailboxes(total: Int) -> Set<String> {
             var counts: [String: Int] = [:]
-            for thread in threads {
+            var weight: [Anchor: Int] = [:]
+            var inside: [String: [Int]] = [:]
+            for (index, thread) in threads.enumerated() {
                 for email in thread.mail {
                     if let mailbox = email.mailbox {
                         counts[mailbox, default: 0] += 1
                     }
                 }
+                for anchor in thread.anchors {
+                    weight[anchor, default: 0] += thread.mail.count
+                }
+                if let mailbox = Self.mailbox(of: thread) {
+                    inside[mailbox, default: []].append(index)
+                }
             }
             let linked = Set(projects.flatMap(\.mailboxes))
-            return Set(counts.filter { name, count in
-                count >= minimumMails && Double(count) < maximumMailboxShare * Double(total) && !linked.contains(name)
-            }.keys)
+            return Set(inside.compactMap { mailbox, indices -> String? in
+                let count = counts[mailbox] ?? 0
+                let held = indices.reduce(0) { $0 + threads[$1].mail.count }
+                guard held >= minimumMails, Double(count) < maximumMailboxShare * Double(total), !linked.contains(mailbox) else { return nil }
+                var carried: [Anchor: Int] = [:]
+                for index in indices {
+                    for anchor in threads[index].anchors {
+                        carried[anchor, default: 0] += threads[index].mail.count
+                    }
+                }
+                let parties = carried.sorted { ($0.value, $1.key.key) > ($1.value, $0.key.key) }.prefix(mailboxParties)
+                let top = Set(parties.map(\.key))
+                let covered = indices.filter { threads[$0].anchors.contains(where: top.contains) }.reduce(0) { $0 + threads[$1].mail.count }
+                guard Double(covered) >= mailboxCoverage * Double(held) else { return nil }
+                let large = parties.filter { $0.value >= minimumMails }
+                guard large.count <= 1 else { return nil }
+                if let party = large.first, 2 * party.value < weight[party.key, default: 0] {
+                    return nil
+                }
+                return mailbox
+            })
         }
 
         // MARK: Groups
 
-        private func makeGroups(dismissed: Set<String>) -> [Group] {
+        private func makeGroups() -> [Group] {
             var weight: [Anchor: Int] = [:]
             for thread in threads {
                 for anchor in thread.anchors {
@@ -384,7 +503,7 @@ nonisolated extension ProjectSuggestions {
             var members: [Anchor: [Int]] = [:]
             var primary: [Int: Anchor] = [:]
             var orphans: [Int] = []
-            for (index, thread) in threads.enumerated() {
+            for (index, thread) in threads.enumerated() where !thread.isDismissed {
                 let best = thread.anchors.reduce(nil as Anchor?) { best, anchor in
                     guard let best else { return anchor }
                     return Self.isStronger(anchor, weight[anchor] ?? 0, than: best, weight[best] ?? 0) ? anchor : best
@@ -393,8 +512,6 @@ nonisolated extension ProjectSuggestions {
                     orphans.append(index)
                     continue
                 }
-                // A dismissed group goes with its threads.
-                guard !dismissed.contains(ProjectSuggestions.dismissalKey(best)) else { continue }
                 primary[index] = best
                 members[best, default: []].append(index)
             }
@@ -424,7 +541,7 @@ nonisolated extension ProjectSuggestions {
                     }
                 }
             }
-            for (anchor, indices) in wordGroups(orphans.sorted(), dismissed: dismissed) {
+            for (anchor, indices) in wordGroups(orphans.sorted()) {
                 members[anchor] = indices
                 for index in indices {
                     primary[index] = anchor
@@ -469,7 +586,7 @@ nonisolated extension ProjectSuggestions {
         /// Groups of the threads left over whose subjects share a word, at least
         /// `minimumWordThreads` threads with `minimumMails` emails each. A thread joins one
         /// group at most, that of the word most threads share.
-        private func wordGroups(_ orphans: [Int], dismissed: Set<String>) -> [(Anchor, [Int])] {
+        private func wordGroups(_ orphans: [Int]) -> [(Anchor, [Int])] {
             var threadsOf: [String: [Int]] = [:]
             for index in orphans {
                 for word in subjectWords(threads[index]) {
@@ -484,7 +601,7 @@ nonisolated extension ProjectSuggestions {
                 let anchor = Anchor.word(word)
                 guard indices.count >= minimumWordThreads,
                       indices.reduce(0, { $0 + threads[$1].mail.count }) >= minimumMails,
-                      !dismissed.contains(ProjectSuggestions.dismissalKey(anchor)) else { continue }
+                      !isDismissed(anchor) else { continue }
                 used.formUnion(indices)
                 groups.append((anchor, indices))
             }
@@ -492,9 +609,11 @@ nonisolated extension ProjectSuggestions {
         }
 
         /// The words of a thread's subjects without their Re: and Fwd: prefixes that a
-        /// project would be known by, as SortingProjects reads a project's own words.
+        /// project would be known by, as SortingProjects reads a project's own words. A
+        /// subject that asks for a filing gives none, see FilingRequests.
         private func subjectWords(_ thread: Thread) -> Set<String> {
-            let subjects = Set(thread.mail.map { MailThreads.subjectKey($0.subject).key })
+            let subjects = Set(thread.mail.filter { !FilingRequests.isFilingRequest($0.subject) }.map { MailThreads.subjectKey($0.subject).key })
+            guard !subjects.isEmpty else { return [] }
             let candidate = SortingCandidate(id: UUID(), name: subjects.sorted().joined(separator: "\n"))
             return Set(SortingProjects.distinctiveWords([candidate], ownAddresses: own)[candidate.id] ?? [])
         }

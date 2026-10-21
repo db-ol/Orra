@@ -17,7 +17,7 @@ import Testing
 /// Debug override of the test guide gives them. The mails have no list headers and come
 /// from one mailbox, as in the maintainer's import.
 ///
-/// It groups the mail with SuggestionService, which names the groups with the real cleanup
+/// It groups the mail with ProjectSuggestionService, which names the groups with the real cleanup
 /// model through ProjectsModelQueue, as the window does. With
 /// TEST_RUNNER_ORRA_PROJECTS_SUGGEST_MODEL=0, or without the model, the groups keep their
 /// names in code. Then it creates every suggestion as New Project is prefilled from it and
@@ -26,8 +26,9 @@ import Testing
 ///
 /// Each suggestion is scored against the set's labels: the project most of the emails it
 /// would take carry, and how many of them carry it. A project of projects.json is found
-/// when a suggestion takes at least 3 of its emails and at least `foundShare` of the emails
-/// that suggestion takes are of it. The report holds the set's ids, project slugs, counts,
+/// when a suggestion that shows takes at least 3 of its emails and at least `foundRecall`
+/// of all its emails, and at least `foundShare` of the emails that suggestion takes are of
+/// it. The report holds the set's ids, project slugs, counts,
 /// and the names and descriptions the model wrote for the synthetic mail.
 @Suite(.serialized, .enabled(if: ["ORRA_PROJECTS_SET", "ORRA_PROJECTS_OWN_ADDRESSES", "ORRA_PROJECTS_OWN_NAME"].allSatisfy { ProcessInfo.processInfo.environment[$0] != nil }))
 @MainActor
@@ -44,6 +45,8 @@ struct ProjectSuggestionsEvaluationTests {
     /// The share of a suggestion's emails that must be of one project for it to find that
     /// project.
     nonisolated static let foundShare = 0.75
+    /// The share of a project's emails a suggestion must take to find it.
+    nonisolated static let foundRecall = 0.5
     /// The projects of the set the suggestions must find.
     nonisolated static let bar = 5
 
@@ -63,8 +66,8 @@ struct ProjectSuggestionsEvaluationTests {
             queue = Self.queue(loaded)
         }
         let owner = SortingService.Owner(addresses: Self.ownAddresses, name: Self.ownName)
-        let service = SuggestionService(
-            lookups: SuggestionService.Lookups(
+        let service = ProjectSuggestionService(
+            lookups: ProjectSuggestionService.Lookups(
                 mail: { set.suggestionMail },
                 projects: { [] },
                 owner: { owner },
@@ -82,7 +85,7 @@ struct ProjectSuggestionsEvaluationTests {
         let groups = await ProjectSuggestions.groups(in: set.suggestionMail, ownAddresses: Self.ownAddresses, projects: [], dismissed: [])
 
         // Every suggestion created as prefilled, then all the mail sorted again.
-        var created: [(suggestion: SuggestionService.Suggestion, project: SortingCandidate)] = []
+        var created: [(suggestion: ProjectSuggestionService.Suggestion, project: SortingCandidate)] = []
         for suggestion in service.suggestions {
             var draft = ProjectsSetupView.Draft(suggestion: suggestion)
             draft.folders = []
@@ -220,7 +223,7 @@ struct ProjectSuggestionsEvaluationTests {
                         attachmentNames: attachments, inReplyTo: inReplyTo, references: references)))
                 suggestionMail.append(ProjectSuggestions.Mail(
                     messageID: messageID, date: date, sender: Self.person(from), recipients: recipients.map(Self.person),
-                    subject: subject, text: String(text.prefix(SuggestionPrompt.textLimit * 4)), attachmentNames: attachments,
+                    subject: subject, text: String(text.prefix(ProjectSuggestionPrompt.textLimit * 4)), attachmentNames: attachments,
                     mailbox: "/Import/orra-test", inReplyTo: inReplyTo, references: references, threadRoot: messageID))
                 threading.append(MailThreads.Message(
                     messageID: messageID, inReplyTo: inReplyTo, references: references, subject: subject,
@@ -266,7 +269,7 @@ struct ProjectSuggestionsEvaluationTests {
     private static func report(
         _ set: SyntheticSet,
         groups: [ProjectSuggestions.Group],
-        created: [(suggestion: SuggestionService.Suggestion, project: SortingCandidate)],
+        created: [(suggestion: ProjectSuggestionService.Suggestion, project: SortingCandidate)],
         rules: [String: SortingDecision],
         model: [String: SortingDecision],
         usedModel: Bool,
@@ -283,7 +286,8 @@ struct ProjectSuggestionsEvaluationTests {
             let golds = group.takes.map(set.gold)
             let best = majority(golds)
             let others = zip(group.takes, golds).filter { $0.1 != best.slug }.map { "\(set.ids[$0.0] ?? "?") \($0.1)" }
-            let isFound = shown != nil && best.slug != "none" && best.count >= 3 && best.share >= foundShare
+            let needed = max(3, Int((Double(totals[best.slug] ?? 0) * foundRecall).rounded(.up)))
+            let isFound = shown != nil && best.slug != "none" && best.count >= needed && best.share >= foundShare
             if isFound {
                 found.insert(best.slug)
             }

@@ -53,6 +53,7 @@ struct ProjectsSuggestedSectionTests {
         let harbor = try #require(service.suggestions.first)
         #expect(harbor.group.takes.count == 3)
         #expect(ProjectsSuggestedSection.takes(harbor) == "Emails it would take from Needs a Project: 3")
+        #expect(ProjectsSuggestedSection.help(harbor) == "harbor.example\nEmails it would take from Needs a Project: 3")
         let draft = ProjectsSetupView.Draft(suggestion: harbor)
         #expect(draft.isNew)
         #expect(draft.suggestion == harbor)

@@ -4,9 +4,9 @@ import os
 extension ProjectsRuntime {
     /// Suggested Projects for the Projects window: the mail of Needs a Project from the
     /// store, named by the model through the queue while the window holds the model.
-    func suggestionService() -> SuggestionService {
-        SuggestionService(
-            lookups: SuggestionService.Lookups(
+    func suggestionService() -> ProjectSuggestionService {
+        ProjectSuggestionService(
+            lookups: ProjectSuggestionService.Lookups(
                 mail: { [weak self] in await self?.suggestionMail() ?? [] },
                 projects: { [weak self] in self?.projectList.map(\.candidate) ?? [] },
                 owner: { [weak self] in await self?.owner() ?? SortingService.Owner(addresses: []) },
@@ -39,14 +39,14 @@ extension ProjectsRuntime {
     }
 }
 
-/// The Suggested Projects section of the Projects window's sidebar, under Needs a Project:
-/// each suggestion with the number of emails it would take. A click opens New Project
-/// prefilled from it, and its menu dismisses it.
+/// The Suggested Projects section of the Projects window's sidebar, below Needs a Project
+/// and Set Aside: each suggestion with the number of emails it would take. A click anywhere
+/// on its row opens New Project prefilled from it, and its menu dismisses it.
 struct ProjectsSuggestedSection: View {
     let runtime: ProjectsRuntime
-    let suggestions: SuggestionService
+    let suggestions: ProjectSuggestionService
     /// Opens New Project prefilled from a suggestion.
-    let create: (SuggestionService.Suggestion) -> Void
+    let create: (ProjectSuggestionService.Suggestion) -> Void
 
     var body: some View {
         if !suggestions.suggestions.isEmpty || suggestions.isNaming {
@@ -61,10 +61,13 @@ struct ProjectsSuggestedSection: View {
                         } icon: {
                             Image(systemName: "folder.badge.plus")
                         }
+                        // The whole row takes the click, as a row of the sidebar does.
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
                     .badge(suggestion.group.takes.count)
-                    .help(Text(Self.takes(suggestion)))
+                    .help(Text(verbatim: Self.help(suggestion)))
                     .accessibilityValue(Text(Self.takes(suggestion)))
                     .contextMenu {
                         Button("Create Project…") {
@@ -89,13 +92,19 @@ struct ProjectsSuggestedSection: View {
     }
 
     /// How many emails a suggestion would take from Needs a Project.
-    static func takes(_ suggestion: SuggestionService.Suggestion) -> String {
+    static func takes(_ suggestion: ProjectSuggestionService.Suggestion) -> String {
         String(localized: "Emails it would take from Needs a Project: \(suggestion.group.takes.count)")
+    }
+
+    /// The help of a row: the name, which the row may cut, the description and how many
+    /// emails it would take.
+    static func help(_ suggestion: ProjectSuggestionService.Suggestion) -> String {
+        [suggestion.name, suggestion.description, takes(suggestion)].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 
     /// Hides a suggestion at once and keeps the dismissal in the project list. When the list
     /// cannot be saved, it stays hidden while the window is open.
-    static func dismiss(_ suggestion: SuggestionService.Suggestion, from suggestions: SuggestionService, runtime: ProjectsRuntime) {
+    static func dismiss(_ suggestion: ProjectSuggestionService.Suggestion, from suggestions: ProjectSuggestionService, runtime: ProjectsRuntime) {
         suggestions.dismiss(suggestion.id)
         Task {
             do {
@@ -107,11 +116,13 @@ struct ProjectsSuggestedSection: View {
     }
 
     /// What makes the window group its mail again: a change of the mail or the projects,
-    /// the model's hold, and the model's arrival.
+    /// the model's hold, the model's arrival, and Mail's start, which gives the user's
+    /// addresses from Mail's accounts.
     struct Reload: Hashable {
         var changes: Int
         var holdsModel: Bool
         var modelIsInstalled: Bool
+        var mailIsRunning: Bool
     }
 
     /// How long the window waits after a change before it groups again, so the saves of a

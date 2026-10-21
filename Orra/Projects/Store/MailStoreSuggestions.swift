@@ -7,7 +7,7 @@ nonisolated extension MailStore {
     /// The emails of Needs a Project that sorting may still file, newest first, at most
     /// `limit`, with their To and Cc and their text read `textLength` far, for Suggested
     /// Projects. Mail the user moved there is left out, since sorting never files it again.
-    func suggestionMail(limit: Int = MailStore.maximumSuggestionMail, textLength: Int = SuggestionPrompt.textLimit * 4) async throws -> [ProjectSuggestions.Mail] {
+    func suggestionMail(limit: Int = MailStore.maximumSuggestionMail, textLength: Int = ProjectSuggestionPrompt.textLimit * 4) async throws -> [ProjectSuggestions.Mail] {
         let parameters: [ProjectsDatabase.Value] = [.integer(Int64(max(0, textLength))), .integer(Int64(max(0, limit)))]
         return try await database.transaction { database in
             let rows = try database.run("""
@@ -29,15 +29,15 @@ nonisolated extension MailStore {
                     sender: ProjectSuggestions.Person(name: senderName, address: sender),
                     subject: subject,
                     text: row[14].text ?? "",
-                    attachmentNames: Self.suggestionAttachmentNames(row[13]),
+                    attachmentNames: Self.decoded([Attachment].self, row[13])?.map(\.name) ?? [],
                     mailbox: row[2].text,
-                    inReplyTo: Self.suggestionStrings(row[8]),
-                    references: Self.suggestionStrings(row[9]),
+                    inReplyTo: Self.decoded([String].self, row[8]) ?? [],
+                    references: Self.decoded([String].self, row[9]) ?? [],
                     threadRoot: row[7].text ?? messageID,
                     list: ListMail(listID: row[10].text, listUnsubscribe: row[11].text, precedence: row[12].text))
             }
             guard !order.isEmpty else { return [] }
-            let ids = String(decoding: try JSONEncoder().encode(order), as: UTF8.self)
+            let ids = try Self.json(order)
             for person in try database.run(
                 "SELECT message, name, address FROM mail_people WHERE message IN (SELECT value FROM json_each(?)) AND role IN ('to', 'cc') ORDER BY message, role DESC, position",
                 [.text(ids)]) where person.count == 3 {
@@ -46,20 +46,5 @@ nonisolated extension MailStore {
             }
             return order.compactMap { mail[$0] }
         }
-    }
-
-    /// The strings of a JSON array in a column, none when it holds none.
-    private static func suggestionStrings(_ value: ProjectsDatabase.Value) -> [String] {
-        guard let text = value.text else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: Data(text.utf8))) ?? []
-    }
-
-    /// The names of the attachments in the attachments column.
-    private static func suggestionAttachmentNames(_ value: ProjectsDatabase.Value) -> [String] {
-        struct Named: Decodable {
-            var name: String
-        }
-        guard let text = value.text else { return [] }
-        return ((try? JSONDecoder().decode([Named].self, from: Data(text.utf8))) ?? []).map(\.name)
     }
 }
