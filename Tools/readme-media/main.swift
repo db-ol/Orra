@@ -103,6 +103,9 @@ func main() throws {
             print("a frame needs one scene and a time in seconds")
             exit(2)
         }
+        // The first frame a process draws can come out slightly different while the fonts
+        // load, so this frame is drawn once before the one that is written.
+        _ = render(scenes[0], langs[0], at: t)
         guard let image = render(scenes[0], langs[0], at: t) else { exit(1) }
         let url = URL(fileURLWithPath: "\(scenes[0].name)-\(langs[0].rawValue)-\(arguments[4]).png")
         writePNG(image, to: url)
@@ -110,8 +113,7 @@ func main() throws {
         return
     }
     // The first frames a process draws can come out slightly different while the fonts
-    // load, so every frame is drawn once before any GIF is written. Then a run writes the
-    // same bytes for a scene that did not change.
+    // load, so every frame is drawn once before any GIF is written.
     for lang in langs {
         for scene in scenes {
             for index in 0..<Int((scene.duration(lang) * framesPerSecond).rounded()) {

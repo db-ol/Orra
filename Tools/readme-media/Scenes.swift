@@ -136,13 +136,14 @@ let translationKey = (
     name: "option",
     caption: L("Press to translate,\nand again to finish", "按一下翻译，\n再按一下结束", "押して翻訳し、\nもう一度押して終了", "Presiona para traducir\ny otra vez para terminar")
 )
+let translationFinishHint = L(
+    "Press right Option to finish",
+    "按右侧 Option 键结束",
+    "右Optionキーを押して終了",
+    "Presiona la tecla Opción derecha para terminar"
+)
 func translationKeyMode(_ lang: Lang) -> KeyMode {
-    .pressToStartAndStop(finishHint: L(
-        "Press right Option to finish",
-        "按右侧 Option 键结束",
-        "右Optionキーを押して終了",
-        "Presiona la tecla Opción derecha para terminar"
-    )(lang))
+    .pressToStartAndStop(finishHint: translationFinishHint(lang))
 }
 
 /// The badge of the translation key with Automatic, as TranslationCue.badge draws it for
@@ -645,11 +646,17 @@ let meetingScene = Scene(
                         .position(x: 360, y: 376)
                 }
                 // Centered below the captions, or just right of the key's caption when it
-                // is too wide for that, as in Spanish.
+                // is too wide for that, as in Spanish. A hidden copy of the capsule with
+                // the hint, its widest state, keeps every state at the same center, as the
+                // app keeps it.
                 HStack(spacing: 0) {
                     Color.clear.frame(width: 146, height: 1)
-                    OrraCapsule(state: reply.capsule(t), badge: translationBadge(lang))
-                        .frame(minWidth: 308)
+                    ZStack {
+                        OrraCapsule(state: .handsFree(level: 0, hint: translationFinishHint(lang)), badge: translationBadge(lang))
+                            .hidden()
+                        OrraCapsule(state: reply.capsule(t), badge: translationBadge(lang))
+                    }
+                    .frame(minWidth: 308)
                     Spacer(minLength: 0)
                 }
                 .frame(width: 600)

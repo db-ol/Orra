@@ -30,11 +30,12 @@ To make the GIFs of one language, or one GIF in one language:
     /tmp/readme-media . all ja
     /tmp/readme-media . vocabulary es
 
-The tool draws every frame once before it writes a GIF, since the first frames a run draws
-can come out slightly different while the fonts load. So a run writes the same bytes for a
-scene that did not change. The English GIFs of dictation, vocabulary and updates were written
-before that and come out with other bytes that look the same. Put back the GIFs you did not
-mean to change with git checkout.
+The first frames a run draws can come out slightly different while the fonts load, so the
+tool draws every frame once before it writes a GIF or a PNG. A run can still write a GIF
+with other bytes that look the same, also for a scene that did not change, and two runs can
+differ. This happens with the English GIFs of dictation, vocabulary and updates and the
+Japanese GIFs of vocabulary and updates, for example. Put back the GIFs you did not mean to
+change with git checkout.
 
 To check one frame of one scene as a PNG in the current folder:
 

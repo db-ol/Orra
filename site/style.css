@@ -648,9 +648,11 @@ h3 {
 }
 
 /* The top row, as in the app: the display mode on the left, then the language captions
-   translate into and Copy, each a menu. */
+   translate into and Copy, each a menu. It wraps only in a browser without container
+   queries, which never turns the modes into the menu below. */
 .meet-stage .captions-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin: 8px 0 14px;
