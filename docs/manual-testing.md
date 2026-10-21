@@ -958,9 +958,8 @@ got worse than the baseline, see docs/release-gate.md.
     English words, English with Japanese and Spanish names and places, short replies,
     Spanish without accents, other scripts and nothing to translate. It checks that every
     direction of Chinese gives each of them the target it always did, that each language
-    offers Automatic, English and itself, that a choice saved for another language acts as
-    Automatic and stays saved, and that kana only Japanese and short Spanish are worth
-    translating.
+    offers Automatic, English and itself (and since 2026-10-21 the other two as a beta,
+    see below), and that kana only Japanese and short Spanish are worth translating.
   - TranslationPairTests checks that the Chinese routes give the prompts of their targets
     character for character for the 1,472 prompts of the Chinese evaluation inputs (as
     heard and after the rules, into both targets), and that their SHA-256 is the one the
@@ -980,14 +979,14 @@ got worse than the baseline, see docs/release-gate.md.
     prefix caches at most, those of the user's language first.
   - TextCleanupTests checks the routes read ahead for each language and direction, that a
     change of language keeps only the routes of the new one and reads them while
-    translation is on, and that a direction saved for Chinese reads those of Automatic for
-    Spanish and its own again back in Chinese. Since 2026-10-19 it also checks that while
+    translation is on, and since 2026-10-21 that Chinese as the target of a Spanish user
+    reads the two routes of the way through English and its own again back in Chinese. Since 2026-10-19 it also checks that while
     captions run the route into the caption target is read first, then those of the
     translation key, all within the two routes of the dictation language, and
     CaptionCleanupTests that a new caption target is read ahead while captions run.
     PushToTalkControllerTests checks Japanese and English both ways on their routes, Paste
-    Original Text, a direction saved for Chinese acting as Automatic for Spanish with its
-    cue, and Japanese with Japanese fixed pasted as heard without the model.
+    Original Text, Spanish and English with their cue, and Japanese with Japanese fixed
+    pasted as heard without the model.
     CaptionPipelineTests checks that a Spanish user's English meeting is shown in Spanish
     and a Spanish one as said with Spanish as the caption target, and in English with
     English, kana only Japanese in English, and since 2026-10-19 that captions follow the
@@ -1121,6 +1120,109 @@ got worse than the baseline, see docs/release-gate.md.
     tries passed one more piece with each model and voice (en frente heard as enfrente,
     which had failed both tries every time), and one more with Qwen3-TTS without a sample
     (Por tanto heard as Portanto). The Japanese tries did not change.
+  - Translation into a language outside the pair, a beta, added on 2026-10-21. Translate
+    into offers all four languages. A target outside English and the dictation language
+    goes through English, see Orra/TranslationPlan.swift: the route of the dictation
+    language into English, then the route from English into the target, the one a user who
+    dictates in that language takes for English text. English with no word of the
+    dictation language takes the second route alone, and text already in the target is
+    pasted as said. The second route gets three more checks, see
+    Orra/TranslationGuard+OutsidePair.swift: no Han character that Shift_JIS lacks in
+    Japanese, a 1 that counts one thing in Japanese (1つ, 1分) is no new number when the
+    English has a word for one, and no Portuguese, French, Italian or Catalan that
+    NLLanguageRecognizer finds well ahead of Spanish. The routes between English and the
+    dictation language keep their checks. A study of 2026-10-20 had compared this with
+    direct prompts without examples, on 319 FLEURS sentences and the dictations below for
+    each direction. Direct prompts were twice as fast but kept or turned around spoken
+    self corrections that the route through English applied (23 of 25 Chinese ones through
+    English, 10 and 16 direct into Japanese and Spanish), so the translation key goes
+    through English for all six directions until there are prompts with examples written
+    by native speakers.
+  - TranslationPlanTests checks the plan of texts written by hand for the six directions:
+    through English for the dictation language and for English mixed with it, one route
+    for English, the target already (Japanese with kana for a Chinese user, Chinese for a
+    Japanese or Spanish user, but not Japanese in kanji only that NLLanguageRecognizer
+    finds Japanese), and nothing to translate. It checks that Automatic and the choices of
+    the pair keep their one route for every direction test text. With a stand in model it
+    checks that both parts must pass, that a first part that fails stops there, that a
+    second part held back pastes the text as said, that English the second part gives back
+    as it was is the translation, that both parts share one time limit and that text in the
+    target skips the model. It checks each new check, and that Chinese keeps its checks.
+    TranslationPairDirectionTests checks the choices, that a fixed choice sends everything
+    to its language, and that a choice saved for another dictation language becomes
+    Automatic once, and LaunchMigrationsTests that this runs before the caption target's
+    step. TextCleanupTests checks that a target outside the pair reads the two routes of
+    the way through English ahead and keeps the route from English beside the pair's.
+    PushToTalkControllerTests checks Chinese into Japanese through English with Paste
+    Original Text and the 日 cue, English into Japanese on one route, and a translation
+    through English held back with its notice. RecordingFeedbackTests checks the badges 中,
+    日 and ES, and ZH and JA with Spanish, SettingsPageTests the choices with their
+    explanations, VoiceRecordingTests the scripts, and ProblemReportTests the line
+    "Japanese, through English".
+  - On 2026-10-21 the checks of the route from English ran on the given translations of
+    phase 0 and of the study, with the English sentence as the source:
+
+    | Given as the translation | Held back by the pair's checks | Held back with the new checks |
+    |---|---|---|
+    | Human Japanese FLEURS sentence (should pass) | 14 of 319 | 8 of 319 |
+    | Human Spanish FLEURS sentence (should pass) | 8 of 319 | 8 of 319 |
+    | Human Chinese FLEURS sentence (should pass) | 4 of 319 | 4 of 319 |
+    | Chinese sentence, as Japanese | 306 of 319 | 319 of 319 |
+    | Japanese with 2 or more simplified forms | 60 of 79 | 79 of 79 |
+    | Portuguese sentence, as Spanish | 246 of 318 | 318 of 318 |
+    | French sentence, as Spanish | 215 of 305 | 305 of 305 |
+
+    The 6 Japanese sentences that pass now hold a counted 1, such as 1つの文化 for "a
+    singular culture" or 1年中 for "all year round". The 8 still held back take other
+    liberties, such as 24時間 for "around the clock", 3世 for III or 12:00 for 1200 GMT.
+    Of 1,153 model translations into Japanese through or from English that the pair's
+    checks passed, the new checks held back 8, each with Chinese characters in it (九龙,
+    集邮, 微信官方账号, 打嗝, 告诉他), and none of the 2,296 into Chinese or Spanish.
+  - The verdict dumps of #114 (prompts, prompt hashes and prefixes, guard tables, values
+    and pairs, stored answers) stayed byte for byte those of phase 0. The direction dumps
+    changed only for the choices outside the pair, on all 7,421 texts. The Chinese
+    evaluation gave the same answer, outcome, pasted and untranslated text as phase 0 for
+    all 736 runs. A first run, at a moment of high load, timed out on 3 of them.
+  - TranslationCrossEvaluationTests runs the real model on the hand written dictations of
+    Tools/rewrite-eval in Chinese, Japanese and Spanish, each into the two other languages,
+    as the translation key does with such a target, only with
+    TEST_RUNNER_ORRA_TRANSLATION_CROSS_EVAL set to all or to directions such as zh-ja, in
+    a Release build:
+
+        TEST_RUNNER_ORRA_TRANSLATION_CROSS_EVAL=all TEST_RUNNER_ORRA_REWRITE_MODEL_DIR=<model folder> xcodebuild -project Orra.xcodeproj -scheme Orra -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedDataRelease -testLanguage en -testRegion US ENABLE_TESTABILITY=YES test -only-testing:OrraTests/TranslationCrossEvaluationTests
+
+    TEST_RUNNER_ORRA_TRANSLATION_DETAILS writes every run with its text, and a run cut by
+    TEST_RUNNER_ORRA_TRANSLATION_CROSS_BUDGET goes on where it stopped.
+    TEST_RUNNER_ORRA_TRANSLATION_CROSS_IN runs the cases of a file instead.
+
+    On 2026-10-21, on an M5 Pro with the installed model, in a Release build, in slices
+    of under 10 minutes. Chinese went through the filler and number rules first, as in the
+    app. The times are from the text to the checked translation, with both caches.
+
+    | Direction | Dictations | Pasted as a translation | Held back | Too long | Median | p90 |
+    |---|---|---|---|---|---|---|
+    | Chinese into Japanese | 147 | 142 | 5 | 0 | 0.66 s | 0.93 s |
+    | Chinese into Spanish | 147 | 146 | 1 | 0 | 0.69 s | 0.99 s |
+    | Japanese into Chinese | 114 | 107 | 3 | 2 | 0.76 s | 0.98 s |
+    | Japanese into Spanish | 114 | 110 | 2 | 2 | 0.76 s | 1.09 s |
+    | Spanish into Chinese | 104 | 98 | 2 | 4 | 0.66 s | 0.88 s |
+    | Spanish into Japanese | 104 | 98 | 2 | 4 | 0.64 s | 0.81 s |
+
+    The other 2 Japanese dictations into Chinese read as Chinese and were pasted as said
+    (契約書最終確認後、署名予定。 and 2026年). The new checks held back 3 (微信官方账号, 打嗝
+    and 告诉他 in Japanese), the checks of the routes the others: 6 assistant openers, 2
+    acronyms, too short, not Japanese, not Chinese and Chinese in Japanese. None timed out.
+    The slowest, 5.4 s, was a Japanese dictation of 163 characters whose English ran over
+    300 characters. No
+    adversarial dictation's English looked answered. The 624 dictations that the rules left
+    as they were got the same English as the study for 622, and the same translation for
+    all 587 that both translated. The study held back the 3 above with its revised
+    checks too. It stopped at English over 300 characters and at English given back
+    unchanged, where the app goes on. The study's 36 self corrections in Japanese and
+    Spanish, run the same way, gave the study's English and translation for all 72 runs.
+    The 4 held back are phone numbers with a corrected last digit (090-1234-5678, いや、
+    最後は9です, and 55 1234 5678, no, perdón, el último es 9), which the number check of
+    the first route holds back, as before.
 - SpeechCorpusEvaluationTests runs Orra's speech recognition on the 392 clips Voxt checks
     its runtime on (LibriSpeech test-clean, FLEURS Chinese, ASCEND and 8 synthetic clips),
     only with TEST_RUNNER_ORRA_SPEECH_EVAL=1. It takes a dictation's path up to the

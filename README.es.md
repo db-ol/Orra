@@ -58,7 +58,7 @@ Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dej
 
 ### Tecla de traducción
 
-Opcional. Presiona una segunda tecla, habla y vuelve a presionarla. Si la configuras en Mantener presionada, mantenla presionada mientras hablas. Orra pega lo que dices traducido entre el inglés y tu idioma de dictado, chino, japonés o español, con el mismo modelo en tu Mac. Una pequeña marca indica que ese dictado se va a traducir: 译 con chino, 訳 con japonés y ⇄ con español.
+Opcional. Presiona una segunda tecla, habla y vuelve a presionarla. Si la configuras en Mantener presionada, mantenla presionada mientras hablas. Orra pega lo que dices traducido entre el inglés y tu idioma de dictado, chino, japonés o español, con el mismo modelo en tu Mac. Una pequeña marca indica que ese dictado se va a traducir: 译 con chino, 訳 con japonés y ⇄ con español. En Traducir a también puedes elegir cualquiera entre chino, inglés, japonés y español. Los dos que no son tu idioma de dictado ni el inglés son beta y pasan por el inglés, así que tardan alrededor del doble.
 
 </td>
 <td width="50%"><img src="docs/images/readme/es/translation.gif" alt="En un chat, Sam pregunta “When can I see the designs?” Con la tecla de traducción presionada, alguien dice “Te puedo mandar los diseños antes del viernes”. La cápsula muestra la marca ⇄, y “I can send you the designs before Friday.” aparece en el campo del mensaje." width="100%"></td>
