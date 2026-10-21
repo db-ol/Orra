@@ -89,6 +89,14 @@ got worse than the baseline, see docs/release-gate.md.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
     window's parts to PNG files there, once per test language, which CI never does. The
     sidebar does not draw offscreen, so it is not in them.
+  - ProjectSuggestionsTests, SuggestionPromptTests, SuggestionServiceTests and
+    ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
+    made up mail and a fake model: the groups, what each would take, the prompt and its
+    answer, naming only while the window holds the model, the prefilled New Project and a
+    dismissal. ProjectsSuggestedSectionTests renders the sidebar section and the
+    prefilled sheet with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in
+    ProjectSuggestionsEvaluationTests runs it on the synthetic set with the real model in
+    a Release build, see its comment for the command.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
@@ -3232,6 +3240,21 @@ build.
   Nothing.
 - [ ] While Delete All Projects Data runs with Projects on, Open Projects Window is dimmed
   and the Projects window stays closed.
+
+Suggested Projects, added on 2026-10-20, not verified yet. Check in a Debug build with the
+synthetic mail imported and no project made, as in the test guide.
+
+- [ ] Within a minute of opening the Projects window, the sidebar shows Suggested
+  Projects under Needs a Project, each named in the language of its mail with the number
+  of emails it would take. Closing the window ends the naming, and the log of the
+  projects-model category shows no new job after the close.
+- [ ] A click on a suggestion opens New Project with its name, description, people and
+  domains, and a line that says where it comes from. Cancel creates nothing. Save
+  creates the project, its mail leaves Needs a Project, and the suggestion goes.
+- [ ] Dismiss Suggestion, in the sheet or in the row's menu, hides it. It stays hidden
+  after the window closes and after Orra starts again.
+- [ ] Without the cleanup model, the suggestions show with a domain or a name as their
+  name.
 
 ## Not implemented
 
