@@ -78,28 +78,31 @@ struct TranslationPlanTests {
 
     // MARK: Through English
 
-    /// A stand in model that answers per route and records each call.
+    /// A stand in model that answers per route and records each call. A call on a route in
+    /// `held` waits until the test releases it.
     private final class Model: Sendable {
         let answers: [TranslationRoute: String]
-        let delays: [TranslationRoute: Duration]
+        let held: [TranslationRoute: HeldWork]
         let calls = Mutex<[String]>([])
 
-        init(_ answers: [TranslationRoute: String], delays: [TranslationRoute: Duration] = [:]) {
+        init(_ answers: [TranslationRoute: String], held: [TranslationRoute: HeldWork] = [:]) {
             self.answers = answers
-            self.delays = delays
+            self.held = held
         }
 
         var complete: @Sendable (String, TranslationRoute) async throws -> String {
             { [self] text, route in
                 calls.withLock { $0.append("\(route.language.rawValue) \(route.target.rawValue) \(text)") }
-                if let delay = delays[route] {
-                    try await Task.sleep(for: delay)
-                }
+                await held[route]?.run()
                 guard let answer = answers[route] else { throw TestError() }
                 return answer
             }
         }
     }
+
+    /// A limit no run reaches, so a busy test runner, which can be seconds late, never
+    /// times a stand in model out.
+    private static let noLimit = Duration.seconds(3600)
 
     private static let chinese = "呃，我们下周一，哦不是，下周二开会。"
     private static let intoEnglish = #"{"cleaned": "我们下周二开会。", "translation": "We have a meeting next Tuesday."}"#
@@ -110,17 +113,17 @@ struct TranslationPlanTests {
     @Test func bothPartsPassAndTheTranslationIsPasted() async {
         let model = Model([.chinese(.english): Self.intoEnglish, Self.japanese: Self.intoJapanese])
         let plan = TranslationPlan.throughEnglish(.chinese(.english), source: .partner, then: Self.japanese)
-        let result = await TranslationStep.run(Self.chinese, plan: plan, in: .chinese, cleansUp: true, complete: model.complete)
+        let result = await TranslationStep.run(Self.chinese, plan: plan, in: .chinese, cleansUp: true, timeout: Self.noLimit, complete: model.complete)
         #expect(result == TranslationStep.Result(text: "来週の火曜日に会議があります。", untranslated: "我们下周二开会。", outcome: .translated))
         #expect(model.calls.withLock { $0 } == ["Chinese en \(Self.chinese)", "Japanese ja We have a meeting next Tuesday."])
-        let ruled = await TranslationStep.run(Self.chinese, plan: plan, in: .chinese, cleansUp: false, complete: model.complete)
+        let ruled = await TranslationStep.run(Self.chinese, plan: plan, in: .chinese, cleansUp: false, timeout: Self.noLimit, complete: model.complete)
         #expect(ruled.untranslated == Self.chinese)
     }
 
     /// A first part that fails stops there, and the second never runs.
     @Test func aFirstPartThatFailsStopsTheTranslation() async {
         let model = Model([.chinese(.english): #"{"cleaned": "我们下周二开会。", "translation": "We have a meeting next Tuesday at 3."}"#, Self.japanese: Self.intoJapanese])
-        let result = await TranslationStep.run(Self.chinese, into: .chinese(.english), source: .partner, then: Self.japanese, cleansUp: false, complete: model.complete)
+        let result = await TranslationStep.run(Self.chinese, into: .chinese(.english), source: .partner, then: Self.japanese, cleansUp: false, timeout: Self.noLimit, complete: model.complete)
         #expect(result == TranslationStep.Result(text: Self.chinese, untranslated: Self.chinese, outcome: .heldBack(.newNumber(["3"]))))
         #expect(model.calls.withLock { $0.count } == 1)
     }
@@ -129,7 +132,7 @@ struct TranslationPlanTests {
     /// checks of the pair let through, pastes the text without translation.
     @Test func aSecondPartThatFailsItsChecksIsNotPasted() async {
         let model = Model([.chinese(.english): Self.intoEnglish, Self.japanese: #"{"cleaned": "We have a meeting next Tuesday.", "translation": "下周二有会议。"}"#])
-        let result = await TranslationStep.run(Self.chinese, into: .chinese(.english), source: .partner, then: Self.japanese, cleansUp: true, complete: model.complete)
+        let result = await TranslationStep.run(Self.chinese, into: .chinese(.english), source: .partner, then: Self.japanese, cleansUp: true, timeout: Self.noLimit, complete: model.complete)
         #expect(result == TranslationStep.Result(text: "我们下周二开会。", untranslated: "我们下周二开会。", outcome: .heldBack(.hanOutsideJapanese)))
         // The same answer passes the checks of a Japanese user's own route from English.
         #expect(TranslationGuard.check(source: "We have a meeting next Tuesday.", output: "下周二有会议。", route: Self.japanese) == nil)
@@ -139,20 +142,21 @@ struct TranslationPlanTests {
     /// translation, such as OK for 好的.
     @Test func englishGivenBackIsTheTranslation() async {
         let model = Model([.chinese(.english): #"{"cleaned": "好的。", "translation": "OK."}"#, Self.spanish: #"{"cleaned": "OK.", "translation": "OK."}"#])
-        let result = await TranslationStep.run("好的。", into: .chinese(.english), source: .partner, then: Self.spanish, cleansUp: false, complete: model.complete)
+        let result = await TranslationStep.run("好的。", into: .chinese(.english), source: .partner, then: Self.spanish, cleansUp: false, timeout: Self.noLimit, complete: model.complete)
         #expect(result == TranslationStep.Result(text: "OK.", untranslated: "好的。", outcome: .translated))
     }
 
-    /// Both parts share one time limit, so a slow second part runs out of time. The limit
-    /// is one second longer than that of one route.
-    @Test func bothPartsShareOneTimeLimit() async {
-        let model = Model(
-            [.chinese(.english): Self.intoEnglish, Self.japanese: Self.intoJapanese],
-            delays: [.chinese(.english): .milliseconds(600), Self.japanese: .milliseconds(1900)]
-        )
-        let result = await TranslationStep.run(Self.chinese, into: .chinese(.english), source: .partner, then: Self.japanese, cleansUp: false, timeout: .seconds(2), complete: model.complete)
+    /// A second part that does not answer is cut off at the time limit, which both parts
+    /// share, and the text is pasted as said. The second call answers only when the test
+    /// lets it, so the test does not depend on how long a busy runner takes. A way through
+    /// English gets one second more than one route.
+    @Test(.timeLimit(.minutes(1)))
+    func aSecondPartThatDoesNotAnswerRunsOutOfTime() async {
+        let held = HeldWork()
+        let model = Model([.chinese(.english): Self.intoEnglish, Self.japanese: Self.intoJapanese], held: [Self.japanese: held])
+        let result = await TranslationStep.run(Self.chinese, into: .chinese(.english), source: .partner, then: Self.japanese, cleansUp: false, timeout: .milliseconds(500), complete: model.complete)
         #expect(result == TranslationStep.Result(text: Self.chinese, untranslated: Self.chinese, outcome: .timedOut))
-        #expect(model.calls.withLock { $0.count } == 2)
+        held.release()
         let plan = TranslationPlan.throughEnglish(.chinese(.english), source: .partner, then: Self.japanese)
         #expect(TranslationStep.timeout(for: Self.chinese, plan: plan) == TranslationStep.timeout(for: Self.chinese) + .seconds(1))
         #expect(TranslationStep.timeout(for: Self.chinese, plan: .route(Self.japanese, source: .english)) == TranslationStep.timeout(for: Self.chinese))
@@ -162,7 +166,7 @@ struct TranslationPlanTests {
     /// second translates it.
     @Test func aFirstPartLeftUnchangedHandsTheTextOn() async {
         let model = Model([.chinese(.english): #"{"cleaned": "OK。", "translation": "OK。"}"#, Self.spanish: #"{"cleaned": "OK。", "translation": "Vale."}"#])
-        let result = await TranslationStep.run("OK。", into: .chinese(.english), source: .partner, then: Self.spanish, cleansUp: false, complete: model.complete)
+        let result = await TranslationStep.run("OK。", into: .chinese(.english), source: .partner, then: Self.spanish, cleansUp: false, timeout: Self.noLimit, complete: model.complete)
         #expect(result == TranslationStep.Result(text: "Vale.", untranslated: "OK。", outcome: .translated))
         #expect(model.calls.withLock { $0 } == ["Chinese en OK。", "Spanish es OK。"])
     }
@@ -174,7 +178,7 @@ struct TranslationPlanTests {
         let text = "Nos vemos mañana en la oficina."
         let plan = try #require(await Self.plan(text, into: .spanish, in: .chinese))
         let model = Model([:])
-        let result = await TranslationStep.run(text, plan: plan, in: .chinese, cleansUp: true, complete: model.complete)
+        let result = await TranslationStep.run(text, plan: plan, in: .chinese, cleansUp: true, timeout: Self.noLimit, complete: model.complete)
         #expect(result == TranslationStep.Result(text: text, untranslated: text, outcome: .unchanged))
         #expect(model.calls.withLock { $0.isEmpty })
     }
@@ -182,7 +186,7 @@ struct TranslationPlanTests {
     /// Text in the target already is pasted as it was said, and the model does not run.
     @Test func textInTheTargetIsPastedAsSaid() async {
         let model = Model([:])
-        let result = await TranslationStep.run("明日の会議は10時からです。", plan: .inTarget(.japanese), in: .chinese, cleansUp: true, complete: model.complete)
+        let result = await TranslationStep.run("明日の会議は10時からです。", plan: .inTarget(.japanese), in: .chinese, cleansUp: true, timeout: Self.noLimit, complete: model.complete)
         #expect(result == TranslationStep.Result(text: "明日の会議は10時からです。", untranslated: "明日の会議は10時からです。", outcome: .unchanged))
         #expect(model.calls.withLock { $0.isEmpty })
     }
@@ -192,9 +196,9 @@ struct TranslationPlanTests {
     @Test func englishIntoATargetOutsideThePairGetsItsChecks() async {
         let answer = #"{"cleaned": "The report is at 10 tomorrow.", "translation": "明天10点有报告。"}"#
         let model = Model([Self.japanese: answer])
-        let outside = await TranslationStep.run("The report is at 10 tomorrow.", plan: .route(Self.japanese, source: .english), in: .chinese, cleansUp: false, complete: model.complete)
+        let outside = await TranslationStep.run("The report is at 10 tomorrow.", plan: .route(Self.japanese, source: .english), in: .chinese, cleansUp: false, timeout: Self.noLimit, complete: model.complete)
         #expect(outside.outcome == .heldBack(.hanOutsideJapanese))
-        let own = await TranslationStep.run("The report is at 10 tomorrow.", plan: .route(Self.japanese, source: .english), in: .japanese, cleansUp: false, complete: model.complete)
+        let own = await TranslationStep.run("The report is at 10 tomorrow.", plan: .route(Self.japanese, source: .english), in: .japanese, cleansUp: false, timeout: Self.noLimit, complete: model.complete)
         #expect(own.outcome == .translated)
     }
 

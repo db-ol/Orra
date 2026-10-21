@@ -1149,9 +1149,10 @@ got worse than the baseline, see docs/release-gate.md.
     checks that both parts must pass, that a first part that fails stops there, that a
     second part held back pastes the text as said, that English the second part gives back
     as it was is the translation, that a first part that gives the text back hands it on,
-    that both parts share one time limit, one second longer than that of one route, and
-    that text in the target skips the model, also Spanish said by a Chinese user with
-    Spanish as the target. It checks each new check, and that Chinese keeps its checks.
+    that a second part that does not answer is cut off at the time limit both parts share,
+    one second longer than that of one route, and that text in the target skips the
+    model, also Spanish said by a Chinese user with Spanish as the target. The stand in
+    model answers when the test lets it, so no test depends on how fast the runner is. It checks each new check, and that Chinese keeps its checks.
     TranslationPairDirectionTests checks the choices, that a fixed choice sends everything
     to its language, and that a choice saved for another dictation language becomes
     Automatic once, and LaunchMigrationsTests that this runs before the caption target's
