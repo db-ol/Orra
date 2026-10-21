@@ -21,8 +21,9 @@ import Observation
 ///   the draft as soon as the dictation ends while the setting for it is on (decision 13),
 ///   see `takeDictation(_:revises:)`.
 /// - Open Reply in Mail and Reply All need Mail's handle of the email, which the scan keeps
-///   for this Mail session. Without it the draft is only copied. The window runs one
-///   handoff at a time, for all its emails, see `Handoffs`.
+///   for this Mail session, and headers from Mail that show the message under it is this
+///   email. Without them the draft is only copied. The window runs one handoff at a time,
+///   for all its emails, see `Handoffs`.
 ///
 /// Every request of the model runs through ProjectsModelQueue as one of the user's, inside
 /// ProjectsRuntime.userRequest(_:), so turning Projects off ends it. The requests started
@@ -47,8 +48,11 @@ final class ProjectsEmailModel {
         var userRequest: (@escaping @MainActor () async throws -> Void) async throws -> Void
         /// An email the store holds, for the source chips and the text of this email.
         var email: (String) async -> ExplainService.Email?
-        /// Mail's handle of an email in this Mail session.
-        var mailReference: (String) -> MailMessageRef?
+        /// Mail's handle of an email in this Mail session, for a reply or with the flag a
+        /// reply to all, once Mail confirmed that the message under it is the email, see
+        /// ProjectsRuntime.checkedMailReference(for:all:). Nil when there is none. Throws
+        /// what Mail answered when it could not check.
+        var mailReference: (_ messageID: String, _ all: Bool) async throws -> MailMessageRef?
         var handoff: ReplyHandoff
         /// The language the user reads explanations in.
         var userLanguage: ProjectsLanguage
@@ -70,7 +74,7 @@ final class ProjectsEmailModel {
                     try await runtime.userRequest(work)
                 },
                 email: { [weak runtime] id in await runtime?.email(id) },
-                mailReference: { [weak runtime] id in runtime?.mailReference(for: id) },
+                mailReference: { [weak runtime] id, all in try await runtime?.checkedMailReference(for: id, all: all) },
                 handoff: runtime.handoff,
                 userLanguage: runtime.userLanguage,
                 now: runtime.dependencies.now
@@ -611,10 +615,34 @@ final class ProjectsEmailModel {
     // MARK: Handoff
 
     /// Open Reply in Mail, or Reply All with `all`, with the draft in the editor. Nothing
-    /// happens while a handoff of the window runs.
+    /// happens while a handoff of the window runs. Mail first confirms that its message is
+    /// this email, and when it is not, or Mail cannot say, the draft is only copied.
     func openReply(all: Bool) async {
         guard !handoffs.isRunning else { return }
-        guard let reference = actions.mailReference(messageID) else {
+        handoffs.isRunning = true
+        handoffNote = nil
+        defer { handoffs.isRunning = false }
+        let reference: MailMessageRef?
+        do {
+            reference = try await actions.mailReference(messageID, all)
+        } catch is CancellationError {
+            // The window closed before Mail answered, so the clipboard stays as it is.
+            return
+        } catch {
+            var error = error as? MailBridgeError ?? .failed(code: (error as NSError).code)
+            // Mail was not asked to reply, so the note must not say that the reply may still
+            // open.
+            if error == .timedOut { error = .failed(code: -1712) }
+            let copied = actions.handoff.copyOnly(text)
+            guard copied == .copied else {
+                handoffNote = .outcome(copied)
+                return
+            }
+            handoffNote = .outcome(error == .mailNotRunning ? .copiedMailNotRunning : .copiedReplyFailed(error))
+            return
+        }
+        guard !Task.isCancelled else { return }
+        guard let reference else {
             // Mail's handles go when it quits, so say that Mail is not open rather than that
             // the email was not found.
             guard actions.handoff.mail.isRunning() else {
@@ -626,11 +654,7 @@ final class ProjectsEmailModel {
             handoffNote = copied == .copied ? .messageNotFound : .outcome(copied)
             return
         }
-        handoffs.isRunning = true
-        handoffNote = nil
-        let outcome = await actions.handoff.openReply(text, to: reference, all: all)
-        handoffs.isRunning = false
-        handoffNote = .outcome(outcome)
+        handoffNote = .outcome(await actions.handoff.openReply(text, to: reference, all: all))
     }
 
     /// Copy: puts the draft in the editor on the clipboard, unless a handoff of the window

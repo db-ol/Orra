@@ -56,10 +56,16 @@ struct ProjectsEmailModelTests {
             var savesVersions = true
             var copies: [String] = []
             var replies: [Bool] = []
+            /// The checks of Mail's handle before a reply, true for a reply to all.
+            var referenceChecks: [Bool] = []
             var broughtForward = 0
             var mailIsRunning = true
             /// Whether Mail's reply waits until the test lets it go.
             var replyWaits = false
+            /// Whether Mail's reply waits for `replyRelease`, also once its task is
+            /// cancelled, as an event already sent to Mail does.
+            var replyHolds = false
+            var replyRelease: CheckedContinuation<Void, Never>?
             var replyStarted = false
             /// The requests that ran as the user's.
             var userRequests = 0
@@ -123,6 +129,11 @@ struct ProjectsEmailModelTests {
                         $0.replies.append(all)
                         $0.replyStarted = true
                     }
+                    if value.replyHolds {
+                        await withCheckedContinuation { continuation in
+                            update { $0.replyRelease = continuation }
+                        }
+                    }
                     while value.replyWaits {
                         try await Task.sleep(for: .milliseconds(5))
                     }
@@ -137,6 +148,7 @@ struct ProjectsEmailModelTests {
         explanation: @escaping () -> Explanation? = { ProjectsEmailModelTests.explanation() },
         userLanguage: ProjectsLanguage = .en,
         reference: MailMessageRef? = MailMessageRef(id: 4, mailbox: .inbox),
+        referenceFailure: MailBridgeError? = nil,
         handoffs: ProjectsEmailModel.Handoffs = ProjectsEmailModel.Handoffs()
     ) -> ProjectsEmailModel {
         let fakes = fakes
@@ -177,7 +189,11 @@ struct ProjectsEmailModelTests {
                     sender: ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example"),
                     text: id == Self.id ? Self.emailText : "The lamps are ordered.", visibleText: "")
             },
-            mailReference: { _ in reference },
+            mailReference: { _, all in
+                fakes.update { $0.referenceChecks.append(all) }
+                if let referenceFailure { throw referenceFailure }
+                return reference
+            },
             handoff: ReplyHandoff(
                 copy: { text in
                     fakes.update { $0.copies.append(text) }
@@ -550,6 +566,26 @@ struct ProjectsEmailModelTests {
         #expect(fakes.value.broughtForward == 0)
     }
 
+    /// The window closes once Mail was asked for the reply, which nothing can call back.
+    /// Mail opens the reply window, but the draft is not copied again and Mail does not
+    /// come to the front.
+    @Test func closingTheWindowWhileMailMakesTheReplyLeavesTheClipboardAndMail() async throws {
+        let model = model()
+        await model.load()
+        fakes.update { $0.replyHolds = true }
+        model.perform { await $0.openReply(all: false) }
+        try await waitUntil { fakes.value.replyRelease != nil }
+        model.cancelWork()
+        fakes.state.withLock { state in
+            state.replyRelease?.resume()
+            state.replyRelease = nil
+        }
+        try await waitUntil { !model.isHandingOff }
+        #expect(model.handoffNote == .outcome(.replyOpened))
+        #expect(fakes.value.copies == [Self.draft])
+        #expect(fakes.value.broughtForward == 0)
+    }
+
     @Test func theFlagsFollowTheTextInTheEditor() async {
         let flags: [DraftCheck.Flag] = [
             .output(OutputChecks.Finding(kind: .amountWithoutSource, text: "¥58,600")),
@@ -653,6 +689,36 @@ struct ProjectsEmailModelTests {
         model.text = "  "
         await model.openReply(all: false)
         #expect(model.handoffNote == .outcome(.emptyDraft))
+    }
+
+    /// Mail's handle is checked for the kind of reply before Mail is asked. When Mail cannot
+    /// say whether its message is this email, the draft is only copied and the note says
+    /// what Mail answered. Mail was not asked to reply, so a timeout does not say that the
+    /// reply may still open.
+    @Test func openReplyChecksMailsHandleFirst() async {
+        let model = model()
+        await model.load()
+        await model.openReply(all: true)
+        #expect(fakes.value.referenceChecks == [true])
+        #expect(fakes.value.replies == [true])
+
+        let failures: [(MailBridgeError, ReplyHandoff.Outcome)] = [
+            (.denied, .copiedReplyFailed(.denied)),
+            (.mailNotRunning, .copiedMailNotRunning),
+            (.timedOut, .copiedReplyFailed(.failed(code: -1712))),
+        ]
+        for (failure, note) in failures {
+            let failing = self.model(referenceFailure: failure)
+            await failing.load()
+            await failing.openReply(all: false)
+            #expect(failing.handoffNote == .outcome(note))
+            #expect(!failing.isHandingOff)
+        }
+        #expect(fakes.value.referenceChecks == [true, false, false, false])
+        #expect(fakes.value.replies == [true])
+        #expect(fakes.value.copies == Array(repeating: Self.draft, count: 5))
+        #expect(fakes.value.broughtForward == 1)
+        #expect(ProjectsWindowText.handoff(.outcome(.copiedReplyFailed(.failed(code: -1712)))) == "Mail did not open the reply. The draft is on the clipboard.")
     }
 
     /// One handoff at a time for the whole window: while Mail opens the reply to one email,

@@ -161,12 +161,14 @@ nonisolated struct TextChunker: Sendable {
     /// The heading a paragraph starts with, read from its first line: a Markdown heading, a
     /// short numbered line such as "2. Payment" or "二、付款", a part such as "第三条", or a
     /// short line that ends with a colon. A line that ends like a sentence is not a heading.
+    /// Every chunk under a heading repeats it, so a longer line than
+    /// `maximumHeadingCharacters` or `maximumHeadingBytes` stays text of its paragraph.
     static func heading(in paragraph: String) -> String? {
-        guard let first = paragraph.split(whereSeparator: \.isNewline).first else { return nil }
+        guard let first = paragraph.split(whereSeparator: \.isNewline).first, first.utf8.count <= maximumHeadingBytes else { return nil }
         let line = Array(first.trimmingCharacters(in: .whitespaces))
         if line.first == "#" {
             let marks = line.prefix(while: { $0 == "#" }).count
-            guard marks <= 6, marks < line.count, line[marks] == " " else { return nil }
+            guard marks <= 6, marks < line.count, line.count <= maximumHeadingCharacters, line[marks] == " " else { return nil }
             let title = String(line[marks...]).trimmingCharacters(in: .whitespaces)
             return title.isEmpty ? nil : title
         }
@@ -177,6 +179,13 @@ nonisolated struct TextChunker: Sendable {
         if headingEnds.contains(last) { return nil }
         return isNumbered(line) ? String(line) : nil
     }
+
+    /// The longest Markdown heading line. Explain shows at most 120 characters of a
+    /// heading, and the other kinds of heading are at most 40 characters.
+    static let maximumHeadingCharacters = 120
+    /// The most bytes in a heading line, so a few characters that each carry many marks
+    /// cannot make a long heading.
+    static let maximumHeadingBytes = 4 * maximumHeadingCharacters
 
     private static let headingEnds: Set<Character> = ["。", "！", "？", "；", "，", "!", "?", ";", ".", ","]
     private static let chineseNumerals: Set<Character> = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "百", "零", "〇"]
