@@ -31,6 +31,7 @@ final class ProjectsSwitch {
     /// Where Projects keeps its data.
     let storage: ProjectsStorage
     /// The bytes Projects keeps on this Mac as last measured, nil before the first look.
+    /// Settings measures again while its Projects page shows, see `followStorage`.
     private(set) var storedBytes: Int64?
     /// Whether the last delete left data behind, so Settings says so. Cleared once nothing
     /// is left.
@@ -135,6 +136,30 @@ final class ProjectsSwitch {
         storedBytes = await storage.size()
         if !holdsData {
             deleteFailed = false
+        }
+    }
+
+    /// How often the Projects page of Settings measures again while it shows. The scan, the
+    /// index, the window and Retention all write, so the page looks again on its own. The
+    /// folder holds a handful of files, so a look is cheap (a guess, not measured).
+    static let storageRefresh: Duration = .seconds(5)
+
+    /// Measures what Projects keeps now and again every `interval` until the task ends, for
+    /// the Projects page of Settings while it shows. A delete measures on its own, so no
+    /// look starts while one runs.
+    func followStorage(
+        every interval: Duration = ProjectsSwitch.storageRefresh,
+        sleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) async {
+        while !Task.isCancelled {
+            if !isDeleting {
+                await measureStorage()
+            }
+            do {
+                try await sleep(interval)
+            } catch {
+                return
+            }
         }
     }
 

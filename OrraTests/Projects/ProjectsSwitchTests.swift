@@ -184,6 +184,61 @@ struct ProjectsSwitchTests {
         #expect(!FileManager.default.fileExists(atPath: storage.folder.path))
     }
 
+    /// While the Projects page shows, it measures now and again after each wait, so the Data
+    /// row follows what the scan and the index write meanwhile (seen on 2026-10-20: the row
+    /// said Nothing after the scan had saved 105 emails). It ends with its task.
+    @Test func theDataRowFollowsWhatProjectsWritesWhileThePageShows() async throws {
+        defer { cleanUp() }
+        let projects = makeSwitch()
+        projects.turnOn()
+        var waits: [Duration] = []
+        var shown: [Int64?] = []
+        await projects.followStorage(every: .seconds(5)) { interval in
+            waits.append(interval)
+            shown.append(projects.storedBytes)
+            switch waits.count {
+            // Projects started and the scan saved mail while the page showed.
+            case 1: try storeData(bytes: 1_000)
+            case 2: try storeData(bytes: 3_000)
+            // The page went away.
+            default: throw CancellationError()
+            }
+        }
+        #expect(shown == [0, 1_000, 3_000])
+        #expect(projects.storedBytes == 3_000)
+        #expect(waits == [.seconds(5), .seconds(5), .seconds(5)])
+        #expect(ProjectsSwitch.storageRefresh == .seconds(5))
+    }
+
+    /// No look starts while a delete runs, since the delete measures on its own once it is
+    /// done, and an earlier look must not bring back the size from before it.
+    @Test func theDataRowDoesNotLookWhileADeleteRuns() async throws {
+        defer { cleanUp() }
+        try storeData(bytes: 1_000)
+        let projects = makeSwitch()
+        projects.turnOn()
+        let (closing, closed) = AsyncStream.makeStream(of: Void.self)
+        let (released, release) = AsyncStream.makeStream(of: Void.self)
+        projects.closeBeforeDelete = {
+            closed.yield()
+            for await _ in released { break }
+        }
+        let deleting = Task { await projects.deleteAllData() }
+        for await _ in closing { break }
+        try #require(projects.isDeleting)
+        var waits = 0
+        await projects.followStorage { _ in
+            waits += 1
+            throw CancellationError()
+        }
+        #expect(waits == 1)
+        #expect(projects.storedBytes == nil)
+        release.yield()
+        await deleting.value
+        #expect(projects.storedBytes == 0)
+        #expect(!projects.deleteFailed)
+    }
+
     /// Delete All Projects Data leaves the switch as it is.
     @Test func deletingAllDataKeepsTheSwitch() async throws {
         defer { cleanUp() }

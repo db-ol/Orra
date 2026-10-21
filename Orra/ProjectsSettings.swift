@@ -122,8 +122,10 @@ struct ProjectsSettings: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Projects")
+        // What Projects keeps grows while the page shows, as the scan saves mail and the
+        // index reads folders, so the Data row looks again on its own.
         .task {
-            await projects.measureStorage()
+            await projects.followStorage()
         }
         // Lists Mail's mailboxes each time the page shows while Projects is on, and when
         // Projects turns on here.
