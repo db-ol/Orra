@@ -867,9 +867,13 @@ struct ProjectsRuntimeTests {
     }
 
     /// The window shows the message in the list sorting files it in, selected.
-    @Test func explainSelectedMessageShowsTheMessageWhereItIsFiled() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageShowsTheMessageWhereItIsFiled() async throws {
         defer { cleanUp() }
         let (runtime, projects, choice) = try await started()
+        // The window waits until sorting filed the message, however long a busy test runner
+        // takes for it. In the app it waits ProjectsRuntime.sortingWait at most.
+        runtime.sortingWaitLimit = nil
         let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
         try await runtime.add(harbor)
         mail.update {

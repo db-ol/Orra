@@ -394,8 +394,8 @@ struct ProjectsWindowViewTests {
         return actions
     }
 
-    /// An email of the fixture, explained with warnings, points with sources, questions and
-    /// a checked draft, and changed once, as the email view shows it.
+    /// An email of the fixture, filed by sorting, explained with warnings, points with
+    /// sources, questions and a checked draft, and changed once, as the email view shows it.
     private static func explainedEmail(in runtime: ProjectsRuntime) async throws -> MailStore.Listed {
         let store = try #require(runtime.running?.store)
         let id = "lamps-2@harbor.example"
@@ -404,7 +404,18 @@ struct ProjectsWindowViewTests {
             messageID: id, mailbox: nil, date: today, sender: MailStore.Person(name: "Mei Tan", address: "mei@harbor.example"),
             to: [MailStore.Person(address: "me@studio.example")], cc: [MailStore.Person(name: "Kai Moss", address: "kai@kiln.example")],
             subject: "The lobby lamps", text: text, visibleText: text, warnings: [.link])], ownAddresses: ["me@studio.example"], at: today)
-        let project = try await store.explainEmail(id)?.project
+        // Sorted first, as every email the scan saves is, so it stays where it is. Left
+        // unsorted, it would be filed in the project by the sorting of Needs a Project that
+        // follows the fixture's index sweep, which can end at any time during the test, and
+        // filing an email in another project drops its explanation and draft.
+        runtime.requestSort()
+        var filed: SortingService.Filed?
+        for _ in 0..<2_000 {
+            filed = try await store.filed(id)
+            if filed != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let project = try #require(filed?.project)
         let chunk = TextChunker.Chunk(file: URL(fileURLWithPath: "/Harbor lobby/schedule.pdf"), page: 2, modified: today, heading: "Lamps", text: "The lobby lamps arrive on 22 November.")
         let draft = "Hi Mei,\n\nThe lamp order is [to confirm: lamp order]. I will send the floor plan today. The total is ¥58,600.\n\n[sentence removed: it claims an action]\n\nLin"
         let check = DraftCheckInput(
@@ -438,8 +449,7 @@ struct ProjectsWindowViewTests {
             messageID: id, change: .tone(.formal),
             check: DraftCheck.Result(draft: draft.replacingOccurrences(of: "Hi Mei", with: "Dear Mei").replacingOccurrences(of: "today", with: "on Monday"), language: .en, outsideRecipients: ["kai@kiln.example"]))
         #expect(try await store.save(version, startedAt: today, at: today) == 1)
-        let place: MailStore.Place = project.map { .project($0) } ?? .needsProject
-        return try #require(await runtime.list(place).first { $0.messageID == id })
+        return try #require(await runtime.list(.project(project)).first { $0.messageID == id })
     }
 
     private func render(_ view: some View, size: NSSize, to file: URL) async throws {
