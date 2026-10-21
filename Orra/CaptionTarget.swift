@@ -1,82 +1,163 @@
 import Foundation
+import NaturalLanguage
 
 /// The language Live Captions translate into, apart from Translate into of the translation
 /// key. Captions are what the user reads, the translation key is what others read or hear,
 /// so each has its own setting. The caption window and the Meeting Interpretation page
 /// choose it, and both write the same value, see CaptionTargetPreference.
 ///
-/// Captions offer English and the dictation language, so every route is one of the two
-/// routes of the dictation language, see `choices(for:)`. A target saved for another
-/// dictation language stays saved, so going back to that language brings it back, and
-/// meanwhile acts and shows as the dictation language, see `effective(_:for:)`.
-///
-/// Each sentence is read with the rule of the dictation language, as a dictation is, with
-/// two exceptions for captions, see `source(of:in:)`. A sentence in the target already is
-/// shown as it was said, on every route. Every other sentence goes into the target, and
-/// one in neither language into English, see `target(source:into:in:)`.
+/// Captions offer all four languages Orra knows, whatever the dictation language, see
+/// `choices(for:)`. Each sentence is read by its script, see `language(of:)`, and goes into
+/// the target by the routes of `hops(from:into:)`: one route between English and another
+/// language, and for two languages other than English the route into English and then
+/// the route from English, a beta. A sentence in the target already, in a fifth language
+/// or with nothing to translate is shown as it was said.
 nonisolated enum CaptionTarget {
-    /// English and the dictation language, in the order Translate into lists them.
+    /// English and the dictation language, then the other two, which are a beta, see
+    /// `isBeta(_:for:)`.
     static func choices(for language: DictationLanguage) -> [TranslationTarget] {
-        language.translationTargets
+        language.translationTargets + TranslationTarget.allCases.filter { !language.translationTargets.contains($0) }
     }
 
-    /// What captions translate into for a user who dictates in `language`: `target` when
-    /// it is one of the choices, and the dictation language otherwise. The window, Settings,
-    /// the sentences and the prompts read ahead all follow it.
-    static func effective(_ target: TranslationTarget, for language: DictationLanguage) -> TranslationTarget {
-        choices(for: language).contains(target) ? target : language.translationLanguage
+    /// Whether `target` is a beta for a user who dictates in `language`: a target that is
+    /// neither English nor that language, which a meeting in the dictation language reaches
+    /// through English, see `hops(from:into:)`.
+    static func isBeta(_ target: TranslationTarget, for language: DictationLanguage) -> Bool {
+        !language.translationTargets.contains(target)
     }
 
-    /// The route whose prompt is read ahead while captions run: the one into the target.
-    /// A sentence in neither language goes into English on the other route, which is rare
-    /// enough to fill when it comes.
-    static func route(_ target: TranslationTarget, in language: DictationLanguage) -> TranslationRoute {
-        TranslationRoute(language, into: effective(target, for: language))
-    }
+    // MARK: Reading a sentence
 
-    /// The language of a caption sentence for a user who dictates in `language`, or nil
-    /// when it has no letter to translate, see TranslationDirection.source(of:in:). Two
-    /// readings change for captions, so that a meeting in the language the rule mistakes
-    /// for the dictation language still goes into English, as under Automatic before
-    /// captions had their own target, instead of showing as said:
-    /// - Under the Chinese rule, a sentence read as Chinese that holds kana is Japanese,
-    ///   since Japanese with kanji reads as Chinese. So is one in kana only, which the rule
-    ///   finds nothing to translate in, so that all Japanese goes into English.
-    /// - Under the Japanese rule, a sentence read as Japanese that holds Han characters and
-    ///   no kana is not Japanese, since Chinese reads as Japanese. Japanese said without any
-    ///   kana goes into English too, which is rare in speech.
-    static func source(of text: String, in language: DictationLanguage) -> TranslationDirection.Source? {
-        let source = TranslationDirection.source(of: text, in: language)
-        guard source == .partner || (source == nil && language == .chinese) else { return source }
-        let letters = text.precomposedStringWithCompatibilityMapping.unicodeScalars.filter(\.properties.isAlphabetic)
-        let kana = letters.contains(where: LanguageGuard.isKana)
-        switch language {
-        case .chinese: return kana ? .other : source
-        case .japanese: return !kana && letters.contains(where: LanguageGuard.isHan) ? .other : .partner
-        case .spanish: return .partner
+    /// The language of a caption sentence by its script, whatever the dictation language, or
+    /// nil when it is shown as it was said: it has no letter, or it is in a language other
+    /// than the four.
+    /// - Letters of other scripts, such as Hangul, from LanguageGuard.otherScriptShare of all
+    ///   letters on: none of the four.
+    /// - Kana: the rule of Japanese dictation, see TranslationDirection.japaneseSource(of:),
+    ///   which reads Japanese, or English with a few kana, such as "Let's meet at the カフェ."
+    /// - Han characters without kana: the rule of Chinese dictation, see
+    ///   TranslationDirection.sourceLanguage(of:), which reads Chinese, or English with a
+    ///   name in Han characters. Japanese written in Han characters only reads as Chinese,
+    ///   which is rare in speech.
+    /// - Latin letters only: the rule of Spanish dictation, see
+    ///   TranslationDirection.spanishSource(of:), which reads Spanish or English, when
+    ///   NLLanguageRecognizer finds English or Spanish, or when the text is too short for
+    ///   it, under LanguageGuard.minimumLatinLetters letters, such as OK, Hi, Sí or Claro.
+    ///   Longer text in another language, such as French or Portuguese, is none of the
+    ///   four. A short English line with a word that looks Spanish, such as "Hay fever.",
+    ///   reads as Spanish, see CaptionPipeline for how it still reaches the target.
+    /// Measured on 2026-10-19 on 4,130 texts, it read every FLEURS sentence in Chinese,
+    /// Japanese, Spanish and English and every caption of Chinese, Cantonese, mixed,
+    /// English, Japanese and Spanish speech in its language, and took 681 French and
+    /// Portuguese sentences for none of the four. May run NLLanguageRecognizer, so the
+    /// pipeline calls it off the main actor, see CaptionPipeline.shownText.
+    static func language(of text: String) -> TranslationTarget? {
+        var han = 0
+        var kana = 0
+        var latin = 0
+        var other = 0
+        for scalar in text.precomposedStringWithCompatibilityMapping.unicodeScalars where scalar.properties.isAlphabetic {
+            if LanguageGuard.isHan(scalar) {
+                han += 1
+            } else if LanguageGuard.isKana(scalar) {
+                kana += 1
+            } else if LanguageGuard.isLatin(scalar) {
+                latin += 1
+            } else if scalar.properties.generalCategory.isLetter {
+                other += 1
+            }
+        }
+        let letters = han + kana + latin + other
+        guard letters > 0, Double(other) < Double(letters) * LanguageGuard.otherScriptShare else { return nil }
+        if kana > 0 {
+            return switch TranslationDirection.japaneseSource(of: text) {
+            case .partner: .japanese
+            case .english: .english
+            case .other, nil: nil
+            }
+        }
+        if han > 0 {
+            return TranslationDirection.sourceLanguage(of: text)
+        }
+        guard latin < LanguageGuard.minimumLatinLetters || isEnglishOrSpanish(text) else { return nil }
+        return switch TranslationDirection.spanishSource(of: text) {
+        case .partner: .spanish
+        case .english: .english
+        case .other, nil: nil
         }
     }
 
-    /// The language a caption sentence in `source` is translated into for the caption
-    /// target `target`, or nil when it needs no translation: nothing to translate, or a
-    /// sentence in the target already. A sentence in neither language goes into English.
-    static func target(source: TranslationDirection.Source?, into target: TranslationTarget, in language: DictationLanguage) -> TranslationTarget? {
-        guard let source else { return nil }
-        let target = effective(target, for: language)
-        switch source {
-        case .english: return target == .english ? nil : target
-        case .partner: return target == language.translationLanguage ? nil : target
-        case .other: return .english
+    /// Whether NLLanguageRecognizer, free to choose any language, finds English or Spanish
+    /// the most likely.
+    private static func isEnglishOrSpanish(_ text: String) -> Bool {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        return recognizer.dominantLanguage == .english || recognizer.dominantLanguage == .spanish
+    }
+
+    // MARK: Routes
+
+    /// A sentence's language and the target.
+    struct Pair: Hashable, Sendable {
+        let source: TranslationTarget
+        let target: TranslationTarget
+
+        init(_ source: TranslationTarget, _ target: TranslationTarget) {
+            self.source = source
+            self.target = target
         }
     }
 
-    /// The route for a caption sentence and its language, read once, or nil when it needs
-    /// no translation. Off the main actor, since the Spanish rule may run
-    /// NLLanguageRecognizer. The checks of the translation take the language on.
-    @concurrent
-    static func plan(for text: String, into target: TranslationTarget, in language: DictationLanguage) async -> (route: TranslationRoute, source: TranslationDirection.Source)? {
-        guard let source = source(of: text, in: language), let into = self.target(source: source, into: target, in: language) else { return nil }
-        return (TranslationRoute(language, into: into), source)
+    /// How a sentence goes from each language into each other one: the routes it takes in
+    /// turn, each translating what the one before wrote. Between English and another
+    /// language the route of that language, as for a dictation. Between two of Chinese,
+    /// Japanese and Spanish the route into English and then the route from English, each
+    /// with its checks, a beta that takes about twice as long as one route. This table is
+    /// the one place that chooses, so a pair can move to a direct route of its own later.
+    static let table: [Pair: [TranslationRoute]] = {
+        let zhEn = TranslationRoute(.chinese, into: .english)
+        let jaEn = TranslationRoute(.japanese, into: .english)
+        let esEn = TranslationRoute(.spanish, into: .english)
+        let enZh = TranslationRoute(.chinese, into: .chinese)
+        let enJa = TranslationRoute(.japanese, into: .japanese)
+        let enEs = TranslationRoute(.spanish, into: .spanish)
+        return [
+            Pair(.chinese, .english): [zhEn],
+            Pair(.japanese, .english): [jaEn],
+            Pair(.spanish, .english): [esEn],
+            Pair(.english, .chinese): [enZh],
+            Pair(.english, .japanese): [enJa],
+            Pair(.english, .spanish): [enEs],
+            Pair(.chinese, .japanese): [zhEn, enJa],
+            Pair(.chinese, .spanish): [zhEn, enEs],
+            Pair(.japanese, .chinese): [jaEn, enZh],
+            Pair(.japanese, .spanish): [jaEn, enEs],
+            Pair(.spanish, .chinese): [esEn, enZh],
+            Pair(.spanish, .japanese): [esEn, enJa],
+        ]
+    }()
+
+    /// The routes a sentence in `source` takes into `target`, see `table`, and none for a
+    /// sentence in the target already or one shown as it was said, a nil `source`.
+    static func hops(from source: TranslationTarget?, into target: TranslationTarget) -> [TranslationRoute] {
+        source.flatMap { table[Pair($0, target)] } ?? []
+    }
+
+    /// Every route a sentence into `target` may take, from any of the other three
+    /// languages. Their prefix caches stay while captions run, see TranslationPrefixSlots.
+    static func routes(into target: TranslationTarget) -> Set<TranslationRoute> {
+        Set(TranslationTarget.allCases.flatMap { hops(from: $0, into: target) })
+    }
+
+    /// The routes read ahead while captions run: those of a sentence in English and of one
+    /// in the dictation language, the languages a meeting is most likely in, each once. A
+    /// sentence in another language fills its route when it comes.
+    static func preparedRoutes(into target: TranslationTarget, for language: DictationLanguage) -> [TranslationRoute] {
+        var prepared: [TranslationRoute] = []
+        for route in hops(from: .english, into: target) + hops(from: language.translationLanguage, into: target) where !prepared.contains(route) {
+            prepared.append(route)
+        }
+        return prepared
     }
 }
 
@@ -113,15 +194,14 @@ nonisolated enum CaptionTargetPreference {
     /// The target that keeps an earlier user's captions as close as can be to what they
     /// were, when captions translated the way the translation key does: their Translate
     /// into when it is fixed to a language that fits their dictation language, otherwise
-    /// their own language when it is one of the choices, otherwise their dictation
-    /// language. An English meeting then still comes out in their language, as under
-    /// Automatic. With English and the dictation language as the only choices, the own
-    /// language counts only when it is the dictation language.
+    /// their own language when it is English or their dictation language, the two languages
+    /// their captions had, otherwise their dictation language. An English meeting then
+    /// still comes out in their language, as under Automatic.
     static func earlierTarget(direction: TranslationDirection, language: DictationLanguage, ownLanguage: DictationLanguage?) -> TranslationTarget {
         if direction != .automatic, direction.fits(language) {
             return direction == .english ? .english : language.translationLanguage
         }
-        if let own = ownLanguage?.translationLanguage, CaptionTarget.choices(for: language).contains(own) {
+        if let own = ownLanguage?.translationLanguage, language.translationTargets.contains(own) {
             return own
         }
         return language.translationLanguage

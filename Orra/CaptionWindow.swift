@@ -194,18 +194,18 @@ private struct CaptionModePicker: View {
 }
 
 /// The language captions translate into, as on the Meeting Interpretation page, with the
-/// choice checked. Off in Original, which does not translate.
+/// choice checked and Beta beside the targets captions reach through English. Off in
+/// Original, which does not translate.
 private struct CaptionTargetMenu: View {
     let captions: MeetingCaptions
     let cleanup: TextCleanup
 
     var body: some View {
-        // A target saved for another dictation language shows as the one it acts as.
-        let target = cleanup.effectiveCaptionTarget
+        let target = cleanup.captionTarget
         Menu {
             Picker("Translate captions into", selection: Binding(get: { target }, set: { cleanup.pickCaptionTarget($0) })) {
                 ForEach(CaptionTarget.choices(for: cleanup.dictationLanguage), id: \.self) { choice in
-                    Text(choice.title).tag(choice)
+                    choice.captionTitle(for: cleanup.dictationLanguage).tag(choice)
                 }
             }
             .pickerStyle(.inline)

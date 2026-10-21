@@ -214,13 +214,12 @@ nonisolated enum ProblemReport {
         return effective == direction ? name : "\(name), acts as \(effective.rawValue.capitalized)"
     }
 
-    /// The caption target, "(default)" while the user has not picked one, and what it acts
-    /// as for the dictation language when that differs, such as "Japanese, acts as
-    /// Chinese".
+    /// The caption target, "(default)" while the user has not picked one, and "beta" for
+    /// a target that is neither English nor the dictation language, such as "Japanese,
+    /// beta", see CaptionTarget.isBeta(_:for:).
     static func describe(captionTarget target: TranslationTarget, picked: Bool, for language: DictationLanguage) -> String {
-        let effective = CaptionTarget.effective(target, for: language)
         let name = picked ? target.logName : "\(target.logName) (default)"
-        return effective == target ? name : "\(name), acts as \(effective.logName)"
+        return CaptionTarget.isBeta(target, for: language) ? "\(name), beta" : name
     }
 
     /// One log entry as a line.

@@ -467,4 +467,33 @@ struct TranslationPairTests {
         slots.remove(jaEn)
         #expect(slots.routes == [jaJa])
     }
+
+    /// While captions run, the routes they want raise the caches kept to four at most, and
+    /// when they stop the caches go back to the two of the dictation language.
+    @Test func captionsKeepUpToFourPrefixCaches() {
+        let zhEn = TranslationRoute.chinese(.english)
+        let zhZh = TranslationRoute.chinese(.chinese)
+        let jaEn = TranslationRoute(.japanese, into: .english)
+        let jaJa = TranslationRoute(.japanese, into: .japanese)
+        let esEn = TranslationRoute(.spanish, into: .english)
+        let esEs = TranslationRoute(.spanish, into: .spanish)
+        var slots = TranslationPrefixSlots()
+        #expect(slots.capacity == TranslationPrefixSlots.limit)
+        // Chinese dictation with Japanese captions: four routes wanted.
+        #expect(slots.keep(TextCleanup.keptRoutes(captionTarget: .japanese, .chinese)).isEmpty)
+        #expect(slots.capacity == TranslationPrefixSlots.captionsLimit)
+        for route in [zhEn, zhZh, esEn, jaJa] {
+            #expect(slots.use(route).isEmpty)
+        }
+        #expect(slots.routes == [zhEn, zhZh, esEn, jaJa])
+        // One more goes past four, and the one used longest ago goes.
+        #expect(slots.use(esEs) == [zhEn])
+        // Then a route nobody wants goes first.
+        #expect(slots.use(jaEn) == [esEs])
+        #expect(slots.routes == [zhZh, esEn, jaJa, jaEn])
+        // Captions stop: only the routes of the dictation language stay, two at most.
+        #expect(slots.keep(TextCleanup.keptRoutes(captionTarget: nil, .chinese)) == [esEn, jaJa, jaEn])
+        #expect(slots.routes == [zhZh])
+        #expect(slots.capacity == TranslationPrefixSlots.limit)
+    }
 }

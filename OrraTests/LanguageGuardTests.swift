@@ -107,6 +107,47 @@ struct LanguageGuardTests {
         }
     }
 
+    /// Captions keep text in any of the four languages, whatever the dictation language,
+    /// and take a fifth language, in Latin letters or another script, for foreign.
+    @Test func captionsTakeOnlyAFifthLanguageForForeign() {
+        for text in [Self.chinese, Self.english, Self.japanese, Self.japaneseInHan, Self.spanish, "我哋今日去咗飲茶，啲點心好好食。", "このPRをreviewしてください。", "Hola, ¿qué tal?", "OK", ""] {
+            #expect(!LanguageGuard.isForeignToCaptions(text), "\(text)")
+        }
+        for text in [Self.swedish, "Das ist ein einfaches Abendessen mit Brot und Olivenöl.", "빵과 올리브 오일로 만든 간단한 저녁입니다.", "Это простой ужин с хлебом и оливковым маслом."] {
+            #expect(LanguageGuard.isForeignToCaptions(text), "\(text)")
+        }
+    }
+
+    /// A caption in Japanese or Spanish keeps its first pass for a user who dictates in
+    /// Chinese, where a dictation is transcribed again. A fifth language gets the passes of
+    /// the dictation language, as a dictation does.
+    @Test func captionsInAnyOfTheFourLanguagesAreTranscribedOnce() async throws {
+        for text in [Self.japanese, Self.spanish, Self.chinese, Self.english] {
+            speech.reply = text
+            #expect(try await speech.transcription.transcribeCaption([0.1], language: .chinese) == text)
+        }
+        #expect(speech.receivedLanguages == [nil, nil, nil, nil])
+        #expect(speech.receivedContexts == [nil, nil, nil, nil])
+        speech.reply = Self.chinese
+        #expect(try await speech.transcription.transcribeCaption([0.1], language: .spanish) == Self.chinese)
+        #expect(speech.receivedLanguages.count == 5)
+        // A dictation of the same text in Chinese still asks for Chinese, then English.
+        speech.reply = Self.japanese
+        _ = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)
+        #expect(Array(speech.receivedLanguages.dropFirst(5)) == [nil, .chinese, .english])
+    }
+
+    @Test func aFifthLanguageInACaptionGetsThePassesOfTheDictationLanguage() async throws {
+        speech.reply = Self.swedish
+        speech.replyInLanguage = [.japanese: Self.japanese, .chinese: Self.chinese]
+        #expect(try await speech.transcription.transcribeCaption([0.1], language: .japanese) == Self.japanese)
+        #expect(speech.receivedLanguages == [nil, .japanese])
+        // No pass helps: the first text stands.
+        speech.replyInLanguage = [:]
+        #expect(try await speech.transcription.transcribeCaption([0.1], language: .spanish) == Self.swedish)
+        #expect(speech.receivedLanguages == [nil, .japanese, nil, .spanish, .english])
+    }
+
     @Test func chineseOrEnglishTextIsTranscribedOnce() async throws {
         speech.reply = Self.chinese
         let text = try await speech.transcription.transcribe([0.1], vocabulary: [], audioSeconds: 1)

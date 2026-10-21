@@ -76,7 +76,8 @@ actor RewriteEngine {
     /// The prefix caches of the translation prompts, one per route, each filled on the
     /// first translation on its route, see `translate`. At most
     /// TranslationPrefixSlots.limit, so a user who changes the dictation language never
-    /// holds more than before. Dropped with the model.
+    /// holds more than before, and TranslationPrefixSlots.captionsLimit while Live
+    /// Captions run. Dropped with the model.
     private var translationPrefixes: [TranslationRoute: Prefix] = [:]
     /// Which routes have a prefix cache, in the order they were used.
     private var prefixSlots = TranslationPrefixSlots()
@@ -205,8 +206,9 @@ actor RewriteEngine {
 
     /// Drops the prefix caches of every route outside `routes`, and drops those first when
     /// more caches than the limit would be filled. TextCleanup passes the routes of the
-    /// user's dictation language and direction, so a change of language gives the memory of
-    /// the old ones back at once.
+    /// user's dictation language, and while Live Captions run those of the caption target
+    /// too, which raise the limit, see TranslationPrefixSlots. So a change of language or
+    /// the end of captions gives the memory of the old ones back at once.
     func keepTranslationPrefixes(_ routes: Set<TranslationRoute>) {
         let dropped = prefixSlots.keep(routes)
         drop(dropped)

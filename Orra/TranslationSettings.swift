@@ -122,6 +122,12 @@ extension TranslationTarget {
         case .spanish: "Spanish"
         }
     }
+
+    /// The name in the pickers of the caption target, with Beta for a target that is
+    /// neither English nor the dictation language, see CaptionTarget.isBeta(_:for:).
+    func captionTitle(for language: DictationLanguage) -> Text {
+        CaptionTarget.isBeta(self, for: language) ? Text("\(Text(title)) (Beta)") : Text(title)
+    }
 }
 
 extension TranslationDirection {

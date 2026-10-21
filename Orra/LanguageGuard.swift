@@ -51,6 +51,21 @@ nonisolated enum LanguageGuard {
         verdict(on: text, for: language) == .foreign
     }
 
+    /// Whether a caption's text looks written in none of the four languages Live Captions
+    /// read, Chinese, English, Japanese and Spanish, whatever the dictation language: the
+    /// verdict for Chinese finds it foreign, the one for Japanese finds no Japanese and
+    /// the one for Spanish no Spanish. So a meeting in any of the four keeps the speech
+    /// model's first pass, and only a fifth language, such as Swedish or Korean, is
+    /// transcribed again, see Transcription.transcribeCaption. Measured on 2026-10-19 on
+    /// 753 clips and 1,006 caption sentences of Chinese, Cantonese and mixed speech, this
+    /// kept every first pass the Chinese verdict keeps and none held a kana, and Japanese
+    /// and Spanish meetings needed no other pass.
+    static func isForeignToCaptions(_ text: String) -> Bool {
+        verdict(on: text, for: .chinese) == .foreign
+            && verdict(on: text, for: .japanese) != .japanese
+            && verdict(on: text, for: .spanish) != .spanish
+    }
+
     /// Whether the steps made for Chinese and English take the text: the filler and number
     /// rules, the cleanup model and learning from corrections. Every text with Chinese
     /// chosen, as before the choice. With Japanese or Spanish chosen, English only: not

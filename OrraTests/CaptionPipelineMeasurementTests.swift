@@ -22,10 +22,12 @@ import Testing
 ///
 /// - ORRA_CAPTION_SETTINGS: a JSON object that changes CaptionSegmenter.Settings, such as
 ///   {"pause": 0.5, "startLevel": 0.01}, for tuning.
-/// - ORRA_CAPTION_TARGET: the caption target, zh (the default) or en, see TranslationTarget.
-///   Sentences in the target already are not translated, so Chinese audio needs en to
-///   measure translation, and English audio zh. Before 2026-10-19 the default translated
-///   both, so compare a run with one in the same target.
+/// - ORRA_CAPTION_TARGET: the caption target, zh (the default), en, ja or es, see
+///   TranslationTarget. Sentences in the target already are not translated, so Chinese
+///   audio needs another target to measure translation, and English audio zh. Between
+///   Chinese, Japanese and Spanish each sentence goes through English, see CaptionTarget.
+///   The dictation language is Chinese. Before 2026-10-19 the default translated both
+///   ways, so compare a run with one in the same target.
 /// - ORRA_CAPTION_TRANSLATE=0: transcripts only, without loading the cleanup model.
 /// - ORRA_CAPTION_REALTIME=1: feeds the audio at the pace it plays, so the latency of each
 ///   caption is measured as the live captions would see it.
@@ -65,7 +67,9 @@ struct CaptionPipelineMeasurementTests {
         if translates {
             let folder = try #require(RewriteTestModel.folder, "The cleanup model is not on this Mac. Set TEST_RUNNER_ORRA_CAPTION_TRANSLATE=0 or TEST_RUNNER_ORRA_REWRITE_MODEL_DIR")
             try await rewrite.load(from: folder)
-            try await rewrite.prepareTranslation(into: CaptionTarget.route(target, in: .chinese))
+            for route in CaptionTarget.preparedRoutes(into: target, for: .chinese) {
+                try await rewrite.prepareTranslation(into: route)
+            }
         }
         var engines = CaptionEngines.shared(
             transcription: .qwen3(speech),

@@ -94,9 +94,9 @@ struct ProblemReportTests {
         #expect(report.contains("### Orra-2026-10-09-120000.ips\n{\"crash\":1}"))
     }
 
-    /// The language settings with their values: Translate into and the caption target as
-    /// saved, what each acts as for the dictation language when that differs, and whether
-    /// the caption target was picked or is the default.
+    /// The language settings with their values: Translate into as saved and what it acts
+    /// as for the dictation language when that differs, and the caption target, whether it
+    /// was picked or is the default, and whether it is a beta for the dictation language.
     @Test func reportNamesTheLanguageSettings() {
         #expect(ProblemReport.describe(.automatic, for: .chinese) == "Automatic")
         #expect(ProblemReport.describe(.english, for: .japanese) == "English")
@@ -104,8 +104,9 @@ struct ProblemReportTests {
         #expect(ProblemReport.describe(.japanese, for: .chinese) == "Japanese, acts as Automatic")
         #expect(ProblemReport.describe(captionTarget: .chinese, picked: true, for: .chinese) == "Chinese")
         #expect(ProblemReport.describe(captionTarget: .english, picked: false, for: .spanish) == "English (default)")
-        #expect(ProblemReport.describe(captionTarget: .japanese, picked: true, for: .chinese) == "Japanese, acts as Chinese")
-        #expect(ProblemReport.describe(captionTarget: .spanish, picked: false, for: .japanese) == "Spanish (default), acts as Japanese")
+        #expect(ProblemReport.describe(captionTarget: .japanese, picked: true, for: .chinese) == "Japanese, beta")
+        #expect(ProblemReport.describe(captionTarget: .spanish, picked: false, for: .japanese) == "Spanish (default), beta")
+        #expect(ProblemReport.describe(captionTarget: .japanese, picked: true, for: .japanese) == "Japanese")
     }
 
     /// One line for Projects, on or off, with counts only. A build that hides Projects has

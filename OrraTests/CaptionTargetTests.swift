@@ -3,8 +3,8 @@ import Testing
 @testable import Orra
 
 /// The language Live Captions translate into: its choices, its default from the user's own
-/// language, what it acts as for the dictation language, how each sentence is read, and
-/// the step that keeps an earlier user's captions in the language they had.
+/// language, how each sentence is read, the routes into the target, the prefix caches
+/// they keep, and the step that keeps an earlier user's captions in the language they had.
 @MainActor
 struct CaptionTargetTests {
     let temporary = TemporaryModelFolders()
@@ -66,45 +66,40 @@ struct CaptionTargetTests {
         #expect(cleanup.pickedCaptionTarget == .chinese)
     }
 
-    /// Captions offer English and the dictation language, English first. A target saved
-    /// for another dictation language acts and shows as the dictation language, stays
-    /// saved, and comes back with its language.
-    @Test func aTargetForAnotherLanguageActsAsTheDictationLanguage() {
-        #expect(CaptionTarget.choices(for: .chinese) == [.english, .chinese])
-        #expect(CaptionTarget.choices(for: .japanese) == [.english, .japanese])
-        #expect(CaptionTarget.choices(for: .spanish) == [.english, .spanish])
+    /// Captions offer all four languages, English and the dictation language first, and the
+    /// other two as a beta. A target saved while dictating in another language stays what
+    /// it is after a change of the dictation language.
+    @Test func captionsOfferAllFourLanguages() {
+        #expect(CaptionTarget.choices(for: .chinese) == [.english, .chinese, .japanese, .spanish])
+        #expect(CaptionTarget.choices(for: .japanese) == [.english, .japanese, .chinese, .spanish])
+        #expect(CaptionTarget.choices(for: .spanish) == [.english, .spanish, .chinese, .japanese])
         for language in DictationLanguage.allCases {
-            #expect(CaptionTarget.effective(.english, for: language) == .english)
-            #expect(CaptionTarget.effective(language.translationLanguage, for: language) == language.translationLanguage)
-            for target in TranslationTarget.allCases {
-                #expect(CaptionTarget.choices(for: language).contains(CaptionTarget.effective(target, for: language)))
-                #expect(language.translationRoutes.contains(CaptionTarget.route(target, in: language)))
-            }
+            #expect(Set(CaptionTarget.choices(for: language)) == Set(TranslationTarget.allCases))
+            #expect(CaptionTarget.choices(for: language).filter { CaptionTarget.isBeta($0, for: language) } == Array(CaptionTarget.choices(for: language).dropFirst(2)))
         }
-        #expect(CaptionTarget.effective(.japanese, for: .chinese) == .chinese)
-        #expect(CaptionTarget.effective(.chinese, for: .spanish) == .spanish)
+        #expect(!CaptionTarget.isBeta(.english, for: .japanese))
+        #expect(!CaptionTarget.isBeta(.japanese, for: .japanese))
+        #expect(CaptionTarget.isBeta(.japanese, for: .chinese))
+        #expect(CaptionTarget.isBeta(.chinese, for: .spanish))
         // Picked while dictating in Japanese, then the dictation language changes.
         let cleanup = cleanup(captionTarget: .japanese) { .english }
         cleanup.setDictationLanguage(.chinese)
         #expect(cleanup.captionTarget == .japanese)
-        #expect(cleanup.effectiveCaptionTarget == .chinese)
-        cleanup.setDictationLanguage(.japanese)
-        #expect(cleanup.effectiveCaptionTarget == .japanese)
+        #expect(cleanup.pickedCaptionTarget == .japanese)
     }
 
-    /// Choosing the target the window or Settings shows already changes nothing: a target
-    /// saved for another dictation language stays, and a default does not become a pick.
+    /// Choosing the target the window or Settings shows already changes nothing, so a
+    /// default does not become a pick.
     @Test func choosingTheShownTargetKeepsWhatIsSaved() {
         var saved: [TranslationTarget] = []
         let picked = cleanup(captionTarget: .japanese, saveCaptionTarget: { saved.append($0) }) { .english }
         picked.setDictationLanguage(.chinese)
-        #expect(picked.effectiveCaptionTarget == .chinese)
-        picked.pickCaptionTarget(.chinese)
+        picked.pickCaptionTarget(.japanese)
         #expect(picked.pickedCaptionTarget == .japanese)
         #expect(saved.isEmpty)
-        picked.pickCaptionTarget(.english)
-        #expect(picked.pickedCaptionTarget == .english)
-        #expect(saved == [.english])
+        picked.pickCaptionTarget(.spanish)
+        #expect(picked.pickedCaptionTarget == .spanish)
+        #expect(saved == [.spanish])
 
         let unpicked = cleanup { .chinese }
         unpicked.setDictationLanguage(.chinese)
@@ -114,65 +109,121 @@ struct CaptionTargetTests {
         #expect(unpicked.pickedCaptionTarget == .english)
     }
 
-    /// Each sentence is read with the rule of the dictation language, except that kana make
-    /// a sentence the Chinese rule reads as Chinese, or finds nothing to translate in,
-    /// Japanese, and that Han characters without kana make a sentence the Japanese rule
-    /// reads as Japanese not Japanese.
-    @Test func captionsTellJapaneseAndChineseApart() {
-        #expect(CaptionTarget.source(of: "我们开始吧。", in: .chinese) == .partner)
-        #expect(CaptionTarget.source(of: "今日はありがとうございました。", in: .chinese) == .other)
-        #expect(CaptionTarget.source(of: "明日の会議は十時からです。", in: .chinese) == .other)
-        #expect(CaptionTarget.source(of: "Hello everyone.", in: .chinese) == .english)
-        // Kana only, which the Chinese rule finds nothing to translate in, is Japanese too.
-        #expect(CaptionTarget.source(of: "ありがとう", in: .chinese) == .other)
-        #expect(CaptionTarget.source(of: "そうですね。", in: .chinese) == .other)
-        // Read as English, which kana do not change, and nothing to translate stays so.
-        #expect(CaptionTarget.source(of: "Let's meet at the カフェ.", in: .chinese) == .english)
-        #expect(CaptionTarget.source(of: "2026", in: .chinese) == nil)
-        #expect(CaptionTarget.source(of: "！？", in: .chinese) == nil)
-        #expect(TranslationDirection.source(of: "ありがとう", in: .chinese) == nil)
-        // The rule of the translation key is unchanged.
-        #expect(TranslationDirection.source(of: "今日はありがとうございました。", in: .chinese) == .partner)
-
-        #expect(CaptionTarget.source(of: "今日はありがとうございました。", in: .japanese) == .partner)
-        #expect(CaptionTarget.source(of: "ありがとう", in: .japanese) == .partner)
-        #expect(CaptionTarget.source(of: "我们开始吧。", in: .japanese) == .other)
-        // Japanese said without any kana goes into English too.
-        #expect(CaptionTarget.source(of: "会議室", in: .japanese) == .other)
-        #expect(CaptionTarget.source(of: "Hello everyone.", in: .japanese) == .english)
-        #expect(TranslationDirection.source(of: "我们开始吧。", in: .japanese) == .partner)
-
-        #expect(CaptionTarget.source(of: "Gracias a todos.", in: .spanish) == .partner)
-        #expect(CaptionTarget.source(of: "我们开始吧。", in: .spanish) == .other)
+    /// Each sentence is read by its script, whatever the dictation language: kana by the
+    /// Japanese rule, Han characters by the Chinese rule, Latin letters by the Spanish rule
+    /// when the recognizer finds English or Spanish or the text is short, and anything
+    /// else is shown as it was said.
+    @Test func eachSentenceIsReadByItsScript() {
+        // Kana make Japanese, also with kanji, which the Chinese rule took for Chinese.
+        #expect(CaptionTarget.language(of: "今日はありがとうございました。") == .japanese)
+        #expect(CaptionTarget.language(of: "明日の会議は十時からです。") == .japanese)
+        #expect(CaptionTarget.language(of: "そうですね。") == .japanese)
+        #expect(CaptionTarget.language(of: LanguageGuardTests.japanese) == .japanese)
+        // English with a few kana stays English.
+        #expect(CaptionTarget.language(of: "Let's meet at the カフェ.") == .english)
+        // Han characters without kana make Chinese, which the Japanese rule took for
+        // Japanese, and Cantonese and mixed Chinese too.
+        #expect(CaptionTarget.language(of: "我们开始吧。") == .chinese)
+        #expect(CaptionTarget.language(of: "我哋而家开始。") == .chinese)
+        #expect(CaptionTarget.language(of: "这个 PR 你帮我 review 一下") == .chinese)
+        #expect(CaptionTarget.language(of: LanguageGuardTests.chinese) == .chinese)
+        // English with a name in Han characters.
+        #expect(CaptionTarget.language(of: "Send it to 王小明.") == .english)
+        // The known blind spot: Japanese in Han characters only reads as Chinese.
+        #expect(CaptionTarget.language(of: "会議室") == .chinese)
+        // Latin letters.
+        #expect(CaptionTarget.language(of: "Hello everyone.") == .english)
+        #expect(CaptionTarget.language(of: LanguageGuardTests.english) == .english)
+        #expect(CaptionTarget.language(of: "Gracias a todos.") == .spanish)
+        #expect(CaptionTarget.language(of: LanguageGuardTests.spanish) == .spanish)
+        // Other languages in Latin letters, long enough for the recognizer, are shown as
+        // they were said.
+        #expect(CaptionTarget.language(of: "Nous allons commencer la réunion avec le budget de cette année.") == nil)
+        #expect(CaptionTarget.language(of: "Vamos começar a reunião com o orçamento deste ano, está bem?") == nil)
+        #expect(CaptionTarget.language(of: "Wir fangen mit dem Budget für dieses Jahr an.") == nil)
+        #expect(CaptionTarget.language(of: LanguageGuardTests.swedish) == nil)
+        // Other scripts.
+        #expect(CaptionTarget.language(of: "회의를 시작하겠습니다.") == nil)
+        #expect(CaptionTarget.language(of: "Давайте начнём.") == nil)
+        // Nothing to translate.
+        #expect(CaptionTarget.language(of: "2026") == nil)
+        #expect(CaptionTarget.language(of: "！？") == nil)
+        #expect(CaptionTarget.language(of: "") == nil)
     }
 
-    /// A sentence in the target already needs no translation, on every route. Every other
-    /// sentence goes into the target as it acts for the dictation language, and one in
-    /// neither language into English.
-    @Test func eachSentenceGoesIntoTheTargetUnlessItIsInItAlready() async {
-        #expect(CaptionTarget.target(source: .english, into: .chinese, in: .chinese) == .chinese)
-        #expect(CaptionTarget.target(source: .english, into: .english, in: .chinese) == nil)
-        #expect(CaptionTarget.target(source: .partner, into: .chinese, in: .chinese) == nil)
-        #expect(CaptionTarget.target(source: .partner, into: .english, in: .chinese) == .english)
-        #expect(CaptionTarget.target(source: .other, into: .chinese, in: .chinese) == .english)
-        #expect(CaptionTarget.target(source: .other, into: .english, in: .japanese) == .english)
-        #expect(CaptionTarget.target(source: nil, into: .chinese, in: .chinese) == nil)
-        // A target saved for Japanese acts as Chinese for Chinese dictation.
-        #expect(CaptionTarget.target(source: .english, into: .japanese, in: .chinese) == .chinese)
-        #expect(CaptionTarget.target(source: .partner, into: .japanese, in: .chinese) == nil)
+    /// Latin text too short for the recognizer, which it gives to languages such as Polish
+    /// or Catalan, goes to the rule of English and Spanish, so it is not shown as it was
+    /// said. A short English line with a word that looks Spanish reads as Spanish, which
+    /// the route through English takes care of, see CaptionPipelineTests.
+    @Test func shortLatinTextReadsAsEnglishOrSpanish() {
+        for text in ["OK", "OK.", "Hi", "Hi.", "Um.", "Yes.", "Thanks."] {
+            #expect(CaptionTarget.language(of: text) == .english, "\(text)")
+        }
+        for text in ["Sí", "Sí.", "Claro", "Claro.", "Dale.", "Listo.", "Te veo later", "Vale."] {
+            #expect(CaptionTarget.language(of: text) == .spanish, "\(text)")
+        }
+        #expect(CaptionTarget.language(of: "Hay fever.") == .spanish)
+    }
 
-        let english = await CaptionTarget.plan(for: "Hello everyone.", into: .chinese, in: .chinese)
-        #expect(english?.route == .chinese(.chinese))
-        #expect(english?.source == .english)
-        let japanese = await CaptionTarget.plan(for: "今日はありがとうございました。", into: .chinese, in: .chinese)
-        #expect(japanese?.route == .chinese(.english))
-        #expect(japanese?.source == .other)
-        let kana = await CaptionTarget.plan(for: "そうですね。", into: .chinese, in: .chinese)
-        #expect(kana?.route == .chinese(.english))
-        #expect(await CaptionTarget.plan(for: "我们开始吧。", into: .chinese, in: .chinese) == nil)
-        #expect(await CaptionTarget.plan(for: "Good morning, everyone.", into: .english, in: .spanish) == nil)
-        let spanish = await CaptionTarget.plan(for: "Gracias a todos.", into: .english, in: .spanish)
-        #expect(spanish?.route == TranslationRoute(.spanish, into: .english))
+    /// The table of routes: none into the same language, one between English and another
+    /// language, and two through English between Chinese, Japanese and Spanish, the second
+    /// from English into the target.
+    @Test func theRouteTableGoesThroughEnglishBetweenTheOtherThree() {
+        let zhEn = TranslationRoute(.chinese, into: .english)
+        let jaEn = TranslationRoute(.japanese, into: .english)
+        let esEn = TranslationRoute(.spanish, into: .english)
+        let enZh = TranslationRoute(.chinese, into: .chinese)
+        let enJa = TranslationRoute(.japanese, into: .japanese)
+        let enEs = TranslationRoute(.spanish, into: .spanish)
+        #expect(CaptionTarget.hops(from: .chinese, into: .english) == [zhEn])
+        #expect(CaptionTarget.hops(from: .japanese, into: .english) == [jaEn])
+        #expect(CaptionTarget.hops(from: .spanish, into: .english) == [esEn])
+        #expect(CaptionTarget.hops(from: .english, into: .chinese) == [enZh])
+        #expect(CaptionTarget.hops(from: .english, into: .japanese) == [enJa])
+        #expect(CaptionTarget.hops(from: .english, into: .spanish) == [enEs])
+        #expect(CaptionTarget.hops(from: .chinese, into: .japanese) == [zhEn, enJa])
+        #expect(CaptionTarget.hops(from: .chinese, into: .spanish) == [zhEn, enEs])
+        #expect(CaptionTarget.hops(from: .japanese, into: .chinese) == [jaEn, enZh])
+        #expect(CaptionTarget.hops(from: .japanese, into: .spanish) == [jaEn, enEs])
+        #expect(CaptionTarget.hops(from: .spanish, into: .chinese) == [esEn, enZh])
+        #expect(CaptionTarget.hops(from: .spanish, into: .japanese) == [esEn, enJa])
+        for target in TranslationTarget.allCases {
+            #expect(CaptionTarget.hops(from: target, into: target).isEmpty)
+            #expect(CaptionTarget.hops(from: nil, into: target).isEmpty)
+            // Every route a sentence into the target may take: one into it from English
+            // and those of the other languages into English.
+            #expect(CaptionTarget.routes(into: target).count == 3)
+            for source in TranslationTarget.allCases where source != target {
+                let hops = CaptionTarget.hops(from: source, into: target)
+                #expect(hops.first?.language.translationLanguage == (source == .english ? target : source))
+                #expect(hops.last?.target == target)
+            }
+        }
+        #expect(CaptionTarget.table.count == 12)
+    }
+
+    /// While captions run, the routes of a sentence in English and of one in the dictation
+    /// language are read ahead, each once, and RewriteEngine keeps every route a sentence
+    /// into the target may take with the two of the dictation language, four at most.
+    @Test func captionRoutesFitFourCaches() {
+        #expect(CaptionTarget.preparedRoutes(into: .chinese, for: .chinese) == [TranslationRoute(.chinese, into: .chinese)])
+        #expect(CaptionTarget.preparedRoutes(into: .english, for: .chinese) == [TranslationRoute(.chinese, into: .english)])
+        #expect(CaptionTarget.preparedRoutes(into: .japanese, for: .chinese) == [TranslationRoute(.japanese, into: .japanese), TranslationRoute(.chinese, into: .english)])
+        #expect(CaptionTarget.preparedRoutes(into: .spanish, for: .japanese) == [TranslationRoute(.spanish, into: .spanish), TranslationRoute(.japanese, into: .english)])
+        for language in DictationLanguage.allCases {
+            for target in TranslationTarget.allCases {
+                let kept = TextCleanup.keptRoutes(captionTarget: target, language)
+                #expect(kept.count <= TranslationPrefixSlots.captionsLimit)
+                #expect(kept.isSuperset(of: language.translationRoutes))
+                #expect(kept.isSuperset(of: CaptionTarget.preparedRoutes(into: target, for: language)))
+            }
+            #expect(TextCleanup.keptRoutes(captionTarget: nil, language) == Set(language.translationRoutes))
+        }
+        // The worst case: Chinese dictation, Japanese captions of a Spanish meeting.
+        #expect(TextCleanup.keptRoutes(captionTarget: .japanese, .chinese) == [
+            TranslationRoute(.chinese, into: .english), TranslationRoute(.chinese, into: .chinese),
+            TranslationRoute(.spanish, into: .english), TranslationRoute(.japanese, into: .japanese),
+        ])
     }
 
     /// An earlier user's captions translated the way the translation key does. Their
@@ -186,7 +237,7 @@ struct CaptionTargetTests {
         #expect(CaptionTargetPreference.earlierTarget(direction: .english, language: .chinese, ownLanguage: .chinese) == .english)
         #expect(CaptionTargetPreference.earlierTarget(direction: .chinese, language: .chinese, ownLanguage: nil) == .chinese)
         // A choice saved for Japanese acted as Automatic for Chinese dictation, and
-        // Japanese is no choice for captions then.
+        // captions had English and Chinese then, so Japanese is not taken.
         #expect(CaptionTargetPreference.earlierTarget(direction: .japanese, language: .chinese, ownLanguage: .japanese) == .chinese)
         #expect(CaptionTargetPreference.earlierTarget(direction: .automatic, language: .japanese, ownLanguage: .japanese) == .japanese)
         #expect(CaptionTargetPreference.earlierTarget(direction: .english, language: .spanish, ownLanguage: .spanish) == .english)

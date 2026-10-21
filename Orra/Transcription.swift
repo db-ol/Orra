@@ -158,6 +158,17 @@ extension Transcription {
         return merged
     }
 
+    /// Turns a sentence of Live Captions into text: one pass without a vocabulary, which
+    /// stands when its text is in any of the four languages captions read, see
+    /// LanguageGuard.isForeignToCaptions, so a meeting in Japanese or Spanish keeps what the
+    /// speech model wrote whatever the dictation language. Only text in a fifth language is
+    /// transcribed again, in the dictation language and then in English, as in
+    /// `checkingLanguage`. A dictation keeps the check of its dictation language.
+    /// Logs a timing and the language that stood, never the text.
+    func transcribeCaption(_ samples: [Float], language: DictationLanguage) async throws -> String {
+        try await checkingLanguage(try await transcribe(samples, nil, nil), of: samples, context: nil, language: language, forCaptions: true)
+    }
+
     /// Returns the text when LanguageGuard finds it in the dictation language or English.
     /// Otherwise the model chose a third language, and the same samples are transcribed
     /// again with the same context, first with the dictation language as the language,
@@ -168,10 +179,11 @@ extension Transcription {
     /// known limit: if English speech ever came out in a third language, the pass in
     /// Chinese would keep it in English for most clips but translate some, on the corpus
     /// 10 of 147 English clips. When neither pass helps or one fails, the text stands as
-    /// it was.
+    /// it was. With `forCaptions`, text in any of the four languages captions read stands,
+    /// see `transcribeCaption`.
     /// Logs a timing and the language that stood, never the text.
-    func checkingLanguage(_ text: String, of samples: [Float], context: String?, language: DictationLanguage = .chinese) async throws -> String {
-        guard await Self.isForeign(text, for: language) else { return text }
+    func checkingLanguage(_ text: String, of samples: [Float], context: String?, language: DictationLanguage = .chinese, forCaptions: Bool = false) async throws -> String {
+        guard await Self.isForeign(text, for: language, forCaptions: forCaptions) else { return text }
         let started = ContinuousClock.now
         for pass in language.passes {
             // A caption cancelled for a dictation starts no pass, see EngineTurns.
@@ -185,7 +197,7 @@ extension Transcription {
                 Logger.pushToTalk.error("Transcript was in another language, the pass in \(pass.rawValue, privacy: .public) failed after \(started.duration(to: .now), privacy: .public)")
                 return text
             }
-            if !hinted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, await !Self.isForeign(hinted, for: language) {
+            if !hinted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, await !Self.isForeign(hinted, for: language, forCaptions: forCaptions) {
                 Logger.pushToTalk.notice("Transcript was in another language, the pass in \(pass.rawValue, privacy: .public) stands, took \(started.duration(to: .now), privacy: .public)")
                 return hinted
             }
@@ -202,8 +214,8 @@ extension Transcription {
 
     /// Off the main actor, since NLLanguageRecognizer reads the whole text.
     @concurrent
-    nonisolated private static func isForeign(_ text: String, for language: DictationLanguage) async -> Bool {
-        LanguageGuard.isForeign(text, for: language)
+    nonisolated private static func isForeign(_ text: String, for language: DictationLanguage, forCaptions: Bool) async -> Bool {
+        forCaptions ? LanguageGuard.isForeignToCaptions(text) : LanguageGuard.isForeign(text, for: language)
     }
 
     /// Off the main actor, since a long transcript is compared character by character.

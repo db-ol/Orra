@@ -375,12 +375,18 @@ final class TextCleanup {
     }
 
     /// Meeting captions stopped. Unloads the model and stops a download unless cleanup or
-    /// translation still need it, and otherwise starts the idle timer.
+    /// translation still need it, and otherwise gives back the prefix caches only
+    /// captions used and starts the idle timer.
     func captionsStopped() {
         guard captionsNeedModel else { return }
         captionsNeedModel = false
         isConfirmingCaptionDownload = false
         if needsModel {
+            let generation = loadGeneration
+            enqueue { [weak self, engine] in
+                guard let self, generation == loadGeneration, isLoaded else { return }
+                await engine.keepTranslationPrefixes(Self.keptRoutes(captionTarget: nil, dictationLanguage))
+            }
             scheduleIdleUnload()
         } else {
             releaseModelIfUnneeded()
@@ -615,37 +621,29 @@ final class TextCleanup {
     }
 
     /// The language Live Captions translate into: the one the user picked, or while there
-    /// is none the default from their own language. Each sentence goes into it as it acts
-    /// for the dictation language, see CaptionTarget.effective(_:for:).
+    /// is none the default from their own language. Every sentence in another language
+    /// goes into it, see CaptionTarget. The caption window and Settings show it.
     var captionTarget: TranslationTarget {
         pickedCaptionTarget ?? defaultCaptionTarget()
     }
 
-    /// What captions translate into for the dictation language now: `captionTarget`, or
-    /// the dictation language when that is no choice for it, see
-    /// CaptionTarget.effective(_:for:). The caption window and Settings show it.
-    var effectiveCaptionTarget: TranslationTarget {
-        CaptionTarget.effective(captionTarget, for: dictationLanguage)
-    }
-
     /// The user chose a caption target in the caption window or in Settings. Choosing the
-    /// one they see already changes nothing, so a target saved for another dictation
-    /// language stays saved and a default does not turn into a pick.
+    /// one they see already changes nothing, so a default does not turn into a pick.
     func pickCaptionTarget(_ target: TranslationTarget) {
-        guard target != effectiveCaptionTarget else { return }
+        guard target != captionTarget else { return }
         setCaptionTarget(target)
     }
 
     /// Saves the language captions translate into: one the user picked, see
     /// `pickCaptionTarget`, or the one the launch step keeps for an earlier user, see
-    /// LaunchMigrations. It counts from the next sentence. Reads its prompt ahead while
+    /// LaunchMigrations. It counts from the next sentence. Reads its prompts ahead while
     /// captions run and the model is loaded.
     func setCaptionTarget(_ target: TranslationTarget) {
         guard target != pickedCaptionTarget else { return }
         pickedCaptionTarget = target
         saveCaptionTarget(target)
         guard captionsNeedModel else { return }
-        Logger.captions.notice("Meeting captions now translate into \(self.effectiveCaptionTarget.logName, privacy: .public)")
+        Logger.captions.notice("Meeting captions now translate into \(self.captionTarget.logName, privacy: .public)")
         if isLoaded {
             prepareTranslation()
         }
@@ -782,15 +780,24 @@ final class TextCleanup {
 
     /// The routes whose prompts are read ahead for the translation key's direction while
     /// translation is on and the caption target while captions run, nil for either one
-    /// that is not wanted: the caption route first, since captions translate without
-    /// waiting, then those of the direction, each once. All are routes of the dictation
-    /// language, so they stay within TranslationPrefixSlots.limit.
+    /// that is not wanted: the caption routes first, since captions translate without
+    /// waiting, see CaptionTarget.preparedRoutes(into:for:), then those of the direction,
+    /// each once. All are among `keptRoutes`, so they stay within the prefix caches
+    /// RewriteEngine keeps.
     nonisolated static func preparedRoutes(direction: TranslationDirection?, captionTarget: TranslationTarget?, _ language: DictationLanguage) -> [TranslationRoute] {
-        var routes = captionTarget.map { [CaptionTarget.route($0, in: language)] } ?? []
+        var routes = captionTarget.map { CaptionTarget.preparedRoutes(into: $0, for: language) } ?? []
         for route in direction.map({ preparedRoutes($0, language) }) ?? [] where !routes.contains(route) {
             routes.append(route)
         }
         return routes
+    }
+
+    /// The routes whose prefix caches RewriteEngine keeps: the two of the dictation
+    /// language, and with a caption target, which is given while captions run, every route
+    /// a sentence into it may take, see CaptionTarget.routes(into:). Four at most, see
+    /// TranslationPrefixSlots.captionsLimit.
+    nonisolated static func keptRoutes(captionTarget: TranslationTarget?, _ language: DictationLanguage) -> Set<TranslationRoute> {
+        Set(language.translationRoutes).union(captionTarget.map(CaptionTarget.routes(into:)) ?? [])
     }
 
     /// Reads the translation prompts ahead after the work queued before, see
@@ -804,13 +811,14 @@ final class TextCleanup {
         }
     }
 
-    /// Drops the prompts of other dictation languages, and reads those of the caption
-    /// target and the user's direction ahead. The other target of the same language stays
-    /// when it is in memory, as it did before the dictation language.
+    /// Drops the prompts of other dictation languages and of caption targets no longer
+    /// chosen, and reads those of the caption target and the user's direction ahead. The
+    /// other target of the same language stays when it is in memory, as it did before the
+    /// dictation language.
     private func fillTranslationPrefixes() async {
         guard translationIsOn || captionsNeedModel, isLoaded else { return }
         let language = dictationLanguage
-        await engine.keepTranslationPrefixes(Set(language.translationRoutes))
+        await engine.keepTranslationPrefixes(Self.keptRoutes(captionTarget: captionsNeedModel ? captionTarget : nil, language))
         let routes = Self.preparedRoutes(
             direction: translationIsOn ? translationDirection : nil,
             captionTarget: captionsNeedModel ? captionTarget : nil,

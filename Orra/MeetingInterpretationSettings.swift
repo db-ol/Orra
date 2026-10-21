@@ -171,20 +171,20 @@ private struct LiveCaptionRows: View {
         } label: {
             Label("Captions show", systemImage: "text.bubble")
         }
-        // A target saved for another dictation language shows as the one it acts as, and
-        // comes back with its language.
+        // All four languages, with Beta beside those captions reach through English.
         Picker(selection: Binding(
-            get: { cleanup.effectiveCaptionTarget },
+            get: { cleanup.captionTarget },
             set: { cleanup.pickCaptionTarget($0) }
         )) {
             ForEach(CaptionTarget.choices(for: cleanup.dictationLanguage), id: \.self) { target in
-                Text(target.title).tag(target)
+                target.captionTitle(for: cleanup.dictationLanguage).tag(target)
             }
         } label: {
             DescribedLabel(
                 title: "Translate captions into",
                 detail: "The language you read in the caption window. The translation key has its own setting, on the Translation page.",
-                systemImage: "translate"
+                systemImage: "translate",
+                note: "Between Chinese, Japanese and Spanish, captions are translated through English. This is a beta, and the translation comes a little later."
             )
         }
         // Original does not translate.

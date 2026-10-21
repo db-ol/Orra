@@ -673,14 +673,17 @@ struct TextCleanupTests {
         }
     }
 
-    /// While captions run, the prompt into the caption target is read ahead first, as it
-    /// acts for the dictation language, then those of the translation key while translation
-    /// is on, each once. All stay within the two routes of the dictation language.
+    /// While captions run, the prompts of a sentence in English and of one in the
+    /// dictation language into the caption target are read ahead first, then those of the
+    /// translation key while translation is on, each once. All stay among the routes whose
+    /// caches RewriteEngine keeps, four at most.
     @Test func captionRoutesAreReadAhead() {
         #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .chinese, .chinese) == [.chinese(.chinese)])
         #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .english, .japanese) == [TranslationRoute(.japanese, into: .english)])
-        // A target saved for Chinese acts as Spanish for Spanish dictation.
-        #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .chinese, .spanish) == [TranslationRoute(.spanish, into: .spanish)])
+        // Chinese captions for Spanish dictation: English into Chinese, and Spanish into
+        // English for the way through English.
+        #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .chinese, .spanish) == [.chinese(.chinese), TranslationRoute(.spanish, into: .english)])
+        #expect(TextCleanup.preparedRoutes(direction: .automatic, captionTarget: .japanese, .chinese) == [TranslationRoute(.japanese, into: .japanese), .chinese(.english), .chinese(.chinese)])
         #expect(TextCleanup.preparedRoutes(direction: .automatic, captionTarget: .chinese, .chinese) == [.chinese(.chinese), .chinese(.english)])
         #expect(TextCleanup.preparedRoutes(direction: .english, captionTarget: .english, .chinese) == [.chinese(.english)])
         #expect(TextCleanup.preparedRoutes(direction: .automatic, captionTarget: nil, .japanese) == TextCleanup.preparedRoutes(.automatic, .japanese))
@@ -690,15 +693,17 @@ struct TextCleanupTests {
                 for target in TranslationTarget.allCases {
                     let routes = TextCleanup.preparedRoutes(direction: direction, captionTarget: target, language)
                     #expect(Set(routes).count == routes.count)
-                    #expect(Set(routes).isSubset(of: language.translationRoutes))
+                    #expect(Set(routes).isSubset(of: TextCleanup.keptRoutes(captionTarget: target, language)))
+                    #expect(routes.count <= TranslationPrefixSlots.captionsLimit)
                 }
             }
         }
     }
 
-    /// Captions running with translation off read the prompt of their target, not those of
-    /// the translation key's direction, and a change of dictation language reads it for the
-    /// new language.
+    /// Captions running with translation off read the prompts of their target, not those of
+    /// the translation key's direction. A change of dictation language keeps the target and
+    /// reads the new language's route into English for the way through English, and the
+    /// caches kept are those of the new language and of the target.
     @Test func captionsReadTheirOwnPromptAhead() async throws {
         defer { temporary.remove() }
         try temporary.writeAll(to: temporary.installed)
@@ -723,7 +728,12 @@ struct TextCleanupTests {
         #expect(fake.preparedRoutes == [.chinese(.chinese)])
         cleanup.setDictationLanguage(.japanese)
         await cleanup.waitForLoad()
-        #expect(fake.preparedRoutes.last == TranslationRoute(.japanese, into: .japanese))
+        #expect(fake.preparedRoutes.last == TranslationRoute(.japanese, into: .english))
+        #expect(fake.kept.last == Set(DictationLanguage.japanese.translationRoutes).union(CaptionTarget.routes(into: .chinese)))
+        // Stopping captions gives back the caches only they kept, while cleanup keeps the
+        // model.
+        cleanup.captionsStopped()
+        await cleanup.waitForLoad()
         #expect(fake.kept.last == Set(DictationLanguage.japanese.translationRoutes))
     }
 
