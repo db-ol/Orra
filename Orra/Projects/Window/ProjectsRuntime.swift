@@ -245,8 +245,9 @@ final class ProjectsRuntime {
     @ObservationIgnored private var lastOwner: SortingService.Owner?
     /// The explain service, while the window is open.
     @ObservationIgnored private var explainService: ExplainService?
-    /// The tokenizer's count, loaded once while the window is open.
-    @ObservationIgnored private var countTokens: (@Sendable (String) -> Int)?
+    /// The load of the tokenizer's count, kept while the window is open. Requests that come
+    /// while it loads wait for the same load, so the tokenizer file is read once.
+    @ObservationIgnored private var tokenCounterLoad: Task<(@Sendable (String) -> Int)?, any Error>?
     /// Mailboxes by the name projects link them with, see `mailboxName(_:)`.
     @ObservationIgnored private var knownMailboxes: [String: MailMailbox] = [:]
     /// Whether Mail gave the names of its mailboxes since Projects started.
@@ -659,7 +660,7 @@ final class ProjectsRuntime {
 
     private func detachWindow() {
         explainService = nil
-        countTokens = nil
+        tokenCounterLoad = nil
         guard windowHoldsModel else { return }
         windowHoldsModel = false
         if let running {
@@ -668,15 +669,28 @@ final class ProjectsRuntime {
         }
     }
 
+    /// The tokenizer's count, loaded once while the window is open. A failed load, or one
+    /// that found no model, is not kept, so the next request tries again.
     private func tokenCounter() async throws -> (@Sendable (String) -> Int)? {
-        if let countTokens {
-            return countTokens
+        if let tokenCounterLoad {
+            return try await tokenCounterLoad.value
         }
-        let loaded = try await dependencies.loadTokenCounter()
+        let load = Task { [loader = dependencies.loadTokenCounter] in try await loader() }
         if windowHoldsModel {
-            countTokens = loaded
+            tokenCounterLoad = load
         }
-        return loaded
+        do {
+            let loaded = try await load.value
+            if loaded == nil, tokenCounterLoad == load {
+                tokenCounterLoad = nil
+            }
+            return loaded
+        } catch {
+            if tokenCounterLoad == load {
+                tokenCounterLoad = nil
+            }
+            throw error
+        }
     }
 
     // MARK: Mail
