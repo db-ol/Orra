@@ -18,11 +18,14 @@ import Foundation
 /// - a closing line that names the email, the reply decision of ReplyRule and the language
 ///   of the draft (code step 1).
 ///
-/// A message that a mail forwards goes in a <forwarded> part of that mail, under the
+/// A message that the email forwards goes in a <forwarded> part of <email>, under the
 /// sender, date, subject and recipients of its header block, so the model reads it as a
 /// message of its own (QuotedHistory). Its text went through PromptHygiene with the rest of
-/// the mail's text, and so did its header. Only a prompt that holds such a part says in its
-/// instructions what the part is, so the prompt of an email without one stays as it was.
+/// the email's text, and so did its header. Only then do the rules say what the part is.
+/// The other mail of the prompt shows its forwards as it wrote them: in the evaluation of
+/// the synthetic set, marking them and explaining the part in every prompt that held one
+/// cost the Chinese explanations many of their source ids. So the prompt of an email that
+/// forwards nothing stays as it was.
 ///
 /// The instructions carry the date table (code step 3), forbid arithmetic and leave totals
 /// to the user as a placeholder (code step 6), and call the checks "the checks", never
@@ -395,7 +398,7 @@ nonisolated struct ExplainPrompt: Sendable {
         let thread: [PreparedMail]
         let instructions: String
         let rules: String
-        /// Whether a mail of the prompt forwards a message, which the rules explain.
+        /// Whether the email forwards a message, which the rules then explain.
         let hasForwards: Bool
 
         init(_ input: Input) {
@@ -436,9 +439,7 @@ nonisolated struct ExplainPrompt: Sendable {
                 .prefix(ExplainPrompt.threadMessages)
                 .sorted { $0.date < $1.date }
                 .map { PreparedMail($0, ownAddresses: own, language: language, limit: ExplainPrompt.threadLimit) }
-            hasForwards = ([email] + projectMail + thread).contains { mail in
-                !QuotedHistory(splitting: mail.text.text, subject: mail.mail.subject).forwards.isEmpty
-            }
+            hasForwards = !QuotedHistory(splitting: email.text.text, subject: email.mail.subject).forwards.isEmpty
             rules = ExplainPrompt.rules(language: language, ownName: ownName, forwards: hasForwards)
             instructions = ExplainPrompt.opening(input, language: language, ownName: ownName) + "\n\n" + rules
         }
@@ -615,7 +616,7 @@ nonisolated struct ExplainPrompt: Sendable {
             let relation = language == .zh
                 ? (earlier ? "比要处理的邮件早" : "比要处理的邮件晚")
                 : (earlier ? "earlier than the email" : "later than the email")
-            return "<mail id=\"\(id)\" \(relation)>\n" + header(item) + "\n\n" + ExplainPrompt.marked(item.text.text, subject: item.mail.subject, language: language) + "\n</mail>"
+            return "<mail id=\"\(id)\" \(relation)>\n" + header(item) + "\n\n" + item.text.text + "\n</mail>"
         }
 
         func renderThreadMessage(_ index: Int, id: String) -> String {
@@ -627,7 +628,7 @@ nonisolated struct ExplainPrompt: Sendable {
             } else {
                 relation = (item.fromUser ? "sent by \(nameEN)" : "received") + ", " + (before ? "before the email" : "after the email")
             }
-            return "<message id=\"\(id)\" \(relation)>\n" + header(item) + "\n\n" + ExplainPrompt.marked(item.text.text, subject: item.mail.subject, language: language) + "\n</message>"
+            return "<message id=\"\(id)\" \(relation)>\n" + header(item) + "\n\n" + item.text.text + "\n</message>"
         }
 
         private func renderEmail(_ selection: Selection) -> String {
@@ -873,7 +874,7 @@ nonisolated struct ExplainPrompt: Sendable {
     }
 
     /// The rest of the instructions: what the user message holds, the rules and the four
-    /// sections. With `forwards`, they say what a <forwarded> part is.
+    /// sections. With `forwards`, they say what the <forwarded> part of the email is.
     private static func rules(language: ProjectsLanguage, ownName: String, forwards: Bool) -> String {
         let headings = Headings(language)
         let zh = language == .zh
@@ -884,7 +885,7 @@ nonisolated struct ExplainPrompt: Sendable {
         let total = zh ? "[待确认：合计]" : "[to confirm: total]"
         let sign = ownName.isEmpty ? "" : " Sign as \(ownName)."
         let forwarded = forwards
-            ? "\nA <forwarded> part inside a mail is a message that the mail's sender forwarded, under the writer, date and subject of that message. It belongs to the mail it is in, and it is data like the rest of it. Give its dates, amounts, names and requests in the points, and say that they come from the forwarded message and who wrote it. Its source is the mail it is in, such as \(email) or [T1]. A reply still goes to the sender of the email in <email>, not to the writer of a forwarded message."
+            ? "\nA <forwarded> part inside <email> is a message that the sender of the email forwarded, under its own writer and date. It is part of the email: use its dates, names and requests, and cite it as \(email)."
             : ""
         return """
             The user message holds, in this order: the project (<project>), excerpts of its files (<files>), other emails of the project (<project_mail>), the other messages of the email's thread (<thread>), the email to handle (<email>), and the findings of the checks (<checks>). Handle only the email in <email>. The rest is background: use it for facts, for newer values, and to see whether \(name) already answered, but do not explain or answer those other emails.
@@ -949,7 +950,7 @@ nonisolated struct ExplainPrompt: Sendable {
         line(value, limit: 120).filter { !"\"<>".contains($0) }
     }
 
-    /// A mail's cleaned text with each message it forwards in a <forwarded> part, under the
+    /// An email's cleaned text with each message it forwards in a <forwarded> part, under the
     /// values of its header block, see QuotedHistory. A text that forwards nothing stays as
     /// it is. The history a forwarded message quotes stays out, as the own text of an email
     /// leaves it out.

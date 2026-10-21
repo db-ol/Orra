@@ -628,7 +628,7 @@ struct ExplainPromptTests {
             </forwarded>
             </email>
             """))
-        #expect(result.rules.contains("A <forwarded> part inside a mail is a message that the mail's sender forwarded"))
+        #expect(result.rules.contains("A <forwarded> part inside <email> is a message that the sender of the email forwarded"))
 
         let chinese = prompt(input(email: Self.forwarded, reply: .reply(.zh), language: .zh))
         #expect(user(chinese).contains("<forwarded>\n发件人：Mill Sales <sales@papermill.example>\n日期：Thu, Oct 15, 2026 at 4:10 PM\n主题：Paper price\n\nFrom 1 November"))
@@ -641,15 +641,17 @@ struct ExplainPromptTests {
         #expect(user(result).contains("Hi Bai Lu,\n\nThe second proof is in the mail. Will it reach you by Wednesday?\n\nIris\n</email>"))
     }
 
-    @Test func forwardsInTheThreadAndOtherMailAreMarkedToo() {
+    /// Other mail of the prompt keeps its forwards as it wrote them, and its prompt says
+    /// nothing about a forwarded part, as before.
+    @Test func aForwardInOtherMailStaysAsItWas() {
         var earlier = Self.forwarded
         earlier.messageID = "fwd-0@printworks.example"
         earlier.date = Self.date("2026-10-15T18:00:00+08:00")
-        let result = prompt(input(projectMail: [earlier]))
+        let result = prompt(input(projectMail: [earlier], thread: [earlier]))
         let text = user(result)
-        #expect(text.contains("<mail id=\"M1\" earlier than the email>"))
-        #expect(count("<forwarded>\nFrom: Mill Sales", in: text) == 1)
-        #expect(result.text.contains("A <forwarded> part inside a mail"))
+        #expect(!text.contains("<forwarded>"))
+        #expect(text.contains("---------- Forwarded message ---------\nFrom: Mill Sales <sales@papermill.example>"))
+        #expect(!result.rules.contains("<forwarded>"))
     }
 
     @Test func outlooksForwardIsMarkedByItsSubject() {
