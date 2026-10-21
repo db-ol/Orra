@@ -10,7 +10,8 @@ extension ProjectsEmailArea {
     /// - Open Reply in Mail, Reply All and Copy, with the hint to press Command V in Mail.
     ///   There is no Send button.
     /// - the change box, which makes a new version, and the newest change highlighted, with
-    ///   Undo
+    ///   Undo. The talk key's words go straight into it while it has the focus (decision 13),
+    ///   see ProjectsWindow.takeDictation(_:).
     ///
     /// Without a draft it says why: no reply is due, the language gets no draft, or the model
     /// wrote none. The requests run through `ProjectsEmailModel.perform(_:)`, so closing the
@@ -91,7 +92,9 @@ extension ProjectsEmailArea {
             checks
             answers
             handoff
-            changeBox
+            // One box for each email, so the focus of one never passes to the next.
+            ChangeBox(runtime: runtime, emailModel: emailModel)
+                .id(ObjectIdentifier(emailModel))
             if let change = emailModel.lastChange {
                 changes(change.segments, version: change.version)
             }
@@ -239,33 +242,50 @@ extension ProjectsEmailArea {
 
         // MARK: The change box
 
-        @ViewBuilder
-        private var changeBox: some View {
-            @Bindable var emailModel = emailModel
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                TextField("Say what to change", text: $emailModel.instruction, axis: .vertical)
-                    .lineLimit(1...4)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        emailModel.perform { await $0.applyInstruction() }
+        /// The change box with Change Draft, and the change under way or why the last one
+        /// gave nothing. It tells the email view while it has the focus, so the talk key's
+        /// words go there. It stays open to typing and to the talk key while a change runs,
+        /// so it keeps the focus, and the words wait for the next change.
+        private struct ChangeBox: View {
+            let runtime: ProjectsRuntime
+            let emailModel: ProjectsEmailModel
+            @FocusState private var isFocused: Bool
+
+            var body: some View {
+                @Bindable var emailModel = emailModel
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        TextField("Say what to change", text: $emailModel.instruction, axis: .vertical)
+                            .lineLimit(1...4)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($isFocused)
+                            .onSubmit {
+                                emailModel.perform { await $0.applyInstruction() }
+                            }
+                        Button("Change Draft") {
+                            emailModel.perform { await $0.applyInstruction() }
+                        }
+                        .disabled(emailModel.isBusy || runtime.phase != .on || emailModel.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .disabled(emailModel.isBusy)
-                Button("Change Draft") {
-                    emailModel.perform { await $0.applyInstruction() }
+                    if emailModel.changing != nil || emailModel.isUndoing {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Changing the draft…")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if let note = emailModel.changeNote {
+                        Text(verbatim: ProjectsWindowText.note(note, for: .change))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                .disabled(emailModel.isBusy || runtime.phase != .on || emailModel.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            if emailModel.changing != nil || emailModel.isUndoing {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Changing the draft…")
-                        .foregroundStyle(.secondary)
+                .onChange(of: isFocused, initial: true) { _, focused in
+                    emailModel.changeBoxHasFocus = focused
                 }
-            } else if let note = emailModel.changeNote {
-                Text(verbatim: ProjectsWindowText.note(note, for: .change))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .onDisappear {
+                    emailModel.changeBoxHasFocus = false
+                }
             }
         }
 

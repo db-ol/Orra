@@ -4,9 +4,10 @@ import Testing
 @testable import Orra
 
 /// The email view of one email: the draft as the user edits it, a change from the change
-/// box or a tone with its highlight and Undo, the answer check once per draft the model
-/// made, Show in My Language, the handoff to Mail with one at a time for the window, the
-/// requests that the window's close ends, the source chips and the deadline mark.
+/// box or a tone with its highlight and Undo, the talk key's words in the change box, the
+/// answer check once per draft the model made, Show in My Language, the handoff to Mail with
+/// one at a time for the window, the requests that the window's close ends, the source chips
+/// and the deadline mark.
 ///
 /// A fake model answers by the kind of request, a fake store keeps the versions, and a fake
 /// Mail never sends an Apple Event. Made up people at .example addresses, nothing from the
@@ -62,6 +63,9 @@ struct ProjectsEmailModelTests {
             var replyStarted = false
             /// The requests that ran as the user's.
             var userRequests = 0
+            /// Whether a request of the user waits until the test lets it go, as one waits
+            /// for its turn at the model.
+            var requestWaits = false
         }
 
         let state = Mutex(State())
@@ -156,6 +160,9 @@ struct ProjectsEmailModelTests {
             },
             userRequest: { request in
                 fakes.update { $0.userRequests += 1 }
+                while fakes.value.requestWaits {
+                    try await Task.sleep(for: .milliseconds(5))
+                }
                 try await request()
             },
             email: { id in
@@ -340,6 +347,89 @@ struct ProjectsEmailModelTests {
         await model.makeChange(.tone(.formal))
         #expect(model.versions.last?.version.droppedPlaceholders == ["[to confirm: lamp order]"])
         #expect(ProjectsWindowText.dropped(["[to confirm: lamp order]"], tone: true) == "The new tone left out [to confirm: lamp order]. Put it back before you send.")
+    }
+
+    // MARK: The talk key
+
+    /// Decision 13: the talk key's words go into the change box and change the draft at
+    /// once, as Change Draft would.
+    @Test func theTalkKeysWordsChangeTheDraftAtOnce() async throws {
+        let model = model()
+        await model.load()
+        let changed = "Hi Mei,\n\nThe lamp order is [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        fakes.update {
+            $0.revisions = [changed]
+            $0.checks = [Self.bothAnswered]
+        }
+        #expect(model.takeDictation("Say Monday.", revises: true))
+        #expect(model.instruction == "Say Monday.")
+        try await waitUntil { !model.isWorking }
+        #expect(model.text == changed)
+        #expect(model.instruction.isEmpty)
+        #expect(model.changeNote == nil)
+        #expect(model.versions.map(\.version.change) == [.instruction("Say Monday.")])
+        #expect(fakes.value.prompts.first?.contains("Say Monday.") == true)
+        // The answer check ran for the new version, as after a click.
+        #expect(model.currentAnswers?.asked == 2)
+    }
+
+    /// With the change after a dictation off, the words wait in the box after what it holds,
+    /// spaced as the language needs, and nothing asks the model.
+    @Test func withTheSettingOffTheWordsWaitInTheBox() async {
+        let model = model()
+        await model.load()
+        model.instruction = "Shorter."
+        #expect(model.takeDictation("Keep the price.", revises: false))
+        #expect(model.instruction == "Shorter. Keep the price.")
+        model.instruction = "更正式一点，"
+        #expect(model.takeDictation("价格不变。", revises: false))
+        #expect(model.instruction == "更正式一点，价格不变。")
+        model.instruction = "Shorter\n"
+        #expect(model.takeDictation("Keep the price.", revises: false))
+        #expect(model.instruction == "Shorter\nKeep the price.")
+        #expect(!model.isWorking)
+        #expect(fakes.value.prompts.isEmpty)
+        #expect(model.versions.isEmpty)
+    }
+
+    /// Without a draft to change, or without words, the box takes nothing, so the dictation
+    /// is pasted as in any app.
+    @Test func theBoxTakesNoWordsWithoutADraft() async {
+        let none = model(explanation: { Self.explanation(draft: nil) })
+        await none.load()
+        #expect(!none.takeDictation("Shorter.", revises: true))
+        #expect(none.instruction.isEmpty)
+        let model = model()
+        await model.load()
+        #expect(!model.takeDictation(" \n", revises: true))
+        #expect(model.instruction.isEmpty)
+        #expect(!model.isWorking)
+    }
+
+    /// While a change runs, the box stays open, so it keeps the focus. Words said meanwhile
+    /// wait there for the next change, and the change that ends takes away only its own.
+    @Test func wordsSaidWhileAChangeRunsWaitForTheNext() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer]
+            $0.checks = [Self.bothAnswered]
+            $0.requestWaits = true
+        }
+        model.instruction = "Firmer."
+        model.perform { await $0.applyInstruction() }
+        try await waitUntil { model.isBusy }
+        #expect(model.takeDictation("Keep the price.", revises: true))
+        #expect(model.instruction == "Firmer. Keep the price.")
+        fakes.update { $0.requestWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.text == firmer)
+        #expect(model.versions.map(\.version.change) == [.instruction("Firmer.")])
+        #expect(model.instruction == "Keep the price.")
+        // Words the user changed meanwhile all stay.
+        #expect(ProjectsEmailModel.remainder(of: "Firm, and keep the price.", after: "Firmer.") == "Firm, and keep the price.")
+        #expect(ProjectsEmailModel.remainder(of: "  Firmer.  ", after: "Firmer.") == "")
     }
 
     // MARK: Checks

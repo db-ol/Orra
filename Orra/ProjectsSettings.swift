@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Projects, a page of Settings shown only in builds that show Projects: the switch with what
 /// Projects reads, keeps and never does, the model it works with and its download, Mail
-/// access with the mailboxes Projects reads, and what it keeps on this Mac with a way to
-/// delete it.
+/// access with the mailboxes Projects reads, whether the talk key's words change the draft
+/// as soon as the dictation ends, and what it keeps on this Mac with a way to delete it.
 ///
 /// The page sits outside Orra/Projects, since it is the one place where Projects may link to
 /// the privacy page and to System Settings. Code in Orra/Projects never opens a URL. The page
@@ -83,6 +83,22 @@ struct ProjectsSettings: View {
                     openURL(Self.automationSettings)
                 }
                 MailboxesSection(mail: mail)
+            }
+            if projects.isOn {
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { projects.revisesAfterDictation },
+                        set: { projects.setRevisesAfterDictation($0) }
+                    )) {
+                        DescribedLabel(
+                            title: "Change the draft when you finish speaking",
+                            detail: "In the Projects window, put the cursor in the box where you say what to change, and use the talk key. Your words go into the box, and when you finish speaking, the draft changes. Turn this off to read your words first and then click Change Draft.",
+                            systemImage: "square.and.pencil"
+                        )
+                    }
+                } header: {
+                    Text("Talk key")
+                }
             }
             Section {
                 LabeledContent {

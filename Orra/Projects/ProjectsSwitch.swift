@@ -14,10 +14,15 @@ extension Logger {
 /// build that hides it, whatever a Debug run saved, since both builds share the preferences.
 /// Turning it on starts nothing by itself. Turning it off keeps or deletes what Projects
 /// keeps on this Mac, as the user chose.
+///
+/// It also keeps the one setting of the Projects window: whether a dictation into the change
+/// box changes the draft as soon as it ends (decision 13).
 @Observable
 final class ProjectsSwitch {
     /// The preference that holds the user's choice.
     static let key = "projectsOn"
+    /// The preference that holds `revisesAfterDictation`, saved only once the user changes it.
+    static let revisesAfterDictationKey = "projectsRevisesAfterDictation"
 
     /// Whether this build shows Projects, see ProjectsAvailability.
     let isVisible: Bool
@@ -33,6 +38,11 @@ final class ProjectsSwitch {
     /// Whether a delete runs. Projects cannot be turned on meanwhile, so it never starts on
     /// a folder that is being deleted, and a second delete returns at once.
     private(set) var isDeleting = false
+    /// Whether the talk key's words in the change box of the Projects window change the
+    /// draft as soon as the dictation ends, when the user lets go of a held key or presses it
+    /// again (decision 13). On until the user turns it off in Settings. Off, the words wait
+    /// in the box for Change Draft.
+    private(set) var revisesAfterDictation: Bool
     /// What the user chose, as saved.
     private var chosen: Bool
     /// Stops what Projects runs and closes its database and project list, so nothing writes
@@ -52,6 +62,14 @@ final class ProjectsSwitch {
         self.physicalMemory = physicalMemory
         self.storage = storage
         chosen = defaults.bool(forKey: Self.key)
+        revisesAfterDictation = defaults.object(forKey: Self.revisesAfterDictationKey) as? Bool ?? true
+    }
+
+    /// Turns the change on letting go of the talk key on or off, and saves it.
+    func setRevisesAfterDictation(_ revises: Bool) {
+        guard revises != revisesAfterDictation else { return }
+        revisesAfterDictation = revises
+        defaults.set(revises, forKey: Self.revisesAfterDictationKey)
     }
 
     /// Whether this Mac has the memory Projects needs, the same bar as cleanup.

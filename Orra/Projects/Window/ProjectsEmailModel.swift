@@ -17,6 +17,9 @@ import Observation
 ///   version (decision 9). For a draft made in an earlier window, and after an edit, it runs
 ///   on a click. The translation runs while Show in My Language is on, for each version, and
 ///   on a click after an edit.
+/// - The talk key's words go straight into the change box while it has the focus, and change
+///   the draft as soon as the dictation ends while the setting for it is on (decision 13),
+///   see `takeDictation(_:revises:)`.
 /// - Open Reply in Mail and Reply All need Mail's handle of the email, which the scan keeps
 ///   for this Mail session. Without it the draft is only copied. The window runs one
 ///   handoff at a time, for all its emails, see `Handoffs`.
@@ -157,9 +160,12 @@ final class ProjectsEmailModel {
     private(set) var emailText = ""
     /// The draft as the editor holds it.
     var text = ""
-    /// What the user types or says into the change box. The talk key of projects-voice
-    /// writes here too.
+    /// What the user types or says into the change box. The talk key writes here too, see
+    /// `takeDictation(_:revises:)`.
     var instruction = ""
+    /// Whether the change box has the focus in the window, which the view sets. The talk
+    /// key's words go there only then.
+    @ObservationIgnored var changeBoxHasFocus = false
     /// The change under way, nil while none runs.
     private(set) var changing: RevisePrompt.Change?
     private(set) var changeNote: Note?
@@ -393,6 +399,23 @@ final class ProjectsEmailModel {
 
     // MARK: Changes
 
+    /// Puts the words of a dictation into the change box, after what it holds, and with
+    /// `revises` changes the draft with them at once, as a click on Change Draft would. While
+    /// a change runs, the words wait in the box. Returns false and takes nothing when there
+    /// is no draft to change or nothing to put in.
+    ///
+    /// The words reach the box inside Orra, with no clipboard and no Command V. The change
+    /// waits in ProjectsModelQueue until the dictation has ended, so it never holds up the
+    /// paste of the dictation itself.
+    func takeDictation(_ words: String, revises: Bool) -> Bool {
+        guard hasDraft, !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        instruction = RecordingPieces.joined([instruction, words])
+        if revises, !isBusy {
+            perform { await $0.applyInstruction() }
+        }
+        return true
+    }
+
     /// Applies the instruction of the change box.
     func applyInstruction() async {
         let words = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -419,10 +442,19 @@ final class ProjectsEmailModel {
         }
         changing = nil
         guard made else { return }
-        if case .instruction = change {
-            instruction = ""
+        if case .instruction(let words) = change {
+            instruction = Self.remainder(of: instruction, after: words)
         }
         await afterNewVersion()
+    }
+
+    /// What stays in the change box after a change made from `words`: what the user typed
+    /// or said after them while the change ran, or all of it when the user changed those
+    /// words meanwhile.
+    nonisolated static func remainder(of box: String, after words: String) -> String {
+        let held = box.drop { $0.isWhitespace || $0.isNewline }
+        guard held.hasPrefix(words) else { return box }
+        return String(held.dropFirst(words.count).drop { $0.isWhitespace || $0.isNewline })
     }
 
     private func makeVersion(_ change: RevisePrompt.Change, from before: String, explanation: Explanation) async throws -> Bool {

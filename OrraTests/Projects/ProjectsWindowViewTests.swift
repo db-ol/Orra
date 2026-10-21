@@ -48,6 +48,85 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    // MARK: The talk key
+
+    /// Decision 13: the talk key's words go into the change box of the selected email only
+    /// while that box has the focus, and change the draft at once only while the setting is
+    /// on. Anywhere else the window takes nothing, and the dictation is pasted as in any app.
+    @Test func theTalkKeysWordsGoOnlyIntoAFocusedChangeBox() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let store = try #require(runtime.running?.store)
+        let changed = "Dear Mei,\n\nThe lamp order is [to confirm: lamp order]. The floor plan follows on Monday.\n\nLin"
+        var actions = ProjectsEmailModel.Actions.live(runtime)
+        actions.reviseService = { started in
+            ReviseService(run: { _ in changed }, countTokens: { $0.count }, save: store.versionSave(startedAt: started))
+        }
+        actions.userRequest = { try await $0() }
+        let model = ProjectsWindowModel(runtime: runtime, emailActions: { actions })
+        // No email selected.
+        #expect(!model.takeDictation("Shorter."))
+        await model.show(explained.messageID)
+        let email = model.emailModel(for: explained.messageID)
+        await email.load()
+        let versions = email.versions.count
+        // The box does not have the focus, such as while the cursor is in the draft.
+        #expect(!model.takeDictation("Shorter."))
+        #expect(email.instruction.isEmpty)
+
+        email.changeBoxHasFocus = true
+        fixture.projects.setRevisesAfterDictation(false)
+        #expect(model.takeDictation("Shorter."))
+        #expect(email.instruction == "Shorter.")
+        #expect(!email.isWorking)
+
+        fixture.projects.setRevisesAfterDictation(true)
+        #expect(model.takeDictation("Say Monday."))
+        try await waitUntil { !email.isWorking }
+        #expect(email.instruction.isEmpty)
+        #expect(email.text == changed)
+        #expect(email.versions.count == versions + 1)
+        #expect(email.versions.last?.version.change == .instruction("Shorter. Say Monday."))
+
+        // Another email selected, whose box never had the focus.
+        model.selectedMessageID = "other@harbor.example"
+        #expect(!model.takeDictation("Shorter."))
+        model.selectedMessageID = explained.messageID
+        email.changeBoxHasFocus = false
+        #expect(!model.takeDictation("Shorter."))
+        await fixture.stop()
+    }
+
+    /// AppDelegate offers a dictation to the Projects window first, and pastes it only when
+    /// the window did not take it, so words in the change box never reach the clipboard or
+    /// Command V.
+    @Test func aDictationTheWindowTookIsNeverPasted() async {
+        final class Seen {
+            var takes = true
+            var offered: [String] = []
+            var pasted: [String] = []
+        }
+        let seen = Seen()
+        let insert = AppDelegate.dictationInsertion(
+            projects: { words in
+                seen.offered.append(words)
+                return seen.takes
+            },
+            paste: { text in
+                seen.pasted.append(text)
+                return .pasted
+            }
+        )
+        #expect(await insert("Shorter.") == .pasted)
+        #expect(seen.offered == ["Shorter."])
+        #expect(seen.pasted.isEmpty)
+        seen.takes = false
+        #expect(await insert("Hello.") == .pasted)
+        #expect(seen.pasted == ["Hello."])
+    }
+
     /// VoiceOver hears what a change took out and put in.
     @Test func aChangeIsSummedUpForVoiceOver() {
         let segments = ProjectsDraftDiff.segments(from: "Hi Mei, see you Friday.", to: "Dear Mei, see you Monday.")
