@@ -16,8 +16,11 @@ of multipart/alternative, so Mail shows the HTML, as it shows real mail. Every a
 becomes a part with its name and type. Projects reads the text of attachments, so a part
 holds the item's attachment text when it has one, else the file of the set's project
 folders with the attachment's name, as when a supplier mails the quote that is also in
-the folder, and a placeholder line otherwise. A Received header carries the date too, in
-case Mail takes the date received from it.
+the folder, and a placeholder line otherwise. An attachment text of a PDF or a docx
+becomes a real file of that kind, made here, in which a line that starts with
+"[white text] " is white without the mark, as the release gate's test makes them. Other
+attachment text goes in as it is. A Received header carries the date too, in case Mail
+takes the date received from it.
 
 It prints counts only, never mail text. Standard library only.
 """
@@ -31,12 +34,14 @@ import json
 import os
 import sys
 import time
+import zipfile
 from datetime import datetime, timezone
 from email import policy
 from email.generator import BytesGenerator
 from email.message import EmailMessage
 from email.utils import format_datetime, parseaddr
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 # Headers in UTF-8 become RFC 2047 words and text that is not ASCII becomes base64 or
 # quoted printable, as most mail clients write them, and lines end with a line feed, as in
@@ -47,6 +52,12 @@ POLICY = policy.default.clone(linesep="\n", cte_type="7bit")
 UTF8_POLICY = POLICY.clone(utf8=True)
 
 PLACEHOLDER = "Synthetic attachment of the Projects test set, without its content.\n"
+
+# The mark of a line of attachment text that is white in a PDF or docx, see attachment_file.
+WHITE_MARK = "[white text] "
+# The date inside each docx, so a second run writes the same bytes.
+FIXED_ZIP_TIME = (2026, 10, 1, 0, 0, 0)
+DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 # Each output, with the set file it comes from and how to take the messages out of a line.
 OUTPUTS = (
@@ -67,6 +78,93 @@ def project_files(set_folder: Path) -> dict[str, Path]:
         if path.is_file():
             files.setdefault(path.name, path)
     return files
+
+
+def marked_lines(text: str) -> list[tuple[str, bool]]:
+    """The lines of an attachment text, each without the white mark and whether it had it."""
+    return [(line[len(WHITE_MARK):], True) if line.startswith(WHITE_MARK) else (line, False) for line in text.split("\n")]
+
+
+def docx_bytes(text: str) -> bytes:
+    """A docx with one paragraph a line, white where marked: the three parts AppKit needs."""
+    white_run = '<w:rPr><w:color w:val="FFFFFF"/></w:rPr>'
+    paragraphs = "".join(
+        f'<w:p><w:r>{white_run if white else ""}<w:t xml:space="preserve">{escape(line)}</w:t></w:r></w:p>'
+        for line, white in marked_lines(text)
+    )
+    parts = {
+        "[Content_Types].xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        '<Override PartName="/word/document.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        "</Types>",
+        "_rels/.rels": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+        'Target="word/document.xml"/>'
+        "</Relationships>",
+        "word/document.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+        + paragraphs
+        + "</w:body></w:document>",
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, content in parts.items():
+            info = zipfile.ZipInfo(name, FIXED_ZIP_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, content.encode("utf-8"))
+    return buffer.getvalue()
+
+
+def pdf_bytes(text: str) -> bytes:
+    """A PDF of one page with a line every 18 points, white where marked. The text is in
+    STSong-Light with UCS-2 codes, one of the standard Chinese fonts PDF readers supply, so
+    it holds Chinese and Latin text without embedding a font. Characters past U+FFFF are
+    left out."""
+    commands = ["BT", "/F1 10 Tf"]
+    baseline = 740
+    for line, white in marked_lines(text):
+        codes = "".join(f"{ord(character):04X}" for character in line if ord(character) <= 0xFFFF)
+        commands.append(f"{'1 1 1' if white else '0 0 0'} rg 1 0 0 1 40 {baseline} Tm <{codes}> Tj")
+        baseline -= 18
+    commands.append("ET")
+    stream = "\n".join(commands).encode("ascii")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [6 0 R] >>",
+        b"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light"
+        b" /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor 7 0 R /DW 1000 >>",
+        b"<< /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [-25 -254 1000 880]"
+        b" /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 93 >>",
+    ]
+    document = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(document))
+        document += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    table = len(document)
+    document += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    document += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
+    document += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, table)
+    return bytes(document)
+
+
+def attachment_file(text: str, name: str, mime_type: str) -> bytes:
+    """The bytes of an attachment with text: a PDF or a docx by the name's extension, else
+    by the type, and the text in UTF-8 for every other kind."""
+    extension = Path(name).suffix.lower().lstrip(".")
+    if extension == "pdf" or (not extension and mime_type == "application/pdf"):
+        return pdf_bytes(text)
+    if extension == "docx" or (not extension and mime_type == DOCX_TYPE):
+        return docx_bytes(text)
+    return text.encode("utf-8")
 
 
 def build_message(item: dict, files: dict[str, Path] | None = None) -> EmailMessage:
@@ -94,7 +192,7 @@ def build_message(item: dict, files: dict[str, Path] | None = None) -> EmailMess
         maintype, _, subtype = attachment["type"].partition("/")
         file = (files or {}).get(attachment["name"])
         if attachment.get("text"):
-            content = attachment["text"].encode("utf-8")
+            content = attachment_file(attachment["text"], attachment["name"], attachment["type"])
         elif file is not None:
             content = file.read_bytes()
         else:
