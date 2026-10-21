@@ -109,6 +109,16 @@ func main() throws {
         print(url.path)
         return
     }
+    // The first frames a process draws can come out slightly different while the fonts
+    // load, so every frame is drawn once before any GIF is written. Then a run writes the
+    // same bytes for a scene that did not change.
+    for lang in langs {
+        for scene in scenes {
+            for index in 0..<Int((scene.duration(lang) * framesPerSecond).rounded()) {
+                _ = render(scene, lang, at: Double(index) / framesPerSecond)
+            }
+        }
+    }
     for lang in langs {
         let folder = root.appendingPathComponent("docs/images/readme/\(lang.rawValue)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

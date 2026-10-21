@@ -61,7 +61,7 @@
 可选功能。按一下第二个键开始说话，再按一下结束。把它的用法设为“按住”时，则按住它说话。Orra 会用同一个模型在你的 Mac 上，把你说的话在英文和你的听写语言（中文、日语或西班牙语）之间翻译后粘贴。小小的标记表示这次听写会被翻译：中文是“译”，日语是“訳”，西班牙语是“⇄”。
 
 </td>
-<td width="50%"><img src="docs/images/readme/zh/translation.gif" alt="在聊天窗口里，Sam 问“When can I see the designs?”。有人按住翻译键说“我这边周五之前能把设计稿发给你。”胶囊里显示“译”字标记，输入框里出现“I can send you the designs before Friday.”" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/zh/translation.gif" alt="在聊天窗口里，Sam 问“When can I see the designs?”。有人按一下翻译键，说“我这边周五之前能把设计稿发给你。”，再按一下。胶囊里显示“译”字标记和“按右侧 Option 键结束”，输入框里出现“I can send you the designs before Friday.”" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -73,7 +73,7 @@
 0.4.0 新增。
 
 </td>
-<td width="50%"><img src="docs/images/readme/zh/meeting.gif" alt="视频会议里，Alex 说英文，“实时字幕”窗口逐句显示原文和中文译文。然后用户按住翻译键说“可以，我周三之前把测试做完。”，通话里从 Orra Microphone 听到“Sure, I’ll finish testing by Wednesday.”" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/zh/meeting.gif" alt="视频会议里，Alex 说英文，“实时字幕”窗口逐句显示原文和中文译文。窗口顶部选的是“双语”和“中文”，旁边是拷贝按钮。然后用户按一下翻译键，说“可以，我周三之前把测试做完。”，再按一下，通话里从 Orra Microphone 听到“Sure, I’ll finish testing by Wednesday.”" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">

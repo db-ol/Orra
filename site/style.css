@@ -637,6 +637,7 @@ h3 {
   background: rgba(40, 40, 44, 0.97);
   box-shadow: var(--shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
   color: #ffffff;
+  container-type: inline-size;
 }
 
 .meet-stage .captions-title {
@@ -646,30 +647,130 @@ h3 {
   color: rgba(255, 255, 255, 0.7);
 }
 
-.meet-stage .captions-modes {
+/* The top row, as in the app: the display mode on the left, then the language captions
+   translate into and Copy, each a menu. */
+.meet-stage .captions-bar {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  width: fit-content;
-  max-width: 100%;
-  margin: 8px auto 14px;
-  padding: 2px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 14px;
   font-size: 11px;
   line-height: 1.4;
 }
 
+.captions-modes {
+  display: flex;
+  margin-right: auto;
+  padding: var(--modes-padding, 2px);
+  border-radius: 7px;
+  background: var(--modes-track, rgba(255, 255, 255, 0.08));
+}
+
 .captions-modes span {
+  position: relative;
   white-space: nowrap;
-  padding: 2px 9px;
+  padding: 2px 8px;
   border-radius: 5px;
   color: rgba(255, 255, 255, 0.75);
 }
 
+.captions-modes span:not(.on) {
+  display: var(--modes-others, block);
+}
+
+/* A thin line between two modes that are not chosen. */
+.captions-modes span:not(.on) + span:not(.on)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .captions-modes .on {
+  display: flex;
+  align-items: center;
   background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
+}
+
+.captions-menu {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* The symbols of the app, drawn for the dark window: two speech bubbles with A and 文,
+   two pages, and the arrow of a menu. */
+.captions-menu i {
+  display: block;
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+.icon-translate {
+  width: 17px;
+  height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 16' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 1h6A2.5 2.5 0 0 1 12 3.5V7a2.5 2.5 0 0 1-2.5 2.5h-4L3 12V9.4A2.5 2.5 0 0 1 1 7V3.5A2.5 2.5 0 0 1 3.5 1z' stroke='%23dfdfe0' stroke-width='1.2'/%3E%3Cpath d='M3.8 7.2l1.8-4.6 1.8 4.6M4.4 5.7h2.4' stroke='%23dfdfe0' stroke-width='1.1'/%3E%3Cpath d='M10.5 5.5h6A2.5 2.5 0 0 1 19 8v3.5a2.5 2.5 0 0 1-2.1 2.5V16l-2.6-2h-3.8A2.5 2.5 0 0 1 8 11.5V8a2.5 2.5 0 0 1 2.5-2.5z' fill='%23dfdfe0' stroke='%2328282c' stroke-width='1.2'/%3E%3Cpath d='M13.5 7.2v.9M11 8.6h5M11.9 8.6c.6 2 2.2 3.2 3.8 3.9M15.1 8.6c-.6 2-2.2 3.2-3.8 3.9' stroke='%2328282c' stroke-width='1'/%3E%3C/svg%3E");
+}
+
+.icon-copy {
+  width: 12px;
+  height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 16' stroke='%23dfdfe0' stroke-width='1.2'%3E%3Crect x='4.6' y='.6' width='8.8' height='11' rx='2' fill='none'/%3E%3Crect x='.6' y='4.4' width='8.8' height='11' rx='2' fill='%2328282c'/%3E%3C/svg%3E");
+}
+
+.icon-chevron {
+  width: 7px;
+  height: 5px;
+  opacity: 0.6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5' fill='none' stroke='%23dfdfe0' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l3 3 3-3'/%3E%3C/svg%3E");
+}
+
+/* In a narrow window the app shows the display mode as a pop up menu with the chosen mode
+   and two arrows. The container is .captions, and each language turns to the menu where its
+   three modes, its language and Copy no longer fit on one line, with a few pixels to spare
+   for other fonts. */
+.captions-modes .on::after {
+  content: "";
+  display: var(--modes-arrows, none);
+  width: 6px;
+  height: 10px;
+  margin-left: 6px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 10' fill='none' stroke='%23ffffff' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 3.5l2-2 2 2M1 6.5l2 2 2-2'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+@container (max-width: 306px) {
+  .captions-bar:lang(es) {
+    --modes-others: none;
+    --modes-arrows: block;
+    --modes-track: none;
+    --modes-padding: 0;
+  }
+}
+
+@container (max-width: 288px) {
+  .captions-bar:lang(en) {
+    --modes-others: none;
+    --modes-arrows: block;
+    --modes-track: none;
+    --modes-padding: 0;
+  }
+}
+
+@container (max-width: 230px) {
+  .captions-bar:lang(zh),
+  .captions-bar:lang(ja) {
+    --modes-others: none;
+    --modes-arrows: block;
+    --modes-track: none;
+    --modes-padding: 0;
+  }
 }
 
 .caption + .caption {
@@ -737,6 +838,11 @@ h3 {
 .level i:nth-of-type(3) { --h: 0.6; }
 .level i:nth-of-type(4) { --h: 1; }
 .level i:nth-of-type(5) { --h: 0.5; }
+
+@keyframes enable {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
 
 @keyframes voice {
   0%, 100% { transform: scaleY(var(--h, 1)); }
@@ -806,6 +912,10 @@ footer p {
   .js .meet-part.in .caption:nth-of-type(2) .caption-original { animation-delay: 2.3s; }
   .js .meet-part.in .caption:nth-of-type(2) .caption-translation { animation-delay: 3s; }
   .js .meet-part.in .meet-said { animation-delay: 0.6s; }
+  /* Copy works once the first sentence is there. */
+  .js .meet-part.in .captions-copy {
+    animation: enable 0.2s var(--ease) 0.6s both;
+  }
   .js .meet-part.in .call-label,
   .js .meet-part.in .call-heard { animation-delay: 2.2s; }
 
@@ -900,10 +1010,6 @@ footer p {
 
   .captions {
     padding: 10px 10px 14px;
-  }
-
-  .captions-modes span {
-    padding: 2px 7px;
   }
 
   .statement {
