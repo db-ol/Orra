@@ -847,7 +847,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Un enlace, nunca se sigue"
+            "value" : "Un enlace, que nunca se sigue"
           }
         },
         "ja" : {
@@ -897,7 +897,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プロジェクトに登録した人物"
+            "value" : "プロジェクトに登録した関係者"
           }
         },
         "zh-Hans" : {
@@ -913,13 +913,13 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Una respuesta llega a alguien que no es del proyecto."
+            "value" : "La respuesta llega a alguien que no es del proyecto."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "返信がプロジェクトの人物以外にも届きます。"
+            "value" : "返信がプロジェクトの関係者以外にも届きます。"
           }
         },
         "zh-Hans" : {
@@ -935,7 +935,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Responder a todos llega a personas fuera del proyecto: %@"
+            "value" : "Si respondes a todos, la respuesta llega a personas fuera del proyecto: %@"
           }
         },
         "ja" : {
@@ -1001,13 +1001,13 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se quitó una oración escrita como si fuera un asistente."
+            "value" : "Se quitó una oración escrita con la voz de un asistente."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アシスタントとして話す文を削除しました。"
+            "value" : "アシスタントの立場で書かれた文を削除しました。"
           }
         },
         "zh-Hans" : {
@@ -1249,7 +1249,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "人物を追加"
+            "value" : "関係者を追加"
           }
         },
         "zh-Hans" : {
@@ -1707,7 +1707,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Un archivo comprimido, nunca se abre"
+            "value" : "Un archivo comprimido, que nunca se abre"
           }
         },
         "ja" : {
@@ -1757,7 +1757,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "添付ファイルの名前が本当の種類を隠しています。"
+            "value" : "添付ファイルの名前が実際の種類を偽っています。"
           }
         },
         "zh-Hans" : {
@@ -2308,7 +2308,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@に変更"
+            "value" : "変更日: %@"
           }
         },
         "zh-Hans" : {
@@ -2456,7 +2456,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Revisa esta fecha, el día de la semana no coincide: %@"
+            "value" : "Revisa esta fecha. El día de la semana no coincide: %@"
           }
         },
         "ja" : {
@@ -4065,7 +4065,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Los borradores necesitan revisión. Lee cada línea antes de enviarlo."
+            "value" : "Los borradores necesitan revisión. Lee cada línea del borrador antes de enviarlo."
           }
         },
         "ja" : {
@@ -5001,7 +5001,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "読み手から隠されていた"
+            "value" : "読み手から隠されたテキスト"
           }
         },
         "zh-Hans" : {
@@ -5421,7 +5421,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "支払いを求めていますが、送信者はプロジェクトの人物ではありません。"
+            "value" : "支払いを求めていますが、送信者はプロジェクトの関係者ではありません。"
           }
         },
         "zh-Hans" : {
@@ -5503,7 +5503,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cambia a dónde pagar."
+            "value" : "Cambia el destino del pago."
           }
         },
         "ja" : {
@@ -5900,7 +5900,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lleva fuera de la carpeta"
+            "value" : "Apunta fuera de la carpeta"
           }
         },
         "ja" : {
@@ -6079,7 +6079,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Queda para que lo confirmes"
+            "value" : "Por confirmar"
           }
         },
         "ja" : {
@@ -6196,7 +6196,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プロジェクトの人物を含まない一斉配信メール"
+            "value" : "プロジェクトの関係者を含まない一斉配信メール"
           }
         },
         "zh-Hans" : {
@@ -6725,7 +6725,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“メール”が応答しませんでした。もう一度お試しください。"
+            "value" : "“メール”から応答がありませんでした。もう一度お試しください。"
           }
         },
         "zh-Hans" : {
@@ -7489,7 +7489,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No hace falta responder. Se envió a una lista o la envió una máquina."
+            "value" : "No hace falta responder. Se envió a una lista o lo envió una máquina."
           }
         },
         "ja" : {
@@ -7869,7 +7869,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "まだインデックスがありません。"
+            "value" : "まだインデックスを作成していません。"
           }
         },
         "zh-Hans" : {
@@ -7995,7 +7995,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No hay nada que decidir antes."
+            "value" : "No hay nada que tengas que decidir antes."
           }
         },
         "ja" : {
@@ -8393,7 +8393,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Abre Mail primero. Orra nunca la abre."
+            "value" : "Primero abre Mail. Orra nunca lo abre."
           }
         },
         "ja" : {
@@ -9252,7 +9252,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra pega lo que dijiste en otro idioma."
+            "value" : "Orra pega en otro idioma lo que dijiste."
           }
         },
         "ja" : {
@@ -9634,7 +9634,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ライブキャプションの実行中は一時停止します。"
+            "value" : "ライブキャプションの実行中のため、一時停止しています。"
           }
         },
         "zh-Hans" : {
@@ -9656,7 +9656,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“翻訳を相手に読み上げる”の音声が読み込まれているため、一時停止中です。"
+            "value" : "“翻訳を相手に読み上げる”の音声が読み込まれているため、一時停止しています。"
           }
         },
         "zh-Hans" : {
@@ -9678,7 +9678,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このMacのメモリが不足しているため、一時停止中です。"
+            "value" : "このMacのメモリが不足しているため、一時停止しています。"
           }
         },
         "zh-Hans" : {
@@ -9700,7 +9700,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音声入力中は一時停止します。"
+            "value" : "音声入力中のため、一時停止しています。"
           }
         },
         "zh-Hans" : {
@@ -9722,7 +9722,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "人物"
+            "value" : "関係者"
           }
         },
         "zh-Hans" : {
@@ -9738,13 +9738,13 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Personas del correo escribieron en más de un proyecto"
+            "value" : "Hay personas del correo que escribieron en más de un proyecto"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "メールの人物が複数のプロジェクトでやり取りしている"
+            "value" : "メールの送信者や受信者の中に、複数のプロジェクトでやり取りしている人がいる"
           }
         },
         "zh-Hans" : {
@@ -10443,13 +10443,13 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proyectos no ha leído este mensaje. Lee el correo de los últimos %lld días en los buzones que elegiste."
+            "value" : "Proyectos no leyó este mensaje. Lee el correo de los últimos %lld días en los buzones que elegiste."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“プロジェクト”はこのメッセージをまだ読み取っていません。選んだメールボックスの過去%lld日間のメールを読み取ります。"
+            "value" : "“プロジェクト”はこのメッセージを読み取っていません。選んだメールボックスの過去%lld日間のメールを読み取ります。"
           }
         },
         "zh-Hans" : {
@@ -10619,7 +10619,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proyectos lee el correo del período elegido en estos buzones mientras Mail está abierta."
+            "value" : "Proyectos lee el correo del período elegido en estos buzones mientras Mail está abierto."
           }
         },
         "ja" : {
@@ -10641,7 +10641,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proyectos lee el correo solo en los buzones que elijas aquí, y solo mientras Mail está abierta. Nunca envía, mueve ni elimina correo. A continuación, macOS te pregunta si Orra puede controlar Mail."
+            "value" : "Proyectos lee el correo solo en los buzones que elijas aquí, y solo mientras Mail está abierto. Nunca envía, mueve ni elimina correo. A continuación, macOS te pregunta si Orra puede controlar Mail."
           }
         },
         "ja" : {
@@ -11724,7 +11724,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Función"
+            "value" : "Rol"
           }
         },
         "ja" : {
@@ -11746,13 +11746,13 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Función, por ejemplo, su arquitecto"
+            "value" : "Rol, por ejemplo, su arquitecto"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "役割（例:先方の建築士）"
+            "value" : "役割（例: 先方の建築士）"
           }
         },
         "zh-Hans" : {
@@ -12414,7 +12414,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“プロジェクト”のデータの一部を削除できませんでした。もう一度試してください。"
+            "value" : "“プロジェクト”のデータの一部を削除できませんでした。もう一度お試しください。"
           }
         },
         "zh-Hans" : {
@@ -12436,7 +12436,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "メールの人物が以前このプロジェクトでやり取りしている"
+            "value" : "メールの送信者や受信者の中に、以前このプロジェクトでやり取りした人がいる"
           }
         },
         "zh-Hans" : {
@@ -13202,7 +13202,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La revisión de respuestas no funcionó. Inténtalo de nuevo."
+            "value" : "La revisión de respuestas no funcionó. Vuelve a intentarlo."
           }
         },
         "ja" : {
@@ -13340,7 +13340,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se pudo cambiar el borrador. Inténtalo de nuevo."
+            "value" : "No se pudo cambiar el borrador. Vuelve a intentarlo."
           }
         },
         "ja" : {
@@ -13362,7 +13362,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se pudo copiar el borrador. Inténtalo de nuevo."
+            "value" : "No se pudo copiar el borrador. Vuelve a intentarlo."
           }
         },
         "ja" : {
@@ -13384,7 +13384,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No se pudo traducir el borrador. Inténtalo de nuevo."
+            "value" : "No se pudo traducir el borrador. Vuelve a intentarlo."
           }
         },
         "ja" : {
@@ -13472,7 +13472,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El borrador puede decidir algo que solo tú puedes decidir. Compáralo con Antes de responder."
+            "value" : "Es posible que el borrador decida algo que solo tú puedes decidir. Compáralo con Antes de responder."
           }
         },
         "ja" : {
@@ -13824,13 +13824,13 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo eligió otro proyecto que las reglas"
+            "value" : "El modelo eligió un proyecto distinto al de las reglas"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "モデルがルールと別のプロジェクトを選んだ"
+            "value" : "モデルがルールとは別のプロジェクトを選んだ"
           }
         },
         "zh-Hans" : {
@@ -13934,7 +13934,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo no dio una versión útil. Inténtalo de nuevo."
+            "value" : "El modelo no dio ninguna versión útil. Vuelve a intentarlo."
           }
         },
         "ja" : {
@@ -14270,7 +14270,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "送信者のドメインがプロジェクトの人物のドメインに似ています。"
+            "value" : "送信者のドメインがプロジェクトの関係者のドメインに似ています。"
           }
         },
         "zh-Hans" : {
@@ -14694,7 +14694,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Preguntaron %1$lld cosas, tu borrador responde %2$lld."
+            "value" : "Preguntaron %1$lld cosas y tu borrador responde %2$lld."
           }
         },
         "ja" : {
@@ -14716,7 +14716,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Preguntaron 1 cosa, tu borrador responde %lld."
+            "value" : "Preguntaron 1 cosa y tu borrador responde %lld."
           }
         },
         "ja" : {
@@ -16286,7 +16286,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "モデル待ち。このウインドウが開いている間にモデルが振り分けます"
+            "value" : "モデル待ち（このウインドウが開いている間に振り分ける）"
           }
         },
         "zh-Hans" : {
