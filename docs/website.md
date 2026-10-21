@@ -51,6 +51,12 @@ https://db-ol.github.io/Orra/.
 - The Meeting Interpretation section draws the Live Captions window and a call in HTML and
   CSS. style.css plays it once when each part scrolls into view, through the class that
   site.js adds. Without site.js, or with reduced motion, it shows its last frame.
+- The Projects section, after Meeting Interpretation, says in two short paragraphs what the
+  Projects row of the README says, and links the Projects part of the user guide in the
+  page's language. Its heading carries the Preview label that Settings shows beside the
+  name, the preview-label class in style.css, in the word Orra uses in that language.
+  Remove the label from all four pages when Projects leaves the preview. The sections after
+  it keep the plain and the soft background alternating.
 - site/icon.png and site/favicon.png are the app icon at 512 and 64 pixels. They are exported
   from Orra/AppIcon.icon with the ictool that ships inside Icon Composer.
 
