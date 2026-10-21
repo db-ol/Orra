@@ -138,20 +138,24 @@ struct SettingsPageTests {
     /// explanation, and the row under it says where the model stands in the words of
     /// translation.
     @Test func everyDirectionHasATitleAndAnExplanation() {
-        #expect(TranslationDirection.choices(for: .chinese) == [.automatic, .english, .chinese])
+        #expect(TranslationDirection.choices(for: .chinese) == [.automatic, .english, .chinese, .japanese, .spanish])
         let details = TranslationDirection.choices(for: .chinese).map { "\($0.detail)" }
         #expect(Set(details).count == details.count)
-        // Each dictation language has its choices, each with its own explanation, and the
-        // Chinese ones are those there always were.
+        // Each dictation language has its choices, each with its own explanation: the three
+        // there always were, then the two outside the pair, which say they go through
+        // English.
         var all: Set<String> = []
         for language in DictationLanguage.allCases {
             let choices = TranslationDirection.choices(for: language)
-            #expect(choices == [.automatic, .english, language.translationDirection])
+            #expect(Array(choices.prefix(3)) == [.automatic, .english, language.translationDirection])
+            #expect(Set(choices) == Set(TranslationDirection.allCases))
             for direction in choices {
-                all.insert("\(direction.detail(for: language))")
+                let detail = "\(direction.detail(for: language))"
+                all.insert(detail)
+                #expect(detail.contains("goes into English first") == !direction.fits(language), "\(direction) for \(language)")
             }
         }
-        #expect(all.count == 7)
+        #expect(all.count == 13)
         #expect(TranslationDirection.choices(for: .chinese).map { "\($0.detail(for: .chinese))" } == details)
         #expect("\(TranslationDirection.japanese.title)" != "\(TranslationDirection.spanish.title)")
         #expect(CleanupLabels.lines(.missing(bytesPresent: 0), total: 100, use: .translation) == ["The local model is not on this Mac yet. Until it is, Orra pastes the text without translation."])

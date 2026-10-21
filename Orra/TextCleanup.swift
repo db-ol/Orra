@@ -770,27 +770,37 @@ final class TextCleanup {
     }
 
     /// The routes whose prompts are read ahead for a direction and a dictation language:
-    /// the route of the direction as it acts for that language, see
-    /// TranslationDirection.effective(for:), or both of the language for Automatic.
+    /// both of the language for Automatic, the one into the fixed target when it is English
+    /// or the language, and for a target outside the pair the two of the way through
+    /// English, see TranslationPlan: the language into English, then English into the
+    /// target. At most two, TranslationPrefixSlots.limit.
     nonisolated static func preparedRoutes(_ direction: TranslationDirection, _ language: DictationLanguage) -> [TranslationRoute] {
-        switch direction.effective(for: language) {
-        case .automatic: language.translationRoutes
-        case .english: [TranslationRoute(language, into: .english)]
-        case .chinese, .japanese, .spanish: [TranslationRoute(language, into: language.translationLanguage)]
+        guard let target = direction.fixedTarget else { return language.translationRoutes }
+        if language.translationTargets.contains(target) {
+            return [TranslationRoute(language, into: target)]
         }
+        return [TranslationRoute(language, into: .english), .fromEnglish(into: target)]
     }
 
     /// The routes whose prompts are read ahead for the translation key's direction while
     /// translation is on and the caption target while captions run, nil for either one
     /// that is not wanted: the caption route first, since captions translate without
-    /// waiting, then those of the direction, each once. All are routes of the dictation
-    /// language, so they stay within TranslationPrefixSlots.limit.
+    /// waiting, then those of the direction, each once. With a target outside the pair
+    /// and captions into the dictation language they are three, one more than
+    /// TranslationPrefixSlots.limit, so the one used longest ago gives its cache up.
     nonisolated static func preparedRoutes(direction: TranslationDirection?, captionTarget: TranslationTarget?, _ language: DictationLanguage) -> [TranslationRoute] {
         var routes = captionTarget.map { [CaptionTarget.route($0, in: language)] } ?? []
         for route in direction.map({ preparedRoutes($0, language) }) ?? [] where !routes.contains(route) {
             routes.append(route)
         }
         return routes
+    }
+
+    /// The routes whose prefix caches RewriteEngine keeps: the two of the dictation
+    /// language, and with a direction into a target outside the pair, which is given while
+    /// translation is on, its route from English.
+    nonisolated static func keptRoutes(direction: TranslationDirection?, _ language: DictationLanguage) -> Set<TranslationRoute> {
+        Set(language.translationRoutes).union(direction.map { preparedRoutes($0, language) } ?? [])
     }
 
     /// Reads the translation prompts ahead after the work queued before, see
@@ -806,11 +816,12 @@ final class TextCleanup {
 
     /// Drops the prompts of other dictation languages, and reads those of the caption
     /// target and the user's direction ahead. The other target of the same language stays
-    /// when it is in memory, as it did before the dictation language.
+    /// when it is in memory, as it did before the dictation language, and so does the route
+    /// from English of a target outside the pair, see `keptRoutes`.
     private func fillTranslationPrefixes() async {
         guard translationIsOn || captionsNeedModel, isLoaded else { return }
         let language = dictationLanguage
-        await engine.keepTranslationPrefixes(Set(language.translationRoutes))
+        await engine.keepTranslationPrefixes(Self.keptRoutes(direction: translationIsOn ? translationDirection : nil, language))
         let routes = Self.preparedRoutes(
             direction: translationIsOn ? translationDirection : nil,
             captionTarget: captionsNeedModel ? captionTarget : nil,

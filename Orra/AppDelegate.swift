@@ -592,6 +592,12 @@ enum LaunchMigrations {
             beside: [pushToTalk.talkKey, pushToTalk.translationKey],
             in: defaults
         ))
+        // A fixed Translate into saved for another dictation language acted as Automatic,
+        // and would now act as its language, so it becomes Automatic, once, see
+        // TranslationDirection.migrate. Before the caption target's step, which reads it.
+        if let direction = TranslationDirection.migrate(cleanup.translationDirection, language: pushToTalk.dictationLanguage, in: defaults) {
+            cleanup.setTranslationDirection(direction)
+        }
         // An earlier user's captions keep translating into the language they did when
         // they followed Translate into, once. A new user's follow their own language until
         // they pick one, see CaptionTargetPreference.

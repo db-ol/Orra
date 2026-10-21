@@ -91,11 +91,17 @@ nonisolated enum TranslationStep {
     /// pastes as a translation. Text in the other language keeps a translation that the
     /// model also wrote into "cleaned", which it sometimes does, and so does English text
     /// with words of the dictation language, such as "I'll send it 明日の朝。", whose
-    /// translation translates them, see TranslationDirection.holdsWords(of:in:).
-    static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into route: TranslationRoute, source: TranslationDirection.Source?) -> Outcome {
+    /// translation translates them, see TranslationDirection.holdsWords(of:in:). With
+    /// `outsidePair` the route takes the user's text into a target outside their pair, see
+    /// TranslationPlan, and the translation gets the checks of such a route, see
+    /// TranslationGuard.checkOutsidePair(source:output:route:).
+    static func verdict(on answer: TranslationPrompt.Answer?, for text: String, into route: TranslationRoute, source: TranslationDirection.Source?, outsidePair: Bool = false) -> Outcome {
         guard route.language != .chinese else { return verdict(on: answer, for: text, into: route.target) }
         guard let answer else { return .unreadable }
-        if let failure = TranslationGuard.check(source: text, output: answer.translation, route: route) {
+        let failure = outsidePair
+            ? TranslationGuard.checkOutsidePair(source: text, output: answer.translation, route: route)
+            : TranslationGuard.check(source: text, output: answer.translation, route: route)
+        if let failure {
             return .heldBack(failure)
         }
         if answer.translation == text {
@@ -155,7 +161,9 @@ nonisolated enum TranslationStep {
     }
 
     /// The same for text whose language `source` the caller read already, see
-    /// TranslationDirection.plan(for:in:).
+    /// TranslationDirection.plan(for:in:). With `outsidePair` the route takes the text
+    /// into a target outside the user's pair, with the checks of such a route, see
+    /// `verdict(on:for:into:source:outsidePair:)`.
     @concurrent
     static func run(
         _ text: String,
@@ -163,6 +171,7 @@ nonisolated enum TranslationStep {
         source: TranslationDirection.Source?,
         cleansUp: Bool,
         timeout: Duration? = nil,
+        outsidePair: Bool = false,
         complete: @escaping @Sendable (String, TranslationRoute) async throws -> String
     ) async -> Result {
         if isInItsLanguage(source: source, on: route) {
@@ -190,7 +199,7 @@ nonisolated enum TranslationStep {
                         cleanup = "used"
                     }
                 }
-                outcome = verdict(on: parsed, for: text, into: route, source: source)
+                outcome = verdict(on: parsed, for: text, into: route, source: source, outsidePair: outsidePair)
                 if outcome == .translated {
                     translation = parsed?.translation
                 }
@@ -213,8 +222,8 @@ struct TranslationModel {
     /// Whether the model can translate now, after waiting a bounded time for a load the
     /// press of the key started, see TextCleanup.waitUntilLoadedForTranslation.
     var waitUntilLoaded: () async -> Bool
-    /// Which way to translate, as the user set it. Each dictation translates the way it
-    /// acts for the dictation language, see TranslationDirection.effective(for:).
+    /// Which way to translate, as the user set it. Each dictation plans its routes for the
+    /// dictation language, see TranslationDirection.plan(for:in:).
     var direction: () -> TranslationDirection
     /// The model's answer for a transcript and a route, see RewriteEngine.translate.
     var complete: @Sendable (String, TranslationRoute) async throws -> String

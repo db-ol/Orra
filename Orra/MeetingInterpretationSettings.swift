@@ -80,7 +80,7 @@ struct MeetingInterpretationSettings: View {
             playback: SpeechPlayer(),
             output: { AudioOutput.systemDefault() },
             scriptLanguage: VoiceScript.language(direction: cleanup.translationDirection, language: pushToTalk.dictationLanguage),
-            scriptLanguages: pushToTalk.dictationLanguage.translationTargets
+            scriptLanguages: VoiceScript.languages(direction: cleanup.translationDirection, language: pushToTalk.dictationLanguage)
         )
     }
 

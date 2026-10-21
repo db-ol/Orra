@@ -16,19 +16,19 @@ struct TranslationSettings: View {
                     // The key does nothing while translation is off, and its field under Keys
                     // is off too.
                     .disabled(!cleanup.translationIsOn)
-                // The choices of the dictation language. A choice saved for another language
-                // shows as Automatic, which is what it does, and comes back with its language.
+                // Automatic, English and the dictation language, then the two outside the
+                // pair as Beta.
                 Picker(selection: Binding(
-                    get: { cleanup.translationDirection.effective(for: pushToTalk.dictationLanguage) },
+                    get: { cleanup.translationDirection },
                     set: { cleanup.setTranslationDirection($0) }
                 )) {
                     ForEach(TranslationDirection.choices(for: pushToTalk.dictationLanguage), id: \.self) { direction in
-                        Text(direction.title).tag(direction)
+                        direction.choiceTitle(for: pushToTalk.dictationLanguage).tag(direction)
                     }
                 } label: {
                     DescribedLabel(
                         title: "Translate into",
-                        detail: cleanup.translationDirection.effective(for: pushToTalk.dictationLanguage).detail(for: pushToTalk.dictationLanguage),
+                        detail: cleanup.translationDirection.detail(for: pushToTalk.dictationLanguage),
                         systemImage: "arrow.left.arrow.right"
                     )
                 }
@@ -136,20 +136,34 @@ extension TranslationDirection {
         }
     }
 
+    /// The name in the picker for a user who dictates in `language`, with Beta for a
+    /// target outside the pair, see TranslationDirection.fits(_:).
+    func choiceTitle(for language: DictationLanguage) -> Text {
+        fits(language) ? Text(title) : Text("\(Text(title)) (Beta)")
+    }
+
     /// What the choice does for a user who dictates in Chinese, under the picker.
     var detail: LocalizedStringKey {
         detail(for: .chinese)
     }
 
-    /// What the choice does for a user who dictates in `language`, under the picker.
+    /// What the choice does for a user who dictates in `language`, under the picker. A
+    /// target outside the pair says that the dictation language goes through English, see
+    /// TranslationPlan.
     func detail(for language: DictationLanguage) -> LocalizedStringKey {
         switch (self, language) {
         case (.automatic, .japanese): "Japanese is translated into English, and English into Japanese. Mixed text goes by the language most of it is in, and text in another script, such as Korean, is translated into English."
         case (.automatic, .spanish): "Spanish is translated into English, and English into Spanish. Mixed text goes by the language most of it is in, and text in another script, such as Korean, is translated into English."
         case (.automatic, _): "Chinese is translated into English, and English into Chinese. Mixed text goes by the language most of it is in."
         case (.english, _): "Everything you say is pasted in English."
+        case (.chinese, .japanese): "Everything you say is pasted in Chinese. Japanese goes into English first and then into Chinese, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English."
+        case (.chinese, .spanish): "Everything you say is pasted in Chinese. Spanish goes into English first and then into Chinese, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English."
         case (.chinese, _): "Everything you say is pasted in Chinese. Common English terms, such as PR or iPhone, may stay in English."
+        case (.japanese, .chinese): "Everything you say is pasted in Japanese. Chinese goes into English first and then into Japanese, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English."
+        case (.japanese, .spanish): "Everything you say is pasted in Japanese. Spanish goes into English first and then into Japanese, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English."
         case (.japanese, _): "Everything you say is pasted in Japanese. Common English terms, such as PR or iPhone, may stay in English."
+        case (.spanish, .chinese): "Everything you say is pasted in Spanish. Chinese goes into English first and then into Spanish, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English."
+        case (.spanish, .japanese): "Everything you say is pasted in Spanish. Japanese goes into English first and then into Spanish, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English."
         case (.spanish, _): "Everything you say is pasted in Spanish. Common English terms, such as PR or iPhone, may stay in English."
         }
     }

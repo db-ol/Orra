@@ -1746,8 +1746,8 @@ final class PushToTalkController {
     /// used. Every case that pastes the text untranslated, other than one with nothing to
     /// translate or already in the target language, leaves a notice that says so. Without
     /// `cleansUp`, the model's cleanup of the text never stands in for the translation.
-    /// `spoken` is the dictation language the text was transcribed in, and the direction
-    /// acts as it does for that language, see TranslationDirection.effective(for:).
+    /// `spoken` is the dictation language the text was transcribed in. Into a language
+    /// outside its pair with English the text goes through English, see TranslationPlan.
     private func translate(_ text: String, _ cue: TranslationCue?, spoken: DictationLanguage, cleansUp: Bool) async -> (result: TranslationStep.Result, target: TranslationTarget)? {
         guard let cue else { return nil }
         guard await translation.waitUntilLoaded() else {
@@ -1761,14 +1761,14 @@ final class PushToTalkController {
         }
         // The model is loaded by now, so this does not wait.
         let cleansUp = await cleanup.waitUntilLoaded() && cleansUp
-        let result = await TranslationStep.run(text, into: plan.route, source: plan.source, cleansUp: cleansUp, complete: translation.complete)
+        let result = await TranslationStep.run(text, plan: plan, in: spoken, cleansUp: cleansUp, complete: translation.complete)
         switch result.outcome {
         case .translated, .unchanged:
             break
         case .unreadable, .heldBack, .timedOut, .failed:
             addNotice(String(localized: "This dictation was pasted without translation."))
         }
-        return (result, plan.route.target)
+        return (result, plan.target)
     }
 
     /// Adds a note for the menu and the indicator after those the dictation has already, so

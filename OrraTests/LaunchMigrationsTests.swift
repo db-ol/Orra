@@ -95,6 +95,28 @@ struct LaunchMigrationsTests {
         }
     }
 
+    /// An update for a user whose Translate into was saved for another dictation language
+    /// and acted as Automatic: it becomes Automatic once, before the caption target's step
+    /// reads it, so captions get what they got. A target outside the pair picked after
+    /// that stays.
+    @Test func aChoiceForAnotherLanguageBecomesAutomatic() throws {
+        try withTestDefaults("LaunchMigrations.translationTargets") { defaults in
+            TranslationDirection.japanese.save(to: defaults)
+            let pushToTalk = controller(talkMode: .hold, dictationLanguage: .chinese)
+            let first = launchCleanup(direction: .japanese, defaults: defaults)
+            launch(pushToTalk, cleanup: first, setUpBefore: true, ownLanguage: .chinese, in: defaults)
+            #expect(first.translationDirection == .automatic)
+            #expect(TranslationDirection.load(from: defaults) == .automatic)
+            #expect(CaptionTargetPreference.saved(in: defaults) == .chinese)
+            // The user picks Japanese, which now goes through English, and it stays.
+            TranslationDirection.japanese.save(to: defaults)
+            let next = launchCleanup(direction: .japanese, defaults: defaults)
+            launch(pushToTalk, cleanup: next, setUpBefore: true, ownLanguage: .chinese, in: defaults)
+            #expect(next.translationDirection == .japanese)
+            #expect(TranslationDirection.load(from: defaults) == .japanese)
+        }
+    }
+
     /// A later launch, or an update, never replaces what is saved.
     @Test func aSavedValueStays() throws {
         try withTestDefaults("LaunchMigrations.saved") { defaults in

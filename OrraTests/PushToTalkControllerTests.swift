@@ -2238,6 +2238,9 @@ struct PushToTalkControllerTests {
         /// What the model closure reads and writes off the main actor.
         final class Shared: Sendable {
             let answer: Mutex<String>
+            /// Answers of their own for some routes, such as the two of a translation
+            /// through English.
+            let answers = Mutex<[TranslationRoute: String]>([:])
             /// The text and the route of each translation.
             let received = Mutex<[(text: String, route: TranslationRoute)]>([])
             let fails = Mutex(false)
@@ -2262,7 +2265,7 @@ struct PushToTalkControllerTests {
                 complete: { [shared] text, route in
                     shared.received.withLock { $0.append((text, route)) }
                     if shared.fails.withLock({ $0 }) { throw TestError() }
-                    return shared.answer.withLock { $0 }
+                    return shared.answers.withLock { $0[route] } ?? shared.answer.withLock { $0 }
                 }
             )
         }
@@ -2389,11 +2392,10 @@ struct PushToTalkControllerTests {
         #expect(inserter.inserted.last == "Can you send me the file?")
     }
 
-    /// For a user who dictates in Spanish, English goes into Spanish. A direction saved for
-    /// Chinese acts as Automatic, and the cue says so, with the language.
+    /// For a user who dictates in Spanish, English goes into Spanish, and the cue says so,
+    /// with the language.
     @Test func spanishAndEnglishAreTranslatedBothWays() async throws {
         let translation = FakeTranslation(answer: #"{"cleaned": "Can you send me the report today?", "translation": "¿Me puedes mandar el reporte hoy?"}"#)
-        translation.direction = .chinese
         let controller = await controller(translation: translation, language: .spanish)
         let cues = CueRecorder(controller)
         speech.reply = "Can you send me the report today?"
@@ -2402,6 +2404,53 @@ struct PushToTalkControllerTests {
         #expect(translation.routes == [TranslationRoute(.spanish, into: .spanish)])
         #expect(inserter.inserted == ["¿Me puedes mandar el reporte hoy?"])
         #expect(controller.notice == nil)
+    }
+
+    /// Into a language outside the pair, Chinese goes into English and then into Japanese,
+    /// and the Japanese is pasted. Paste Original Text brings back the Chinese, and the
+    /// cue shows 日. English goes into Japanese on one route.
+    @Test func aTargetOutsideThePairGoesThroughEnglish() async throws {
+        let translation = FakeTranslation(answer: Self.goodTranslation)
+        translation.shared.answers.withLock {
+            $0[TranslationRoute(.japanese, into: .japanese)] = #"{"cleaned": "We have a meeting next Tuesday.", "translation": "来週の火曜日に会議があります。"}"#
+        }
+        translation.direction = .japanese
+        let controller = await controller(translation: translation)
+        let cues = CueRecorder(controller)
+        speech.reply = "我们下周二开会。"
+        try await dictate(controller, with: .rightOption)
+        #expect(cues.list.first == .listening(translation: TranslationCue(direction: .japanese, language: .chinese)))
+        #expect(translation.received == ["en 我们下周二开会。", "ja We have a meeting next Tuesday."])
+        #expect(translation.routes == [.chinese(.english), TranslationRoute(.japanese, into: .japanese)])
+        #expect(inserter.inserted == ["来週の火曜日に会議があります。"])
+        #expect(controller.notice == nil)
+        await controller.pasteOriginal()
+        #expect(inserter.inserted.last == "我们下周二开会。")
+        // English takes the route from English alone.
+        translation.shared.answers.withLock {
+            $0[TranslationRoute(.japanese, into: .japanese)] = #"{"cleaned": "Can you send me the file?", "translation": "ファイルを送ってもらえますか？"}"#
+        }
+        speech.reply = "Can you send me the file?"
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.routes.suffix(1) == [TranslationRoute(.japanese, into: .japanese)])
+        #expect(inserter.inserted.last == "ファイルを送ってもらえますか？")
+    }
+
+    /// A translation through English that fails the checks of a target outside the pair,
+    /// such as Chinese characters in Japanese, pastes the text as said and says so.
+    @Test func aTranslationThroughEnglishThatFailsItsChecksIsNotPasted() async throws {
+        let translation = FakeTranslation(answer: Self.goodTranslation)
+        translation.shared.answers.withLock {
+            $0[TranslationRoute(.japanese, into: .japanese)] = #"{"cleaned": "We have a meeting next Tuesday.", "translation": "下周二有会议。"}"#
+        }
+        translation.direction = .japanese
+        let controller = await controller(translation: translation)
+        speech.reply = "我们下周二开会。"
+        try await dictate(controller, with: .rightOption)
+        #expect(translation.calls == 2)
+        #expect(inserter.inserted == ["我们下周二开会。"])
+        #expect(controller.notice == "This dictation was pasted without translation.")
+        #expect(controller.originalText == nil)
     }
 
     /// With the target fixed to Japanese, Japanese text is pasted as heard, quietly, and

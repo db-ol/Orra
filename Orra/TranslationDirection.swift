@@ -28,11 +28,13 @@ nonisolated enum TranslationTarget: String, CaseIterable, Sendable {
 /// Which way a dictation is translated: chosen from the text by default, or fixed to one
 /// target by a setting.
 ///
-/// Translation goes between English and the user's dictation language. Settings offers
-/// Automatic, English and that language, see `choices(for:)`. A fixed choice of another
-/// dictation language stays saved, so going back to that language brings it back, and
-/// meanwhile acts and shows as Automatic, see `effective(for:)`. The functions without a
-/// dictation language are those of Chinese, as before the choice.
+/// Automatic translates between English and the user's dictation language. A fixed choice
+/// may be any of the four languages, whatever the dictation language, see
+/// `choices(for:)`. One outside English and the dictation language is Beta and goes through
+/// English, see `fits(_:)` and TranslationPlan. Before it was offered, such a choice acted
+/// as Automatic, so the first launch that offers it saves Automatic in its place, see
+/// `migrate(_:language:in:)`. The functions without a dictation language are those of
+/// Chinese, as before the choice.
 nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
     case automatic
     case english
@@ -60,7 +62,7 @@ nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
     /// The target for a text of a user who dictates in `language`, or nil when it has no
     /// letter to translate, see `source(of:in:)`. Automatic sends English to the dictation
     /// language and everything else to English, the dictation language and text in neither
-    /// language alike.
+    /// language alike. A fixed choice sends everything to its language.
     func target(for text: String, in language: DictationLanguage) -> TranslationTarget? {
         target(source: Self.source(of: text, in: language), in: language)
     }
@@ -68,41 +70,69 @@ nonisolated enum TranslationDirection: String, CaseIterable, Sendable {
     /// The same for a text whose language the caller read already.
     func target(source: Source?, in language: DictationLanguage) -> TranslationTarget? {
         guard let source else { return nil }
-        switch effective(for: language) {
-        case .automatic: return source == .english ? language.translationLanguage : .english
-        case .english: return .english
-        case .chinese, .japanese, .spanish: return language.translationLanguage
+        return fixedTarget ?? (source == .english ? language.translationLanguage : .english)
+    }
+
+    /// The language of a fixed choice, nil for Automatic.
+    var fixedTarget: TranslationTarget? {
+        switch self {
+        case .automatic: nil
+        case .english: .english
+        case .chinese: .chinese
+        case .japanese: .japanese
+        case .spanish: .spanish
         }
     }
 
-    /// The route for a text of a user who dictates in `language` and the language of the
-    /// text, read once, or nil when it has no letter to translate. Off the main actor,
-    /// since the Spanish rule may run NLLanguageRecognizer. A dictation passes the
-    /// language on to the steps after it, see TranslationStep. Captions have a plan of
-    /// their own, see CaptionTarget.
+    /// How the translation key translates a text of a user who dictates in `language`, read
+    /// once, or nil when it has no letter to translate. Off the main actor, since the
+    /// Spanish rule may run NLLanguageRecognizer. Between English and the dictation
+    /// language a text takes one route, as always. Into a language outside that pair it
+    /// goes through English, see TranslationPlan. A dictation passes the language it read
+    /// on to the steps after it, see TranslationStep. Captions have a plan of their own,
+    /// see CaptionTarget.
     @concurrent
-    func plan(for text: String, in language: DictationLanguage) async -> (route: TranslationRoute, source: Source)? {
+    func plan(for text: String, in language: DictationLanguage) async -> TranslationPlan? {
         guard let source = Self.source(of: text, in: language), let target = target(source: source, in: language) else { return nil }
-        return (TranslationRoute(language, into: target), source)
+        guard !fits(language) else { return .route(TranslationRoute(language, into: target), source: source) }
+        return TranslationPlan.into(target, text: text, source: source, in: language)
     }
 
-    /// Whether the choice belongs to `language`: Automatic and English to every dictation
-    /// language, each other choice to its own.
+    /// Whether the choice stays between English and `language`: Automatic and English for
+    /// every dictation language, and the language itself. Any other choice is a target
+    /// outside the pair, which goes through English and is Beta.
     func fits(_ language: DictationLanguage) -> Bool {
         self == .automatic || self == .english || self == language.translationDirection
     }
 
-    /// What the choice does for a user who dictates in `language`: itself when it fits,
-    /// Automatic otherwise. The badge, the paste, the voice, the prompts read ahead and
-    /// Settings all follow it. Live Captions have their own target, see CaptionTarget.
-    func effective(for language: DictationLanguage) -> TranslationDirection {
-        fits(language) ? self : .automatic
+    /// The choices Settings offers for `language`: Automatic, English and the language,
+    /// the three there always were, then the other two in the order Chinese, Japanese,
+    /// Spanish, as Beta.
+    static func choices(for language: DictationLanguage) -> [TranslationDirection] {
+        let pair: [TranslationDirection] = [.automatic, .english, language.translationDirection]
+        return pair + [.chinese, .japanese, .spanish].filter { !pair.contains($0) }
     }
 
-    /// The choices Settings offers for `language`: Automatic, English and the language.
-    /// For Chinese the three there always were.
-    static func choices(for language: DictationLanguage) -> [TranslationDirection] {
-        [.automatic, .english, language.translationDirection]
+    // MARK: Targets outside the pair
+
+    /// Set by the first launch of a version that offers every target, so `migrate` runs
+    /// once. After it, a choice outside the pair is one the user made.
+    static let targetsMigratedKey = "translationDirectionTargetsMigrated"
+
+    /// Before every target was offered, a fixed choice saved for another dictation language
+    /// acted as Automatic, so going back to that language brought it back. Now it would
+    /// act as its language, and Chinese speech of a user who once picked Japanese while
+    /// dictating Japanese would suddenly paste in Japanese. So at the first launch of this
+    /// version such a choice is saved as Automatic, which is what it did. Runs once, see
+    /// `targetsMigratedKey`. Returns the choice it saved, nil when it saved none.
+    /// LaunchMigrations runs it at every launch.
+    @discardableResult
+    static func migrate(_ direction: TranslationDirection, language: DictationLanguage, in defaults: UserDefaults = .standard) -> TranslationDirection? {
+        guard !defaults.bool(forKey: targetsMigratedKey) else { return nil }
+        defaults.set(true, forKey: targetsMigratedKey)
+        guard !direction.fits(language) else { return nil }
+        TranslationDirection.automatic.save(to: defaults)
+        return .automatic
     }
 
     /// The language a text is in, for a user who dictates in `language`.

@@ -11,16 +11,24 @@ nonisolated enum VoiceSampleCaptureError: Error, Equatable {
 /// own language whatever language Orra shows, so it is not localized.
 nonisolated enum VoiceScript {
     /// The language the user speaks in meetings, for a user who dictates in `language`:
-    /// the source of a fixed translation direction as it acts for that language, and for
-    /// the automatic one that language when Orra shows it, English otherwise.
+    /// with a fixed direction the source, English into the dictation language and the
+    /// dictation language into any other, and with the automatic one that language when
+    /// Orra shows it, English otherwise.
     static func language(direction: TranslationDirection, language: DictationLanguage = .chinese, interface: Locale = .interface) -> TranslationTarget {
         let own = language.translationLanguage
-        switch direction.effective(for: language) {
-        case .english: return own
-        case .chinese, .japanese, .spanish: return .english
-        case .automatic:
+        guard let target = direction.fixedTarget else {
             return interface.language.languageCode == Locale.LanguageCode(own.rawValue) ? own : .english
         }
+        return target == own ? .english : own
+    }
+
+    /// The languages of the scripts the user can pick: English and the dictation language,
+    /// and the target of the direction when it is outside that pair, which the voice
+    /// speaks.
+    static func languages(direction: TranslationDirection, language: DictationLanguage) -> [TranslationTarget] {
+        let pair = language.translationTargets
+        guard let target = direction.fixedTarget, !pair.contains(target) else { return pair }
+        return pair + [target]
     }
 
     static func text(in language: TranslationTarget) -> String {

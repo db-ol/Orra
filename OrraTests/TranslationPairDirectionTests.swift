@@ -139,25 +139,52 @@ struct TranslationPairDirectionTests {
         }
     }
 
-    /// Settings offers Automatic, English and the dictation language. A choice saved for
-    /// another language acts as Automatic, and comes back with its language.
+    /// Settings offers Automatic, English and the dictation language, then the other two
+    /// languages, which are outside the pair. A fixed choice sends everything to its
+    /// language, whatever the dictation language.
     @Test func eachLanguageHasItsChoices() {
-        #expect(TranslationDirection.choices(for: .chinese) == [.automatic, .english, .chinese])
-        #expect(TranslationDirection.choices(for: .japanese) == [.automatic, .english, .japanese])
-        #expect(TranslationDirection.choices(for: .spanish) == [.automatic, .english, .spanish])
-        #expect(TranslationDirection.chinese.effective(for: .spanish) == .automatic)
-        #expect(TranslationDirection.chinese.effective(for: .chinese) == .chinese)
-        #expect(TranslationDirection.japanese.effective(for: .chinese) == .automatic)
-        #expect(TranslationDirection.english.effective(for: .japanese) == .english)
-        #expect(TranslationDirection.chinese.target(for: "Hello there", in: .spanish) == .spanish)
-        #expect(TranslationDirection.chinese.target(for: "Hola a todos", in: .spanish) == .english)
-        #expect(TranslationDirection.japanese.target(for: "Hello there") == .chinese)
+        #expect(TranslationDirection.choices(for: .chinese) == [.automatic, .english, .chinese, .japanese, .spanish])
+        #expect(TranslationDirection.choices(for: .japanese) == [.automatic, .english, .japanese, .chinese, .spanish])
+        #expect(TranslationDirection.choices(for: .spanish) == [.automatic, .english, .spanish, .chinese, .japanese])
+        #expect(TranslationDirection.chinese.fits(.chinese))
+        #expect(!TranslationDirection.chinese.fits(.spanish))
+        #expect(!TranslationDirection.japanese.fits(.chinese))
+        #expect(TranslationDirection.english.fits(.japanese))
+        #expect(TranslationDirection.automatic.fits(.spanish))
+        #expect(TranslationDirection.chinese.target(for: "Hello there", in: .spanish) == .chinese)
+        #expect(TranslationDirection.chinese.target(for: "Hola a todos", in: .spanish) == .chinese)
+        #expect(TranslationDirection.japanese.target(for: "Hello there") == .japanese)
         #expect(TranslationDirection.spanish.target(for: "Hello there", in: .spanish) == .spanish)
         #expect(TranslationDirection.spanish.target(for: "Hola a todos", in: .spanish) == .spanish)
         #expect(TranslationDirection.english.target(for: "Hola a todos", in: .spanish) == .english)
+        #expect(TranslationDirection.automatic.fixedTarget == nil)
         for language in DictationLanguage.allCases {
-            for direction in TranslationDirection.allCases {
-                #expect(TranslationDirection.choices(for: language).contains(direction.effective(for: language)))
+            #expect(Set(TranslationDirection.choices(for: language)) == Set(TranslationDirection.allCases))
+            for direction in TranslationDirection.allCases where direction != .automatic {
+                #expect(direction.target(for: "Hello there", in: language) == direction.fixedTarget)
+            }
+        }
+    }
+
+    /// At the first launch that offers every target, a fixed choice saved for another
+    /// dictation language, which acted as Automatic, is saved as Automatic, once. A choice
+    /// that fits stays, and a choice outside the pair made after that stays too.
+    @Test func aChoiceThatActedAsAutomaticBecomesAutomaticOnce() throws {
+        try withTestDefaults("translation-targets-migration") { defaults in
+            TranslationDirection.japanese.save(to: defaults)
+            #expect(TranslationDirection.migrate(.japanese, language: .chinese, in: defaults) == .automatic)
+            #expect(TranslationDirection.load(from: defaults) == .automatic)
+            // The user picks Japanese now, and the next launch keeps it.
+            TranslationDirection.japanese.save(to: defaults)
+            #expect(TranslationDirection.migrate(.japanese, language: .chinese, in: defaults) == nil)
+            #expect(TranslationDirection.load(from: defaults) == .japanese)
+        }
+        for (direction, language) in [(TranslationDirection.automatic, DictationLanguage.chinese), (.english, .spanish), (.spanish, .spanish), (.chinese, .chinese)] {
+            try withTestDefaults("translation-targets-fits") { defaults in
+                direction.save(to: defaults)
+                #expect(TranslationDirection.migrate(direction, language: language, in: defaults) == nil)
+                #expect(TranslationDirection.load(from: defaults) == direction)
+                #expect(defaults.bool(forKey: TranslationDirection.targetsMigratedKey))
             }
         }
     }

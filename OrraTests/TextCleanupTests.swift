@@ -652,17 +652,23 @@ struct TextCleanupTests {
     }
 
     /// The prompts read ahead are those of the dictation language: both of its routes for
-    /// Automatic, and the route of a fixed direction as it acts for that language. For
-    /// Chinese they are the targets they always were.
+    /// Automatic, and the route of a fixed direction into English or that language. For
+    /// Chinese they are the targets they always were. A target outside the pair reads the
+    /// two of the way through English.
     @Test func thePromptsReadAheadAreThoseOfTheDictationLanguage() {
         let japanese = [TranslationRoute(.japanese, into: .english), TranslationRoute(.japanese, into: .japanese)]
         #expect(TextCleanup.preparedRoutes(.automatic, .japanese) == japanese)
         #expect(TextCleanup.preparedRoutes(.japanese, .japanese) == [TranslationRoute(.japanese, into: .japanese)])
         #expect(TextCleanup.preparedRoutes(.spanish, .spanish) == [TranslationRoute(.spanish, into: .spanish)])
         #expect(TextCleanup.preparedRoutes(.english, .spanish) == [TranslationRoute(.spanish, into: .english)])
-        // A choice saved for Chinese acts as Automatic for Japanese, and the other way round.
-        #expect(TextCleanup.preparedRoutes(.chinese, .japanese) == japanese)
-        #expect(TextCleanup.preparedRoutes(.japanese, .chinese) == TextCleanup.preparedRoutes(.automatic, .chinese))
+        #expect(TextCleanup.preparedRoutes(.chinese, .japanese) == [TranslationRoute(.japanese, into: .english), .chinese(.chinese)])
+        #expect(TextCleanup.preparedRoutes(.japanese, .chinese) == [.chinese(.english), TranslationRoute(.japanese, into: .japanese)])
+        #expect(TextCleanup.preparedRoutes(.japanese, .spanish) == [TranslationRoute(.spanish, into: .english), TranslationRoute(.japanese, into: .japanese)])
+        #expect(TextCleanup.preparedTargets(.spanish) == [.english, .spanish])
+        // The caches kept: the pair's, and the route from English of a target outside it.
+        #expect(TextCleanup.keptRoutes(direction: .automatic, .chinese) == Set(DictationLanguage.chinese.translationRoutes))
+        #expect(TextCleanup.keptRoutes(direction: nil, .japanese) == Set(japanese))
+        #expect(TextCleanup.keptRoutes(direction: .spanish, .japanese) == Set(japanese + [TranslationRoute(.spanish, into: .spanish)]))
         for direction in TranslationDirection.choices(for: .chinese) {
             #expect(TextCleanup.preparedRoutes(direction, .chinese).map(\.target) == TextCleanup.preparedTargets(direction))
         }
@@ -675,7 +681,9 @@ struct TextCleanupTests {
 
     /// While captions run, the prompt into the caption target is read ahead first, as it
     /// acts for the dictation language, then those of the translation key while translation
-    /// is on, each once. All stay within the two routes of the dictation language.
+    /// is on, each once. All stay within the two routes of the dictation language, unless
+    /// the translation key goes into a target outside the pair, which adds its route from
+    /// English.
     @Test func captionRoutesAreReadAhead() {
         #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .chinese, .chinese) == [.chinese(.chinese)])
         #expect(TextCleanup.preparedRoutes(direction: nil, captionTarget: .english, .japanese) == [TranslationRoute(.japanese, into: .english)])
@@ -690,7 +698,8 @@ struct TextCleanupTests {
                 for target in TranslationTarget.allCases {
                     let routes = TextCleanup.preparedRoutes(direction: direction, captionTarget: target, language)
                     #expect(Set(routes).count == routes.count)
-                    #expect(Set(routes).isSubset(of: language.translationRoutes))
+                    #expect(Set(routes).isSubset(of: TextCleanup.keptRoutes(direction: direction, language)))
+                    #expect(Set(routes).isSubset(of: language.translationRoutes) == direction.fits(language))
                 }
             }
         }
@@ -763,9 +772,10 @@ struct TextCleanupTests {
         #expect(fake.preparedRoutes.count == count)
     }
 
-    /// A direction saved for Chinese reads the prompts of Automatic for Spanish, and its own
-    /// again when the user goes back to Chinese.
-    @Test func aChoiceOfAnotherLanguageReadsTheAutomaticPrompts() async throws {
+    /// Chinese as the target while dictating Spanish reads the prompts of the way through
+    /// English, Spanish into English and English into Chinese, and keeps the cache of the
+    /// second beside the two of Spanish. Back in Chinese it reads its own.
+    @Test func aTargetOutsideThePairReadsTheWayThroughEnglish() async throws {
         defer { temporary.remove() }
         try temporary.writeAll(to: temporary.installed)
         let fake = FakeEngine()
@@ -774,10 +784,12 @@ struct TextCleanupTests {
         cleanup.setDictationLanguage(.spanish)
         await cleanup.start()
         await cleanup.waitForLoad()
-        #expect(fake.preparedRoutes == [TranslationRoute(.spanish, into: .english), TranslationRoute(.spanish, into: .spanish)])
+        #expect(fake.preparedRoutes == [TranslationRoute(.spanish, into: .english), .chinese(.chinese)])
+        #expect(fake.kept.last == Set(DictationLanguage.spanish.translationRoutes + [.chinese(.chinese)]))
         #expect(cleanup.translationDirection == .chinese)
         cleanup.setDictationLanguage(.chinese)
         await cleanup.waitForLoad()
         #expect(fake.preparedRoutes.last == .chinese(.chinese))
+        #expect(fake.kept.last == Set(DictationLanguage.chinese.translationRoutes))
     }
 }

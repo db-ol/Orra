@@ -309,17 +309,11 @@ nonisolated extension TranslationDirection {
     }
 }
 
-/// A dictation of the translation key, for the recording indicator: the direction as it
-/// acts for the dictation language, see TranslationDirection.effective(for:), and that
-/// language.
+/// A dictation of the translation key, for the recording indicator: the direction and the
+/// dictation language.
 nonisolated struct TranslationCue: Equatable, Sendable {
     let direction: TranslationDirection
     let language: DictationLanguage
-
-    init(direction: TranslationDirection, language: DictationLanguage) {
-        self.direction = direction.effective(for: language)
-        self.language = language
-    }
 
     /// The cues of a user who dictates in Chinese.
     static let automatic = TranslationCue(direction: .automatic, language: .chinese)
@@ -327,11 +321,14 @@ nonisolated struct TranslationCue: Equatable, Sendable {
     static let chinese = TranslationCue(direction: .chinese, language: .chinese)
 
     /// The badge: the one of the direction, with 訳 for Automatic in Japanese, which writes
-    /// that character in place of 译, and ⇄ in Spanish, whose speakers read neither.
+    /// that character in place of 译, and for Spanish ⇄ for Automatic and ZH or JA for
+    /// Chinese or Japanese, since its speakers read neither 译 nor 中 or 日.
     var badge: String {
         switch (language, direction) {
         case (.japanese, .automatic): "訳"
         case (.spanish, .automatic): "⇄"
+        case (.spanish, .chinese): "ZH"
+        case (.spanish, .japanese): "JA"
         default: direction.badge
         }
     }

@@ -59,6 +59,12 @@ nonisolated enum TranslationGuard {
         case foreignLatin
         /// Han characters in a Spanish translation, other than a short name of the source.
         case hanInSpanish
+        /// A Han character that Japanese does not write, in a Japanese translation through
+        /// English, see TranslationGuard.hasHanOutsideJapanese.
+        case hanOutsideJapanese
+        /// Another language than Spanish, such as Portuguese or French, in a Spanish
+        /// translation through English, see TranslationGuard.isOtherLanguageThanSpanish.
+        case otherThanSpanish
 
         /// The reason in the words of guards2.py, for the tests. It may hold numbers and
         /// acronyms from the text, so it is never logged.
@@ -90,6 +96,8 @@ nonisolated enum TranslationGuard {
             case .notSpanish: "English in Spanish output"
             case .foreignLatin: "foreign accented Latin"
             case .hanInSpanish: "Han in Spanish output"
+            case .hanOutsideJapanese: "Han outside Japanese in Japanese output"
+            case .otherThanSpanish: "another language than Spanish"
             }
         }
 
@@ -122,6 +130,8 @@ nonisolated enum TranslationGuard {
             case .notSpanish: "not Spanish"
             case .foreignLatin: "foreign accent"
             case .hanInSpanish: "Han in Spanish"
+            case .hanOutsideJapanese: "Han outside Japanese"
+            case .otherThanSpanish: "other than Spanish"
             }
         }
 

@@ -4370,6 +4370,50 @@
         }
       }
     },
+    "Everything you say is pasted in Chinese. Japanese goes into English first and then into Chinese, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que dices se pega en chino. El japonés se traduce primero al inglés y luego al chino, así que tarda alrededor del doble. Los términos comunes en inglés, como PR o iPhone, pueden quedar en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容はすべて中国語でペーストされます。日本語はいったん英語に翻訳してから中国語に翻訳するため、時間が約2倍かかります。PRやiPhoneなど、よく使われる英語の用語は英語のまま残ることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以中文粘贴。日文会先翻译成英文，再翻译成中文，用时大约是两倍。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
+    "Everything you say is pasted in Chinese. Spanish goes into English first and then into Chinese, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que dices se pega en chino. El español se traduce primero al inglés y luego al chino, así que tarda alrededor del doble. Los términos comunes en inglés, como PR o iPhone, pueden quedar en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容はすべて中国語でペーストされます。スペイン語はいったん英語に翻訳してから中国語に翻訳するため、時間が約2倍かかります。PRやiPhoneなど、よく使われる英語の用語は英語のまま残ることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以中文粘贴。西班牙文会先翻译成英文，再翻译成中文，用时大约是两倍。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
     "Everything you say is pasted in English." : {
       "localizations" : {
         "es-419" : {
@@ -4388,6 +4432,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你说的内容都会以英文粘贴。"
+          }
+        }
+      }
+    },
+    "Everything you say is pasted in Japanese. Chinese goes into English first and then into Japanese, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que dices se pega en japonés. El chino se traduce primero al inglés y luego al japonés, así que tarda alrededor del doble. Los términos comunes en inglés, como PR o iPhone, pueden quedar en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容はすべて日本語でペーストされます。中国語はいったん英語に翻訳してから日本語に翻訳するため、時間が約2倍かかります。PRやiPhoneなど、よく使われる英語の用語は英語のまま残ることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以日文粘贴。中文会先翻译成英文，再翻译成日文，用时大约是两倍。PR、iPhone 这类常用英文词可能保留英文。"
           }
         }
       }
@@ -4414,6 +4480,50 @@
         }
       }
     },
+    "Everything you say is pasted in Japanese. Spanish goes into English first and then into Japanese, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que dices se pega en japonés. El español se traduce primero al inglés y luego al japonés, así que tarda alrededor del doble. Los términos comunes en inglés, como PR o iPhone, pueden quedar en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容はすべて日本語でペーストされます。スペイン語はいったん英語に翻訳してから日本語に翻訳するため、時間が約2倍かかります。PRやiPhoneなど、よく使われる英語の用語は英語のまま残ることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以日文粘贴。西班牙文会先翻译成英文，再翻译成日文，用时大约是两倍。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
+    "Everything you say is pasted in Spanish. Chinese goes into English first and then into Spanish, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que dices se pega en español. El chino se traduce primero al inglés y luego al español, así que tarda alrededor del doble. Los términos comunes en inglés, como PR o iPhone, pueden quedar en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容はすべてスペイン語でペーストされます。中国語はいったん英語に翻訳してからスペイン語に翻訳するため、時間が約2倍かかります。PRやiPhoneなど、よく使われる英語の用語は英語のまま残ることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以西班牙文粘贴。中文会先翻译成英文，再翻译成西班牙文，用时大约是两倍。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
     "Everything you say is pasted in Spanish. Common English terms, such as PR or iPhone, may stay in English." : {
       "localizations" : {
         "es-419" : {
@@ -4432,6 +4542,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你说的内容都会以西班牙文粘贴。PR、iPhone 这类常用英文词可能保留英文。"
+          }
+        }
+      }
+    },
+    "Everything you say is pasted in Spanish. Japanese goes into English first and then into Spanish, which takes about twice as long. Common English terms, such as PR or iPhone, may stay in English." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo lo que dices se pega en español. El japonés se traduce primero al inglés y luego al español, así que tarda alrededor del doble. Los términos comunes en inglés, como PR o iPhone, pueden quedar en inglés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話した内容はすべてスペイン語でペーストされます。日本語はいったん英語に翻訳してからスペイン語に翻訳するため、時間が約2倍かかります。PRやiPhoneなど、よく使われる英語の用語は英語のまま残ることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你说的内容都会以西班牙文粘贴。日文会先翻译成英文，再翻译成西班牙文，用时大约是两倍。PR、iPhone 这类常用英文词可能保留英文。"
           }
         }
       }

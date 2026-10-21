@@ -206,12 +206,11 @@ nonisolated enum ProblemReport {
         return lines.joined(separator: "\n")
     }
 
-    /// Translate into as saved, and what it acts as for the dictation language when that
-    /// differs, such as "Japanese, acts as Automatic".
+    /// Translate into as saved, and for a target outside the pair of the dictation
+    /// language that it goes through English, such as "Japanese, through English".
     static func describe(_ direction: TranslationDirection, for language: DictationLanguage) -> String {
-        let effective = direction.effective(for: language)
         let name = direction.rawValue.capitalized
-        return effective == direction ? name : "\(name), acts as \(effective.rawValue.capitalized)"
+        return direction.fits(language) ? name : "\(name), through English"
     }
 
     /// The caption target, "(default)" while the user has not picked one, and what it acts

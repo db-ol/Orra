@@ -28,6 +28,13 @@ nonisolated extension TranslationGuard {
     }
 
     private static func checkPair(source: String, output: String, route: TranslationRoute) -> Failure? {
+        checkPair(source: source, output: output, route: route, numbers: output)
+    }
+
+    /// The checks of the pair, with the number check on `numbers` in place of `output`, so
+    /// a route into a target outside the user's pair can leave out the ones Japanese counts
+    /// with, see `checkOutsidePair(source:output:route:)`.
+    static func checkPair(source: String, output: String, route: TranslationRoute, numbers: String) -> Failure? {
         if output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .empty
         }
@@ -62,7 +69,7 @@ nonisolated extension TranslationGuard {
         // A correction can make the translation much shorter than the source, and change
         // a long number.
         let corrects = matches(pairCorrectionCue, source)
-        let added = newPairNumbers(source: source, output: output, target: route.target, corrects: corrects)
+        let added = newPairNumbers(source: source, output: numbers, target: route.target, corrects: corrects)
         if !added.isEmpty {
             return .newNumber(added)
         }

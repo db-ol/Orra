@@ -416,8 +416,8 @@ struct RecordingFeedbackTests {
     }
 
     /// Japanese and Spanish have badges of their own: 訳 and ⇄ for Automatic, 日 and ES
-    /// for their language, EN for English. A choice saved for another language shows as
-    /// Automatic. Chinese keeps 译, EN and 中.
+    /// for their language, EN for English. Chinese keeps 译, EN and 中. A target outside
+    /// the pair shows its own badge, 中, 日 or ES, and ZH or JA with Spanish.
     @Test func eachDictationLanguageHasItsBadges() {
         #expect(TranslationCue.automatic.badge == "译")
         #expect(TranslationCue.english.badge == "EN")
@@ -428,8 +428,13 @@ struct RecordingFeedbackTests {
         #expect(TranslationCue(direction: .automatic, language: .spanish).badge == "⇄")
         #expect(TranslationCue(direction: .spanish, language: .spanish).badge == "ES")
         #expect(TranslationCue(direction: .english, language: .spanish).badge == "EN")
-        #expect(TranslationCue(direction: .chinese, language: .spanish) == TranslationCue(direction: .automatic, language: .spanish))
-        #expect(TranslationCue(direction: .spanish, language: .chinese) == .automatic)
+        #expect(TranslationCue(direction: .japanese, language: .chinese).badge == "日")
+        #expect(TranslationCue(direction: .spanish, language: .chinese).badge == "ES")
+        #expect(TranslationCue(direction: .chinese, language: .japanese).badge == "中")
+        #expect(TranslationCue(direction: .spanish, language: .japanese).badge == "ES")
+        #expect(TranslationCue(direction: .chinese, language: .spanish).badge == "ZH")
+        #expect(TranslationCue(direction: .japanese, language: .spanish).badge == "JA")
+        #expect(TranslationCue(direction: .chinese, language: .spanish).badgeDescription() == "This dictation will be translated into Chinese.")
         #expect(TranslationCue(direction: .japanese, language: .japanese).badgeDescription() == "This dictation will be translated into Japanese.")
         #expect(TranslationCue(direction: .spanish, language: .spanish).badgeDescription() == "This dictation will be translated into Spanish.")
         #expect(TranslationCue(direction: .automatic, language: .spanish).badgeDescription() == "This dictation will be translated.")
@@ -512,6 +517,8 @@ struct RecordingFeedbackTests {
             ("listening-japanese", [.listening(translation: TranslationCue(direction: .japanese, language: .japanese))]),
             ("listening-spanish-automatic", [.listening(translation: TranslationCue(direction: .automatic, language: .spanish))]),
             ("listening-spanish", [.listening(translation: TranslationCue(direction: .spanish, language: .spanish))]),
+            ("listening-spanish-japanese", [.listening(translation: TranslationCue(direction: .japanese, language: .spanish))]),
+            ("listening-chinese-japanese", [.listening(translation: TranslationCue(direction: .japanese, language: .chinese))]),
             ("listening-talk-key", [.listening]),
             ("hands-free-automatic", [.handsFree(finishHint: hint, translation: .automatic)]),
             ("transcribing-english", [.listening(translation: .english), .transcribing]),

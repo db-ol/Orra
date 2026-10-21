@@ -75,8 +75,9 @@ struct VoiceRecordingTests {
         #expect(VoiceScript.language(direction: .automatic, language: .japanese, interface: Locale(identifier: "ja")) == .japanese)
         #expect(VoiceScript.language(direction: .automatic, language: .spanish, interface: Locale(identifier: "es-419")) == .spanish)
         #expect(VoiceScript.language(direction: .automatic, language: .spanish, interface: Locale(identifier: "en")) == .english)
-        // A choice saved for Chinese acts as Automatic.
+        // Into a language outside the pair, the user speaks their dictation language.
         #expect(VoiceScript.language(direction: .chinese, language: .spanish, interface: Locale(identifier: "es-419")) == .spanish)
+        #expect(VoiceScript.language(direction: .japanese, language: .chinese, interface: Locale(identifier: "en")) == .chinese)
         let japanese = VoiceScript.text(in: .japanese)
         let spanish = VoiceScript.text(in: .spanish)
         #expect(TranslationDirection.source(of: japanese, in: .japanese) == .partner)
@@ -90,6 +91,16 @@ struct VoiceRecordingTests {
         let recording = VoiceRecording(recorder: mic.recorder, playback: playback, output: { nil }, scriptLanguage: .japanese, scriptLanguages: DictationLanguage.japanese.translationTargets)
         #expect(recording.scriptLanguages == [.english, .japanese])
         #expect(recording.script == japanese)
+    }
+
+    /// The picker offers English and the dictation language, and the target of
+    /// Translate into when it is outside that pair, which the voice speaks.
+    @Test func theScriptsIncludeATargetOutsideThePair() {
+        #expect(VoiceScript.languages(direction: .automatic, language: .chinese) == [.english, .chinese])
+        #expect(VoiceScript.languages(direction: .english, language: .japanese) == [.english, .japanese])
+        #expect(VoiceScript.languages(direction: .spanish, language: .spanish) == [.english, .spanish])
+        #expect(VoiceScript.languages(direction: .japanese, language: .chinese) == [.english, .chinese, .japanese])
+        #expect(VoiceScript.languages(direction: .chinese, language: .spanish) == [.english, .spanish, .chinese])
     }
 
     @Test func aNewRecordingShowsTheScriptOfItsLanguage() {

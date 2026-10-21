@@ -94,14 +94,15 @@ struct ProblemReportTests {
         #expect(report.contains("### Orra-2026-10-09-120000.ips\n{\"crash\":1}"))
     }
 
-    /// The language settings with their values: Translate into and the caption target as
-    /// saved, what each acts as for the dictation language when that differs, and whether
-    /// the caption target was picked or is the default.
+    /// The language settings with their values: Translate into as saved, and whether it
+    /// goes through English, the caption target as saved, what it acts as for the
+    /// dictation language when that differs, and whether it was picked or is the default.
     @Test func reportNamesTheLanguageSettings() {
         #expect(ProblemReport.describe(.automatic, for: .chinese) == "Automatic")
         #expect(ProblemReport.describe(.english, for: .japanese) == "English")
         #expect(ProblemReport.describe(.japanese, for: .japanese) == "Japanese")
-        #expect(ProblemReport.describe(.japanese, for: .chinese) == "Japanese, acts as Automatic")
+        #expect(ProblemReport.describe(.japanese, for: .chinese) == "Japanese, through English")
+        #expect(ProblemReport.describe(.chinese, for: .spanish) == "Chinese, through English")
         #expect(ProblemReport.describe(captionTarget: .chinese, picked: true, for: .chinese) == "Chinese")
         #expect(ProblemReport.describe(captionTarget: .english, picked: false, for: .spanish) == "English (default)")
         #expect(ProblemReport.describe(captionTarget: .japanese, picked: true, for: .chinese) == "Japanese, acts as Chinese")
