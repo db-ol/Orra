@@ -128,8 +128,9 @@ got worse than the baseline, see docs/release-gate.md.
     nor the dictation language, a target saved under another dictation language staying
     what it is, the reader by script (kana, Han characters, English and Spanish, French,
     Portuguese, German and Swedish shown as heard, Hangul, Cyrillic, nothing to translate,
-    short Latin text such as OK, Hi, Sí or Claro read as English or Spanish, and "Hay
-    fever." read as Spanish), the route table with two hops through English between
+    short Latin text such as OK, Hi, Sí or Claro read as English or Spanish, "Hay
+    fever." read as Spanish, and English full of names or terms, such as "Next item,
+    Kafka consumer lag.", read as English), the route table with two hops through English between
     Chinese, Japanese and Spanish, the routes read ahead and the routes kept, four at
     most.
   - VoiceRecordingTests covers the voice sample sheet with a fake microphone: the script
@@ -979,7 +980,7 @@ got worse than the baseline, see docs/release-gate.md.
     while captions run. Since 2026-10-20 the caption routes are those of a sentence in
     English and of one in the dictation language into the target, the kept routes add
     every route into the target, four at most, and stopping captions keeps only the
-    routes of the dictation language.
+    routes of the dictation language, unless captions start again before that runs.
     PushToTalkControllerTests checks Japanese and English both ways on their routes, Paste
     Original Text, a direction saved for Chinese acting as Automatic for Spanish with its
     cue, and Japanese with Japanese fixed pasted as heard without the model.
@@ -992,7 +993,8 @@ got worse than the baseline, see docs/release-gate.md.
     back first hop stops the way through English, that "Hay fever." reaches a Chinese
     reader when the hop into English gives it back, that French and Korean are shown as
     heard for every target, and that only sentences read as Chinese turn into simplified
-    characters. EngineTurnsTests and LanguageGuardTests check that captions keep a first
+    characters. A Cantonese line in traditional characters with English words reads as
+    Chinese, since the language is read in simplified characters. EngineTurnsTests and LanguageGuardTests check that captions keep a first
     pass in any of the four languages and give a fifth the passes of the dictation
     language, while a dictation keeps its own check.
     RecordingFeedbackTests checks the badges 訳, 日, ⇄ and ES and what VoiceOver
@@ -1271,8 +1273,9 @@ got worse than the baseline, see docs/release-gate.md.
 - ProblemReportTests covers the diagnostic report of Report a Problem…: the home folder,
   account name, full name and computer name are taken out, names under three characters
   and other users' folders stay, the report lists the facts, the dictation language,
-  Translate into, what the caption window shows and the caption target with what each
-  acts as and whether the caption target was picked, and only counts of the
+  Translate into with what it acts as, what the caption window shows, the caption
+  target with ", beta" for a target that is neither English nor the dictation language,
+  and whether it was picked, and only counts of the
   vocabulary and the learned pairs, keeps the newest 2000 log lines, picks at most three
   Orra crash reports from the last 7 days, and the issue link fills the form fields the
   bug report form defines, with what happened among them. The link stays under 6,000
@@ -2795,21 +2798,23 @@ it shows starts, stops, counts and failures, never text.
   app. The window's menu and the Settings row list English and the dictation language,
   then the other two with Beta, such as English, Chinese, Japanese (Beta) and Spanish
   (Beta) with Chinese dictation, and 英文、中文、日文（测试版）、西班牙文（测试版） in 简体中文.
-  The row shows "Between Chinese, Japanese and Spanish, captions are translated through
-  English. This is a beta, and the translation comes a little later." under its line.
+  The row shows "Captions between Chinese, Japanese and Spanish are a beta, and the
+  translation may come a little later." under its line.
   Each row and the window's top row fit at 720 by 560 and 300 pt in all four languages.
 - [ ] With Chinese dictation and Chinese as the target, a Japanese video (with kana)
   shows each sentence in Japanese, then its Chinese translation, about half a second
-  later than an English video's. A Spanish video goes into Chinese the same way. For each
+  to a second later than an English video's. A Spanish video goes into Chinese the same way. For each
   Japanese sentence the log shows "Translation into English for Japanese dictation ran
   in" and then "Translation into Chinese ran in", and no "Transcript was in another
   language" line.
 - [ ] With Japanese dictation and Japanese as the target, a Chinese video goes into
   Japanese. With Spanish dictation and Chinese as the target, an English video goes
   into Chinese in one step.
-- [ ] A French or Korean video is shown as heard for every target, with no translation.
-  A Cantonese video with Chinese dictation shows simplified characters, and a Japanese
-  video keeps its kanji, such as 東京駅.
+- [ ] A French or Korean video is mostly shown as heard for every target, with no
+  translation. A line now and then may come out in the dictation language or in English
+  after "Transcript was in another language, the pass in" in the log, and is then
+  translated. A Cantonese video with Chinese dictation shows simplified characters, and
+  a Japanese line with kana keeps its kanji, such as 東京駅に着きました.
 - [ ] A target picked while dictating in Japanese stays Japanese after switching the
   dictation language to Chinese, and shows Beta then.
 - [ ] Memory: with Translation on and Chinese dictation, Japanese captions of a Spanish
@@ -3067,7 +3072,8 @@ translated. So Chinese audio, such as stream_zh.wav and the Chinese parts of
 stream_mixed.wav, gets no translation and no translation times with the default. Run
 Chinese audio with `TEST_RUNNER_ORRA_CAPTION_TARGET=en` and English audio with the
 default. Runs before that date translated both languages in one run, so compare each
-language with a run in the same target.
+language with a run in the same target. The dictation language is Chinese unless
+`TEST_RUNNER_ORRA_CAPTION_LANGUAGE=ja` or `es`, since 2026-10-21.
 The output holds the text of the audio, so it goes outside the repository.
 
 Capture start, added on 2026-10-16, not verified yet. A key that waits records from its

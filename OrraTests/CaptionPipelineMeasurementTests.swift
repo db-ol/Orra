@@ -26,8 +26,10 @@ import Testing
 ///   TranslationTarget. Sentences in the target already are not translated, so Chinese
 ///   audio needs another target to measure translation, and English audio zh. Between
 ///   Chinese, Japanese and Spanish each sentence goes through English, see CaptionTarget.
-///   The dictation language is Chinese. Before 2026-10-19 the default translated both
-///   ways, so compare a run with one in the same target.
+///   Before 2026-10-19 the default translated both ways, so compare a run with one in the
+///   same target.
+/// - ORRA_CAPTION_LANGUAGE: the dictation language, zh (the default), ja or es. It picks
+///   the passes of a fifth language, the routes read ahead and simplified characters.
 /// - ORRA_CAPTION_TRANSLATE=0: transcripts only, without loading the cleanup model.
 /// - ORRA_CAPTION_REALTIME=1: feeds the audio at the pace it plays, so the latency of each
 ///   caption is measured as the live captions would see it.
@@ -57,6 +59,9 @@ struct CaptionPipelineMeasurementTests {
         try #require(!files.isEmpty, "No audio files")
         let settings = try Self.settings()
         let target = Self.environment["ORRA_CAPTION_TARGET"].flatMap(TranslationTarget.init(rawValue:)) ?? .chinese
+        let language = Self.environment["ORRA_CAPTION_LANGUAGE"].flatMap { code in
+            DictationLanguage.allCases.first { $0.translationLanguage.rawValue == code }
+        } ?? .chinese
         let realtime = Self.environment["ORRA_CAPTION_REALTIME"] == "1"
         let translates = Self.environment["ORRA_CAPTION_TRANSLATE"] != "0"
         let interimInterval = Self.environment["ORRA_CAPTION_INTERIM"].flatMap(Double.init).flatMap { $0 > 0 ? $0 : nil }
@@ -67,7 +72,7 @@ struct CaptionPipelineMeasurementTests {
         if translates {
             let folder = try #require(RewriteTestModel.folder, "The cleanup model is not on this Mac. Set TEST_RUNNER_ORRA_CAPTION_TRANSLATE=0 or TEST_RUNNER_ORRA_REWRITE_MODEL_DIR")
             try await rewrite.load(from: folder)
-            for route in CaptionTarget.preparedRoutes(into: target, for: .chinese) {
+            for route in CaptionTarget.preparedRoutes(into: target, for: language) {
                 try await rewrite.prepareTranslation(into: route)
             }
         }
@@ -79,6 +84,7 @@ struct CaptionPipelineMeasurementTests {
             complete: { try await rewrite.translate($0, into: $1).answer },
             turns: EngineTurns()
         )
+        engines.language = { language }
         // Counts the model calls, for the cost.
         var calls = (final: 0, interim: 0, translation: 0)
         let transcribe = engines.transcribe
@@ -209,7 +215,7 @@ struct CaptionPipelineMeasurementTests {
 
         let summary = """
         Caption measurement: \(files.count) files, \(String(format: "%.1f", audioSeconds)) s of audio, \(sentences) sentences, \(translated) translated, \
-        took \(started.duration(to: .now)), realtime: \(realtime), settings: \(settings)
+        took \(started.duration(to: .now)), realtime: \(realtime), dictation: \(language.rawValue), target: \(target.rawValue), settings: \(settings)
         Recognition per sentence: \(Self.summary(recognition))
         Translation per sentence: \(Self.summary(translation))
         Caption latency: \(Self.summary(captionLatency))

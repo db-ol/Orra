@@ -449,13 +449,17 @@ final class CaptionPipeline {
     /// TranscriptGuard, as a dictation's, and into simplified characters for a user who
     /// dictates in Chinese when the sentence reads as Chinese, see DictationLanguage. So
     /// Japanese, and an English line with a name in Han characters, keep their characters
-    /// as they were said. Off the main actor, since the reading may run
-    /// NLLanguageRecognizer.
+    /// as they were said. The language is read in simplified characters, as the rule of
+    /// Chinese dictation counts them, so a Cantonese line in traditional characters with
+    /// English words, such as 個 project 嘅 timeline, still reads as Chinese. ChineseText
+    /// leaves text with kana and mostly English text as it is. Off the main actor, since
+    /// the reading may run NLLanguageRecognizer.
     @concurrent
     nonisolated static func shownText(_ raw: String, seconds: Double, language: DictationLanguage) async -> (text: String, source: TranslationTarget?) {
         let guarded = TranscriptGuard.clean(raw, audioSeconds: seconds)
-        let source = CaptionTarget.language(of: guarded)
+        let simplified = ChineseText.simplified(guarded)
+        let source = CaptionTarget.language(of: simplified)
         let simplifies = language.simplifiesCharacters && source == .chinese
-        return (simplifies ? ChineseText.simplified(guarded) : guarded, source)
+        return (simplifies ? simplified : guarded, source)
     }
 }

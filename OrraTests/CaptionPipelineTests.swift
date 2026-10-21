@@ -458,6 +458,30 @@ struct CaptionPipelineTests {
         #expect(originals[4] != LanguageGuardTests.japaneseInHan)
     }
 
+    /// The language is read in simplified characters, as the rule of Chinese dictation
+    /// counts them, so a Cantonese line in traditional characters with English words
+    /// reads as Chinese for every dictation language. Only Chinese dictation shows it
+    /// simplified, and its translation into English runs on the text it shows.
+    @Test func aTraditionalLineIsReadInSimplifiedCharacters() async throws {
+        let line = "個 project 嘅 timeline 同 budget 係 confirmed 咗"
+        // Read in its traditional characters, it would be English.
+        #expect(CaptionTarget.language(of: line) == .english)
+        for language in DictationLanguage.allCases {
+            let shown = await CaptionPipeline.shownText(line, seconds: 4, language: language)
+            #expect(shown.source == .chinese)
+            #expect(shown.text == (language == .chinese ? ChineseText.simplified(line) : line))
+        }
+        let models = FakeCaptionModels([line])
+        models.target = .english
+        var reports: [CaptionSentence] = []
+        let pipeline = CaptionPipeline(engines: models.engines()) { reports.append($0) }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 1))
+        await pipeline.finish()
+        #expect(models.translated.map(\.route) == [TranslationRoute(.chinese, into: .english)])
+        #expect(models.translated.first?.text == ChineseText.simplified(line))
+        #expect(reports.last?.original == ChineseText.simplified(line))
+    }
+
     @Test func silenceAndEmptyTranscriptsGiveNoSentence() async throws {
         let models = FakeCaptionModels(["", "  ", "Okay."])
         var reports: [CaptionSentence] = []

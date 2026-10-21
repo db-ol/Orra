@@ -41,16 +41,19 @@ nonisolated enum CaptionTarget {
     ///   which is rare in speech.
     /// - Latin letters only: the rule of Spanish dictation, see
     ///   TranslationDirection.spanishSource(of:), which reads Spanish or English, when
-    ///   NLLanguageRecognizer finds English or Spanish, or when the text is too short for
-    ///   it, under LanguageGuard.minimumLatinLetters letters, such as OK, Hi, Sí or Claro.
-    ///   Longer text in another language, such as French or Portuguese, is none of the
-    ///   four. A short English line with a word that looks Spanish, such as "Hay fever.",
-    ///   reads as Spanish, see CaptionPipeline for how it still reaches the target.
+    ///   the text is English or Spanish by `isEnglishOrSpanish`, or when it is too short
+    ///   to judge, under LanguageGuard.minimumLatinLetters letters, such as OK, Hi, Sí or
+    ///   Claro. Longer text in another language, such as French or Portuguese, is none of
+    ///   the four. A short English line with a word that looks Spanish, such as "Hay
+    ///   fever.", reads as Spanish, see CaptionPipeline for how it still reaches the
+    ///   target.
     /// Measured on 2026-10-19 on 4,130 texts, it read every FLEURS sentence in Chinese,
     /// Japanese, Spanish and English and every caption of Chinese, Cantonese, mixed,
     /// English, Japanese and Spanish speech in its language, and took 681 French and
-    /// Portuguese sentences for none of the four. May run NLLanguageRecognizer, so the
-    /// pipeline calls it off the main actor, see CaptionPipeline.shownText.
+    /// Portuguese sentences for none of the four, also with the English floor of
+    /// `isEnglishOrSpanish`. Chinese text is read in simplified characters, see
+    /// CaptionPipeline.shownText. May run NLLanguageRecognizer, so the pipeline calls it
+    /// off the main actor.
     static func language(of text: String) -> TranslationTarget? {
         var han = 0
         var kana = 0
@@ -88,11 +91,17 @@ nonisolated enum CaptionTarget {
     }
 
     /// Whether NLLanguageRecognizer, free to choose any language, finds English or Spanish
-    /// the most likely.
+    /// the most likely, or gives English a chance of at least LanguageGuard.englishFloor,
+    /// as the language check of captions does, see LanguageGuard.isForeignToCaptions. So
+    /// an English line full of names or terms, such as "Next item, Kafka consumer lag.",
+    /// which it takes for Indonesian, is still read as English and translated.
     private static func isEnglishOrSpanish(_ text: String) -> Bool {
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(text)
-        return recognizer.dominantLanguage == .english || recognizer.dominantLanguage == .spanish
+        if recognizer.dominantLanguage == .english || recognizer.dominantLanguage == .spanish {
+            return true
+        }
+        return (recognizer.languageHypotheses(withMaximum: 80)[.english] ?? 0) >= LanguageGuard.englishFloor
     }
 
     // MARK: Routes
@@ -113,7 +122,10 @@ nonisolated enum CaptionTarget {
     /// language the route of that language, as for a dictation. Between two of Chinese,
     /// Japanese and Spanish the route into English and then the route from English, each
     /// with its checks, a beta that takes about twice as long as one route. This table is
-    /// the one place that chooses, so a pair can move to a direct route of its own later.
+    /// the one place that chooses among the routes Orra has. A direct route between two
+    /// of Chinese, Japanese and Spanish needs a route, a prompt, a cache and checks of its
+    /// own first, since TranslationRoute only goes into or out of English, and
+    /// CaptionPipeline takes each route for one into or out of English.
     static let table: [Pair: [TranslationRoute]] = {
         let zhEn = TranslationRoute(.chinese, into: .english)
         let jaEn = TranslationRoute(.japanese, into: .english)

@@ -136,11 +136,17 @@ struct CaptionTargetTests {
         #expect(CaptionTarget.language(of: LanguageGuardTests.english) == .english)
         #expect(CaptionTarget.language(of: "Gracias a todos.") == .spanish)
         #expect(CaptionTarget.language(of: LanguageGuardTests.spanish) == .spanish)
+        // English full of names or terms, which the recognizer gives to Indonesian with
+        // English close behind, stays English, as the language check of captions keeps it.
+        #expect(CaptionTarget.language(of: "Next item, Kafka consumer lag.") == .english)
+        #expect(CaptionTarget.language(of: "Tokyo, Osaka, Nagoya, Fukuoka stores.") == .english)
         // Other languages in Latin letters, long enough for the recognizer, are shown as
         // they were said.
         #expect(CaptionTarget.language(of: "Nous allons commencer la réunion avec le budget de cette année.") == nil)
         #expect(CaptionTarget.language(of: "Vamos começar a reunião com o orçamento deste ano, está bem?") == nil)
         #expect(CaptionTarget.language(of: "Wir fangen mit dem Budget für dieses Jahr an.") == nil)
+        #expect(CaptionTarget.language(of: "Iniziamo la riunione con il bilancio di quest'anno.") == nil)
+        #expect(CaptionTarget.language(of: "We beginnen de vergadering met het budget van dit jaar.") == nil)
         #expect(CaptionTarget.language(of: LanguageGuardTests.swedish) == nil)
         // Other scripts.
         #expect(CaptionTarget.language(of: "회의를 시작하겠습니다.") == nil)

@@ -384,7 +384,8 @@ final class TextCleanup {
         if needsModel {
             let generation = loadGeneration
             enqueue { [weak self, engine] in
-                guard let self, generation == loadGeneration, isLoaded else { return }
+                // Unloaded, or captions started again, since.
+                guard let self, generation == loadGeneration, isLoaded, !captionsNeedModel else { return }
                 await engine.keepTranslationPrefixes(Self.keptRoutes(captionTarget: nil, dictationLanguage))
             }
             scheduleIdleUnload()

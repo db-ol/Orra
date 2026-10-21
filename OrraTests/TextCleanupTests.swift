@@ -735,6 +735,16 @@ struct TextCleanupTests {
         cleanup.captionsStopped()
         await cleanup.waitForLoad()
         #expect(fake.kept.last == Set(DictationLanguage.japanese.translationRoutes))
+        // Captions started again before the queue gets to the stop keep their caches, so
+        // none is dropped only to be filled again.
+        cleanup.captionsStarted()
+        await cleanup.waitForLoad()
+        let keptBefore = fake.kept.count
+        cleanup.captionsStopped()
+        cleanup.captionsStarted()
+        await cleanup.waitForLoad()
+        #expect(fake.kept.count > keptBefore)
+        #expect(fake.kept.dropFirst(keptBefore).allSatisfy { $0.isSuperset(of: CaptionTarget.routes(into: .chinese)) })
     }
 
     /// A change of dictation language keeps only the prompts of the new language and reads

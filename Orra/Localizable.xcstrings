@@ -2010,28 +2010,6 @@
         }
       }
     },
-    "Between Chinese, Japanese and Spanish, captions are translated through English. This is a beta, and the translation comes a little later." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entre chino, japonés y español, los subtítulos se traducen a través del inglés. Esta función está en versión beta y la traducción aparece un poco más tarde."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "中国語、日本語、スペイン語の間では、キャプションは英語を経由して翻訳されます。これはベータ版の機能で、訳文の表示が少し遅れます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "中文、日文和西班牙文之间的字幕会经由英文翻译。这是测试版功能，译文会稍晚一些出现。"
-          }
-        }
-      }
-    },
     "Both" : {
       "comment" : "A display mode of the caption window and its choice in Settings: each sentence's original with its translation",
       "localizations" : {
@@ -2161,6 +2139,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "有人说话时，字幕会显示在这里。"
+          }
+        }
+      }
+    },
+    "Captions between Chinese, Japanese and Spanish are a beta, and the translation may come a little later." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los subtítulos entre chino, japonés y español están en versión beta, y la traducción puede aparecer un poco más tarde."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中国語、日本語、スペイン語の間のキャプション翻訳はベータ版の機能で、訳文の表示が少し遅れることがあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中文、日文和西班牙文之间的字幕翻译是测试版功能，译文可能会稍晚一些出现。"
           }
         }
       }

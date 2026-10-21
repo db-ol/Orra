@@ -171,7 +171,8 @@ private struct LiveCaptionRows: View {
         } label: {
             Label("Captions show", systemImage: "text.bubble")
         }
-        // All four languages, with Beta beside those captions reach through English.
+        // All four languages, with Beta beside the two that are neither English nor the
+        // dictation language, see CaptionTarget.isBeta(_:for:).
         Picker(selection: Binding(
             get: { cleanup.captionTarget },
             set: { cleanup.pickCaptionTarget($0) }
@@ -184,7 +185,7 @@ private struct LiveCaptionRows: View {
                 title: "Translate captions into",
                 detail: "The language you read in the caption window. The translation key has its own setting, on the Translation page.",
                 systemImage: "translate",
-                note: "Between Chinese, Japanese and Spanish, captions are translated through English. This is a beta, and the translation comes a little later."
+                note: "Captions between Chinese, Japanese and Spanish are a beta, and the translation may come a little later."
             )
         }
         // Original does not translate.
