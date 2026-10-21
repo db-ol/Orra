@@ -449,7 +449,8 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
-    @Test func whatTheScanSavesIsSorted() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func whatTheScanSavesIsSorted() async throws {
         defer { cleanUp() }
         let (runtime, projects, choice) = try await started()
         let harbor = Project(name: "Harbor", people: [Project.Person(name: "Mei Tan", address: "mei@harbor.example")])
@@ -466,11 +467,7 @@ struct ProjectsRuntimeTests {
         choice.confirm()
         try await waitUntil { runtime.isScanning }
         try await waitUntil { runtime.mailChanges > 0 && mail.calls.contains("source") }
-        var filed: [MailStore.Listed] = []
-        for _ in 0..<400 where filed.isEmpty {
-            filed = await runtime.list(.project(harbor.id))
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        let filed = try await listed(.project(harbor.id), runtime) { !$0.isEmpty }
         #expect(filed.map(\.messageID) == ["b@harbor.example"])
         #expect(filed.first?.level == .sure)
         // The line under the subject is its first sentence until it is explained.
@@ -483,26 +480,19 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
-    @Test func aNewProjectSortsNeedsAProjectAgain() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func aNewProjectSortsNeedsAProjectAgain() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
         let store = try #require(runtime.running?.store)
         try await store.save([Self.message("c@harbor.example", from: "lu@harbor.example")], ownAddresses: [Self.own], at: Self.today)
         runtime.requestSort()
-        var waiting: [MailStore.Listed] = []
-        for _ in 0..<400 where waiting.first?.level == nil {
-            waiting = await runtime.list(.needsProject)
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        let waiting = try await listed(.needsProject, runtime) { $0.first?.level != nil }
         #expect(waiting.map(\.messageID) == ["c@harbor.example"])
 
         let harbor = Project(name: "Harbor", domains: ["harbor.example"])
         try await runtime.add(harbor)
-        var filed: [MailStore.Listed] = []
-        for _ in 0..<400 where filed.isEmpty {
-            filed = await runtime.list(.project(harbor.id))
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        let filed = try await listed(.project(harbor.id), runtime) { !$0.isEmpty }
         #expect(filed.map(\.messageID) == ["c@harbor.example"])
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
@@ -1431,6 +1421,16 @@ struct ProjectsRuntimeTests {
             try await Task.sleep(for: .milliseconds(5))
         }
         Issue.record("The email did not show in its list as expected")
+    }
+
+    /// The list of `place` once it is as `condition` asks, however long sorting takes on a
+    /// busy test runner. The test's time limit bounds the wait.
+    private func listed(_ place: MailStore.Place, _ runtime: ProjectsRuntime, until condition: ([MailStore.Listed]) -> Bool) async throws -> [MailStore.Listed] {
+        while true {
+            let rows = await runtime.list(place)
+            if condition(rows) { return rows }
+            try await Task.sleep(for: .milliseconds(5))
+        }
     }
 
     /// A folder under the test's folder that holds one text file.
