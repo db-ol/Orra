@@ -265,6 +265,10 @@ final class ProjectsRuntime {
     @ObservationIgnored private var referenceSession = 0
     /// The most handles kept, `maximumReferences` in the app. Tests set fewer.
     @ObservationIgnored var referenceLimit = ProjectsRuntime.maximumReferences
+    /// How long Explain Selected Message waits for sorting to file a message, `sortingWait`
+    /// in the app. Nil waits until sorting filed it, for tests that check the list the
+    /// window then shows, so the speed of a busy test runner does not decide that list.
+    @ObservationIgnored var sortingWaitLimit: Duration? = ProjectsRuntime.sortingWait
     @ObservationIgnored private var modelWasInstalled = false
     /// Projects whose index is at work, so sorting prepares again when one finishes.
     @ObservationIgnored private var indexing: Set<UUID> = []
@@ -827,13 +831,14 @@ final class ProjectsRuntime {
         }
     }
 
-    /// Waits until sorting decided where an email goes, for at most `limit`, such as for a
-    /// message the scan just saved. It never waits for the sorting of other mail.
-    func waitUntilSorted(_ messageID: String, for limit: Duration = ProjectsRuntime.sortingWait) async {
+    /// Waits until sorting decided where an email goes, for at most `sortingWaitLimit`, such
+    /// as for a message the scan just saved. It never waits for the sorting of other mail.
+    func waitUntilSorted(_ messageID: String) async {
         guard let running else { return }
         let store = running.store
+        let limit = sortingWaitLimit
         let started = ContinuousClock.now
-        while started.duration(to: .now) < limit, !Task.isCancelled, self.running?.database === running.database {
+        while limit.map({ started.duration(to: .now) < $0 }) ?? true, !Task.isCancelled, self.running?.database === running.database {
             if (try? await store.filed(messageID)) != nil {
                 return
             }
