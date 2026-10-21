@@ -487,6 +487,17 @@ struct EngineTurnsTests {
         #expect(probe.languages == [nil, nil, .chinese, .english])
     }
 
+    /// A call cancelled while it waits for the speech model, as a caption call does behind
+    /// another shared call, runs nothing.
+    @Test func aCancelledCallStartsNoPassOfTheSpeechModel() async {
+        let engine = Qwen3Engine(folder: { nil })
+        let call = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await engine.transcribe([0.1])
+        }
+        await #expect(throws: CancellationError.self) { try await call.value }
+    }
+
     @Test func aCaptionCallWaitsWhileADictationRuns() async throws {
         let turns = EngineTurns(pollInterval: .milliseconds(2))
         turns.dictationStarted()

@@ -1166,7 +1166,8 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     language, that the first pass in Chinese or English stands, that the vocabulary
     stays on those passes, that the text stands when no pass helps or one fails, that
     cancellation still ends the dictation, and that the echo check runs on the new
-    text. PushToTalkControllerTests checks that the dictation pastes the text of the
+    text. EngineTurnsTests checks that a caption call whose first pass the talk key
+    cancelled starts no other pass until the dictation ends. PushToTalkControllerTests checks that the dictation pastes the text of the
     pass in Chinese.
   - With Japanese or Spanish as the dictation language, since 2026-10-18,
     LanguageGuardTests checks that Japanese with kana, Japanese and Chinese in Han
