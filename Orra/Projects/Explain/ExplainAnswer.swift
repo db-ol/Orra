@@ -11,8 +11,8 @@ import Foundation
 /// [M1, T1]. Sources that are not in the prompt's table are dropped and flagged, and so are
 /// missing and repeated sections. A repeated section's second copy is not read, but the
 /// heading written again right after itself, as after the prefill, is not a copy. An item
-/// copied from the prompt's own instructions is left out, and so is a lead in copied from
-/// them before a colon, see `Echo`. The answer is data, and nothing here follows it: the
+/// copied from the prompt's own rules is left out, and so is a lead in copied from them
+/// before a colon, see `Echo`. The answer is data, and nothing here follows it: the
 /// window shows it as plain text only.
 nonisolated struct ExplainAnswer: Sendable, Equatable {
     nonisolated enum Section: String, Sendable, CaseIterable, Codable {
@@ -55,11 +55,11 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     var problems: [Problem] = []
 
     /// Reads `answer`, which starts with the prompt's prefill. `sources` holds the ids of
-    /// the prompt's source table, such as 本邮件, F1 and M1, and `instructions` the
-    /// prompt's own instructions.
-    init(_ answer: String, sources: some Collection<String>, instructions: String = "") {
+    /// the prompt's source table, such as 本邮件, F1 and M1, and `rules` the prompt's own
+    /// rules, see `ExplainPrompt.rules`.
+    init(_ answer: String, sources: some Collection<String>, rules: String = "") {
         let known = Set(sources)
-        let echo = Echo(instructions)
+        let echo = Echo(rules)
         var sections: [Section: [String]] = [:]
         var current: Section?
         let text = answer
@@ -168,20 +168,23 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     private static let bulletPattern = try! NSRegularExpression(pattern: #"^(?:[-•*·・–]|\d{1,2}[.、)]|[（(]\d{1,2}[)）])\s*(.*)$"#)
 
     /// Whether an item says there is nothing: 无, None, N/A.
-    static func isNothing(_ item: String) -> Bool {
+    private static func isNothing(_ item: String) -> Bool {
         let word = item.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces)).lowercased()
         return ["无", "没有", "暂无", "none", "nothing", "n/a", "na"].contains(word)
     }
 
     // MARK: Echo
 
-    /// What a small model copies from the prompt's own instructions into a section, such
-    /// as "Questions in the email, or decisions the reply needs, that the sources cannot
-    /// settle …" as the first question. A run of `run` words of the instructions in a row
-    /// counts as copied. An item of at least `least` words that is mostly copied is no
-    /// item, and a lead in like that before a colon goes with the colon. Chinese counts by
-    /// character, so a Chinese item never matches the English instructions by chance.
-    nonisolated struct Echo: Sendable {
+    /// What a small model copies from the prompt's own rules into a section, such as
+    /// "Questions in the email, or decisions the reply needs, that the sources cannot
+    /// settle …" as the first question. A run of `run` words of the rules in a row counts
+    /// as copied. An item of at least `least` words that is mostly copied is no item, and
+    /// a lead in like that before a colon goes with the colon. A colon between two digits,
+    /// as in 17:00, ends no lead in. Chinese counts by character. The rules are English but
+    /// for the headings, the placeholders, the marker of a removed passage and the user's
+    /// name, so a Chinese item rarely holds five of their words in a row, and the date
+    /// table is not among them.
+    nonisolated private struct Echo: Sendable {
         static let run = 5
         static let least = 6
         /// The share of an item's words in copied runs that makes it a copy.
@@ -189,8 +192,8 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
 
         private let runs: Set<[String]>
 
-        init(_ instructions: String) {
-            let words = Self.words(instructions)
+        init(_ rules: String) {
+            let words = Self.words(rules)
             var runs: Set<[String]> = []
             if words.count >= Self.run {
                 for start in 0...(words.count - Self.run) {
@@ -206,7 +209,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
             if isCopied(item) {
                 return nil
             }
-            if let colon = item.firstIndex(where: { $0 == ":" || $0 == "：" }), isCopied(String(item[..<colon])) {
+            if let colon = Self.leadInColon(in: item), isCopied(String(item[..<colon])) {
                 let rest = item[item.index(after: colon)...].trimmingCharacters(in: .whitespaces)
                 return rest.isEmpty || ExplainAnswer.isNothing(rest) ? nil : withoutCopy(rest)
             }
@@ -225,9 +228,18 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
             return Double(copied.filter { $0 }.count) >= Self.share * Double(words.count)
         }
 
+        /// The first colon of an item that is not between two digits.
+        private static func leadInColon(in item: String) -> String.Index? {
+            item.indices.first { index in
+                guard item[index] == ":" || item[index] == "：" else { return false }
+                let after = item.index(after: index)
+                return !(index > item.startIndex && item[item.index(before: index)].isNumber && after < item.endIndex && item[after].isNumber)
+            }
+        }
+
         /// The words of a text, lowercased: runs of letters and digits, with each Chinese
         /// character a word of its own.
-        static func words(_ text: String) -> [String] {
+        private static func words(_ text: String) -> [String] {
             var words: [String] = []
             var word = ""
             for character in text.precomposedStringWithCompatibilityMapping.lowercased() {

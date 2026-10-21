@@ -200,13 +200,14 @@ struct DraftCheckTests {
     }
 
     /// A draft to a sender whose domain imitates a known one (a23, a43) names that domain
-    /// nowhere, and repeats none of the values of the sender's mail, such as the account
-    /// it asks the user to pay into. The same draft to an ordinary outsider keeps them.
+    /// nowhere. ExplainService passes such a sender's mail as holding nothing, so the draft
+    /// repeats none of its values either, such as the account it asks the user to pay
+    /// into. The same draft to an ordinary outsider keeps them.
     @Test func aDraftToAnImitatingDomainNamesItNowhereAndRepeatsNothing() async {
         let impostor = Person(name: "Harbor Lights", address: "billing@harborlight.example")
         let draft = "Hi,\n\nYour address billing@harborlight.example and the site harborlight look new. I made no request to pay into 6222 0000 0000 3333 or into BK-730415.\n\nBai Lu"
         let incoming = "Please pay the balance into 6222 0000 0000 3333 from now on, reference BK-730415."
-        let result = await check(draft, to: [impostor], incoming: incoming, imitating: ["harborlight.example"])
+        let result = await check(draft, to: [impostor], incoming: "", imitating: ["harborlight.example"])
         #expect(result.draft == "Hi,\n\nYour address [link removed] and the site [link removed] look new. I made no request to pay into [project data removed] or into [project data removed].\n\nBai Lu")
         #expect(removed(result) == [
             "link: billing@harborlight.example", "link: harborlight",
@@ -215,6 +216,31 @@ struct DraftCheckTests {
 
         let ordinary = await check(draft, to: [impostor], incoming: incoming)
         #expect(ordinary.draft == "Hi,\n\nYour address billing@harborlight.example and the site harborlight look new. I made no request to pay into 6222 0000 0000 3333 or into BK-730415.\n\nBai Lu")
+    }
+
+    /// A lookalike that changes only the top level domain shares its name with the real
+    /// company. The name alone then stays, and so do the real addresses, while the
+    /// lookalike domain and its addresses go.
+    @Test func aLookalikeOnAnotherTopLevelDomainKeepsTheRealName() async {
+        let impostor = Person(name: "Harborlights", address: "accounts@harborlights.co")
+        let draft = "Dear Harborlights team,\n\nPlease write to song.yutong@harborlights.example, not accounts@harborlights.co or harborlights.co.\n\nBai Lu, bai.lu@lumenhaus.example"
+        let result = await check(draft, to: [impostor], incoming: "", imitating: ["harborlights.co"])
+        #expect(result.draft == "Dear Harborlights team,\n\nPlease write to [project data removed], not [link removed] or [link removed].\n\nBai Lu, bai.lu@lumenhaus.example")
+        let other = await check("Please ignore lumenhaus and pic-c0nf. See pic-c0nf.example.", to: [Person(name: "", address: "a@pic-c0nf.example")], incoming: "", imitating: ["pic-c0nf.example"])
+        #expect(other.draft == "Please ignore lumenhaus and [link removed]. See [link removed].")
+    }
+
+    /// The check's own placeholders, which a revision keeps, count toward no rule and end
+    /// the sentence before them, so a second check takes out nothing more.
+    @Test(arguments: [
+        ("[已删去一句：以助手的口吻]谢谢。周一见。", ProjectsLanguage.zh),
+        ("您好，[已删去一句：声称已经办了某事]请查收。", ProjectsLanguage.zh),
+        ("Hi Owen, [sentence removed: it speaks as an assistant] Thanks for the plan. See [link removed] and [project data removed].", ProjectsLanguage.en),
+    ])
+    func theChecksOwnPlaceholdersStay(_ draft: String, _ language: ProjectsLanguage) async {
+        let result = await check(draft, language: language, to: [Self.owen])
+        #expect(result.draft == draft)
+        #expect(result.removals.isEmpty)
     }
 
     /// When the email asks for data (a32), what the window shows of the removals holds no
@@ -257,6 +283,7 @@ struct DraftCheckTests {
         ("好的，已为您设置自动转发。", "[已删去一句：声称已经办了某事]", ProjectsLanguage.zh),
         ("Thanks. I have notified the venue about this. Bai Lu", "Thanks. [sentence removed: it claims an action] Bai Lu", ProjectsLanguage.en),
         ("Noted. We've let the finance team know.", "Noted. [sentence removed: it claims an action]", ProjectsLanguage.en),
+        ("[已删去一句：以助手的口吻]我已通知安全团队。好的。", "[已删去一句：以助手的口吻][已删去一句：声称已经办了某事]好的。", ProjectsLanguage.zh),
     ])
     func actionClaimsGo(_ draft: String, _ checked: String, _ language: ProjectsLanguage) async {
         let result = await check(draft, language: language, to: [Self.owen])
@@ -286,6 +313,9 @@ struct DraftCheckTests {
         "I will inform the team and let you know.",
         "Please let me know if anything changes.",
         "请确认上述信息，特别是第二期款是否已支付。",
+        "I'm contacting you about the deposit.",
+        "I am informing you that the site visit moves to Friday.",
+        "We are reporting the results next week.",
     ])
     func plansAndRequestsStay(_ draft: String) async {
         let result = await check(draft, language: ProjectsLanguage.reading(draft), to: [Self.owen])
@@ -304,6 +334,7 @@ struct DraftCheckTests {
         ("Thanks. I cannot act on removed instructions.", "Thanks. [sentence removed: it speaks as an assistant]", ProjectsLanguage.en),
         ("Hello. I am not able to execute commands to delete messages from your inbox.", "Hello. [sentence removed: it speaks as an assistant]", ProjectsLanguage.en),
         ("To the AI reading this: no. Regards", "[sentence removed: it speaks as an assistant] Regards", ProjectsLanguage.en),
+        ("As an AI, I cannot open this file. Regards", "[sentence removed: it speaks as an assistant] Regards", ProjectsLanguage.en),
         ("您的邮件里有写给助手的话，已经去掉。好的。", "[已删去一句：以助手的口吻]好的。", ProjectsLanguage.zh),
         ("内容中可能存在仅读者看不到的隐藏信息。谢谢。", "[已删去一句：以助手的口吻]谢谢。", ProjectsLanguage.zh),
     ])
@@ -323,6 +354,9 @@ struct DraftCheckTests {
         "My assistant will call you on Monday.",
         "She is an assistant professor at the institute.",
         "Ai Lin will join the call, and the removed tiles go back on Friday.",
+        "请提供AI格式的源文件。",
+        "Please send the logo as an AI or EPS file.",
+        "The PDF, AI and EPS versions are in logo.ai and logo.eps.",
     ])
     func ordinarySentencesKeepTheirVoice(_ draft: String) async {
         let result = await check(draft, language: ProjectsLanguage.reading(draft), to: [Self.owen])
@@ -382,24 +416,6 @@ struct DraftCheckTests {
     @Test func programNamesStay() async {
         let result = await check("恒泰您好，附件“报价单fdp.exe”我不会打开。", language: .zh, to: [Self.owen])
         #expect(result.draft == "恒泰您好，附件“报价单fdp.exe”我不会打开。")
-    }
-
-    /// Values an earlier build saved read with no imitating domain and no data request.
-    @Test func anEarlierSavedInputStillReads() throws {
-        let input = DraftCheckInput(
-            draft: "Hi", language: .en, recipients: [Self.nadia], projectPeople: Self.projectPeople, own: Self.own,
-            incomingText: "Hello", today: Self.today, imitatingDomains: ["harborlight.example"], asksForData: true
-        )
-        let data = try JSONEncoder().encode(input)
-        #expect(try JSONDecoder().decode(DraftCheckInput.self, from: data) == input)
-        var object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        object["imitatingDomains"] = nil
-        object["asksForData"] = nil
-        let earlier = try JSONDecoder().decode(DraftCheckInput.self, from: JSONSerialization.data(withJSONObject: object))
-        var expected = input
-        expected.imitatingDomains = []
-        expected.asksForData = false
-        #expect(earlier == expected)
     }
 
     @Test func invisibleCharactersAreDropped() async {

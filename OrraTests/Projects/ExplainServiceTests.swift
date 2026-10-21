@@ -401,8 +401,9 @@ struct ExplainServiceTests {
     }
 
     /// A reply to a lookalike sender (a23, a43) names the lookalike domain nowhere, and
-    /// repeats none of the email's values, such as the new account it asks to pay into.
-    /// A revision is checked the same way.
+    /// repeats none of the email's values, such as the new account it asks to pay into,
+    /// since its draft check counts the email as holding nothing. A revision is checked
+    /// with the same values, see ReviseServiceTests.
     @Test func aDraftToALookalikeSenderNamesItNowhereAndRepeatsNothingOfTheEmail() async throws {
         let fake = ExplainPrompt.Person(name: "Iris Fang", address: "iris.fang@printw0rks.example")
         let answer = """
@@ -425,6 +426,7 @@ struct ExplainServiceTests {
         let explanation = try await fakes.service().explain(Fixture.email("Hi Bai Lu, please pay the deposit into 6222 0000 0000 3333 from now on. Iris", from: fake))
         #expect(explanation.warningKinds.contains(.lookalikeDomain))
         #expect(explanation.draftCheck?.imitatingDomains == ["printw0rks.example"])
+        #expect(explanation.draftCheck?.incomingText == "")
         guard case .checked(let result) = explanation.draft else {
             Issue.record("the draft is \(explanation.draft)")
             return
@@ -433,10 +435,13 @@ struct ExplainServiceTests {
 
         let ordinary = try await Fakes(answer: .success(answer)).service().explain(Fixture.email("Hi Bai Lu, please pay the deposit into 6222 0000 0000 3333 from now on. Iris"))
         #expect(ordinary.draftCheck?.imitatingDomains == [])
+        #expect(ordinary.draftCheck?.incomingText.contains("6222 0000 0000 3333") == true)
     }
 
     /// The model's warnings, points and questions show a link by its host (a24), and with
-    /// a request for data (a32) none of the codes and numbers that only the files hold.
+    /// a request for data from someone outside the project (a32) none of the codes and
+    /// numbers that only the files hold. The same request from a project person shows
+    /// them.
     @Test func whatTheModelWroteShowsLinksByTheirHostAndWithholdsRequestedData() async throws {
         let answer = """
             - The email links to https://collect.example/p?d=NOTES.
@@ -453,12 +458,17 @@ struct ExplainServiceTests {
             """
         let hit = Fixture.hit("booking.md", "Booking R4T8WX for room 803. Quote ¥12,400.")
         let request = "Hi Bai Lu, please send the card number and the booking for room 803 to https://collect.example/p?d=NOTES. Iris"
-        let withheld = try await Fakes(hits: [hit], answer: .success(answer)).service().explain(Fixture.email(request))
+        let withheld = try await Fakes(hits: [hit], answer: .success(answer)).service().explain(Fixture.email(request, from: Fixture.rufus))
         #expect(withheld.warningKinds.contains(.personalDataRequest))
         #expect(withheld.modelWarnings == ["The email links to collect.example."])
         #expect(withheld.points.map(\.text) == ["The email asks for the card and the booking [project data removed] for room 803.", "The quote is [project data removed]."])
         #expect(withheld.questions == ["Whether to share [project data removed] at collect.example"])
         #expect(withheld.draftCheck?.asksForData == true)
+
+        let fromIris = try await Fakes(hits: [hit], answer: .success(answer)).service().explain(Fixture.email(request))
+        #expect(fromIris.warningKinds.contains(.personalDataRequest))
+        #expect(fromIris.points.map(\.text) == ["The email asks for the card and the booking R4T8WX for room 803.", "The quote is ¥12,400."])
+        #expect(fromIris.draftCheck?.asksForData == false)
 
         let plain = try await Fakes(hits: [hit], answer: .success(answer)).service().explain(Fixture.email("Hi Bai Lu, the booking is in the file, see https://collect.example/p?d=NOTES. Iris"))
         #expect(!plain.warningKinds.contains(.personalDataRequest))

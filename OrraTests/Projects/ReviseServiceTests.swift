@@ -171,6 +171,22 @@ struct ReviseServiceTests {
         #expect(version.check.flags.isEmpty)
     }
 
+    /// A revision to a sender whose domain imitates a known one (a23) is checked with the
+    /// values of the first draft, whose email counts as holding nothing. The lookalike
+    /// domain goes, and so does a value only the impostor's mail holds, while what the user
+    /// typed into the draft or asked for stays.
+    @Test func aRevisionToAnImitatingDomainKeepsWhatTheUserGave() async throws {
+        let impostor = Person(name: "Iris Fang", address: "iris.fang@printw0rks.example")
+        var context = Self.context(to: [impostor], email: "Hi Bai Lu, please pay into 6222 0000 0000 3333 from now on. Iris")
+        context.incomingText = ""
+        context.imitatingDomains = ["printw0rks.example"]
+        let before = "Hi Iris,\n\nI will pay invoice INV-2026-118 to the account on file.\n\nBai Lu"
+        let written = "Hi Iris,\n\nI will pay invoice INV-2026-118 of ¥5,800 to the account on file, not to 6222 0000 0000 3333 or iris.fang@printw0rks.example. My booking is R4T8WX.\n\nBai Lu"
+        let version = try await service(FakeModel(answering: written)).revise(before, .instruction("Firmer. The invoice is ¥5,800 and my booking is R4T8WX"), flags: [], context: context)
+        #expect(version.draft == "Hi Iris,\n\nI will pay invoice INV-2026-118 of ¥5,800 to the account on file, not to [project data removed] or [link removed]. My booking is R4T8WX.\n\nBai Lu")
+        #expect(version.check.removals.map(\.kind) == [.link, .projectData])
+    }
+
     /// An amount flagged in the draft before, such as a total the model worked out, stays
     /// flagged while the new version holds it, in whatever form. One the user typed was not
     /// flagged and stays unflagged, and one the instruction gives is the user's.

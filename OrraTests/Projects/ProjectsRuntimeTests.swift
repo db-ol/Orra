@@ -833,7 +833,8 @@ struct ProjectsRuntimeTests {
         try await store.save([Self.message(id, from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
         let check = DraftCheckInput(
             draft: "", language: .en, recipients: [DraftCheckInput.Person(name: "", address: "mei@harbor.example")], projectPeople: [],
-            own: [DraftCheckInput.Person(name: "Me", address: Self.own)], incomingText: "Could you send the plan?", today: Self.today)
+            own: [DraftCheckInput.Person(name: "Me", address: Self.own)], incomingText: "Could you send the plan?", today: Self.today,
+            imitatingDomains: ["harb0r.example"], asksForData: true)
         let explanation = Explanation(
             messageID: id, project: nil, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
             points: [Explanation.Point(text: "Mei asks for the plan by 23 October.", sources: [], flags: [])], questions: [],
@@ -851,6 +852,8 @@ struct ProjectsRuntimeTests {
         #expect(context.ownName == "Me")
         #expect(context.recipients == check.recipients)
         #expect(context.incomingText == check.incomingText)
+        #expect(context.imitatingDomains == ["harb0r.example"])
+        #expect(context.asksForData)
         var noDraft = explanation
         noDraft.draftCheck = nil
         #expect(await runtime.reviseContext(for: noDraft) == nil)

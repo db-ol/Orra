@@ -19,7 +19,9 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
     /// The user's own names and addresses, which a draft may always hold.
     var own: [Person] = []
     /// What the recipients already have: the email, and the earlier messages of its thread
-    /// they were on.
+    /// they were on. Empty for mail from a domain that imitates a known one, which holds
+    /// nothing a reply may repeat, so a refusal never quotes the account it was asked to
+    /// pay into.
     var incomingText: String
     /// The other texts the model read: the excerpts of project files and the project's
     /// other mail.
@@ -28,39 +30,12 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
     var questionsForUser: [String] = []
     var today: Date
     /// The domains that imitate a domain the user knows: the sender's, when the sender
-    /// checks found it a lookalike. The draft names none of them, and repeats nothing from
-    /// the incoming mail that would count as project data.
+    /// checks found it a lookalike. The draft names none of them.
     var imitatingDomains: [String] = []
-    /// Whether the email asks for personal data, a credential or confidential project
-    /// data. What the window shows of the removals then holds no value the recipients do
-    /// not already have, see `OutputChecks.shown`.
+    /// Whether the email asks someone outside the project for personal data, a credential
+    /// or confidential project data. What the window shows of the removals then holds no
+    /// value the recipients do not already have, see `OutputChecks.shown`.
     var asksForData = false
-}
-
-nonisolated extension DraftCheckInput {
-    private enum CodingKeys: String, CodingKey {
-        case draft, language, recipients, projectPeople, own, incomingText, sourceTexts, questionsForUser, today
-        case imitatingDomains, asksForData
-    }
-
-    /// Reads the values, with no imitating domains and no data request in what an earlier
-    /// build saved.
-    init(from decoder: any Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(
-            draft: try values.decode(String.self, forKey: .draft),
-            language: try values.decode(ProjectsLanguage.self, forKey: .language),
-            recipients: try values.decode([Person].self, forKey: .recipients),
-            projectPeople: try values.decode([Person].self, forKey: .projectPeople),
-            own: try values.decode([Person].self, forKey: .own),
-            incomingText: try values.decode(String.self, forKey: .incomingText),
-            sourceTexts: try values.decode([String].self, forKey: .sourceTexts),
-            questionsForUser: try values.decode([String].self, forKey: .questionsForUser),
-            today: try values.decode(Date.self, forKey: .today),
-            imitatingDomains: try values.decodeIfPresent([String].self, forKey: .imitatingDomains) ?? [],
-            asksForData: try values.decodeIfPresent(Bool.self, forKey: .asksForData) ?? false
-        )
-    }
 }
 
 /// Checks a draft after the model and before the user sees it (code step 5 of the phase 0
@@ -78,12 +53,12 @@ nonisolated extension DraftCheckInput {
 /// - project data when the reply goes to someone outside the project's people: amounts in
 ///   digits or in Chinese words, scores, codes such as booking, ID and account numbers,
 ///   years that are not this year or the next or last, and the names and addresses of other
-///   people, unless the incoming mail already holds them. Mail from a domain that imitates
-///   a known one holds nothing a reply may repeat, so a refusal never quotes the account
-///   it was asked to pay into.
+///   people, unless the incoming mail already holds them
 ///
-/// What it took out shows in the window as `OutputChecks.shown` gives it: a link as its
-/// host only, and with a data request no value the recipients do not already have.
+/// Its own placeholders, which a revision keeps, are left as they are: a sentence
+/// placeholder is a sentence of its own, and no placeholder counts toward a rule. What it
+/// took out shows in the window as `OutputChecks.shown` gives it: a link as its host only,
+/// and with a data request no value the recipients do not already have.
 ///
 /// It reads full width letters and digits as plain ones, and names with any spaces in
 /// them. Names of the project's people are always caught, in Chinese and in pinyin. Other
@@ -139,16 +114,17 @@ nonisolated enum DraftCheck {
         let style: ProjectsLanguage = input.language == .zh ? .zh : .en
         var removals: [Removal] = []
 
-        let links = ContentChecks.merged(OutputChecks.linkRanges(in: original) + imitationRanges(in: original, domains: input.imitatingDomains))
+        let links = ContentChecks.merged(OutputChecks.linkRanges(in: original) + imitationRanges(in: original, input: input))
         removals += links.map { Removal(kind: .link, text: String(original[$0])) }
         let language = ProjectsLanguage.reading(replacing(links.map { ($0, " ") }, in: original))
         var draft = replacing(links.map { ($0, placeholder(.link, style)) }, in: original)
 
         var sentences: [(Range<String.Index>, String)] = []
         for range in sentenceRanges(in: draft) {
-            let form = SortingText.matchingForm(String(draft[range]))
+            let sentence = withoutPlaceholders(String(draft[range]))
+            let form = SortingText.matchingForm(sentence)
             let kind: Removal.Kind
-            if speaksAsAssistant(String(draft[range]), form: form) {
+            if speaksAsAssistant(sentence, form: form) {
                 kind = .assistantVoice
             } else if claimsAction(form) {
                 kind = .actionClaim
@@ -176,20 +152,38 @@ nonisolated enum DraftCheck {
         let kept = input.language != .other && language == input.language
         let withholding = input.asksForData ? input.incomingText : nil
         let shown = removals.map { removal in
-            Removal(kind: removal.kind, text: OutputChecks.shown(removal.text, withholding: withholding, placeholders: OutputChecks.Placeholders(style)))
+            Removal(kind: removal.kind, text: OutputChecks.shown(removal.text, withholding: withholding, language: style))
         }
         return Result(draft: kept ? draft : nil, language: language, removals: shown, flags: flags, outsideRecipients: outside)
     }
 
     // MARK: Placeholders
 
-    private static func placeholder(_ kind: Removal.Kind, _ language: ProjectsLanguage) -> String {
+    /// What stands where the check took something out, in Chinese or else in English. The
+    /// window's other texts use the link and project data ones too, see `OutputChecks.shown`.
+    static func placeholder(_ kind: Removal.Kind, _ language: ProjectsLanguage) -> String {
         switch kind {
-        case .link: OutputChecks.Placeholders(language).link
+        case .link: language == .zh ? "[已删去链接]" : "[link removed]"
         case .actionClaim: language == .zh ? "[已删去一句：声称已经办了某事]" : "[sentence removed: it claims an action]"
         case .assistantVoice: language == .zh ? "[已删去一句：以助手的口吻]" : "[sentence removed: it speaks as an assistant]"
-        case .projectData: OutputChecks.Placeholders(language).data
+        case .projectData: language == .zh ? "[已删去项目资料]" : "[project data removed]"
         }
+    }
+
+    /// Every placeholder of the check in both languages, the sentence ones apart.
+    private static let placeholders: (sentences: [String], parts: [String]) = {
+        let languages: [ProjectsLanguage] = [.zh, .en]
+        return (
+            languages.flatMap { [placeholder(.actionClaim, $0), placeholder(.assistantVoice, $0)] },
+            languages.flatMap { [placeholder(.link, $0), placeholder(.projectData, $0)] }
+        )
+    }()
+
+    /// A sentence without the check's link and project data placeholders, so the words in
+    /// them never count toward a rule. Sentence placeholders are no part of a sentence, see
+    /// `sentenceRanges(in:)`.
+    private static func withoutPlaceholders(_ sentence: String) -> String {
+        placeholders.parts.reduce(sentence) { $0.replacingOccurrences(of: $1, with: " ") }
     }
 
     /// A placeholder for what only the user can decide, as the explanation prompt asks
@@ -205,18 +199,27 @@ nonisolated enum DraftCheck {
     /// Where the text names a domain that imitates a known one: an address there, the
     /// domain or a subdomain of it, or its name without the top level label, such as
     /// pic-c0nf for pic-c0nf.example. Mail programs make an address or a host into a link,
-    /// and the name alone still points the reader there. Read in compatibility form, so
-    /// full width letters count too.
-    private static func imitationRanges(in text: String, domains: [String]) -> [Range<String.Index>] {
-        let names = domains.map { $0.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "@."))).lowercased() }.filter { $0.contains(".") }
-        guard !names.isEmpty else { return [] }
+    /// and the name alone still points the reader there. The name alone does not count
+    /// inside another host or address, nor when it is also the name of a domain of the
+    /// user, the project's people or the other recipients, as for qingshi.co against
+    /// qingshi.example, where it names the real company too. Read in compatibility form,
+    /// so full width letters count too.
+    private static func imitationRanges(in text: String, input: DraftCheckInput) -> [Range<String.Index>] {
+        let domains = Set(input.imitatingDomains.map { $0.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "@."))).lowercased() }.filter { $0.contains(".") })
+        guard !domains.isEmpty else { return [] }
+        var knownNames: Set<String> = []
+        for person in input.own + input.projectPeople + input.recipients {
+            guard let address = ProjectsAddress.normalized(person.address), let domain = address.split(separator: "@").last, !domains.contains(String(domain)) else { continue }
+            let labels = domain.split(separator: ".").dropLast()
+            knownNames.formUnion(labels.map(String.init) + [labels.joined(separator: ".")])
+        }
         let folded = OutputChecks.Folded(text)
         let whole = NSRange(folded.text.startIndex..., in: folded.text)
         var found: [Range<String.Index>] = []
-        for domain in Set(names) {
+        for domain in domains {
             var patterns = [#"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9._%+-]+@)?(?:[A-Za-z0-9-]+\.)*"# + NSRegularExpression.escapedPattern(for: domain) + #"(?![A-Za-z0-9_-])"#]
-            if let dot = domain.lastIndex(of: "."), domain.distance(from: domain.startIndex, to: dot) >= 4 {
-                patterns.append(#"(?<![A-Za-z0-9_-])"# + NSRegularExpression.escapedPattern(for: String(domain[..<dot])) + #"(?![A-Za-z0-9_-])"#)
+            if let dot = domain.lastIndex(of: "."), domain.distance(from: domain.startIndex, to: dot) >= 4, !knownNames.contains(String(domain[..<dot])) {
+                patterns.append(#"(?<![A-Za-z0-9_@.-])"# + NSRegularExpression.escapedPattern(for: String(domain[..<dot])) + #"(?![A-Za-z0-9_@-]|\.[A-Za-z0-9])"#)
             }
             for pattern in patterns {
                 let expression = try! NSRegularExpression(pattern: pattern, options: .caseInsensitive)
@@ -230,7 +233,8 @@ nonisolated enum DraftCheck {
 
     /// The sentences of the text: up to 。！？!?… or a full stop before a space, with the
     /// closing quotes and brackets after them, or up to the end of the line. White space
-    /// between sentences belongs to none.
+    /// between sentences belongs to none. A sentence placeholder of the check stands for a
+    /// sentence, so it ends the one before it and is left out.
     private static func sentenceRanges(in text: String) -> [Range<String.Index>] {
         var ranges: [Range<String.Index>] = []
         var start: String.Index?
@@ -249,7 +253,10 @@ nonisolated enum DraftCheck {
         while index < text.endIndex {
             let character = text[index]
             var next = text.index(after: index)
-            if character.isNewline {
+            if character == "[", let placeholder = placeholders.sentences.first(where: { text[index...].hasPrefix($0) }) {
+                close(at: index)
+                next = text.index(index, offsetBy: placeholder.count)
+            } else if character.isNewline {
                 close(at: index)
             } else if start == nil, character.isWhitespace {
                 // Between sentences.
@@ -276,12 +283,26 @@ nonisolated enum DraftCheck {
 
     /// Whether a sentence speaks as an assistant, names Orra, or talks about the checks:
     /// the voice patterns read its matching form, and AI in capitals counts as a word of
-    /// its own, since ai in lower case is also a name in pinyin.
+    /// its own, since ai in lower case is also a name in pinyin. AI as the Illustrator file
+    /// format, as in AI格式, an AI file or AI or EPS, counts for neither.
     private static func speaksAsAssistant(_ sentence: String, form: String) -> Bool {
-        ContentChecks.matches(assistantVoice, form) || ContentChecks.matches([capitalAI], sentence.precomposedStringWithCompatibilityMapping)
+        let plain = sentence.precomposedStringWithCompatibilityMapping
+        let range = NSRange(plain.startIndex..., in: plain)
+        guard fileFormatAI.firstMatch(in: plain, range: range) != nil else {
+            return ContentChecks.matches(assistantVoice, form) || ContentChecks.matches([capitalAI], plain)
+        }
+        let rest = fileFormatAI.stringByReplacingMatches(in: plain, range: range, withTemplate: "Illustrator")
+        return ContentChecks.matches(assistantVoice, SortingText.matchingForm(rest)) || ContentChecks.matches([capitalAI], rest)
     }
 
     private static let capitalAI = try! NSRegularExpression(pattern: #"(?<![A-Za-z])(?:AI|A\.I\.)(?![A-Za-z])"#)
+
+    /// AI as a file format: next to a word for a file or a format, or next to another
+    /// format such as EPS or PDF.
+    private static let fileFormatAI = try! NSRegularExpression(
+        pattern: #"(?<![A-Za-z.])AI(?=\s?(?:files?\b|formats?\b|versions?\b|sources?\b|文件|格式|源文件|档|稿|版)|\s?(?:[,/、]|or\b|and\b|或|和)\s?(?:EPS|PDF|SVG|PSD|PNG|INDD)\b)|(?<=(?:EPS|PDF|SVG|PSD|PNG|INDD)\s?(?:[,/、]|or|and|或|和)\s?)AI(?![A-Za-z])|(?<=\.)ai(?![A-Za-z])"#,
+        options: .caseInsensitive
+    )
 
     /// A sentence that speaks as an assistant, names Orra, or talks about an assistant or
     /// the checks: text removed or hidden, words to an assistant or a model, and commands
@@ -336,7 +357,6 @@ nonisolated enum DraftCheck {
         #"(?:已经|已)(?:为您|为你|帮您|帮你|替您|替你)(?:通知|告知|知会|转告|联系|联络|上报|报告|设置|设定|更新|回复)"#,
         #"(?<!您|你|贵司|贵方|对方|他|她|如|若|如果|若是|是否|是不是|有没有)(?:已经|已)(?:设置|设定|更新|添加|建立|创建)(?:好)?(?:了)?(?:一条)?(?:自动)?(?:转发|过滤|规则)"#,
         #"\b(?:i|we)(?:(?:'ve|’ve| have| had)(?: already| just| now| also)?| already| just) (?:set up|updated|notified|informed|told|alerted|contacted|reported|escalated|reached out to|let (?:\w+ ){1,3}know)\b"#,
-        #"\b(?:i|we)(?:'m|’m|'re|’re| am| are) (?:now )?(?:notifying|informing|alerting|contacting|reporting|escalating)\b"#,
         #"(?<!您|你|贵司|贵方|对方|他|她|如|若|如果|若是|是否|是不是|有没有)(?:已经|已)(?:为您|为你|帮您|帮你|替您|替你|给您|给你|向您|向你)?(?:转发|转交|转给|转到|发送|发出|发给|发过去|发到|寄出|寄给|寄到|删除|删掉|归档|移动|移到|移至|挪到|标记|抄送|付款|付清|转账|汇款|打款|支付|上传|分享|提交)"#,
         #"(?<!您|你|贵司|贵方|对方|他|她|如|若|如果|若是|是否|是不是|有没有)(?:已经|已)(?:将|把)[^。!?]{0,30}(?:转发|转交|转给|发送|发给|寄给|删除|归档|移到|移至|移动到|挪到|抄送|上传|分享)"#,
         #"(?<!请|麻烦|会|可以|能否|可否|要|需要|想)(?:将|把)[^。!?]{0,30}(?:转发|转交|转给|发送|发给|寄给|删除|归档|移到|移至|移动到|挪到|抄送|上传|分享)[^。!?,]{0,20}?(?:了|过)(?=$|[\s。!?,;:…]|吧|啊|哦)"#,
@@ -375,11 +395,11 @@ nonisolated enum DraftCheck {
     /// Where the draft holds project data that the incoming mail does not: amounts and
     /// scores, years other than this one and the next and last, codes, and the names and
     /// addresses of people other than the recipients and the user. Overlapping finds are
-    /// merged. Mail from a domain that imitates a known one counts as holding nothing.
+    /// merged.
     private static func projectData(in draft: String, input: DraftCheckInput) -> [Range<String.Index>] {
         let folded = OutputChecks.Folded(draft)
         let text = folded.text
-        let incoming = input.imitatingDomains.isEmpty ? input.incomingText.precomposedStringWithCompatibilityMapping : ""
+        let incoming = input.incomingText.precomposedStringWithCompatibilityMapping
         let incomingValues = Set(
             OutputChecks.numbers(in: incoming, skippingDatesAndCodes: false).map(\.value)
                 + OutputChecks.numbers(in: NumberRules.writingNumbersAsDigits(in: incoming), skippingDatesAndCodes: false).map(\.value)
