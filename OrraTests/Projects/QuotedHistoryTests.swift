@@ -79,6 +79,7 @@ struct QuotedHistoryTests {
         "----- original message -----",
         "-----邮件原件-----",
         "---- 回复的原邮件 ----",
+        "------------------ Original ------------------",
     ])
     func separatorsStartTheHistory(_ separator: String) {
         let split = QuotedHistory(splitting: "收到。\n\n\(separator)\n发件人: 苏晴\n内容")
@@ -383,5 +384,111 @@ struct QuotedHistoryTests {
             #expect(split.forwards.isEmpty)
             #expect(split.note == split.ownText)
         }
+    }
+
+    /// "Original" alone heads a part of the email, unless a From or Date line follows it as
+    /// QQ Mail and Foxmail write it.
+    @Test func originalAloneIsHistoryOnlyOverAHeader() {
+        let parts = "Please compare the two versions.\n\n--- Original ---\nThe lamp shade is 40 cm wide.\n\n--- Revised ---\nThe lamp shade is 45 cm wide. Please confirm by Friday."
+        let split = QuotedHistory(splitting: parts)
+        #expect(split.ownText == parts)
+        #expect(split.quotedText == "")
+        let reply = QuotedHistory(splitting: "OK.\n\n------------------ Original ------------------\nFrom: \"Mei Tan\"<mei.tan@orchard.example>;\nDate: Mon\n\nReady?", subject: "Re: Proofs")
+        #expect(reply.ownText == "OK.")
+        #expect(reply.quotedText.hasSuffix("Ready?"))
+    }
+
+    // MARK: Quoted forwards
+
+    /// Apple Mail quotes the forwarded message, marker and all. Its plain text part and
+    /// VisibleText give it with "> " in front, VisibleText with blank lines between the
+    /// paragraphs.
+    @Test(arguments: [
+        "FYI, see below.\n\n> Begin forwarded message:\n> \n> From: Mei Tan <mei.tan@orchard.example>\n> Subject: Proofs\n> Date: 12 October 2026 at 09:30:00 GMT+8\n> To: Theo Lind <theo@studio.example>\n> \n> The proofs are ready.",
+        "FYI, see below.\n\n> Begin forwarded message:\n\n> From: Mei Tan <mei.tan@orchard.example>\n> Subject: Proofs\n> Date: 12 October 2026 at 09:30:00 GMT+8\n> To: Theo Lind <theo@studio.example>\n\n> The proofs are ready.",
+        "FYI, see below.\n\nBegin forwarded message:\n\n> From: Mei Tan <mei.tan@orchard.example>\n> Subject: Proofs\n> Date: 12 October 2026 at 09:30:00 GMT+8\n> To: Theo Lind <theo@studio.example>\n> \n> The proofs are ready.",
+    ])
+    func appleMailsQuotedForwardIsAForward(_ text: String) {
+        let split = QuotedHistory(splitting: text, subject: "Fwd: Proofs")
+        #expect(split.note == "FYI, see below.")
+        #expect(split.forwards == [QuotedHistory.Forward(
+            sender: "Mei Tan <mei.tan@orchard.example>", date: "12 October 2026 at 09:30:00 GMT+8", subject: "Proofs",
+            to: "Theo Lind <theo@studio.example>", text: "The proofs are ready.")])
+        #expect(split.quotedText == "")
+        #expect(split.ownText.hasSuffix("The proofs are ready."))
+        let again = QuotedHistory(splitting: split.ownText, subject: "Fwd: Proofs")
+        #expect(again.forwards == split.forwards)
+    }
+
+    @Test func aQuotedForwardKeepsItsOwnHistoryQuotedAndNestsOnce() {
+        let split = QuotedHistory(splitting: """
+            Look at this.
+
+            > Begin forwarded message:
+            >
+            > From: Kai Moss <kai@kiln.example>
+            > Subject: Fwd: Lamps
+            >
+            > See Mei's note.
+            >
+            > > Begin forwarded message:
+            > >
+            > > From: Mei Tan <mei.tan@orchard.example>
+            > >
+            > > Twelve lamps.
+            > >
+            > > > How many lamps?
+            """, subject: "Fwd: Fwd: Lamps")
+        #expect(split.note == "Look at this.")
+        #expect(split.forwards.map(\.sender) == ["Kai Moss <kai@kiln.example>", "Mei Tan <mei.tan@orchard.example>"])
+        #expect(split.forwards.map(\.text) == ["See Mei's note.", "Twelve lamps."])
+        #expect(split.quotedText == "> How many lamps?")
+    }
+
+    /// A forward marker inside quoted history is the history of an earlier message: after
+    /// an attribution, and after other quoted lines.
+    @Test func aQuotedMarkerAfterAnAttributionOrQuotedLinesStaysHistory() {
+        for text in [
+            "Thanks!\n\nOn Mon, Oct 12, 2026 at 9:30 AM Mei Tan <mei.tan@orchard.example> wrote:\n> Begin forwarded message:\n> From: Kai Moss <kai@kiln.example>\n> Lamps.",
+            "Thanks!\n\n> Hi Lin,\n> see below.\n>\n> Begin forwarded message:\n> From: Kai Moss <kai@kiln.example>\n> Lamps.",
+            "Thanks!\n\n> Hi Lin, see below.\n\n> Begin forwarded message:\n\n> From: Kai Moss <kai@kiln.example>\n\n> Lamps.",
+        ] {
+            let split = QuotedHistory(splitting: text)
+            #expect(split.ownText == "Thanks!")
+            #expect(split.forwards.isEmpty)
+            #expect(split.quotedText.hasSuffix("> Lamps."))
+        }
+    }
+
+    /// Text made of forward markers costs no more than 10 forwards, and the markers after
+    /// the tenth are text.
+    @Test func anEmailForwardsTenMessagesAtMost() {
+        let markers = String(repeating: "转发邮件\n", count: 5_000)
+        let split = QuotedHistory(splitting: markers)
+        #expect(split.forwards.count == QuotedHistory.maximumForwards)
+        #expect(split.forwards.last?.text.hasPrefix("转发邮件\n转发邮件") == true)
+
+        let quoted = QuotedHistory(splitting: "FYI\n\n" + String(repeating: "> Begin forwarded message:\n", count: 5_000))
+        #expect(quoted.forwards.count == QuotedHistory.maximumForwards)
+        #expect(quoted.note == "FYI")
+    }
+
+    @Test func theSignatureLosesTheRuleAboveAnOutlookForward() {
+        let split = QuotedHistory(splitting: "FYI\n-- \nMei\n\n________________________________\nFrom: Kai Moss <kai@kiln.example>\nSent: Monday, October 12, 2026 9:30 AM\nSubject: Lamps\n\nTwelve lamps.", subject: "FW: Lamps")
+        #expect(split.note == "FYI")
+        #expect(split.signature == "Mei")
+        #expect(split.forwards.map(\.text) == ["Twelve lamps."])
+    }
+
+    // MARK: The sender's words
+
+    @Test func theSendersWordsAreTheNoteOfAForward() {
+        let forward = "请看下面供应商的邮件，周五前回复。\n\n---------- Forwarded message ---------\nFrom: Mill Sales <sales@papermill.example>\nDate: Thu, Oct 15, 2026\n\nFrom 1 November the 200 g matte costs 6% more. We look forward to your order.\n\nUnsubscribe from these mails"
+        #expect(QuotedHistory.sendersWords(in: forward, subject: "Fwd: Paper") == "请看下面供应商的邮件，周五前回复。")
+        // Without a forward, or with a note without letters, the whole text counts.
+        #expect(QuotedHistory.sendersWords(in: "See you Friday.\n\nOn Mon, Mei wrote:\nHi", subject: "") == "See you Friday.\n\nOn Mon, Mei wrote:\nHi")
+        let bare = "---------- Forwarded message ---------\nFrom: Mill Sales <sales@papermill.example>\n\nPrices rise."
+        #expect(QuotedHistory.sendersWords(in: "👇\n\n" + bare, subject: "") == "👇\n\n" + bare)
+        #expect(QuotedHistory.sendersWords(in: bare, subject: "") == bare)
     }
 }

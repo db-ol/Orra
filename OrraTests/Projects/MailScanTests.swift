@@ -868,6 +868,60 @@ struct MailScanTests {
         #expect(history.quotedText == "")
     }
 
+    /// Apple Mail puts a forwarded message in a blockquote, marker and all, as its HTML
+    /// part shows it. VisibleText quotes it, and the forward still keeps its message.
+    @Test func appleMailsQuotedForwardKeepsTheForwardedMessage() async throws {
+        let span = "<span style=\"font-family: -webkit-system-font, Helvetica Neue, Helvetica, sans-serif;\">"
+        func field(_ label: String, _ value: String) -> String {
+            "<div style=\"margin: 0px;\">\(span)<b>\(label): </b></span>\(span)\(value)<br></span></div>"
+        }
+        let html = "<html><body style=\"overflow-wrap: break-word;\">See below.<br id=\"lineBreakAtBeginningOfMessage\"><div><br><blockquote type=\"cite\">"
+            + "<div>Begin forwarded message:</div><br class=\"Apple-interchange-newline\">"
+            + field("From", "Kai Moss &lt;kai@kiln.example&gt;") + field("Subject", "<b>Lamps</b>")
+            + field("Date", "16 October 2026 at 16:10:00 GMT+8") + field("To", "Mei Tan &lt;mei.tan@harbor.example&gt;")
+            + "<br><div><div>Twelve lamps, delivery in week 47.</div></div></blockquote></div><br></body></html>"
+        let source = [
+            "Message-ID: <fwd.lamps@harbor.example>",
+            "Date: Sat, 17 Oct 2026 08:30:00 +0800",
+            "From: Mei Tan <mei.tan@harbor.example>",
+            "Subject: Fwd: Lamps",
+            "MIME-Version: 1.0",
+            "Content-Type: multipart/alternative; boundary=\"apple\"",
+            "",
+            "--apple",
+            "Content-Type: text/plain; charset=utf-8",
+            "",
+            "See below.",
+            "",
+            "> Begin forwarded message:",
+            "> ",
+            "> From: Kai Moss <kai@kiln.example>",
+            "> Subject: Lamps",
+            "> Date: 16 October 2026 at 16:10:00 GMT+8",
+            "> To: Mei Tan <mei.tan@harbor.example>",
+            "> ",
+            "> Twelve lamps, delivery in week 47.",
+            "--apple",
+            "Content-Type: text/html; charset=utf-8",
+            "",
+            html,
+            "--apple--",
+            "",
+        ].joined(separator: "\r\n")
+        let listing = MailListing(
+            message: MailMessageRef(id: 10, mailbox: .inbox), messageID: "fwd.lamps@harbor.example", dateReceived: Self.now,
+            sender: "Mei Tan <mei.tan@harbor.example>", subject: "Fwd: Lamps", to: [], cc: [], size: source.utf8.count)
+        let parsed = await MailScan.parsed(source: source, listing: listing)
+        #expect(parsed.visible?.text.contains("> Begin forwarded message:") == true)
+        let history = try #require(parsed.history)
+        #expect(history.note == "See below.")
+        #expect(history.forwards == [QuotedHistory.Forward(
+            sender: "Kai Moss <kai@kiln.example>", date: "16 October 2026 at 16:10:00 GMT+8", subject: "Lamps",
+            to: "Mei Tan <mei.tan@harbor.example>", text: "Twelve lamps, delivery in week 47.")])
+        #expect(history.ownText.hasSuffix("Twelve lamps, delivery in week 47."))
+        #expect(history.quotedText == "")
+    }
+
     @Test func theOrderOfAMailboxComesFromItsDates() {
         func listing(_ dates: [Date?]) -> [MailListing] {
             dates.enumerated().map { index, date in

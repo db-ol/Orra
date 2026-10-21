@@ -12,7 +12,9 @@ import Foundation
 ///   an attribution with a date or an address, so a sentence such as "On Monday the printer
 ///   wrote:" keeps the rest of the email as own text
 /// - everything from a separator line such as "-----Original Message-----" or
-///   "-----原始邮件-----"
+///   "-----原始邮件-----". "Original" alone, as QQ Mail and Foxmail write it in English,
+///   counts only with a From or Date line under it, since "--- Original ---" may also head
+///   a part of the email
 /// - everything from an Outlook header block: a From: or 发件人： line with a Sent:, Date:,
 ///   发送时间： or 日期： line within the next three lines
 ///
@@ -26,6 +28,11 @@ import Foundation
 ///   --------" (Thunderbird in Chinese)
 /// - "-------- 转发邮件信息 --------" (NetEase 163 and 126)
 ///
+/// Apple Mail quotes a forwarded message, so its plain text and VisibleText give it with
+/// "> " in front, marker and all, and iPhone gives the marker without it and the rest with
+/// it. Such quoted lines lose one level of quoting and are read as a forward, unless they
+/// follow an attribution or other quoted lines, which makes them history.
+///
 /// Its header block follows: the lines that start with From, Date, Sent, Subject, To or Cc,
 /// or 发件人, 日期, 时间, 发送时间, 发送日期, 主题, 收件人 or 抄送, in any order, which `forwards`
 /// keeps apart from its text. Outlook, QQ Mail, Foxmail and some phones forward with the
@@ -34,7 +41,8 @@ import Foundation
 /// forward, with FW:, Fwd: or 转发： in front, the first separator or header block followed
 /// by a header line starts the forwarded message, and a later one is that message's own
 /// history. A header block within three lines of a line that names a forward stays own
-/// text too, as Outlook writes some forwards.
+/// text too, as Outlook writes some forwards. An email forwards 10 messages at most, so
+/// text made of markers costs no more than one, and later markers are text.
 ///
 /// `ownText` keeps the forwarded messages with their marker and header lines, so whatever
 /// reads the email's text reads them too. `note` is the sender's own words before the first
@@ -90,22 +98,37 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
     /// Splits `text`, the visible text of an email with the subject `subject`.
     init(splitting text: String, subject: String = "") {
         let normalized = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
+        var lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
         let isForward = Self.isForward(subject: subject)
         var own: [Substring] = []
         var quoted: [Substring] = []
         // Where each forwarded message starts in `own`, the number of its marker and header
         // lines, and the values of its header.
         var starts: [(at: Int, lines: Int, header: Forward)] = []
+        // Whether the quoted lines that come next answer an attribution, which makes them
+        // history even when they start with a forward marker.
+        var afterAttribution = false
         var index = 0
         while index < lines.count {
             let line = lines[index]
+            let mayForward = starts.count < Self.maximumForwards
             if Self.isQuoted(line) {
+                if mayForward, !afterAttribution, !Self.followsQuotedLine(lines, at: index), Self.isForwardMarker(Self.unquoted(line)) {
+                    Self.unquote(&lines, from: index)
+                    continue
+                }
                 quoted.append(line)
                 index += 1
                 continue
             }
-            if let forward = Self.forward(lines, at: index, bySubject: isForward && starts.isEmpty) {
+            if !line.allSatisfy(\.isWhitespace) {
+                afterAttribution = false
+            }
+            if mayForward, Self.isForwardMarker(line), let next = Self.nextLineWithText(lines, after: index),
+               Self.isQuoted(lines[next]), Self.headerField(Self.unquoted(lines[next])) != nil {
+                Self.unquote(&lines, from: next)
+            }
+            if mayForward, let forward = Self.forward(lines, at: index, bySubject: isForward && starts.isEmpty) {
                 starts.append((own.count, forward.lines, forward.header))
                 own += lines[index..<(index + forward.lines)]
                 index += forward.lines
@@ -113,7 +136,7 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
             }
             // The lines of the last forwarded message's marker and header stay its own.
             let kept = starts.last.map { $0.at + $0.lines } ?? 0
-            if Self.isSeparator(line) || (Self.isHeaderBlock(lines, at: index) && !Self.followsForwardMarker(lines, at: index)) {
+            if Self.isSeparator(lines, at: index) || (Self.isHeaderBlock(lines, at: index) && !Self.followsForwardMarker(lines, at: index)) {
                 Self.moveTrailingRules(from: &own, to: &quoted, keeping: kept)
                 quoted += lines[index...]
                 break
@@ -123,6 +146,7 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
                 if let next, Self.isQuoted(lines[next]) {
                     quoted += lines[index..<(index + span)]
                     index += span
+                    afterAttribution = true
                     continue
                 }
                 if lines[index..<(index + span)].contains(where: Self.hasDateOrAddress) {
@@ -135,12 +159,13 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
             index += 1
         }
 
-        // The signature is the sender's, so it is looked for in the note only.
+        // The signature is the sender's, so it is looked for in the note only. It loses the
+        // rule line that Outlook puts above the header block of a forward.
         let noteEnd = starts.first?.at ?? own.count
         var signature: [Substring] = []
         if let dashes = own[..<noteEnd].lastIndex(where: { $0 == "-- " }),
            own[(dashes + 1)..<noteEnd].count(where: { !$0.allSatisfy(\.isWhitespace) }) <= Self.maximumSignatureLines {
-            signature = Array(own[(dashes + 1)..<noteEnd])
+            signature = Array(Self.withoutTrailingRules(own[(dashes + 1)..<noteEnd]))
             own.removeSubrange(dashes..<noteEnd)
             let removed = noteEnd - dashes
             starts = starts.map { ($0.at - removed, $0.lines, $0.header) }
@@ -164,6 +189,16 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
             forwards: forwards)
     }
 
+    /// The words of an email's own text that its sender wrote: the note when the text
+    /// forwards a message and the note holds letters, and the whole text otherwise. The
+    /// reply rule reads its language and the list mail check its footer there, since a
+    /// reply goes to the sender and not to the writer of a forwarded message.
+    static func sendersWords(in text: String, subject: String) -> String {
+        let split = QuotedHistory(splitting: text, subject: subject)
+        guard !split.forwards.isEmpty, split.note.unicodeScalars.contains(where: \.properties.isAlphabetic) else { return text }
+        return split.note
+    }
+
     /// Whether a subject says its email is a forward: FW:, Fwd: or 转发： stands first.
     static func isForward(subject: String) -> Bool {
         let text = subject.drop { $0.isWhitespace }
@@ -174,6 +209,8 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
     private static let forwardPrefixes: Set<String> = ["fw", "fwd", "转发", "轉發", "转寄", "轉寄", "rv", "転送"]
 
     private static let maximumSignatureLines = 20
+    /// The messages an email forwards at most.
+    static let maximumForwards = 10
     /// Attributions and header lines are short. Longer lines are never taken for one.
     private static let maximumMarkerLength = 300
     /// The header lines of a forwarded message may list many people.
@@ -185,6 +222,41 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
 
     private static func isQuoted(_ line: Substring) -> Bool {
         line.drop { $0 == " " || $0 == "\t" }.first == ">"
+    }
+
+    /// A line without its first level of quoting: the ">" and one space after it.
+    private static func unquoted(_ line: Substring) -> Substring {
+        var rest = line.drop { $0 == " " || $0 == "\t" }
+        guard rest.first == ">" else { return line }
+        rest = rest.dropFirst()
+        return rest.first == " " ? rest.dropFirst() : rest
+    }
+
+    /// Takes one level of quoting off the lines from `start` on, up to the first line with
+    /// text that is not quoted. Blank lines in between stay, as VisibleText leaves the
+    /// lines between the paragraphs of a blockquote blank.
+    private static func unquote(_ lines: inout [Substring], from start: Int) {
+        var index = start
+        while index < lines.count {
+            let line = lines[index]
+            if isQuoted(line) {
+                lines[index] = unquoted(line)
+            } else if !line.allSatisfy(\.isWhitespace) {
+                return
+            }
+            index += 1
+        }
+    }
+
+    /// Whether the last line with text above `index` is quoted.
+    private static func followsQuotedLine(_ lines: [Substring], at index: Int) -> Bool {
+        lines[..<index].last { !$0.allSatisfy(\.isWhitespace) }.map(isQuoted) ?? false
+    }
+
+    /// The first line with text within the three lines after `index`, as between a forward
+    /// marker and its header block.
+    private static func nextLineWithText(_ lines: [Substring], after index: Int) -> Int? {
+        lines[(index + 1)..<min(lines.count, index + 4)].firstIndex { !$0.allSatisfy(\.isWhitespace) }
     }
 
     private static func trimmed(_ line: Substring) -> String {
@@ -230,12 +302,16 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
     }
 
     /// A line such as "-----Original Message-----" or "------------------ 原始邮件 ------------------".
-    private static func isSeparator(_ line: Substring) -> Bool {
-        guard trimmed(line).count(where: ruleCharacters.contains) >= 2, let words = markerWords(line) else { return false }
-        return separatorWords.contains(words)
+    /// QQ Mail and Foxmail write "Original" alone in English, which counts only with a From
+    /// or Date line as the next line with text.
+    private static func isSeparator(_ lines: [Substring], at index: Int) -> Bool {
+        let line = lines[index]
+        guard trimmed(line).count(where: ruleCharacters.contains) >= 2, let words = markerWords(line), separatorWords.contains(words) else { return false }
+        guard words == "original" else { return true }
+        guard let next = nextLineWithText(lines, after: index), let (field, _) = headerField(lines[next]) else { return false }
+        return field == .sender || field == .date
     }
 
-    /// QQ Mail and Foxmail write "Original" alone in English.
     private static let separatorWords: Set<String> = ["original message", "original", "原始邮件", "邮件原件", "原邮件", "回复的原邮件"]
 
     /// A line that holds only a forward marker, such as "---------- Forwarded message
@@ -297,7 +373,7 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
         let line = lines[index]
         let isMarker = isForwardMarker(line)
         let headerStart: Int
-        if isMarker || (bySubject && isSeparator(line)) {
+        if isMarker || (bySubject && isSeparator(lines, at: index)) {
             headerStart = index + 1
         } else if bySubject, isHeaderBlock(lines, at: index) {
             headerStart = index
@@ -363,7 +439,7 @@ nonisolated struct QuotedHistory: Sendable, Equatable {
 
     private static func isRule(_ line: Substring) -> Bool {
         let text = trimmed(line)
-        return text.count >= 5 && text.allSatisfy { "-_=—*".contains($0) }
+        return text.count >= 5 && text.allSatisfy(ruleCharacters.contains)
     }
 
     /// The lines without the blank and rule lines at their end.
