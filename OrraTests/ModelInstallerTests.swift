@@ -169,17 +169,22 @@ struct ModelInstallerTests {
         #expect(servers.log.isEmpty)
     }
 
-    @Test func cancelReturnsToResumeWithTheBytesKept() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func cancelReturnsToResumeWithTheBytesKept() async throws {
         defer { temporary.remove() }
-        // The server stops after 400 KB of the weights and holds the connection open, so the
-        // download cannot finish before the test sees it running, however slow the Mac is.
+        // The server stops after 400 KB of the weights and holds the connection open until
+        // the cancel or the 30 s idle timeout, so the download cannot finish before the test
+        // sees it running.
         let servers = StubServers(behaviors: [.huggingFace: StubBehavior(dropAfter: 400_000, dropWhen: { false })])
         defer { servers.close() }
         let installer = makeInstaller(servers)
         await installer.prepare()
         installer.download()
         let smallFiles = temporary.manifest.totalBytes - TestModel.size("model.safetensors")
-        for _ in 0..<1_000 where !Self.isDownloading(installer.state, pastBytes: smallFiles + 300_000) {
+        // The test waits for the bytes on disk, not for the state: the download reports
+        // progress at most every 0.25 s and not again while the server holds, so the state
+        // may never show them.
+        while ModelDisk.bytesPresent(temporary.staging, temporary.manifest) < smallFiles + 300_000 {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(installer.isKeepingTheMacAwake)
@@ -314,9 +319,5 @@ struct ModelInstallerTests {
         #expect(State.failed(.offline).symbolName == "exclamationmark.triangle")
         // Once installed, the icon shows the talk key and the model's load as before.
         #expect(State.installed(URL(fileURLWithPath: "/tmp")).symbolName == nil)
-    }
-
-    private static func isDownloading(_ state: ModelInstaller.State, pastBytes bytes: Int64) -> Bool {
-        if case .downloading(let current, _) = state { current > bytes } else { false }
     }
 }
