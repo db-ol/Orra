@@ -25,6 +25,9 @@ import os
 ///   again when a project is added or changed, when the index of that project finishes, and
 ///   when the user accepts a rule, since the mail read before had nothing to go to. A newer
 ///   change ends the one under way, whose list is out of date.
+/// - Mail's handle of each email the scan lists is kept for Open Reply in Mail. The handles
+///   hold for one Mail session, so the scan stops when Mail quits and starts again with Mail,
+///   which lists every chosen mailbox back to the chosen days again.
 /// - Delete All Projects Data waits for `closeBeforeDelete()`, which stops everything,
 ///   closes the files and forgets the mailbox choice, so nothing is read again before the
 ///   user confirms anew. Projects starts again with no data once the delete is done.
@@ -188,7 +191,8 @@ final class ProjectsRuntime {
     /// asks again while Projects runs.
     nonisolated static let mailboxListingGap: TimeInterval = 600
     /// The most Mail handles of messages kept for the window. They hold for one Mail session.
-    nonisolated static let maximumReferences = 5_000
+    /// About as many as the emails within the longest days a busy mailbox holds (a guess).
+    nonisolated static let maximumReferences = 20_000
     /// The most emails of Needs a Project sorted again when a project changes.
     nonisolated static let maximumResorted = 1_000
 
@@ -234,8 +238,13 @@ final class ProjectsRuntime {
     @ObservationIgnored private var mailboxesListed = false
     /// When the scan last asked Mail for them.
     @ObservationIgnored private var lastMailboxListing: Date?
-    /// Mail's handles of the messages read in this Mail session, by Message-ID.
+    /// Mail's handles of the messages read or listed in this Mail session, by Message-ID.
     @ObservationIgnored private var references: [String: MailMessageRef] = [:]
+    /// Counts the times the handles were let go, at a stop and when Mail quits, so a listing
+    /// that began before never brings old ones back.
+    @ObservationIgnored private var referenceSession = 0
+    /// The most handles kept, `maximumReferences` in the app. Tests set fewer.
+    @ObservationIgnored var referenceLimit = ProjectsRuntime.maximumReferences
     @ObservationIgnored private var modelWasInstalled = false
     /// Projects whose index is at work, so sorting prepares again when one finishes.
     @ObservationIgnored private var indexing: Set<UUID> = []
@@ -484,7 +493,11 @@ final class ProjectsRuntime {
             now: dependencies.now
         )
         let scan = MailScan(
-            bridge: dependencies.bridge,
+            bridge: Self.remembering(
+                dependencies.bridge,
+                session: { [weak self] in await self?.referenceSession },
+                listed: { [weak self] listings, session in await self?.rememberListed(listings, session: session) }
+            ),
             choice: dependencies.choice,
             lookups: MailScan.Lookups(
                 known: { [store] ids in await Self.known(ids, in: store) },
@@ -497,6 +510,7 @@ final class ProjectsRuntime {
             sleep: dependencies.sleep
         )
         let retention = Retention.start(store: store, now: dependencies.now, sleep: dependencies.sleep)
+        forgetReferences()
         running = Running(
             database: database, store: store, list: list, index: index, search: search, memory: memory,
             model: model, queue: queue, sorting: sorting, scan: scan, retention: retention
@@ -555,7 +569,7 @@ final class ProjectsRuntime {
         mailboxesListed = false
         lastMailboxListing = nil
         missingMailboxes = []
-        references = [:]
+        forgetReferences()
         indexing = []
         replyDueCount = 0
         mailChanges += 1
@@ -637,9 +651,17 @@ final class ProjectsRuntime {
         let running = dependencies.bridge.isRunning()
         if running != mailIsRunning {
             mailIsRunning = running
-            // Mail's handles hold for one Mail session only.
+            // Mail's handles hold for one Mail session only. The scan stops with Mail, so it
+            // starts again with the next Mail and lists the mailboxes back to the days, which
+            // gives the handles of the mail it knows again.
             if !running {
-                references = [:]
+                forgetReferences()
+                scanCheck?.cancel()
+                scanCheck = nil
+                if scanStarted, let scan = self.running?.scan {
+                    scan.stop()
+                    scanStarted = false
+                }
             }
         }
         updateScan()
@@ -679,7 +701,9 @@ final class ProjectsRuntime {
         scanCheck = Task { [weak self] in
             // Never asks, so macOS never shows its prompt here.
             let permission = await bridge.permission(false)
-            guard let self else { return }
+            // Cancelled when Mail quit or Projects stopped, which let go of this check, and a
+            // newer one may run.
+            guard let self, !Task.isCancelled else { return }
             self.scanCheck = nil
             guard let current = self.running, current.scan === running.scan, !self.scanStarted,
                   self.dependencies.choice.isConfirmed else { return }
@@ -714,11 +738,15 @@ final class ProjectsRuntime {
     /// Saves what the scan read and sorts the mail that waits.
     private func saveScanned(_ messages: [MailScan.Message]) async {
         guard let running, !messages.isEmpty else { return }
+        // Kept before the first wait, so a stop or Mail's quit meanwhile lets them go. Handles
+        // from before Mail quit are not kept.
+        if dependencies.bridge.isRunning() {
+            for message in messages {
+                remember(message.reference, for: message.messageID)
+            }
+        }
         let owner = await owner()
         let now = dependencies.now()
-        for message in messages {
-            remember(message.reference, for: message.messageID)
-        }
         do {
             let saved = try await running.store.save(messages.map { Self.storeMessage($0, now: now) }, ownAddresses: owner.addresses, at: now)
             Logger.projects.notice("Projects saved \(saved.count, privacy: .public) of \(messages.count, privacy: .public) emails the scan read")
@@ -998,15 +1026,55 @@ final class ProjectsRuntime {
         return names.sorted().compactMap { knownMailboxes[$0] }
     }
 
+    /// Keeps Mail's handle of a message the scan read or the user selected in Mail. Once
+    /// `referenceLimit` are kept, a new one takes the place of one kept before, so the others
+    /// stay.
     private func remember(_ reference: MailMessageRef, for messageID: String) {
-        if references.count >= Self.maximumReferences, references[messageID] == nil {
-            references = [:]
+        if references[messageID] == nil, references.count >= referenceLimit, !references.isEmpty {
+            references.remove(at: references.startIndex)
         }
         references[messageID] = reference
     }
 
-    /// Mail's handle of a message read in this Mail session, for Open Reply in Mail. Nil
-    /// after Mail quit, or for mail read before.
+    /// Lets go of Mail's handles, which hold for one Mail session, at a stop and when Mail
+    /// quits.
+    private func forgetReferences() {
+        references = [:]
+        referenceSession += 1
+    }
+
+    /// Keeps Mail's handles of the messages the scan listed, also those it knows already and
+    /// does not read again, so Open Reply in Mail finds mail read before Orra or Mail
+    /// started. Once `referenceLimit` are kept, only handles of mail already kept change. A
+    /// listing that began before Mail quit or Projects stopped keeps nothing.
+    private func rememberListed(_ listings: [MailListing], session: Int?) {
+        guard session == referenceSession, running != nil, dependencies.bridge.isRunning() else { return }
+        for listing in listings where !listing.messageID.isEmpty {
+            guard references[listing.messageID] != nil || references.count < referenceLimit else { continue }
+            references[listing.messageID] = listing.message
+        }
+    }
+
+    /// The bridge the scan reads with, which hands each listing to `listed` before the scan
+    /// gets it, with the `session` read when the listing began.
+    nonisolated static func remembering(
+        _ bridge: MailBridge,
+        session: @escaping @Sendable () async -> Int?,
+        listed: @escaping @Sendable ([MailListing], Int?) async -> Void
+    ) -> MailBridge {
+        var bridge = bridge
+        let listing = bridge.listing
+        bridge.listing = { mailbox, positions in
+            let began = await session()
+            let listings = try await listing(mailbox, positions)
+            await listed(listings, began)
+            return listings
+        }
+        return bridge
+    }
+
+    /// Mail's handle of a message the scan read or listed in this Mail session, for Open
+    /// Reply in Mail. Nil after Mail quit, until the scan lists the mailboxes again.
     func mailReference(for messageID: String) -> MailMessageRef? {
         references[messageID]
     }
@@ -1051,6 +1119,54 @@ final class ProjectsRuntime {
     /// The email's latest explanation, nil when there is none.
     func explanation(for messageID: String) async -> Explanation? {
         try? await running?.store.explanation(for: messageID)
+    }
+
+    /// An email the store holds, for the email view: the text of this email and the sender
+    /// and date of an earlier one that a point cites. Nil when the store does not hold it.
+    func email(_ messageID: String) async -> ExplainService.Email? {
+        try? await running?.store.explainEmail(messageID)
+    }
+
+    /// The versions of the email's draft, oldest first.
+    func versions(of messageID: String) async -> [MailStore.DraftVersion] {
+        (try? await running?.store.versions(of: messageID)) ?? []
+    }
+
+    /// Undo of a change: removes the newest version of the email's draft, and says whether
+    /// there was one.
+    func removeNewestVersion(of messageID: String) async -> Bool {
+        guard let store = running?.store else { return false }
+        return (try? await store.removeNewestVersion(of: messageID, at: dependencies.now())) ?? false
+    }
+
+    /// What a revision, the translation and the answer check of the explanation's draft
+    /// need: the values the first draft was checked with, the email's own text, the user's
+    /// name and language, and today. Nil when the explanation has no draft in Chinese or
+    /// English, or while Projects does not run.
+    func reviseContext(for explanation: Explanation) async -> ReviseService.Context? {
+        guard let running, let check = explanation.draftCheck, let language = explanation.reply.draftLanguage else { return nil }
+        let email = try? await running.store.explainEmail(explanation.messageID)
+        let owner = await owner()
+        return ReviseService.Context(
+            messageID: explanation.messageID,
+            emailText: email?.text ?? "",
+            language: language,
+            userLanguage: dependencies.language,
+            ownName: owner.name ?? "",
+            recipients: check.recipients,
+            projectPeople: check.projectPeople,
+            own: check.own,
+            incomingText: check.incomingText,
+            sourceTexts: check.sourceTexts,
+            today: dependencies.now(),
+            timeZone: .current
+        )
+    }
+
+    /// The language explanations are in, which the user reads, see
+    /// ProjectsLanguage.forExplanations.
+    var userLanguage: ProjectsLanguage {
+        dependencies.language
     }
 
     /// A service for one revision of a draft, which saves its version as made when the

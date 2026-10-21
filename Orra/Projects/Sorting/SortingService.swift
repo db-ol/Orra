@@ -382,8 +382,10 @@ final class SortingService {
                 let answer = try await ask(request)
                 decision = SortingPolicy.decide(ruled.signals, model: prompt.answer(SortingPrompt.prefill + answer))
             } catch RewriteError.promptTooLong {
-                // It never fits, so it goes to Needs a Project rather than wait for ever.
+                // It never fits, so it goes to Needs a Project rather than wait for ever. The
+                // chip says why, since the model never answered.
                 decision = SortingPolicy.decide(ruled.signals, model: .invalid)
+                decision.reasons = decision.reasons.map { $0 == .modelAnswerInvalid ? .tooLongForModel : $0 }
             } catch RewriteError.notLoaded {
                 // The model is not on this Mac or not loaded. The rest of the batch waits too.
                 modelIsThere = false

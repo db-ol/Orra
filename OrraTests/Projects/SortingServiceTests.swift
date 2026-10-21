@@ -315,13 +315,14 @@ struct SortingServiceTests {
         #expect(store.decision("b@test.example")?.waitsForModel == true)
     }
 
+    /// The chip says the email was too long for the model, which never answered.
     @Test func aPromptTooLongGoesToNeedsAProject() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
         model.answer = { _ in throw RewriteError.promptTooLong }
         await service(store, model).sort([email("a@test.example", from: "kim@quay.example")])
-        #expect(store.decision("a@test.example") == SortingDecision(project: nil, level: .unsure, reasons: [.modelAnswerInvalid]))
+        #expect(store.decision("a@test.example") == SortingDecision(project: nil, level: .unsure, reasons: [.tooLongForModel]))
     }
 
     @Test func cancellingTheCallerStopsTheBatchWithoutSaving() async {

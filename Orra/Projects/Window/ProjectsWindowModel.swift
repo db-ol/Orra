@@ -2,8 +2,10 @@ import Foundation
 import Observation
 
 /// What the Projects window shows and what the user does there: the list chosen in the
-/// sidebar, its mail, the selected email, the rule offered after moves, the explanations
-/// under way, and the line after Explain Selected Message. ProjectsRuntime does the work.
+/// sidebar, its mail with the deadline marks of the explained ones, the selected email, a
+/// move that waits for the user's yes, the rule offered after moves, the explanations under
+/// way, the email view of each email the user opened with the window's one handoff at a
+/// time, and the line after Explain Selected Message. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -13,6 +15,14 @@ final class ProjectsWindowModel {
         case projectNotSaved
         case projectNotForgotten
         case ruleNotSaved
+    }
+
+    /// A move from a Move To menu that waits for the user's yes, since it takes away a draft
+    /// the user changed, see `requestMove(_:to:)`.
+    nonisolated struct PendingMove: Equatable, Sendable {
+        var messageID: String
+        /// The project, nil for Needs a Project.
+        var project: UUID?
     }
 
     /// Why an explanation did not come.
@@ -63,9 +73,51 @@ final class ProjectsWindowModel {
     /// that list shows with the email still selected, until the user chooses another email
     /// or list, or moves it.
     @ObservationIgnored private var followed: String?
+    /// Counts the explanations made in the window, by Message-ID, so the email view reads
+    /// its explanation again.
+    private(set) var explained: [String: Int] = [:]
+    /// The deadline of each explained email of the list, from its explanation's dates.
+    private(set) var deadlines: [String: Date] = [:]
+    /// The emails whose deadline was read from their explanation.
+    @ObservationIgnored private var deadlinesRead: Set<String> = []
+    /// A move that waits for the user's yes.
+    var pendingMove: PendingMove?
+    /// Counts the times the window let go of its email views, so the email view shown reads
+    /// its email again into a new one.
+    private(set) var emailViewGeneration = 0
+    /// The email view of each email the user opened while the window is open, so edits to
+    /// a draft stay while the user looks at other mail.
+    @ObservationIgnored private var emailModels: [String: ProjectsEmailModel] = [:]
+    /// The handoffs of the window, one at a time for all its emails.
+    @ObservationIgnored let handoffs = ProjectsEmailModel.Handoffs()
+    /// Makes the actions of an email view, the runtime's in the app.
+    @ObservationIgnored private let emailActions: () -> ProjectsEmailModel.Actions
 
-    init(runtime: ProjectsRuntime) {
+    init(runtime: ProjectsRuntime, emailActions: (() -> ProjectsEmailModel.Actions)? = nil) {
         self.runtime = runtime
+        self.emailActions = emailActions ?? { .live(runtime) }
+    }
+
+    /// The email view of an email, the same one each time while the window is open.
+    func emailModel(for messageID: String) -> ProjectsEmailModel {
+        if let model = emailModels[messageID] {
+            return model
+        }
+        let model = ProjectsEmailModel(messageID: messageID, actions: emailActions(), handoffs: handoffs)
+        emailModels[messageID] = model
+        return model
+    }
+
+    /// Lets go of the email views with their drafts, translations and answer checks, and
+    /// ends their requests, such as when the window closes or a project is forgotten.
+    func forgetEmails() {
+        for model in emailModels.values {
+            model.cancelWork()
+        }
+        emailModels = [:]
+        emailViewGeneration += 1
+        deadlines = [:]
+        deadlinesRead = []
     }
 
     /// The selected email as the list shows it.
@@ -83,10 +135,41 @@ final class ProjectsWindowModel {
         let listed = await runtime.list(place)
         guard place == self.place else { return }
         rows = listed
-        guard let followed, !listed.contains(where: { $0.messageID == followed }) else { return }
-        let now = await runtime.place(of: followed)
-        guard followed == self.followed, place == self.place, now != place else { return }
-        await show(followed, in: now)
+        if let followed, !listed.contains(where: { $0.messageID == followed }) {
+            let now = await runtime.place(of: followed)
+            if followed == self.followed, place == self.place, now != place {
+                await show(followed, in: now)
+                return
+            }
+        }
+        await readDeadlines(listed)
+    }
+
+    /// Reads the deadline of each explained email of the list that has none read yet.
+    private func readDeadlines(_ rows: [MailStore.Listed]) async {
+        let now = runtime.dependencies.now()
+        for row in rows {
+            // Changes only what differs, since each change makes the window draw again.
+            guard row.isExplained else {
+                if deadlines[row.messageID] != nil {
+                    deadlines[row.messageID] = nil
+                }
+                deadlinesRead.remove(row.messageID)
+                continue
+            }
+            guard deadlinesRead.insert(row.messageID).inserted else { continue }
+            let explanation = await runtime.explanation(for: row.messageID)
+            let deadline = explanation.flatMap { ProjectsEmailModel.deadline(of: $0, now: now) }
+            if deadlines[row.messageID] != deadline {
+                deadlines[row.messageID] = deadline
+            }
+        }
+    }
+
+    /// Shows an email in the window, such as the earlier one a point cites: chooses its
+    /// list and selects it.
+    func show(_ messageID: String) async {
+        await show(messageID, in: await runtime.place(of: messageID))
     }
 
     /// Shows an email selected in its list, and follows it from there.
@@ -98,14 +181,55 @@ final class ProjectsWindowModel {
     }
 
     /// Moves an email to a project, or to Needs a Project with nil, and offers a rule after
-    /// two moves of the same kind.
+    /// two moves of the same kind. The window stays on its list. When the moved email was
+    /// selected, the next one of the list is.
     func move(_ messageID: String, to project: UUID?) async {
         if messageID == followed {
             followed = nil
         }
-        if let offer = await runtime.move(messageID, to: project) {
+        let next = selectedMessageID == messageID ? neighbor(of: messageID) : nil
+        let offer = await runtime.move(messageID, to: project)
+        if selectedMessageID == messageID, await runtime.place(of: messageID) != place {
+            selectedMessageID = next
+        }
+        if let offer {
             ruleOffer = offer
         }
+    }
+
+    /// The email after this one in the list, or before it when it is the last.
+    private func neighbor(of messageID: String) -> String? {
+        guard let index = rows.firstIndex(where: { $0.messageID == messageID }) else { return nil }
+        if index + 1 < rows.count {
+            return rows[index + 1].messageID
+        }
+        return index > 0 ? rows[index - 1].messageID : nil
+    }
+
+    /// A move from a Move To menu. A move takes the explanation and the draft away, since
+    /// they hold text of the project they were made for (#146). When the user changed the
+    /// draft, or the model made versions of it, the move waits for the user's yes.
+    func requestMove(_ messageID: String, to project: UUID?) async {
+        if await takesDraftAway(messageID) {
+            pendingMove = PendingMove(messageID: messageID, project: project)
+        } else {
+            await move(messageID, to: project)
+        }
+    }
+
+    /// The user said yes to the move that waited.
+    func confirmMove(_ move: PendingMove) async {
+        pendingMove = nil
+        await self.move(move.messageID, to: move.project)
+    }
+
+    /// Whether the user changed the email's draft in this window, or it has versions.
+    private func takesDraftAway(_ messageID: String) async -> Bool {
+        if let model = emailModels[messageID], model.isEdited || !model.versions.isEmpty {
+            return true
+        }
+        guard rows.first(where: { $0.messageID == messageID })?.isExplained ?? true else { return false }
+        return !(await runtime.versions(of: messageID)).isEmpty
     }
 
     /// Adds the offered rule to its project.
@@ -126,6 +250,11 @@ final class ProjectsWindowModel {
         do {
             _ = try await runtime.explain(messageID)
             explaining[messageID] = nil
+            explained[messageID, default: 0] += 1
+            deadlinesRead.remove(messageID)
+            // Decision 9: the answer check of the new draft, once, also when the user went
+            // on to other mail meanwhile.
+            emailModel(for: messageID).perform { await $0.explained() }
         } catch is CancellationError {
             explaining[messageID] = nil
         } catch RewriteError.notLoaded {

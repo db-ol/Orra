@@ -657,6 +657,230 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    // MARK: The email view
+
+    /// Open Reply in Mail finds mail read before Orra started: the scan keeps Mail's handle
+    /// of each message it lists, also one it knows and does not read again. The handles go
+    /// when Mail quits, and come back when the scan lists the mailbox again with the next
+    /// Mail.
+    @Test func theScanKeepsMailsHandlesOfTheMailItKnows() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        let store = try #require(runtime.running?.store)
+        // More mail than a poll lists, all known before Orra started. The oldest is the one
+        // to reply to.
+        let count = MailScan.pollRangeSize + 5
+        let ids = (1...count).map { "h\($0)@harbor.example" }
+        try await store.save(ids.map { Self.message($0, from: "mei@harbor.example") }, ownAddresses: [Self.own], at: Self.today)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = ids.enumerated().map { position, id in
+                FakeMail.Message(id: 100 + position, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Hello", text: "Could you send the plan?")
+            }
+        }
+        runtime.mailRunningChanged()
+        choice.choose([.inbox])
+        choice.confirm()
+        let oldest = ids[count - 1]
+        try await waitUntil { runtime.mailReference(for: oldest) != nil }
+        #expect(runtime.mailReference(for: oldest) == MailMessageRef(id: 100 + count - 1, mailbox: .inbox))
+        #expect(runtime.mailReference(for: ids[0]) == MailMessageRef(id: 100, mailbox: .inbox))
+        // Known already, so no source was read again.
+        #expect(!mail.calls.contains("source"))
+
+        // Mail quits: the handles go and the scan stops.
+        mail.update { $0.isRunning = false }
+        runtime.mailRunningChanged()
+        #expect(runtime.mailReference(for: oldest) == nil)
+        #expect(!runtime.isScanning)
+
+        // The next Mail gives the messages other ids. The scan starts again and lists the
+        // inbox back to the days, beyond what a poll lists.
+        mail.update {
+            $0.isRunning = true
+            for index in $0.inbox.indices {
+                $0.inbox[index].id += 1_000
+            }
+        }
+        runtime.mailRunningChanged()
+        try await waitUntil { runtime.mailReference(for: oldest) != nil }
+        #expect(runtime.mailReference(for: oldest) == MailMessageRef(id: 1_100 + count - 1, mailbox: .inbox))
+        #expect(!mail.calls.contains("source"))
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Once the most handles are kept, a new one takes the place of one kept before, so the
+    /// others stay and Open Reply in Mail still finds their mail.
+    @Test func aFullListOfHandlesKeepsTheOthers() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.referenceLimit = 3
+        let store = try #require(runtime.running?.store)
+        let known = (1...5).map { "k\($0)@harbor.example" }
+        try await store.save(known.map { Self.message($0, from: "mei@harbor.example") }, ownAddresses: [Self.own], at: Self.today)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = known.enumerated().map { position, id in
+                FakeMail.Message(id: 100 + position, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Hello", text: "Could you send the plan?")
+            }
+        }
+        runtime.mailRunningChanged()
+        choice.choose([.inbox])
+        choice.confirm()
+        try await waitUntil { known.filter { runtime.mailReference(for: $0) != nil }.count == 3 }
+
+        // New mail comes in: the next pass reads it and keeps its handle in place of one
+        // other. The tests never poll, so a new answer about Mail access starts the pass.
+        let new = "new@harbor.example"
+        mail.update {
+            $0.inbox.insert(FakeMail.Message(id: 99, messageID: new, from: "Mei Tan <mei@harbor.example>", subject: "Hello", text: "One more thing."), at: 0)
+        }
+        runtime.mailAccessChanged()
+        try await waitUntil { runtime.mailReference(for: new) != nil }
+        #expect(runtime.mailReference(for: new) == MailMessageRef(id: 99, mailbox: .inbox))
+        #expect(known.filter { runtime.mailReference(for: $0) != nil }.count == 2)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The scan's bridge hands each listing on with the session read before it began, so a
+    /// listing under way when Mail quits brings no handle of the old Mail back.
+    @Test func aListingCarriesTheSessionItBeganIn() async throws {
+        let session = Mutex(1)
+        let handed = Mutex<[Int?]>([])
+        var bridge = mail.bridge
+        bridge.listing = { _, _ in
+            // Mail quits while it lists.
+            session.withLock { $0 += 1 }
+            return [MailListing(
+                message: MailMessageRef(id: 1, mailbox: .inbox), messageID: "q@harbor.example", dateReceived: Self.today,
+                sender: "mei@harbor.example", subject: "Hello", to: [Self.own], cc: [], size: 1_000)]
+        }
+        let remembering = ProjectsRuntime.remembering(
+            bridge,
+            session: { session.withLock { $0 } },
+            listed: { listings, began in
+                #expect(listings.map(\.messageID) == ["q@harbor.example"])
+                handed.withLock { $0.append(began) }
+            }
+        )
+        let listings = try await remembering.listing(.inbox, 1...1)
+        #expect(listings.count == 1)
+        #expect(handed.withLock { $0 } == [1])
+    }
+
+    /// A move from a Move To menu keeps the window on its list and selects the next email.
+    /// When it takes away versions of the draft, it waits for the user's yes.
+    @Test func aMoveStaysOnTheListAndAsksBeforeItTakesADraftAway() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let store = try #require(runtime.running?.store)
+        let harbor = Project(name: "Harbor")
+        try await runtime.add(harbor)
+        let ids = ["m1@kiln.example", "m2@kiln.example", "m3@kiln.example"]
+        try await store.save(ids.enumerated().map { day, id in Self.message(id, from: "lu@kiln.example", day: Double(day)) }, ownAddresses: [Self.own], at: Self.today)
+        try await waitUntilListed(ids[0], in: .needsProject, runtime) { _ in true }
+        let model = ProjectsWindowModel(runtime: runtime)
+        model.place = .needsProject
+        await model.reload()
+        let order = model.rows.map(\.messageID)
+        #expect(Set(order) == Set(ids))
+
+        // No draft to lose: it moves at once, and the next email is selected.
+        model.selectedMessageID = order[1]
+        await model.requestMove(order[1], to: harbor.id)
+        #expect(model.pendingMove == nil)
+        #expect(await runtime.place(of: order[1]) == .project(harbor.id))
+        #expect(model.place == .needsProject)
+        #expect(model.selectedMessageID == order[2])
+
+        // With a version of its draft, the move waits until the user says yes.
+        let check = DraftCheckInput(
+            draft: "", language: .en, recipients: [DraftCheckInput.Person(name: "", address: "lu@kiln.example")], projectPeople: [],
+            own: [DraftCheckInput.Person(name: "Me", address: Self.own)], incomingText: "Could you send the plan?", today: Self.today)
+        let explanation = Explanation(
+            messageID: order[2], project: nil, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [], questions: [], draft: .checked(DraftCheck.Result(draft: "Hi Lu,\n\nHere it is.\n\nMe", language: .en)), draftCheck: check,
+            sources: [:], removed: [:], problems: [], unknownSources: [])
+        #expect(try await store.save(explanation, at: Self.today))
+        let version = ReviseService.Version(messageID: order[2], change: .tone(.warm), check: DraftCheck.Result(draft: "Hi Lu,\n\nHappy to send it.\n\nMe", language: .en))
+        #expect(try await store.save(version, startedAt: Self.today, at: Self.today) == 1)
+        await model.reload()
+        await model.requestMove(order[2], to: harbor.id)
+        let pending = try #require(model.pendingMove)
+        #expect(pending == ProjectsWindowModel.PendingMove(messageID: order[2], project: harbor.id))
+        #expect(await runtime.place(of: order[2]) == .needsProject)
+        await model.confirmMove(pending)
+        #expect(model.pendingMove == nil)
+        #expect(await runtime.place(of: order[2]) == .project(harbor.id))
+        // The last of the list went, so the one before it is selected.
+        #expect(model.selectedMessageID == order[0])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// What the email view reads and changes through the runtime: the explanation, what a
+    /// revision checks with, the versions with Undo, the deadline mark, and an email shown
+    /// in its list.
+    @Test func theEmailViewReadsTheExplanationAndTheVersions() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let store = try #require(runtime.running?.store)
+        let id = "v@harbor.example"
+        try await store.save([Self.message(id, from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        let check = DraftCheckInput(
+            draft: "", language: .en, recipients: [DraftCheckInput.Person(name: "", address: "mei@harbor.example")], projectPeople: [],
+            own: [DraftCheckInput.Person(name: "Me", address: Self.own)], incomingText: "Could you send the plan?", today: Self.today)
+        let explanation = Explanation(
+            messageID: id, project: nil, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [Explanation.Point(text: "Mei asks for the plan by 23 October.", sources: [], flags: [])], questions: [],
+            draft: .checked(DraftCheck.Result(draft: "Hi Mei,\n\nHere is the plan.\n\nMe", language: .en)), draftCheck: check,
+            sources: [:], removed: [:], problems: [], unknownSources: [])
+        #expect(try await store.save(explanation, at: Self.today))
+        #expect(await runtime.explanation(for: id) == explanation)
+        #expect(await runtime.email(id)?.text == "Could you send the plan?")
+
+        let context = try #require(await runtime.reviseContext(for: explanation))
+        #expect(context.messageID == id)
+        #expect(context.emailText == "Could you send the plan?")
+        #expect(context.language == .en)
+        #expect(context.userLanguage == .en)
+        #expect(context.ownName == "Me")
+        #expect(context.recipients == check.recipients)
+        #expect(context.incomingText == check.incomingText)
+        var noDraft = explanation
+        noDraft.draftCheck = nil
+        #expect(await runtime.reviseContext(for: noDraft) == nil)
+
+        let version = ReviseService.Version(messageID: id, change: .tone(.warm), check: DraftCheck.Result(draft: "Hi Mei,\n\nHappy to share the plan.\n\nMe", language: .en))
+        #expect(try await store.save(version, startedAt: Self.today, at: Self.today.addingTimeInterval(1)) == 1)
+        // The version reads back equal, which the email view relies on to find its own.
+        #expect(await runtime.versions(of: id).map(\.version) == [version])
+        #expect(await runtime.removeNewestVersion(of: id))
+        #expect(await runtime.versions(of: id).isEmpty)
+        #expect(!(await runtime.removeNewestVersion(of: id)))
+
+        let model = ProjectsWindowModel(runtime: runtime)
+        model.place = .setAside
+        await model.show(id)
+        #expect(model.place == .needsProject)
+        #expect(model.selectedMessageID == id)
+        #expect(model.deadlines[id] == Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 23)))
+        // The same email view each time, until the window closes, with the window's one
+        // handoff at a time.
+        let view = model.emailModel(for: id)
+        #expect(model.emailModel(for: id) === view)
+        #expect(view.handoffs === model.handoffs)
+        model.forgetEmails()
+        #expect(model.deadlines.isEmpty)
+        #expect(model.emailModel(for: id) !== view)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: Values
 
     @Test func theDebugKeysCountOnlyInDebugBuilds() {
