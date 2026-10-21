@@ -164,17 +164,49 @@ struct CorrectionWatcherTests {
         #expect(await watch(field, pasted: "我在用克劳德写代码") == Correction(heard: "克劳德", corrected: "Claude"))
     }
 
+    /// Holds a watch in its wait once the field was read `at` times, until the test lets it go.
+    @MainActor final class Hold {
+        var at: Int
+        var waiting: CheckedContinuation<Void, Never>?
+        init(at: Int) { self.at = at }
+    }
+
+    /// The field's environment, with the one wait that `hold` names held.
+    static func held(_ field: ScriptedField, _ hold: Hold) -> CorrectionWatcher.Environment {
+        var environment = field.environment
+        environment.sleep = { _ in
+            guard field.reads == hold.at else { await Task.yield(); return }
+            hold.at = -1
+            await withCheckedContinuation { hold.waiting = $0 }
+        }
+        return environment
+    }
+
     @Test func aWatchPushedOutByANewPasteReportsWhatItFound() async {
-        let first = ScriptedField(["我在用克劳德写代码", "我在用Claude写代码"])
-        let watcher = CorrectionWatcher(environment: first.environment)
+        let field = ScriptedField(["我在用克劳德写代码", "我在用Claude写代码"])
+        // Held after it read the fix, before the quiet reading that would report it, so
+        // only being pushed out can make it report.
+        let hold = Hold(at: 2)
+        let watcher = CorrectionWatcher(environment: Self.held(field, hold))
         var found: [Correction] = []
         watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0.correction); _ = $1 }
-        for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(5)) }
+        for _ in 0..<1_000 where hold.waiting == nil { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(hold.waiting != nil)
+        #expect(found.isEmpty)
         for _ in 1...CorrectionWatcher.maximumWatches {
             watcher.watch(pasted: "不在这里", in: 42) { found.append($0.correction); _ = $1 }
         }
-        for _ in 0..<200 where found.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        hold.waiting?.resume()
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
         #expect(found == [Correction(heard: "克劳德", corrected: "Claude")])
+        // Two readings of its own, then one of each new watch, which finds no paste.
+        #expect(field.reads == 2 + CorrectionWatcher.maximumWatches)
         watcher.stop()
     }
 
