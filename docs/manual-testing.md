@@ -19,7 +19,7 @@ Build and test commands, run in the repository root:
 
 Before a release, `Tools/release-gate/run.sh --baseline <folder>` runs the speech corpus,
 ContextASR, cleanup, latency and gate set evaluations in Release and fails on any case that
-got worse than the baseline, see docs/release-gate.md.
+got worse than the baseline or has no result, see docs/release-gate.md.
 
 ## Automatically verified
 
@@ -153,12 +153,13 @@ got worse than the baseline, see docs/release-gate.md.
     keeps no older sample, the folder is 0700 and left out of backups and the file 0600,
     what a cut write left is deleted, Remove or the switch turned off right before Quit
     deletes the file at once, and the recording sheet's checkbox applies only with the
-    sample. At launch the saved sample loads once the speech model is ready, and only while
-    Speak translations is on, a file that is not a sample, is too short or has no speech
-    is deleted with one message that stays while Speak translations is turned off and on,
-    the switch turned off and on or Remove while it waits ends the load for good, a sample
-    picked meanwhile wins unless the speech model could not take it, a stray file is
-    deleted while the switch is off, and the code logs neither the audio nor the words.
+    sample and never undoes a change of the switch made meanwhile. At launch the saved
+    sample loads once the speech model is ready, and only while Speak translations is on, a
+    file that is not a sample, is too short or has no speech is deleted with one message
+    that stays while Speak translations is turned off and on, the switch turned off and on
+    or Remove while it waits ends the load for good, a sample picked meanwhile wins unless
+    the speech model could not take it, a stray file is deleted while the switch is off,
+    and the code logs neither the audio nor the words.
   - ModelGateTests covers the model gate of 2026-10-16 without models: shared calls run
     together, the voice model runs alone, a voice request that waits holds back the
     shared calls that came after it, a reservation keeps a voice request that waits out
@@ -1166,8 +1167,10 @@ got worse than the baseline, see docs/release-gate.md.
     language, that the first pass in Chinese or English stands, that the vocabulary
     stays on those passes, that the text stands when no pass helps or one fails, that
     cancellation still ends the dictation, and that the echo check runs on the new
-    text. PushToTalkControllerTests checks that the dictation pastes the text of the
-    pass in Chinese.
+    text. EngineTurnsTests checks that a caption call whose first pass the talk key
+    cancelled starts no other pass until the dictation ends, and that a call cancelled
+    while it waits for the speech model runs no pass. PushToTalkControllerTests checks that
+    the dictation pastes the text of the pass in Chinese.
   - With Japanese or Spanish as the dictation language, since 2026-10-18,
     LanguageGuardTests checks that Japanese with kana, Japanese and Chinese in Han
     characters only and their mix with English count as Japanese, that Spanish and Latin

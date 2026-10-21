@@ -143,6 +143,87 @@ class CompareTests(unittest.TestCase):
             self.assertEqual(gate.compare(base, cand, ["corpus"]).failures, [])
             self.assertEqual(len(gate.compare(base, cand, ["corpus", "latency"]).failures), 1)
 
+    def test_missing_groups_and_cases_fail(self):
+        # Every rule above looks only at what the candidate holds, so a group, set or case
+        # that dropped out of a run must fail on its own.
+        missing_groups, missing_cases = "cleanup: groups in the baseline without a result", "cleanup: cases in the baseline without a result"
+        base = cleanup({"x": True, "y": False})
+        base["groups"]["regular/as the app runs it"] = {"cases": 1, "exact": 1, "obeyed": 0, "median_s": 0.2, "p90_s": 0.3}
+        base["cases"]["regular/as the app runs it/r"] = {"exact": True, "obeyed": False, "outcome": "cleaned"}
+        adversarial = ["cleanup/adversarial/as the app runs it/x", "cleanup/adversarial/as the app runs it/y"]
+
+        # A whole group and its cases.
+        cand = copy.deepcopy(base)
+        del cand["groups"]["adversarial/as the app runs it"]
+        cand["cases"] = {key: row for key, row in cand["cases"].items() if not key.startswith("adversarial/")}
+        rules = dict(self.run_compare("cleanup", base, cand).failures)
+        self.assertEqual(rules[missing_groups], ["cleanup/adversarial/as the app runs it"])
+        self.assertEqual(rules[missing_cases], adversarial)
+
+        # One case that was not exact, which the exact count does not see.
+        cand = copy.deepcopy(base)
+        del cand["cases"]["adversarial/as the app runs it/y"]
+        cand["groups"]["adversarial/as the app runs it"]["cases"] = 1
+        self.assertEqual(self.run_compare("cleanup", base, cand).failures, [(missing_cases, ["cleanup/adversarial/as the app runs it/y"])])
+
+        # No result at all.
+        rules = dict(self.run_compare("cleanup", base, {"groups": {}, "cases": {}}).failures)
+        self.assertEqual(rules[missing_groups], ["cleanup/adversarial/as the app runs it", "cleanup/regular/as the app runs it"])
+        self.assertEqual(rules[missing_cases], adversarial + ["cleanup/regular/as the app runs it/r"])
+
+        # A new case does not stand in for one that is gone.
+        cand = copy.deepcopy(base)
+        cand["cases"]["adversarial/as the app runs it/z"] = cand["cases"].pop("adversarial/as the app runs it/y")
+        self.assertEqual(self.run_compare("cleanup", base, cand).failures, [(missing_cases, ["cleanup/adversarial/as the app runs it/y"])])
+
+        # A set and its clips.
+        clip = {"errors": 0, "tokens": 10, "missing_terms": [], "forbidden_found": []}
+        total = {"clips": 1, "errors": 0, "tokens": 10, "error_rate": 0.0, "expect_recall": 100.0, "forbidden_found": 0, "exact_clips": 1}
+        sets = {"sets": {"s": dict(total), "t": dict(total)}, "clips": {"s/a": dict(clip), "t/a": dict(clip)}}
+        cand = copy.deepcopy(sets)
+        del cand["sets"]["t"], cand["clips"]["t/a"]
+        self.assertEqual(self.run_compare("sets", sets, cand).failures, [("sets: sets in the baseline without a result", ["sets/t"]), ("sets: clips in the baseline without a result", ["sets/t/a"])])
+
+        # The other suites the same way.
+        cand = corpus({"a": 0})
+        del cand["groups"]["ruled_text"]["mer_mixed"]
+        self.assertEqual(self.run_compare("corpus", corpus({"a": 0, "b": 2}), cand).failures, [("corpus: ruled_text groups in the baseline without a result", ["corpus/mer_mixed"]), ("corpus: clips in the baseline without a result", ["corpus/b"])])
+        way = {"found": 3, "inserted": 0, "errors": 1, "recall": 100.0, "error_rate": 1.0, "median_s": 1.0, "p90_s": 2.0, "p95_s": 2.0}
+        context = {"sets": {"zh": {"plain": dict(way), "context": dict(way)}, "en": {"plain": dict(way), "context": dict(way)}}, "summary": {"no_speech": {"gave_text": 0}},
+                   "clips": {"zh/a": {"terms": 3, "found": 3, "inserted": 0, "errors": 1}, "en/a": {"terms": 3, "found": 3, "inserted": 0, "errors": 1}}}
+        cand = copy.deepcopy(context)
+        del cand["sets"]["en"], cand["clips"]["en/a"], cand["summary"]["no_speech"]
+        self.assertEqual([ids for _, ids in self.run_compare("context", context, cand).failures], [["context/en"], ["context/en/a"], ["context/no_speech"]])
+        cand = latency(900)
+        del cand["modes"]["cleanup_off"]["steps"]["fillers"], cand["modes"]["cleanup_off"]["clips"]["say zh_short_1"]
+        base = latency(900)
+        base["modes"]["cleanup_on"] = copy.deepcopy(base["modes"]["cleanup_off"])
+        self.assertEqual([ids for _, ids in self.run_compare("latency", base, cand).failures], [["latency/cleanup_on"], ["latency/cleanup_off/fillers"], ["latency/cleanup_off/say zh_short_1"]])
+
+        # Through compare, with empty result files, the run does not pass.
+        with tempfile.TemporaryDirectory() as folder:
+            base_folder, cand_folder = Path(folder, "base"), Path(folder, "cand")
+            base_folder.mkdir()
+            cand_folder.mkdir()
+            gate.write_json(base_folder / "cleanup.json", base_cleanup := cleanup({"x": True, "y": False}))
+            gate.write_json(base_folder / "sets.json", sets)
+            gate.write_json(cand_folder / "cleanup.json", {"groups": {}, "cases": {}})
+            gate.write_json(cand_folder / "sets.json", {"sets": {}, "clips": {}})
+            rules = [rule for rule, _ in gate.compare(base_folder, cand_folder, ["cleanup", "sets"]).failures]
+            self.assertEqual(rules, [missing_groups, missing_cases, "sets: sets in the baseline without a result", "sets: clips in the baseline without a result"])
+            gate.write_json(cand_folder / "cleanup.json", base_cleanup)
+            gate.write_json(cand_folder / "sets.json", sets)
+            self.assertEqual(gate.compare(base_folder, cand_folder, ["cleanup", "sets"]).failures, [])
+
+    def test_new_corpus_group_is_listed(self):
+        # A group the baseline did not have, such as a new language, has nothing to compare.
+        base = corpus({"a": 0})
+        cand = copy.deepcopy(base)
+        cand["groups"]["text"]["cer_ja"] = 3.0
+        result = self.run_compare("corpus", base, cand)
+        self.assertEqual(result.failures, [])
+        self.assertIn("corpus text cer_ja: new, 3.00%", result.lines)
+
     def test_summarize_sets(self):
         with tempfile.TemporaryDirectory() as folder:
             sets = Path(folder, "sets")
@@ -334,6 +415,19 @@ class ProjectsTests(unittest.TestCase):
         rules = dict(self.run_compare(before, after).failures)
         self.assertEqual(rules, {"projects items that lost a warning the checks in code showed": ["projects/en/x1"]})
         self.assertEqual(after["languages"]["en"]["warnings_found"], 0)
+
+    def test_item_in_the_baseline_without_a_result_fails(self):
+        # The set lives outside the repository. An item taken out of it is in neither the
+        # candidate's items nor its results, so only the baseline still names it.
+        items = [attack("a01"), attack("a02", must_flag=["link"])]
+        before = self.summary([projects_row(item, language, warnings=["link"]) for item in ("a01", "a02") for language in ("zh", "en")], items)
+        after = self.summary([projects_row("a01", language, warnings=["link"]) for language in ("zh", "en")], items[:1])
+        rules = dict(self.run_compare(before, after).failures)
+        self.assertEqual(rules, {"projects items without a result": ["projects/en/a02", "projects/zh/a02"]})
+        # Without a baseline, the smaller set holds its own bar, and a folder compared with
+        # itself, as show does, passes.
+        self.assertEqual(self.run_compare({}, after).failures, [])
+        self.assertEqual(self.run_compare(before, before).failures, [])
 
     def run_compare(self, base: dict, cand: dict) -> gate.Result:
         result = gate.Result()

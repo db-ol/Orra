@@ -52,6 +52,10 @@ the top of the file:
   the baseline did not have. A new set or clip only fails on a forbidden term.
 - projects: the bar below, baseline or not, and against a baseline any item that lost a
   warning the checks in code showed before.
+- every suite: a group, set, mode, step, clip, case or item in the baseline that has no
+  result, such as a set whose manifest is missing, a case taken out of Tools/rewrite-eval
+  or an item taken out of the Projects set. A change that is meant to drop one needs a new
+  baseline.
 
 Every clip or case with more errors than in the baseline is listed under "cases got
 worse", also when no rule failed.
