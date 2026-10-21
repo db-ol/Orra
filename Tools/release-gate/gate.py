@@ -522,7 +522,19 @@ class Result:
         self.failures.append((rule, sorted(ids or [])))
 
 
+def require_all(result: Result, suite: str, what: str, base: dict, cand: dict, prefix: str = "") -> None:
+    """Fails on every key of the baseline that the candidate has no result for. The rules
+    below look only at what the candidate holds, so without this a group, set or case that
+    dropped out of a run would shrink the gate and pass."""
+    missing = sorted(set(base) - set(cand))
+    if missing:
+        result.fail(f"{suite}: {what} in the baseline without a result", [f"{suite}/{prefix}{key}" for key in missing])
+
+
 def compare_corpus(base: dict, cand: dict, result: Result) -> None:
+    for field in ("text", "ruled_text"):
+        require_all(result, "corpus", f"{field} groups", base["groups"][field], cand["groups"][field])
+    require_all(result, "corpus", "clips", base["clips"], cand["clips"])
     for field in ("text", "ruled_text"):
         for name, value in cand["groups"][field].items():
             old = base["groups"][field].get(name)
@@ -545,6 +557,9 @@ def compare_corpus(base: dict, cand: dict, result: Result) -> None:
 
 
 def compare_context(base: dict, cand: dict, result: Result) -> None:
+    require_all(result, "context", "sets", base["sets"], cand["sets"])
+    require_all(result, "context", "clips", base["clips"], cand["clips"])
+    require_all(result, "context", "summaries", base.get("summary", {}), cand.get("summary", {}))
     for name, total in cand["sets"].items():
         old = base["sets"].get(name)
         if old is None:
@@ -589,6 +604,8 @@ def compare_context(base: dict, cand: dict, result: Result) -> None:
 
 
 def compare_cleanup(base: dict, cand: dict, result: Result) -> None:
+    require_all(result, "cleanup", "groups", base["groups"], cand["groups"])
+    require_all(result, "cleanup", "cases", base["cases"], cand["cases"])
     for key, group in sorted(cand["groups"].items()):
         old = base["groups"].get(key)
         if old is None:
@@ -612,10 +629,13 @@ def compare_cleanup(base: dict, cand: dict, result: Result) -> None:
 
 
 def compare_latency(base: dict, cand: dict, result: Result) -> None:
+    require_all(result, "latency", "modes", base["modes"], cand["modes"])
     for mode, data in sorted(cand["modes"].items()):
         old_mode = base["modes"].get(mode)
         if old_mode is None:
             continue
+        require_all(result, "latency", f"{mode} steps", old_mode["steps"], data["steps"], prefix=f"{mode}/")
+        require_all(result, "latency", f"{mode} clips", old_mode.get("clips", {}), data.get("clips", {}), prefix=f"{mode}/")
         for step, values in data["steps"].items():
             old = old_mode["steps"].get(step)
             if old is None:
@@ -630,6 +650,8 @@ def compare_latency(base: dict, cand: dict, result: Result) -> None:
 
 
 def compare_sets(base: dict, cand: dict, result: Result) -> None:
+    require_all(result, "sets", "sets", base["sets"], cand["sets"])
+    require_all(result, "sets", "clips", base["clips"], cand["clips"])
     for name, total in sorted(cand["sets"].items()):
         old = base["sets"].get(name)
         if old is None:
