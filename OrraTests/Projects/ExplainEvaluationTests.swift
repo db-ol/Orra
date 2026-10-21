@@ -290,7 +290,7 @@ struct ExplainEvaluationTests {
             cc: (mail.cc ?? []).map(person),
             subject: mail.subject,
             attachmentNames: (mail.attachments ?? []).map(\.name),
-            text: QuotedHistory(splitting: mail.body).ownText
+            text: QuotedHistory(splitting: mail.body, subject: mail.subject).ownText
         )
     }
 
@@ -299,7 +299,7 @@ struct ExplainEvaluationTests {
     /// `ownText`, as the store keeps it for the app.
     private nonisolated static func email(_ mail: SetMail, project: UUID?, ownText: Bool, in mails: [SetMail], byMessageID: [String: SetMail]) -> ExplainService.Email {
         let parentKnown = mail.in_reply_to.map { byMessageID[bare($0)] != nil } ?? false
-        let split = QuotedHistory(splitting: mail.body)
+        let split = QuotedHistory(splitting: mail.body, subject: mail.subject)
         let text = ownText || (parentKnown && !split.quotedText.isEmpty) ? split.ownText : mail.body
         return ExplainService.Email(
             messageID: bare(mail.message_id),

@@ -77,8 +77,8 @@ final class MailScan {
         /// The text a reader sees and the text the email hides. Nil for a message over
         /// `largestSource`, whose source is never read.
         var visible: VisibleText?
-        /// The visible text split into the email's own text, its quoted history and its
-        /// signature. Nil when `visible` is.
+        /// The visible text split into the email's own text, its quoted history, its
+        /// signature and the messages it forwards. Nil when `visible` is.
         var history: QuotedHistory?
 
         var isTooLarge: Bool {
@@ -597,6 +597,7 @@ final class MailScan {
         let from = headers.from
         let to = headers.to
         let cc = headers.cc
+        let subject = listing.subject.isEmpty ? headers.subject ?? "" : listing.subject
         return Message(
             reference: listing.message,
             messageID: listing.messageID,
@@ -607,7 +608,7 @@ final class MailScan {
             replyTo: headers.replyTo,
             to: to.isEmpty ? listed(listing.to) : to,
             cc: cc.isEmpty ? listed(listing.cc) : cc,
-            subject: listing.subject.isEmpty ? headers.subject ?? "" : listing.subject,
+            subject: subject,
             inReplyTo: headers.inReplyTo,
             references: headers.references,
             list: ListMail(
@@ -618,7 +619,8 @@ final class MailScan {
             attachments: attachments,
             size: listing.size,
             visible: visible,
-            history: visible.map { QuotedHistory(splitting: $0.text) }
+            // The subject tells a forward that Outlook writes like a reply.
+            history: visible.map { QuotedHistory(splitting: $0.text, subject: subject) }
         )
     }
 
