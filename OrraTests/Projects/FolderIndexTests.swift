@@ -27,24 +27,33 @@ struct FolderIndexTests {
         }
     }
 
-    /// Whether a dictation is under way, as EngineTurns says.
+    /// Whether a dictation is under way, as EngineTurns says, and how often a worker asked.
     final class Dictation: Sendable {
         private let value = Mutex(false)
+        private let asked = Mutex(0)
 
         var isOn: Bool {
-            get { value.withLock { $0 } }
+            get {
+                asked.withLock { $0 += 1 }
+                return value.withLock { $0 }
+            }
             set { value.withLock { $0 = newValue } }
+        }
+
+        var checks: Int {
+            asked.withLock { $0 }
         }
     }
 
-    /// Holds the reads that wait on it until the test opens it, and counts how many waited
-    /// at once.
+    /// Holds the reads that wait on it until the test opens it, and counts how many were in
+    /// flight at once.
     final class Gate: Sendable {
         private struct State {
             var waiting: [CheckedContinuation<Void, Never>] = []
             var arrivals: [CheckedContinuation<Void, Never>] = []
             var isOpen = false
-            var mostAtOnce = 0
+            var reading = 0
+            var mostReading = 0
         }
 
         private let state = Mutex(State())
@@ -53,8 +62,20 @@ struct FolderIndexTests {
             state.withLock { $0.waiting.count }
         }
 
-        var mostAtOnce: Int {
-            state.withLock { $0.mostAtOnce }
+        /// The most reads in flight at once, from the start of a read to its end.
+        var mostReading: Int {
+            state.withLock { $0.mostReading }
+        }
+
+        /// Reads a file after waiting here, and counts it as in flight until it is read.
+        func read(_ url: URL) async -> Result<FileTextResult, FileSkipReason> {
+            state.withLock { state in
+                state.reading += 1
+                state.mostReading = max(state.mostReading, state.reading)
+            }
+            defer { state.withLock { $0.reading -= 1 } }
+            await wait()
+            return await FileTextExtractor().text(of: url)
         }
 
         func wait() async {
@@ -62,7 +83,6 @@ struct FolderIndexTests {
                 let arrivals = state.withLock { state -> [CheckedContinuation<Void, Never>]? in
                     guard !state.isOpen else { return nil }
                     state.waiting.append(continuation)
-                    state.mostAtOnce = max(state.mostAtOnce, state.waiting.count)
                     defer { state.arrivals = [] }
                     return state.arrivals
                 }
@@ -723,22 +743,26 @@ struct FolderIndexTests {
     /// file, so only one worker reads at a time.
     @Test func aWorkerStartedAgainWaitsForTheStoppedOne() async throws {
         let gate = Gate()
-        try await withFixture(read: { url in
-            await gate.wait()
-            return await FileTextExtractor().text(of: url)
+        let dictation = Dictation()
+        try await withFixture(dictation: dictation, read: { url in
+            await gate.read(url)
         }) { fixture in
             try fixture.write("slow.txt", "Posters.")
             fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
             await gate.untilARead()
+            let checks = dictation.checks
             fixture.index.stop(project: fixture.alpha)
             fixture.index.start(project: fixture.alpha, folders: [fixture.folderURL])
             for _ in 0..<100 {
                 await Task.yield()
             }
+            // A worker asks about the dictation first, on the main actor, so one that does
+            // not wait for the stopped worker asks within these yields.
+            #expect(dictation.checks == checks)
             #expect(gate.waiting == 1)
             gate.open()
             await fixture.index.waitUntilIdle()
-            #expect(gate.mostAtOnce == 1)
+            #expect(gate.mostReading == 1)
             #expect(fixture.reads.all == ["slow.txt", "slow.txt"])
             #expect(try await fixture.count("SELECT count(*) FROM index_files") == 1)
             #expect(fixture.index.isIdle)
