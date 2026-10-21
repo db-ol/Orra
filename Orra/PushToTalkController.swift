@@ -1706,6 +1706,8 @@ final class PushToTalkController {
                 }
             case .skippedPasswordField:
                 addNotice(String(localized: "Orra does not paste into password fields. Use Copy Last Dictation."))
+            case .skippedAppChanged:
+                addNotice(String(localized: "Another app came to the front, so the text was not pasted. Use Copy Last Dictation."))
             case .nothingToInsert:
                 break
             }
@@ -1728,6 +1730,8 @@ final class PushToTalkController {
             break
         case .skippedPasswordField:
             notices = [String(localized: "Orra does not paste into password fields. Use Copy Last Dictation.")]
+        case .skippedAppChanged:
+            notices = [String(localized: "Another app came to the front, so the text was not pasted. Use Copy Last Dictation.")]
         }
     }
 

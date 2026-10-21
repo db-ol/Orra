@@ -739,6 +739,22 @@ struct PushToTalkControllerTests {
         #expect(controller.lastTranscript == "你好")
     }
 
+    /// Another app came to the front while the inserter read the old clipboard, so the
+    /// inserter pasted nothing. Learning does not follow the app that was in front.
+    @Test func anAppThatCameToTheFrontDuringThePasteLeavesANoticeAndTheTextForCopying() async throws {
+        let controller = await makeController()
+        var pastes = 0
+        controller.onPasted = { _, _, _, _ in pastes += 1 }
+        try await dictate(controller)
+        #expect(pastes == 1)
+        inserter.result = .skippedAppChanged
+        try await dictate(controller)
+        #expect(controller.notice == "Another app came to the front, so the text was not pasted. Use Copy Last Dictation.")
+        #expect(controller.problem == nil)
+        #expect(controller.lastTranscript == "你好")
+        #expect(pastes == 1)
+    }
+
     @Test func pressDuringProcessingIsIgnored() async throws {
         speech.delay = .milliseconds(200)
         let controller = await makeController()
@@ -1989,6 +2005,10 @@ struct PushToTalkControllerTests {
         // Orra does not learn from the menu's paste, and stops following the cleaned one.
         #expect(reported == ["我们下午3点开会。"])
         #expect(stopped == ["我们下午3点开会。"])
+        // Another app came to the front while the menu's paste read the old clipboard.
+        inserter.result = .skippedAppChanged
+        await controller.pasteOriginal()
+        #expect(controller.notice == "Another app came to the front, so the text was not pasted. Use Copy Last Dictation.")
     }
 
     /// Japanese for a user who dictates in it: one pass of the speech model, its Han
