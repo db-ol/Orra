@@ -38,8 +38,9 @@ struct ProjectsRuntimeTests {
 
     /// The runtime with fakes, and its switch and mailbox choice. `installed` says whether
     /// the cleanup model is on this Mac, `countsTokens` gives the explain service a
-    /// tokenizer, and `openFails` makes the start fail at the database.
-    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    /// tokenizer, `openFails` makes the start fail at the database, `folders` stands in for
+    /// how the index reaches project folders, and `keyDown` for the presses of the talk key.
+    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: isVisible, physicalMemory: 32 << 30, storage: storage)
         if isOn {
             projects.turnOn()
@@ -47,6 +48,14 @@ struct ProjectsRuntimeTests {
         let choice = MailChoice(defaults: defaults, suggestsInboxAndSent: false)
         let model = model
         let counter: (@Sendable (String) -> Int)? = countsTokens ? Self.countTokens : nil
+        var watchFolders: FolderIndex.Watch = { _, _, _ in {} }
+        var readText: @Sendable (URL) async -> Result<FileTextResult, FileSkipReason> = ProjectsRuntime.readFile
+        var resolveFolders: @Sendable ([Data]) async -> [URL] = ProjectsRuntime.resolveFolders
+        if let folders {
+            watchFolders = folders.watch
+            readText = { await folders.read($0) }
+            resolveFolders = { await folders.resolve($0) }
+        }
         let runtime = ProjectsRuntime(projects: projects, dependencies: ProjectsRuntime.Dependencies(
             storage: storage,
             bridge: mail.bridge,
@@ -54,12 +63,15 @@ struct ProjectsRuntimeTests {
             ownerOverride: { SortingService.Owner(addresses: [Self.own], name: "Me") },
             language: .en,
             isDictating: { false },
+            whenDictationStarts: { [keyDown] handler in keyDown?.handlers.append(handler) },
             modelEnvironment: { _ in model.environment },
             modelIsInstalled: { installed.value },
             loadTokenCounter: { counter },
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail.bridge, isOrraActive: { true }, bringMailToFront: {}),
             watchesMemoryPressure: false,
-            watchFolders: { _, _, _ in {} },
+            watchFolders: watchFolders,
+            readText: readText,
+            resolveFolders: resolveFolders,
             openDatabase: { storage in
                 opens?.add()
                 if openFails {
@@ -83,8 +95,8 @@ struct ProjectsRuntimeTests {
         Issue.record("The condition did not come true")
     }
 
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
-        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens)
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown)
         made.0.follow()
         try await waitUntil { made.0.phase == .on }
         return made
@@ -502,6 +514,66 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    // MARK: Project folders
+
+    /// The user adds a folder whose bookmark takes long to resolve, such as on a share that
+    /// hangs and recovers, and removes it again before it resolved. The late resolve
+    /// starts nothing: the folder is neither read nor watched.
+    @Test func aStaleFolderResolveDoesNotStartARemovedFolder() async throws {
+        defer { cleanUp() }
+        let folders = StallingFolders()
+        let (runtime, projects, _) = try await started(folders: folders)
+        let alpha = try folder("Alpha", holding: "alpha.txt")
+        var project = Project(name: "Harbor")
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id)?.isIndexing == false }
+
+        project.folders = [try Project.bookmark(of: alpha)]
+        try await runtime.update(project)
+        try await waitUntil { folders.isHolding }
+        project.folders = []
+        try await runtime.update(project)
+        folders.letGo()
+        try await waitUntil { folders.heldResolveReturned }
+        try await Task.sleep(for: .milliseconds(100))
+        let index = try #require(runtime.running?.index)
+        await index.waitUntilIdle()
+        #expect(!folders.readFiles.contains("alpha.txt"))
+        #expect(!folders.watchedFolders.joined().contains("Alpha"))
+        #expect(runtime.indexReport(project.id)?.indexed == 0)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The same with a folder added next to it: the late resolve of the first folder alone
+    /// does not drop the second one from the index.
+    @Test func aStaleFolderResolveDoesNotDropAFolderAddedSince() async throws {
+        defer { cleanUp() }
+        let folders = StallingFolders()
+        let (runtime, projects, _) = try await started(folders: folders)
+        let alpha = try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))
+        let beta = try Project.bookmark(of: folder("Beta", holding: "beta.txt"))
+        var project = Project(name: "Harbor")
+        try await runtime.add(project)
+        try await waitUntil { runtime.indexReport(project.id)?.isIndexing == false }
+
+        project.folders = [alpha]
+        try await runtime.update(project)
+        try await waitUntil { folders.isHolding }
+        project.folders = [alpha, beta]
+        try await runtime.update(project)
+        try await waitUntil { runtime.indexReport(project.id)?.indexed == 2 }
+        folders.letGo()
+        try await waitUntil { folders.heldResolveReturned }
+        try await Task.sleep(for: .milliseconds(100))
+        let index = try #require(runtime.running?.index)
+        await index.waitUntilIdle()
+        #expect(folders.watchedFolders.last == ["Alpha", "Beta"])
+        #expect(runtime.indexReport(project.id)?.indexed == 2)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: The model
 
     @Test func sortingAsksTheModelOnlyWhileTheWindowHoldsIt() async throws {
@@ -559,6 +631,27 @@ struct ProjectsRuntimeTests {
         model.isThere.withLock { $0 = true }
         installed.value = true
         try await waitUntilListed("h@kiln.example", in: .project(harbor.id), runtime) { $0.level == .likely }
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The press of a key reaches the model work at once: the call under way gives way and
+    /// runs again, see ProjectsModelQueue.dictationStarted.
+    @Test func theKeyDownReachesTheModelWork() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        model.blocks.withLock { $0 = true }
+        let keyDown = KeyDown()
+        let (runtime, projects, _) = try await started(installed: Installed(true), keyDown: keyDown)
+        #expect(keyDown.handlers.count == 1)
+        try await runtime.add(Project(name: "Harbor"))
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("h@kiln.example", from: "ana@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.windowOpened()
+        try await waitUntil { model.jobs.value == 1 }
+        keyDown.press()
+        try await waitUntil { model.ended.value == 1 && model.jobs.value == 2 }
         runtime.windowClosed()
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
@@ -652,6 +745,46 @@ struct ProjectsRuntimeTests {
         #expect(await runtime.messageSelectedInMail() == .notInChosenMailbox)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Which answer of Mail is under way when the user turns Projects off.
+    nonisolated enum PendingAnswer: Sendable, CaseIterable {
+        /// The selection, of a message of the inbox of all accounts.
+        case selectionInInbox
+        /// The selection, of a message in a mailbox the user chose.
+        case selectionInChosenMailbox
+        /// Whether the selected message is in the inbox of all accounts.
+        case inboxLookup
+    }
+
+    /// The user turns Projects off and keeps its data while Mail has not answered yet. The
+    /// choice stays confirmed, but once the answer comes nothing more is read from Mail.
+    @Test(arguments: PendingAnswer.allCases)
+    func explainSelectedMessageReadsNothingMoreOnceProjectsIsOff(_ pending: PendingAnswer) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        let inInbox = pending != .selectionInChosenMailbox
+        let held = pending == .inboxLookup ? "mailbox" : "selection"
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [FakeMail.Message(id: 5, messageID: "e@harbor.example", from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")]
+            $0.selection = [MailMessageRef(id: 5, mailbox: inInbox ? FakeMail.workInbox : FakeMail.clients)]
+            $0.holds = [held]
+        }
+        choice.choose([inInbox ? .inbox : FakeMail.clients])
+        choice.confirm()
+        let finding = Task { await runtime.messageSelectedInMail() }
+        try await waitUntil { mail.calls.contains(held) }
+
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        #expect(choice.isConfirmed)
+        mail.clearCalls()
+        mail.update { $0.holds = [] }
+        #expect(await finding.value == .noMailboxChosen)
+        #expect(!mail.calls.contains("mailbox"))
+        #expect(!mail.calls.contains("headers"))
     }
 
     /// The window shows the message in the list sorting files it in, selected.
@@ -1026,6 +1159,14 @@ struct ProjectsRuntimeTests {
         Issue.record("The email did not show in its list as expected")
     }
 
+    /// A folder under the test's folder that holds one text file.
+    private func folder(_ name: String, holding file: String) throws -> URL {
+        let folder = root.appendingPathComponent(name, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try "Notes for the harbor office".write(to: folder.appendingPathComponent(file), atomically: true, encoding: .utf8)
+        return folder
+    }
+
     private static func message(_ id: String, from sender: String, day: Double = 0) -> MailStore.Message {
         MailStore.Message(
             messageID: id, mailbox: nil, date: today.addingTimeInterval(-86_400 * (3 - day)),
@@ -1046,6 +1187,17 @@ struct ProjectsRuntimeTests {
         }
     }
 
+    /// The presses of the talk key, as EngineTurns.whenDictationStarts hands them on.
+    final class KeyDown {
+        var handlers: [() -> Void] = []
+
+        func press() {
+            for handler in handlers {
+                handler()
+            }
+        }
+    }
+
     /// Whether the cleanup model is on this Mac, which a test changes and the runtime
     /// observes.
     @Observable final class Installed {
@@ -1053,6 +1205,83 @@ struct ProjectsRuntimeTests {
 
         init(_ value: Bool = false) {
             self.value = value
+        }
+    }
+
+    /// How the index reaches project folders, recorded by name: resolves bookmarks with
+    /// Project.resolve, but holds the first resolve of a bookmark until the test lets it go,
+    /// as on a share that hangs and recovers. Reads files with FileTextExtractor and
+    /// watches nothing.
+    final class StallingFolders: Sendable {
+        private nonisolated struct State: Sendable {
+            var holdsNext = true
+            var held: CheckedContinuation<Void, Never>?
+            var letGo = false
+            var heldResolveReturned = false
+            var readFiles: [String] = []
+            var watchedFolders: [[String]] = []
+        }
+
+        private let state = Mutex(State())
+
+        nonisolated var isHolding: Bool {
+            state.withLock { $0.held != nil }
+        }
+
+        nonisolated var heldResolveReturned: Bool {
+            state.withLock { $0.heldResolveReturned }
+        }
+
+        /// The names of the files read, in order.
+        nonisolated var readFiles: [String] {
+            state.withLock { $0.readFiles }
+        }
+
+        /// The names of the folders of each watch, in order.
+        nonisolated var watchedFolders: [[String]] {
+            state.withLock { $0.watchedFolders }
+        }
+
+        nonisolated func letGo() {
+            let held = state.withLock { state in
+                state.letGo = true
+                defer { state.held = nil }
+                return state.held
+            }
+            held?.resume()
+        }
+
+        nonisolated func resolve(_ bookmarks: [Data]) async -> [URL] {
+            let holds = state.withLock { state in
+                guard state.holdsNext, !bookmarks.isEmpty else { return false }
+                state.holdsNext = false
+                return true
+            }
+            guard holds else { return await Project.resolve(bookmarks) }
+            await withCheckedContinuation { continuation in
+                let goes = state.withLock { state in
+                    if !state.letGo {
+                        state.held = continuation
+                    }
+                    return state.letGo
+                }
+                if goes {
+                    continuation.resume()
+                }
+            }
+            let folders = await Project.resolve(bookmarks)
+            state.withLock { $0.heldResolveReturned = true }
+            return folders
+        }
+
+        nonisolated func read(_ file: URL) async -> Result<FileTextResult, FileSkipReason> {
+            state.withLock { $0.readFiles.append(file.lastPathComponent) }
+            return await ProjectsRuntime.readFile(file)
+        }
+
+        nonisolated func watch(_ folders: [URL], _ since: UInt64?, _ deliver: @escaping @Sendable (FolderEvents.Changes) -> Void) -> () -> Void {
+            state.withLock { $0.watchedFolders.append(folders.map(\.lastPathComponent)) }
+            return {}
         }
     }
 
@@ -1129,6 +1358,9 @@ struct ProjectsRuntimeTests {
             /// Reading a source waits until the pass is cancelled.
             var sourceBlocks = false
             var sourcesCancelled = 0
+            /// Calls, by name, that answer only once the test takes them out, also when
+            /// their caller is cancelled, as an event Mail already got.
+            var holds: Set<String> = []
         }
 
         nonisolated static let account = MailEvents.Specifier.textID(MailEvents.Code.account, "WORK-ACCOUNT", of: .application)
@@ -1163,6 +1395,13 @@ struct ProjectsRuntimeTests {
             state.withLock { state in
                 state.calls.append(call)
                 return state
+            }
+        }
+
+        /// Waits while the test holds a call.
+        private nonisolated func waitWhileHeld(_ call: String) async {
+            while state.withLock({ $0.holds.contains(call) }) {
+                try? await Task.sleep(for: .milliseconds(10))
             }
         }
 
@@ -1225,13 +1464,19 @@ struct ProjectsRuntimeTests {
                 },
                 attachments: { _ in try self.answer("attachments") { _ in [] } },
                 mailbox: { reference in
-                    try self.answer("mailbox") { state in
+                    let mailbox = try self.answer("mailbox") { state in
                         // Only messages of the inbox of all accounts are found there.
                         guard reference.mailbox == .inbox, state.inbox.contains(where: { $0.id == reference.id }) else { throw MailBridgeError.notFound }
                         return Self.workInbox
                     }
+                    await self.waitWhileHeld("mailbox")
+                    return mailbox
                 },
-                selection: { try self.answer("selection") { $0.selection } },
+                selection: {
+                    let selection = try self.answer("selection") { $0.selection }
+                    await self.waitWhileHeld("selection")
+                    return selection
+                },
                 reply: { _, _ in try self.answer("reply") { _ in } }
             )
         }

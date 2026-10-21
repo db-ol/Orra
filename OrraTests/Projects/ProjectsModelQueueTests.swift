@@ -8,7 +8,8 @@ import Testing
 @MainActor
 struct ProjectsModelQueueTests {
     /// A stand in for RewriteEngine's job calls that counts tokens the way the engine does,
-    /// can hold a slice or a burst until the test lets it go, and records every call. Like
+    /// can hold the start of a job, a slice or a burst until the test lets it go, and records
+    /// every call. Like
     /// the engine, a call cancelled before it began throws CancellationError, a slice under
     /// way runs to its end, and a burst under way stops after its next token.
     @MainActor
@@ -21,6 +22,9 @@ struct ProjectsModelQueueTests {
         /// How long each slice ran inside the engine, by the order of the slices. Later
         /// slices take the last value.
         var ran: [Duration] = [.milliseconds(150)]
+        /// Holds a start once it began the job, as the engine's start runs to its end once it
+        /// passed its first check.
+        var holdsStart = false
         var holdsSlices = false
         var holdsBursts = false
         /// The slices, counted from 1 over every job, that throw RewriteError.jobDropped
@@ -89,14 +93,18 @@ struct ProjectsModelQueueTests {
             slices.compactMap { $0.split(separator: " ").last.flatMap { Int($0) } }
         }
 
-        func start(_ prompt: String, _ maximumTokens: Int) throws -> RewriteEngine.JobStart {
+        func start(_ prompt: String, _ maximumTokens: Int) async throws -> RewriteEngine.JobStart {
             try Task.checkCancellation()
             let tokens = promptTokens(prompt)
             guard tokens <= RewriteEngine.maximumJobPromptTokens else { throw RewriteError.promptTooLong }
             lastJob += 1
-            jobs[lastJob] = (tokens, 0, 0)
+            let id = lastJob
+            jobs[id] = (tokens, 0, 0)
             events.append("start \(prompt)")
-            return RewriteEngine.JobStart(id: lastJob, promptTokens: tokens)
+            if holdsStart {
+                await withCheckedContinuation { held.append($0) }
+            }
+            return RewriteEngine.JobStart(id: id, promptTokens: tokens)
         }
 
         func slice(_ id: Int, _ tokens: Int) async throws -> RewriteEngine.SliceRun {
@@ -338,6 +346,42 @@ struct ProjectsModelQueueTests {
         #expect(gate.snapshot == ModelGate.Snapshot())
     }
 
+    /// The talk key goes down while a slice waits at the gate behind the voice model, and
+    /// the voice piece ends before the queue looks again. The queue hears of the key first
+    /// and takes the slice out of the gate, before the dictation's reservation lets it in.
+    @Test func aSliceWaitingBehindTheVoiceModelLeavesTheGateAtTheKeyDown() async throws {
+        let gate = ModelGate()
+        let queue = makeQueue(gate: gate)
+        fake.holdsSlices = true
+        let job = Task { try await queue.run(Self.request()) }
+        try await eventually { fake.isHolding }
+        let voice = HeldWork()
+        let speaking = Task { try await gate.run(.exclusive) { await voice.run() } }
+        try await eventually { gate.snapshot.waiting == [.exclusive] }
+        fake.holdsSlices = false
+        fake.letGo()
+        try await eventually { voice.began == 1 && gate.snapshot.waiting == [.shared] }
+        // The key down, in the order of the app.
+        queue.dictationStarted()
+        fake.isDictating = true
+        let reservation = gate.reserve()
+        voice.release()
+        try await speaking.value
+        try await settle()
+        #expect(fake.slicesBegun == 1)
+        #expect(gate.snapshot == ModelGate.Snapshot(reserved: 1))
+        try await poll()
+        #expect(queue.pause == .dictation)
+        // The paste: the job goes on and loses nothing.
+        reservation.end()
+        fake.isDictating = false
+        try await poll()
+        #expect(try await job.value == "好的。")
+        #expect(fake.slices.count == 4)
+        #expect(fake.starts.count == 1)
+        #expect(gate.snapshot == ModelGate.Snapshot())
+    }
+
     @Test func aBurstUnderWayStopsAfterItsNextTokenWhenADictationStarts() async throws {
         let queue = makeQueue()
         fake.holdsBursts = true
@@ -556,6 +600,55 @@ struct ProjectsModelQueueTests {
         // The next request runs.
         _ = try await queue.run(Self.request())
         #expect(fake.ends == ["end 1", "end 2"])
+    }
+
+    /// The window closes while the engine starts the job, after the start's own check for a
+    /// cancel. The job that starts all the same is ended.
+    @Test func cancellingTheCallerWhileTheJobStartsEndsTheJob() async throws {
+        let queue = makeQueue()
+        fake.holdsStart = true
+        let job = Task { try await queue.run(Self.request()) }
+        try await eventually { fake.isHolding }
+        job.cancel()
+        try await settle()
+        fake.holdsStart = false
+        fake.letGo()
+        await #expect(throws: CancellationError.self) { try await job.value }
+        #expect(fake.starts.count == 1)
+        #expect(fake.slices.isEmpty)
+        #expect(fake.ends == ["end 1"])
+    }
+
+    @Test func cancelBackgroundWhileTheJobStartsEndsTheJob() async throws {
+        let queue = makeQueue()
+        fake.holdsStart = true
+        let job = Task { try await queue.run(Self.request(String(repeating: "x", count: 1_000), .background)) }
+        try await eventually { fake.isHolding }
+        queue.cancelBackground()
+        try await settle()
+        fake.holdsStart = false
+        fake.letGo()
+        await #expect(throws: CancellationError.self) { try await job.value }
+        #expect(fake.starts.count == 1)
+        #expect(fake.slices.isEmpty)
+        #expect(fake.ends == ["end 1"])
+    }
+
+    /// A cancelled caller gets no answer, also when the last burst finishes after the
+    /// cancel, and the job is ended.
+    @Test func cancellingTheCallerDuringTheLastBurstEndsTheJobWithoutAnAnswer() async throws {
+        let queue = makeQueue()
+        fake.answerTokens = 1
+        fake.holdsBursts = true
+        let job = Task { try await queue.run(Self.request()) }
+        try await eventually { fake.isHolding }
+        job.cancel()
+        try await settle()
+        fake.holdsBursts = false
+        fake.letGo()
+        await #expect(throws: CancellationError.self) { try await job.value }
+        #expect(fake.bursts.count == 1)
+        #expect(fake.ends == ["end 1"])
     }
 
     @Test func aDroppedJobStartsAgainOnce() async throws {

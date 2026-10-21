@@ -51,6 +51,9 @@ final class ProjectsRuntime {
         /// True from the press of the talk key or the translation key until the dictation is
         /// pasted or cancelled, see EngineTurns.isDictating.
         var isDictating: () -> Bool
+        /// Runs a closure at each press of the talk key or the translation key, before the
+        /// dictation reserves the model gate, see EngineTurns.whenDictationStarts.
+        var whenDictationStarts: (@escaping () -> Void) -> Void
         /// The model's closures for the queue, given the memory pressure the runtime
         /// watches, see TextCleanup.projectsEnvironment.
         var modelEnvironment: (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment
@@ -66,6 +69,8 @@ final class ProjectsRuntime {
         var watchFolders: FolderIndex.Watch
         /// Reads one file of a project folder, FileTextExtractor in the app.
         var readText: @Sendable (URL) async -> Result<FileTextResult, FileSkipReason>
+        /// Where a project's folders are now, Project.resolve in the app.
+        var resolveFolders: @Sendable ([Data]) async -> [URL]
         /// Opens the database, ProjectsDatabase.open in the app.
         var openDatabase: @Sendable (ProjectsStorage) async throws -> ProjectsDatabase
         var now: @Sendable () -> Date
@@ -80,6 +85,7 @@ final class ProjectsRuntime {
             ownerOverride: @escaping () -> SortingService.Owner?,
             language: ProjectsLanguage,
             isDictating: @escaping () -> Bool,
+            whenDictationStarts: @escaping (@escaping () -> Void) -> Void = { _ in },
             modelEnvironment: @escaping (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment,
             modelIsInstalled: @escaping () -> Bool,
             loadTokenCounter: @escaping @Sendable () async throws -> (@Sendable (String) -> Int)?,
@@ -87,6 +93,7 @@ final class ProjectsRuntime {
             watchesMemoryPressure: Bool = true,
             watchFolders: @escaping FolderIndex.Watch = FolderIndex.watchWithFolderEvents,
             readText: @escaping @Sendable (URL) async -> Result<FileTextResult, FileSkipReason> = ProjectsRuntime.readFile,
+            resolveFolders: @escaping @Sendable ([Data]) async -> [URL] = ProjectsRuntime.resolveFolders,
             openDatabase: @escaping @Sendable (ProjectsStorage) async throws -> ProjectsDatabase = ProjectsRuntime.openDatabase,
             now: @escaping @Sendable () -> Date = Date.init,
             sleep: @escaping @Sendable (Duration) async throws -> Void = ProjectsRuntime.sleep
@@ -97,6 +104,7 @@ final class ProjectsRuntime {
             self.ownerOverride = ownerOverride
             self.language = language
             self.isDictating = isDictating
+            self.whenDictationStarts = whenDictationStarts
             self.modelEnvironment = modelEnvironment
             self.modelIsInstalled = modelIsInstalled
             self.loadTokenCounter = loadTokenCounter
@@ -104,6 +112,7 @@ final class ProjectsRuntime {
             self.watchesMemoryPressure = watchesMemoryPressure
             self.watchFolders = watchFolders
             self.readText = readText
+            self.resolveFolders = resolveFolders
             self.openDatabase = openDatabase
             self.now = now
             self.sleep = sleep
@@ -114,6 +123,12 @@ final class ProjectsRuntime {
     @concurrent
     nonisolated static func readFile(_ url: URL) async -> Result<FileTextResult, FileSkipReason> {
         await FileTextExtractor().text(of: url)
+    }
+
+    /// Where a project's folders are now, with Project.resolve.
+    @concurrent
+    nonisolated static func resolveFolders(_ bookmarks: [Data]) async -> [URL] {
+        await Project.resolve(bookmarks)
     }
 
     /// Opens the Projects database.
@@ -321,6 +336,11 @@ final class ProjectsRuntime {
             await self?.closeBeforeDelete()
         }
         modelWasInstalled = dependencies.modelIsInstalled()
+        // The model work gives way at the press of a key, before the dictation reserves the
+        // model gate, see ProjectsModelQueue.dictationStarted.
+        dependencies.whenDictationStarts { [weak self] in
+            self?.running?.queue.dictationStarted()
+        }
         followSwitch()
         followChoice()
         followModel()
@@ -950,14 +970,18 @@ final class ProjectsRuntime {
 
     /// Where a project's folders are now.
     func folders(of project: Project) async -> [URL] {
-        await Project.resolve(project.folders)
+        await dependencies.resolveFolders(project.folders)
     }
 
     /// Starts indexing a project's folders as they are now. With `resortAfter`, Needs a
-    /// Project is sorted again once the sweep that starts here ends.
+    /// Project is sorted again once the sweep that starts here ends. A folder can take long
+    /// to resolve, such as on a share that hangs. When the project's folders changed
+    /// meanwhile, or Projects stopped, this starts nothing, since the start for the change
+    /// or the next start of Projects counts.
     private func startIndex(_ project: Project, resortAfter: Bool = false) async {
-        let folders = await Project.resolve(project.folders)
-        guard let index = running?.index, running?.list.project(project.id) != nil else { return }
+        guard let index = running?.index else { return }
+        let folders = await dependencies.resolveFolders(project.folders)
+        guard running?.index === index, running?.list.project(project.id)?.folders == project.folders else { return }
         index.start(project: project.id, folders: folders)
         if resortAfter, !folders.isEmpty, index.reports[project.id]?.isIndexing == true {
             resortAfterIndex.insert(project.id)
@@ -1235,7 +1259,8 @@ final class ProjectsRuntime {
     /// Finds the message selected in Mail, for Explain Selected Message. Reads Mail's
     /// selection only on that click, and only after the user confirmed a mailbox choice.
     /// Reads more only of a message in a chosen or linked mailbox (decision 18). A message
-    /// the scan has not read yet makes it read the mailboxes once.
+    /// the scan has not read yet makes it read the mailboxes once. Reads nothing more once
+    /// Projects stops or the choice is forgotten, which the user can do while Mail answers.
     func messageSelectedInMail() async -> SelectedMessage {
         guard let running else { return .noMailboxChosen }
         guard dependencies.choice.isConfirmed else { return .noMailboxChosen }
@@ -1243,7 +1268,10 @@ final class ProjectsRuntime {
         guard bridge.isRunning() else { return .mailNotRunning }
         do {
             guard let selected = try await bridge.selection().first else { return .nothingSelected }
-            guard try await isChosen(selected) else {
+            guard stillReads(running) else { return .noMailboxChosen }
+            let chosen = try await isChosen(selected, running)
+            guard stillReads(running) else { return .noMailboxChosen }
+            guard chosen else {
                 Logger.projects.notice("Explain Selected Message: the message is not in a chosen mailbox")
                 return .notInChosenMailbox
             }
@@ -1251,6 +1279,7 @@ final class ProjectsRuntime {
             updateScan()
             let headers = try await bridge.headers(selected)
             guard let messageID = await Self.messageID(in: headers) else { return .notRead(days: dependencies.choice.days) }
+            guard stillReads(running) else { return .noMailboxChosen }
             remember(selected, for: messageID)
             if try await running.store.explainEmail(messageID) == nil {
                 switch await readUntilSaved(messageID, store: running.store, scan: running.scan) {
@@ -1273,15 +1302,25 @@ final class ProjectsRuntime {
         }
     }
 
+    /// Whether Projects still runs as when Explain Selected Message began, with the mailbox
+    /// choice confirmed, so it may ask Mail more.
+    private func stillReads(_ running: Running) -> Bool {
+        self.running?.scan === running.scan && dependencies.choice.isConfirmed
+    }
+
     /// Whether a message selected in Mail is in a chosen or linked mailbox. Mail names a
     /// message of the inbox or the sent mailbox of all accounts by the mailbox of its
-    /// account, so for those two the message is looked for there by its id.
-    private func isChosen(_ message: MailMessageRef) async throws -> Bool {
-        let chosen = dependencies.choice.mailboxes + (await linkedMailboxes())
+    /// account, so for those two the message is looked for there by its id. False without
+    /// asking Mail once Projects stopped or the choice was forgotten, see `stillReads`.
+    private func isChosen(_ message: MailMessageRef, _ running: Running) async throws -> Bool {
+        let linked = await linkedMailboxes()
+        guard stillReads(running) else { return false }
+        let chosen = dependencies.choice.mailboxes + linked
         if chosen.contains(message.mailbox) {
             return true
         }
         for special in [MailMailbox.inbox, MailMailbox.sent] where chosen.contains(special) {
+            guard stillReads(running) else { return false }
             do {
                 _ = try await dependencies.bridge.mailbox(MailMessageRef(id: message.id, mailbox: special))
                 return true

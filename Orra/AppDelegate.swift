@@ -211,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ownerOverride: { ProjectsDebugOwner.load() },
             language: ProjectsLanguage.forExplanations(interface: AppLanguage.launchLocalization),
             isDictating: { [turns] in turns.isDictating },
+            whenDictationStarts: { [turns] in turns.whenDictationStarts($0) },
             modelEnvironment: { [cleanup, turns, captions, speech] memoryPressure in
                 cleanup.projectsEnvironment(
                     isDictating: { turns.isDictating },

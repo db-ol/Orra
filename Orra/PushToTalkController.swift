@@ -1098,8 +1098,10 @@ final class PushToTalkController {
             let counted = ContinuousClock.now
             holdTimings?.counted = counted
             beginUserActivity()
-            reserveModelGate()
+            // Before the reservation, so captions and Projects take a call that waits at
+            // the model gate out of it first, see EngineTurns.whenDictationStarts.
             cleanup.dictationStarted()
+            reserveModelGate()
             startReadingScreen()
             // The delay counts from the key down, which the wait has used up already.
             let held = holdTimings.map { $0.keyDown.duration(to: counted) } ?? .zero
@@ -1128,10 +1130,11 @@ final class PushToTalkController {
                 handle(.cancelled)
                 return
             }
-            reserveModelGate()
             // Loads the model when it was unloaded while idle, so it loads while the user
-            // speaks, for cleanup and for translation.
+            // speaks, for cleanup and for translation. Before the reservation, so captions
+            // and Projects take a call that waits at the model gate out of it first.
             cleanup.dictationStarted()
+            reserveModelGate()
             startRecording(cueDelay: transition == .startedHandsFree ? .zero : listeningCueDelay)
         case .awaitingSecondPress:
             // The recording goes on until the second press or the end of the window.
