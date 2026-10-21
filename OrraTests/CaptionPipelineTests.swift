@@ -19,6 +19,9 @@ final class FakeCaptionModels {
     var translationDelay: Duration = .zero
     /// Holds each translation until the test lets it go.
     var holdsTranslations = false
+    /// Holds the first transcription until the test lets it go, like a slow one, however
+    /// long the test takes to feed the audio after it.
+    var holdsFirstTranscription = false
     private(set) var transcribed = 0
     /// The dictation language each transcription was given.
     private(set) var languages: [DictationLanguage] = []
@@ -74,6 +77,9 @@ final class FakeCaptionModels {
         running += 1
         mostRunning = max(mostRunning, running)
         defer { running -= 1 }
+        if turn == 0, holdsFirstTranscription {
+            await withCheckedContinuation { held.append($0) }
+        }
         if turn < recognitionDelays.count {
             try await Task.sleep(for: recognitionDelays[turn])
         }
@@ -121,13 +127,16 @@ final class FakeCaptionModels {
     }
 }
 
-/// Waits until the condition holds, for at most a few seconds.
+/// Waits until the condition holds, for at most a minute, and fails the test at the caller's
+/// line when it does not. The limit is time, not a count of turns, since 2,000 turns of
+/// 2 ms ran out on the busy CI runner before the work a test waited for was done.
 @MainActor
-func eventually(_ condition: () -> Bool) async throws {
-    for _ in 0..<2_000 where !condition() {
+func eventually(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+    let deadline = ContinuousClock.now + .seconds(60)
+    while !condition(), ContinuousClock.now < deadline {
         try await Task.sleep(for: .milliseconds(2))
     }
-    #expect(condition())
+    #expect(condition(), sourceLocation: sourceLocation)
 }
 
 @MainActor
