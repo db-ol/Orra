@@ -12,6 +12,13 @@ struct MIMEFuzzTests {
     private static let mimeLimits = MIMEMessage.Limits(
         maximumSourceBytes: maximumCaseBytes, maximumParts: 64, maximumDepth: 8, maximumTextBytes: 32 << 10,
         maximumHeaderBytes: 8 << 10, maximumSteps: 400_000)
+    /// The limits of the scan, which decode the content of the attachments MailAttachment
+    /// reads, with a small cap so the random parts reach it.
+    private static let attachmentLimits = {
+        var limits = MailAttachment.mimeLimits(mimeLimits)
+        limits.attachmentBytes = 4 << 10
+        return limits
+    }()
     private static let visibleLimits = VisibleText.Limits(
         maximumMarkupBytes: maximumCaseBytes, maximumDepth: 64, maximumRules: 50, maximumDeclarations: 400,
         maximumTextBytes: 32 << 10, maximumHiddenPieces: 8, maximumHiddenLength: 80, maximumSteps: 400_000)
@@ -233,6 +240,20 @@ struct MIMEFuzzTests {
         #expect(message.attachments.count <= mimeLimits.maximumParts)
         #expect(message.bodies.reduce(0) { $0 + $1.text.utf8.count } <= 4 * mimeLimits.maximumTextBytes)
 
+        // With the attachments decoded, as the scan parses: each part's body costs at most
+        // twice more, and nothing over the attachment cap is decoded.
+        let decoded = MIMEMessage(source: Data(source), limits: attachmentLimits)
+        #expect(decoded.steps <= attachmentLimits.maximumSteps + source.count)
+        #expect(decoded.steps <= (attachmentLimits.maximumDepth + 4) * (source.count + lineCount(source)))
+        #expect(decoded.attachments.count <= attachmentLimits.maximumParts)
+        for attachment in decoded.attachments {
+            if case .data(let data)? = attachment.content {
+                #expect(data.count <= attachmentLimits.attachmentBytes)
+                #expect(attachment.size == data.count)
+            }
+            #expect((attachment.size ?? 0) >= 0)
+        }
+
         let visible = VisibleText(message, limits: visibleLimits)
         let markupBytes = message.bodies.filter { $0.format == .markup }.reduce(0) { $0 + min($1.text.utf8.count, visibleLimits.maximumMarkupBytes) }
         // The limit, and past it at most the markup itself and one element's candidate rules.
@@ -275,12 +296,14 @@ struct MIMEFuzzTests {
                 var source = generator.entity(depth: 0)
                 if generator.chance(50) { source = generator.damaged(source) }
                 let message = MIMEMessage(source: Data(source.prefix(Self.maximumCaseBytes)), limits: Self.mimeLimits)
+                let decoded = MIMEMessage(source: Data(source.prefix(Self.maximumCaseBytes)), limits: Self.attachmentLimits)
                 let visible = VisibleText(message, limits: Self.visibleLimits)
                 let split = QuotedHistory(splitting: visible.text)
                 let reached = [
                     "several bodies": message.bodies.count > 1,
                     "markup": message.bodies.contains { $0.format == .markup },
                     "attachment": !message.attachments.isEmpty,
+                    "decoded attachment": decoded.attachments.contains { if case .data? = $0.content { true } else { false } },
                     "cut message": message.isCut,
                     "hidden text": !visible.findings.isEmpty,
                     "cut markup": visible.isCut,
@@ -290,7 +313,7 @@ struct MIMEFuzzTests {
                 for (name, isReached) in reached where isReached { counts[name, default: 0] += 1 }
             }
         }
-        for name in ["several bodies", "markup", "attachment", "cut message", "hidden text", "cut markup", "quote", "subject"] {
+        for name in ["several bodies", "markup", "attachment", "decoded attachment", "cut message", "hidden text", "cut markup", "quote", "subject"] {
             #expect(counts[name, default: 0] >= 3, "\(name): \(counts[name, default: 0]) of 288")
         }
     }

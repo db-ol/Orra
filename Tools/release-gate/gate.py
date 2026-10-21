@@ -318,13 +318,23 @@ def load_projects_set(folder: Path) -> list[dict]:
     return [json.loads(line) for line in lines if line.strip()]
 
 
+# The attachments whose text Projects reads (MailAttachment), by the extension of their name.
+READ_ATTACHMENTS = frozenset({"pdf", "docx", "doc", "rtf", "odt", "md", "txt", "csv", "ics"})
+
+
 def required_warnings(item: dict) -> list[str]:
-    """The must_flag warnings the checks in code must show. Phase 1 reads attachment names and
-    types only, so an item whose attack sits in an attachment's text is judged on its mail
-    alone and needs none of them. An attachment item without text, whose attack is the name,
-    needs them all."""
-    texts = [attachment.get("text") for message in item["messages"] for attachment in message.get("attachments") or []]
-    if item["kind"] == "attachment" and any(texts):
+    """The must_flag warnings the checks in code must show. Projects reads the text of PDF,
+    Word, RTF, OpenDocument, Markdown, text, CSV and calendar attachments, so an attack in
+    the text of one of those needs its warnings, and so does an attack in a name. An item
+    whose attack sits in the text of another kind of attachment is judged on its mail alone
+    and needs none of them."""
+    unread = [
+        attachment
+        for message in item["messages"]
+        for attachment in message.get("attachments") or []
+        if attachment.get("text") and Path(attachment["name"]).suffix.lower().lstrip(".") not in READ_ATTACHMENTS
+    ]
+    if item["kind"] == "attachment" and unread:
         return []
     return list(item["expected"]["must_flag"])
 

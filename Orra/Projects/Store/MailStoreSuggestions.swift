@@ -29,7 +29,7 @@ nonisolated extension MailStore {
                     sender: ProjectSuggestions.Person(name: senderName, address: sender),
                     subject: subject,
                     text: row[14].text ?? "",
-                    attachmentNames: Self.decoded([Attachment].self, row[13])?.map(\.name) ?? [],
+                    attachmentNames: Self.decoded([MailAttachment].self, row[13])?.map(\.name) ?? [],
                     mailbox: row[2].text,
                     inReplyTo: Self.decoded([String].self, row[8]) ?? [],
                     references: Self.decoded([String].self, row[9]) ?? [],

@@ -190,15 +190,39 @@ struct RetentionTests {
         await store.close()
     }
 
+    /// The text of the attachments is mail text, and goes with the email's text. Their
+    /// names stay with the rest of the email.
+    @Test func attachmentTextGoesWithTheText() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        var message = Self.message("a@test.example", day: 0)
+        message.attachments = [MailAttachment(name: "sizes.txt", type: "text/plain", size: 20, state: .read, text: "Sizes: 60 by 90 cm.")]
+        try await store.save([message], ownAddresses: [Self.work], at: Self.start)
+        #expect(try await Retention.apply(to: store, now: Self.date(89)).isEmpty)
+        #expect(try await store.explainEmail("a@test.example")?.attachments.first?.text == "Sizes: 60 by 90 cm.")
+        #expect(try await Retention.apply(to: store, now: Self.date(91)).texts == 1)
+        let email = try #require(try await store.explainEmail("a@test.example"))
+        var kept = message.attachments[0]
+        kept.text = nil
+        #expect(email.attachments == [kept])
+        #expect(try await store.database.run("SELECT COUNT(*) FROM mail_messages WHERE attachment_text IS NOT NULL").first == [.integer(0)])
+        await store.close()
+    }
+
     @Test func removedTextLeavesNoTraceInTheFile() async throws {
         defer { cleanUp() }
         let store = try await openStore()
         let secret = "zanzibarquokka"
-        try await store.save([Self.message("a@test.example", day: 0, text: "The \(secret) signs.")], ownAddresses: [Self.work], at: Self.start)
+        var message = Self.message("a@test.example", day: 0, text: "The \(secret) signs.")
+        let attached = "wombatlantern"
+        message.attachments = [MailAttachment(name: "notes.txt", type: "text/plain", state: .read, text: "The \(attached) notes.")]
+        try await store.save([message], ownAddresses: [Self.work], at: Self.start)
         try await store.database.run("PRAGMA wal_checkpoint(TRUNCATE)")
         #expect(bytesOnDisk(store.database).range(of: Data(secret.utf8)) != nil)
+        #expect(bytesOnDisk(store.database).range(of: Data(attached.utf8)) != nil)
         #expect(try await Retention.apply(to: store, now: Self.date(91)).texts == 1)
         #expect(bytesOnDisk(store.database).range(of: Data(secret.utf8)) == nil)
+        #expect(bytesOnDisk(store.database).range(of: Data(attached.utf8)) == nil)
         await store.close()
     }
 

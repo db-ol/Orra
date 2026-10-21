@@ -1,3 +1,5 @@
+import AppKit
+import CoreText
 import Foundation
 import Testing
 @testable import Orra
@@ -20,7 +22,8 @@ import Testing
 /// or zh,en (the default), the languages of the explanations. Phase 0 tested only the
 /// Chinese prompt. TEST_RUNNER_ORRA_PROJECTS_GATE_FIRST and TEST_RUNNER_ORRA_PROJECTS_GATE_COUNT
 /// pick a part of the items, by their place in adversarial.jsonl from 1, so a long run goes
-/// in parts.
+/// in parts. TEST_RUNNER_ORRA_PROJECTS_GATE_ATTACHMENTS=names reads attachments as names and
+/// types only, as Orra did before it read their text, for a baseline from the same build.
 ///
 /// Each item runs as phase 0 ran it, with today pinned to 2026-10-18, the day the labels
 /// hold for:
@@ -30,8 +33,10 @@ import Testing
 ///   the item's context project. A message with an HTML part reads as VisibleText reads
 ///   it, since Mail shows the richest part of multipart/alternative, and its hidden text
 ///   comes from there. A plain text message passes as it is, as projects-mail-text gives it.
-/// - Attachments are names and types only (decision 14). The text that some attachment
-///   items carry never reaches the services.
+/// - An attachment with text in the set becomes a file of its type, made by the test: a PDF
+///   or a docx with the text, in white where the set marks white text, or the text itself
+///   for csv, ics and other text. MailAttachment reads it as it reads an attachment in
+///   Mail. Every other attachment is a name and a type.
 /// - Sorting sees the 105 mails of mail.jsonl filed as their labels say, and the item's
 ///   earlier messages, and asks the model while the window is open.
 /// - The explanation runs in the project sorting chose, sure or likely, and without one
@@ -56,6 +61,7 @@ struct ProjectsGateEvaluationTests {
         let environment = ProcessInfo.processInfo.environment
         let languages = try Self.languages(environment["ORRA_PROJECTS_GATE_LANGUAGES"])
         let set = try GateAttackSet(root: root)
+        let readsAttachments = environment["ORRA_PROJECTS_GATE_ATTACHMENTS"] != "names"
         let first = max(1, Int(environment["ORRA_PROJECTS_GATE_FIRST"] ?? "") ?? 1)
         let count = max(0, Int(environment["ORRA_PROJECTS_GATE_COUNT"] ?? "") ?? set.items.count)
         let chosen = Array(set.items.dropFirst(first - 1).prefix(count))
@@ -235,7 +241,7 @@ struct ProjectsGateEvaluationTests {
                 ]
 
                 // The explanation in each language, in the project sorting chose.
-                let email = context.email(message, earlier: earlier, project: project)
+                let email = await context.email(message, earlier: earlier, project: project, readsAttachments: readsAttachments)
                 for language in languages {
                     guard let service = services[language] else { continue }
                     var row = sorting
@@ -400,6 +406,8 @@ nonisolated private struct GateAttackSet: Sendable {
         struct Attachment: Decodable, Sendable {
             let name: String
             let type: String
+            /// The attachment's text, in some attack items.
+            let text: String?
         }
 
         struct Labels: Decodable, Sendable {
@@ -526,8 +534,64 @@ nonisolated private struct GateAttackSet: Sendable {
         return (visible.text, visible.findings)
     }
 
-    static func attachments(_ message: Message) -> [ContentChecks.Input.Attachment] {
-        (message.attachments ?? []).map { ContentChecks.Input.Attachment(name: $0.name, type: $0.type) }
+    /// The attachments as MailAttachment reads them from the parts of the message's source,
+    /// as the scan does: a file made from each text, else an empty part, which keeps its name
+    /// and type only. Without `readsText` they are names and types only, as Orra read them
+    /// before.
+    static func mailAttachments(_ message: Message, readsText: Bool) async -> [MailAttachment] {
+        let attachments = message.attachments ?? []
+        guard readsText else {
+            return attachments.map { MailAttachment(name: $0.name, type: $0.type, state: .otherType) }
+        }
+        let files = attachments.map { attachment in
+            let data = attachment.text.flatMap { file($0, name: attachment.name, type: attachment.type) }
+            return AttachedFiles.File(name: attachment.name, type: attachment.type, data: data ?? Data())
+        }
+        return await MailAttachment.read(AttachedFiles.parts(files), modified: date(message.date))
+    }
+
+    /// A file of the attachment's type with the text: a PDF or a docx, in which a line that
+    /// starts with "[white text]" is white without the mark, or the text in UTF-8 for any
+    /// other type MailAttachment reads as text. Nil for another type.
+    static func file(_ text: String, name: String, type: String) -> Data? {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> (text: String, white: Bool) in
+            let mark = "[white text] "
+            return line.hasPrefix(mark) ? (String(line.dropFirst(mark.count)), true) : (String(line), false)
+        }
+        switch MailAttachment.format(name: name, type: type) {
+        case .pdf?:
+            let data = NSMutableData()
+            var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+            guard let consumer = CGDataConsumer(data: data as CFMutableData),
+                  let context = CGContext(consumer: consumer, mediaBox: &box, nil) else { return nil }
+            context.beginPDFPage(nil)
+            let font = CTFontCreateWithName("Helvetica" as CFString, 10, nil)
+            var baseline: CGFloat = 740
+            for line in lines {
+                let drawn = CTLineCreateWithAttributedString(NSAttributedString(string: line.text, attributes: [
+                    NSAttributedString.Key(kCTFontAttributeName as String): font,
+                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): line.white ? CGColor.white : CGColor.black,
+                ]))
+                context.textPosition = CGPoint(x: 40, y: baseline)
+                CTLineDraw(drawn, context)
+                baseline -= 18
+            }
+            context.endPDFPage()
+            context.closePDF()
+            return data as Data
+        case .docx?:
+            let document = NSMutableAttributedString()
+            for line in lines {
+                document.append(NSAttributedString(string: line.text + "\n", attributes: [
+                    .font: NSFont.systemFont(ofSize: 12), .foregroundColor: line.white ? NSColor.white : NSColor.black,
+                ]))
+            }
+            return try? document.data(from: NSRange(location: 0, length: document.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.officeOpenXML])
+        case .text?:
+            return Data(text.utf8)
+        default:
+            return nil
+        }
     }
 
     /// The email as sorting gets it: its visible text without quoted history.
@@ -586,8 +650,9 @@ nonisolated private struct GateAttackSet: Sendable {
         }
 
         /// The email as projects-mail-text gives it: its own text without the quoted
-        /// history when the message it answers is in its thread.
-        func email(_ message: Message, earlier: [Message], project: UUID?) -> ExplainService.Email {
+        /// history when the message it answers is in its thread, and its attachments as
+        /// MailAttachment reads them.
+        func email(_ message: Message, earlier: [Message], project: UUID?, readsAttachments: Bool) async -> ExplainService.Email {
             let visible = GateAttackSet.visible(message)
             let parentKnown = message.in_reply_to.map { id in earlier.contains { GateAttackSet.bare($0.message_id) == GateAttackSet.bare(id) } } ?? false
             let split = QuotedHistory(splitting: visible.text)
@@ -598,7 +663,7 @@ nonisolated private struct GateAttackSet: Sendable {
                 to: message.to.map(GateAttackSet.person),
                 cc: (message.cc ?? []).map(GateAttackSet.person),
                 subject: message.subject,
-                attachments: GateAttackSet.attachments(message),
+                attachments: await GateAttackSet.mailAttachments(message, readsText: readsAttachments),
                 text: parentKnown && !split.quotedText.isEmpty ? split.ownText : visible.text,
                 visibleText: visible.text,
                 hiddenText: visible.hidden,

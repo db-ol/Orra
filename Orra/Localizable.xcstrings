@@ -462,6 +462,34 @@
         }
       }
     },
+    "%@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@. %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@。%2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@。%2$@"
+          }
+        }
+      }
+    },
     "%@. Chinese becomes English, and English becomes Chinese." : {
       "localizations" : {
         "es-419" : {
@@ -1896,6 +1924,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "附上诊断报告"
+          }
+        }
+      }
+    },
+    "Attachment %@" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjunto %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添付ファイル: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件：%@"
+          }
+        }
+      }
+    },
+    "Attachments" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adjuntos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添付ファイル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件"
           }
         }
       }
@@ -5210,6 +5282,28 @@
         }
       }
     },
+    "Hidden text in it was taken out." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se quitó el texto oculto que contenía."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "含まれていた隠しテキストを取り除きました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其中的隐藏文字已删去。"
+          }
+        }
+      }
+    },
     "Hold" : {
       "comment" : "A trigger mode: hold the key while speaking",
       "localizations" : {
@@ -7018,6 +7112,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“邮件”中现在没有这个名称的邮箱。请在“编辑项目”中重新选择。"
+          }
+        }
+      }
+    },
+    "Mail has not downloaded it, so Projects knows only its name." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail no lo ha descargado, así que Proyectos solo conoce su nombre."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”がまだダウンロードしていないため、“プロジェクト”には名前しかわかりません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”还没有下载它，所以“项目”只知道它的名称。"
           }
         }
       }
@@ -10658,6 +10774,116 @@
         }
       }
     },
+    "Projects could not read it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no pudo leerlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”はこのファイルを読み取れませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”无法读取它。"
+          }
+        }
+      }
+    },
+    "Projects did not read it, as it is over 10 MB." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no lo leyó, porque pesa más de 10 MB."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10 MBを超えるため、“プロジェクト”は読み取りませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它超过 10 MB，所以“项目”没有读取。"
+          }
+        }
+      }
+    },
+    "Projects did not read it, as the email is too large." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no lo leyó, porque el correo es demasiado grande."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールが大きすぎるため、“プロジェクト”は読み取りませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这封邮件太大，所以“项目”没有读取它。"
+          }
+        }
+      }
+    },
+    "Projects did not read it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no lo leyó."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”はこのファイルを読み取りませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”没有读取它。"
+          }
+        }
+      }
+    },
+    "Projects does not read this kind of file." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no lee este tipo de archivo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”はこの種類のファイルを読み取りません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”不读取这类文件。"
+          }
+        }
+      }
+    },
     "Projects explains mail and drafts replies with the cleanup model. The model comes from Hugging Face or a mirror. Your mail and files stay on this Mac." : {
       "localizations" : {
         "es-419" : {
@@ -10676,6 +10902,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“项目”使用整理模型解释邮件并起草回复。模型来自 Hugging Face 或其镜像。你的邮件和文件只留在这台 Mac 上。"
+          }
+        }
+      }
+    },
+    "Projects found no text in it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no encontró texto en él."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”はこのファイルにテキストを見つけられませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”没有在其中找到文字。"
           }
         }
       }
@@ -10856,6 +11104,50 @@
         }
       }
     },
+    "Projects read its text." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos leyó su texto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”はこのファイルのテキストを読み取りました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”读取了它的文字。"
+          }
+        }
+      }
+    },
+    "Projects read the start of its text." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos leyó el inicio de su texto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”はこのファイルの冒頭部分のテキストを読み取りました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”读取了它开头部分的文字。"
+          }
+        }
+      }
+    },
     "Projects reads mail from the chosen period in these mailboxes while Mail is open." : {
       "localizations" : {
         "es-419" : {
@@ -10940,6 +11232,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“项目”只读取在这段时间内收到的邮件。"
+          }
+        }
+      }
+    },
+    "Projects saved this email before it read attachments." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos guardó este correo antes de empezar a leer adjuntos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は添付ファイルを読み取るようになる前にこのメールを保存しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”在开始读取附件之前保存了这封邮件。"
           }
         }
       }
@@ -14431,6 +14745,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新版本的文字没有变化。"
+          }
+        }
+      }
+    },
+    "The part of this attachment the model read" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La parte de este adjunto que leyó el modelo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モデルが読んだ添付ファイルの部分"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型读取的这份附件的内容"
           }
         }
       }

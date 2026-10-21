@@ -129,6 +129,18 @@ class ProjectsMboxTests(unittest.TestCase):
         self.assertEqual([part.get_content_type() for part in attachments], ["application/pdf"])
         self.assertEqual(attachments[0].get_content(), projects_mbox.PLACEHOLDER.encode("utf-8"))
 
+    def test_an_attachment_named_as_a_project_file_carries_that_file(self):
+        folder = self.set_folder / "projects" / "signs"
+        folder.mkdir(parents=True)
+        (folder / "报价单_v2.pdf").write_bytes(b"%PDF-1.4 made up for the test\n")
+        projects_mbox.build(self.set_folder, self.out_folder)
+        (_, first), _ = self.read("orra-test.mbox")
+        [attachment] = list(first.iter_attachments())
+        self.assertEqual(attachment.get_content(), b"%PDF-1.4 made up for the test\n")
+        # An attachment with its own text keeps it.
+        [(_, attack)] = self.read("orra-attacks.mbox")
+        self.assertEqual(list(attack.iter_attachments())[1].get_content(), "item,count\nsign,4\n")
+
     def test_a_body_line_starting_with_from_cannot_split_the_message(self):
         item = dict(MAIL[1], body="Notes below.\nFrom now on we meet on Fridays.\n")
         (self.set_folder / "mail.jsonl").write_text(json.dumps(item) + "\n", encoding="utf-8")

@@ -1396,6 +1396,20 @@ struct ProjectsRuntimeTests {
         #expect(stored.warnings == [.hiddenText])
     }
 
+    /// Hidden text in an attachment shows in the list before the email is explained, as
+    /// hidden text in the email does, also when the attachment has no other text.
+    @Test func hiddenTextInAnAttachmentIsAWarningOfTheScannedMessage() async {
+        let message = FakeMail.Message(id: 4, messageID: "h@harbor.example", from: "Mei Tan <mei@harbor.example>", subject: "Plan", text: "The plan is attached.")
+        let listing = MailListing(message: MailMessageRef(id: 4, mailbox: FakeMail.clients), messageID: message.messageID, dateReceived: Self.today, sender: message.from, subject: message.subject, to: [Self.own], cc: [], size: 100)
+        var scanned = await MailScan.parsed(source: message.source, listing: listing)
+        #expect(ProjectsRuntime.storeMessage(scanned, now: Self.today).warnings == [])
+        scanned.attachments = [MailAttachment(name: "plan.docx", type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", state: .noText, hiddenRuns: 1)]
+        let stored = ProjectsRuntime.storeMessage(scanned, now: Self.today)
+        #expect(stored.warnings == [.hiddenText])
+        #expect(stored.hiddenText.isEmpty)
+        #expect(stored.attachments == scanned.attachments)
+    }
+
     @Test func theMenuTitleCountsTheMailWaitingForAReply() {
         let english = Locale(identifier: "en")
         #expect(ProjectsWindowText.menuTitle(replyDue: 0, locale: english) == "Open Projects Window")

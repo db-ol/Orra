@@ -261,13 +261,62 @@ struct ProjectsEmailModelTests {
         #expect(!ProjectsEmailArea.SourceChip.isGone(.thisEmail))
     }
 
+    /// An attachment's chip shows its name, and the excerpt the model read.
+    @Test func anAttachmentSourceShowsItsNameAndExcerpt() async {
+        var explanation = Self.explanation()
+        explanation.sources["A1"] = .attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps at ¥980 each.")
+        explanation.points[0].sources.append("A1")
+        let model = model(explanation: { explanation })
+        await model.load()
+        #expect(model.sources["A1"] == .attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps at ¥980 each."))
+        #expect(ProjectsWindowText.source(.attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps.")) == "lamps-quote.pdf")
+        #expect(!ProjectsEmailArea.SourceChip.isGone(.attachment(name: "lamps-quote.pdf", excerpt: "")))
+        #expect(ProjectsEmailArea.ExplanationSections.sourceID(.attachment("A1")) == "A1")
+    }
+
+    /// What the attachment list says of each attachment: its kind as Finder names it, its
+    /// size, and whether Projects read it.
+    @Test func theAttachmentListSaysWhatWasRead() {
+        let english = Locale(identifier: "en")
+        let pdf = MailAttachment(name: "lamps-quote.pdf", type: "application/pdf", size: 220_000, state: .read)
+        // The unit is as the locale writes it, such as kB.
+        let kind = ProjectsWindowText.attachmentKind(pdf, locale: english)
+        #expect(kind.hasPrefix("PDF document, 220 ") && kind.lowercased().hasSuffix("kb"))
+        let unknown = MailAttachment(name: "lamps.orraunknown", type: "application/x-orra-unknown", state: .notDownloaded)
+        #expect(ProjectsWindowText.attachmentKind(unknown, locale: english) == "application/x-orra-unknown")
+        let lines: [(MailAttachment.State, Bool, String)] = [
+            (.read, false, "Projects read its text."),
+            (.read, true, "Projects read the start of its text."),
+            (.notDownloaded, false, "Mail has not downloaded it, so Projects knows only its name."),
+            (.tooLarge, false, "Projects did not read it, as it is over 10 MB."),
+            (.emailTooLarge, false, "Projects did not read it, as the email is too large."),
+            (.otherType, false, "Projects does not read this kind of file."),
+            (.unreadable, false, "Projects could not read it."),
+            (.noText, false, "Projects found no text in it."),
+            (.notRead, false, "Projects did not read it."),
+            (.savedEarlier, false, "Projects saved this email before it read attachments."),
+        ]
+        #expect(Set(lines.map(\.0)) == Set(MailAttachment.State.allCases))
+        for (state, isCut, line) in lines {
+            #expect(ProjectsWindowText.attachmentState(MailAttachment(name: "a.pdf", type: "application/pdf", state: state, isCut: isCut)) == line)
+        }
+        // The kind, the size and the state share one line.
+        let text = MailAttachment(name: "notes.txt", type: "text/plain", state: .read)
+        #expect(ProjectsWindowText.attachmentLine(text) == ProjectsWindowText.attachmentKind(text) + ". Projects read its text.")
+        // VoiceOver tells an attachment's chip from a file's of the same name.
+        #expect(ProjectsWindowText.sourceLabel(.attachment(name: "报价单_v2.pdf", excerpt: "")) == "Attachment 报价单_v2.pdf")
+        #expect(ProjectsWindowText.sourceLabel(.thisEmail) == ProjectsWindowText.source(.thisEmail))
+        #expect(ProjectsAttachmentList.Row.icon(pdf) == "doc.text")
+        #expect(ProjectsAttachmentList.Row.icon(unknown) == "doc")
+    }
+
     // MARK: The email itself
 
     /// A forward with a signature, an attachment and quoted history, as the store gives it.
     static let forwardEmail = ExplainService.Email(
         messageID: id, date: today, sender: ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example"),
         to: [ExplainPrompt.Person(name: "Lin", address: "me@studio.example")], cc: [ExplainPrompt.Person(address: "kai@kiln.example")],
-        subject: "Fwd: Lamps", attachments: [ContentChecks.Input.Attachment(name: "lamps.pdf", type: "application/pdf")],
+        subject: "Fwd: Lamps", attachments: [MailAttachment(name: "lamps.pdf", type: "application/pdf", state: .notDownloaded)],
         text: "Lin, see Kai's note.",
         visibleText: "Lin, see Kai's note.\n\n-- \nMei\n\n---------- Forwarded message ---------\nFrom: Kai Moss <kai@kiln.example>\nDate: Mon, Oct 12, 2026 at 9:30 AM\nSubject: Lamps\n\nTwelve lamps, delivery in week 47.\n\nOn Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?")
 

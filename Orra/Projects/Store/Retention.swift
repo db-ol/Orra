@@ -7,12 +7,12 @@ import os
 /// the user chose more days, is kept as long as new mail, and a forged date keeps nothing
 /// longer.
 ///
-/// - **Mail text, 90 days:** the email's own text, its visible text, the words that find
-///   it, and its latest explanation and draft versions, which hold the text, go 90 days
-///   after Orra read the email.
+/// - **Mail text, 90 days:** the email's own text, its visible text, the text of its
+///   attachments, the words that find it, and its latest explanation and draft versions,
+///   which hold the text, go 90 days after Orra read the email.
 /// - **The rest of an email, 180 days:** its headers, people, project, marks, warnings and
-///   attachment names go with its whole thread, 180 days after Orra read the thread's
-///   newest message.
+///   attachment names, types and sizes go with its whole thread, 180 days after Orra read
+///   the thread's newest message.
 /// - **Drafts, 30 days:** the versions of a draft go 30 days after the draft last changed.
 ///   The explanation holds the first draft, so an explanation with a draft goes with it.
 ///   It can be explained again while the text is kept.
@@ -86,8 +86,8 @@ nonisolated enum Retention {
                 RETURNING id
                 """, [cutoffs.text]).count
             removed.texts = try database.run("""
-                UPDATE mail_messages SET text = NULL, visible_text = NULL, words = NULL, draft_changed = NULL
-                WHERE saved < ? AND (text IS NOT NULL OR visible_text IS NOT NULL OR words IS NOT NULL)
+                UPDATE mail_messages SET text = NULL, visible_text = NULL, words = NULL, attachment_text = NULL, draft_changed = NULL
+                WHERE saved < ? AND (text IS NOT NULL OR visible_text IS NOT NULL OR words IS NOT NULL OR attachment_text IS NOT NULL)
                 RETURNING id
                 """, [cutoffs.text]).count
             // Whole threads, by the newest message read. Their people and drafts go with them.

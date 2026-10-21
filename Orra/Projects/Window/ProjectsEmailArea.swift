@@ -4,13 +4,15 @@ import SwiftUI
 /// (plan section 5, projects-email-view), top to bottom:
 /// - the sender, date and subject, the marks, and Explain or Explain Again
 /// - the project chip with its reasons, whose menu moves the email to another project
+/// - the attachments, with whether Projects read their text, see ProjectsAttachmentList
 /// - once the email is explained, the choice between the explanation and the email itself,
 ///   see ProjectsEmailOriginal. Before that the email itself shows under its warnings.
 /// - the warnings, always with those the code found, and what was taken out of the text
 ///   before the model read it
 /// - What it says: the points, each with chips for its sources. A file's chip shows the
-///   excerpt with its page inside Orra, and an earlier email's chip shows that email in the
-///   window (decision 20). Nothing opens outside Orra.
+///   excerpt with its page inside Orra, an attachment's chip the excerpt the model read, and
+///   an earlier email's chip shows that email in the window (decision 20). Nothing opens
+///   outside Orra.
 /// - Before you reply: the questions only the user can answer
 /// - the draft with its tools, see DraftSection
 ///
@@ -47,6 +49,7 @@ struct ProjectsEmailArea: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 ProjectChip(runtime: runtime, model: model, email: email)
+                ProjectsAttachmentList(attachments: email.attachments)
                 Divider()
                 if let explanation = emailModel.explanation {
                     Picker("Show", selection: $emailModel.showsOriginal) {
@@ -311,7 +314,7 @@ extension ProjectsEmailArea {
         static func sourceID(_ place: ExplainPrompt.Place) -> String? {
             switch place {
             case .email: nil
-            case .file(let id), .thread(let id), .projectMail(let id): id
+            case .file(let id), .thread(let id), .projectMail(let id), .attachment(let id): id
             }
         }
     }
@@ -423,9 +426,10 @@ extension ProjectsEmailArea {
             let order: (ExplainPrompt.Place) -> (Int, String) = { place in
                 switch place {
                 case .email: (0, "")
-                case .thread(let id): (1, id)
-                case .projectMail(let id): (2, id)
-                case .file(let id): (3, id)
+                case .attachment(let id): (1, id)
+                case .thread(let id): (2, id)
+                case .projectMail(let id): (3, id)
+                case .file(let id): (4, id)
                 }
             }
             return explanation.removed
@@ -439,8 +443,8 @@ extension ProjectsEmailArea {
 
 extension ProjectsEmailArea {
     /// The chips of a point's sources. A file's chip shows its excerpt with its page in a
-    /// popover, this email's chip its text, and an earlier email's chip shows that email in
-    /// the window (decision 20).
+    /// popover, an attachment's chip the excerpt the model read, this email's chip its text,
+    /// and an earlier email's chip shows that email in the window (decision 20).
     struct SourceChips: View {
         let ids: [String]
         let model: ProjectsWindowModel
@@ -484,6 +488,7 @@ extension ProjectsEmailArea {
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
+            .accessibilityLabel(Text(verbatim: ProjectsWindowText.sourceLabel(source)))
             .disabled(Self.isGone(source))
             .popover(isPresented: $showsExcerpt, arrowEdge: .bottom) {
                 Excerpt(source: source, emailText: emailText)
@@ -494,6 +499,7 @@ extension ProjectsEmailArea {
             switch source {
             case .thisEmail, .mail: "envelope"
             case .file: "doc.text"
+            case .attachment: "paperclip"
             }
         }
 
@@ -503,8 +509,8 @@ extension ProjectsEmailArea {
         }
     }
 
-    /// The text behind a chip: a file's excerpt with its page and heading, or the email's own
-    /// text.
+    /// The text behind a chip: a file's excerpt with its page and heading, the excerpt of an
+    /// attachment the model read, or the email's own text.
     struct Excerpt: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
@@ -529,6 +535,16 @@ extension ProjectsEmailArea {
                             .foregroundStyle(.secondary)
                         Divider()
                         Text(verbatim: chunk.text)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    case .attachment(let name, let excerpt):
+                        Text(verbatim: name)
+                            .font(.headline)
+                        Text("The part of this attachment the model read")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Divider()
+                        Text(verbatim: excerpt)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     case .thisEmail:

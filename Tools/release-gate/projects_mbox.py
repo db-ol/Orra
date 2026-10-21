@@ -13,10 +13,11 @@ is unverified until the first import.
 Each message keeps the set's Message-ID, In-Reply-To, References and date, its From, To,
 Cc and subject, and its plain text. An item with an HTML body gets it as the second part
 of multipart/alternative, so Mail shows the HTML, as it shows real mail. Every attachment
-becomes a part with its name and type. Projects reads only the names and types of
-attachments in phase 1 (decision 14), so a part holds the item's attachment text when it
-has one and a placeholder line otherwise. A Received header carries the date too, in case
-Mail takes the date received from it.
+becomes a part with its name and type. Projects reads the text of attachments, so a part
+holds the item's attachment text when it has one, else the file of the set's project
+folders with the attachment's name, as when a supplier mails the quote that is also in
+the folder, and a placeholder line otherwise. A Received header carries the date too, in
+case Mail takes the date received from it.
 
 It prints counts only, never mail text. Standard library only.
 """
@@ -59,8 +60,18 @@ def read_lines(path: Path) -> list[dict]:
         return [json.loads(line) for line in file if line.strip()]
 
 
-def build_message(item: dict) -> EmailMessage:
-    """One message of the set as an email, with its parts."""
+def project_files(set_folder: Path) -> dict[str, Path]:
+    """The files of the set's project folders, by name, the first of a name counting."""
+    files: dict[str, Path] = {}
+    for path in sorted((set_folder / "projects").glob("*/*")):
+        if path.is_file():
+            files.setdefault(path.name, path)
+    return files
+
+
+def build_message(item: dict, files: dict[str, Path] | None = None) -> EmailMessage:
+    """One message of the set as an email, with its parts. An attachment without text gets
+    the file of `files` with its name."""
     date = datetime.fromisoformat(item["date"])
     message = EmailMessage(policy=POLICY)
     message["Received"] = f"by synthetic.example; {format_datetime(date)}"
@@ -81,7 +92,13 @@ def build_message(item: dict) -> EmailMessage:
         message.add_alternative(item["body_html"], subtype="html")
     for attachment in item.get("attachments") or []:
         maintype, _, subtype = attachment["type"].partition("/")
-        content = (attachment.get("text") or PLACEHOLDER).encode("utf-8")
+        file = (files or {}).get(attachment["name"])
+        if attachment.get("text"):
+            content = attachment["text"].encode("utf-8")
+        elif file is not None:
+            content = file.read_bytes()
+        else:
+            content = PLACEHOLDER.encode("utf-8")
         message.add_attachment(content, maintype=maintype, subtype=subtype or "octet-stream", filename=attachment["name"])
     # Boundaries made from the Message-ID, so a second run writes the same bytes.
     for number, part in enumerate(part for part in message.walk() if part.is_multipart()):
@@ -99,10 +116,10 @@ def from_line(item: dict) -> str:
     return f"From {address} {time.asctime(date.timetuple())}\n"
 
 
-def message_bytes(item: dict) -> bytes:
+def message_bytes(item: dict, files: dict[str, Path] | None = None) -> bytes:
     """The message as it goes into the file. A body line that starts with "From " gets a
     ">" in front, so it never reads as the start of the next message."""
-    message = build_message(item)
+    message = build_message(item, files)
     for chosen in (POLICY, UTF8_POLICY):
         buffer = io.BytesIO()
         try:
@@ -115,14 +132,14 @@ def message_bytes(item: dict) -> bytes:
     raise AssertionError("unreachable")
 
 
-def write_mbox(path: Path, items: list[dict]) -> None:
+def write_mbox(path: Path, items: list[dict], files: dict[str, Path] | None = None) -> None:
     """Writes the messages to a new file next to path, then puts it in place."""
     partial = path.with_name(path.name + ".partial")
     try:
         with partial.open("wb") as file:
             for item in items:
                 file.write(from_line(item).encode("ascii"))
-                file.write(message_bytes(item))
+                file.write(message_bytes(item, files))
                 file.write(b"\n")
         os.replace(partial, path)
     finally:
@@ -133,9 +150,10 @@ def write_mbox(path: Path, items: list[dict]) -> None:
 def build(set_folder: Path, out_folder: Path) -> dict[str, int]:
     """Writes both files and returns the count of messages in each, by file name."""
     counts = {}
+    files = project_files(set_folder)
     for source, target, messages in OUTPUTS:
         items = [message for line in read_lines(set_folder / source) for message in messages(line)]
-        write_mbox(out_folder / target, items)
+        write_mbox(out_folder / target, items, files)
         counts[target] = len(items)
     return counts
 

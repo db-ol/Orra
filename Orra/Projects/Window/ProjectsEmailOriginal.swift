@@ -21,7 +21,8 @@ struct ProjectsEmailOriginal: View {
         /// The people of To and Cc, each as "Name <address>" or the address alone.
         var to: [String] = []
         var cc: [String] = []
-        /// The names of the attachments. Projects reads no attachment's content (decision 14).
+        /// The names of the attachments, as Mail lists them with the message. Whether Projects
+        /// read their text shows in ProjectsAttachmentList, under the project chip.
         var attachments: [String] = []
         /// The sender's own words, before the first forwarded message.
         var note: String

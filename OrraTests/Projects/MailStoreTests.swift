@@ -62,11 +62,11 @@ struct MailStoreTests {
 
     // MARK: Saving
 
-    @Test func theTablesAreTheSecondStepOfTheSchema() async throws {
+    @Test func theTablesAreTheSecondStepOfTheSchemaAndTheAttachmentTextTheThird() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2])
-        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(2)])
+        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3])
+        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(3)])
         await store.close()
     }
 
@@ -353,7 +353,9 @@ struct MailStoreTests {
         let store = try await openStore()
         var message = Self.message("a@test.example", from: "song.yutong@harborlights.example", name: "宋雨桐", to: [Self.work, "lee@quay.example"], cc: ["ann@quay.example"], subject: "Signs", text: "Please confirm the sizes.")
         message.replyTo = [MailStore.Person(name: "Desk", address: "desk@harborlights.example")]
-        message.attachments = [MailStore.Attachment(name: "sizes.pdf", type: "application/pdf")]
+        let sizes = MailAttachment(name: "sizes.pdf", type: "application/pdf", size: 1_200, state: .read, hiddenRuns: 1, isCut: true, text: "Sizes: 60 by 90 cm.")
+        let photo = MailAttachment(name: "site.jpg", type: "image/jpeg", size: 900, state: .otherType)
+        message.attachments = [sizes, photo]
         message.hiddenText = [.htmlComment]
         message.list = ListMail(listID: "Signs <signs.harborlights.example>")
         try await store.save([message], ownAddresses: [Self.work], at: Self.start)
@@ -366,27 +368,65 @@ struct MailStoreTests {
             to: [ExplainPrompt.Person(address: Self.work), ExplainPrompt.Person(address: "lee@quay.example")],
             cc: [ExplainPrompt.Person(address: "ann@quay.example")],
             subject: "Signs",
-            attachments: [ContentChecks.Input.Attachment(name: "sizes.pdf", type: "application/pdf")],
+            attachments: [sizes, photo],
             text: "Please confirm the sizes.", visibleText: "Please confirm the sizes.\n\n> quoted history",
             hiddenText: [.htmlComment], list: ListMail(listID: "Signs <signs.harborlights.example>"), project: Self.harbor))
         #expect(try await store.explainEmail("unknown@test.example") == nil)
+        // The list shows the attachments without their text.
+        var listed = sizes
+        listed.text = nil
+        #expect(try await store.list(.project(Self.harbor)).first?.attachments == [listed, photo])
         await store.close()
     }
 
     /// An email saved while QuotedHistory took a kind of forward for quoted history keeps
     /// that own text in the store. It is read with the own text its visible text gives now,
-    /// so the forward reaches the explanation.
+    /// so the forward reaches the explanation, and with the text of its attachments.
     @Test func anEmailIsReadWithTheOwnTextItsVisibleTextGivesNow() async throws {
         defer { cleanUp() }
         let store = try await openStore()
         let visible = "Lin, see the note below.\n\nAmy\n\n---------- 转发的消息 ----------\n发件人：Kai Moss <kai@kiln.example>\n时间：2026-10-16 09:30\n\nThe start moves to 23 November."
         var message = Self.message("fwd@test.example", from: "amy@quay.example", subject: "转发：Start date", text: "Lin, see the note below.\n\nAmy")
         message.visibleText = visible
+        message.attachments = [MailAttachment(name: "start.txt", type: "text/plain", size: 21, state: .read, text: "Start on 23 November.")]
         try await store.save([message], ownAddresses: [Self.work], at: Self.start)
         let email = try #require(try await store.explainEmail("fwd@test.example"))
         #expect(email.text == visible)
         #expect(email.visibleText == visible)
+        #expect(email.attachments.map(\.text) == ["Start on 23 November."])
         await store.close()
+    }
+
+    /// The text of the attachments is kept apart from their names, types and states, and an
+    /// email without it stores none.
+    @Test func attachmentTextIsKeptApartFromTheirNames() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        var read = Self.message("read@test.example", from: "kim@quay.example")
+        read.attachments = [
+            MailAttachment(name: "photo.png", type: "image/png", size: 10, state: .otherType),
+            MailAttachment(name: "notes.txt", type: "text/plain", size: 14, state: .read, text: "Tiles in gray."),
+        ]
+        var unread = Self.message("unread@test.example", from: "kim@quay.example")
+        unread.attachments = [MailAttachment(name: "plan.pdf", type: "application/pdf", state: .notDownloaded)]
+        try await store.save([read, unread], ownAddresses: [Self.work], at: Self.start)
+        let rows = try await store.database.run("SELECT message_id, attachments, attachment_text FROM mail_messages ORDER BY message_id")
+        #expect(rows.map { $0[2] } == [.text(#"[null,"Tiles in gray."]"#), .null])
+        #expect(rows.allSatisfy { !($0[1].text ?? "").contains("Tiles") })
+        #expect(try await store.explainEmail("read@test.example")?.attachments.map(\.text) == [nil, "Tiles in gray."])
+        #expect(try await store.explainEmail("unread@test.example")?.attachments == unread.attachments)
+        await store.close()
+    }
+
+    /// An attachment that an Orra before attachment text saved, by name and type, says so,
+    /// and a state a later Orra wrote reads as not read.
+    @Test func anAttachmentSavedByNameAndTypeSaysItWasSavedEarlier() throws {
+        let saved = try JSONDecoder().decode([MailAttachment].self, from: Data(#"[{"name":"plan.pdf","type":"application/pdf"}]"#.utf8))
+        #expect(saved == [MailAttachment(name: "plan.pdf", type: "application/pdf", state: .savedEarlier)])
+        let later = try JSONDecoder().decode([MailAttachment].self, from: Data(#"[{"name":"plan.pdf","type":"application/pdf","state":"someday"}]"#.utf8))
+        #expect(later.map(\.state) == [.notRead])
+        let encoded = String(decoding: try JSONEncoder().encode(MailAttachment(name: "a.txt", type: "text/plain", state: .read, text: "words")), as: UTF8.self)
+        #expect(!encoded.contains("words"))
     }
 
     @Test func threadMailHoldsTheOtherMessagesWithTheirText() async throws {

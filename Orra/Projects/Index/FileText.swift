@@ -67,7 +67,8 @@ nonisolated struct FileTextResult: Sendable, Equatable {
         var text: String
     }
 
-    /// The pages that hold text, in order.
+    /// The pages that hold text, in order. None only for bytes whose only text was hidden,
+    /// see `FileTextExtractor.text(of:format:modified:)`.
     var pages: [Page]
     /// How many runs of hidden text were dropped: text colored like what lies behind it,
     /// nearly transparent text, text in a tiny font, Word's hidden text in RTF, and text
@@ -82,6 +83,7 @@ nonisolated struct FileTextResult: Sendable, Equatable {
 }
 
 /// Reads the text of one file in a project folder: PDF, docx, doc, rtf, odt, md and txt.
+/// MailAttachment reads the bytes of an email's attachments with it too.
 ///
 /// The files may come from anyone and are read in Orra's own process, so:
 /// - A file is read only after a check of its type, flags and size, through a descriptor
@@ -141,6 +143,17 @@ nonisolated struct FileTextExtractor: Sendable {
         read(file)
     }
 
+    /// The text of the bytes of a file in `format` that came from elsewhere, such as an
+    /// email's attachment, with the same limits and checks as a file in a folder, or why
+    /// they give none. `modified` is the date the result carries. Bytes whose only text is
+    /// hidden give a result without pages, so the hidden runs are not lost with the text.
+    @concurrent
+    func text(of data: Data, format: Format, modified: Date) async -> Result<FileTextResult, FileSkipReason> {
+        guard !Task.isCancelled else { return .failure(.cancelled) }
+        guard Int64(data.count) <= limit(of: format) else { return .failure(.tooLarge) }
+        return extract(data, format: format, modified: modified, keepsHiddenOnly: true)
+    }
+
     /// What a file extension means: the format to read, or why such a file is skipped.
     static func format(ofExtension fileExtension: String) -> Result<Format, FileSkipReason> {
         switch fileExtension.lowercased() {
@@ -168,18 +181,27 @@ nonisolated struct FileTextExtractor: Sendable {
         case .success(let found): format = found
         case .failure(let reason): return .failure(reason)
         }
-        let limit = switch format {
+        let data: Data
+        let modified: Date
+        switch contents(of: file.path, limit: limit(of: format)) {
+        case .success(let contents): (data, modified) = contents
+        case .failure(let reason): return .failure(reason)
+        }
+        return extract(data, format: format, modified: modified)
+    }
+
+    /// The most bytes a file of the format may have.
+    private func limit(of format: Format) -> Int64 {
+        switch format {
         case .pdf: limits.fileBytes
         case .text: min(limits.fileBytes, limits.textBytes)
         case .docx, .doc, .rtf, .odt: min(limits.fileBytes, limits.officeBytes)
         }
-        let data: Data
-        let modified: Date
-        switch contents(of: file.path, limit: limit) {
-        case .success(let contents): (data, modified) = contents
-        case .failure(let reason): return .failure(reason)
-        }
+    }
 
+    /// The text of a file's bytes, read as `format`. Without visible text it gives `noText`,
+    /// or with `keepsHiddenOnly` a result without pages when hidden runs were dropped.
+    private func extract(_ data: Data, format: Format, modified: Date, keepsHiddenOnly: Bool = false) -> Result<FileTextResult, FileSkipReason> {
         var pages: [FileTextResult.Page]
         var hiddenRuns = 0
         var isCut = false
@@ -203,7 +225,7 @@ nonisolated struct FileTextExtractor: Sendable {
 
         pages = pages.map { FileTextResult.Page(number: $0.number, text: Self.normalized($0.text)) }
             .filter { !$0.text.allSatisfy(\.isWhitespace) }
-        guard !pages.isEmpty else { return .failure(.noText) }
+        guard !pages.isEmpty || (keepsHiddenOnly && hiddenRuns > 0) else { return .failure(.noText) }
         return .success(FileTextResult(pages: pages, hiddenRuns: hiddenRuns, modified: modified, isCut: isCut))
     }
 
