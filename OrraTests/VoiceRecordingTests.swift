@@ -227,6 +227,32 @@ struct VoiceRecordingTests {
         #expect(playback.calls == ["start MacBook Pro Speakers", "play 80000", "finish", "stop"])
     }
 
+    /// The output device opens away from the main thread. A click on Stop while it opens
+    /// plays nothing.
+    @Test func stoppingWhileTheDeviceOpensPlaysNothing() async throws {
+        let start = HeldWork()
+        playback.holdsStart = start
+        let recording = makeRecording()
+        recording.start()
+        try await eventually { recording.phase == .recording }
+        recording.stop()
+        try await eventually { recording.phase == .recorded }
+        recording.togglePlayback()
+        #expect(recording.isPlaying)
+        try await eventually { start.began == 1 }
+        recording.togglePlayback()
+        #expect(!recording.isPlaying)
+        start.release()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(playback.calls == ["start MacBook Pro Speakers", "stop"])
+        #expect(!recording.isPlaying)
+        // The next click plays.
+        playback.holdsStart = nil
+        recording.togglePlayback()
+        try await eventually { !recording.isPlaying }
+        #expect(playback.calls.suffix(4) == ["start MacBook Pro Speakers", "play 80000", "finish", "stop"])
+    }
+
     @Test func withoutAnOutputThereIsNoPlayBack() async throws {
         let recording = makeRecording(output: nil)
         recording.start()
