@@ -319,6 +319,26 @@ struct FolderIndexTests {
         }
     }
 
+    /// Every chunk under a heading keeps it and finds its words. A heading as long as a
+    /// heading may be is repeated in each chunk, and a far longer line stays text, so the
+    /// index grows with the file and not with its square.
+    @Test func longHeadingsKeepTheIndexInProportion() async throws {
+        try await withFixture { fixture in
+            let body = String(repeating: "The studio prints the calendar. ", count: 200)
+            let longest = "# " + String(repeating: "plan ", count: 23) + "\n\n" + body
+            let tooLong = "# " + String(repeating: "word ", count: 2_000) + "\n\n" + body
+            try fixture.write("longest.md", longest)
+            try fixture.write("too-long.md", tooLong)
+            await fixture.start()
+            let chunks = try await fixture.count("SELECT count(*) FROM index_chunks")
+            #expect(chunks > 20)
+            #expect(try await fixture.count("SELECT count(*) FROM index_chunks WHERE heading IS NOT NULL") > 5)
+            #expect(try await fixture.count("SELECT coalesce(sum(length(heading)), 0) FROM index_chunks") <= chunks * Int64(TextChunker.maximumHeadingCharacters))
+            #expect(try await fixture.count("SELECT sum(length(words)) FROM index_chunk_words") <= Int64(longest.utf8.count + tooLong.utf8.count) * 3)
+            try await fixture.expectTablesAgree()
+        }
+    }
+
     /// Changed folders are swept at the next tick, which reads only what changed and drops
     /// what is gone.
     @Test func aSweepAtTheNextTickReadsOnlyWhatChangedAndDropsWhatIsGone() async throws {
