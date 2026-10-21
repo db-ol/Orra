@@ -245,7 +245,8 @@ extension ProjectsEmailArea {
         /// The change box with Change Draft, and the change under way or why the last one
         /// gave nothing. It tells the email view while it has the focus, so the talk key's
         /// words go there. It stays open to typing and to the talk key while a change runs,
-        /// so it keeps the focus, and the words wait for the next change.
+        /// so it keeps the focus. Words said meanwhile change the draft next, see
+        /// ProjectsEmailModel.takeDictation(_:revises:).
         private struct ChangeBox: View {
             let runtime: ProjectsRuntime
             let emailModel: ProjectsEmailModel

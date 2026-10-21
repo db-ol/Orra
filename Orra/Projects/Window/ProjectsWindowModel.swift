@@ -111,11 +111,14 @@ final class ProjectsWindowModel {
     /// Puts the words of a dictation into the change box of the selected email while it has
     /// the focus, and returns whether it took them (decision 13). They change the draft at
     /// once while Projects runs and the setting for it is on, see
-    /// ProjectsSwitch.revisesAfterDictation. The window takes them only while it is the key
-    /// window, see ProjectsWindow.takeDictation(_:).
+    /// ProjectsSwitch.revisesAfterDictation, and only at the end of a dictation. Paste
+    /// Original Text in the menu puts its words in the box and changes nothing, so the words
+    /// of one dictation never change the draft twice. The window takes them only while it is
+    /// the key window, see ProjectsWindow.takeDictation(_:into:appIsActive:windowIsKey:).
     func takeDictation(_ words: String) -> Bool {
         guard let id = selectedMessageID, let model = emailModels[id], model.changeBoxHasFocus else { return false }
-        return model.takeDictation(words, revises: runtime.phase == .on && runtime.projects.revisesAfterDictation)
+        let revises = runtime.phase == .on && runtime.projects.revisesAfterDictation && runtime.dependencies.isDictating()
+        return model.takeDictation(words, revises: revises)
     }
 
     /// Lets go of the email views with their drafts, translations and answer checks, and

@@ -5,7 +5,8 @@ import IOKit
 
 /// How putting text into the frontmost app went.
 nonisolated enum InsertionResult: Equatable, Sendable {
-    /// The text was pasted with Command V.
+    /// The text was pasted with Command V, or the change box of the Projects window took
+    /// it, see AppDelegate.dictationInsertion(projects:paste:).
     case pasted
     /// A password field had the focus, so nothing was pasted and the pasteboard was left
     /// alone.

@@ -66,6 +66,8 @@ struct ProjectsEmailModelTests {
             /// Whether a request of the user waits until the test lets it go, as one waits
             /// for its turn at the model.
             var requestWaits = false
+            /// Whether the removal of a version waits until the test lets it go.
+            var removeWaits = false
         }
 
         let state = Mutex(State())
@@ -142,7 +144,10 @@ struct ProjectsEmailModelTests {
             explanation: { _ in explanation() },
             versions: { _ in fakes.value.versions },
             removeNewestVersion: { _ in
-                fakes.state.withLock { state in
+                while fakes.value.removeWaits {
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                return fakes.state.withLock { state in
                     guard !state.versions.isEmpty else { return false }
                     state.versions.removeLast()
                     return true
@@ -407,8 +412,63 @@ struct ProjectsEmailModelTests {
     }
 
     /// While a change runs, the box stays open, so it keeps the focus. Words said meanwhile
-    /// wait there for the next change, and the change that ends takes away only its own.
-    @Test func wordsSaidWhileAChangeRunsWaitForTheNext() async throws {
+    /// change the draft once it ends, and the change that ends takes away only its own. The
+    /// answer check then runs once, for the newest version.
+    @Test func wordsSaidWhileAChangeRunsChangeTheDraftNext() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let priced = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. The price stays. I will send the floor plan today.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, priced]
+            $0.checks = [Self.bothAnswered]
+            $0.requestWaits = true
+        }
+        model.instruction = "Firmer."
+        model.perform { await $0.applyInstruction() }
+        try await waitUntil { model.isBusy }
+        #expect(model.takeDictation("Keep the price.", revises: true))
+        #expect(model.instruction == "Firmer. Keep the price.")
+        fakes.update { $0.requestWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.versions.map(\.version.change) == [.instruction("Firmer."), .instruction("Keep the price.")])
+        #expect(model.text == priced)
+        #expect(model.instruction.isEmpty)
+        #expect(fakes.value.prompts.filter { $0.contains("<questions>") }.count == 1)
+        #expect(model.currentAnswers?.asked == 2)
+        // Words the user changed meanwhile all stay.
+        #expect(ProjectsEmailModel.remainder(of: "Firm, and keep the price.", after: "Firmer.") == "Firm, and keep the price.")
+        #expect(ProjectsEmailModel.remainder(of: "  Firmer.  ", after: "Firmer.") == "")
+    }
+
+    /// Words said while an undo runs change the draft once it is done, from the text it put
+    /// back.
+    @Test func wordsSaidWhileAnUndoRunsChangeTheDraftAfterIt() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let monday = "Hi Mei,\n\nThe lamp order is [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, monday]
+            $0.checks = [Self.bothAnswered, Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        #expect(model.text == firmer)
+        fakes.update { $0.removeWaits = true }
+        model.perform { await $0.undo() }
+        try await waitUntil { model.isBusy }
+        #expect(model.takeDictation("Say Monday.", revises: true))
+        fakes.update { $0.removeWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.versions.map(\.version.change) == [.instruction("Say Monday.")])
+        #expect(model.text == monday)
+        #expect(fakes.value.prompts.last(where: { !$0.contains("<questions>") })?.contains(Self.draft) == true)
+        #expect(model.instruction.isEmpty)
+    }
+
+    /// Words said while a change runs wait in the box with the setting off, and when the
+    /// change gives no new draft, so a failed change is never tried again on its own.
+    @Test func wordsSaidWhileAChangeRunsWaitWithTheSettingOffOrAfterAFailure() async throws {
         let model = model()
         await model.load()
         let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
@@ -420,16 +480,24 @@ struct ProjectsEmailModelTests {
         model.instruction = "Firmer."
         model.perform { await $0.applyInstruction() }
         try await waitUntil { model.isBusy }
-        #expect(model.takeDictation("Keep the price.", revises: true))
-        #expect(model.instruction == "Firmer. Keep the price.")
+        #expect(model.takeDictation("Keep the price.", revises: false))
         fakes.update { $0.requestWaits = false }
         try await waitUntil { !model.isWorking }
-        #expect(model.text == firmer)
         #expect(model.versions.map(\.version.change) == [.instruction("Firmer.")])
         #expect(model.instruction == "Keep the price.")
-        // Words the user changed meanwhile all stay.
-        #expect(ProjectsEmailModel.remainder(of: "Firm, and keep the price.", after: "Firmer.") == "Firm, and keep the price.")
-        #expect(ProjectsEmailModel.remainder(of: "  Firmer.  ", after: "Firmer.") == "")
+
+        // The fake model has no answer left, so the next change fails.
+        fakes.update { $0.requestWaits = true }
+        model.perform { await $0.applyInstruction() }
+        try await waitUntil { model.isBusy }
+        #expect(model.takeDictation("Say Monday.", revises: true))
+        fakes.update { $0.requestWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.changeNote == .noModel)
+        #expect(model.versions.count == 1)
+        #expect(model.text == firmer)
+        #expect(model.instruction == "Keep the price. Say Monday.")
+        #expect(fakes.value.userRequests == 3)
     }
 
     // MARK: Checks

@@ -57,7 +57,14 @@ final class ProjectsWindow {
     /// the talk key's words go straight into the box, with no clipboard and no Command V
     /// (decision 13). Text only flows in: nothing here reaches the dictation.
     func takeDictation(_ words: String) -> Bool {
-        guard let window, let model, NSApplication.shared.isActive, window.isKeyWindow else { return false }
+        Self.takeDictation(words, into: model, appIsActive: NSApplication.shared.isActive, windowIsKey: window?.isKeyWindow == true)
+    }
+
+    /// The decision of `takeDictation(_:)`, apart from AppKit for tests. The change box keeps
+    /// its focus when another window or app comes to the front, so its focus alone would
+    /// take words meant for another app.
+    static func takeDictation(_ words: String, into model: ProjectsWindowModel?, appIsActive: Bool, windowIsKey: Bool) -> Bool {
+        guard let model, appIsActive, windowIsKey else { return false }
         return model.takeDictation(words)
     }
 

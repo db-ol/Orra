@@ -51,8 +51,9 @@ struct ProjectsWindowViewTests {
     // MARK: The talk key
 
     /// Decision 13: the talk key's words go into the change box of the selected email only
-    /// while that box has the focus, and change the draft at once only while the setting is
-    /// on. Anywhere else the window takes nothing, and the dictation is pasted as in any app.
+    /// while Orra is in front, the window is key and that box has the focus, and change the
+    /// draft at once only at the end of a dictation while the setting is on. Anywhere else
+    /// the window takes nothing, and the dictation is pasted as in any app.
     @Test func theTalkKeysWordsGoOnlyIntoAFocusedChangeBox() async throws {
         let fixture = try await Fixture()
         defer { fixture.cleanUp() }
@@ -77,18 +78,36 @@ struct ProjectsWindowViewTests {
         #expect(email.instruction.isEmpty)
 
         email.changeBoxHasFocus = true
+        fixture.dictation.isOn = true
+        // The box keeps its focus when another window or app comes to the front. The window
+        // then takes nothing, so the dictation goes to the app in front.
+        #expect(!ProjectsWindow.takeDictation("Shorter.", into: model, appIsActive: false, windowIsKey: true))
+        #expect(!ProjectsWindow.takeDictation("Shorter.", into: model, appIsActive: true, windowIsKey: false))
+        #expect(!ProjectsWindow.takeDictation("Shorter.", into: model, appIsActive: false, windowIsKey: false))
+        #expect(!ProjectsWindow.takeDictation("Shorter.", into: nil, appIsActive: true, windowIsKey: true))
+        #expect(email.instruction.isEmpty)
+
         fixture.projects.setRevisesAfterDictation(false)
-        #expect(model.takeDictation("Shorter."))
+        #expect(ProjectsWindow.takeDictation("Shorter.", into: model, appIsActive: true, windowIsKey: true))
         #expect(email.instruction == "Shorter.")
         #expect(!email.isWorking)
 
+        // Paste Original Text in the menu, with no dictation under way, puts its words in the
+        // box and changes nothing, also with the setting on.
         fixture.projects.setRevisesAfterDictation(true)
+        fixture.dictation.isOn = false
+        #expect(model.takeDictation("Keep the price."))
+        #expect(email.instruction == "Shorter. Keep the price.")
+        #expect(!email.isWorking)
+
+        fixture.dictation.isOn = true
         #expect(model.takeDictation("Say Monday."))
+        fixture.dictation.isOn = false
         try await waitUntil { !email.isWorking }
         #expect(email.instruction.isEmpty)
         #expect(email.text == changed)
         #expect(email.versions.count == versions + 1)
-        #expect(email.versions.last?.version.change == .instruction("Shorter. Say Monday."))
+        #expect(email.versions.last?.version.change == .instruction("Shorter. Keep the price. Say Monday."))
 
         // Another email selected, whose box never had the focus.
         model.selectedMessageID = "other@harbor.example"
@@ -443,13 +462,27 @@ struct ProjectsWindowViewTests {
 
     /// Projects on with one indexed project, a Mail that never runs and no model.
     @MainActor final class Fixture {
+        /// Whether a dictation is under way, as EngineTurns says. Off unless a test turns it
+        /// on, since the index waits while it is on.
+        final class Dictation: Sendable {
+            private let value = Mutex(false)
+
+            var isOn: Bool {
+                get { value.withLock { $0 } }
+                set { value.withLock { $0 = newValue } }
+            }
+        }
+
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ProjectsWindowViewTests-\(UUID().uuidString)", isDirectory: true)
         let suite = "io.github.db-ol.OrraTests.projects-window-\(UUID().uuidString)"
         let defaults: UserDefaults
         let projects: ProjectsSwitch
+        let dictation: Dictation
         let runtime: ProjectsRuntime
 
         init() async throws {
+            let dictation = Dictation()
+            self.dictation = dictation
             defaults = try #require(UserDefaults(suiteName: suite))
             let storage = ProjectsStorage(root: root.appendingPathComponent("Support", isDirectory: true))
             projects = ProjectsSwitch(defaults: defaults, isVisible: true, physicalMemory: 32 << 30, storage: storage)
@@ -478,7 +511,7 @@ struct ProjectsWindowViewTests {
                 choice: choice,
                 ownerOverride: { SortingService.Owner(addresses: ["me@studio.example"]) },
                 language: .en,
-                isDictating: { false },
+                isDictating: { dictation.isOn },
                 modelEnvironment: { _ in
                     ProjectsModelEnvironment(
                         startJob: { _, _ in throw RewriteError.notLoaded },
