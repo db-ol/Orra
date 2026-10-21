@@ -4,9 +4,10 @@ import Testing
 @testable import Orra
 
 /// The email view of one email: the draft as the user edits it, a change from the change
-/// box or a tone with its highlight and Undo, the answer check once per draft the model
-/// made, Show in My Language, the handoff to Mail with one at a time for the window, the
-/// requests that the window's close ends, the source chips and the deadline mark.
+/// box or a tone with its highlight and Undo, the talk key's words in the change box, the
+/// answer check once per draft the model made, Show in My Language, the handoff to Mail with
+/// one at a time for the window, the requests that the window's close ends, the source chips
+/// and the deadline mark.
 ///
 /// A fake model answers by the kind of request, a fake store keeps the versions, and a fake
 /// Mail never sends an Apple Event. Made up people at .example addresses, nothing from the
@@ -62,6 +63,11 @@ struct ProjectsEmailModelTests {
             var replyStarted = false
             /// The requests that ran as the user's.
             var userRequests = 0
+            /// Whether a request of the user waits until the test lets it go, as one waits
+            /// for its turn at the model.
+            var requestWaits = false
+            /// Whether the removal of a version waits until the test lets it go.
+            var removeWaits = false
         }
 
         let state = Mutex(State())
@@ -138,7 +144,10 @@ struct ProjectsEmailModelTests {
             explanation: { _ in explanation() },
             versions: { _ in fakes.value.versions },
             removeNewestVersion: { _ in
-                fakes.state.withLock { state in
+                while fakes.value.removeWaits {
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                return fakes.state.withLock { state in
                     guard !state.versions.isEmpty else { return false }
                     state.versions.removeLast()
                     return true
@@ -156,6 +165,9 @@ struct ProjectsEmailModelTests {
             },
             userRequest: { request in
                 fakes.update { $0.userRequests += 1 }
+                while fakes.value.requestWaits {
+                    try await Task.sleep(for: .milliseconds(5))
+                }
                 try await request()
             },
             email: { id in
@@ -340,6 +352,152 @@ struct ProjectsEmailModelTests {
         await model.makeChange(.tone(.formal))
         #expect(model.versions.last?.version.droppedPlaceholders == ["[to confirm: lamp order]"])
         #expect(ProjectsWindowText.dropped(["[to confirm: lamp order]"], tone: true) == "The new tone left out [to confirm: lamp order]. Put it back before you send.")
+    }
+
+    // MARK: The talk key
+
+    /// Decision 13: the talk key's words go into the change box and change the draft at
+    /// once, as Change Draft would.
+    @Test func theTalkKeysWordsChangeTheDraftAtOnce() async throws {
+        let model = model()
+        await model.load()
+        let changed = "Hi Mei,\n\nThe lamp order is [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        fakes.update {
+            $0.revisions = [changed]
+            $0.checks = [Self.bothAnswered]
+        }
+        #expect(model.takeDictation("Say Monday.", revises: true))
+        #expect(model.instruction == "Say Monday.")
+        try await waitUntil { !model.isWorking }
+        #expect(model.text == changed)
+        #expect(model.instruction.isEmpty)
+        #expect(model.changeNote == nil)
+        #expect(model.versions.map(\.version.change) == [.instruction("Say Monday.")])
+        #expect(fakes.value.prompts.first?.contains("Say Monday.") == true)
+        // The answer check ran for the new version, as after a click.
+        #expect(model.currentAnswers?.asked == 2)
+    }
+
+    /// With the change after a dictation off, the words wait in the box after what it holds,
+    /// spaced as the language needs, and nothing asks the model.
+    @Test func withTheSettingOffTheWordsWaitInTheBox() async {
+        let model = model()
+        await model.load()
+        model.instruction = "Shorter."
+        #expect(model.takeDictation("Keep the price.", revises: false))
+        #expect(model.instruction == "Shorter. Keep the price.")
+        model.instruction = "更正式一点，"
+        #expect(model.takeDictation("价格不变。", revises: false))
+        #expect(model.instruction == "更正式一点，价格不变。")
+        model.instruction = "Shorter\n"
+        #expect(model.takeDictation("Keep the price.", revises: false))
+        #expect(model.instruction == "Shorter\nKeep the price.")
+        #expect(!model.isWorking)
+        #expect(fakes.value.prompts.isEmpty)
+        #expect(model.versions.isEmpty)
+    }
+
+    /// Without a draft to change, or without words, the box takes nothing, so the dictation
+    /// is pasted as in any app.
+    @Test func theBoxTakesNoWordsWithoutADraft() async {
+        let none = model(explanation: { Self.explanation(draft: nil) })
+        await none.load()
+        #expect(!none.takeDictation("Shorter.", revises: true))
+        #expect(none.instruction.isEmpty)
+        let model = model()
+        await model.load()
+        #expect(!model.takeDictation(" \n", revises: true))
+        #expect(model.instruction.isEmpty)
+        #expect(!model.isWorking)
+    }
+
+    /// While a change runs, the box stays open, so it keeps the focus. Words said meanwhile
+    /// change the draft once it ends, and the change that ends takes away only its own. The
+    /// answer check then runs once, for the newest version.
+    @Test func wordsSaidWhileAChangeRunsChangeTheDraftNext() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let priced = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. The price stays. I will send the floor plan today.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, priced]
+            $0.checks = [Self.bothAnswered]
+            $0.requestWaits = true
+        }
+        model.instruction = "Firmer."
+        model.perform { await $0.applyInstruction() }
+        try await waitUntil { model.isBusy }
+        #expect(model.takeDictation("Keep the price.", revises: true))
+        #expect(model.instruction == "Firmer. Keep the price.")
+        fakes.update { $0.requestWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.versions.map(\.version.change) == [.instruction("Firmer."), .instruction("Keep the price.")])
+        #expect(model.text == priced)
+        #expect(model.instruction.isEmpty)
+        #expect(fakes.value.prompts.filter { $0.contains("<questions>") }.count == 1)
+        #expect(model.currentAnswers?.asked == 2)
+        // Words the user changed meanwhile all stay.
+        #expect(ProjectsEmailModel.remainder(of: "Firm, and keep the price.", after: "Firmer.") == "Firm, and keep the price.")
+        #expect(ProjectsEmailModel.remainder(of: "  Firmer.  ", after: "Firmer.") == "")
+    }
+
+    /// Words said while an undo runs change the draft once it is done, from the text it put
+    /// back.
+    @Test func wordsSaidWhileAnUndoRunsChangeTheDraftAfterIt() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let monday = "Hi Mei,\n\nThe lamp order is [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, monday]
+            $0.checks = [Self.bothAnswered, Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        #expect(model.text == firmer)
+        fakes.update { $0.removeWaits = true }
+        model.perform { await $0.undo() }
+        try await waitUntil { model.isBusy }
+        #expect(model.takeDictation("Say Monday.", revises: true))
+        fakes.update { $0.removeWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.versions.map(\.version.change) == [.instruction("Say Monday.")])
+        #expect(model.text == monday)
+        #expect(fakes.value.prompts.last(where: { !$0.contains("<questions>") })?.contains(Self.draft) == true)
+        #expect(model.instruction.isEmpty)
+    }
+
+    /// Words said while a change runs wait in the box with the setting off, and when the
+    /// change gives no new draft, so a failed change is never tried again on its own.
+    @Test func wordsSaidWhileAChangeRunsWaitWithTheSettingOffOrAfterAFailure() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer]
+            $0.checks = [Self.bothAnswered]
+            $0.requestWaits = true
+        }
+        model.instruction = "Firmer."
+        model.perform { await $0.applyInstruction() }
+        try await waitUntil { model.isBusy }
+        #expect(model.takeDictation("Keep the price.", revises: false))
+        fakes.update { $0.requestWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.versions.map(\.version.change) == [.instruction("Firmer.")])
+        #expect(model.instruction == "Keep the price.")
+
+        // The fake model has no answer left, so the next change fails.
+        fakes.update { $0.requestWaits = true }
+        model.perform { await $0.applyInstruction() }
+        try await waitUntil { model.isBusy }
+        #expect(model.takeDictation("Say Monday.", revises: true))
+        fakes.update { $0.requestWaits = false }
+        try await waitUntil { !model.isWorking }
+        #expect(model.changeNote == .noModel)
+        #expect(model.versions.count == 1)
+        #expect(model.text == firmer)
+        #expect(model.instruction == "Keep the price. Say Monday.")
+        #expect(fakes.value.userRequests == 3)
     }
 
     // MARK: Checks

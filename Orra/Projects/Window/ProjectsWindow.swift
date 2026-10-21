@@ -24,6 +24,8 @@ final class ProjectsWindow {
     /// Opens Settings at the Projects page.
     private let openSettings: () -> Void
     private var window: NSWindow?
+    /// What the open window shows, nil while it is closed.
+    private var model: ProjectsWindowModel?
     private var closeObserver: (any NSObjectProtocol)?
 
     init(runtime: ProjectsRuntime, willShow: @escaping () -> Void, openSettings: @escaping () -> Void) {
@@ -49,8 +51,26 @@ final class ProjectsWindow {
         window?.close()
     }
 
+    /// Puts the words of a dictation into the change box of the email view, while Orra is
+    /// in front, this window is its key window and the change box has the focus, and
+    /// returns whether it took them. AppDelegate asks this before it pastes a dictation, so
+    /// the talk key's words go straight into the box, with no clipboard and no Command V
+    /// (decision 13). Text only flows in: nothing here reaches the dictation.
+    func takeDictation(_ words: String) -> Bool {
+        Self.takeDictation(words, into: model, appIsActive: NSApplication.shared.isActive, windowIsKey: window?.isKeyWindow == true)
+    }
+
+    /// The decision of `takeDictation(_:)`, apart from AppKit for tests. The change box keeps
+    /// its focus when another window or app comes to the front, so its focus alone would
+    /// take words meant for another app.
+    static func takeDictation(_ words: String, into model: ProjectsWindowModel?, appIsActive: Bool, windowIsKey: Bool) -> Bool {
+        guard let model, appIsActive, windowIsKey else { return false }
+        return model.takeDictation(words)
+    }
+
     private func makeWindow() -> NSWindow {
         let model = ProjectsWindowModel(runtime: runtime)
+        self.model = model
         let view = ProjectsWindowView(runtime: runtime, model: model, openSettings: openSettings)
         let controller = NSHostingController(rootView: view)
         controller.sceneBridgingOptions = [.toolbars, .title]
@@ -83,6 +103,7 @@ final class ProjectsWindow {
     private func letGo() {
         let closing = window
         window = nil
+        model = nil
         if let closeObserver {
             NotificationCenter.default.removeObserver(closeObserver)
         }

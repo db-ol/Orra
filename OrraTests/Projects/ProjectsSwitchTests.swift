@@ -4,6 +4,7 @@ import Testing
 
 /// The Projects switch: off by default, only in builds that show Projects and on Macs with
 /// 16 GB, saved in its preference, and turning it off keeps or deletes the data as asked.
+/// Also the setting of the talk key in the Projects window.
 /// Each test has preferences of its own and a temporary folder, never the real ones.
 @MainActor
 struct ProjectsSwitchTests {
@@ -85,6 +86,27 @@ struct ProjectsSwitchTests {
         defaults.set(true, forKey: ProjectsSwitch.key)
         #expect(!makeSwitch(physicalMemory: Self.eightGB).isOn)
         #expect(makeSwitch(physicalMemory: Self.sixteenGB).isOn)
+    }
+
+    /// Decision 13: the talk key's words in the change box change the draft as soon as the
+    /// dictation ends, until the user turns that off. Nothing is saved before a change.
+    @Test func theChangeAfterADictationIsOnUntilTurnedOff() {
+        defer { cleanUp() }
+        let projects = makeSwitch()
+        #expect(projects.revisesAfterDictation)
+        #expect(defaults.persistentDomain(forName: suite)?[ProjectsSwitch.revisesAfterDictationKey] == nil)
+        projects.setRevisesAfterDictation(false)
+        #expect(!projects.revisesAfterDictation)
+        #expect(defaults.persistentDomain(forName: suite)?[ProjectsSwitch.revisesAfterDictationKey] as? Bool == false)
+        #expect(!makeSwitch().revisesAfterDictation)
+        projects.setRevisesAfterDictation(true)
+        #expect(projects.revisesAfterDictation)
+        #expect(makeSwitch().revisesAfterDictation)
+        // It is its own setting: turning Projects on and off leaves it alone.
+        projects.setRevisesAfterDictation(false)
+        projects.turnOn()
+        #expect(!projects.revisesAfterDictation)
+        #expect(!makeSwitch().revisesAfterDictation)
     }
 
     /// Debug and release builds share the preferences. A release build that hides Projects

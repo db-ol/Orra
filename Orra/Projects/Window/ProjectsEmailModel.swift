@@ -17,6 +17,9 @@ import Observation
 ///   version (decision 9). For a draft made in an earlier window, and after an edit, it runs
 ///   on a click. The translation runs while Show in My Language is on, for each version, and
 ///   on a click after an edit.
+/// - The talk key's words go straight into the change box while it has the focus, and change
+///   the draft as soon as the dictation ends while the setting for it is on (decision 13),
+///   see `takeDictation(_:revises:)`.
 /// - Open Reply in Mail and Reply All need Mail's handle of the email, which the scan keeps
 ///   for this Mail session. Without it the draft is only copied. The window runs one
 ///   handoff at a time, for all its emails, see `Handoffs`.
@@ -157,9 +160,12 @@ final class ProjectsEmailModel {
     private(set) var emailText = ""
     /// The draft as the editor holds it.
     var text = ""
-    /// What the user types or says into the change box. The talk key of projects-voice
-    /// writes here too.
+    /// What the user types or says into the change box. The talk key writes here too, see
+    /// `takeDictation(_:revises:)`.
     var instruction = ""
+    /// Whether the change box has the focus in the window, which the view sets. The talk
+    /// key's words go there only then.
+    @ObservationIgnored var changeBoxHasFocus = false
     /// The change under way, nil while none runs.
     private(set) var changing: RevisePrompt.Change?
     private(set) var changeNote: Note?
@@ -179,6 +185,10 @@ final class ProjectsEmailModel {
     /// Whether a translation or an answer check was asked for while one ran.
     @ObservationIgnored private var translateAgain = false
     @ObservationIgnored private var checkAgain = false
+    /// Whether the talk key's words came into the change box, with the change after a
+    /// dictation on, while a change or an undo ran, so the draft changes with them once that
+    /// ends.
+    @ObservationIgnored private var changesWhenFree = false
     /// The requests started with `perform(_:)` that still run.
     @ObservationIgnored private var work: [UUID: Task<Void, Never>] = [:]
 
@@ -393,17 +403,41 @@ final class ProjectsEmailModel {
 
     // MARK: Changes
 
-    /// Applies the instruction of the change box.
-    func applyInstruction() async {
+    /// Puts the words of a dictation into the change box, after what it holds, and with
+    /// `revises` changes the draft with them at once, as a click on Change Draft would. While
+    /// a change or an undo runs, the draft changes with what the box holds once that ends,
+    /// unless it gave no new draft. Returns false and takes nothing when there is no draft
+    /// to change or nothing to put in.
+    ///
+    /// The words reach the box inside Orra, with no clipboard and no Command V. The change
+    /// waits in ProjectsModelQueue until the dictation has ended, so it never holds up the
+    /// paste of the dictation itself.
+    func takeDictation(_ words: String, revises: Bool) -> Bool {
+        guard hasDraft, !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        instruction = RecordingPieces.joined([instruction, words])
+        if revises {
+            if isBusy {
+                changesWhenFree = true
+            } else {
+                perform { await $0.applyInstruction() }
+            }
+        }
+        return true
+    }
+
+    /// Applies the instruction of the change box, and returns whether it made a new version.
+    @discardableResult
+    func applyInstruction() async -> Bool {
         let words = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty else { return }
-        await makeChange(.instruction(words))
+        guard !words.isEmpty else { return false }
+        return await makeChange(.instruction(words))
     }
 
     /// Makes a new version of the draft in the editor, from an instruction or in a tone,
-    /// and keeps it when the store saved it.
-    func makeChange(_ change: RevisePrompt.Change) async {
-        guard changing == nil, !isUndoing, let explanation, hasDraft else { return }
+    /// keeps it when the store saved it, and returns whether it made one.
+    @discardableResult
+    func makeChange(_ change: RevisePrompt.Change) async -> Bool {
+        guard changing == nil, !isUndoing, let explanation, hasDraft else { return false }
         let before = text
         changing = change
         changeNote = nil
@@ -418,11 +452,28 @@ final class ProjectsEmailModel {
             made = false
         }
         changing = nil
-        guard made else { return }
-        if case .instruction = change {
-            instruction = ""
+        let changesAgain = changesWhenFree
+        changesWhenFree = false
+        guard made else { return false }
+        if case .instruction(let words) = change {
+            instruction = Self.remainder(of: instruction, after: words)
+        }
+        // The talk key's words that came meanwhile change the draft next, see
+        // takeDictation(_:revises:). The checks then run once, for the newest version.
+        if changesAgain, await applyInstruction() {
+            return true
         }
         await afterNewVersion()
+        return true
+    }
+
+    /// What stays in the change box after a change made from `words`: what the user typed
+    /// or said after them while the change ran, or all of it when the user changed those
+    /// words meanwhile.
+    nonisolated static func remainder(of box: String, after words: String) -> String {
+        let held = box.drop { $0.isWhitespace || $0.isNewline }
+        guard held.hasPrefix(words) else { return box }
+        return String(held.dropFirst(words.count).drop { $0.isWhitespace || $0.isNewline })
     }
 
     private func makeVersion(_ change: RevisePrompt.Change, from before: String, explanation: Explanation) async throws -> Bool {
@@ -452,7 +503,8 @@ final class ProjectsEmailModel {
     }
 
     /// Undo of the newest change: removes the newest version and puts back the text it was
-    /// made from.
+    /// made from. The talk key's words that came meanwhile then change the draft, see
+    /// `takeDictation(_:revises:)`.
     func undo() async {
         guard let last = versions.last, !isBusy else { return }
         isUndoing = true
@@ -461,6 +513,8 @@ final class ProjectsEmailModel {
         let removed = await actions.removeNewestVersion(messageID)
         let saved = await actions.versions(messageID)
         isUndoing = false
+        let changesAgain = changesWhenFree
+        changesWhenFree = false
         guard removed, !saved.contains(where: { $0.number == last.number }) else {
             await load()
             return
@@ -468,6 +522,9 @@ final class ProjectsEmailModel {
         let before = madeFrom.removeValue(forKey: last.number)
         await take(saved)
         text = before ?? modelDraft ?? ""
+        if changesAgain {
+            await applyInstruction()
+        }
     }
 
     /// After a new version: the answer check, and the translation while it shows.

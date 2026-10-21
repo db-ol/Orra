@@ -2209,6 +2209,28 @@
         }
       }
     },
+    "Change the draft when you finish speaking" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiar el borrador al terminar de hablar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話し終えたら下書きを変更"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说完就修改草稿"
+          }
+        }
+      }
+    },
     "Change Translation Key…" : {
       "localizations" : {
         "es-419" : {
@@ -5186,6 +5208,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入音频文件…"
+          }
+        }
+      }
+    },
+    "In the Projects window, put the cursor in the box where you say what to change, and use the talk key. Your words go into the box, and when you finish speaking, the draft changes. Turn this off to read your words first and then click Change Draft." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En la ventana Proyectos, pon el cursor en el cuadro donde dices qué cambiar y usa la tecla para hablar. Tus palabras van al cuadro y, cuando terminas de hablar, el borrador cambia. Desactiva esta opción para leer primero tus palabras y luego hacer clic en Cambiar borrador."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”ウインドウで、変更内容を入力する欄にカーソルを置いて音声入力キーを使います。話した内容がその欄に入力され、話し終えると下書きが変更されます。オフにすると、内容を確認してから“下書きを変更”をクリックできます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“项目”窗口中，把光标放进填写修改要求的框里，然后使用说话键。你说的话会填进这个框，说完后草稿就会修改。关闭此项后，可以先看看这些文字，再点按“修改草稿”。"
           }
         }
       }

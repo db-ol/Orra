@@ -23,13 +23,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let talkKey = TalkKeyPreference.loadHotkey()
         let translationKey = TranslationKeyPreference.loadHotkey(talkKey: talkKey)
         let setUpBefore = self.setUpBefore
+        let inserter = TextInserter.live()
         let controller = PushToTalkController(
             capture: .live(),
             transcription: transcription,
             cleanup: cleanup.model.sharing(turns),
             translation: cleanup.translation,
             voice: speech.voiceForDictation,
-            insert: TextInserter.live().insert,
+            insert: Self.dictationInsertion(
+                projects: { [weak self] words in self?.projectsWindow.takeDictation(words) ?? false },
+                paste: inserter.insert
+            ),
             talkKey: talkKey,
             saveTalkKey: { TalkKeyPreference.saveHotkey($0) },
             talkKeyChosen: TalkKeyPreference.isSaved(),
@@ -498,6 +502,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate {
+    /// Where a dictation goes: straight into the change box of the Projects window when the
+    /// window takes it, with no clipboard and no Command V (decision 13), see
+    /// ProjectsWindow.takeDictation(_:), and into the app in front through `paste`
+    /// otherwise. The translation key's text goes the same way, so in the window's draft it
+    /// is pasted as in any app. Words the change box took count as pasted.
+    static func dictationInsertion(
+        projects: @escaping @MainActor (String) -> Bool,
+        paste: @escaping @MainActor (String) async -> InsertionResult
+    ) -> @MainActor (String) async -> InsertionResult {
+        { text in
+            if projects(text) {
+                return .pasted
+            }
+            return await paste(text)
+        }
+    }
+
     /// The user's addresses and name for Projects in a Debug build, from two preferences
     /// the test guide sets, so a Debug run treats a person of the synthetic mail as the user
     /// and never reads the addresses of Mail's accounts (plan section 8). A release build
