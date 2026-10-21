@@ -88,10 +88,6 @@ got worse than the baseline, see docs/release-gate.md.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
     window's parts to PNG files there, once per test language, which CI never does. The
     sidebar does not draw offscreen, so it is not in them.
-  - ProjectsSwitchTests checks since 2026-10-20 that every build shows Projects, release
-    builds too, with its page in the sidebar marked as a preview and the switch off until
-    the user turns it on, and that a build that hides Projects never has it on, whatever a
-    Debug run saved.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
@@ -3160,32 +3156,36 @@ or press the key to start and again to finish where they say hold:
 - [ ] The welcome window's translation line names the dictation language.
 
 Projects as a preview in release builds, added on 2026-10-20, not verified yet. Every build
-shows Projects since then. Check in a Release build (docs/development.md, A faster build for
+shows Projects since then. No unit test can tell, since the tests build in Debug, where
+Projects always showed. Check in a Release build (docs/development.md, A faster build for
 daily use), after Delete All Projects Data… and the cleanup steps of Projects in a Debug
 build in docs/development.md, so nothing of a Debug run carries over. Import a test mailbox
-into Mail (File > Import Mailboxes…) and tick only it under Mailboxes, so Projects reads no
-real mail. The checks of Mail access below hold for a release build too.
+into Mail (File > Import Mailboxes…). A release build ignores projectsDebugOwnAddresses and
+projectsDebugOwnName. After Start Reading Mail it reads the names and addresses of your real
+Mail accounts to tell the mail you sent, so the owner of the test set counts as someone else.
+The reply count, the sorting and Suggested Projects then differ from a Debug run, which is
+not a bug. Check those in a Debug build. The checks of Mail access below hold for a release
+build too.
 
 - [ ] Settings shows Projects after Vocabulary with Preview under its name, and its page
   shows Preview beside the switch, in English, Chinese, Japanese and Spanish. The switch is
   off, and on a Mac with less than 16 GB the page says why it cannot turn on.
-- [ ] Start Reading Mail opens the Projects window. The test mail lands in projects, in
-  Needs a Project and in Set Aside, and the menu item shows the count of mail to reply to.
-- [ ] With no project made yet, Suggested Projects shows under Needs a Project, each with
-  the number of emails it would take, and the model names them while the window is open.
-  A click opens New Project filled in. Saving it sorts the mail again. Dismiss Suggestion,
-  in the sheet or in the row's menu, removes it, also after Orra restarts. Nothing is made
-  without a click.
+- [ ] After Allow Mail Access…, Mailboxes has Inbox (all accounts) and Sent (all accounts)
+  ticked. Untick both and tick only the test mailbox before Start Reading Mail, so Projects
+  reads no real mail.
+- [ ] Start Reading Mail opens the Projects window. The test mail shows in Needs a Project
+  and in Set Aside, Suggested Projects shows below them when Orra finds groups, and the menu
+  item shows a count of mail to reply to.
 - [ ] A new project with a folder: its page shows how many files were read and skipped, why,
   and the files with hidden text. Add a folder inside Documents, Desktop or Downloads and
   note whether macOS asks for access to it.
-- [ ] Move two emails of one sender to a project. Orra offers a rule, and Add Rule files the
-  sender's next email there.
-- [ ] Explain an email: Warnings, What it says with source chips, Before you reply and the
-  draft. A file's chip shows the passage with its page inside Orra, an attachment's chip
-  its passage, and an earlier email's chip that email. Nothing opens outside Orra.
-  Explanation and Original Email switch, and the original shows To, Cc, the attachments,
-  each forwarded message under its own header and Quoted Text folded.
+- [ ] Move two emails of one sender to that project. Orra offers a rule, and Add Rule files
+  the sender's next email there.
+- [ ] Explain an email of that project: Warnings, What it says with source chips, Before
+  you reply and the draft. A file's chip shows the passage with its page inside Orra, an
+  attachment's chip its passage, and an earlier email's chip that email. Nothing opens
+  outside Orra. Explanation and Original Email switch, and the original shows To, Cc, the
+  attachments, each forwarded message under its own header and Quoted Text folded.
 - [ ] An email with a PDF or docx attachment lists it as read, and an explanation can cite
   it. An attachment Mail has not downloaded keeps its name only and says so.
 - [ ] Tone, Show in Chinese or Show in English, the answer check, Change Draft and Undo
@@ -3250,8 +3250,8 @@ mail.
   allowed and a mailbox is ticked. No mail is read before Start Reading Mail, and this
   prints only the ticked mailboxes:
   `defaults export io.github.db-ol.Orra - | plutil -extract projectsMailboxes raw -o - - | base64 -D`
-- [ ] Once release builds show Projects: a release build ticks Inbox (all accounts) and
-  Sent (all accounts) before the user chooses.
+- [ ] A release build ticks Inbox (all accounts) and Sent (all accounts) before the user
+  chooses.
 - [ ] Choose a mailbox with no project made yet, then turn Projects off. It asks Keep or
   Delete. Delete Data, or Delete All Projects Data… with Projects on or off, removes the
   choice, and the command above then finds no projectsMailboxes.

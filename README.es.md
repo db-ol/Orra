@@ -80,7 +80,7 @@ Novedad de la versión 0.4.0.
 
 ### Proyectos (vista previa)
 
-Opcional, para una Mac con 16 GB de memoria o más, y una vista previa que todavía puede cambiar. Elige los buzones de Mail que lee Orra y agrega tus proyectos con sus carpetas y personas, o empieza con los proyectos que Orra sugiere, y Orra clasifica cada correo nuevo en su proyecto. Haz clic en Explicar, y el modelo local enumera lo que dice el correo, con sus fuentes en los archivos del proyecto, sus adjuntos y correos anteriores, y las preguntas que solo tú puedes decidir. Luego redacta una respuesta en el idioma del correo, chino o inglés, que cambias escribiendo o con la tecla para hablar y pegas en la ventana de respuesta de Mail. Orra nunca envía, mueve ni elimina correos, y nada de lo que lee sale de tu Mac.
+Opcional, para una Mac con 16 GB de memoria o más, y una vista previa que todavía puede cambiar. Elige los buzones de Mail que lee Orra y agrega tus proyectos con sus carpetas y personas, o empieza con los proyectos que Orra sugiere, y Orra clasifica cada correo nuevo en su proyecto. Haz clic en Explicar, y el modelo local enumera lo que dice el correo, con sus fuentes en los archivos del proyecto, sus adjuntos y correos anteriores, y las preguntas que solo tú puedes decidir. La explicación aparece en inglés. Luego redacta una respuesta en el idioma del correo, chino o inglés, que cambias escribiendo o con la tecla para hablar y pegas en la ventana de respuesta de Mail. Orra nunca envía, mueve ni elimina correos, y nada de lo que lee sale de tu Mac.
 
 </td>
 </tr>

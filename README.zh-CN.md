@@ -100,7 +100,7 @@
 
 - **[下载最新版本的 Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**，打开后把 Orra 拖进“应用程序”。旧版本和更新说明在[版本发布页面](https://github.com/db-ol/Orra/releases)。
 - **Orra Microphone**（可选，用于“为对方朗读译文”）：下载已签名并经过公证的 [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg)，打开即可安装。[Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md)（英文）说明了如何移除它，或者自己构建。
-- 需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。可选的本地模型（用来整理、翻译和在“项目”中解释邮件）另需 2.8 GB，“为对方朗读译文”可选的语音合成模型另需约 2 GB。“项目”需要 16 GB 或以上的内存。
+- 需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。可选的本地模型（用来整理、翻译和在“项目”中解释邮件）另需 2.8 GB，“为对方朗读译文”可选的语音合成模型另需约 2 GB。“项目”需要 16 GB 及以上的内存。
 - 使用 Developer ID 签名并经过苹果公证，打开时不会出现安全警告。
 - 不在 Mac App Store 上架，因为 App Store 的沙盒不允许 App 在其他 App 里监听按键或粘贴文字。
 
