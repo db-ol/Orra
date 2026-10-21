@@ -3236,8 +3236,9 @@ build.
 
 Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
 checks that a download agreed to in the caption window turns on neither cleanup nor
-translation and stops when captions stop, as docs/privacy.md says. Prepare a first launch
-as in Welcome window above, then choose Hold for the talk key in the welcome window:
+translation and stops when captions stop, as docs/privacy.md says, and that it goes on
+when Clean Up Text or Translation is turned on meanwhile. Prepare a first launch as in
+Welcome window above, then choose Hold for the talk key in the welcome window:
 
 - [ ] With Double press in Hold to keep recording on, as it starts, the microphone step
   reads "Orra records only while you hold the talk key, or after you press it twice
