@@ -15,7 +15,9 @@ final class FakeSpeechOutput: SpeechOutput {
     }
 
     let state = Mutex(State())
-    /// When set, each start waits until the test signals it, or five seconds.
+    /// When set, each start waits until the test signals it, however long the main actor is
+    /// busy meanwhile. A start on the main thread does not wait, since the test could never
+    /// signal it, so it ends at once and the test sees it in its calls.
     let startGate: DispatchSemaphore?
 
     init(startGate: DispatchSemaphore? = nil) {
@@ -32,7 +34,9 @@ final class FakeSpeechOutput: SpeechOutput {
 
     func start(on device: AudioOutput, changed: @escaping @Sendable () -> Void) throws {
         record("start \(device.name)")
-        _ = startGate?.wait(timeout: .now() + 5)
+        if !Thread.isMainThread {
+            startGate?.wait()
+        }
         state.withLock { state in
             state.running = true
             state.changed = changed
@@ -93,13 +97,15 @@ struct SpeechPlayerTests {
 
     /// A device that is slow to open leaves the main actor free, where the keyboard tap runs.
     /// No call to the device runs on the main thread.
-    @Test func aSlowDeviceStartLeavesTheMainActorFree() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func aSlowDeviceStartLeavesTheMainActorFree() async throws {
         let gate = DispatchSemaphore(value: 0)
         let output = FakeSpeechOutput(startGate: gate)
         let player = SpeechPlayer(output: output)
         let starting = Task { try await player.start(on: Self.speakers) }
-        // The main actor runs this while the device still opens. A start on the main
-        // thread would hold it until the gate gives up, and the start would be over.
+        // The main actor runs this while the device still opens, also when other work
+        // holds it for longer meanwhile. A start on the main thread would not wait for the
+        // gate, and the start would be over.
         try await waitUntil { output.calls == ["start MacBook Pro Speakers"] }
         #expect(output.calls == ["start MacBook Pro Speakers"])
         try await Task.sleep(for: .milliseconds(20))
@@ -115,7 +121,8 @@ struct SpeechPlayerTests {
 
     /// A stop while the device opens wins: the device is let go after the start, and
     /// nothing plays.
-    @Test func aStopDuringASlowStartWins() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func aStopDuringASlowStartWins() async throws {
         let gate = DispatchSemaphore(value: 0)
         let output = FakeSpeechOutput(startGate: gate)
         let player = SpeechPlayer(output: output)
