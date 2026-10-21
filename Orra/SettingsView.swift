@@ -749,7 +749,7 @@ private struct AboutSettings: View {
                 Text("Updates")
             }
             Section {
-                Text("Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the speech model or the cleanup model when you ask it to, and to check for updates when you allow it.")
+                Text("Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the models you ask for, and to check for updates when you allow it.")
                     .foregroundStyle(.secondary)
                 Link("Source code and privacy details", destination: URL(string: "https://github.com/db-ol/Orra")!)
             }

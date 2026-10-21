@@ -9313,6 +9313,28 @@
         }
       }
     },
+    "Orra records only while you hold the talk key, or after you press it twice quickly, until you press it once more." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra solo graba mientras mantienes presionada la tecla para hablar, o desde que la presionas rápido dos veces hasta que la vuelves a presionar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraが録音するのは、音声入力キーを押している間と、すばやく2回押してからもう一度押すまでの間だけです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 只在你按住说话键时录音，或在你快速连按两下说话键后录音，直到你再按一下。"
+          }
+        }
+      }
+    },
     "Orra records only while you hold the talk key." : {
       "localizations" : {
         "es-419" : {
@@ -12712,24 +12734,24 @@
         }
       }
     },
-    "Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the speech model or the cleanup model when you ask it to, and to check for updates when you allow it." : {
+    "Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the models you ask for, and to check for updates when you allow it." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La voz se convierte en texto en esta Mac, y la limpieza opcional también se hace en ella. Orra solo se conecta a Internet para descargar el modelo de transcripción o el modelo de limpieza cuando se lo pides, y para buscar actualizaciones cuando lo permites."
+            "value" : "La voz se convierte en texto en esta Mac, y la limpieza opcional también se hace en ella. Orra solo se conecta a Internet para descargar los modelos que pides, y para buscar actualizaciones cuando lo permites."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音声はこのMac上でテキストに変換され、オプションの整文もこのMac上で行われます。Orraがインターネットに接続するのは、指示に応じて音声認識モデルや整文モデルをダウンロードするときと、許可した場合にアップデートを確認するときだけです。"
+            "value" : "音声はこのMac上でテキストに変換され、オプションの整文もこのMac上で行われます。Orraがインターネットに接続するのは、指示に応じてモデルをダウンロードするときと、許可した場合にアップデートを確認するときだけです。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "语音在这台 Mac 上转成文字，可选的整理也在这台 Mac 上完成。Orra 只在两种情况下联网：你要求下载语音模型或整理模型时，以及你允许后检查更新时。"
+            "value" : "语音在这台 Mac 上转成文字，可选的整理也在这台 Mac 上完成。Orra 只在两种情况下联网：下载你要求的模型时，以及你允许后检查更新时。"
           }
         }
       }

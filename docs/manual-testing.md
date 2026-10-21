@@ -467,7 +467,9 @@ got worse than the baseline, see docs/release-gate.md.
     Spanish counts one second in the singular, that each language is chosen only when it
     comes before English in the preferred languages, that Chinese is never chosen for
     Traditional Chinese alone, that every Spanish of the Mac gets es-419, and the talk key
-    hints, key names and finish hints in Chinese, Japanese and Spanish.
+    hints, key names and finish hints in Chinese, Japanese and Spanish. Since 2026-10-20
+    it also checks that the English microphone prompt of the build is the one in the
+    catalog, and that the About text in Settings names no single model in any language.
   - SetupDownloadTests covers who gets the cleanup model with the welcome window's one
     download (a new user from 16 GB of memory, never over a saved choice), the line on
     memory under 16 GB, the order of the download (speech model first, cleanup model
@@ -3231,6 +3233,21 @@ build.
   Nothing.
 - [ ] While Delete All Projects Data runs with Projects on, Open Projects Window is dimmed
   and the Projects window stays closed.
+
+Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
+checks that a download agreed to in the caption window turns on neither cleanup nor
+translation and stops when captions stop, as docs/privacy.md says. Prepare a first launch
+as in Welcome window above, then choose Hold for the talk key in the welcome window:
+
+- [ ] With Double press in Hold to keep recording on, as it starts, the microphone step
+  reads "Orra records only while you hold the talk key, or after you press it twice
+  quickly, until you press it once more." With it off in Settings, the step reads "Orra
+  records only while you hold the talk key."
+- [ ] Allow Microphone Access… shows the macOS prompt with "Orra uses the microphone when
+  you start a dictation or a translation, or record a voice sample, and turns your voice
+  into text on this Mac." Check it in English, Chinese, Japanese and Spanish.
+- [ ] Settings > About reads "Orra goes online only to download the models you ask for,
+  and to check for updates when you allow it."
 
 ## Not implemented
 
