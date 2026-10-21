@@ -630,12 +630,15 @@ final class TranslationSpeech {
         // Again after the load, which a stop does not always cut short.
         guard generation == self.generation, await loadIfNeeded(), generation == self.generation else { return }
         do {
-            try playback.start(on: device)
+            try await playback.start(on: device)
         } catch {
+            guard generation == self.generation else { return }
             problem = String(localized: "Orra could not play into \(device.name).")
             logger.error("The output device refused playback: \(String(describing: error), privacy: .public)")
             return
         }
+        // A stop while the device opened lets it go, see SpeechPlayback.start.
+        guard generation == self.generation else { return }
         state = .speaking
         problem = nil
         let started = ContinuousClock.now

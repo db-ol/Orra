@@ -416,6 +416,57 @@ struct MailStoreTests {
         await store.close()
     }
 
+    /// The ranking of project mail: the most shared words first, then the newest, then the
+    /// highest id. Rows of the thread and rows without a shared word are left out.
+    @Test func rankedIDsBreakTiesByDateThenID() async {
+        func row(_ id: Int64, _ messageID: String, _ words: [String], day: Double) -> [ProjectsDatabase.Value] {
+            [.integer(id), .text(messageID), .text(words.joined(separator: "\n")), .real(Self.date(day).timeIntervalSince1970)]
+        }
+        let rows = [
+            row(1, "a@test.example", ["grey", "tiles"], day: 1),
+            row(2, "b@test.example", ["grey", "tiles"], day: 2),
+            row(3, "c@test.example", ["grey", "tiles"], day: 2),
+            row(4, "d@test.example", ["grey", "grout", "tiles"], day: 0),
+            row(5, "thread@test.example", ["grey", "grout", "tiles"], day: 3),
+            row(6, "none@test.example", ["invoice"], day: 4),
+            [.integer(7), .null, .text("grey"), .real(0)],
+        ]
+        let words: Set<String> = ["grey", "tiles", "grout"]
+        #expect(await MailStore.rankedIDs(rows, words: words, excluding: ["thread@test.example"], limit: 10) == [4, 3, 2, 1])
+        #expect(await MailStore.rankedIDs(rows, words: words, excluding: ["thread@test.example"], limit: 2) == [4, 3])
+        #expect(await MailStore.rankedIDs(rows, words: words, excluding: [], limit: 1) == [5])
+        #expect(await MailStore.rankedIDs(rows, words: ["invoice"], excluding: [], limit: 0).isEmpty)
+    }
+
+    /// Project mail is ranked off the database's actor, then read. An email that moved to
+    /// another project or to Needs a Project, whose text Retention removed, or that Forget
+    /// Project removed, in between is left out.
+    @Test func projectMailLeavesOutAnEmailThatChangedAfterTheRanking() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let messageIDs = ["both@test.example", "grout@test.example", "floor@test.example", "tiles@test.example"]
+        try await store.save([
+            Self.message("tiles@test.example", from: "owen@pike-build.example", subject: "Tiles", text: "The grey floor tiles arrive Monday."),
+            Self.message("both@test.example", from: "owen@pike-build.example", day: 1, subject: "Tiles and grout", text: "Grey tiles need white grout."),
+            Self.message("grout@test.example", from: "owen@pike-build.example", day: 2, subject: "Grout", text: "White grout only."),
+            Self.message("floor@test.example", from: "owen@pike-build.example", day: 3, subject: "Floor", text: "The floor is ready for tiles."),
+        ], ownAddresses: [Self.work], at: Self.date(4))
+        var ids: [Int64] = []
+        for messageID in messageIDs {
+            #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: messageID))
+            let id = try await store.database.run("SELECT id FROM mail_messages WHERE message_id = ?", [.text(messageID)]).first?.first?.integer
+            ids.append(try #require(id))
+        }
+        #expect(try await store.projectMail(ids: ids, in: Self.maple).map(\.messageID) == messageIDs)
+        #expect(try await store.projectMail(ids: ids, in: Self.harbor).isEmpty)
+        _ = try await store.database.run("UPDATE mail_messages SET text = NULL, visible_text = NULL, words = NULL WHERE message_id = ?", [.text("both@test.example")])
+        #expect(try await store.move("grout@test.example", to: Self.harbor))
+        #expect(try await store.move("floor@test.example", to: nil))
+        #expect(try await store.projectMail(ids: ids + [999], in: Self.maple).map(\.messageID) == ["tiles@test.example"])
+        #expect(try await store.projectMail(ids: [], in: Self.maple).isEmpty)
+        await store.close()
+    }
+
     /// Only the people the user wrote to count, from the user's mail dated before the email.
     @Test func correspondenceReadsOnlyTheUsersEarlierMail() async throws {
         defer { cleanUp() }

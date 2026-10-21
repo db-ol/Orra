@@ -77,10 +77,13 @@ final class FakeSynthesizer: SpeechSynthesizer {
 final class FakePlayback: SpeechPlayback {
     private(set) var calls: [String] = []
     var refuses = false
+    /// Holds each start until the test releases it, like a device that is slow to open.
+    var holdsStart: HeldWork?
 
-    func start(on device: AudioOutput) throws {
+    func start(on device: AudioOutput) async throws {
         if refuses { throw SpeechPlayerError.engineFailed }
         calls.append("start \(device.name)")
+        await holdsStart?.run()
     }
 
     func play(_ audio: SpokenAudio) {
@@ -264,6 +267,23 @@ struct TranslationSpeechTests {
         #expect(playback.calls == ["stop"])
         #expect(speech.state == .idle)
         #expect(speech.isLoaded)
+        #expect(speech.problem == nil)
+    }
+
+    /// A stop while the output device opens: nothing plays, and the menu offers no Stop
+    /// Speaking.
+    @Test func aStopWhileTheDeviceOpensPlaysNothing() async throws {
+        let start = HeldWork()
+        playback.holdsStart = start
+        let speech = makeSpeech()
+        speech.speak("We have a meeting next Tuesday.", in: .english)
+        try await eventually { start.began == 1 }
+        speech.stop()
+        start.release()
+        await speech.waitUntilDone()
+        #expect(spoken.isEmpty)
+        #expect(playback.calls == ["start Orra Microphone", "stop"])
+        #expect(speech.state == .idle)
         #expect(speech.problem == nil)
     }
 

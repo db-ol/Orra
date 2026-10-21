@@ -22,6 +22,7 @@ struct ProjectsRuntimeTests {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("ProjectsRuntimeTests-\(UUID().uuidString)", isDirectory: true)
     let mail = FakeMail()
     let model = FakeModel()
+    let tokenizer = TokenizerLoads()
 
     init() throws {
         defaults = try #require(UserDefaults(suiteName: suite))
@@ -66,7 +67,7 @@ struct ProjectsRuntimeTests {
             whenDictationStarts: { [keyDown] handler in keyDown?.handlers.append(handler) },
             modelEnvironment: { _ in model.environment },
             modelIsInstalled: { installed.value },
-            loadTokenCounter: { counter },
+            loadTokenCounter: { [tokenizer] in try await tokenizer.load(counter) },
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail.bridge, isOrraActive: { true }, bringMailToFront: {}),
             watchesMemoryPressure: false,
             watchFolders: watchFolders,
@@ -304,6 +305,84 @@ struct ProjectsRuntimeTests {
         #expect(closed == 1)
         #expect(!runtime.isWindowOpen)
         #expect(model.holds.value == 0)
+    }
+
+    /// Requests that start while the tokenizer loads wait for that one load, and the next
+    /// window loads it again.
+    @Test func requestsThatStartTogetherShareOneTokenizerLoad() async throws {
+        defer { cleanUp() }
+        let held = HeldWork()
+        tokenizer.holds(held)
+        let (runtime, projects, _) = try await started(countsTokens: true)
+        runtime.windowOpened()
+        let first = Task { _ = try await runtime.reviseService(startedAt: Self.today) }
+        let second = Task { _ = try await runtime.reviseService(startedAt: Self.today) }
+        try await waitUntil { held.began == 1 }
+        try await Task.sleep(for: .milliseconds(50))
+        held.release()
+        try await first.value
+        try await second.value
+        #expect(tokenizer.count == 1)
+        _ = try await runtime.reviseService(startedAt: Self.today)
+        #expect(tokenizer.count == 1)
+        runtime.windowClosed()
+        runtime.windowOpened()
+        _ = try await runtime.reviseService(startedAt: Self.today)
+        #expect(tokenizer.count == 2)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A tokenizer load that failed is not kept, so the next request loads again.
+    @Test func aFailedTokenizerLoadIsTriedAgain() async throws {
+        defer { cleanUp() }
+        tokenizer.failsNext()
+        let (runtime, projects, _) = try await started(countsTokens: true)
+        runtime.windowOpened()
+        await #expect(throws: TestError.self) {
+            _ = try await runtime.reviseService(startedAt: Self.today)
+        }
+        _ = try await runtime.reviseService(startedAt: Self.today)
+        #expect(tokenizer.count == 2)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Counts the loads of the tokenizer, and holds them or fails the next one when a test
+    /// asks.
+    final class TokenizerLoads: Sendable {
+        private struct State {
+            var count = 0
+            var failsNext = false
+            var held: HeldWork?
+        }
+
+        private let state = Mutex(State())
+
+        nonisolated var count: Int {
+            state.withLock { $0.count }
+        }
+
+        nonisolated func holds(_ held: HeldWork) {
+            state.withLock { $0.held = held }
+        }
+
+        nonisolated func failsNext() {
+            state.withLock { $0.failsNext = true }
+        }
+
+        nonisolated func load(_ counter: (@Sendable (String) -> Int)?) async throws -> (@Sendable (String) -> Int)? {
+            let (fails, held) = state.withLock { state in
+                state.count += 1
+                defer { state.failsNext = false }
+                return (state.failsNext, state.held)
+            }
+            await held?.run()
+            if fails {
+                throw TestError()
+            }
+            return counter
+        }
     }
 
     // MARK: The scan

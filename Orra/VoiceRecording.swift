@@ -224,16 +224,21 @@ final class VoiceRecording: Identifiable {
             return
         }
         guard phase == .recorded, let sample, let device = output() else { return }
-        do {
-            try playback.start(on: device)
-        } catch {
-            return
-        }
         playGeneration += 1
         let current = playGeneration
         isPlaying = true
-        playback.play(SpokenAudio(samples: sample.samples, sampleRate: sample.sampleRate))
         Task {
+            // The device opens away from the main thread, and a click meanwhile stops it.
+            do {
+                try await playback.start(on: device)
+            } catch {
+                if current == playGeneration {
+                    isPlaying = false
+                }
+                return
+            }
+            guard current == playGeneration else { return }
+            playback.play(SpokenAudio(samples: sample.samples, sampleRate: sample.sampleRate))
             await playback.finish()
             guard current == playGeneration else { return }
             playback.stop()
