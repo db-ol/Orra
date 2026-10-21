@@ -51,10 +51,11 @@ nonisolated enum FieldReader {
 }
 
 /// Follows the field Orra just pasted into, for up to 3 minutes, and reports the user's
-/// correction of a misheard word. Reads only that field, and only while its app is in
-/// front without secure input and the field has the focus. Otherwise it waits, so
-/// switching away and coming back to fix a line works. Each paste has its own watch, up to
-/// five at a time, so dictating several lines and then fixing them works. A watch pushed
+/// correction of a misheard word. That is the field that has the focus as the paste goes
+/// in. Reads only that field, and only while its app is in front without secure input and
+/// the field has the focus, so a field the user moves to while the paste lands is never
+/// read. Otherwise it waits, so switching away and coming back to fix a line works. Each
+/// paste has its own watch, up to five at a time, so dictating several lines and then fixing them works. A watch pushed
 /// out by a sixth paste reports what it found. PasteTracker follows where each paste is while other lines
 /// change. It looks for corrections after every change and reports them once the field has
 /// not changed for a reading, so the user hears back a second or two after the fix. Separate
@@ -143,6 +144,16 @@ final class CorrectionWatcher {
             @MainActor func allowed() -> Bool {
                 environment.frontmost() == pid && environment.secureInputHolder() != pid
             }
+            guard allowed() else {
+                logger.notice("Learning: the app is no longer in front, or holds secure input")
+                return
+            }
+            // Opened right after Command V, so it is the field the paste goes into. The
+            // reader gives nil while another field has the focus.
+            guard let read = await environment.open(pid) else {
+                logger.notice("Learning: the focused element is not a text field Orra can read")
+                return
+            }
             // The paste lands a moment after Command V.
             try? await environment.sleep(.milliseconds(900))
             guard !Task.isCancelled else { return }
@@ -150,11 +161,11 @@ final class CorrectionWatcher {
                 logger.notice("Learning: the app is no longer in front, or holds secure input")
                 return
             }
-            guard let read = await environment.open(pid) else {
-                logger.notice("Learning: the focused element is not a text field Orra can read")
+            guard let before = await read() else {
+                logger.notice("Learning: the field lost the focus, or cannot be read")
                 return
             }
-            guard let before = await read(), var tracker = PasteTracker(pasted: pasted, field: before) else {
+            guard var tracker = PasteTracker(pasted: pasted, field: before) else {
                 logger.notice("Learning: the pasted text is not in the field")
                 return
             }

@@ -384,7 +384,8 @@ got worse than the baseline, see docs/release-gate.md.
     widened to its unchanged characters, and the cap of 8 Chinese characters.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
-    after leaving the app, under secure input, or in a field without the pasted text.
+    after leaving the app, under secure input, in a field without the pasted text, or in a
+    field that got the focus while the paste landed.
     CorrectionLearningTests checks that nothing is read while learning is off, that the
     first fix adds the word and tells the user, a quiet new mishearing, Undo, that a
     learned word removed from the vocabulary is learned again, that after a cleanup only
@@ -1980,6 +1981,9 @@ corrections under Recognition in Settings, Dictation first:
   right word there: the Orra menu offers to add it to the vocabulary.
 - [ ] In Messages or WeChat, fix a misheard name and press Return to send: the fix still
   counts. Click into another field during the watch: nothing is read from it.
+- [ ] Dictate into one field and press Tab into another field of the same app as soon as
+  the text appears. Nothing is read from that field, and the learning log says the field
+  lost the focus.
 - [ ] Dictating into a password field, or switching apps right after the paste, records
   nothing.
 - [ ] Dictate into a text field in Orra's own Settings window, such as the new word field
