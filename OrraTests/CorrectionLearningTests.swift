@@ -182,7 +182,8 @@ struct CorrectionWatcherTests {
         return environment
     }
 
-    @Test func aWatchPushedOutByANewPasteReportsWhatItFound() async {
+    @Test(.timeLimit(.minutes(1)))
+    func aWatchPushedOutByANewPasteReportsWhatItFound() async throws {
         let field = ScriptedField(["我在用克劳德写代码", "我在用Claude写代码"])
         // Held after it read the fix, before the quiet reading that would report it, so
         // only being pushed out can make it report.
@@ -190,13 +191,14 @@ struct CorrectionWatcherTests {
         let watcher = CorrectionWatcher(environment: Self.held(field, hold))
         var found: [Correction] = []
         watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0.correction); _ = $1 }
-        for _ in 0..<1_000 where hold.waiting == nil { try? await Task.sleep(for: .milliseconds(5)) }
-        #expect(hold.waiting != nil)
+        try await eventually { hold.waiting != nil }
         #expect(found.isEmpty)
         for _ in 1...CorrectionWatcher.maximumWatches {
             watcher.watch(pasted: "不在这里", in: 42) { found.append($0.correction); _ = $1 }
         }
         hold.waiting?.resume()
+        try await eventually { !found.isEmpty && field.reads >= 2 + CorrectionWatcher.maximumWatches }
+        // Then a while without readings, in which a reading too many would show.
         var lastReads = -1
         var quiet = 0
         for _ in 0..<1_000 where quiet < 40 {

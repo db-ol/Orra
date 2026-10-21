@@ -669,7 +669,7 @@ struct ProjectsEmailModelTests {
             $0.diffStarted = false
         }
         model.perform { await $0.undo() }
-        try await waitUntil { fakes.value.diffStarted }
+        try await eventually { fakes.value.diffStarted }
         // The store removed the newer version, and the highlight of the older one waits.
         #expect(model.isBusy)
         #expect(fakes.value.versions.count == 1)
@@ -681,7 +681,7 @@ struct ProjectsEmailModelTests {
         #expect(fakes.value.prompts.count == prompts)
 
         fakes.update { $0.diffWaits = false }
-        try await waitUntil { !model.isWorking }
+        try await eventually { !model.isWorking }
         #expect(model.versions == fakes.value.versions)
         #expect(model.versions.map(\.version.change) == [.tone(.firm), .instruction("Keep the price.")])
         #expect(model.text == priced)
