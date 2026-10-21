@@ -62,6 +62,8 @@ struct ProjectsEmailArea: View {
                             WarningList(items: warnings, model: model, emailModel: emailModel)
                         }
                         original(emailModel)
+                        // The draft is the model's text, so a line sets it apart from the mail's.
+                        Divider()
                     } else {
                         ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
                     }

@@ -12,6 +12,9 @@ import SwiftUI
 /// It shows the visible text the scan kept, so text the email hides from its reader is not
 /// here. The warnings above it say that it was there. Plain text only, with
 /// `Text(verbatim:)`: no HTML, no links that open, no images, and an attachment is a name.
+/// It shows the first `shownLength` characters at most, so a long email does not hold up
+/// the window while it lays out, and says that Mail has the rest. QuotedHistory finds at
+/// most 10 forwarded messages, so the view holds that many blocks at most.
 struct ProjectsEmailOriginal: View {
     /// What the view shows, worked out off the main actor from the email the store holds.
     nonisolated struct Content: Sendable, Equatable {
@@ -26,14 +29,19 @@ struct ProjectsEmailOriginal: View {
         var forwards: [QuotedHistory.Forward] = []
         /// The history the email and its forwarded messages quote.
         var quoted: String = ""
-        /// Whether the text reached the length the store reads, so Mail holds more of it.
+        /// Whether the text reached the length the store reads or the length the view shows,
+        /// so Mail holds more of it.
         var isCut = false
+
+        /// The characters of the email's text the view shows at most.
+        static let shownLength = 20_000
 
         /// The content of an email, split as QuotedHistory splits it, or nil when the store
         /// keeps none of its text, such as after Retention removed it.
         static func of(_ email: ExplainService.Email) -> Content? {
-            let text = email.visibleText.allSatisfy(\.isWhitespace) ? email.text : email.visibleText
-            guard !text.allSatisfy(\.isWhitespace) else { return nil }
+            let whole = email.visibleText.allSatisfy(\.isWhitespace) ? email.text : email.visibleText
+            guard !whole.allSatisfy(\.isWhitespace) else { return nil }
+            let text = String(whole.prefix(shownLength))
             let split = QuotedHistory(splitting: text, subject: email.subject)
             func person(_ person: ExplainPrompt.Person) -> String {
                 person.name.isEmpty ? person.address : "\(person.name) <\(person.address)>"
@@ -44,10 +52,11 @@ struct ProjectsEmailOriginal: View {
                 attachments: email.attachments.map(\.name),
                 note: split.note,
                 signature: split.signature,
-                forwards: split.forwards,
+                // A marker with neither a header nor text shows nothing.
+                forwards: split.forwards.filter { $0 != QuotedHistory.Forward() },
                 quoted: split.quotedText,
                 // The store reads text by its Unicode scalars.
-                isCut: text.unicodeScalars.count >= MailStore.readLength
+                isCut: text.count < whole.count || whole.unicodeScalars.count >= MailStore.readLength
             )
         }
 
@@ -119,12 +128,15 @@ struct ProjectsEmailOriginal: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 4) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     GridRow {
+                        // VoiceOver reads the label with the value, in one stop.
                         Text(row.label)
                             .foregroundStyle(.secondary)
                             .gridColumnAlignment(.trailing)
+                            .accessibilityHidden(true)
                         Text(verbatim: row.value)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel(Text(row.label) + Text(verbatim: " " + row.value))
                     }
                 }
             }
@@ -142,6 +154,7 @@ struct ProjectsEmailOriginal: View {
                 Text("Forwarded Message")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
                 let header = [
                     Row(label: "From:", value: forward.sender), Row(label: "Date:", value: forward.date),
                     Row(label: "Subject:", value: forward.subject), Row(label: "To:", value: forward.to),
@@ -161,6 +174,7 @@ struct ProjectsEmailOriginal: View {
                     .frame(width: 3)
             }
             .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text("Forwarded Message"))
         }
     }
 }

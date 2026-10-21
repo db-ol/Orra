@@ -8824,7 +8824,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "原始邮件"
+            "value" : "邮件原文"
           }
         }
       }

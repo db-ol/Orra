@@ -309,6 +309,15 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsEmailOriginal.Content.of(email)?.isCut == false)
         email.visibleText = String(repeating: "灯", count: MailStore.readLength)
         #expect(ProjectsEmailOriginal.Content.of(email)?.isCut == true)
+        // The view shows the first characters of a long email, and Mail has the rest.
+        email.visibleText = String(repeating: "灯", count: 30_000)
+        let long = ProjectsEmailOriginal.Content.of(email)
+        #expect(long?.note.count == ProjectsEmailOriginal.Content.shownLength)
+        #expect(long?.isCut == true)
+        // A marker with neither a header nor text shows no forwarded message.
+        email.visibleText = "Lin, see below.\n\n---------- Forwarded message ---------"
+        #expect(ProjectsEmailOriginal.Content.of(email)?.forwards == [])
+        #expect(ProjectsEmailOriginal.Content.of(email)?.note == "Lin, see below.")
     }
 
     // MARK: Changes
