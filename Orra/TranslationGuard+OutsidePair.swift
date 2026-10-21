@@ -13,7 +13,8 @@ import NaturalLanguage
 ///   simplified forms. With this one they held back all of them, and no human Japanese
 ///   text.
 /// - Into Japanese, a 1 that counts one thing, as in 1つの文化 for "a singular culture",
-///   is no new number, see `countingOnes(in:source:)`.
+///   is no new number when every number of the English is kept, see
+///   `countingOnes(in:source:)`.
 /// - Into Spanish, no other language that NLLanguageRecognizer finds well ahead of
 ///   Spanish, see `isOtherThanSpanish(_:)`. The checks of the route let through 72 of 318
 ///   Portuguese and 90 of 305 French sentences given as Spanish.
@@ -42,20 +43,31 @@ nonisolated extension TranslationGuard {
 
     /// Whether a Japanese translation holds a Han character that Shift_JIS (Windows code
     /// page 932) cannot write, such as the simplified 报, 龙 or 该, other than one the source
-    /// holds, as a short Chinese name may stay in the English. Japanese is written in the
-    /// characters of Shift_JIS: none of the 319 human Japanese sentences of FLEURS holds one
-    /// outside it, while 317 of 319 Chinese sentences do. On the route from English, through
-    /// English or not, it held back 8 of 1,153 model translations into Japanese, each with
-    /// Chinese characters in it, such as 九龙 or 集邮.
+    /// holds, as a short Chinese name may stay in the English, and other than a standard
+    /// Japanese form that Shift_JIS lacks, see `japaneseFormsOutsideShiftJIS`. Japanese is
+    /// written in the characters of Shift_JIS: none of the 319 human Japanese sentences of
+    /// FLEURS holds one outside it, while 317 of 319 Chinese sentences do. On the route
+    /// from English, through English or not, it held back 8 of 1,153 model translations
+    /// into Japanese, each with Chinese characters in it, such as 九龙 or 集邮.
     static func hasHanOutsideJapanese(_ output: String, source: String) -> Bool {
         let sourceScalars = Set(source.unicodeScalars)
         return output.unicodeScalars.contains { scalar in
-            TranslationDirection.isHan(scalar) && !sourceScalars.contains(scalar) && !String(scalar).canBeConverted(to: shiftJIS)
+            TranslationDirection.isHan(scalar) && !sourceScalars.contains(scalar) && !japaneseFormsOutsideShiftJIS.contains(scalar)
+                && !String(scalar).canBeConverted(to: shiftJIS)
         }
     }
 
     /// Windows code page 932, Shift_JIS as Japanese Windows and macOS write it.
     static let shiftJIS = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.dosJapanese.rawValue)))
+
+    /// Standard Japanese forms that Shift_JIS lacks, since it has only a simpler form, such
+    /// as 剥 for 剝 or 嘘 for 噓: the three of the Jōyō table of 2010 (剝, 頰, 塡), those
+    /// JIS X 0213 added in 2004, and the print standard forms of common kanji outside the
+    /// Jōyō table, such as 鷗, 俠 and 蔣. Each is in JIS X 0213 and is no simplified Chinese
+    /// form. JIS X 0213 as a whole is not taken, since it holds simplified forms such as
+    /// 关, 开 and 种, which 46 of the 479 characters outside Shift_JIS of the Chinese FLEURS
+    /// sentences are.
+    static let japaneseFormsOutsideShiftJIS = Set("剝頰塡俱吞噓姸屛幷瘦繫鷗俠蔣醬瀆摑禱蠟麴鹼驒蟬顚搔攢潑醱繡囊".unicodeScalars)
 
     /// `output` with each 1 that counts one thing written as 一, which the number check
     /// does not read, as it does not read 一つ:
@@ -65,10 +77,15 @@ nonisolated extension TranslationGuard {
     /// - the 1 of 1年中 and 1日中 (all year, all day) when the source has all, whole, entire,
     ///   round or throughout.
     ///
+    /// Only when every number of the English is in `output`, see `keepsNumbers(of:in:)`.
+    /// Nearly every English sentence has a word for one, and the number check reads only
+    /// the numbers a translation adds, so 1分後 for "in 5 minutes" would pass otherwise.
+    ///
     /// Japanese writes 1つの文化 for "a singular culture" and 1分間 for "for a minute". The
     /// number check held back 13 of the 319 human Japanese sentences of FLEURS translated
     /// from English, 6 of them for such a 1.
     static func countingOnes(in output: String, source: String) -> String {
+        guard keepsNumbers(of: source, in: output) else { return output }
         let words = Set(all(lowercaseWord, in: source.lowercased()))
         var text = output
         if !words.isDisjoint(with: wordsForOne) {
@@ -78,6 +95,37 @@ nonisolated extension TranslationGuard {
             text = replacing(oneAllAlong, in: text) { _ in "一" }
         }
         return text
+    }
+
+    /// Whether every number of the English `source` is in `output`, a Japanese
+    /// translation, by the values the number check reads, see `englishNumbers(_:)`.
+    static func keepsNumbers(of source: String, in output: String) -> Bool {
+        let values = pairSourceValues(output)
+        return englishNumbers(source).allSatisfy { number in
+            values.contains { abs($0 - number) < 1e-6 * max(1, abs(number)) }
+        }
+    }
+
+    /// The numbers of an English text: each run of digits, and each number word but one,
+    /// with twenty five as 25. One is left out, since a counted 1 may stand for it.
+    static func englishNumbers(_ text: String) -> [Double] {
+        var numbers = all(decimal, in: joinedNumbers(asciiDigits(text))).compactMap(Double.init)
+        let words = all(lowercaseWord, in: text.lowercased().replacingOccurrences(of: "-", with: " "))
+        var index = 0
+        while index < words.count {
+            if let ten = tens[words[index]] {
+                if index + 1 < words.count, let one = ones[words[index + 1]], (1..<10).contains(one) {
+                    numbers.append(ten + one)
+                    index += 1
+                } else {
+                    numbers.append(ten)
+                }
+            } else if words[index] != "one", let one = ones[words[index]] {
+                numbers.append(one)
+            }
+            index += 1
+        }
+        return numbers
     }
 
     static let wordsForOne: Set<String> = ["a", "an", "one", "single", "singular", "once", "alone", "each", "per"]

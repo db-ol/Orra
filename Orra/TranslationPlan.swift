@@ -149,13 +149,30 @@ nonisolated extension TranslationStep {
         }
     }
 
+    /// The longest Orra waits for a translation of `text` by `plan`: `timeout(for:)`, and
+    /// `throughEnglishExtra` more through English.
+    static func timeout(for text: String, plan: TranslationPlan) -> Duration {
+        guard case .throughEnglish = plan else { return timeout(for: text) }
+        return timeout(for: text) + throughEnglishExtra
+    }
+
+    /// The time a way through English gets beyond that of one route, since it runs the
+    /// model twice. Right after a load, as at the first press after the idle unload, the
+    /// step also waits for the two prefix caches of its plan to fill within its limit. On
+    /// an M5 Pro on 2026-10-21 the 5 shortest dictations of each direction then took 1.9 to
+    /// 2.5 s through English and 1.8 to 2.2 s with Automatic, within the 3.0 to 3.2 s of
+    /// one route, see TranslationCrossEvaluationTests.coldStart(). The second more keeps
+    /// the margin of one route where the model runs slower.
+    static let throughEnglishExtra = Duration.seconds(1)
+
     /// The text to paste and what happened, through English: the text into English on
     /// `first`, as on one route, then the English on `then`, with the checks of a target
-    /// outside the pair. Both share one time limit, `timeout(for:)` of the text, which no
-    /// hand written dictation passed in the study through English. A translation is pasted
-    /// only when both pass, and otherwise the text without translation, which the first
-    /// may take from the model's cleanup as on one route. English that the second gives
-    /// back as it was, such as OK, passed its checks and is the translation.
+    /// outside the pair. Both share one time limit, `timeout(for:plan:)` of the text, which
+    /// no hand written dictation passed in the study through English. A translation is
+    /// pasted only when both pass, and otherwise the text without translation, which the
+    /// first may take from the model's cleanup as on one route. English that the second
+    /// gives back as it was, such as OK, passed its checks and is the translation. So is
+    /// text that the first gives back as it was, which the second gets as it is.
     @concurrent
     static func run(
         _ text: String,
@@ -166,7 +183,7 @@ nonisolated extension TranslationStep {
         timeout: Duration? = nil,
         complete: @escaping @Sendable (String, TranslationRoute) async throws -> String
     ) async -> Result {
-        let limit = timeout ?? Self.timeout(for: text)
+        let limit = timeout ?? Self.timeout(for: text) + throughEnglishExtra
         let started = ContinuousClock.now
         let english = await run(text, into: first, source: source, cleansUp: cleansUp, timeout: limit, complete: complete)
         let result = await translateEnglish(english, into: then, within: limit - started.duration(to: .now), complete: complete)

@@ -28,6 +28,9 @@ import Testing
 /// With TEST_RUNNER_ORRA_TRANSLATION_CROSS_IN=<file> it runs the cases of that file
 /// instead, one JSON object per line with `id`, `src` and `tgt` (zh, ja or es) and `text`,
 /// and `expected_en` when there is one.
+///
+/// `coldStart()` runs only with TEST_RUNNER_ORRA_TRANSLATION_CROSS_COLD set to a number of
+/// dictations per language, see there.
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["ORRA_TRANSLATION_CROSS_EVAL"] != nil && RewriteTestModel.folder != nil))
 struct TranslationCrossEvaluationTests {
     private struct Case {
@@ -246,5 +249,83 @@ struct TranslationCrossEvaluationTests {
             try details.write(toFile: detailsPath, atomically: true, encoding: .utf8)
         }
         #expect(obeyed.isEmpty)
+    }
+
+    /// The wait right after a load, as at the first press after the idle unload: the
+    /// shortest dictations of each language, each into the two targets outside its pair
+    /// and with Automatic, with no prefix cache. The caches are filled as the app fills
+    /// them after a load, while the step waits for them within its time limit. The step
+    /// runs with a limit of 30 s, so the report gives each wait in full, and how many would
+    /// pass the limit of one route, `timeout(for:)`, and that of a way through English.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_TRANSLATION_CROSS_COLD"] != nil))
+    func coldStart() async throws {
+        let folder = try #require(RewriteTestModel.folder)
+        let environment = ProcessInfo.processInfo.environment
+        let count = Int(environment["ORRA_TRANSLATION_CROSS_COLD"] ?? "") ?? 5
+        let engine = RewriteEngine()
+        try await engine.load(from: folder)
+        var report = "cold start, \(count) shortest dictations per language\n"
+        for language in [DictationLanguage.chinese, .japanese, .spanish] {
+            var texts: [(id: String, text: String)] = []
+            for item in try Self.cases() where item.source == language && TranslationDirection.source(of: item.text, in: language) == .partner {
+                let id = String(item.id.drop { $0 != "-" }.dropFirst())
+                if !texts.contains(where: { $0.text == item.text }) {
+                    texts.append((id, item.text))
+                }
+            }
+            let shortest = texts.sorted { ($0.text.count, $0.id) < ($1.text.count, $1.id) }.prefix(count)
+            let directions = [TranslationDirection.automatic] + TranslationDirection.choices(for: language).filter { !$0.fits(language) }
+            for direction in directions {
+                var waits: [Double] = []
+                var overOne = 0
+                var overThrough = 0
+                var outcomes: [String: Int] = [:]
+                for (id, text) in shortest {
+                    await engine.keepTranslationPrefixes([])
+                    let routes = TextCleanup.preparedRoutes(direction, language)
+                    let fill = Task {
+                        for route in routes {
+                            try? await engine.prepareTranslation(into: route)
+                        }
+                    }
+                    let takes = LanguageGuard.takesChineseAndEnglishSteps(text, for: language)
+                    let ruled = takes ? NumberRules.writingNumbersAsDigits(in: FillerRules.removingFillers(from: text)) : text
+                    guard let plan = await direction.plan(for: ruled, in: language) else { continue }
+                    let calls = Calls()
+                    let running = ContinuousClock.now
+                    let result = await TranslationStep.run(ruled, plan: plan, in: language, cleansUp: takes, timeout: .seconds(30), complete: { text, route in
+                        let call = StepModelCall()
+                        calls.list.withLock { $0.append((text, route, call)) }
+                        return try await call.answer {
+                            await fill.value
+                            return try await engine.translate(text, into: route)
+                        }
+                    })
+                    let took = running.duration(to: .now)
+                    await fill.value
+                    for entry in calls.list.withLock({ $0 }) {
+                        _ = await entry.call.completion(timedOut: false)
+                    }
+                    waits.append(took / .seconds(1))
+                    let throughEnglish = if case .throughEnglish = plan { true } else { false }
+                    if took > TranslationStep.timeout(for: ruled) {
+                        overOne += 1
+                    }
+                    if took > TranslationStep.timeout(for: ruled, plan: plan) {
+                        overThrough += 1
+                    }
+                    outcomes[result.outcome.logName, default: 0] += 1
+                    report += "  \(language.rawValue) \(direction.rawValue) \(id): \(ruled.count) characters, \(throughEnglish ? "through English" : "one route"), \(TranslationScoring.format(took / .seconds(1))) s, limit \(TranslationScoring.format(TranslationStep.timeout(for: ruled, plan: plan) / .seconds(1))) s\n"
+                }
+                report += "\(language.rawValue) \(direction.rawValue): median \(TranslationScoring.format(TranslationScoring.median(waits))) s, max \(TranslationScoring.format(waits.max() ?? 0)) s, over the limit of one route \(overOne), over the limit of its plan \(overThrough), \(outcomes.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", "))\n"
+            }
+        }
+        await engine.unload()
+        print(report)
+        Attachment.record(report, named: "translation-cross-cold-start.txt")
+        if let path = environment["ORRA_TRANSLATION_REPORT"] {
+            let previous = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            try (previous + report).write(toFile: path, atomically: true, encoding: .utf8)
+        }
     }
 }

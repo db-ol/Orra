@@ -143,15 +143,40 @@ struct TranslationPlanTests {
         #expect(result == TranslationStep.Result(text: "OK.", untranslated: "好的。", outcome: .translated))
     }
 
-    /// Both parts share the time limit of one, so a slow second part runs out of time.
+    /// Both parts share one time limit, so a slow second part runs out of time. The limit
+    /// is one second longer than that of one route.
     @Test func bothPartsShareOneTimeLimit() async {
         let model = Model(
             [.chinese(.english): Self.intoEnglish, Self.japanese: Self.intoJapanese],
-            delays: [.chinese(.english): .milliseconds(600), Self.japanese: .milliseconds(900)]
+            delays: [.chinese(.english): .milliseconds(600), Self.japanese: .milliseconds(1900)]
         )
-        let result = await TranslationStep.run(Self.chinese, into: .chinese(.english), source: .partner, then: Self.japanese, cleansUp: false, timeout: .seconds(1), complete: model.complete)
+        let result = await TranslationStep.run(Self.chinese, into: .chinese(.english), source: .partner, then: Self.japanese, cleansUp: false, timeout: .seconds(2), complete: model.complete)
         #expect(result == TranslationStep.Result(text: Self.chinese, untranslated: Self.chinese, outcome: .timedOut))
         #expect(model.calls.withLock { $0.count } == 2)
+        let plan = TranslationPlan.throughEnglish(.chinese(.english), source: .partner, then: Self.japanese)
+        #expect(TranslationStep.timeout(for: Self.chinese, plan: plan) == TranslationStep.timeout(for: Self.chinese) + .seconds(1))
+        #expect(TranslationStep.timeout(for: Self.chinese, plan: .route(Self.japanese, source: .english)) == TranslationStep.timeout(for: Self.chinese))
+    }
+
+    /// A first part that gives the text back as it was hands it on as it is, and the
+    /// second translates it.
+    @Test func aFirstPartLeftUnchangedHandsTheTextOn() async {
+        let model = Model([.chinese(.english): #"{"cleaned": "OK。", "translation": "OK。"}"#, Self.spanish: #"{"cleaned": "OK。", "translation": "Vale."}"#])
+        let result = await TranslationStep.run("OK。", into: .chinese(.english), source: .partner, then: Self.spanish, cleansUp: false, complete: model.complete)
+        #expect(result == TranslationStep.Result(text: "Vale.", untranslated: "OK。", outcome: .translated))
+        #expect(model.calls.withLock { $0 } == ["Chinese en OK。", "Spanish es OK。"])
+    }
+
+    /// Spanish that a Chinese user says while Translate into is Spanish is in the target
+    /// already by the rule of the route, so the step pastes it as said and the model does
+    /// not run.
+    @Test func spanishIntoSpanishForAChineseUserSkipsTheModel() async throws {
+        let text = "Nos vemos mañana en la oficina."
+        let plan = try #require(await Self.plan(text, into: .spanish, in: .chinese))
+        let model = Model([:])
+        let result = await TranslationStep.run(text, plan: plan, in: .chinese, cleansUp: true, complete: model.complete)
+        #expect(result == TranslationStep.Result(text: text, untranslated: text, outcome: .unchanged))
+        #expect(model.calls.withLock { $0.isEmpty })
     }
 
     /// Text in the target already is pasted as it was said, and the model does not run.
@@ -183,6 +208,17 @@ struct TranslationPlanTests {
         #expect(!TranslationGuard.hasHanOutsideJapanese("東京駅の八重洲中央口で待っています。", source: "I'm waiting at the Yaesu central exit."))
         #expect(!TranslationGuard.hasHanOutsideJapanese("髙橋さんと﨑山さんに連絡しました。", source: "I contacted Takahashi and Sakiyama."))
         #expect(!TranslationGuard.hasHanOutsideJapanese("刘洋さんに請求書を送ってください。", source: "Please send the invoice to 刘洋."))
+        // Standard Japanese forms that Shift_JIS lacks, while simplified forms that JIS X 0213
+        // holds are still held back.
+        #expect(!TranslationGuard.hasHanOutsideJapanese("森鷗外の小説を読みました。", source: "I read a novel by Mori Ogai."))
+        #expect(!TranslationGuard.hasHanOutsideJapanese("頰に塗ったクリームが剝がれました。", source: "The cream on my cheek peeled off."))
+        #expect(TranslationGuard.hasHanOutsideJapanese("明日开会します。", source: "We meet tomorrow."))
+        #expect(TranslationGuard.hasHanOutsideJapanese("打嗝は医学用語です。", source: "Hiccups is a medical term."))
+        for scalar in TranslationGuard.japaneseFormsOutsideShiftJIS {
+            let character = String(scalar)
+            #expect(!character.canBeConverted(to: TranslationGuard.shiftJIS), "\(character)")
+            #expect(character.applyingTransform(StringTransform("Hans-Hant"), reverse: false) == character, "\(character)")
+        }
         // Chinese given as Japanese, which the checks of the pair let through when it is short
         // and holds at most one of the simplified forms they know.
         let chinese = "九龙的天气很好。"
@@ -204,8 +240,12 @@ struct TranslationPlanTests {
         let output = "文明とは、大きな集団が共有する1つの文化のことです。"
         #expect(TranslationGuard.check(source: source, output: output, route: Self.japanese) == .newNumber(["1"]))
         #expect(TranslationGuard.checkOutsidePair(source: source, output: output, route: Self.japanese) == nil)
-        // A changed number is still caught.
-        #expect(TranslationGuard.checkOutsidePair(source: "We need two rooms for a week.", output: "1週間、3部屋必要です。", route: Self.japanese) == .newNumber(["3"]))
+        // A changed number is still caught, and a lost one keeps the 1 a number.
+        #expect(TranslationGuard.checkOutsidePair(source: "We need two rooms for a week.", output: "1週間、3部屋必要です。", route: Self.japanese) == .newNumber(["1", "3"]))
+        #expect(TranslationGuard.checkOutsidePair(source: "Can you give me a call in 5 minutes?", output: "1分後に電話してもらえますか？", route: Self.japanese) == .newNumber(["1"]))
+        #expect(TranslationGuard.checkOutsidePair(source: "Can you give me a call in 5 minutes?", output: "5分後に電話してもらえますか？", route: Self.japanese) == nil)
+        #expect(TranslationGuard.checkOutsidePair(source: "Each of the three teams has one lead for a week.", output: "3つのチームにはそれぞれ1週間、リーダーが1人います。", route: Self.japanese) == nil)
+        #expect(TranslationGuard.englishNumbers("Twenty-five people, 3 rooms and one table for 1,500 yen") == [3, 1500, 25])
     }
 
     /// Portuguese or French given as Spanish is held back, Spanish and short text are not.

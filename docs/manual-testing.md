@@ -980,9 +980,10 @@ got worse than the baseline, see docs/release-gate.md.
   - TextCleanupTests checks the routes read ahead for each language and direction, that a
     change of language keeps only the routes of the new one and reads them while
     translation is on, and since 2026-10-21 that Chinese as the target of a Spanish user
-    reads the two routes of the way through English and its own again back in Chinese. Since 2026-10-19 it also checks that while
-    captions run the route into the caption target is read first, then those of the
-    translation key, all within the two routes of the dictation language, and
+    reads the two routes of the way through English and its own again back in Chinese.
+    Since 2026-10-19 it also checks that while captions run the route into the caption
+    target is read first, then those of the translation key, all within the two routes of
+    the dictation language unless the key goes into a target outside the pair, and
     CaptionCleanupTests that a new caption target is read ahead while captions run.
     PushToTalkControllerTests checks Japanese and English both ways on their routes, Paste
     Original Text, Spanish and English with their cue, and Japanese with Japanese fixed
@@ -1128,9 +1129,10 @@ got worse than the baseline, see docs/release-gate.md.
     dictation language takes the second route alone, and text already in the target is
     pasted as said. The second route gets three more checks, see
     Orra/TranslationGuard+OutsidePair.swift: no Han character that Shift_JIS lacks in
-    Japanese, a 1 that counts one thing in Japanese (1つ, 1分) is no new number when the
-    English has a word for one, and no Portuguese, French, Italian or Catalan that
-    NLLanguageRecognizer finds well ahead of Spanish. The routes between English and the
+    Japanese, other than standard Japanese forms such as 剝, 頰 or 鷗, a 1 that counts one
+    thing in Japanese (1つ, 1分) is no new number when the English has a word for one and
+    every number of the English is in the translation, and no Portuguese, French, Italian
+    or Catalan that NLLanguageRecognizer finds well ahead of Spanish. The routes between English and the
     dictation language keep their checks. A study of 2026-10-20 had compared this with
     direct prompts without examples, on 319 FLEURS sentences and the dictations below for
     each direction. Direct prompts were twice as fast but kept or turned around spoken
@@ -1146,13 +1148,16 @@ got worse than the baseline, see docs/release-gate.md.
     the pair keep their one route for every direction test text. With a stand in model it
     checks that both parts must pass, that a first part that fails stops there, that a
     second part held back pastes the text as said, that English the second part gives back
-    as it was is the translation, that both parts share one time limit and that text in the
-    target skips the model. It checks each new check, and that Chinese keeps its checks.
+    as it was is the translation, that a first part that gives the text back hands it on,
+    that both parts share one time limit, one second longer than that of one route, and
+    that text in the target skips the model, also Spanish said by a Chinese user with
+    Spanish as the target. It checks each new check, and that Chinese keeps its checks.
     TranslationPairDirectionTests checks the choices, that a fixed choice sends everything
     to its language, and that a choice saved for another dictation language becomes
     Automatic once, and LaunchMigrationsTests that this runs before the caption target's
     step. TextCleanupTests checks that a target outside the pair reads the two routes of
-    the way through English ahead and keeps the route from English beside the pair's.
+    the way through English ahead and keeps only those two caches, and the caption route
+    while captions run.
     PushToTalkControllerTests checks Chinese into Japanese through English with Paste
     Original Text and the 日 cue, English into Japanese on one route, and a translation
     through English held back with its notice. RecordingFeedbackTests checks the badges 中,
@@ -1199,7 +1204,7 @@ got worse than the baseline, see docs/release-gate.md.
     of under 10 minutes. Chinese went through the filler and number rules first, as in the
     app. The times are from the text to the checked translation, with both caches.
 
-    | Direction | Dictations | Pasted as a translation | Held back | Too long | Median | p90 |
+    | Direction | Dictations | Pasted as a translation | Held back | Over 300 characters | Median | p90 |
     |---|---|---|---|---|---|---|
     | Chinese into Japanese | 147 | 142 | 5 | 0 | 0.66 s | 0.93 s |
     | Chinese into Spanish | 147 | 146 | 1 | 0 | 0.69 s | 0.99 s |
@@ -1213,16 +1218,28 @@ got worse than the baseline, see docs/release-gate.md.
     and 告诉他 in Japanese), the checks of the routes the others: 6 assistant openers, 2
     acronyms, too short, not Japanese, not Chinese and Chinese in Japanese. None timed out.
     The slowest, 5.4 s, was a Japanese dictation of 163 characters whose English ran over
-    300 characters. No
-    adversarial dictation's English looked answered. The 624 dictations that the rules left
+    300 characters. No adversarial dictation's English looked answered. The 624 dictations that the rules left
     as they were got the same English as the study for 622, and the same translation for
     all 587 that both translated. The study held back the 3 above with its revised
     checks too. It stopped at English over 300 characters and at English given back
     unchanged, where the app goes on. The study's 36 self corrections in Japanese and
     Spanish, run the same way, gave the study's English and translation for all 72 runs.
-    The 4 held back are phone numbers with a corrected last digit (090-1234-5678, いや、
-    最後は9です, and 55 1234 5678, no, perdón, el último es 9), which the number check of
-    the first route holds back, as before.
+    4 of those 72 runs were held back, all phone numbers with a corrected last digit
+    (090-1234-5678, いや、最後は9です, and 55 1234 5678, no, perdón, el último es 9), which
+    the number check of the first route holds back, as before.
+  - With TEST_RUNNER_ORRA_TRANSLATION_CROSS_COLD=5, TranslationCrossEvaluationTests runs
+    coldStart() instead: the 5 shortest dictations of each language, each into the two
+    other languages and with Automatic, right after a load and with no prefix cache. The
+    caches fill as the app fills them after a load, while the step waits within its
+    limit. On 2026-10-21 on an M5 Pro, through English took 1.9 to 2.5 s and Automatic 1.8
+    to 2.2 s, all within the 3.0 to 3.2 s limit of one route. A way through English gets
+    one second more than one route anyway, since it runs the model twice.
+  - Two rules came with the review of 2026-10-21: a counted 1 is no new number only when
+    every number of the English is in the translation, so 1分後 for "in 5 minutes" is held
+    back, and standard Japanese forms that Shift_JIS lacks (剝, 頰, 塡, 噓, 鷗 and 25 more)
+    pass. JIS X 0213 as a whole is not taken, since it holds 46 of the 479 characters
+    outside Shift_JIS of the Chinese FLEURS sentences, such as 关, 开 and 种. Neither rule
+    changed a verdict on the 8,798 given and model translations of the checks above.
 - SpeechCorpusEvaluationTests runs Orra's speech recognition on the 392 clips Voxt checks
     its runtime on (LibriSpeech test-clean, FLEURS Chinese, ASCEND and 8 synthetic clips),
     only with TEST_RUNNER_ORRA_SPEECH_EVAL=1. It takes a dictation's path up to the
@@ -1371,8 +1388,9 @@ got worse than the baseline, see docs/release-gate.md.
 - ProblemReportTests covers the diagnostic report of Report a Problem…: the home folder,
   account name, full name and computer name are taken out, names under three characters
   and other users' folders stay, the report lists the facts, the dictation language,
-  Translate into, what the caption window shows and the caption target with what each
-  acts as and whether the caption target was picked, and only counts of the
+  Translate into (with ", through English" for a target outside the pair), what the
+  caption window shows and the caption target with what it acts as and whether it was
+  picked, and only counts of the
   vocabulary and the learned pairs, keeps the newest 2000 log lines, picks at most three
   Orra crash reports from the last 7 days, and the issue link fills the form fields the
   bug report form defines, with what happened among them. The link stays under 6,000
@@ -3271,9 +3289,9 @@ app yet. The checks hold the translation key, so set Translation key mode to Hol
 or press the key to start and again to finish where they say hold:
 
 - [ ] With 日本語 + English, Translate into in Settings shows Automatic, English and
-  Japanese, with the Japanese explanation, and with Español + English Automatic, English
-  and Spanish. A choice of Chinese made with 中文 + English shows as Automatic there, and
-  comes back when 中文 + English is picked again.
+  Japanese first, with the Japanese explanation, and with Español + English Automatic,
+  English and Spanish first. Since 2026-10-21 the other two follow as a beta, and a choice
+  stays as it is when the dictation language changes, see the checks of the beta below.
 - [ ] With 日本語 + English, hold the translation key and say a short sentence in kana
   only: English is pasted and the badge shows 訳. Say an English sentence: Japanese is
   pasted. Paste Original Text pastes the Japanese as heard, fillers included.
@@ -3292,6 +3310,43 @@ or press the key to start and again to finish where they say hold:
   that it does not speak Japanese, and pastes the Japanese one with Also paste the
   translated text off.
 - [ ] The welcome window's translation line names the dictation language.
+
+Translation into a language outside the pair, a beta, added on 2026-10-21, not verified in
+the app yet. Set Translation key mode to Hold first, or press the key to start and again to
+finish where they say hold:
+
+- [ ] With each dictation language, Translate into shows five choices: Automatic, English
+  and the dictation language, then the other two with "(Beta)". Check it with Orra in
+  English, 简体中文 (（测试版）), 日本語 (（ベータ版）) and Español. The detail line of
+  each beta choice, which says it goes through English and takes about twice as long,
+  shows in full under the picker.
+- [ ] With 中文 + English and Translate into set to Japanese, hold the translation key and
+  say a Chinese sentence: Japanese is pasted after about twice the usual wait, and the
+  badge shows 日. Paste Original Text pastes the Chinese. An English sentence is pasted in
+  Japanese, and a Japanese sentence with kana as you said it.
+- [ ] With 日本語 + English and Chinese, the badge shows 中. With Español + English and
+  Chinese or Japanese, it shows ZH or JA.
+- [ ] A translation held back on the way through English pastes what you said, and the
+  menu says the dictation was pasted without translation. To get one, say a phone number
+  and correct its last digit, such as 090-1234-5678, いや、最後は9です。
+- [ ] With a beta target, the voice sample sheet of Speak Translations to Others offers the
+  target's script besides English and the dictation language.
+- [ ] The update saves Automatic once in place of a choice made for another dictation
+  language. Quit Orra and run `defaults write io.github.db-ol.Orra translationDirection
+  japanese`, `defaults write io.github.db-ol.Orra dictationLanguage Chinese` and
+  `defaults delete io.github.db-ol.Orra translationDirectionTargetsMigrated`, then open
+  Orra: Translate into shows Automatic. Pick Japanese, quit and open Orra again: it stays
+  Japanese, also after a change of dictation language.
+- [ ] Report a Problem… shows Translate into as "Japanese, through English" for such a
+  choice.
+- [ ] Right after a launch, and after the model was unloaded while idle, a short Spanish
+  dictation into Chinese is pasted translated, not as said.
+- [ ] With the model loaded and Live Captions off, switch Translate into from Automatic to
+  a beta target. The log shows one translation prefix cache dropped and one filled, so
+  two stay:
+  `/usr/bin/log show --last 10m --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`.
+  With Live Captions running into the dictation language, a dictation into the beta
+  target is still pasted translated.
 
 Mail access for Projects, added on 2026-10-19, not verified yet. Projects reads mail in the
 Mail app through three Apple Events, see Orra/Projects/Mail/MailEvents.swift: get and count,

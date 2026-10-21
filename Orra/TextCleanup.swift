@@ -761,10 +761,12 @@ final class TextCleanup {
         saveTranslation(on)
     }
 
-    /// The targets whose translation prompts are read ahead for a direction of a user who
-    /// dictates in Chinese: the fixed one, or both for the automatic direction, which picks
-    /// one per dictation. English first, since most dictations into Orra are Chinese. Each
-    /// takes about 0.8 s on the GPU and keeps about 110 MB, see docs/manual-testing.md.
+    /// The targets of the routes whose translation prompts are read ahead for a direction
+    /// of a user who dictates in Chinese: the fixed one, or both for the automatic
+    /// direction, which picks one per dictation. English first, since most dictations into
+    /// Orra are Chinese. Japanese and Spanish, outside the pair, give English and then
+    /// their own, the targets of the way through English, see `preparedRoutes`. Each takes
+    /// about 0.8 s on the GPU and keeps about 110 MB, see docs/manual-testing.md.
     nonisolated static func preparedTargets(_ direction: TranslationDirection) -> [TranslationTarget] {
         preparedRoutes(direction, .chinese).map(\.target)
     }
@@ -788,6 +790,7 @@ final class TextCleanup {
     /// waiting, then those of the direction, each once. With a target outside the pair
     /// and captions into the dictation language they are three, one more than
     /// TranslationPrefixSlots.limit, so the one used longest ago gives its cache up.
+    /// Without captions they are two.
     nonisolated static func preparedRoutes(direction: TranslationDirection?, captionTarget: TranslationTarget?, _ language: DictationLanguage) -> [TranslationRoute] {
         var routes = captionTarget.map { [CaptionTarget.route($0, in: language)] } ?? []
         for route in direction.map({ preparedRoutes($0, language) }) ?? [] where !routes.contains(route) {
@@ -796,11 +799,15 @@ final class TextCleanup {
         return routes
     }
 
-    /// The routes whose prefix caches RewriteEngine keeps: the two of the dictation
-    /// language, and with a direction into a target outside the pair, which is given while
-    /// translation is on, its route from English.
-    nonisolated static func keptRoutes(direction: TranslationDirection?, _ language: DictationLanguage) -> Set<TranslationRoute> {
-        Set(language.translationRoutes).union(direction.map { preparedRoutes($0, language) } ?? [])
+    /// The routes whose prefix caches RewriteEngine keeps. The direction is given while
+    /// translation is on and the caption target while captions run. The two of the
+    /// dictation language, as before the dictation language, unless the direction goes
+    /// into a target outside the pair. Then they are the two of the way through English
+    /// and the caption route, so a translation key that never uses the route of the
+    /// dictation language into itself does not hold a third cache for it.
+    nonisolated static func keptRoutes(direction: TranslationDirection?, captionTarget: TranslationTarget?, _ language: DictationLanguage) -> Set<TranslationRoute> {
+        guard let direction, !direction.fits(language) else { return Set(language.translationRoutes) }
+        return Set(preparedRoutes(direction: direction, captionTarget: captionTarget, language))
     }
 
     /// Reads the translation prompts ahead after the work queued before, see
@@ -816,17 +823,15 @@ final class TextCleanup {
 
     /// Drops the prompts of other dictation languages, and reads those of the caption
     /// target and the user's direction ahead. The other target of the same language stays
-    /// when it is in memory, as it did before the dictation language, and so does the route
-    /// from English of a target outside the pair, see `keptRoutes`.
+    /// when it is in memory, as it did before the dictation language, unless the
+    /// translation key goes into a target outside the pair, see `keptRoutes`.
     private func fillTranslationPrefixes() async {
         guard translationIsOn || captionsNeedModel, isLoaded else { return }
         let language = dictationLanguage
-        await engine.keepTranslationPrefixes(Self.keptRoutes(direction: translationIsOn ? translationDirection : nil, language))
-        let routes = Self.preparedRoutes(
-            direction: translationIsOn ? translationDirection : nil,
-            captionTarget: captionsNeedModel ? captionTarget : nil,
-            language
-        )
+        let direction = translationIsOn ? translationDirection : nil
+        let captionTarget = captionsNeedModel ? captionTarget : nil
+        await engine.keepTranslationPrefixes(Self.keptRoutes(direction: direction, captionTarget: captionTarget, language))
+        let routes = Self.preparedRoutes(direction: direction, captionTarget: captionTarget, language)
         for route in routes {
             do {
                 try await engine.prepareTranslation(route)

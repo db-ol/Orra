@@ -665,10 +665,14 @@ struct TextCleanupTests {
         #expect(TextCleanup.preparedRoutes(.japanese, .chinese) == [.chinese(.english), TranslationRoute(.japanese, into: .japanese)])
         #expect(TextCleanup.preparedRoutes(.japanese, .spanish) == [TranslationRoute(.spanish, into: .english), TranslationRoute(.japanese, into: .japanese)])
         #expect(TextCleanup.preparedTargets(.spanish) == [.english, .spanish])
-        // The caches kept: the pair's, and the route from English of a target outside it.
-        #expect(TextCleanup.keptRoutes(direction: .automatic, .chinese) == Set(DictationLanguage.chinese.translationRoutes))
-        #expect(TextCleanup.keptRoutes(direction: nil, .japanese) == Set(japanese))
-        #expect(TextCleanup.keptRoutes(direction: .spanish, .japanese) == Set(japanese + [TranslationRoute(.spanish, into: .spanish)]))
+        // The caches kept: the pair's, or for a target outside it the two of the way through
+        // English and the caption route.
+        #expect(TextCleanup.keptRoutes(direction: .automatic, captionTarget: nil, .chinese) == Set(DictationLanguage.chinese.translationRoutes))
+        #expect(TextCleanup.keptRoutes(direction: nil, captionTarget: .japanese, .japanese) == Set(japanese))
+        #expect(TextCleanup.keptRoutes(direction: .english, captionTarget: nil, .spanish) == Set(DictationLanguage.spanish.translationRoutes))
+        #expect(TextCleanup.keptRoutes(direction: .spanish, captionTarget: nil, .japanese) == [TranslationRoute(.japanese, into: .english), TranslationRoute(.spanish, into: .spanish)])
+        #expect(TextCleanup.keptRoutes(direction: .spanish, captionTarget: .english, .japanese) == [TranslationRoute(.japanese, into: .english), TranslationRoute(.spanish, into: .spanish)])
+        #expect(TextCleanup.keptRoutes(direction: .spanish, captionTarget: .japanese, .japanese) == Set(japanese + [TranslationRoute(.spanish, into: .spanish)]))
         for direction in TranslationDirection.choices(for: .chinese) {
             #expect(TextCleanup.preparedRoutes(direction, .chinese).map(\.target) == TextCleanup.preparedTargets(direction))
         }
@@ -698,7 +702,8 @@ struct TextCleanupTests {
                 for target in TranslationTarget.allCases {
                     let routes = TextCleanup.preparedRoutes(direction: direction, captionTarget: target, language)
                     #expect(Set(routes).count == routes.count)
-                    #expect(Set(routes).isSubset(of: TextCleanup.keptRoutes(direction: direction, language)))
+                    #expect(Set(routes).isSubset(of: TextCleanup.keptRoutes(direction: direction, captionTarget: target, language)))
+                    #expect(TextCleanup.keptRoutes(direction: direction, captionTarget: nil, language).count <= TranslationPrefixSlots.limit)
                     #expect(Set(routes).isSubset(of: language.translationRoutes) == direction.fits(language))
                 }
             }
@@ -773,8 +778,8 @@ struct TextCleanupTests {
     }
 
     /// Chinese as the target while dictating Spanish reads the prompts of the way through
-    /// English, Spanish into English and English into Chinese, and keeps the cache of the
-    /// second beside the two of Spanish. Back in Chinese it reads its own.
+    /// English, Spanish into English and English into Chinese, and keeps only those two
+    /// caches. Back in Chinese it reads its own.
     @Test func aTargetOutsideThePairReadsTheWayThroughEnglish() async throws {
         defer { temporary.remove() }
         try temporary.writeAll(to: temporary.installed)
@@ -785,7 +790,7 @@ struct TextCleanupTests {
         await cleanup.start()
         await cleanup.waitForLoad()
         #expect(fake.preparedRoutes == [TranslationRoute(.spanish, into: .english), .chinese(.chinese)])
-        #expect(fake.kept.last == Set(DictationLanguage.spanish.translationRoutes + [.chinese(.chinese)]))
+        #expect(fake.kept.last == [TranslationRoute(.spanish, into: .english), .chinese(.chinese)])
         #expect(cleanup.translationDirection == .chinese)
         cleanup.setDictationLanguage(.chinese)
         await cleanup.waitForLoad()
