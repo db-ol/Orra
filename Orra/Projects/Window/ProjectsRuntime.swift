@@ -270,8 +270,8 @@ final class ProjectsRuntime {
         self.dependencies = dependencies
     }
 
-    /// Whether the menu shows Projects…: while Projects is on, also while it starts or after
-    /// it failed to start, so the window can say why.
+    /// Whether the menus show Open Projects Window: while Projects is on, also while it
+    /// starts or after it failed to start, so the window can say why.
     var showsMenuItem: Bool {
         phase != .off && phase != .stopping
     }

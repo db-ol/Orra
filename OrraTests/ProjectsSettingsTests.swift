@@ -460,6 +460,72 @@ struct ProjectsSettingsTests {
         #expect(mail.asks.isEmpty)
     }
 
+    // MARK: The Projects window
+
+    /// Start Reading Mail says whether it confirmed the choice, so the page opens the
+    /// Projects window then, and only then: not before access is allowed and a mailbox is
+    /// ticked, not while Projects is off, and not a second time.
+    @Test func onlyTheConfirmOfStartReadingMailOpensTheWindow() async {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        var on = true
+        let access = access(isOn: { on })
+        await access.show()
+        // No mailbox ticked yet.
+        #expect(!access.startReading())
+        access.choose(Self.imported, true)
+        on = false
+        #expect(!access.startReading())
+        #expect(!access.choice.isConfirmed)
+        on = true
+        #expect(access.startReading())
+        #expect(access.choice.isConfirmed)
+        // Confirmed once, so the button is gone and nothing opens again.
+        #expect(!access.startReading())
+    }
+
+    /// Without access, Start Reading Mail confirms nothing and opens nothing, even with a
+    /// mailbox ticked.
+    @Test func withoutAccessStartReadingMailOpensNothing() async {
+        defer { cleanUp() }
+        mail.remembered = .denied
+        mail.listingError = .denied
+        let access = access(suggests: true)
+        await access.show()
+        #expect(access.isChosen(.inbox))
+        #expect(!access.startReading())
+        #expect(!access.choice.isConfirmed)
+    }
+
+    /// Turning Projects on in Settings opens the Projects window only when a mailbox choice
+    /// was confirmed before, as after turning it off with Keep Data. Before the first
+    /// confirm, the steps that remain are on the page, and the window opens at the confirm.
+    @Test func turningOnOpensTheWindowOnlyWithAConfirmedChoice() {
+        #expect(ProjectsSettings.opensWindowAfterTurningOn(isOn: true, choiceConfirmed: true))
+        #expect(!ProjectsSettings.opensWindowAfterTurningOn(isOn: true, choiceConfirmed: false))
+        // The switch did not go on, such as below 16 GB.
+        #expect(!ProjectsSettings.opensWindowAfterTurningOn(isOn: false, choiceConfirmed: true))
+        #expect(!ProjectsSettings.opensWindowAfterTurningOn(isOn: false, choiceConfirmed: false))
+    }
+
+    /// A choice confirmed before turning Projects off with Keep Data is still confirmed
+    /// when it is turned on again, read from the preferences as at the next launch.
+    @Test func aKeptChoiceStaysConfirmedForTheNextTurnOn() async {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        let access = access()
+        await access.show()
+        access.choose(Self.imported, true)
+        #expect(access.startReading())
+        access.projectsTurnedOff()
+        let later = MailChoice(defaults: defaults, suggestsInboxAndSent: false)
+        #expect(later.isConfirmed)
+        #expect(ProjectsSettings.opensWindowAfterTurningOn(isOn: true, choiceConfirmed: later.isConfirmed))
+        // Delete Data forgets it, so the next turn on opens nothing until a new confirm.
+        later.forget()
+        #expect(!MailChoice(defaults: defaults, suggestsInboxAndSent: false).isConfirmed)
+    }
+
     /// Mail as a test plays it: whether it runs, what macOS answers when asked, what the
     /// bridge remembers, the mailboxes, and one mailbox with mail for the scan. Records the
     /// asks, the listings and the reads of mail.

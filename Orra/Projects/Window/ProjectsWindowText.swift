@@ -3,13 +3,14 @@ import Foundation
 /// The words of the Projects window and its menu item for the values Projects code returns,
 /// mapped to localized text in one place (plan section 2.8).
 nonisolated enum ProjectsWindowText {
-    /// The menu item that opens the window, with the count of mail waiting for a reply, in
-    /// the language of `locale`, Orra's own by default.
+    /// The menu item that opens the window, in the menu bar menu and the Dock menu, with the
+    /// count of mail waiting for a reply, in the language of `locale`, Orra's own by default.
+    /// It names the window, as the button on the Projects page of Settings does.
     static func menuTitle(replyDue: Int, locale: Locale = .interface) -> String {
         if replyDue > 0 {
-            String(localized: LocalizedStringResource("Projects (\(replyDue) to Reply)…", locale: locale))
+            String(localized: LocalizedStringResource("Open Projects Window (\(replyDue) to Reply)", locale: locale))
         } else {
-            String(localized: LocalizedStringResource("Projects…", locale: locale))
+            String(localized: LocalizedStringResource("Open Projects Window", locale: locale))
         }
     }
 

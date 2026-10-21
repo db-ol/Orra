@@ -8454,6 +8454,50 @@
         }
       }
     },
+    "Open Projects Window" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir la ventana Proyectos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”ウインドウを開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“项目”窗口"
+          }
+        }
+      }
+    },
+    "Open Projects Window (%lld to Reply)" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir la ventana Proyectos (%lld por responder)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”ウインドウを開く（返信待ち%lld件）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“项目”窗口（%lld 封待回复）"
+          }
+        }
+      }
+    },
     "Open Reply in Mail" : {
       "localizations" : {
         "es-419" : {
@@ -10328,28 +10372,6 @@
         }
       }
     },
-    "Projects (%lld to Reply)…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Proyectos (%lld por responder)…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロジェクト（返信待ち%lld件）…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目（%lld 封待回复）…"
-          }
-        }
-      }
-    },
     "Projects cannot find this email in Mail now, so the draft is only on the clipboard. Reply to it in Mail and press ⌘V." : {
       "localizations" : {
         "es-419" : {
@@ -10680,6 +10702,50 @@
         }
       }
     },
+    "Projects Settings" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuración de Proyectos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクト設定"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目设置"
+          }
+        }
+      }
+    },
+    "Projects window" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ventana Proyectos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”ウインドウ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”窗口"
+          }
+        }
+      }
+    },
     "Projects works with the local model of Clean Up Text, on this Mac." : {
       "localizations" : {
         "es-419" : {
@@ -10698,28 +10764,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“项目”使用“整理文字”的本地模型，在这台 Mac 上运行。"
-          }
-        }
-      }
-    },
-    "Projects…" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Proyectos…"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロジェクト…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目…"
           }
         }
       }
@@ -16734,6 +16778,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你把它移到了这里"
+          }
+        }
+      }
+    },
+    "Your projects, with their mail, explanations and drafts, are in a window of their own. You can also open it from Orra in the menu bar." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tus proyectos, con su correo, explicaciones y borradores, están en una ventana propia. También puedes abrirla desde Orra en la barra de menús."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクトと、そのメール、説明、下書きは専用のウインドウにあります。メニューバーのOrraから開くこともできます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的项目及其邮件、解释和草稿都在单独的窗口中。你也可以从菜单栏中的 Orra 打开它。"
           }
         }
       }

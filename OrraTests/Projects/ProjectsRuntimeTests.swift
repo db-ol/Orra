@@ -934,8 +934,12 @@ struct ProjectsRuntimeTests {
 
     @Test func theMenuTitleCountsTheMailWaitingForAReply() {
         let english = Locale(identifier: "en")
-        #expect(ProjectsWindowText.menuTitle(replyDue: 0, locale: english) == "Projects…")
-        #expect(ProjectsWindowText.menuTitle(replyDue: 3, locale: english) == "Projects (3 to Reply)…")
+        #expect(ProjectsWindowText.menuTitle(replyDue: 0, locale: english) == "Open Projects Window")
+        #expect(ProjectsWindowText.menuTitle(replyDue: 3, locale: english) == "Open Projects Window (3 to Reply)")
+        // The window's name, as the catalog gives it elsewhere.
+        let chinese = Locale(identifier: "zh-Hans")
+        #expect(ProjectsWindowText.menuTitle(replyDue: 0, locale: chinese) == "打开“项目”窗口")
+        #expect(ProjectsWindowText.menuTitle(replyDue: 3, locale: chinese) == "打开“项目”窗口（3 封待回复）")
     }
 
     // MARK: Helpers
