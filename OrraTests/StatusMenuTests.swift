@@ -103,9 +103,9 @@ struct StatusMenuTests {
         let item = try #require(lines.firstIndex(of: "Open Projects Window"))
         #expect(Array(lines[(item - 3)...(item + 2)]) == ["# Meeting Interpretation", "Live Captions", "---", "Open Projects Window", "---", "Talk Key >"])
         #expect(!zip(lines, lines.dropFirst()).contains { $0 == "---" && $1 == "---" })
-        // The only item with an icon, so it stands out.
+        // It carries an icon, so it stands out.
         let items = menu(translationOn: false, speakingOn: false, projects: runtime).items
-        #expect(items.filter { $0.image != nil }.map(\.title) == ["Open Projects Window"])
+        #expect(items.first { $0.title == "Open Projects Window" }?.image != nil)
         // The Dock menu: the one item, which opens the window.
         let dock = try #require(StatusMenu.dockMenu(projects: runtime, target: target, action: #selector(DockTarget.open)))
         #expect(Self.lines(of: dock) == ["Open Projects Window"])

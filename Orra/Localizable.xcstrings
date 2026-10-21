@@ -10713,13 +10713,13 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プロジェクト設定"
+            "value" : "“プロジェクト”設定"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "项目设置"
+            "value" : "“项目”设置"
           }
         }
       }
@@ -16782,24 +16782,24 @@
         }
       }
     },
-    "Your projects, with their mail, explanations and drafts, are in a window of their own. You can also open it from Orra in the menu bar." : {
+    "Your projects, with their mail, explanations and drafts, are in a window of their own. You can also open it from the Orra menu." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tus proyectos, con su correo, explicaciones y borradores, están en una ventana propia. También puedes abrirla desde Orra en la barra de menús."
+            "value" : "Tus proyectos, con su correo, explicaciones y borradores, están en una ventana propia. También puedes abrirla desde el menú de Orra."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プロジェクトと、そのメール、説明、下書きは専用のウインドウにあります。メニューバーのOrraから開くこともできます。"
+            "value" : "プロジェクトと、そのメール、説明、下書きは専用のウインドウにあります。Orraメニューから開くこともできます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的项目及其邮件、解释和草稿都在单独的窗口中。你也可以从菜单栏中的 Orra 打开它。"
+            "value" : "你的项目及其邮件、解释和草稿都在单独的窗口中。你也可以从 Orra 菜单打开它。"
           }
         }
       }

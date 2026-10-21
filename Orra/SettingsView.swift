@@ -15,7 +15,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// The name in the sidebar and the window's title.
+    /// The name in the sidebar and the window's title, except Projects, whose page is titled
+    /// Projects Settings so it is not taken for the Projects window.
     var title: LocalizedStringKey {
         switch self {
         case .general: "General"

@@ -35,11 +35,11 @@ final class ProjectsWindow {
         self.openSettings = openSettings
     }
 
-    /// Brings the window to the front, while Projects is on. Also right after the switch
-    /// went on, before Projects has started, as when Settings opens the window then. It
-    /// takes the model once Projects runs, see ProjectsRuntime.windowOpened().
+    /// Brings the window to the front, while Projects is on, see
+    /// ProjectsRuntime.canOpenWindow. It takes the model once Projects runs, see
+    /// ProjectsRuntime.windowOpened().
     func show() {
-        guard runtime.projects.isOn else { return }
+        guard runtime.canOpenWindow else { return }
         let window = self.window ?? makeWindow()
         self.window = window
         willShow()

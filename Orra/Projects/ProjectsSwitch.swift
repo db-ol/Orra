@@ -50,6 +50,8 @@ final class ProjectsSwitch {
     /// into the files a delete removes. The app sets it while Projects runs, and a delete
     /// waits for it first.
     @ObservationIgnored var closeBeforeDelete: (() async -> Void)?
+    /// Counts the deletes begun, so a look that a delete overtook drops what it found.
+    @ObservationIgnored private var deletesBegun = 0
     @ObservationIgnored private let defaults: UserDefaults
 
     init(
@@ -131,22 +133,29 @@ final class ProjectsSwitch {
         }
     }
 
-    /// Measures what Projects keeps on this Mac, for Settings.
+    /// Measures what Projects keeps on this Mac, for Settings. A delete that begins during
+    /// the look measures on its own once it is done, so the look then drops what it found,
+    /// which may be the size from before the delete.
     func measureStorage() async {
-        storedBytes = await storage.size()
+        let deletes = deletesBegun
+        let bytes = await storage.size()
+        guard deletesBegun == deletes else { return }
+        storedBytes = bytes
         if !holdsData {
             deleteFailed = false
         }
     }
 
-    /// How often the Projects page of Settings measures again while it shows. The scan, the
-    /// index, the window and Retention all write, so the page looks again on its own. The
-    /// folder holds a handful of files, so a look is cheap (a guess, not measured).
+    /// How often the Projects page of Settings measures again while it shows and Projects
+    /// is on (a guess). The scan, the index, the window and Retention all write then. The
+    /// folder holds the project list and the database with the files SQLite keeps next to
+    /// it, so a look reads the sizes of a handful of files.
     static let storageRefresh: Duration = .seconds(5)
 
-    /// Measures what Projects keeps now and again every `interval` until the task ends, for
-    /// the Projects page of Settings while it shows. A delete measures on its own, so no
-    /// look starts while one runs.
+    /// Measures what Projects keeps now, for the Projects page of Settings while it shows.
+    /// While Projects is on it measures again every `interval` until the task ends. While it
+    /// is off nothing writes, so one look is enough. A delete measures on its own, so no look
+    /// starts while one runs.
     func followStorage(
         every interval: Duration = ProjectsSwitch.storageRefresh,
         sleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
@@ -155,6 +164,7 @@ final class ProjectsSwitch {
             if !isDeleting {
                 await measureStorage()
             }
+            guard isOn else { return }
             do {
                 try await sleep(interval)
             } catch {
@@ -169,6 +179,7 @@ final class ProjectsSwitch {
     func deleteAllData() async {
         guard !isDeleting else { return }
         isDeleting = true
+        deletesBegun += 1
         defer { isDeleting = false }
         await closeBeforeDelete?()
         let bytes = await storage.size()

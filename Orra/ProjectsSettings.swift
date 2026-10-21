@@ -32,6 +32,9 @@ struct ProjectsSettings: View {
         Form {
             if projects.isOn, let openWindow {
                 WindowSection(openWindow: openWindow)
+                    // Delete All Projects Data stops Projects and closes the window while
+                    // the switch stays on.
+                    .disabled(projects.isDeleting)
             }
             Section {
                 Toggle(isOn: Binding(
@@ -134,9 +137,9 @@ struct ProjectsSettings: View {
         .formStyle(.grouped)
         // Not Projects, the title of the Projects window, so the two are not mistaken.
         .navigationTitle("Projects Settings")
-        // What Projects keeps grows while the page shows, as the scan saves mail and the
-        // index reads folders, so the Data row looks again on its own.
-        .task {
+        // What Projects keeps grows while the page shows and Projects is on, as the scan
+        // saves mail and the index reads folders, so the Data row looks again on its own.
+        .task(id: projects.isOn) {
             await projects.followStorage()
         }
         // Lists Mail's mailboxes each time the page shows while Projects is on, and when
@@ -234,21 +237,15 @@ struct ProjectsSettings: View {
         }
     }
 
-    /// Opens the Projects window after the user turned Projects on here, when setting up is
-    /// done, see `opensWindowAfterTurningOn`.
-    private func openWindowAfterTurningOn() {
-        if Self.opensWindowAfterTurningOn(isOn: projects.isOn, choiceConfirmed: mail?.choice.isConfirmed == true) {
-            openWindow?()
-        }
-    }
-
-    /// Whether turning Projects on here opens the Projects window: only when the user
+    /// Opens the Projects window after the user turned Projects on here, only when they
     /// confirmed a mailbox choice before, as after turning Projects off and keeping the
     /// data, since Projects reads mail at once then. Before the first confirm, the steps
     /// that remain are on this page, so the window would only cover them. It opens then when
     /// Start Reading Mail confirms the choice.
-    nonisolated static func opensWindowAfterTurningOn(isOn: Bool, choiceConfirmed: Bool) -> Bool {
-        isOn && choiceConfirmed
+    private func openWindowAfterTurningOn() {
+        if projects.isOn, mail?.choice.isConfirmed == true {
+            openWindow?()
+        }
     }
 
     /// Whether Projects keeps anything on this Mac: data in its folder, as last measured, or
@@ -323,7 +320,7 @@ struct ProjectsSettings: View {
                 HStack(spacing: 12) {
                     DescribedLabel(
                         title: "Projects window",
-                        detail: "Your projects, with their mail, explanations and drafts, are in a window of their own. You can also open it from Orra in the menu bar.",
+                        detail: "Your projects, with their mail, explanations and drafts, are in a window of their own. You can also open it from the Orra menu.",
                         systemImage: "macwindow"
                     )
                     Spacer()

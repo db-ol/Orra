@@ -49,7 +49,7 @@ nonisolated struct ProjectsStorage: Sendable {
     }
 
     /// The bytes of every file Projects keeps, 0 when it keeps none. Off the main actor, since
-    /// an index can hold many files. Links are skipped, never followed.
+    /// it reads the disk. Links are skipped, never followed.
     @concurrent
     func size() async -> Int64 {
         sizeNow()
@@ -68,8 +68,8 @@ nonisolated struct ProjectsStorage: Sendable {
     }
 
     /// Deletes everything Projects keeps, with its folder. Nothing to delete is no error, but
-    /// a file gone midway while the folder stays is. Off the main actor, since an index can
-    /// hold many files.
+    /// a file gone midway while the folder stays is. Off the main actor, since it writes to
+    /// the disk.
     @concurrent
     func deleteAll() async throws {
         do {

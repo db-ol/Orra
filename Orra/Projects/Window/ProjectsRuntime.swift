@@ -276,6 +276,14 @@ final class ProjectsRuntime {
         phase != .off && phase != .stopping
     }
 
+    /// Whether the Projects window may open: while the switch is on, also right after it
+    /// went on and before Projects has started, as when Settings opens the window then.
+    /// Never during Delete All Projects Data, which stops Projects and closes the window
+    /// while the switch stays on.
+    var canOpenWindow: Bool {
+        projects.isOn && !projects.isDeleting
+    }
+
     /// Why the model work waits now, nil while it runs or when none runs.
     var pause: ProjectsModelQueue.Pause? {
         running?.queue.pause
@@ -532,6 +540,13 @@ final class ProjectsRuntime {
 
     private func stopNow() async {
         guard let running else {
+            // The window can open before Projects runs, see canOpenWindow. It closes here
+            // too, after a failed start or a start the switch overtook.
+            if isWindowOpen {
+                closeWindow()
+                isWindowOpen = false
+                detachWindow()
+            }
             if phase == .failed {
                 phase = .off
             }

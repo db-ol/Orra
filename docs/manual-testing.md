@@ -3229,6 +3229,8 @@ build.
 - [ ] Keep Settings > Projects open while Projects reads mail. Stored on this Mac grows
   within a few seconds of the mail showing in the Projects window, and never stays at
   Nothing.
+- [ ] While Delete All Projects Data runs with Projects on, Open Projects Window is dimmed
+  and the Projects window stays closed.
 
 ## Not implemented
 

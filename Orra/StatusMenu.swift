@@ -140,14 +140,15 @@ struct StatusMenu: View {
         }
 
         // Projects, only while it is on, with the count of mail waiting for a reply. It
-        // names the window it opens and carries the icon of Projects in Settings, so it
-        // stands out among the lines of text. A heading of its own would draw a second
-        // divider next to the one the section above draws.
+        // names the window it opens and carries the outline of the icon of Projects in
+        // Settings, as a symbol next to text, so it stands out among the lines of text. A
+        // heading of its own would draw a second divider next to the one the section above
+        // draws.
         if projects.showsMenuItem {
             Button {
                 showProjects()
             } label: {
-                Label(ProjectsWindowText.menuTitle(replyDue: projects.replyDueCount), systemImage: SettingsTab.projects.symbol)
+                Label(ProjectsWindowText.menuTitle(replyDue: projects.replyDueCount), systemImage: "briefcase")
             }
             Divider()
         }

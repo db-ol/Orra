@@ -210,8 +210,22 @@ struct ProjectsSwitchTests {
         #expect(ProjectsSwitch.storageRefresh == .seconds(5))
     }
 
+    /// While Projects is off nothing writes, so the page looks once and stops.
+    @Test func whileProjectsIsOffTheDataRowLooksOnce() async throws {
+        defer { cleanUp() }
+        try storeData(bytes: 2_000)
+        let projects = makeSwitch()
+        var waits = 0
+        await projects.followStorage { _ in
+            waits += 1
+            throw CancellationError()
+        }
+        #expect(waits == 0)
+        #expect(projects.storedBytes == 2_000)
+    }
+
     /// No look starts while a delete runs, since the delete measures on its own once it is
-    /// done, and an earlier look must not bring back the size from before it.
+    /// done.
     @Test func theDataRowDoesNotLookWhileADeleteRuns() async throws {
         defer { cleanUp() }
         try storeData(bytes: 1_000)
@@ -237,6 +251,28 @@ struct ProjectsSwitchTests {
         await deleting.value
         #expect(projects.storedBytes == 0)
         #expect(!projects.deleteFailed)
+    }
+
+    /// A look that a delete overtook drops what it found, so it never brings back the size
+    /// from before the delete. The look reads the disk off the main actor, and the delete
+    /// begins on the main actor before the look comes back.
+    @Test(.timeLimit(.minutes(1))) func aLookThatADeleteOvertookDropsWhatItFound() async throws {
+        defer { cleanUp() }
+        try storeData(bytes: 1_000)
+        let projects = makeSwitch()
+        projects.turnOn()
+        let (released, release) = AsyncStream.makeStream(of: Void.self)
+        projects.closeBeforeDelete = {
+            for await _ in released { break }
+        }
+        let look = Task { await projects.measureStorage() }
+        let deleting = Task { await projects.deleteAllData() }
+        await look.value
+        #expect(projects.isDeleting)
+        #expect(projects.storedBytes == nil)
+        release.yield()
+        await deleting.value
+        #expect(projects.storedBytes == 0)
     }
 
     /// Delete All Projects Data leaves the switch as it is.
