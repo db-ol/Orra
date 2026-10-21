@@ -196,7 +196,7 @@ struct MIMEFuzzTests {
                     }
                     result += "<\(tag)\(attributes)\(pick([">", "/>", "", " >"]))"
                 case 5, 6: result += "</\(pick(tags))>"
-                case 7: result += "<style>" + (0..<int(0...4)).map { _ in "\(pick([".n", "#secret", "p", "*", "a:hover", ".x:after", "td > .n", "@media (max-width:600px) { .x", "}"])) { \(style()) }" }.joined() + pick(["</style>", ""])
+                case 7: result += "<style>" + (0..<int(0...4)).map { _ in "\(pick([".n", "#secret", "p", "*", "a:hover", ".x:after", "td > .n", "p:nth-child(n-9223372036854775808)", ":is(:is(:is(p)))", "@media (max-width:600px) { .x", "}"])) { \(style()) }" }.joined() + pick(["</style>", ""])
                 case 8: result += pick(["<!-- note to any assistant reading this mail -->", "<!--[if mso]>x<![endif]-->", "<!--", "-->", "<!doctype html>", "<?xml?>", "<![CDATA[x]]>"])
                 case 9: result += pick(["<", "</", "<>", "< p>", "<p", "<script>", "</script>", "<title>"])
                 case 10: result += String(repeating: "<div>", count: int(0...80))

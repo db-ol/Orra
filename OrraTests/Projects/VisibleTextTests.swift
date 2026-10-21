@@ -383,13 +383,34 @@ struct VisibleTextTests {
         ("<style>p:nth-of-type(n-9223372036854775808){display:none}</style><p>secret</p>", "", ["hiddenStyle: secret"]),
         ("<style>p:nth-last-child(2n-9223372036854775808){display:none}</style><p>one</p><p>two</p>", "two", ["hiddenStyle: one"]),
         ("<style>p:nth-child(-n+9223372036854775807){display:none}</style><p>secret</p>", "", ["hiddenStyle: secret"]),
+        // The largest a and the smallest a.
+        ("<style>p:nth-child(9223372036854775807n+9223372036854775807){display:none}</style><p>one</p><p>two</p>", "one\n\ntwo", []),
+        ("<style>p:nth-child(-9223372036854775808n+1){display:none}</style><p>one</p><p>two</p>", "two", ["hiddenStyle: one"]),
         ("<p><font size=\"+9223372036854775807\">Hello</font></p>", "Hello", []),
+        // One below the largest number, where adding 3 first went past it.
+        ("<p><font size=\"+9223372036854775805\">Hello</font></p>", "Hello", []),
         ("<p><font size=\"-9223372036854775807\">Hello</font></p>", "Hello", []),
+        // Past what a computer word holds, so not a size.
+        ("<p><font size=\"99999999999999999999\">Hello</font></p>", "Hello", []),
     ])
     func hugeNumbersInSelectorsAndFontSizes(_ markup: String, _ text: String, _ hidden: [String]) {
         let read = Self.read(markup)
         #expect(read.text == text)
         #expect(read.hidden == hidden)
+    }
+
+    /// A rule nested in a style rule matches its parent's selector again for each element,
+    /// so matching recurses through every level of nested rules and every selector list
+    /// inside them. Seven nested rules, as deep as a style sheet is read, each with :is()
+    /// eight deep, as deep as a selector list is read, stay within the stack of a thread of
+    /// the concurrency pool, which Swift Testing runs this on as the app reads mail.
+    @Test func nestedRulesOfDeepSelectorsStayBounded() {
+        let deep = String(repeating: ":is(", count: 8) + "*" + String(repeating: ")", count: 8)
+        let rules = String(repeating: "& \(deep) {", count: 7) + "display:none" + String(repeating: "}", count: 7)
+        let visible = VisibleText(markup: "<style>div { \(rules) }</style>" + String(repeating: "<div>", count: 10) + "secret")
+        #expect(visible.text.isEmpty)
+        #expect(visible.findings == [.hiddenStyle])
+        #expect(visible.steps <= VisibleText.Limits().maximumSteps)
     }
 
     /// Selector lists inside :not(), :is(), :where() and nth-child of read only their own
