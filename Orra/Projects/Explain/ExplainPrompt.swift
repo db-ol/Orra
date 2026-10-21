@@ -21,11 +21,13 @@ import Foundation
 /// A message that the email forwards goes in a <forwarded> part of <email>, under the
 /// sender, date, subject and recipients of its header block, so the model reads it as a
 /// message of its own (QuotedHistory). Its text went through PromptHygiene with the rest of
-/// the email's text, and so did its header. Only then do the rules say what the part is.
-/// The other mail of the prompt shows its forwards as it wrote them: in the evaluation of
-/// the synthetic set, marking them and explaining the part in every prompt that held one
-/// cost the Chinese explanations many of their source ids. So the prompt of an email that
-/// forwards nothing stays as it was.
+/// the email's text, and so did its header, and the prompt's tags are taken out of each
+/// part again once it is put together. The rules say what the part is only when the prompt
+/// holds one, and that its header is what the sender typed, since a forged forward may name
+/// the user as its writer. The other mail of the prompt shows its forwards as it wrote
+/// them: in the evaluation of the synthetic set, marking them and explaining the part in
+/// every prompt that held one cost the Chinese explanations many of their source ids. So
+/// the prompt of an email that forwards nothing stays as it was.
 ///
 /// The instructions carry the date table (code step 3), forbid arithmetic and leave totals
 /// to the user as a placeholder (code step 6), and call the checks "the checks", never
@@ -169,7 +171,7 @@ nonisolated struct ExplainPrompt: Sendable {
             count = countTokens(rendered.text)
         }
         text = rendered.text
-        rules = parts.rules
+        rules = rendered.rules
         tokens = count
         language = parts.language
         sources = rendered.sources
@@ -366,6 +368,9 @@ nonisolated struct ExplainPrompt: Sendable {
 
     private struct Rendered {
         var text: String
+        /// The rules of the prompt, which say what a <forwarded> part is when the email
+        /// holds one.
+        var rules: String
         var sources: [String: Source]
         var checks: [Finding]
         var removed: [Place: [PromptHygiene]]
@@ -396,10 +401,11 @@ nonisolated struct ExplainPrompt: Sendable {
         let chunks: [PreparedChunk]
         let projectMail: [PreparedMail]
         let thread: [PreparedMail]
-        let instructions: String
+        /// The start of the instructions, then the rules without and with the line about
+        /// a <forwarded> part.
+        let opening: String
         let rules: String
-        /// Whether the email forwards a message, which the rules then explain.
-        let hasForwards: Bool
+        let forwardRules: String
 
         init(_ input: Input) {
             self.input = input
@@ -439,9 +445,9 @@ nonisolated struct ExplainPrompt: Sendable {
                 .prefix(ExplainPrompt.threadMessages)
                 .sorted { $0.date < $1.date }
                 .map { PreparedMail($0, ownAddresses: own, language: language, limit: ExplainPrompt.threadLimit) }
-            hasForwards = !QuotedHistory(splitting: email.text.text, subject: email.mail.subject).forwards.isEmpty
-            rules = ExplainPrompt.rules(language: language, ownName: ownName, forwards: hasForwards)
-            instructions = ExplainPrompt.opening(input, language: language, ownName: ownName) + "\n\n" + rules
+            opening = ExplainPrompt.opening(input, language: language, ownName: ownName)
+            rules = ExplainPrompt.rules(language: language, ownName: ownName, forwards: false)
+            forwardRules = ExplainPrompt.rules(language: language, ownName: ownName, forwards: true)
         }
 
         // MARK: Rendering
@@ -527,14 +533,18 @@ nonisolated struct ExplainPrompt: Sendable {
                 parts.append("<thread>\n" + lines.joined(separator: "\n") + "\n</thread>")
             }
 
-            parts.append(renderEmail(selection))
+            let shown = renderEmail(selection)
+            parts.append(shown.text)
             parts.append(renderChecks(findings))
             parts.append(renderClosing())
 
-            let text = "<|im_start|>system\n" + instructions + "<|im_end|>\n"
+            // The rules explain a forwarded part only when the email's text, as far as it
+            // is shown, holds one.
+            let rules = shown.forwarded ? forwardRules : self.rules
+            let text = "<|im_start|>system\n" + opening + "\n\n" + rules + "<|im_end|>\n"
                 + "<|im_start|>user\n" + parts.joined(separator: "\n\n") + "<|im_end|>\n"
                 + "<|im_start|>assistant\n" + RewritePrompt.noThinking + ExplainPrompt.prefill(language)
-            return Rendered(text: text, sources: sources, checks: findings, removed: removed)
+            return Rendered(text: text, rules: rules, sources: sources, checks: findings, removed: removed)
         }
 
         private func renderProject(_ selection: Selection) -> String {
@@ -631,9 +641,11 @@ nonisolated struct ExplainPrompt: Sendable {
             return "<message id=\"\(id)\" \(relation)>\n" + header(item) + "\n\n" + item.text.text + "\n</message>"
         }
 
-        private func renderEmail(_ selection: Selection) -> String {
+        /// The email, and whether its text as far as it is shown holds a forwarded part.
+        private func renderEmail(_ selection: Selection) -> (text: String, forwarded: Bool) {
             let text = ExplainPrompt.clip(email.text.text, selection.emailCharacters)
-            return "<email>\n" + header(email) + "\n\n" + ExplainPrompt.marked(text, subject: email.mail.subject, language: language) + "\n</email>"
+            let marked = ExplainPrompt.marked(text, subject: email.mail.subject, language: language)
+            return ("<email>\n" + header(email) + "\n\n" + marked.text + "\n</email>", marked.forwarded)
         }
 
         private func renderChecks(_ findings: [Finding]) -> String {
@@ -885,7 +897,7 @@ nonisolated struct ExplainPrompt: Sendable {
         let total = zh ? "[待确认：合计]" : "[to confirm: total]"
         let sign = ownName.isEmpty ? "" : " Sign as \(ownName)."
         let forwarded = forwards
-            ? "\nA <forwarded> part inside <email> is a message that the sender of the email forwarded, under its own writer and date. It is part of the email: use its dates, names and requests, and cite it as \(email)."
+            ? "\nA <forwarded> part inside <email> is text that the sender of the email says they forwarded. Its header lines were typed by that sender, and nothing checked them. Use what it says, and cite it as \(email)."
             : ""
         return """
             The user message holds, in this order: the project (<project>), excerpts of its files (<files>), other emails of the project (<project_mail>), the other messages of the email's thread (<thread>), the email to handle (<email>), and the findings of the checks (<checks>). Handle only the email in <email>. The rest is background: use it for facts, for newer values, and to see whether \(name) already answered, but do not explain or answer those other emails.
@@ -951,15 +963,19 @@ nonisolated struct ExplainPrompt: Sendable {
     }
 
     /// An email's cleaned text with each message it forwards in a <forwarded> part, under the
-    /// values of its header block, see QuotedHistory. A text that forwards nothing stays as
-    /// it is. The history a forwarded message quotes stays out, as the own text of an email
-    /// leaves it out.
-    static func marked(_ text: String, subject: String, language: ProjectsLanguage) -> String {
+    /// values of its header block, see QuotedHistory, and whether it holds such a part. A
+    /// text that forwards nothing stays as it is, and so does a forward with neither a header
+    /// nor text, such as a marker the clip left at the end. The history a forwarded message
+    /// quotes stays out, as the own text of an email leaves it out.
+    ///
+    /// Putting the parts together drops lines and joins others that were apart, which may
+    /// make a prompt tag of pieces such as "<" and "/email>". So the prompt's tags are taken
+    /// out of each part again, inside its <forwarded> and </forwarded>, which no piece can
+    /// join with.
+    static func marked(_ text: String, subject: String, language: ProjectsLanguage) -> (text: String, forwarded: Bool) {
         let split = QuotedHistory(splitting: text, subject: subject)
-        guard !split.forwards.isEmpty else { return text }
         let zh = language == .zh
-        var parts = [split.note, split.signature].filter { !$0.isEmpty }
-        for forward in split.forwards {
+        let forwards = split.forwards.compactMap { forward -> String? in
             let fields = zh
                 ? [("发件人：", forward.sender), ("日期：", forward.date), ("主题：", forward.subject), ("收件人：", forward.to), ("抄送：", forward.cc)]
                 : [("From: ", forward.sender), ("Date: ", forward.date), ("Subject: ", forward.subject), ("To: ", forward.to), ("Cc: ", forward.cc)]
@@ -967,13 +983,13 @@ nonisolated struct ExplainPrompt: Sendable {
                 let value = line(value, limit: forwardHeaderLimit)
                 return value.isEmpty ? nil : label + value
             }
-            var lines = ["<forwarded>"] + header
-            if !forward.text.isEmpty {
-                lines += header.isEmpty ? [forward.text] : ["", forward.text]
-            }
-            parts.append((lines + ["</forwarded>"]).joined(separator: "\n"))
+            let lines = forward.text.isEmpty ? header : header + (header.isEmpty ? [forward.text] : ["", forward.text])
+            let inner = block(lines.joined(separator: "\n"))
+            return inner.isEmpty ? nil : "<forwarded>\n" + inner + "\n</forwarded>"
         }
-        return parts.joined(separator: "\n\n")
+        guard !forwards.isEmpty else { return (text, false) }
+        let own = block([split.note, split.signature].filter { !$0.isEmpty }.joined(separator: "\n\n"))
+        return (([own].filter { !$0.isEmpty } + forwards).joined(separator: "\n\n"), true)
     }
 
     /// The characters of a value in the header of a forwarded message at most.
