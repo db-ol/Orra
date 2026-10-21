@@ -75,11 +75,13 @@ struct ProjectsModelEnvironment {
 ///   memory pressure is not normal, and on a Mac with less than 24 GiB while the voice
 ///   model is loaded. `pause` says why it waits. A key press pauses a job and never drops
 ///   it.
-/// - While a call waits at the model gate or at the engine, the queue looks every
-///   `pollInterval` whether a pause began, and then cancels the call. It leaves without
-///   running and runs again after the pause, so a call that waited behind the voice model
-///   never starts during a dictation. A burst under way stops after its next token. A
-///   slice under way runs to its end.
+/// - The press of a key cancels the call under way at once, before the dictation reserves
+///   the model gate, which would let a call that waits there in, see `dictationStarted()`.
+///   For the other pauses, while a call waits at the model gate or at the engine, the queue
+///   looks every `pollInterval` whether a pause began, and then cancels the call. A call
+///   cancelled before it began leaves without running and runs again after the pause, so a
+///   call that waited behind the voice model never starts during a dictation. A burst
+///   under way stops after its next token. A slice under way runs to its end.
 /// - Slices start at 256 tokens. A slice that ran longer than 0.2 s halves the next one,
 ///   down to 64 tokens, and one that ran under 0.1 s doubles it, up to 512, so every Mac
 ///   keeps a slice near 0.1 to 0.2 s. The time is the one the model ran, measured inside
@@ -153,6 +155,8 @@ final class ProjectsModelQueue {
     /// Counts the calls of `cancelBackground()`, so a background request that was let in
     /// before one and had not begun yet leaves too.
     @ObservationIgnored private var backgroundGeneration = 0
+    /// Cancels the call under way, see `dictationStarted()`.
+    @ObservationIgnored private var cancelCall: (() -> Void)?
 
     private struct Waiter {
         let ticket: Int
@@ -222,6 +226,14 @@ final class ProjectsModelQueue {
         if let running, running.priority == .background {
             running.task.cancel()
         }
+    }
+
+    /// The talk key or the translation key went down, before the dictation reserves the
+    /// model gate. Cancels the call under way at once, so one that waits at the gate leaves
+    /// it before the reservation lets it in. The job waits until the dictation is over, as
+    /// for any pause.
+    func dictationStarted() {
+        cancelCall?()
     }
 
     /// How many requests wait for the job under way. Internal for tests.
@@ -318,6 +330,8 @@ final class ProjectsModelQueue {
                 log.written += burst.written
                 finished = burst.finished || burst.written == 0
             } while !finished
+            // A caller cancelled during the last burst gets no answer, and the job ends.
+            try Task.checkCancellation()
         } catch {
             // Gives the job's memory back, whatever ended it. After an unload the job is
             // gone already.
@@ -331,10 +345,13 @@ final class ProjectsModelQueue {
     /// that a pause cancels, see ProjectsModelQueue. A call cancelled before it began
     /// throws CancellationError at the gate or at the engine and changes nothing, so it
     /// runs again after the pause. A burst cancelled while it writes returns what it wrote.
+    /// What a call returns is kept also when the caller was cancelled meanwhile, so a job
+    /// that started then is ended, see `attempt`.
     private func call<T: Sendable>(_ log: inout JobLog, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
         while true {
             try await waitForTurn(&log)
             let task = Task { try await work() }
+            cancelCall = { task.cancel() }
             let watch = Task { [weak self, sleep = environment.sleep] in
                 while (try? await sleep(Self.pollInterval)) != nil {
                     if self?.pauseReason() != nil {
@@ -348,7 +365,11 @@ final class ProjectsModelQueue {
             } onCancel: {
                 task.cancel()
             }
+            cancelCall = nil
             watch.cancel()
+            if case .success(let value) = result {
+                return value
+            }
             try Task.checkCancellation()
             do {
                 return try result.get()

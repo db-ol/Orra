@@ -531,11 +531,13 @@ struct EngineTurnsTests {
         var events: [String] = []
         let model = CleanupModel(waitUntilLoaded: { false }, dictationStarted: { events.append("started") }, dictationEnded: { events.append("ended") }, complete: { _ in "" })
             .sharing(turns)
+        // Other model work hears of the key down too, with the dictation under way.
+        turns.whenDictationStarts { events.append("handler, dictating: \(turns.isDictating)") }
         model.dictationStarted()
         #expect(turns.isDictating)
         model.dictationEnded()
         #expect(!turns.isDictating)
-        #expect(events == ["started", "ended"])
+        #expect(events == ["handler, dictating: true", "started", "ended"])
     }
 
     @Test func captionsWaitForADictationAndCatchUpInOrder() async throws {

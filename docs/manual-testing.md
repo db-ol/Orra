@@ -154,8 +154,9 @@ got worse than the baseline, see docs/release-gate.md.
     once. ModelGateReservationTests checks that a dictation reserves the gate from the
     press of its key until it is pasted or cancelled, that the speech and cleanup loads
     and the prompts read with the cleanup load run with a reservation, and the voice
-    sample, the word check and the prompts read ahead later without one, and that the
-    prompts read with the load go ahead of a voice request that waits.
+    sample, the word check and the prompts read ahead later without one, that the
+    prompts read with the load go ahead of a voice request that waits, and that the press
+    of a key tells the cleanup model of the dictation before it reserves the gate.
     ModelGateWiringTests checks without models that the app's speech and cleanup models
     from Transcription.qwen3 and CleanupEngine.live queue at the gate, and that every voice
     model of VoiceEngines.live runs alone at the app's gate. CompileLockTests runs only

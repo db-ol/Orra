@@ -816,6 +816,64 @@ struct CleanupIdleUnloadTests {
         #expect(fake.events == ["load", "unload", "load"])
     }
 
+    /// The Projects window opens during a dictation: the model loads only after the paste,
+    /// so the load does not compete with the speech model.
+    @Test func aHolderDuringADictationLoadsTheModelAfterThePaste() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        cleanup.dictationStarted()
+        cleanup.projectsStarted()
+        await cleanup.waitForLoad()
+        #expect(fake.events.isEmpty)
+        #expect(cleanup.engineState == .unloaded)
+        cleanup.dictationEnded()
+        #expect(cleanup.engineState == .loading)
+        #expect(await cleanup.waitUntilLoadedForProjects())
+        #expect(fake.events == ["load"])
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+    }
+
+    @Test func aHolderThatLeavesDuringTheDictationLoadsNothing() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        cleanup.dictationStarted()
+        cleanup.projectsStarted()
+        #expect(cleanup.engineState == .unloaded)
+        cleanup.projectsStopped()
+        cleanup.dictationEnded()
+        await cleanup.waitForLoad()
+        #expect(fake.loads == 0)
+        #expect(cleanup.engineState == .unloaded)
+        // The next holder after the dictation loads it as usual.
+        cleanup.projectsStarted()
+        #expect(cleanup.engineState == .loading)
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+    }
+
+    /// A Projects job that asks for the model during the dictation waits for the load
+    /// after the paste, instead of failing for a model that is not there.
+    @Test func aProjectsWaitDuringADictationEndsLoaded() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        cleanup.dictationStarted()
+        cleanup.projectsStarted()
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.waitUntilLoadedForProjects()
+        }
+        try await settle { clock.sleeping > 0 }
+        #expect(result == nil)
+        cleanup.dictationEnded()
+        clock.advance(by: .milliseconds(100))
+        await waiting.value
+        #expect(result == true)
+        #expect(fake.events == ["load"])
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+    }
+
     @Test func projectsWaitForALoadWithoutTheLimitOfADictation() async throws {
         defer { temporary.remove() }
         let cleanup = try await makeCleanupForProjects()
