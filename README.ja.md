@@ -91,7 +91,7 @@ Orraが新しいバージョンを確認するのは許可したあとだけで�
 
 - **[Orra.dmgをダウンロード](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**（最新バージョン）。開いて、Orraを“アプリケーション”フォルダにドラッグします。以前のバージョンとリリースノートは[リリースページ](https://github.com/db-ol/Orra/releases)にあります。
 - **Orra Microphone**（オプション、“翻訳を相手に読み上げる”用）: 署名と公証を受けた[OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg)をダウンロードし、開いてインストールします。削除する方法や自分でビルドする方法は[Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md)（英語）で説明しています。
-- Appleシリコンを搭載し、macOS 15.6以降を実行しているMacと、約3 GBのディスクの空き容量が必要です。整文と翻訳に使うオプションのローカルモデルにはさらに2.8 GB、“翻訳を相手に読み上げる”で使うオプションの音声合成モデルには約2 GBが必要です。
+- Appleシリコンを搭載し、macOS 15.6以降を実行しているMacと、約3 GBのディスクの空き容量が必要です。整文と翻訳に使うオプションのローカルモデルにはさらに3.05 GB、“翻訳を相手に読み上げる”で使うオプションの音声合成モデルには約2 GBが必要です。
 - Developer IDで署名され、Appleの公証を受けているため、警告なしで開けます。
 - Mac App Storeでは配布していません。App Storeのサンドボックスでは、ほかのアプリでのキー操作を検知したり、ほかのアプリにペーストしたりできないためです。
 
