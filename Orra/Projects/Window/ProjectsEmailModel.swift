@@ -1,10 +1,14 @@
 import Foundation
 import Observation
 
-/// One email in the email view of the Projects window (projects-email-view): its
-/// explanation, the versions of its draft, the draft as the user edits it, the translation
-/// next to it, the answer check, the change under way and the handoff to Mail.
+/// One email in the email view of the Projects window (projects-email-view): the email
+/// itself as Mail shows it, its explanation, the versions of its draft, the draft as the
+/// user edits it, the translation next to it, the answer check, the change under way and
+/// the handoff to Mail.
 ///
+/// - The view shows the email itself until it is explained, then its explanation. The user
+///   switches between the two at any time with `showsOriginal`, and a new explanation shows
+///   the explanation again.
 /// - The draft is plain text the user may edit. Only the versions the model makes are saved,
 ///   by ReviseService. The user's own edits stay in memory while the window is open, so
 ///   they last while the user looks at other mail, and go when the window closes, Projects
@@ -162,6 +166,12 @@ final class ProjectsEmailModel {
     private(set) var sources: [String: Source] = [:]
     /// The email's own text, for the chip of this email.
     private(set) var emailText = ""
+    /// The email as Mail shows it, nil until it is read or when the store keeps no text of
+    /// it.
+    private(set) var original: ProjectsEmailOriginal.Content?
+    /// Whether the view shows the email itself rather than its explanation. Without an
+    /// explanation it always does.
+    var showsOriginal = false
     /// The draft as the editor holds it.
     var text = ""
     /// What the user types or says into the change box. The talk key writes here too, see
@@ -319,6 +329,7 @@ final class ProjectsEmailModel {
         madeFrom = madeFrom.filter { number, _ in versions.contains { $0.number == number } }
         if explanation != self.explanation {
             self.explanation = explanation
+            showsOriginal = false
         }
         await take(versions)
         isLoaded = true
@@ -329,11 +340,19 @@ final class ProjectsEmailModel {
             answersNote = nil
             handoffNote = nil
         }
-        await readSources()
+        let email = await actions.email(messageID)
+        var original: ProjectsEmailOriginal.Content?
+        if let email {
+            original = await ProjectsEmailOriginal.Content.reading(email)
+        }
+        if original != self.original {
+            self.original = original
+        }
+        await readSources(email)
     }
 
     /// Reads what the source ids stand for, and the email's own text.
-    private func readSources() async {
+    private func readSources(_ email: ExplainService.Email?) async {
         guard let explanation else {
             sources = [:]
             emailText = ""
@@ -353,7 +372,7 @@ final class ProjectsEmailModel {
             }
         }
         self.sources = sources
-        emailText = await actions.email(messageID).map { $0.text.isEmpty ? $0.visibleText : $0.text } ?? ""
+        emailText = email.map { $0.text.isEmpty ? $0.visibleText : $0.text } ?? ""
     }
 
     /// After a new explanation in this window: reads it, and runs the answer check of its

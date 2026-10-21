@@ -1900,6 +1900,28 @@
         }
       }
     },
+    "Attachments:" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivos adjuntos:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添付ファイル:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "附件："
+          }
+        }
+      }
+    },
     "Automatic" : {
       "localizations" : {
         "es-419" : {
@@ -2161,6 +2183,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "字幕显示"
+          }
+        }
+      }
+    },
+    "Cc:" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cc:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cc:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "抄送："
           }
         }
       }
@@ -3280,6 +3324,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "数据"
+          }
+        }
+      }
+    },
+    "Date:" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fecha:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日付:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日期："
           }
         }
       }
@@ -4480,6 +4546,28 @@
         }
       }
     },
+    "Explanation" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Explicación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "説明"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "解释"
+          }
+        }
+      }
+    },
     "Files with Hidden Text" : {
       "localizations" : {
         "es-419" : {
@@ -4812,6 +4900,28 @@
         }
       }
     },
+    "Forwarded Message" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mensaje reenviado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "転送されたメッセージ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转发的邮件"
+          }
+        }
+      }
+    },
     "From %@" : {
       "localizations" : {
         "es-419" : {
@@ -4830,6 +4940,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "来源：%@"
+          }
+        }
+      }
+    },
+    "From:" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "差出人:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发件人："
           }
         }
       }
@@ -8675,6 +8807,28 @@
         }
       }
     },
+    "Original Email" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Correo original"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "元のメール"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原始邮件"
+          }
+        }
+      }
+    },
     "Orra" : {
       "localizations" : {
         "es-419" : {
@@ -10878,6 +11032,28 @@
         }
       }
     },
+    "Quoted Text" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto citado"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引用文"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "引用的文本"
+          }
+        }
+      }
+    },
     "Qwen3-TTS starts speaking sooner. CosyVoice3 sounds more like the voice sample and needs a larger download." : {
       "localizations" : {
         "es-419" : {
@@ -12976,6 +13152,28 @@
         }
       }
     },
+    "Subject:" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Asunto:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "件名:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主题："
+          }
+        }
+      }
+    },
     "Suggested from your mail in Needs a Project, where it would take %lld emails. Check the name, the people and the domains, and add the project's folders." : {
       "localizations" : {
         "es-419" : {
@@ -14347,6 +14545,28 @@
         }
       }
     },
+    "The rest of this email is in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El resto de este correo está en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメールの続きは“メール”にあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这封邮件的其余部分在“邮件”中。"
+          }
+        }
+      }
+    },
     "The rule could not be saved. Try again." : {
       "localizations" : {
         "es-419" : {
@@ -15389,6 +15609,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "标题（可选）"
+          }
+        }
+      }
+    },
+    "To:" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para:"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宛先:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收件人："
           }
         }
       }

@@ -356,6 +356,11 @@ struct ProjectsWindowViewTests {
         let emailModel = model.emailModel(for: explained.messageID)
         await emailModel.load()
         try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_500), to: folder.appendingPathComponent("\(language)-projects-email-explained.png"))
+        // The same email itself, one click away from its explanation, and a forward.
+        emailModel.showsOriginal = true
+        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_200), to: folder.appendingPathComponent("\(language)-projects-email-original.png"))
+        emailModel.showsOriginal = false
+        try await render(ProjectsEmailOriginal(content: Self.forward).padding(20), size: NSSize(width: 520, height: 560), to: folder.appendingPathComponent("\(language)-projects-email-forward.png"))
 
         // The width of the email column at the window's first size, with the English draft
         // translated for a reader of Chinese, which puts the translation under the draft.
@@ -372,6 +377,16 @@ struct ProjectsWindowViewTests {
         try await render(window, size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window.png"))
         await fixture.stop()
     }
+
+    /// A forward as the email view shows it, with every part it can have.
+    static let forward = ProjectsEmailOriginal.Content(
+        to: ["Lin <me@studio.example>"], cc: ["Kai Moss <kai@kiln.example>"], attachments: ["lamps.pdf", "plan.docx"],
+        note: "Lin, see the note from the lamp maker below. Can we take the brass ones?", signature: "Mei Tan\nHarbor Lobby",
+        forwards: [QuotedHistory.Forward(
+            sender: "Lumen Works <orders@lumenworks.example>", date: "Mon, Oct 12, 2026 at 9:30 AM", subject: "Lamps for the lobby",
+            to: "Mei Tan <mei@harbor.example>", text: "Twelve brass lamps are ready. Delivery in week 47.")],
+        quoted: "On Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps are ready?",
+        isCut: true)
 
     /// The runtime's actions for the email view, with a reader of Chinese and a fake model
     /// that gives a translation of the draft.
