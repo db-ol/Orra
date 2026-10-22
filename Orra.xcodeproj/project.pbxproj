@@ -384,7 +384,7 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orra/Info.plist;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orra records your voice while you hold the talk key and turns it into text on this Mac.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orra uses the microphone when you start a dictation or a translation, or record a voice sample, and turns your voice into text on this Mac.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -438,7 +438,7 @@
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Orra/Info.plist;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orra records your voice while you hold the talk key and turns it into text on this Mac.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Orra uses the microphone when you start a dictation or a translation, or record a voice sample, and turns your voice into text on this Mac.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
