@@ -204,7 +204,8 @@ nonisolated extension SortingSignals {
                 hasProjectPeople = true
             }
         }
-        listMail = input.list.sign(sender: sender, text: input.text)
+        // A forwarded newsletter's footer does not make the forward list mail.
+        listMail = input.list.sign(sender: sender, text: QuotedHistory.sendersWords(in: input.text, subject: input.subject))
         scores = fullText.filter { ids.contains($0.key) && $0.value > 0 }
         filingLines = vote.removed
         ranked = rank(candidates.map(\.id))

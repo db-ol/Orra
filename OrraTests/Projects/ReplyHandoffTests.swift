@@ -116,6 +116,27 @@ struct ReplyHandoffTests {
         #expect(fixture.activeChecks == 0)
     }
 
+    /// The window goes away while the reply's event is on its way to Mail, which nothing
+    /// can call back. Mail opens the reply window, but the draft is not copied again and
+    /// Mail does not come to the front. A handoff that hung would hang the test, and the
+    /// time limit stops it.
+    @Test(.timeLimit(.minutes(1)))
+    func aReplyCancelledWhileMailMakesItLeavesTheClipboardAndMail() async {
+        let gate = DispatchSemaphore(value: 0)
+        let fixture = Fixture(sendThread: MailEvents.SendThread(), gate: gate)
+        let handoff = fixture.handoff()
+        let reply = Task { await handoff.openReply(Self.draft, to: Self.message, all: false) }
+        // Once Mail is asked, the send thread holds the reply and a cancel cannot take it back.
+        while !fixture.steps.contains(.send(.reply(to: Self.message.reference, all: false))) {
+            await Task.yield()
+        }
+        reply.cancel()
+        gate.signal()
+        #expect(await reply.value == .replyOpened)
+        #expect(fixture.steps == [.copy(Self.draft), .send(.reply(to: Self.message.reference, all: false))])
+        #expect(fixture.activeChecks == 0)
+    }
+
     @Test func copyOnlyAsksNothingOfMail() {
         let fixture = Fixture()
         #expect(fixture.handoff().copyOnly(Self.draft) == .copied)
@@ -145,6 +166,7 @@ struct ReplyHandoffTests {
 
     /// The clipboard, Mail, whether Orra is in front and the activation, as a test sets them,
     /// with what each was asked. With a send thread, Mail's events wait their turn on it.
+    /// With a gate, Mail answers an event only once the test signals it.
     private final class Fixture: Sendable {
         enum Step: Equatable, Sendable {
             case copy(String)
@@ -166,9 +188,11 @@ struct ReplyHandoffTests {
 
         private let state = Mutex(State())
         private let sendThread: MailEvents.SendThread?
+        private let gate: DispatchSemaphore?
 
-        init(sendThread: MailEvents.SendThread? = nil) {
+        init(sendThread: MailEvents.SendThread? = nil, gate: DispatchSemaphore? = nil) {
             self.sendThread = sendThread
+            self.gate = gate
         }
 
         var steps: [Step] {
@@ -248,7 +272,7 @@ struct ReplyHandoffTests {
         }
 
         private func send(_ request: Request) throws -> MailEvents.Value {
-            try state.withLock { state in
+            let value = try state.withLock { state in
                 state.steps.append(.send(request))
                 if state.quitsOnReply {
                     state.mailRunning = false
@@ -259,8 +283,10 @@ struct ReplyHandoffTests {
                 if let code = state.replyFailure {
                     throw MailEvents.Failure(code: code)
                 }
-                return .missing
+                return MailEvents.Value.missing
             }
+            gate?.wait()
+            return value
         }
     }
 }

@@ -16,15 +16,24 @@ import Testing
 ///
 /// TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_FIRST and TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_COUNT pick a
 /// part of the 105 mails, by their place in mail.jsonl from 1, so a long evaluation runs in
-/// parts. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_LANGUAGE is zh (the default) or en, the language
-/// of the explanations.
+/// parts. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_IDS picks mails by their ids in the set instead,
+/// comma separated. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_LANGUAGE is zh (the default) or en, the
+/// language of the explanations. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TEXT=own gives every mail
+/// its own text as the store keeps it, without its quoted history, as the app does.
 ///
-/// It runs the mails as phase 0 did, with today pinned to 2026-10-18, the day the labels
-/// hold for: each mail in its labeled project, with that project's files indexed by
+/// Otherwise it runs the mails as phase 0 did, with today pinned to 2026-10-18, the day the
+/// labels hold for: each mail in its labeled project, with that project's files indexed by
 /// FolderIndex and found by ChunkSearch, its thread from the set's thread ids and Message-ID
 /// links, the project's other mail ranked by the words it shares with the mail, and the set
 /// owner as the user. The model runs through ProjectsModelQueue, as a request of the user. The set
 /// stays outside the repository, and so do the results, which hold its text.
+///
+/// The set lists attachments by name and type. An attachment named as a file in the set's
+/// project folders comes with that file, as when a supplier mails the quote that is also in
+/// the folder, and MailAttachment reads it as it reads an attachment in Mail. The others are
+/// names and types. TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_ATTACHMENTS=names reads them all as
+/// names and types, as Orra did before it read attachments, for a baseline from the same
+/// build.
 @Suite(.serialized, .enabled(if: ExplainEvaluationSet.folder != nil && !ExplainEvaluationSet.ownAddresses.isEmpty && RewriteTestModel.folder != nil))
 @MainActor
 struct ExplainEvaluationTests {
@@ -40,6 +49,7 @@ struct ExplainEvaluationTests {
         let out = URL(fileURLWithPath: ((environment["ORRA_PROJECTS_EXPLAIN_OUT"] ?? NSTemporaryDirectory()) as NSString).expandingTildeInPath, isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         let language: ProjectsLanguage = environment["ORRA_PROJECTS_EXPLAIN_LANGUAGE"] == "en" ? .en : .zh
+        let readsAttachments = environment["ORRA_PROJECTS_EXPLAIN_ATTACHMENTS"] != "names"
 
         let mails = try String(contentsOf: root.appendingPathComponent("mail.jsonl"), encoding: .utf8)
             .split(separator: "\n")
@@ -47,8 +57,10 @@ struct ExplainEvaluationTests {
         let setProjects = try JSONDecoder().decode([SetProject].self, from: Data(contentsOf: root.appendingPathComponent("projects/projects.json")))
         let first = max(1, Int(environment["ORRA_PROJECTS_EXPLAIN_FIRST"] ?? "") ?? 1)
         let count = Int(environment["ORRA_PROJECTS_EXPLAIN_COUNT"] ?? "") ?? mails.count
-        let chosen = Array(mails.dropFirst(first - 1).prefix(count))
+        let picked = Set((environment["ORRA_PROJECTS_EXPLAIN_IDS"] ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+        let chosen = picked.isEmpty ? Array(mails.dropFirst(first - 1).prefix(count)) : mails.filter { picked.contains($0.id) }
         try #require(!chosen.isEmpty)
+        let ownText = environment["ORRA_PROJECTS_EXPLAIN_TEXT"] == "own"
 
         // The projects, with their files indexed in a folder of their own.
         let ids = Dictionary(uniqueKeysWithValues: setProjects.enumerated().map { index, project in
@@ -99,6 +111,16 @@ struct ExplainEvaluationTests {
         ))
 
         let byMessageID = Dictionary(mails.map { (Self.bare($0.message_id), $0) }, uniquingKeysWith: { first, _ in first })
+        // The files of the project folders by name, for the attachments named as one.
+        var projectFiles: [String: URL] = [:]
+        if readsAttachments {
+            for project in setProjects {
+                let folder = root.appendingPathComponent(project.folder, isDirectory: true)
+                for name in try FileManager.default.contentsOfDirectory(atPath: folder.path) where projectFiles[name] == nil {
+                    projectFiles[name] = folder.appendingPathComponent(name)
+                }
+            }
+        }
         let lookups = ExplainService.Lookups(
             // Only mail dated before this one counts, since a later mail cannot make its
             // sender known or hold a quote of the user.
@@ -157,14 +179,16 @@ struct ExplainEvaluationTests {
         )
 
         // Written after each mail, so a run stopped early keeps what it explained.
-        let name = "explain-\(language.rawValue)-\(String(format: "%03d", first))-\(String(format: "%03d", first + chosen.count - 1))"
+        let part = picked.isEmpty ? "\(String(format: "%03d", first))-\(String(format: "%03d", first + chosen.count - 1))" : "picked"
+        let name = "explain-\(language.rawValue)-\(part)" + (ownText ? "-own" : "")
         let report = try Self.file(out.appendingPathComponent(name + ".md"))
         let rows = try Self.file(out.appendingPathComponent(name + ".jsonl"))
         defer {
             try? report.close()
             try? rows.close()
         }
-        try report.write(contentsOf: Data("# Explanations of the synthetic set\n\nLanguage \(language.rawValue), mails \(first) to \(first + chosen.count - 1), today 2026-10-18, chip \(SpeechCorpus.chip()). Indexing the 5 project folders took \(Self.seconds(indexTime)).\n".utf8))
+        let which = picked.isEmpty ? "mails \(first) to \(first + chosen.count - 1)" : "mails \(chosen.map(\.id).joined(separator: ", "))"
+        try report.write(contentsOf: Data("# Explanations of the synthetic set\n\nLanguage \(language.rawValue), \(which)\(ownText ? ", each with its own text only" : ""), today 2026-10-18, chip \(SpeechCorpus.chip()). Indexing the 5 project folders took \(Self.seconds(indexTime)).\n".utf8))
         var times: [Duration] = []
         var decisionsRight = 0
         var languagesRight = 0
@@ -172,7 +196,8 @@ struct ExplainEvaluationTests {
         var failure: (any Error)?
         do {
             for mail in chosen {
-                let email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, in: mails, byMessageID: byMessageID)
+                var email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, ownText: ownText, in: mails, byMessageID: byMessageID)
+                email.attachments = await Self.attachments(of: mail, files: projectFiles)
                 let started = ContinuousClock.now
                 let explanation = try await service.explain(email)
                 let time = started.duration(to: .now)
@@ -284,16 +309,17 @@ struct ExplainEvaluationTests {
             cc: (mail.cc ?? []).map(person),
             subject: mail.subject,
             attachmentNames: (mail.attachments ?? []).map(\.name),
-            text: QuotedHistory(splitting: mail.body).ownText
+            text: QuotedHistory(splitting: mail.body, subject: mail.subject).ownText
         )
     }
 
     /// The email as projects-mail-text gives it: its own text without the quoted history
-    /// when the message it answers is in its thread, as in phase 0.
-    private nonisolated static func email(_ mail: SetMail, project: UUID?, in mails: [SetMail], byMessageID: [String: SetMail]) -> ExplainService.Email {
+    /// when the message it answers is in its thread, as in phase 0, or always with
+    /// `ownText`, as the store keeps it for the app.
+    private nonisolated static func email(_ mail: SetMail, project: UUID?, ownText: Bool, in mails: [SetMail], byMessageID: [String: SetMail]) -> ExplainService.Email {
         let parentKnown = mail.in_reply_to.map { byMessageID[bare($0)] != nil } ?? false
-        let split = QuotedHistory(splitting: mail.body)
-        let text = parentKnown && !split.quotedText.isEmpty ? split.ownText : mail.body
+        let split = QuotedHistory(splitting: mail.body, subject: mail.subject)
+        let text = ownText || (parentKnown && !split.quotedText.isEmpty) ? split.ownText : mail.body
         return ExplainService.Email(
             messageID: bare(mail.message_id),
             date: date(mail.date),
@@ -301,7 +327,7 @@ struct ExplainEvaluationTests {
             to: mail.to.map(person),
             cc: (mail.cc ?? []).map(person),
             subject: mail.subject,
-            attachments: (mail.attachments ?? []).map { ContentChecks.Input.Attachment(name: $0.name, type: $0.type) },
+            attachments: (mail.attachments ?? []).map { MailAttachment(name: $0.name, type: $0.type, state: .otherType) },
             text: text,
             visibleText: mail.body,
             project: project
@@ -365,6 +391,7 @@ struct ExplainEvaluationTests {
         }
         let object: [String: Any] = [
             "id": mail.id,
+            "attachments_read": explanation.sources.keys.filter { $0.hasPrefix("A") }.count,
             "seconds": time / .seconds(1),
             "prompt_tokens": promptTokens,
             "reply": describe(explanation.reply),
@@ -391,8 +418,19 @@ struct ExplainEvaluationTests {
     private static func place(_ place: ExplainPrompt.Place) -> String {
         switch place {
         case .email: "email"
-        case .file(let id), .thread(let id), .projectMail(let id): id
+        case .file(let id), .thread(let id), .projectMail(let id), .attachment(let id): id
         }
+    }
+
+    /// The mail's attachments as MailAttachment reads them from the parts of its source, as
+    /// the scan does: with the file of the project folders that has the attachment's name,
+    /// else as an empty part, which keeps its name and type only.
+    private nonisolated static func attachments(of mail: SetMail, files: [String: URL]) async -> [MailAttachment] {
+        let attached = (mail.attachments ?? []).map { attachment in
+            let data = files[attachment.name].flatMap { try? Data(contentsOf: $0) }
+            return AttachedFiles.File(name: attachment.name, type: attachment.type, data: data ?? Data())
+        }
+        return await MailAttachment.read(AttachedFiles.parts(attached), modified: date(mail.date))
     }
 
     private static func list(_ items: [String]) -> String {

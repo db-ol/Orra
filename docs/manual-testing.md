@@ -19,7 +19,7 @@ Build and test commands, run in the repository root:
 
 Before a release, `Tools/release-gate/run.sh --baseline <folder>` runs the speech corpus,
 ContextASR, cleanup, latency and gate set evaluations in Release and fails on any case that
-got worse than the baseline, see docs/release-gate.md.
+got worse than the baseline or has no result, see docs/release-gate.md.
 
 ## Automatically verified
 
@@ -89,6 +89,26 @@ got worse than the baseline, see docs/release-gate.md.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
     window's parts to PNG files there, once per test language, which CI never does. The
     sidebar does not draw offscreen, so it is not in them.
+  - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
+    ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
+    made up mail and a fake model: the groups, what each would take, the prompt and its
+    answer, naming only while the window holds the model, the prefilled New Project and a
+    dismissal. ProjectsSuggestedSectionTests renders the sidebar section and the
+    prefilled sheet with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in
+    ProjectSuggestionsEvaluationTests runs it on the synthetic set with the real model in
+    a Release build, see its comment for the command.
+  - QuotedHistoryTests, MailScanTests, ExplainPromptTests, ReplyRuleTests,
+    SortingSignalsTests, MailStoreTests and ProjectsEmailModelTests, since 2026-10-21,
+    cover forwarded messages with made up mail: the forwards of Gmail, Apple Mail (quoted
+    and not), iPhone, Thunderbird, Yahoo, NetEase, Outlook, QQ Mail and Foxmail in their
+    languages, a forward of a forward, history inside a forward, at most 10 forwards, the
+    <forwarded> part of the prompt with its own header and its rule, the tags of the
+    prompt in it, the reply language and the list footer of a forward, mail stored before
+    this change, and the email view's content before and after Explain.
+    ProjectsWindowViewTests renders projects-email-original and projects-email-forward
+    with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in ExplainEvaluationTests takes
+    TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_IDS for a few mails and
+    TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TEXT=own for each mail's own text as the app keeps it.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
@@ -133,12 +153,13 @@ got worse than the baseline, see docs/release-gate.md.
     keeps no older sample, the folder is 0700 and left out of backups and the file 0600,
     what a cut write left is deleted, Remove or the switch turned off right before Quit
     deletes the file at once, and the recording sheet's checkbox applies only with the
-    sample. At launch the saved sample loads once the speech model is ready, and only while
-    Speak translations is on, a file that is not a sample, is too short or has no speech
-    is deleted with one message that stays while Speak translations is turned off and on,
-    the switch turned off and on or Remove while it waits ends the load for good, a sample
-    picked meanwhile wins unless the speech model could not take it, a stray file is
-    deleted while the switch is off, and the code logs neither the audio nor the words.
+    sample and never undoes a change of the switch made meanwhile. At launch the saved
+    sample loads once the speech model is ready, and only while Speak translations is on, a
+    file that is not a sample, is too short or has no speech is deleted with one message
+    that stays while Speak translations is turned off and on, the switch turned off and on
+    or Remove while it waits ends the load for good, a sample picked meanwhile wins unless
+    the speech model could not take it, a stray file is deleted while the switch is off,
+    and the code logs neither the audio nor the words.
   - ModelGateTests covers the model gate of 2026-10-16 without models: shared calls run
     together, the voice model runs alone, a voice request that waits holds back the
     shared calls that came after it, a reservation keeps a voice request that waits out
@@ -154,8 +175,9 @@ got worse than the baseline, see docs/release-gate.md.
     once. ModelGateReservationTests checks that a dictation reserves the gate from the
     press of its key until it is pasted or cancelled, that the speech and cleanup loads
     and the prompts read with the cleanup load run with a reservation, and the voice
-    sample, the word check and the prompts read ahead later without one, and that the
-    prompts read with the load go ahead of a voice request that waits.
+    sample, the word check and the prompts read ahead later without one, that the
+    prompts read with the load go ahead of a voice request that waits, and that the press
+    of a key tells the cleanup model of the dictation before it reserves the gate.
     ModelGateWiringTests checks without models that the app's speech and cleanup models
     from Transcription.qwen3 and CleanupEngine.live queue at the gate, and that every voice
     model of VoiceEngines.live runs alone at the app's gate. CompileLockTests runs only
@@ -287,10 +309,12 @@ got worse than the baseline, see docs/release-gate.md.
     leaving a password field and the pasteboard alone, leaving a field that cannot be
     described alone when the app in front holds secure input, pasting into plain text
     there, asking about the field only under secure input and only right before the paste,
-    telling fields apart by role and subrole, empty text, two dictations in a row,
-    restoring several items and types, reading the pasteboard off the main actor, and
-    finding the key for v in the current layout with and without Command held. They use
-    private named pasteboards and a fake key poster, so no real event is posted.
+    pasting nothing when another app comes to the front while the old contents are read or
+    the field is asked about, telling fields apart by role and subrole, empty text, two
+    dictations in a row, restoring several items and types, reading the pasteboard off the
+    main actor, and finding the key for v in the current layout with and without Command
+    held. They use private named pasteboards and a fake key poster, so no real event is
+    posted.
   - ConcealedClipboardTests covers the copy that the paste, Copy Last Dictation, Live
     Captions and the Projects reply use: concealed, staying, and in place of every earlier
     item, on a private named pasteboard.
@@ -372,7 +396,9 @@ got worse than the baseline, see docs/release-gate.md.
     without losing a word, that every save also writes that list, so words added after
     going back to 0.1.0 and the words of an unreadable save are kept, and the rows, search,
     header and removal of the table in Settings, where removing a learned word lets
-    learning add it again. PushToTalkControllerTests checks that every
+    learning add it again. It checks that the copied word the menu offers is read without
+    holding the main actor, never while Orra dictates, and only from the latest menu's
+    read. PushToTalkControllerTests checks that every
     dictation passes the vocabulary to the model, nil when it is empty, only the 200 most
     recent of a longer list, that a paste dates the words it holds while a text that was not
     pasted dates none, that a change is saved, and that learning is refused only at the cap.
@@ -384,7 +410,8 @@ got worse than the baseline, see docs/release-gate.md.
     widened to its unchanged characters, and the cap of 8 Chinese characters.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
-    after leaving the app, under secure input, or in a field without the pasted text.
+    after leaving the app, under secure input, in a field without the pasted text, or in a
+    field that got the focus while the paste landed.
     CorrectionLearningTests checks that nothing is read while learning is off, that the
     first fix adds the word and tells the user, a quiet new mishearing, Undo, that a
     learned word removed from the vocabulary is learned again, that after a cleanup only
@@ -1142,8 +1169,10 @@ got worse than the baseline, see docs/release-gate.md.
     language, that the first pass in Chinese or English stands, that the vocabulary
     stays on those passes, that the text stands when no pass helps or one fails, that
     cancellation still ends the dictation, and that the echo check runs on the new
-    text. PushToTalkControllerTests checks that the dictation pastes the text of the
-    pass in Chinese.
+    text. EngineTurnsTests checks that a caption call whose first pass the talk key
+    cancelled starts no other pass until the dictation ends, and that a call cancelled
+    while it waits for the speech model runs no pass. PushToTalkControllerTests checks that
+    the dictation pastes the text of the pass in Chinese.
   - With Japanese or Spanish as the dictation language, since 2026-10-18,
     LanguageGuardTests checks that Japanese with kana, Japanese and Chinese in Han
     characters only and their mix with English count as Japanese, that Spanish and Latin
@@ -1545,6 +1574,9 @@ are in place since 2026-10-05:
   dictate. Typing on the Mac does not stall while Orra saves the old clipboard.
 - [ ] Release the talk key and switch to another app at once. The text is not pasted
   there, the menu says so, and "Copy Last Dictation" copies it.
+- [ ] Copy a large range in Excel, or copy something on an iPhone, then dictate and press
+  Command Tab while Orra saves the old clipboard. The text is not pasted in the other app,
+  and the menu says another app came to the front.
 - [ ] Pasting works in Notes, a browser text field, VS Code and Terminal.
 - [x] In the password field of a login form in Safari and in Chrome, nothing is pasted,
   the clipboard keeps what it had, the menu says "Orra does not paste into password
@@ -1980,8 +2012,14 @@ corrections under Recognition in Settings, Dictation first:
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the
   right word there: the Orra menu offers to add it to the vocabulary.
+- [ ] Copy a word in a remote desktop or virtual machine window, then open the Orra menu.
+  The menu opens at once, typing in other apps does not stall, and the offer to add the
+  word comes a moment later.
 - [ ] In Messages or WeChat, fix a misheard name and press Return to send: the fix still
   counts. Click into another field during the watch: nothing is read from it.
+- [ ] Dictate into one field and press Tab into another field of the same app as soon as
+  the text appears. Nothing is read from that field, and the learning log says the field
+  lost the focus.
 - [ ] Dictating into a password field, or switching apps right after the paste, records
   nothing.
 - [ ] Dictate into a text field in Orra's own Settings window, such as the new word field
@@ -3233,6 +3271,44 @@ build.
   Nothing.
 - [ ] While Delete All Projects Data runs with Projects on, Open Projects Window is dimmed
   and the Projects window stays closed.
+
+Suggested Projects, added on 2026-10-20, not verified yet. Check in a Debug build with the
+synthetic mail imported and no project made, as in the test guide.
+
+- [ ] Within a minute of opening the Projects window, the sidebar shows Suggested
+  Projects below Needs a Project and Set Aside, at most 8, each named in the language of
+  its mail with the number of emails it would take. Closing the window ends the naming,
+  and the log of the projects-model category shows no new job after the close.
+- [ ] A click anywhere on a suggestion's row opens New Project with its name, description,
+  people and domains, and a line that says where it comes from. Hovering a row shows its
+  whole name and description. Cancel creates nothing. Save creates the project, the
+  suggestion goes at once, and its mail leaves Needs a Project.
+- [ ] Dismiss Suggestion, in the sheet or in the row's menu, hides it. It stays hidden
+  after the window closes and after Orra starts again.
+- [ ] Without the cleanup model, the suggestions show with a domain or a name as their
+  name.
+
+The email itself in the Projects window, added on 2026-10-21, not verified yet. Check in a
+Debug build with the synthetic mail imported, as in the test guide. Mail read before this
+change keeps its old text in the store for sorting, so for a clean check use Delete All
+Projects Data and Start Reading Mail again first.
+
+- [ ] Before Explain, the email view shows the whole email: To and Cc, the attachment
+  names, the sender's words and signature, each forwarded message under its own header
+  block with a bar on its side, and Quoted Text folded. 转发：宋佳关于入职时间 shows the
+  forwarded message from 宋佳 with its date.
+- [ ] After Explain, Explanation and Original Email switch between the explanation and
+  the email at any time. The warnings and the draft stay in both, and a line sets the
+  draft apart from the email. Explain Again shows the explanation again.
+- [ ] The explanation of 转发：宋佳关于入职时间 names the request to move the start to 23
+  November and cites this email.
+- [ ] Clicking an address or a web address in the email opens nothing. Text can be
+  selected and copied.
+- [ ] An email longer than the view shows ends with The rest of this email is in Mail.
+- [ ] VoiceOver reads Explanation and Original Email as one control, reads each header
+  row of a forwarded message in one stop, and names the Forwarded Message group.
+- [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
+  email view shows it as a forwarded message, and its explanation uses what it says.
 
 Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
 checks that a download agreed to in the caption window turns on neither cleanup nor

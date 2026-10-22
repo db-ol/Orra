@@ -22,6 +22,7 @@ struct VoiceSampleFileTests {
         remembers: Bool,
         isOn: Bool = true,
         file: VoiceSampleFile? = nil,
+        save: @escaping (TranslationSpeech.Settings) -> Void = { _ in },
         transcribeVoice: @escaping (VoiceSample) async throws -> String = { _ in "We met at noon." }
     ) -> TranslationSpeech {
         let speech = TranslationSpeech(
@@ -30,6 +31,7 @@ struct VoiceSampleFileTests {
             outputs: { [] },
             folders: { nil },
             settings: TranslationSpeech.Settings(isOn: isOn, remembersVoice: remembers),
+            save: save,
             voiceFile: file ?? self.file,
             dictationPoll: .milliseconds(1)
         )
@@ -294,6 +296,33 @@ struct VoiceSampleFileTests {
         await speech.waitForVoiceFile()
         #expect(!speech.remembersVoice)
         #expect(!file.exists)
+        #expect(speech.voiceSeconds == 4)
+    }
+
+    /// The switch turned on and off again in Settings while the sheet's sample is written
+    /// down ends where it started, and still wins over the sheet's checkbox, also in what
+    /// is saved.
+    @Test func aSwitchTurnedOnAndOffMeanwhileWinsOverTheCheckbox() async throws {
+        defer { cleanUp() }
+        let gate = AsyncStream<Void>.makeStream()
+        var saves: [TranslationSpeech.Settings] = []
+        let speech = makeSpeech(remembers: false, save: { saves.append($0) }, transcribeVoice: { _ in
+            for await _ in gate.stream { break }
+            return "We met at noon."
+        })
+        let use = Task { await speech.useVoice(Self.fourSeconds, remember: true) }
+        for _ in 0..<400 where !speech.isListeningToVoice {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(speech.isListeningToVoice)
+        speech.setRemembersVoice(true)
+        speech.setRemembersVoice(false)
+        gate.continuation.yield()
+        #expect(await use.value == .used)
+        await speech.waitForVoiceFile()
+        #expect(!speech.remembersVoice)
+        #expect(!file.exists)
+        #expect(saves.map(\.remembersVoice) == [true, false])
         #expect(speech.voiceSeconds == 4)
     }
 

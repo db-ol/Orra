@@ -180,8 +180,8 @@ nonisolated struct SortingPrompt: Sendable, Equatable {
     }
 
     /// A value on one line: cleaned, with every run of white space made one space, and cut
-    /// to `limit` characters.
-    private static func line(_ value: String, limit: Int = 200) -> String {
+    /// to `limit` characters. ProjectSuggestionPrompt writes its values with it too.
+    static func line(_ value: String, limit: Int = 200) -> String {
         String(clean(value).split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(limit))
     }
 

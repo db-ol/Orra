@@ -56,10 +56,16 @@ struct ProjectsEmailModelTests {
             var savesVersions = true
             var copies: [String] = []
             var replies: [Bool] = []
+            /// The checks of Mail's handle before a reply, true for a reply to all.
+            var referenceChecks: [Bool] = []
             var broughtForward = 0
             var mailIsRunning = true
             /// Whether Mail's reply waits until the test lets it go.
             var replyWaits = false
+            /// Whether Mail's reply waits for `replyRelease`, also once its task is
+            /// cancelled, as an event already sent to Mail does.
+            var replyHolds = false
+            var replyRelease: CheckedContinuation<Void, Never>?
             var replyStarted = false
             /// The requests that ran as the user's.
             var userRequests = 0
@@ -68,6 +74,9 @@ struct ProjectsEmailModelTests {
             var requestWaits = false
             /// Whether the removal of a version waits until the test lets it go.
             var removeWaits = false
+            /// Whether working out what a change changed waits until the test lets it go.
+            var diffWaits = false
+            var diffStarted = false
         }
 
         let state = Mutex(State())
@@ -123,6 +132,11 @@ struct ProjectsEmailModelTests {
                         $0.replies.append(all)
                         $0.replyStarted = true
                     }
+                    if value.replyHolds {
+                        await withCheckedContinuation { continuation in
+                            update { $0.replyRelease = continuation }
+                        }
+                    }
                     while value.replyWaits {
                         try await Task.sleep(for: .milliseconds(5))
                     }
@@ -137,7 +151,9 @@ struct ProjectsEmailModelTests {
         explanation: @escaping () -> Explanation? = { ProjectsEmailModelTests.explanation() },
         userLanguage: ProjectsLanguage = .en,
         reference: MailMessageRef? = MailMessageRef(id: 4, mailbox: .inbox),
-        handoffs: ProjectsEmailModel.Handoffs = ProjectsEmailModel.Handoffs()
+        referenceFailure: MailBridgeError? = nil,
+        handoffs: ProjectsEmailModel.Handoffs = ProjectsEmailModel.Handoffs(),
+        email original: ExplainService.Email? = nil
     ) -> ProjectsEmailModel {
         let fakes = fakes
         return ProjectsEmailModel(messageID: Self.id, actions: ProjectsEmailModel.Actions(
@@ -171,13 +187,20 @@ struct ProjectsEmailModelTests {
                 try await request()
             },
             email: { id in
+                if id == Self.id, let original {
+                    return original
+                }
                 guard id == Self.id || id == "lamps-1@harbor.example" else { return nil }
                 return ExplainService.Email(
                     messageID: id, date: Self.today.addingTimeInterval(-86_400 * 3),
                     sender: ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example"),
                     text: id == Self.id ? Self.emailText : "The lamps are ordered.", visibleText: "")
             },
-            mailReference: { _ in reference },
+            mailReference: { _, all in
+                fakes.update { $0.referenceChecks.append(all) }
+                if let referenceFailure { throw referenceFailure }
+                return reference
+            },
             handoff: ReplyHandoff(
                 copy: { text in
                     fakes.update { $0.copies.append(text) }
@@ -188,7 +211,14 @@ struct ProjectsEmailModelTests {
                 bringMailToFront: { fakes.update { $0.broughtForward += 1 } }
             ),
             userLanguage: userLanguage,
-            now: { Self.today }
+            now: { Self.today },
+            highlight: { before, after in
+                fakes.update { $0.diffStarted = true }
+                while fakes.value.diffWaits {
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                return ProjectsDraftDiff.segments(from: before, to: after)
+            }
         ), handoffs: handoffs)
     }
 
@@ -239,6 +269,114 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsWindowText.source(model.sources["T1"]!).hasPrefix("Mei Tan, "))
         #expect(ProjectsEmailArea.SourceChip.isGone(.mail(messageID: "gone@harbor.example", sender: nil, date: nil)))
         #expect(!ProjectsEmailArea.SourceChip.isGone(.thisEmail))
+    }
+
+    /// An attachment's chip shows its name, and the excerpt the model read.
+    @Test func anAttachmentSourceShowsItsNameAndExcerpt() async {
+        var explanation = Self.explanation()
+        explanation.sources["A1"] = .attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps at ¥980 each.")
+        explanation.points[0].sources.append("A1")
+        let model = model(explanation: { explanation })
+        await model.load()
+        #expect(model.sources["A1"] == .attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps at ¥980 each."))
+        #expect(ProjectsWindowText.source(.attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps.")) == "lamps-quote.pdf")
+        #expect(!ProjectsEmailArea.SourceChip.isGone(.attachment(name: "lamps-quote.pdf", excerpt: "")))
+        #expect(ProjectsEmailArea.ExplanationSections.sourceID(.attachment("A1")) == "A1")
+    }
+
+    /// What the attachment list says of each attachment: its kind as Finder names it, its
+    /// size, and whether Projects read it.
+    @Test func theAttachmentListSaysWhatWasRead() {
+        let english = Locale(identifier: "en")
+        let pdf = MailAttachment(name: "lamps-quote.pdf", type: "application/pdf", size: 220_000, state: .read)
+        // The unit is as the locale writes it, such as kB.
+        let kind = ProjectsWindowText.attachmentKind(pdf, locale: english)
+        #expect(kind.hasPrefix("PDF document, 220 ") && kind.lowercased().hasSuffix("kb"))
+        let unknown = MailAttachment(name: "lamps.orraunknown", type: "application/x-orra-unknown", state: .notDownloaded)
+        #expect(ProjectsWindowText.attachmentKind(unknown, locale: english) == "application/x-orra-unknown")
+        let lines: [(MailAttachment.State, Bool, String)] = [
+            (.read, false, "Projects read its text."),
+            (.read, true, "Projects read the start of its text."),
+            (.notDownloaded, false, "Mail has not downloaded it, so Projects knows only its name."),
+            (.tooLarge, false, "Projects did not read it, as it is over 10 MB."),
+            (.emailTooLarge, false, "Projects did not read it, as the email is too large."),
+            (.otherType, false, "Projects does not read this kind of file."),
+            (.unreadable, false, "Projects could not read it."),
+            (.noText, false, "Projects found no text in it."),
+            (.notRead, false, "Projects did not read it."),
+            (.savedEarlier, false, "Projects saved this email before it read attachments."),
+        ]
+        #expect(Set(lines.map(\.0)) == Set(MailAttachment.State.allCases))
+        for (state, isCut, line) in lines {
+            #expect(ProjectsWindowText.attachmentState(MailAttachment(name: "a.pdf", type: "application/pdf", state: state, isCut: isCut)) == line)
+        }
+        // The kind, the size and the state share one line.
+        let text = MailAttachment(name: "notes.txt", type: "text/plain", state: .read)
+        #expect(ProjectsWindowText.attachmentLine(text) == ProjectsWindowText.attachmentKind(text) + ". Projects read its text.")
+        // VoiceOver tells an attachment's chip from a file's of the same name.
+        #expect(ProjectsWindowText.sourceLabel(.attachment(name: "报价单_v2.pdf", excerpt: "")) == "Attachment 报价单_v2.pdf")
+        #expect(ProjectsWindowText.sourceLabel(.thisEmail) == ProjectsWindowText.source(.thisEmail))
+        #expect(ProjectsAttachmentList.Row.icon(pdf) == "doc.text")
+        #expect(ProjectsAttachmentList.Row.icon(unknown) == "doc")
+    }
+
+    // MARK: The email itself
+
+    /// A forward with a signature, an attachment and quoted history, as the store gives it.
+    static let forwardEmail = ExplainService.Email(
+        messageID: id, date: today, sender: ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example"),
+        to: [ExplainPrompt.Person(name: "Lin", address: "me@studio.example")], cc: [ExplainPrompt.Person(address: "kai@kiln.example")],
+        subject: "Fwd: Lamps", attachments: [MailAttachment(name: "lamps.pdf", type: "application/pdf", state: .notDownloaded)],
+        text: "Lin, see Kai's note.",
+        visibleText: "Lin, see Kai's note.\n\n-- \nMei\n\n---------- Forwarded message ---------\nFrom: Kai Moss <kai@kiln.example>\nDate: Mon, Oct 12, 2026 at 9:30 AM\nSubject: Lamps\n\nTwelve lamps, delivery in week 47.\n\nOn Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?")
+
+    @Test func theEmailShowsAsMailShowsItBeforeAndAfterItsExplanation() async {
+        var current: Explanation?
+        let model = model(explanation: { current }, email: Self.forwardEmail)
+        await model.load()
+        #expect(model.original == ProjectsEmailOriginal.Content(
+            to: ["Lin <me@studio.example>"], cc: ["kai@kiln.example"], attachments: ["lamps.pdf"],
+            note: "Lin, see Kai's note.", signature: "Mei",
+            forwards: [QuotedHistory.Forward(sender: "Kai Moss <kai@kiln.example>", date: "Mon, Oct 12, 2026 at 9:30 AM", subject: "Lamps", text: "Twelve lamps, delivery in week 47.")],
+            quoted: "On Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?"))
+
+        // Explained: the explanation shows, and the email stays one click away.
+        current = Self.explanation()
+        await model.load()
+        #expect(!model.showsOriginal)
+        model.showsOriginal = true
+        await model.load()
+        #expect(model.showsOriginal)
+        #expect(model.original?.note == "Lin, see Kai's note.")
+        #expect(model.text == Self.draft)
+
+        // Explained again: the new explanation shows.
+        current = Self.explanation(draft: "Hi Mei,\n\nNoted.\n\nLin")
+        await model.load()
+        #expect(!model.showsOriginal)
+        #expect(model.original?.forwards.count == 1)
+    }
+
+    @Test func anEmailWithoutTextShowsNothingAndALongOneSaysMailHasTheRest() {
+        var email = Self.forwardEmail
+        email.text = ""
+        email.visibleText = "  \n"
+        #expect(ProjectsEmailOriginal.Content.of(email) == nil)
+        // Without the visible text, the own text shows.
+        email.text = "Lin, see Kai's note."
+        #expect(ProjectsEmailOriginal.Content.of(email)?.note == "Lin, see Kai's note.")
+        #expect(ProjectsEmailOriginal.Content.of(email)?.isCut == false)
+        email.visibleText = String(repeating: "灯", count: MailStore.readLength)
+        #expect(ProjectsEmailOriginal.Content.of(email)?.isCut == true)
+        // The view shows the first characters of a long email, and Mail has the rest.
+        email.visibleText = String(repeating: "灯", count: 30_000)
+        let long = ProjectsEmailOriginal.Content.of(email)
+        #expect(long?.note.count == ProjectsEmailOriginal.Content.shownLength)
+        #expect(long?.isCut == true)
+        // A marker with neither a header nor text shows no forwarded message.
+        email.visibleText = "Lin, see below.\n\n---------- Forwarded message ---------"
+        #expect(ProjectsEmailOriginal.Content.of(email)?.forwards == [])
+        #expect(ProjectsEmailOriginal.Content.of(email)?.note == "Lin, see below.")
     }
 
     // MARK: Changes
@@ -466,6 +604,92 @@ struct ProjectsEmailModelTests {
         #expect(model.instruction.isEmpty)
     }
 
+    /// An undo stays busy until the versions, the highlight of the version left and the
+    /// text are all in place, so a second undo, a change or a keystroke never works on the
+    /// version it removes. The highlight of the version left is worked out off the main
+    /// actor, and a poller on the main actor looks while it is.
+    @Test func anUndoStaysBusyUntilItPutsTheTextBack() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let monday = "Hi Mei,\n\nThe lamp order is [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, monday]
+            $0.checks = [Self.bothAnswered, Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        model.instruction = "Say Monday."
+        await model.applyInstruction()
+        #expect(model.versions.map(\.number) == [1, 2])
+        #expect(model.text == monday)
+
+        // The removal waits until the undo has started, so the poller below never meets
+        // the moment before it starts.
+        fakes.update { $0.removeWaits = true }
+        model.perform { await $0.undo() }
+        try await waitUntil { model.isBusy }
+        fakes.update { $0.removeWaits = false }
+        while model.isWorking {
+            if !model.isBusy {
+                // Free while the undo still works: what a click or a keystroke would meet.
+                #expect(model.versions.map(\.number) == [1])
+                #expect(model.text == firmer)
+                await model.undo()
+            }
+            await Task.yield()
+        }
+        #expect(fakes.value.versions.map(\.number) == [1])
+        #expect(model.versions.map(\.number) == [1])
+        #expect(model.text == firmer)
+    }
+
+    /// The undo of the newer of two versions stays busy while it works out the highlight of
+    /// the older one, which is then the newest. Another undo, a change and the editor wait,
+    /// and words said meanwhile change the draft it put back once it is done. A change that
+    /// did not wait would wait for the held highlight, so the time limit ends the test.
+    @Test(.timeLimit(.minutes(1)))
+    func theUndoOfOneOfTwoVersionsWaitsForItsHighlight() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let monday = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        let priced = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. The price stays. I will send the floor plan today.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, monday, priced]
+            $0.checks = [Self.bothAnswered, Self.bothAnswered, Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        model.instruction = "Say Monday."
+        await model.applyInstruction()
+        #expect(model.versions.map(\.version.change) == [.tone(.firm), .instruction("Say Monday.")])
+        #expect(model.text == monday)
+
+        fakes.update {
+            $0.diffWaits = true
+            $0.diffStarted = false
+        }
+        model.perform { await $0.undo() }
+        try await eventually { fakes.value.diffStarted }
+        // The store removed the newer version, and the highlight of the older one waits.
+        #expect(model.isBusy)
+        #expect(fakes.value.versions.count == 1)
+        let prompts = fakes.value.prompts.count
+        await model.undo()
+        #expect(fakes.value.versions.count == 1)
+        #expect(await model.makeChange(.tone(.warm)) == false)
+        #expect(model.takeDictation("Keep the price.", revises: true))
+        #expect(fakes.value.prompts.count == prompts)
+
+        fakes.update { $0.diffWaits = false }
+        try await eventually { !model.isWorking }
+        #expect(model.versions == fakes.value.versions)
+        #expect(model.versions.map(\.version.change) == [.tone(.firm), .instruction("Keep the price.")])
+        #expect(model.text == priced)
+        let revision = try #require(fakes.value.prompts.last(where: { !$0.contains("<questions>") }))
+        #expect(revision.contains(firmer))
+        #expect(!revision.contains(monday))
+    }
+
     /// Words said while a change runs wait in the box with the setting off, and when the
     /// change gives no new draft, so a failed change is never tried again on its own.
     @Test func wordsSaidWhileAChangeRunsWaitWithTheSettingOffOrAfterAFailure() async throws {
@@ -547,6 +771,26 @@ struct ProjectsEmailModelTests {
         try await waitUntil { !model.isHandingOff }
         // Cancelled before Mail answered: the draft is on the clipboard and nothing else.
         #expect(model.handoffNote == .outcome(.copied))
+        #expect(fakes.value.broughtForward == 0)
+    }
+
+    /// The window closes once Mail was asked for the reply, which nothing can call back.
+    /// Mail opens the reply window, but the draft is not copied again and Mail does not
+    /// come to the front.
+    @Test func closingTheWindowWhileMailMakesTheReplyLeavesTheClipboardAndMail() async throws {
+        let model = model()
+        await model.load()
+        fakes.update { $0.replyHolds = true }
+        model.perform { await $0.openReply(all: false) }
+        try await waitUntil { fakes.value.replyRelease != nil }
+        model.cancelWork()
+        fakes.state.withLock { state in
+            state.replyRelease?.resume()
+            state.replyRelease = nil
+        }
+        try await waitUntil { !model.isHandingOff }
+        #expect(model.handoffNote == .outcome(.replyOpened))
+        #expect(fakes.value.copies == [Self.draft])
         #expect(fakes.value.broughtForward == 0)
     }
 
@@ -653,6 +897,36 @@ struct ProjectsEmailModelTests {
         model.text = "  "
         await model.openReply(all: false)
         #expect(model.handoffNote == .outcome(.emptyDraft))
+    }
+
+    /// Mail's handle is checked for the kind of reply before Mail is asked. When Mail cannot
+    /// say whether its message is this email, the draft is only copied and the note says
+    /// what Mail answered. Mail was not asked to reply, so a timeout does not say that the
+    /// reply may still open.
+    @Test func openReplyChecksMailsHandleFirst() async {
+        let model = model()
+        await model.load()
+        await model.openReply(all: true)
+        #expect(fakes.value.referenceChecks == [true])
+        #expect(fakes.value.replies == [true])
+
+        let failures: [(MailBridgeError, ReplyHandoff.Outcome)] = [
+            (.denied, .copiedReplyFailed(.denied)),
+            (.mailNotRunning, .copiedMailNotRunning),
+            (.timedOut, .copiedReplyFailed(.failed(code: -1712))),
+        ]
+        for (failure, note) in failures {
+            let failing = self.model(referenceFailure: failure)
+            await failing.load()
+            await failing.openReply(all: false)
+            #expect(failing.handoffNote == .outcome(note))
+            #expect(!failing.isHandingOff)
+        }
+        #expect(fakes.value.referenceChecks == [true, false, false, false])
+        #expect(fakes.value.replies == [true])
+        #expect(fakes.value.copies == Array(repeating: Self.draft, count: 5))
+        #expect(fakes.value.broughtForward == 1)
+        #expect(ProjectsWindowText.handoff(.outcome(.copiedReplyFailed(.failed(code: -1712)))) == "Mail did not open the reply. The draft is on the clipboard.")
     }
 
     /// One handoff at a time for the whole window: while Mail opens the reply to one email,

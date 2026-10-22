@@ -286,4 +286,10 @@ struct SortingSignalsTests {
         #expect(await signals(mail(from: "editor@art-weekly.example", text: "Unsubscribe at any time.")).listMail == .unsubscribeText)
         #expect(await signals(mail(from: "editor@art-weekly.example", text: "See you soon.")).listMail == nil)
     }
+
+    /// The footer of a forwarded newsletter does not make the person who forwards it a list.
+    @Test func aForwardedFooterIsNoListMail() async {
+        let text = "Lin, worth a look for the lobby.\n\n---------- Forwarded message ---------\nFrom: Art Weekly <editor@art-weekly.example>\nDate: Mon, Oct 12, 2026\n\nThis week in design.\n\nUnsubscribe at any time."
+        #expect(await signals(mail(from: "mei.tan@orchard.example", subject: "Fwd: This week", text: text)).listMail == nil)
+    }
 }
