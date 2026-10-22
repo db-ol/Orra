@@ -109,8 +109,9 @@ struct ProjectsSwitchTests {
         #expect(!makeSwitch().revisesAfterDictation)
     }
 
-    /// Debug and release builds share the preferences. A release build that hides Projects
-    /// never has it on, even after a Debug run saved it as on, and cannot turn it on.
+    /// Debug and release builds share the preferences. A build that hides Projects, as
+    /// release builds did before the preview, never has it on, even after a Debug run saved
+    /// it as on, and cannot turn it on.
     @Test func projectsIsNeverOnWhileTheBuildHidesIt() {
         defer { cleanUp() }
         defaults.set(true, forKey: ProjectsSwitch.key)
