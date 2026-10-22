@@ -441,7 +441,9 @@ private struct MicrophoneStepDetail: View {
                     .foregroundStyle(.secondary)
             case .notDetermined:
                 Group {
-                    if pushToTalk.talkMode == .hold {
+                    if pushToTalk.talkMode == .hold, pushToTalk.handsFreeOn {
+                        Text("Orra records only while you hold the talk key, or after you press it twice quickly, until you press it once more.")
+                    } else if pushToTalk.talkMode == .hold {
                         Text("Orra records only while you hold the talk key.")
                     } else {
                         Text("Orra records only after you press the talk key, until you press it again.")

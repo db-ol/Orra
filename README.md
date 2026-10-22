@@ -91,7 +91,7 @@ Orra checks for a new version only after you allow it, and installs one only whe
 
 - **[Download Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**, the newest version, open it, and drag Orra to Applications. Older versions and the release notes are on [the releases page](https://github.com/db-ol/Orra/releases).
 - **Orra Microphone**, optional, for Speak Translations to Others: download [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg), signed and notarized, and open it to install. [Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md) explains how to remove it or build it yourself.
-- Needs a Mac with Apple Silicon and macOS 15.6 or later, and about 3 GB of free disk space, plus 2.8 GB for the optional local model, which cleans up and translates, and about 2 GB for the optional voice model of Speak Translations to Others.
+- Needs a Mac with Apple Silicon and macOS 15.6 or later, and about 3 GB of free disk space, plus 3.05 GB for the optional local model, which cleans up and translates, and about 2 GB for the optional voice model of Speak Translations to Others.
 - Signed with a Developer ID and notarized by Apple, so it opens without a warning.
 - Not in the Mac App Store, because the App Store's sandbox does not let an app notice a key in other apps or paste into them.
 

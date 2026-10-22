@@ -98,25 +98,25 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Orra records your voice while you hold the talk key and turns it into text on this Mac."
+            "value" : "Orra uses the microphone when you start a dictation or a translation, or record a voice sample, and turns your voice into text on this Mac."
           }
         },
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra graba tu voz mientras mantienes presionada la tecla para hablar y la convierte en texto en esta Mac."
+            "value" : "Orra usa el micrófono cuando empiezas un dictado o una traducción, o grabas una muestra de voz, y convierte tu voz en texto en esta Mac."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orraは、音声入力キーを押している間あなたの声を録音し、このMac上でテキストに変換します。"
+            "value" : "Orraは、音声入力や翻訳を開始したときと、音声サンプルを録音するときにマイクを使用し、このMac上であなたの声をテキストに変換します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 会在你按住说话键时录下你的声音，并在这台 Mac 上把它转成文字。"
+            "value" : "当你开始听写或翻译，或录制声音样本时，Orra 会使用麦克风，并在这台 Mac 上把你的声音转成文字。"
           }
         }
       }
