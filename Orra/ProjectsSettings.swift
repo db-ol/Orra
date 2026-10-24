@@ -578,7 +578,7 @@ struct ProjectsSettings: View {
         }
 
         /// A mailbox a project links, with its project and the button that opens Edit
-        /// Project.
+        /// Project. One that Mail no longer has says so, as on the project page.
         private func linkRow(_ link: MailAccess.Link) -> some View {
             HStack {
                 Label {
@@ -587,6 +587,12 @@ struct ProjectsSettings: View {
                         Text(verbatim: MailAccess.note(for: link))
                             .font(.callout)
                             .foregroundStyle(.secondary)
+                        if link.isMissing {
+                            Text("Mail has no mailbox with this name now. Choose it again in Edit Project.")
+                                .font(.callout)
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 } icon: {
                     Image(systemName: "link")
@@ -637,7 +643,8 @@ extension ProjectsSettings {
     /// - Start Reading Mail confirms the choice, before which the scan reads nothing
     ///   (decision 17).
     /// - It lists the mailboxes the projects link, which the scan reads along with the
-    ///   ticked ones, also when they are not ticked here (MailScan).
+    ///   ticked ones, also when they are not ticked here (MailScan). A linked one that Mail
+    ///   no longer has is marked, since the scan skips it.
     @Observable
     final class MailAccess {
         /// What the page says about Orra's access to Mail.
@@ -657,6 +664,9 @@ extension ProjectsSettings {
             let mailbox: String
             let project: UUID
             let projectName: String
+            /// Whether Mail no longer has a mailbox with this name, so the scan does not
+            /// read it, see ProjectsRuntime.missingMailboxes.
+            var isMissing = false
         }
 
         /// A line under the access after the user clicked Allow Mail Access….
@@ -686,15 +696,19 @@ extension ProjectsSettings {
         private(set) var listFailed = false
         @ObservationIgnored private let isOn: () -> Bool
         @ObservationIgnored private let projects: () -> [Project]
+        @ObservationIgnored private let missingMailboxes: () -> Set<String>
 
         /// - Parameters:
         ///   - projects: the user's projects, for the mailboxes they link. The runtime's
         ///     list in the app, which is empty while Projects is off.
+        ///   - missingMailboxes: the linked mailboxes Mail no longer has, the runtime's in
+        ///     the app.
         ///   - isOn: whether Projects is on. Nothing is asked or listed while it is off.
-        init(bridge: MailBridge, choice: MailChoice, projects: @escaping () -> [Project] = { [] }, isOn: @escaping () -> Bool) {
+        init(bridge: MailBridge, choice: MailChoice, projects: @escaping () -> [Project] = { [] }, missingMailboxes: @escaping () -> Set<String> = { [] }, isOn: @escaping () -> Bool) {
             self.bridge = bridge
             self.choice = choice
             self.projects = projects
+            self.missingMailboxes = missingMailboxes
             self.isOn = isOn
         }
 
@@ -895,12 +909,12 @@ extension ProjectsSettings {
         /// The mailboxes the projects link, each with its project, in the order of the
         /// projects and their mailboxes.
         var links: [Link] {
-            Self.links(projects())
+            Self.links(projects(), missing: missingMailboxes())
         }
 
-        nonisolated static func links(_ projects: [Project]) -> [Link] {
+        nonisolated static func links(_ projects: [Project], missing: Set<String>) -> [Link] {
             projects.flatMap { project in
-                project.mailboxes.map { Link(mailbox: $0, project: project.id, projectName: project.name) }
+                project.mailboxes.map { Link(mailbox: $0, project: project.id, projectName: project.name, isMissing: missing.contains($0)) }
             }
         }
 

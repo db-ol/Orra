@@ -213,8 +213,9 @@ struct SettingsPageTests {
     }()
 
     /// Mail access over a stand in Mail that runs and never sends an Apple Event: macOS last
-    /// answered `permission`, and the listing follows it. `projects` link their mailboxes.
-    private static func mailAccess(answering permission: MailPermission, defaults: UserDefaults, projects: [Project] = [], isOn: @escaping () -> Bool) -> ProjectsSettings.MailAccess {
+    /// answered `permission`, and the listing follows it. `projects` link their mailboxes,
+    /// and Mail no longer has those in `missing`.
+    private static func mailAccess(answering permission: MailPermission, defaults: UserDefaults, projects: [Project] = [], missing: Set<String> = [], isOn: @escaping () -> Bool) -> ProjectsSettings.MailAccess {
         let bridge = MailBridge(
             isRunning: { true },
             permission: { _ in permission },
@@ -236,7 +237,7 @@ struct SettingsPageTests {
             selection: { [] },
             reply: { _, _ in }
         )
-        return ProjectsSettings.MailAccess(bridge: bridge, choice: MailChoice(defaults: defaults, suggestsInboxAndSent: false), projects: { projects }, isOn: isOn)
+        return ProjectsSettings.MailAccess(bridge: bridge, choice: MailChoice(defaults: defaults, suggestsInboxAndSent: false), projects: { projects }, missingMailboxes: { missing }, isOn: isOn)
     }
 
     private var folder: URL {
@@ -252,7 +253,8 @@ struct SettingsPageTests {
     /// `projectsData` bytes kept, in folders of its own, and on with `projectsOn`. With
     /// `mail`, it shows Mail access as macOS last answered it, over a stand in Mail with a
     /// few made up mailboxes, one of them ticked and another linked to a project once access
-    /// is allowed, and the choice confirmed with `reading`.
+    /// is allowed, and the choice confirmed with `reading`, where the project also links a
+    /// mailbox that Mail no longer has.
     private func render(_ tab: SettingsTab, cleanupOn: Bool = false, translationOn: Bool = false, swapped: Bool = false, meeting: Bool = false, dictating: DictationLanguage = .chinese, talkKey: Hotkey = .defaultKey, talkMode: TriggerMode = .hold, translationMode: TriggerMode = .newTranslationKeyMode, cleanupInstalled: Bool = false, physicalMemory: UInt64 = 48 << 30, projectsData: Int = 0, projectsOn: Bool = false, mail: MailPermission? = nil, reading: Bool = false, scrollingTo section: SettingsSection? = nil, height: CGFloat? = nil, name: String) async throws {
         // The real model's files in an empty folder, so the page shows its size and that
         // it is missing, or the files of the test model in place.
@@ -279,8 +281,9 @@ struct SettingsPageTests {
         if projectsData > 0 || projectsOn {
             projects.turnOn()
         }
-        let linked = mail == .allowed ? ProjectsRuntime.mailboxName(Self.snapshotMailboxes[3]).map { [Project(name: "Harbor lobby", mailboxes: [$0])] } ?? [] : []
-        let projectsMail = mail.map { Self.mailAccess(answering: $0, defaults: defaults, projects: linked, isOn: { projects.isOn }) }
+        let missing: Set<String> = reading ? ["/Harbor 2025"] : []
+        let linked = mail == .allowed ? ProjectsRuntime.mailboxName(Self.snapshotMailboxes[3]).map { [Project(name: "Harbor lobby", mailboxes: [$0] + missing.sorted())] } ?? [] : []
+        let projectsMail = mail.map { Self.mailAccess(answering: $0, defaults: defaults, projects: linked, missing: missing, isOn: { projects.isOn }) }
         if mail == .allowed, let projectsMail {
             await projectsMail.show()
             projectsMail.choose(Self.snapshotMailboxes[2], true)

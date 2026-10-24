@@ -117,6 +117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// projects link. Creating it sends nothing to Mail.
     lazy var projectsMail = ProjectsSettings.MailAccess(bridge: .live, choice: mailChoice, projects: { [weak self] in
         self?.projectsRuntime.projectList ?? []
+    }, missingMailboxes: { [weak self] in
+        self?.projectsRuntime.missingMailboxes ?? []
     }) { [projects] in
         projects.isOn
     }
