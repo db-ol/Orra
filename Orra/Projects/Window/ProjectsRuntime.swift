@@ -181,6 +181,9 @@ final class ProjectsRuntime {
         case notRead(days: Int)
         /// The scan has not reached the message yet, since a pass still reads the mailboxes.
         case stillReading
+        /// The pass of the scan for the message ended as the store failed to save what it
+        /// read, or to say which mail it knows, such as on a full disk.
+        case notSaved
         /// The store holds another email with the message's Message-ID, see
         /// `isSelectedEmail`, such as when the message was made to look like it. The store
         /// keeps one email for each Message-ID, so that email is not shown for it.
@@ -1457,6 +1460,7 @@ final class ProjectsRuntime {
                 case .saved: email = try await running.store.explainEmail(messageID)
                 case .notFound: return .notRead(days: dependencies.choice.days)
                 case .stillReading: return .stillReading
+                case .storeFailed: return .notSaved
                 }
             }
             guard let email else { return .notRead(days: dependencies.choice.days) }
@@ -1521,6 +1525,8 @@ final class ProjectsRuntime {
         case notFound
         /// A pass still read the mailboxes when the wait ended.
         case stillReading
+        /// A pass of its own ended without the message, as the store failed.
+        case storeFailed
     }
 
     /// Runs a pass of the scan and waits until it saved the message, for at most about
@@ -1534,6 +1540,7 @@ final class ProjectsRuntime {
                 let result = await scan.scan()
                 pass.isRunning = false
                 pass.isDone = result.skipped != .busy
+                pass.storeFailed = result.skipped == .storeFailed
             }
         }
         startPass()
@@ -1543,7 +1550,10 @@ final class ProjectsRuntime {
                 return .saved
             }
             if pass.isDone {
-                return (try? await store.explainEmail(messageID)) != nil ? .saved : .notFound
+                if (try? await store.explainEmail(messageID)) != nil {
+                    return .saved
+                }
+                return pass.storeFailed ? .storeFailed : .notFound
             }
             if !pass.isRunning {
                 startPass()
@@ -1553,11 +1563,12 @@ final class ProjectsRuntime {
         return (try? await store.explainEmail(messageID)) != nil ? .saved : .stillReading
     }
 
-    /// Whether a pass of the scan that Explain Selected Message started runs, and whether
-    /// one ran to its end.
+    /// Whether a pass of the scan that Explain Selected Message started runs, whether one
+    /// ran to its end, and whether that one ended as the store failed.
     private final class PassState {
         var isRunning = false
         var isDone = false
+        var storeFailed = false
     }
 
     /// How long Explain Selected Message waits for the scan to read the message.

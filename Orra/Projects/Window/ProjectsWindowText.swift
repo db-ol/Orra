@@ -36,6 +36,7 @@ nonisolated enum ProjectsWindowText {
         case .notInChosenMailbox: String(localized: "This message is in a mailbox Projects does not read. Choose the mailbox in Settings first.")
         case .notRead(let days): String(localized: "Projects has not read this message. It reads the mail of the last \(days) days in the mailboxes you chose.")
         case .stillReading: String(localized: "Projects is still reading your mail. Try again in a moment.")
+        case .notSaved: String(localized: "Projects could not save this message on this Mac. Try again later.")
         case .otherEmail: String(localized: "This message looks like an email Projects read, but its sender, recipients or date differ, so Projects cannot explain it.")
         case .notAllowed: String(localized: "Orra is not allowed to read Mail yet. Allow it in Settings.")
         case .failed: String(localized: "Mail did not answer. Try again.")

@@ -10818,6 +10818,28 @@
         }
       }
     },
+    "Projects could not save this message on this Mac. Try again later." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no pudo guardar este mensaje en esta Mac. Vuelve a intentarlo más tarde."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”はこのメッセージをこのMacに保存できませんでした。あとでもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”无法在这台 Mac 上保存这封邮件。请稍后再试。"
+          }
+        }
+      }
+    },
     "Projects did not read it, as it is over 10 MB." : {
       "localizations" : {
         "es-419" : {

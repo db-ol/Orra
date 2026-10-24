@@ -1125,6 +1125,30 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// The store fails to save the message that the scan reads for Explain Selected
+    /// Message, as on a full disk. The window says so, not that Projects has not read it.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageSaysWhenTheMessageCouldNotBeSaved() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        let store = try #require(runtime.running?.store)
+        // No new email saves, while the store still reads.
+        try await store.database.run("CREATE TEMP TRIGGER no_new_mail BEFORE INSERT ON mail_messages BEGIN SELECT RAISE(ABORT, 'full'); END")
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [FakeMail.Message(id: 5, messageID: "e@harbor.example", from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")]
+            $0.selection = [MailMessageRef(id: 5, mailbox: FakeMail.workInbox)]
+        }
+        choice.choose([.inbox])
+        choice.confirm()
+        #expect(await runtime.messageSelectedInMail() == .notSaved)
+        #expect(ProjectsWindowText.selection(.notSaved) == "Projects could not save this message on this Mac. Try again later.")
+        #expect(try await store.explainEmail("e@harbor.example") == nil)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     @Test func explainingNeedsTheWindowAndTheModel() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
