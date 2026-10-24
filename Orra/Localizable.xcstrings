@@ -5104,28 +5104,6 @@
         }
       }
     },
-    "Future mail will no longer use this rule. Existing assignments stay unchanged." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El correo nuevo ya no usará esta regla. El correo ya archivado no cambia."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "今後のメールにはこのルールが使われなくなります。すでに振り分けられたメールはそのままです。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以后的邮件不再使用这条规则。已归入项目的邮件保持不变。"
-          }
-        }
-      }
-    },
     "General" : {
       "localizations" : {
         "es-419" : {
@@ -7750,6 +7728,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从未使用"
+          }
+        }
+      }
+    },
+    "New mail is no longer filed by this rule. Mail it already filed stays where it is." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El correo nuevo ya no se archivará con esta regla. El correo ya archivado no cambia."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今後のメールにはこのルールが使われなくなります。すでに振り分けられたメールはそのままです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以后的邮件不再按这条规则归入项目。已归入项目的邮件保持不变。"
           }
         }
       }

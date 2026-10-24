@@ -142,7 +142,7 @@ struct ProjectsProjectPage: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("Future mail will no longer use this rule. Existing assignments stay unchanged.")
+            Text("New mail is no longer filed by this rule. Mail it already filed stays where it is.")
         }
         .task(id: Reload(project: project.id, folders: project.folders, report: Self.fingerprint(report))) {
             folders = await runtime.folders(of: project)
