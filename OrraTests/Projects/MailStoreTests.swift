@@ -783,6 +783,85 @@ struct MailStoreTests {
         await store.close()
     }
 
+    /// A list counts all its emails, and an email read alone gives its list and how many
+    /// emails come before it there, in the order of the list, also between emails of the
+    /// same date.
+    @Test func aListCountsItsEmailsAndAnEmailKnowsItsPlaceInIt() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("harbor1@test.example", from: "song.yutong@harborlights.example", day: 1),
+            Self.message("harbor2@test.example", from: "song.yutong@harborlights.example", day: 1),
+            Self.message("harbor3@test.example", from: "song.yutong@harborlights.example", day: 2),
+            Self.message("news@test.example", from: "news@letters.example", day: 3),
+            Self.message("new@test.example", from: "kim@quay.example", day: 4),
+            Self.message("moved@test.example", from: "kim@quay.example", day: 5),
+        ], ownAddresses: [Self.work], at: Self.date(6))
+        for id in ["harbor1@test.example", "harbor2@test.example", "harbor3@test.example"] {
+            #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: id))
+        }
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .setAside, reasons: [.listMail]), for: "news@test.example"))
+        #expect(try await store.move("moved@test.example", to: nil))
+
+        #expect(try await store.count(.project(Self.harbor)) == 3)
+        #expect(try await store.count(.project(Self.maple)) == 0)
+        #expect(try await store.count(.setAside) == 1)
+        #expect(try await store.count(.needsProject) == 2)
+        for place in [MailStore.Place.project(Self.harbor), .setAside, .needsProject] {
+            for (index, email) in try await store.list(place).enumerated() {
+                #expect(email.place == place)
+                let position = try #require(try await store.position(of: email.messageID))
+                #expect(position.place == place && position.index == index, "\(email.messageID)")
+            }
+        }
+        #expect(try await store.position(of: "unknown@test.example") == nil)
+        await store.close()
+    }
+
+    /// Sorting again reads all of Needs a Project that sorting may still file, oldest first
+    /// in batches, and never mail the user moved there, also when that mail is the newest.
+    /// A batch filed meanwhile does not change where the next one starts.
+    @Test func sortingAgainReadsNeedsAProjectInBatchesPastTheUsersMoves() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let waiting = (0..<5).map { "waiting\($0)@test.example" }
+        try await store.save(
+            waiting.enumerated().map { day, id in Self.message(id, from: "kim@quay.example", day: Double(day)) } + [
+                Self.message("same-day@test.example", from: "kim@quay.example", day: 2),
+                Self.message("harbor@test.example", from: "song.yutong@harborlights.example", day: 1),
+                Self.message("news@test.example", from: "news@letters.example", day: 1),
+                Self.message("moved1@test.example", from: "kim@quay.example", day: 6),
+                Self.message("moved2@test.example", from: "kim@quay.example", day: 7),
+            ], ownAddresses: [Self.work], at: Self.date(8))
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: waiting[1]))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "harbor@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .setAside, reasons: [.listMail]), for: "news@test.example"))
+        #expect(try await store.move("moved1@test.example", to: nil))
+        #expect(try await store.move("moved2@test.example", to: nil))
+
+        var read: [String] = []
+        var cursor: MailStore.Cursor?
+        while true {
+            let batch = try await store.resortBatch(after: cursor, limit: 2)
+            #expect(batch.emails.count <= 2)
+            guard let next = batch.next else {
+                #expect(batch.emails.isEmpty)
+                break
+            }
+            read += batch.emails.map(\.messageID)
+            // Each email reads as sorting reads it alone. Sorting files the batch in a project
+            // before the next one is read.
+            for email in batch.emails {
+                #expect(email == (try await store.sortingEmail(email.messageID)))
+                #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.domain]), for: email.messageID))
+            }
+            cursor = next
+        }
+        // The two emails of day 2 come in the order they were saved.
+        #expect(read == [waiting[0], waiting[1], waiting[2], "same-day@test.example", waiting[3], waiting[4]])
+        await store.close()
+    }
+
     /// The line under the subject is the first sentence until the email is explained, then
     /// the first point (decision 16).
     @Test func theListShowsTheFirstSentenceThenTheFirstPoint() async throws {

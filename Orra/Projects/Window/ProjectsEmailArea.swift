@@ -2,6 +2,7 @@ import SwiftUI
 
 /// The email view, the third column of the Projects window while an email is selected
 /// (plan section 5, projects-email-view), top to bottom:
+/// - Back to Previous Email, after an earlier email's chip showed this email
 /// - the sender, date and subject, the marks, and Explain or Explain Again
 /// - the project chip with its reasons, whose menu moves the email to another project
 /// - the attachments, with whether Projects read their text, see ProjectsAttachmentList
@@ -106,6 +107,17 @@ struct ProjectsEmailArea: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // After an earlier email's chip showed this email.
+            if model.previousEmail != nil {
+                Button {
+                    Task { await model.showPreviousEmail() }
+                } label: {
+                    Label("Back to Previous Email", systemImage: "chevron.backward")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.bottom, 4)
+            }
             Text(verbatim: email.subject)
                 .font(.title3.weight(.semibold))
                 .textSelection(.enabled)

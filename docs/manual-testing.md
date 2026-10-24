@@ -3310,6 +3310,27 @@ Projects Data and Start Reading Mail again first.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
 
+Every email Projects keeps, added on 2026-10-24, not verified yet. Check in a Debug build
+with a test mailbox in Mail that holds more than 1,000 made up messages from one company
+domain, all received within the period Projects reads, and no project for that domain.
+MailStoreTests, ProjectsRuntimeTests and ProjectsSuggestedSectionTests cover the same with
+made up mail, and ProjectsWindowViewTests renders the line under the list and Back to
+Previous Email with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS.
+
+- [ ] Needs a Project shows its newest 1,000 emails, and under them "Showing the newest
+  1,000 of" and how many it holds, with Load Older Emails. Each click shows 1,000 more,
+  and the line goes once every email shows. Another list starts again with 1,000.
+- [ ] Select the oldest test message in Mail and click Explain Selected Message. The
+  window selects it in its list, which reads down to it and scrolls to it.
+- [ ] Create the project Suggested Projects offers for the domain. Within a minute every
+  email it counted leaves Needs a Project, also those past the first 1,000.
+- [ ] Explain an email whose points cite an earlier email, and click that email's chip.
+  The window shows it with Back to Previous Email at the top. A click shows the email
+  before in its list, scrolled to it, with your changes to its draft. After two chips in a
+  row it goes back one email at a time, and choosing another email hides it.
+- [ ] The line and both buttons read well in Chinese, Japanese and Spanish, and VoiceOver
+  reads Back to Previous Email and Load Older Emails.
+
 Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
 checks that a download agreed to in the caption window turns on neither cleanup nor
 translation and stops when captions stop, as docs/privacy.md says, and that it goes on

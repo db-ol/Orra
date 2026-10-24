@@ -2060,6 +2060,28 @@
         }
       }
     },
+    "Back to Previous Email" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volver al correo anterior"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前のメールに戻る"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返回上一封邮件"
+          }
+        }
+      }
+    },
     "Bars at the bottom of the screen that move with your voice." : {
       "localizations" : {
         "es-419" : {
@@ -6760,6 +6782,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "实时字幕快捷键"
+          }
+        }
+      }
+    },
+    "Load Older Emails" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cargar correos anteriores"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前のメールを読み込む"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "载入更早的邮件"
           }
         }
       }
@@ -12932,6 +12976,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "查看报告"
+          }
+        }
+      }
+    },
+    "Showing the newest %lld of %lld emails." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Showing the newest %1$lld of %2$lld emails."
+          }
+        },
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se muestran los %1$lld correos más recientes de un total de %2$lld."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全%2$lld件のメールのうち、最新の%1$lld件を表示しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示最新的 %1$lld 封邮件，共 %2$lld 封。"
           }
         }
       }

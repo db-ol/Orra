@@ -101,6 +101,42 @@ struct ProjectsSuggestedSectionTests {
         }
     }
 
+    /// A project made from a suggestion takes every email the suggestion counted, also
+    /// more than the window reads at once. The 1,200 emails were sorted before any project
+    /// existed, so only the sorting again of Needs a Project files them.
+    @Test(.timeLimit(.minutes(1)))
+    func aSuggestedProjectTakesEveryEmailItCounted() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let store = try #require(runtime.running?.store)
+        let people = ["mei@harbor.example", "lu@harbor.example", "ana@harbor.example"]
+        let mail = (0..<1_200).map { index in
+            Self.message("o\(index)@harbor.example", from: people[index % 3], name: "", subject: "Order \(index)", day: -Double(1_200 - index) / 24)
+        }
+        try await store.save(mail, ownAddresses: [Self.me], at: Self.today)
+        var sorted = 0
+        for message in mail where try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: message.messageID) {
+            sorted += 1
+        }
+        #expect(sorted == mail.count)
+
+        runtime.windowOpened()
+        let service = runtime.suggestionService()
+        await service.refresh()
+        await service.untilNamed()
+        let harbor = try #require(service.suggestions.first { $0.name == "harbor.example" })
+        #expect(harbor.group.takes.count == 1_200)
+        let project = try #require(ProjectsSetupView.Draft(suggestion: harbor).project)
+        #expect(project.folders.isEmpty)
+        try await runtime.add(project)
+        await runtime.untilResorted()
+        let filed = try await store.database.run("SELECT COUNT(*) FROM mail_messages WHERE project = ?", [.text(project.id.uuidString)]).first?.first?.integer
+        #expect(filed == 1_200)
+        runtime.windowClosed()
+        await fixture.stop()
+    }
+
     // MARK: Render
 
     /// Renders the sidebar with its suggestions and the prefilled sheet into PNG files, for

@@ -74,6 +74,23 @@ nonisolated struct MailStore: Sendable {
         /// Mail with no project yet: not sorted, unsure, or moved there by the user.
         case needsProject
         case setAside
+
+        /// The list of an email filed in `project` with `level`.
+        init(project: UUID?, level: SortingLevel?) {
+            if let project {
+                self = .project(project)
+            } else {
+                self = level == .setAside ? .setAside : .needsProject
+            }
+        }
+    }
+
+    /// Where a read of mail in batches goes on: after the email with this date and row, in
+    /// the order of date and row. It holds the date as the store keeps it, so no email of
+    /// the same date is read twice or left out.
+    nonisolated struct Cursor: Sendable, Equatable {
+        var date: Double
+        var id: Int64
     }
 
     /// An email in a list of the window.
@@ -101,6 +118,11 @@ nonisolated struct MailStore: Sendable {
         var summary: String
         /// The attachments with their states, without their text.
         var attachments: [MailAttachment] = []
+
+        /// The list that holds it.
+        var place: Place {
+            Place(project: project, level: level)
+        }
     }
 
     /// A version of a draft, from the user's instruction or a tone. The explanation holds
@@ -809,24 +831,72 @@ nonisolated struct MailStore: Sendable {
 
     // MARK: The window
 
+    /// The emails a list of the window reads at once. Load Older Emails reads as many more.
+    static let listPage = 1_000
+
     /// The emails of a list, newest first, at most `limit`.
-    func list(_ place: Place, limit: Int = 1_000) async throws -> [Listed] {
-        let condition: String
-        var parameters: [ProjectsDatabase.Value] = []
-        switch place {
-        case .project(let id):
-            condition = "project = ?"
-            parameters = [.text(id.uuidString)]
-        case .needsProject:
-            condition = "project IS NULL AND (level IS NULL OR level = 'unsure')"
-        case .setAside:
-            condition = "level = 'setAside'"
-        }
-        parameters.append(.integer(Int64(max(0, limit))))
-        let values = parameters
+    func list(_ place: Place, limit: Int = listPage) async throws -> [Listed] {
+        let (condition, parameters) = Self.condition(of: place)
+        let values = parameters + [.integer(Int64(max(0, limit)))]
         return try await database.transaction { database in
             try Self.rows(where: "\(condition) ORDER BY date DESC, id DESC LIMIT ?", values, people: false, textLength: Self.summaryReadLength, in: database)
                 .map(\.listed)
+        }
+    }
+
+    /// How many emails a list holds.
+    func count(_ place: Place) async throws -> Int {
+        let (condition, parameters) = Self.condition(of: place)
+        return Int(try await database.run("SELECT COUNT(*) FROM mail_messages WHERE \(condition)", parameters).first?.first?.integer ?? 0)
+    }
+
+    /// The list that holds an email and how many emails come before it there, read for
+    /// that email alone, so an email past the emails a list read can show too. Nil when the
+    /// store does not hold it.
+    func position(of messageID: String) async throws -> (place: Place, index: Int)? {
+        try await database.transaction { database in
+            guard let row = try database.run("SELECT project, level FROM mail_messages WHERE message_id = ?", [.text(messageID)]).first,
+                  row.count == 2 else { return nil }
+            let place = Place(project: row[0].text.flatMap(UUID.init(uuidString:)), level: row[1].text.flatMap(SortingLevel.init(rawValue:)))
+            let (condition, parameters) = Self.condition(of: place)
+            // The emails a list shows before this one: newer, or as new with a higher id.
+            let index = try database.run(
+                "SELECT COUNT(*) FROM mail_messages WHERE \(condition) AND (date, id) > (SELECT date, id FROM mail_messages WHERE message_id = ?)",
+                parameters + [.text(messageID)]
+            ).first?.first?.integer ?? 0
+            return (place, Int(index))
+        }
+    }
+
+    /// The emails of Needs a Project that sorting may still file, oldest first, at most
+    /// `limit`, after `cursor`, with the cursor that reads on after them. Sorting reads all
+    /// of them this way when the projects change. Mail the user moved there is left out
+    /// before the limit, since sorting never files it again.
+    func resortBatch(after cursor: Cursor?, limit: Int) async throws -> (emails: [SortingService.Email], next: Cursor?) {
+        let after = cursor == nil ? "" : " AND (date, id) > (?, ?)"
+        let values = (cursor.map { [.real($0.date), .integer($0.id)] } ?? []) + [ProjectsDatabase.Value.integer(Int64(max(0, limit)))]
+        return try await database.transaction { database in
+            let batch = try database.run("""
+                SELECT id, date FROM mail_messages
+                WHERE project IS NULL AND (level IS NULL OR level = 'unsure') AND moved_by_user = 0\(after)
+                ORDER BY date, id LIMIT ?
+                """, values)
+            guard let last = batch.last, last.count == 2, let id = last[0].integer, let date = last[1].real else { return ([], nil) }
+            let emails = try Self.rows(
+                where: "id IN (SELECT value FROM json_each(?)) ORDER BY date, id",
+                [.text(try Self.json(batch.compactMap { $0.first?.integer }))],
+                in: database
+            ).map(\.sortingEmail)
+            return (emails, Cursor(date: date, id: id))
+        }
+    }
+
+    /// The condition of a list in SQL, with its parameters.
+    private static func condition(of place: Place) -> (sql: String, parameters: [ProjectsDatabase.Value]) {
+        switch place {
+        case .project(let id): ("project = ?", [.text(id.uuidString)])
+        case .needsProject: ("project IS NULL AND (level IS NULL OR level = 'unsure')", [])
+        case .setAside: ("level = 'setAside'", [])
         }
     }
 

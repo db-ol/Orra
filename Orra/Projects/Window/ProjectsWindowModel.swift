@@ -2,11 +2,11 @@ import Foundation
 import Observation
 
 /// What the Projects window shows and what the user does there: the list chosen in the
-/// sidebar, its mail with the deadline marks of the explained ones, the selected email, a
-/// move that waits for the user's yes, the rule offered after moves, the explanations under
-/// way, the email view of each email the user opened with the window's one handoff at a
-/// time, the line after Explain Selected Message, and Suggested Projects. ProjectsRuntime
-/// does the work.
+/// sidebar, its newest mail a page at a time with the deadline marks of the explained ones,
+/// the selected email, the way back after a source showed another email, a move that waits
+/// for the user's yes, the rule offered after moves, the explanations under way, the email
+/// view of each email the user opened with the window's one handoff at a time, the line
+/// after Explain Selected Message, and Suggested Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -41,6 +41,18 @@ final class ProjectsWindowModel {
         case failed(ExplainFailure)
     }
 
+    /// Where the window was before it showed the email a source cites: the list, how many of
+    /// its emails it read, and the email selected there, with the email the source showed.
+    private struct Visit {
+        var place: MailStore.Place
+        var limit: Int
+        var messageID: String
+        var shown: String
+    }
+
+    /// The most visits Back to Previous Email goes back through.
+    static let maximumHistory = 20
+
     let runtime: ProjectsRuntime
     /// The list chosen in the sidebar.
     var place: MailStore.Place? = .needsProject {
@@ -49,6 +61,8 @@ final class ProjectsWindowModel {
                 followed = nil
                 selectedMessageID = nil
                 rows = []
+                total = 0
+                limit = MailStore.listPage
             }
         }
     }
@@ -64,6 +78,17 @@ final class ProjectsWindowModel {
     }
     /// The emails of the chosen list, newest first.
     private(set) var rows: [MailStore.Listed] = []
+    /// How many emails the chosen list holds, also those older than `rows`.
+    private(set) var total = 0
+    /// How many of the newest emails of the chosen list the window reads: a page, a page
+    /// more for each Load Older Emails, or down to an older email the window shows.
+    private(set) var limit = MailStore.listPage
+    /// Counts the times the window showed an email on its own, such as the one a source
+    /// cites, so the list scrolls to it.
+    private(set) var showCount = 0
+    /// The visits the window left to show the email of a source, the newest last, while the
+    /// window is open.
+    private var history: [Visit] = []
     /// The rule offered after two moves of the same kind, until the user answers.
     var ruleOffer: SortingService.RuleOffer?
     var notice: Notice?
@@ -135,6 +160,7 @@ final class ProjectsWindowModel {
         emailViewGeneration += 1
         deadlines = [:]
         deadlinesRead = []
+        history = []
     }
 
     /// The selected email as the list shows it.
@@ -142,24 +168,47 @@ final class ProjectsWindowModel {
         selectedMessageID.flatMap { id in rows.first { $0.messageID == id } }
     }
 
-    /// Reads the chosen list again, and follows the email Explain Selected Message showed
-    /// when sorting filed it in another list.
+    /// Whether the chosen list holds older emails than the window read, for Load Older
+    /// Emails.
+    var hasOlderEmails: Bool {
+        rows.count >= limit && total > rows.count
+    }
+
+    /// Reads the chosen list again with how many emails it holds. When the selected email,
+    /// or the one Explain Selected Message or a source showed, is older than the emails
+    /// read, such as an email a source cites, it reads down to that email. When sorting
+    /// filed the email Explain Selected Message or a source showed in another list, that
+    /// list shows with it.
     func reload() async {
         guard let place else {
             rows = []
+            total = 0
             return
         }
-        let listed = await runtime.list(place)
+        var listed = await runtime.list(place, limit: limit)
         guard place == self.place else { return }
-        rows = listed
-        if let followed, !listed.contains(where: { $0.messageID == followed }) {
-            let now = await runtime.place(of: followed)
-            if followed == self.followed, place == self.place, now != place {
-                await show(followed, in: now)
+        if let id = followed ?? selectedMessageID, !listed.contains(where: { $0.messageID == id }),
+           let found = await runtime.position(of: id), place == self.place {
+            if found.place == place {
+                // Whole pages, as Load Older Emails reads them.
+                limit = max(limit, (found.index / MailStore.listPage + 1) * MailStore.listPage)
+                listed = await runtime.list(place, limit: limit)
+            } else if id == followed {
+                await show(id, in: found.place)
                 return
             }
         }
+        let total = await runtime.count(place)
+        guard place == self.place else { return }
+        rows = listed
+        self.total = total
         await readDeadlines(listed)
+    }
+
+    /// Load Older Emails: reads a page more of the chosen list.
+    func loadOlderEmails() async {
+        limit += MailStore.listPage
+        await reload()
     }
 
     /// Reads the deadline of each explained email of the list that has none read yet.
@@ -184,9 +233,35 @@ final class ProjectsWindowModel {
     }
 
     /// Shows an email in the window, such as the earlier one a point cites: chooses its
-    /// list and selects it.
+    /// list and selects it. Back to Previous Email returns to the email selected before.
     func show(_ messageID: String) async {
+        let left = place.flatMap { place in
+            selectedMessageID.map { Visit(place: place, limit: limit, messageID: $0, shown: messageID) }
+        }
         await show(messageID, in: await runtime.place(of: messageID))
+        if let left, left.messageID != messageID {
+            history = Array((history + [left]).suffix(Self.maximumHistory))
+        }
+    }
+
+    /// The email Back to Previous Email returns to: the one selected before a source showed
+    /// the selected email. Nil once the user chose another email or list.
+    var previousEmail: String? {
+        guard let visit = history.last, visit.shown == selectedMessageID else { return nil }
+        return visit.messageID
+    }
+
+    /// Back to Previous Email: selects the email `previousEmail` names in its list, read as
+    /// far as before. An email that moved meanwhile shows in its list now. The email view
+    /// with its draft is the same as before, see `emailModel(for:)`.
+    func showPreviousEmail() async {
+        guard previousEmail != nil, let visit = history.popLast(),
+              let now = await runtime.position(of: visit.messageID)?.place else { return }
+        place = now
+        if now == visit.place {
+            limit = max(limit, visit.limit)
+        }
+        await show(visit.messageID, in: now)
     }
 
     /// Shows an email selected in its list, and follows it from there.
@@ -195,6 +270,7 @@ final class ProjectsWindowModel {
         followed = messageID
         selectedMessageID = messageID
         await reload()
+        showCount += 1
     }
 
     /// Moves an email to a project, or to Needs a Project with nil, and offers a rule after
