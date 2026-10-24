@@ -213,11 +213,13 @@ struct PushToTalkControllerTests {
     }
 
     /// A started controller whose keyboard tap is a fake, so no real tap is installed. The
-    /// fake allows the tap, so the hotkey is active.
+    /// fake allows the tap, so the hotkey is active. After a stop at the limit the key waits
+    /// an hour for the press meant to stop, unless a test asks for less, so the wait is not
+    /// over when the test process stalls for a minute.
     private func startedController(
         translation: TranslationModel = .off,
         limit: Duration = RecordingLimits.maximumDuration,
-        limitNoticeWindow: Duration = RecordingLimits.noticeWindow
+        limitNoticeWindow: Duration = .seconds(3600)
     ) async throws -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,
@@ -888,7 +890,9 @@ struct PushToTalkControllerTests {
     }
 
     @Test func aDictationReleasedBeforeTheCountdownSendsNone() async throws {
-        let controller = await makeController(limit: .seconds(10), countdown: .seconds(5))
+        // An hour, so the release comes long before the countdown even when the test
+        // process stalls for a minute.
+        let controller = await makeController(limit: .seconds(3600), countdown: .seconds(5))
         let cues = CueRecorder(controller)
         try await dictate(controller)
         try await Task.sleep(for: .milliseconds(50))
@@ -1046,8 +1050,9 @@ struct PushToTalkControllerTests {
     }
 
     /// Starts a dictation that the limit stops while the key is up, in `mode`, and waits until
-    /// it was pasted.
-    private func dictationStoppedAtLimit(_ mode: TriggerMode, limitNoticeWindow: Duration = RecordingLimits.noticeWindow) async throws -> (PushToTalkController, HotkeyTap, CueRecorder, ContinuousClock.Instant) {
+    /// it was pasted. The key waits an hour for the press meant to stop, as in
+    /// `startedController`, unless a test asks for less.
+    private func dictationStoppedAtLimit(_ mode: TriggerMode, limitNoticeWindow: Duration = .seconds(3600)) async throws -> (PushToTalkController, HotkeyTap, CueRecorder, ContinuousClock.Instant) {
         let controller = try await startedController(limit: .milliseconds(200), limitNoticeWindow: limitNoticeWindow)
         controller.setTriggerMode(mode, for: .talk)
         let cues = CueRecorder(controller)
@@ -1444,8 +1449,9 @@ struct PushToTalkControllerTests {
     /// since a microphone can deliver zeros for a while after its start.
     @Test func theStartSoundWaitsForSoundFromTheMicrophone() async throws {
         mic.soundHeld = true
-        // A limit no run reaches, so only the sound can bring the cue.
-        let controller = await makeController(soundWaitLimit: .seconds(60))
+        // A limit no run reaches, so only the sound can bring the cue. An hour, since the
+        // test process can stall for a minute, and a limit of 60 s ran out on CI that way.
+        let controller = await makeController(soundWaitLimit: .seconds(3600))
         let cues = CueRecorder(controller)
         controller.handle(.pressed(isRepeat: false))
         try await waitUntil { mic.calls.contains("start") }
@@ -1480,7 +1486,8 @@ struct PushToTalkControllerTests {
 
     @Test func theHandsFreeCueWaitsForSoundToo() async throws {
         mic.soundHeld = true
-        let controller = await makeController(soundWaitLimit: .seconds(60))
+        // An hour, a limit no run reaches, as above.
+        let controller = await makeController(soundWaitLimit: .seconds(3600))
         let cues = CueRecorder(controller)
         controller.handle(.doublePressed)
         try await waitUntil { mic.calls.contains("start") }
