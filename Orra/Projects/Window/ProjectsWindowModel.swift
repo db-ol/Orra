@@ -288,12 +288,15 @@ final class ProjectsWindowModel {
     }
 
     /// Try Loading Again, after the cleanup model could not be loaded: looks at the model's
-    /// files and loads it again, then explains the email.
+    /// files and loads it again, then explains the email. A new explanation starts the
+    /// draft again, so it is left out when a change or an undo of the draft began
+    /// meanwhile. Explain is there again once that is done.
     func loadModelAgain(explaining messageID: String) async {
         guard explaining[messageID] != .explaining else { return }
         explaining[messageID] = .explaining
         await runtime.dependencies.retryLoadingModel()
         explaining[messageID] = nil
+        guard emailModels[messageID]?.isBusy != true else { return }
         await explain(messageID)
     }
 

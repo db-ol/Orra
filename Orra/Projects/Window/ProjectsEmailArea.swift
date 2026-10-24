@@ -169,11 +169,13 @@ struct ProjectsEmailArea: View {
                             .fixedSize()
                     }
                 case .modelNotLoaded:
+                    // It explains the email after the load, so it waits for a change or
+                    // an undo of the draft, as Explain does.
                     Button("Try Loading Again") {
                         Task { await model.loadModelAgain(explaining: email.messageID) }
                     }
                     .fixedSize()
-                    .disabled(runtime.phase != .on)
+                    .disabled(isChanging || runtime.phase != .on)
                 case .tooLong, .other:
                     EmptyView()
                 }

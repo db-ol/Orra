@@ -995,6 +995,64 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// A change of the draft that begins while Try Loading Again looks at the model keeps
+    /// the draft. No explanation follows the load, since a new one would start the draft
+    /// again and drop the version the change makes.
+    @Test func tryLoadingAgainLeavesOutTheExplanationWhileTheDraftChanges() async throws {
+        defer { cleanUp() }
+        let meanwhile = Meanwhile()
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true, retryLoading: { [model] in
+            model.isThere.withLock { $0 = true }
+            await meanwhile.run()
+        })
+        let store = try #require(runtime.running?.store)
+        let id = "f@harbor.example"
+        try await store.save([Self.message(id, from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        let check = DraftCheckInput(
+            draft: "", language: .en, recipients: [DraftCheckInput.Person(name: "", address: "mei@harbor.example")], projectPeople: [],
+            own: [DraftCheckInput.Person(name: "Me", address: Self.own)], incomingText: "Could you send the plan?", today: Self.today)
+        let explanation = Explanation(
+            messageID: id, project: nil, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [], questions: [], draft: .checked(DraftCheck.Result(draft: "Hi Mei,\n\nHere is the plan.\n\nMe", language: .en)), draftCheck: check,
+            sources: [:], removed: [:], problems: [], unknownSources: [])
+        #expect(try await store.save(explanation, at: Self.today))
+        runtime.windowOpened()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain(id)
+        #expect(window.explaining[id] == .failed(.modelNotLoaded))
+        let email = window.emailModel(for: id)
+        await email.load()
+        #expect(email.hasDraft)
+        // The user changes the draft while the model is looked at. The change's job waits
+        // at the model until the test ends it.
+        meanwhile.work = { [model] in
+            model.blocks.withLock { $0 = true }
+            email.perform { await $0.makeChange(.tone(.warm)) }
+            for _ in 0..<1_000 where !email.isBusy {
+                await Task.yield()
+            }
+        }
+        // A task, so the test fails rather than waits for good when an explanation waits
+        // behind the change.
+        let returned = Count()
+        let retrying = Task {
+            await window.loadModelAgain(explaining: id)
+            returned.add()
+        }
+        try await waitUntil { returned.value == 1 }
+        #expect(email.isBusy)
+        #expect(window.explaining[id] == nil)
+        #expect(window.explained[id] == nil)
+        email.cancelWork()
+        retrying.cancel()
+        await retrying.value
+        try await waitUntil { !email.isBusy }
+        #expect(await runtime.explanation(for: id) == explanation)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: The email view
 
     /// Open Reply in Mail finds mail read before Orra started: the scan keeps Mail's handle
@@ -1537,6 +1595,16 @@ struct ProjectsRuntimeTests {
 
         nonisolated var value: Int {
             count.withLock { $0 }
+        }
+    }
+
+    /// What a test does while Try Loading Again looks at the model, set once the window is
+    /// there.
+    @MainActor final class Meanwhile {
+        var work: () async -> Void = {}
+
+        func run() async {
+            await work()
         }
     }
 
