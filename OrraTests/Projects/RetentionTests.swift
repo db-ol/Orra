@@ -112,8 +112,8 @@ struct RetentionTests {
         try await store.save([Self.message("backfill@test.example", day: -365)], ownAddresses: [Self.work], at: Self.start)
         // A date in the future keeps nothing longer.
         try await store.save([Self.message("future@test.example", day: 1_000)], ownAddresses: [Self.work], at: Self.date(-200))
-        try await store.save(Self.explanation("lone@test.example", draft: .noReply(.listMail)), at: Self.date(-100))
-        try await store.save(ReviseService.Version(messageID: "lone@test.example", change: .tone(.warm), check: DraftCheck.Result(draft: "Hi", language: .en)), startedAt: Self.date(-1), at: Self.date(-1))
+        try await store.save(Self.explanation("lone@test.example", draft: Self.draft), at: Self.date(-100))
+        #expect(try await store.save(ReviseService.Version(messageID: "lone@test.example", change: .tone(.warm), check: DraftCheck.Result(draft: "Hi", language: .en)), startedAt: Self.date(-1), at: Self.date(-1)) == 1)
 
         let removed = try await Retention.apply(to: store, now: Self.start)
         #expect(removed.emails == 2)
@@ -177,6 +177,21 @@ struct RetentionTests {
         // The explanations go with the text.
         #expect(try await retention.apply(to: store, now: Self.date(91)) == Retention.Removed(texts: 3, explanations: 3))
         #expect(try await store.explanation(for: "drafted@test.example") == nil)
+        await store.close()
+    }
+
+    /// A revision that started before Retention removed its draft ends on nothing, so the
+    /// draft never comes back under the explanation that stays.
+    @Test func aRevisionThatEndsAfterItsDraftWentIsNotSaved() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("a@test.example", day: 0)], ownAddresses: [Self.work], at: Self.start)
+        try await store.save(Self.explanation("a@test.example", draft: Self.draft), at: Self.date(1))
+        let late = ReviseService.Version(messageID: "a@test.example", change: .tone(.warm), check: DraftCheck.Result(draft: "Hi Song,", language: .en))
+        #expect(try await Retention.apply(to: store, now: Self.date(32)) == Retention.Removed(drafts: 1))
+        #expect(try await store.save(late, startedAt: Self.date(31), at: Self.date(32)) == nil)
+        #expect(try await store.versions(of: "a@test.example").isEmpty)
+        #expect(try await store.explanation(for: "a@test.example")?.draft == .expired)
         await store.close()
     }
 
@@ -256,9 +271,11 @@ struct RetentionTests {
         await store.close()
     }
 
-    /// The time and the sleeps of `start`, which the test moves on itself.
+    /// The time and the sleeps of `start`, which the test moves on itself, and the runs that
+    /// removed something.
     final class Steps: Sendable {
         let now = Mutex(Date.distantPast)
+        let removals = Mutex(0)
         let slept: AsyncStream<Duration>
         private let sleeps: AsyncStream<Duration>.Continuation
         private let pending = Mutex<[CheckedContinuation<Void, any Error>]>([])
@@ -296,14 +313,19 @@ struct RetentionTests {
         let steps = Steps()
         steps.now.withLock { $0 = Self.date(10) }
         var slept = steps.slept.makeAsyncIterator()
-        let task = Retention.start(store: store, now: { steps.now.withLock { $0 } }, sleep: { try await steps.sleep($0) })
+        let task = Retention.start(
+            store: store, now: { steps.now.withLock { $0 } }, sleep: { try await steps.sleep($0) },
+            removed: { steps.removals.withLock { $0 += 1 } })
 
         #expect(await slept.next() == Retention.interval)
         #expect(try await store.explainEmail("a@test.example")?.text.isEmpty == false)
+        #expect(steps.removals.withLock { $0 } == 0)
         steps.now.withLock { $0 = Self.date(91) }
         steps.wake()
         #expect(await slept.next() == Retention.interval)
         #expect(try await store.explainEmail("a@test.example")?.text.isEmpty == true)
+        // The window reads its mail again after a run that removed something.
+        #expect(steps.removals.withLock { $0 } == 1)
 
         task.cancel()
         steps.wake(throwing: CancellationError())

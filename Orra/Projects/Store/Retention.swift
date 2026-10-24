@@ -130,15 +130,20 @@ nonisolated enum Retention {
     /// - Parameters:
     ///   - now: the time, which tests set.
     ///   - sleep: waits for a time. Tests pass one that does not.
+    ///   - removed: runs after a run that removed something, so the window reads its mail
+    ///     again, such as an email whose draft went while it shows.
     static func start(
         store: MailStore,
         now: @escaping @Sendable () -> Date = Date.init,
-        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        removed: @escaping @Sendable () async -> Void = {}
     ) -> Task<Void, Never> {
         Task {
             while !Task.isCancelled {
                 do {
-                    try await apply(to: store, now: now())
+                    if try await !apply(to: store, now: now()).isEmpty {
+                        await removed()
+                    }
                 } catch {
                     MailStore.log(error, "removing old mail and drafts")
                 }

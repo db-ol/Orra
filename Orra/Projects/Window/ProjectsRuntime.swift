@@ -557,7 +557,9 @@ final class ProjectsRuntime {
             now: dependencies.now,
             sleep: dependencies.sleep
         )
-        let retention = Retention.start(store: store, now: dependencies.now, sleep: dependencies.sleep)
+        let retention = Retention.start(store: store, now: dependencies.now, sleep: dependencies.sleep, removed: { [weak self] in
+            await self?.mailChanged()
+        })
         forgetReferences()
         running = Running(
             database: database, store: store, list: list, index: index, search: search, memory: memory,

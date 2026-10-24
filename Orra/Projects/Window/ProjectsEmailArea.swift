@@ -25,12 +25,13 @@ struct ProjectsEmailArea: View {
     let email: MailStore.Listed
 
     /// Reads the explanation again when the email changes project, is explained, Retention
-    /// removed its explanation, or the window let go of its email view, such as after Forget
-    /// Project, and made a new one.
+    /// removed its explanation or its draft, or the window let go of its email view, such
+    /// as after Forget Project, and made a new one.
     struct Reload: Hashable {
         var messageID: String
         var project: UUID?
         var isExplained: Bool
+        var hasDraft: Bool
         var explained: Int
         var generation: Int
 
@@ -38,6 +39,7 @@ struct ProjectsEmailArea: View {
             messageID = email.messageID
             project = email.project
             isExplained = email.isExplained
+            hasDraft = email.hasDraft
             explained = model.explained[email.messageID] ?? 0
             generation = model.emailViewGeneration
         }

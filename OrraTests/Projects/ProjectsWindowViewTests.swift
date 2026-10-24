@@ -48,6 +48,36 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    /// The email view reads its explanation again once Retention took out the draft, which
+    /// the list shows as an email still explained but without a draft. The draft and its
+    /// versions are gone from the view then.
+    @Test func theEmailViewReadsAgainOnceItsDraftWent() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let store = try #require(runtime.running?.store)
+        let model = ProjectsWindowModel(runtime: runtime)
+        let email = model.emailModel(for: explained.messageID)
+        await email.load()
+        #expect(explained.hasDraft)
+        #expect(email.hasDraft)
+        let before = ProjectsEmailArea.Reload(email: explained, model: model)
+
+        try await Retention.apply(to: store, now: Self.today.addingTimeInterval(31 * Retention.day))
+        let project = try #require(explained.project)
+        let listed = try #require(await runtime.list(.project(project)).first { $0.messageID == explained.messageID })
+        #expect(listed.isExplained)
+        #expect(!listed.hasDraft)
+        #expect(ProjectsEmailArea.Reload(email: listed, model: model) != before)
+        await email.load()
+        #expect(email.explanation?.draft == .expired)
+        #expect(!email.hasDraft)
+        #expect(email.versions.isEmpty)
+        #expect(email.text.isEmpty)
+        await fixture.stop()
+    }
+
     // MARK: The talk key
 
     /// Decision 13: the talk key's words go into the change box of the selected email only

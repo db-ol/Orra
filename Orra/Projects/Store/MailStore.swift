@@ -96,6 +96,10 @@ nonisolated struct MailStore: Sendable {
         var reply: ReplyRule.Decision?
         var warnings: [ProjectsWarning]
         var isExplained: Bool
+        /// Whether its explanation holds a draft. Retention takes the draft out 30 days after
+        /// its last change and keeps the explanation, so this tells the window to read the
+        /// explanation again.
+        var hasDraft = false
         /// Whether the email's text is still kept, see Retention.
         var hasText: Bool
         /// Whether the scan found the email too large to read, so the store has none of its
@@ -757,8 +761,9 @@ nonisolated struct MailStore: Sendable {
 
     /// Adds a version of the email's draft and returns its number. Returns nil and saves
     /// nothing when the store does not hold the email, or when its explanation, which holds
-    /// the first draft, is gone or newer than the revision: a revision that ends after the
-    /// email was explained again, moved or forgotten never lands on the new draft.
+    /// the first draft, is gone, holds no draft or is newer than the revision: a revision
+    /// that ends after the email was explained again, moved or forgotten never lands on the
+    /// new draft, and one that ends after Retention removed the draft never brings it back.
     /// - Parameters:
     ///   - started: when the revision started, from the clock that `now` reads.
     @discardableResult
@@ -768,7 +773,7 @@ nonisolated struct MailStore: Sendable {
             guard let number = try database.run("""
                 INSERT INTO mail_draft_versions (message, number, made, version)
                 SELECT m.id, COALESCE((SELECT MAX(v.number) FROM mail_draft_versions v WHERE v.message = m.id), 0) + 1, ?2, ?3
-                FROM mail_messages m WHERE m.message_id = ?1 AND m.explained <= ?4
+                FROM mail_messages m WHERE m.message_id = ?1 AND m.explained <= ?4 AND m.explanation_draft = 1
                 RETURNING number
                 """, [.text(version.messageID), .real(now.timeIntervalSince1970), .blob(data), .real(started.timeIntervalSince1970)]
             ).first?.first?.integer else { return nil }
@@ -907,6 +912,7 @@ nonisolated struct MailStore: Sendable {
         /// The text of the explanation's first point, nil without one.
         var firstPoint: String?
         var isTooLarge: Bool
+        var hasDraft: Bool
         /// The To, Cc and Reply-To, by their role.
         var people: [String: [Person]] = [:]
 
@@ -941,7 +947,7 @@ nonisolated struct MailStore: Sendable {
             return Listed(
                 messageID: messageID, date: date, sender: sender, subject: subject, project: project,
                 level: level, reasons: reasons, movedByUser: movedByUser, reply: reply, warnings: warnings,
-                isExplained: isExplained, hasText: text != nil, isTooLarge: isTooLarge,
+                isExplained: isExplained, hasDraft: hasDraft, hasText: text != nil, isTooLarge: isTooLarge,
                 summary: point.isEmpty ? MailStore.firstSentence(text ?? "") : String(point.prefix(MailStore.summaryLength)),
                 attachments: attachments)
         }
@@ -954,7 +960,7 @@ nonisolated struct MailStore: Sendable {
         precedence, attachments, hidden_text, warnings, project, level, reasons, moved_by_user, reply, \
         substr(text, 1, \(textLength)), substr(visible_text, 1, \(textLength)), explanation IS NOT NULL, \
         CASE WHEN json_valid(CAST(explanation AS TEXT)) THEN json_extract(CAST(explanation AS TEXT), '$.points[0].text') END, \
-        too_large
+        too_large, explanation_draft
         """
     }
 
@@ -984,7 +990,7 @@ nonisolated struct MailStore: Sendable {
     }
 
     private static func row(_ values: [ProjectsDatabase.Value]) -> Row? {
-        guard values.count == 25, let id = values[0].integer, let messageID = values[1].text, let date = values[3].real,
+        guard values.count == 26, let id = values[0].integer, let messageID = values[1].text, let date = values[3].real,
               let senderName = values[4].text, let sender = values[5].text, let subject = values[6].text else { return nil }
         return Row(
             id: id,
@@ -1008,7 +1014,8 @@ nonisolated struct MailStore: Sendable {
             visibleText: values[21].text,
             isExplained: values[22].integer == 1,
             firstPoint: values[23].text,
-            isTooLarge: values[24].integer == 1
+            isTooLarge: values[24].integer == 1,
+            hasDraft: values[25].integer == 1
         )
     }
 
