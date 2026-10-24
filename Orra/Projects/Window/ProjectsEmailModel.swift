@@ -48,8 +48,9 @@ final class ProjectsEmailModel {
         /// The text the user typed into the email's draft, nil when there is none.
         var editedDraft: (String) async -> MailStore.EditedDraft?
         /// Keeps the text the user typed into the email's draft, or with nil removes it,
-        /// and says whether the store did.
-        var saveEditedDraft: (_ messageID: String, MailStore.EditedDraft?) async -> Bool
+        /// and gives the write, which says whether the store did. The write starts before
+        /// this returns, see ProjectsRuntime.saveEditedDraft(_:for:).
+        var saveEditedDraft: (_ messageID: String, MailStore.EditedDraft?) -> Task<Bool, Never>
         /// What a revision checks with, nil when the explanation has no draft to change.
         var reviseContext: (Explanation) async -> ReviseService.Context?
         /// A service for one request on the draft, started at this time, see
@@ -80,7 +81,7 @@ final class ProjectsEmailModel {
                 versions: { [weak runtime] id in await runtime?.versions(of: id) ?? [] },
                 removeNewestVersion: { [weak runtime] id in await runtime?.removeNewestVersion(of: id) ?? false },
                 editedDraft: { [weak runtime] id in await runtime?.editedDraft(of: id) },
-                saveEditedDraft: { [weak runtime] id, edited in await runtime?.saveEditedDraft(edited, for: id) ?? false },
+                saveEditedDraft: { [weak runtime] id, edited in runtime?.saveEditedDraft(edited, for: id) ?? Task { false } },
                 reviseContext: { [weak runtime] explanation in await runtime?.reviseContext(for: explanation) },
                 reviseService: { [weak runtime] started in
                     guard let runtime else { throw ProjectsRuntime.Failure.off }
@@ -505,36 +506,42 @@ final class ProjectsEmailModel {
     // MARK: Saving the user's text
 
     /// Saves the editor's text after `saveDelay`, unless a save waits or runs already, which
-    /// then saves it. What the user typed is saved with the key of the newest draft the
-    /// model made, and the model's draft as it made it removes what the user typed before.
-    /// A save that fails leaves `saveFailed` on until the next one works.
+    /// then saves it. A save that fails leaves `saveFailed` on until the next one works.
     private func saveText() {
         guard saving == nil, isLoaded else { return }
         saving = Task {
             defer { saving = nil }
             while true {
-                // Ends at once when the task is cancelled, see `saveTextNow()`.
                 try? await Task.sleep(for: saveDelay)
-                guard let draft = modelDraft, let key = modelDraftKey, text != savedText else { return }
-                let typed = text
-                let edited = typed == draft ? nil : MailStore.EditedDraft(text: typed, editedFrom: key)
-                guard await actions.saveEditedDraft(messageID, edited) else {
+                // `saveTextNow()` saved in place of this task.
+                guard !Task.isCancelled, let save = startSave() else { return }
+                guard await save.write.value else {
                     saveFailed = true
                     return
                 }
-                savedText = typed
+                savedText = save.text
                 saveFailed = false
             }
         }
     }
 
-    /// Saves the editor's text at once rather than after a pause in typing, such as when
-    /// the window closes. The save runs to its end also after the window let go of this
-    /// email view.
+    /// Starts writing the editor's text, unless the store keeps it already, and gives the
+    /// text with the write. What the user typed goes with the key of the newest draft the
+    /// model made, and the model's draft as it made it removes what the user typed before.
+    private func startSave() -> (text: String, write: Task<Bool, Never>)? {
+        guard let draft = modelDraft, let key = modelDraftKey, text != savedText else { return nil }
+        let typed = text
+        let edited = typed == draft ? nil : MailStore.EditedDraft(text: typed, editedFrom: key)
+        return (typed, actions.saveEditedDraft(messageID, edited))
+    }
+
+    /// Saves the editor's text at once, in place of the save that waits for a pause in
+    /// typing, for an email view the window lets go of, such as when it closes. The write
+    /// starts before this returns, so Projects waits for it when it turns off and closes the
+    /// window, see ProjectsRuntime.saveEditedDraft(_:for:).
     func saveTextNow() {
-        saveDelay = .zero
         saving?.cancel()
-        saveText()
+        _ = startSave()
     }
 
     /// Runs one request of the model as the user's, see Actions.userRequest.

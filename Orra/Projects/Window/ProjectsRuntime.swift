@@ -282,6 +282,9 @@ final class ProjectsRuntime {
     @ObservationIgnored private var resortAfterIndex: Set<UUID> = []
     /// The requests of the user under way, which stopping ends, see `userRequest(_:)`.
     @ObservationIgnored private var userRequests: [UUID: UserRequest] = [:]
+    /// The newest write of the text the user typed into each email's draft since Projects
+    /// started, by Message-ID, which stopping waits for, see `saveEditedDraft(_:for:)`.
+    @ObservationIgnored private var draftSaves: [String: Task<Bool, Never>] = [:]
 
     /// A request of the user under way: how to end it, and a task that ends with it.
     private struct UserRequest {
@@ -608,6 +611,10 @@ final class ProjectsRuntime {
         countTask?.cancel()
         countTask = nil
         self.running = nil
+        // The writes of the text the user typed into drafts, with those that closing the
+        // window started. None starts from here on, since nothing runs.
+        let draftSaves = Array(self.draftSaves.values)
+        self.draftSaves = [:]
         phase = .stopping
         lastOwner = nil
         knownMailboxes = [:]
@@ -622,6 +629,9 @@ final class ProjectsRuntime {
         // the files after they close.
         for request in requests {
             await request.ended.value
+        }
+        for save in draftSaves {
+            _ = await save.value
         }
         await running.list.close()
         await running.store.close()
@@ -1285,15 +1295,25 @@ final class ProjectsRuntime {
     }
 
     /// Keeps the text the user typed into the email's draft, or with nil removes it, and
-    /// says whether the store did. A failed write is logged with its code.
-    func saveEditedDraft(_ edited: MailStore.EditedDraft?, for messageID: String) async -> Bool {
-        guard let store = running?.store else { return false }
-        do {
-            return try await store.save(edited, for: messageID, at: dependencies.now())
-        } catch {
-            MailStore.log(error, "saving the text typed into a draft")
-            return false
+    /// gives the write, which says whether the store did. The write starts at once in the
+    /// store that runs now, after the one before it for the same email, so the newest text
+    /// lands last. A stop waits for it before it closes the store, also when the window
+    /// that saved it closes as Projects turns off. A failed write is logged with its code.
+    func saveEditedDraft(_ edited: MailStore.EditedDraft?, for messageID: String) -> Task<Bool, Never> {
+        guard let store = running?.store else { return Task { false } }
+        let before = draftSaves[messageID]
+        let now = dependencies.now()
+        let save = Task {
+            _ = await before?.value
+            do {
+                return try await store.save(edited, for: messageID, at: now)
+            } catch {
+                MailStore.log(error, "saving the text typed into a draft")
+                return false
+            }
         }
+        draftSaves[messageID] = save
+        return save
     }
 
     /// What a revision, the translation and the answer check of the explanation's draft

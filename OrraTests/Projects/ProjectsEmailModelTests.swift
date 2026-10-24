@@ -191,7 +191,11 @@ struct ProjectsEmailModelTests {
                 }
             },
             editedDraft: { _ in fakes.value.edited },
-            saveEditedDraft: { _, edited in fakes.save(edited) },
+            saveEditedDraft: { _, edited in
+                // Saved at once, as the store's write starts at once.
+                let saved = fakes.save(edited)
+                return Task { saved }
+            },
             reviseContext: { explanation in
                 guard let check = explanation.draftCheck else { return nil }
                 return ReviseService.Context(

@@ -61,6 +61,8 @@ struct ProjectsWindowViewTests {
         await model.show(explained.messageID)
         let email = model.emailModel(for: explained.messageID)
         await email.load()
+        // Only closing the window saves it.
+        email.saveDelay = .seconds(3_600)
         let edited = email.text + "\n\nP.S. The plan follows tonight."
         email.text = edited
         // The window closes, as ProjectsWindow does.
@@ -88,6 +90,41 @@ struct ProjectsWindowViewTests {
             try await Task.sleep(for: .milliseconds(5))
         }
         #expect(try await shown() == edited)
+        await fixture.stop()
+    }
+
+    /// Projects turns off with Keep Data while the window is open, right after the user
+    /// typed into a draft. Closing the window saves the text, and Projects closes its files
+    /// only once that write is done, so the email view opens with it after Projects is on
+    /// again.
+    @Test func theUsersTextOfADraftStaysWhenProjectsTurnsOffWithTheWindowOpen() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let model = ProjectsWindowModel(runtime: runtime)
+        // Turning off closes the window, which lets go of its email views, as
+        // ProjectsWindow does.
+        runtime.closeWindow = { model.forgetEmails() }
+        await model.show(explained.messageID)
+        let email = model.emailModel(for: explained.messageID)
+        await email.load()
+        // Only closing the window saves it.
+        email.saveDelay = .seconds(3_600)
+        let edited = email.text + "\n\nP.S. The plan follows tonight."
+        email.text = edited
+
+        await fixture.projects.turnOff(keepingData: true)
+        for _ in 0..<2_000 where runtime.phase != .off {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        fixture.projects.turnOn()
+        for _ in 0..<2_000 where runtime.phase != .on {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let reopened = ProjectsEmailModel(messageID: explained.messageID, actions: .live(runtime))
+        await reopened.load()
+        #expect(reopened.text == edited)
         await fixture.stop()
     }
 
