@@ -1250,6 +1250,7 @@ struct PushToTalkControllerTests {
         // The wait is over, so right Control records again.
         press(tap, at: &now)
         #expect(controller.state == .handsFree)
+        try await waitUntil { mic.calls.count == 5 }
         _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
         try await waitUntil { controller.state == .idle && mic.calls.count == 6 }
     }
@@ -2739,6 +2740,7 @@ struct PushToTalkControllerTests {
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
         #expect(controller.state == .handsFree)
         #expect(tap.activeKey == .rightControl)
+        try await waitUntil { mic.calls.contains("start") }
         // Escape is swallowed and cancels.
         #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now))
         #expect(controller.state == .idle)
@@ -2986,6 +2988,7 @@ struct PushToTalkControllerTests {
         #expect(controller.state == .arming)
         tap.fireTimer()
         #expect(controller.state == .listening)
+        try await waitUntil { mic.calls.contains("start") }
         controller.setTranslationKeyOn(false)
         // Turning translation off ends the translation key's dictation.
         #expect(controller.state == .idle)
