@@ -94,8 +94,9 @@ final class TextCleanup {
     /// True from the press of the talk key or the translation key until the dictation is over. No idle unload
     /// happens in between.
     @ObservationIgnored private var isDictating = false
-    /// True when the first holder of Projects came during a dictation, so its load waits
-    /// until the dictation is over, see `projectsStarted()`.
+    /// True when a load for Projects waits until the dictation is over: the first holder of
+    /// Projects came during the dictation, see `projectsStarted()`, or only Projects wanted
+    /// the model when a load was asked for or came to its turn during it, see `load(from:)`.
     @ObservationIgnored private var projectsLoadWaitsForDictation = false
     /// Transcripts waiting for the load under way, resumed when it ends, when the last of
     /// cleanup and translation is turned off or when their wait is over.
@@ -234,8 +235,8 @@ final class TextCleanup {
         return true
     }
 
-    /// The dictation is over, pasted or not. Loads the model for Projects when its first
-    /// holder came during the dictation, and starts the idle timer.
+    /// The dictation is over, pasted or not. Loads the model for Projects when that load
+    /// waited for the dictation, and starts the idle timer.
     func dictationEnded() {
         isDictating = false
         if projectsLoadWaitsForDictation {
@@ -350,6 +351,14 @@ final class TextCleanup {
         projectsHolders > 0
     }
 
+    /// True while a dictation runs and only Projects wants the model. A load then waits
+    /// until the dictation is over, so it never competes with the speech model (AGENTS.md).
+    /// Cleanup, translation and captions want the model during a dictation too, so with one
+    /// of them on it loads at once.
+    private var loadWaitsForDictation: Bool {
+        isDictating && projectsNeedModel && !isOn && !translationIsOn && !captionsNeedModel
+    }
+
     /// Whether captions can translate now: they run and the model is in memory. Captions
     /// never wait for a load, they show the transcript alone meanwhile.
     var isReadyForCaptions: Bool {
@@ -445,19 +454,25 @@ final class TextCleanup {
     /// Whether Projects can run a job on the model now. Waits while Orra looks for the
     /// model on disk, at launch or after Try Again, while a load waits for the end of a
     /// dictation, and for a load under way, for as long as they take, since no dictation
-    /// waits for this. False when no holder of `projectsStarted()` remains, when the model
-    /// is not on this Mac, when it failed to load, and at once when the task is cancelled.
+    /// waits for this. A load that gives way to a dictation before it begins is waited for
+    /// after the dictation. False when no holder of `projectsStarted()` remains, when the
+    /// model is not on this Mac, when it failed to load, and at once when the task is
+    /// cancelled.
     func waitUntilLoadedForProjects() async -> Bool {
-        // A model found on disk loads for the holders, see `load(from:)`, and one the
-        // holders wanted during a dictation loads after it, see `projectsStarted()`.
-        while projectsNeedModel, models.state == .checking || projectsLoadWaitsForDictation {
-            guard (try? await sleep(Self.projectsCheckInterval)) != nil else { return false }
-        }
-        guard projectsNeedModel else { return false }
-        if engineState == .unloadedWhileIdle {
-            modelNeededNow(loadingAgainFrom: folder, for: "Projects")
-        }
-        if engineState == .loading {
+        while projectsNeedModel {
+            // A model found on disk loads for the holders, see `load(from:)`, and a load
+            // that waits for a dictation starts after it, see `dictationEnded()`.
+            if models.state == .checking || projectsLoadWaitsForDictation {
+                guard (try? await sleep(Self.projectsCheckInterval)) != nil else { return false }
+                continue
+            }
+            if engineState == .unloadedWhileIdle {
+                modelNeededNow(loadingAgainFrom: folder, for: "Projects")
+            }
+            if projectsLoadWaitsForDictation {
+                continue
+            }
+            guard engineState == .loading else { break }
             let started = ContinuousClock.now
             nextWaiter += 1
             let id = nextWaiter
@@ -475,6 +490,7 @@ final class TextCleanup {
                 }
             }
             Logger.rewrite.notice("Waited \(started.duration(to: .now), privacy: .public) for the cleanup model for Projects, loaded: \(self.projectsNeedModel && self.isLoaded, privacy: .public)")
+            guard !Task.isCancelled else { return false }
         }
         return !Task.isCancelled && projectsNeedModel && isLoaded
     }
@@ -825,8 +841,16 @@ final class TextCleanup {
         }
     }
 
+    /// Loads the model from `folder` after the work queued before it, while something needs
+    /// the model. While a dictation runs and only Projects wants the model, the load waits
+    /// until the dictation is over, see `loadWaitsForDictation`. That holds when the load is
+    /// asked for, as when a download ends, and again when its turn comes.
     private func load(from folder: URL) {
         guard needsModel, engineState == .unloaded || engineState == .failed else { return }
+        guard !loadWaitsForDictation else {
+            loadForProjectsAfterDictation()
+            return
+        }
         self.folder = folder
         engineState = .loading
         loadGeneration += 1
@@ -835,6 +859,14 @@ final class TextCleanup {
             // Turned off, or off and on again, before its turn: the unload queued by
             // turning off runs next, and a newer load after it.
             guard let self, generation == loadGeneration else { return }
+            // A dictation began while the load waited for its turn. The waits of Projects
+            // go on until the load after the dictation, see `waitUntilLoadedForProjects()`.
+            guard !loadWaitsForDictation else {
+                engineState = .unloaded
+                loadForProjectsAfterDictation()
+                resumeAllWaiters()
+                return
+            }
             // Reserves the model gate for the load and the prompts read after it, at
             // launch, at the press of a key and from Settings alike, so a voice model that
             // waits does not come in between, see ModelGate.reserve.
@@ -859,6 +891,13 @@ final class TextCleanup {
             }
             scheduleIdleUnload()
         }
+    }
+
+    /// Leaves the load of the model for Projects until the dictation is over, see
+    /// `dictationEnded()`.
+    private func loadForProjectsAfterDictation() {
+        projectsLoadWaitsForDictation = true
+        Logger.rewrite.notice("The cleanup model loads for Projects after the dictation")
     }
 
     /// Runs engine work after the work queued before it.
