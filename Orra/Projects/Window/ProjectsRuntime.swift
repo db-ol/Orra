@@ -225,8 +225,9 @@ final class ProjectsRuntime {
     /// The most Mail handles of messages kept for the window. They hold for one Mail session.
     /// About as many as the emails within the longest days a busy mailbox holds (a guess).
     nonisolated static let maximumReferences = 20_000
-    /// The most emails of Needs a Project sorted again when a project changes.
-    nonisolated static let maximumResorted = 1_000
+    /// The most emails of Needs a Project read at once to sort them again when a project
+    /// changes. Sorting goes on with the next ones until it sorted them all.
+    nonisolated static let resortBatch = 200
 
     private(set) var phase: Phase = .off
     /// What runs, nil while Projects is off.
@@ -282,6 +283,13 @@ final class ProjectsRuntime {
     @ObservationIgnored private var referenceSession = 0
     /// The most handles kept, `maximumReferences` in the app. Tests set fewer.
     @ObservationIgnored var referenceLimit = ProjectsRuntime.maximumReferences
+    /// The emails a list of the window reads at once, `MailStore.listPage` in the app. When
+    /// the projects change, sorting asks the model only about as many of the newest emails
+    /// of Needs a Project. Tests set fewer.
+    @ObservationIgnored var listPage = MailStore.listPage
+    /// The emails of Needs a Project read at once to sort them again, `resortBatch` in the
+    /// app. Tests set fewer.
+    @ObservationIgnored var resortBatchLimit = ProjectsRuntime.resortBatch
     /// How long Explain Selected Message waits for sorting to file a message, `sortingWait`
     /// in the app. Nil waits until sorting filed it, for tests that check the list the
     /// window then shows, so the speed of a busy test runner does not decide that list.
@@ -890,29 +898,55 @@ final class ProjectsRuntime {
     nonisolated static let sortingWait: Duration = .seconds(2)
 
     /// Sorts the mail of Needs a Project again, which the user did not move there, after
-    /// a change of the projects. A newer request ends the one under way, whose list and
-    /// projects are out of date, so one runs at a time.
+    /// a change of the projects: all of it, oldest first, `resortBatchLimit` emails at a
+    /// time. Only the newest `listPage` of it may go to the model. The rules alone sort the
+    /// older emails and file only those they file on their own, in a project or in Set
+    /// Aside, so the others stay as they were and the model work stays within that bound.
+    /// A newer request ends the one under way, whose projects are out of date, so one runs
+    /// at a time.
     private func resortNeedsProject() {
         guard let running else { return }
         let store = running.store
         let sorting = running.sorting
+        let newest = listPage
+        let batchLimit = resortBatchLimit
         let previous = resortTask
         previous?.cancel()
         resortTask = Task { [weak self] in
             await previous?.value
             guard !Task.isCancelled else { return }
-            let listed = (try? await store.list(.needsProject, limit: Self.maximumResorted)) ?? []
-            var emails: [SortingService.Email] = []
-            for row in listed where !row.movedByUser {
-                guard !Task.isCancelled else { return }
-                if let email = try? await store.sortingEmail(row.messageID) {
-                    emails.append(email)
-                }
+            // The newest of the older emails, nil when there are none.
+            let end: MailStore.Cursor?
+            do {
+                end = try await store.resortEnd(beforeNewest: newest)
+            } catch {
+                return
             }
-            guard !emails.isEmpty, !Task.isCancelled, self?.running?.sorting === sorting else { return }
-            await sorting.sort(emails)
-            // Also when a newer one ended it, since some emails may have moved.
-            self?.mailChanged()
+            var cursor: MailStore.Cursor?
+            var rulesOnly = end != nil
+            while !Task.isCancelled {
+                guard let batch = try? await store.resortBatch(after: cursor, through: rulesOnly ? end : nil, limit: batchLimit),
+                      !Task.isCancelled, self?.running?.sorting === sorting else { return }
+                guard let next = batch.next else {
+                    // The older emails are sorted. The newest come next, with the model.
+                    guard rulesOnly else { return }
+                    rulesOnly = false
+                    continue
+                }
+                await sorting.sort(batch.emails, rulesOnly: rulesOnly)
+                // Also when a newer one ended it, since some emails may have moved.
+                self?.mailChanged()
+                cursor = next
+            }
+        }
+    }
+
+    /// Waits until the sorting again of Needs a Project ends, also one that a newer request
+    /// started meanwhile, for tests.
+    func untilResorted() async {
+        while let task = resortTask {
+            await task.value
+            if task == resortTask { return }
         }
     }
 
@@ -927,25 +961,37 @@ final class ProjectsRuntime {
         }
     }
 
-    /// The emails of a list of the window, newest first.
-    func list(_ place: MailStore.Place) async -> [MailStore.Listed] {
+    /// The emails of a list of the window, newest first, at most `limit`.
+    func list(_ place: MailStore.Place, limit: Int = MailStore.listPage) async -> [MailStore.Listed] {
         guard let store = running?.store else { return [] }
         do {
-            return try await store.list(place)
+            return try await store.list(place, limit: limit)
         } catch {
             Logger.projects.error("Projects could not read a list of mail: \(Self.logName(error), privacy: .public)")
             return []
         }
     }
 
+    /// An email as a list of the window shows it, read alone, nil when the store does not
+    /// hold it.
+    func listed(_ messageID: String) async -> MailStore.Listed? {
+        try? await running?.store.listed(messageID)
+    }
+
+    /// How many emails a list of the window holds.
+    func count(_ place: MailStore.Place) async -> Int {
+        (try? await running?.store.count(place)) ?? 0
+    }
+
+    /// The list that holds an email and how many emails come before it there, nil when the
+    /// store does not hold it.
+    func position(of messageID: String) async -> (place: MailStore.Place, index: Int)? {
+        try? await running?.store.position(of: messageID)
+    }
+
     /// Where an email is listed, for Explain Selected Message.
     func place(of messageID: String) async -> MailStore.Place {
-        guard let store = running?.store else { return .needsProject }
-        if let project = try? await store.explainEmail(messageID)?.project {
-            return .project(project)
-        }
-        let setAside = (try? await store.list(.setAside)) ?? []
-        return setAside.contains { $0.messageID == messageID } ? .setAside : .needsProject
+        await position(of: messageID)?.place ?? .needsProject
     }
 
     /// The user moves an email to a project, or to Needs a Project with nil. Returns the rule

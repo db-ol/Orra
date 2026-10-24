@@ -687,6 +687,7 @@ struct ProjectsWindowViewTests {
                 Divider()
             }
             ProjectsWindowView.RuleOfferBar(text: ProjectsWindowText.ruleOffer(.sender("mei@harbor.example"), project: "Harbor"), accept: {}, decline: {})
+            ProjectsWindowView.OlderEmailsBar(shown: 2_000, total: 2_345, load: {})
             ProjectsWindowView.StatusLines(runtime: runtime, model: listModel, openSettings: {})
             Spacer()
         }
@@ -704,6 +705,8 @@ struct ProjectsWindowViewTests {
         try await render(ProjectsEmailArea(runtime: runtime, model: model, email: Self.listed(level: .sure, reply: .reply(.en))), size: NSSize(width: 520, height: 300), to: folder.appendingPathComponent("\(language)-projects-email.png"))
 
         let explained = try await Self.explainedEmail(in: runtime)
+        // As if a source of another email showed it, so Back to Previous Email shows.
+        model.selectedMessageID = "earlier@harbor.example"
         await model.show(explained.messageID)
         let emailModel = model.emailModel(for: explained.messageID)
         await emailModel.load()

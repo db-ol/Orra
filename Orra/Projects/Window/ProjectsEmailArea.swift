@@ -2,6 +2,8 @@ import SwiftUI
 
 /// The email view, the third column of the Projects window while an email is selected
 /// (plan section 5, projects-email-view), top to bottom:
+/// - Back to Previous Email, after an earlier email's chip showed this email. It stays
+///   above the rest, which scrolls, since the chip is often far down.
 /// - the sender, date and subject, the marks, and Explain or Explain Again
 /// - the project chip with its reasons, whose menu assigns the email to another project in
 ///   Orra. The email stays where it is in Mail.
@@ -55,44 +57,50 @@ struct ProjectsEmailArea: View {
 
     var body: some View {
         @Bindable var emailModel = model.emailModel(for: email.messageID)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                ProjectChip(runtime: runtime, model: model, email: email)
+        VStack(spacing: 0) {
+            if model.previousEmail != nil {
+                backBar
                 Divider()
-                if let explanation = emailModel.explanation {
-                    Picker("Show", selection: $emailModel.showsOriginal) {
-                        Text("Explanation").tag(false)
-                        Text("Original Email").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    if emailModel.showsOriginal {
-                        let warnings = ExplanationSections.warnings(explanation, listed: email.warnings)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    ProjectChip(runtime: runtime, model: model, email: email)
+                    Divider()
+                    if let explanation = emailModel.explanation {
+                        Picker("Show", selection: $emailModel.showsOriginal) {
+                            Text("Explanation").tag(false)
+                            Text("Original Email").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        if emailModel.showsOriginal {
+                            let warnings = ExplanationSections.warnings(explanation, listed: email.warnings)
+                            if !warnings.isEmpty {
+                                WarningList(items: warnings, model: model, emailModel: emailModel)
+                            }
+                            original(emailModel)
+                            // The draft is the model's text, so a line sets it apart from the mail's.
+                            Divider()
+                        } else {
+                            ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
+                        }
+                        DraftSection(
+                            runtime: runtime, emailModel: emailModel, explanation: explanation,
+                            isExplaining: model.explaining[email.messageID] == .explaining)
+                    } else {
+                        // Before it is explained: the rule findings, and the email itself.
+                        let warnings = ProjectsWarning.allCases.filter(email.warnings.contains).map { ExplanationSections.Item(warning: $0, places: []) }
                         if !warnings.isEmpty {
                             WarningList(items: warnings, model: model, emailModel: emailModel)
                         }
                         original(emailModel)
-                        // The draft is the model's text, so a line sets it apart from the mail's.
-                        Divider()
-                    } else {
-                        ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
                     }
-                    DraftSection(
-                        runtime: runtime, emailModel: emailModel, explanation: explanation,
-                        isExplaining: model.explaining[email.messageID] == .explaining)
-                } else {
-                    // Before it is explained: the rule findings, and the email itself.
-                    let warnings = ProjectsWarning.allCases.filter(email.warnings.contains).map { ExplanationSections.Item(warning: $0, places: []) }
-                    if !warnings.isEmpty {
-                        WarningList(items: warnings, model: model, emailModel: emailModel)
-                    }
-                    original(emailModel)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
         }
         .task(id: Reload(email: email, model: model)) {
             // The answer check runs on its own only for a draft made in this window, see
@@ -118,6 +126,20 @@ struct ProjectsEmailArea: View {
     }
 
     // MARK: The header
+
+    /// Back to Previous Email, after an earlier email's chip showed this email.
+    private var backBar: some View {
+        Button {
+            Task { await model.showPreviousEmail() }
+        } label: {
+            Label("Back to Previous Email", systemImage: "chevron.backward")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+    }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {

@@ -201,15 +201,29 @@ struct ProjectsWindowView: View {
                 }
                 Divider()
             }
-            List(model.rows, id: \.messageID, selection: $model.selectedMessageID) { email in
-                MailRow(email: email, deadline: model.deadlines[email.messageID].flatMap { ProjectsWindowText.deadline($0, now: runtime.dependencies.now()) })
-                    .contextMenu {
-                        moveMenu(email)
+            ScrollViewReader { scroller in
+                List(model.rows, id: \.messageID, selection: $model.selectedMessageID) { email in
+                    MailRow(email: email, deadline: model.deadlines[email.messageID].flatMap { ProjectsWindowText.deadline($0, now: runtime.dependencies.now()) })
+                        .contextMenu {
+                            moveMenu(email)
+                        }
+                }
+                .overlay {
+                    if model.rows.isEmpty {
+                        ContentUnavailableView("No Mail", systemImage: "tray")
                     }
+                }
+                .onChange(of: model.showCount) {
+                    // The email a source or Explain Selected Message showed, which may be far
+                    // down the list.
+                    if let id = model.selectedMessageID {
+                        scroller.scrollTo(id, anchor: .center)
+                    }
+                }
             }
-            .overlay {
-                if model.rows.isEmpty {
-                    ContentUnavailableView("No Mail", systemImage: "tray")
+            if model.hasOlderEmails {
+                OlderEmailsBar(shown: model.rows.count, total: model.total) {
+                    Task { await model.loadOlderEmails() }
                 }
             }
             StatusLines(runtime: runtime, model: model, openSettings: openSettings)
@@ -394,6 +408,27 @@ extension ProjectsWindowView {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
+        }
+    }
+
+    /// The line under a list that shows only its newest emails, with how many it holds, and
+    /// Load Older Emails.
+    struct OlderEmailsBar: View {
+        let shown: Int
+        let total: Int
+        let load: () -> Void
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Divider()
+                Text(verbatim: ProjectsWindowText.olderEmails(shown: shown, total: total))
+                    .foregroundStyle(.secondary)
+                Button("Load Older Emails", action: load)
+            }
+            .font(.callout)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding([.horizontal, .bottom], 10)
         }
     }
 

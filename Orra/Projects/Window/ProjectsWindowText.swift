@@ -53,6 +53,11 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
+    /// The line under a list that shows only its newest emails.
+    static func olderEmails(shown: Int, total: Int) -> String {
+        String(localized: "Showing the newest \(shown) of \(total) emails.")
+    }
+
     static func explainFailure(_ failure: ProjectsWindowModel.ExplainFailure) -> String {
         switch failure {
         case .noModel: String(localized: "The cleanup model is not on this Mac.")
