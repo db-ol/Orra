@@ -688,6 +688,36 @@ struct MailScanTests {
         for other in [MailBridgeError.mailNotRunning, .notFound, .changedWhileReading, .failed(code: -10_000)] {
             #expect(MailScan.wait(after: other, previous: .seconds(480)) == minute)
         }
+        // A store that fails, as on a full disk, makes it wait as long.
+        #expect(MailScan.wait(after: nil, storeFailed: true, previous: minute) == .seconds(120))
+        #expect(MailScan.wait(after: .notFound, storeFailed: true, previous: .seconds(960)) == .seconds(1_800))
+    }
+
+    /// The loop waits longer while the store fails to save, so a full disk does not have
+    /// each pass read a range of mail again, and goes back to a minute once a save works.
+    @Test func theLoopBacksOffWhileTheStoreFails() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(2), in: .inbox)
+        store.failingSaves = [1, 2]
+        let clock = TestClock()
+        let waits = Waits()
+        let scan = scan(choice([.inbox]), sleep: { duration in
+            waits.add(duration)
+            try await clock.sleep(for: duration)
+        })
+        scan.start()
+        defer { scan.stop() }
+        try await waitUntil { waits.all.count == 1 && clock.sleeping == 1 }
+        #expect(waits.all == [.seconds(120)])
+        clock.advance(by: .seconds(120))
+        try await waitUntil { waits.all.count == 2 && clock.sleeping == 1 }
+        #expect(waits.all == [.seconds(120), .seconds(240)])
+        clock.advance(by: .seconds(240))
+        try await waitUntil { waits.all.count == 3 && clock.sleeping == 1 }
+        #expect(waits.all.last == .seconds(60))
+        #expect(store.saved.count == 2)
+        scan.stop()
+        try await waitUntil { clock.sleeping == 0 }
     }
 
     /// The loop polls every minute, waits longer while Mail times out, and goes back to a

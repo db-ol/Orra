@@ -35,7 +35,7 @@ import os
 ///   Each throws when the store fails.
 /// - It polls every minute. When Mail does not answer (-600 while it runs), times out
 ///   (-1712), or Orra may not control it, the pass ends and the scan waits twice as long
-///   each time, up to 30 minutes.
+///   each time, up to 30 minutes. It does the same when the store fails.
 ///
 /// The user's own addresses and name come from Mail's accounts, or from the override that
 /// a Debug build passes in, with which the scan never asks Mail for the accounts.
@@ -238,7 +238,7 @@ final class MailScan {
         loop = Task(priority: .utility) { [weak self] in
             var wait = MailScan.pollInterval
             while !Task.isCancelled, let pass = await self?.scan() {
-                wait = MailScan.wait(after: pass.error, previous: wait)
+                wait = MailScan.wait(after: pass.error, storeFailed: pass.skipped == .storeFailed, previous: wait)
                 do {
                     try await sleep(wait)
                 } catch {
@@ -261,15 +261,16 @@ final class MailScan {
     }
 
     /// The wait before the next pass. After Mail did not answer, timed out, or refused
-    /// Orra, twice the last wait, at least two poll intervals and at most `longestWait`.
-    /// Otherwise one poll interval.
-    nonisolated static func wait(after error: MailBridgeError?, previous: Duration) -> Duration {
-        switch error {
-        case .notAnswered?, .timedOut?, .denied?, .notAsked?:
-            min(max(previous * 2, pollInterval * 2), longestWait)
-        default:
-            pollInterval
+    /// Orra, or after the store failed, twice the last wait, at least two poll intervals and
+    /// at most `longestWait`. Otherwise one poll interval. A store that keeps failing, as on
+    /// a full disk, would otherwise have each pass read a range of mail from Mail again,
+    /// only to fail to save it.
+    nonisolated static func wait(after error: MailBridgeError?, storeFailed: Bool = false, previous: Duration) -> Duration {
+        let waitsLonger = switch error {
+        case .notAnswered?, .timedOut?, .denied?, .notAsked?: true
+        default: storeFailed
         }
+        return waitsLonger ? min(max(previous * 2, pollInterval * 2), longestWait) : pollInterval
     }
 
     // MARK: The user
