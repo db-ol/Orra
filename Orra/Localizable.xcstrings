@@ -2853,6 +2853,28 @@
         }
       }
     },
+    "Choose an email in Needs a Project and assign it to this project with Assign to Project." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige un correo en Sin proyecto y usa Asignar a proyecto para asignarlo a este proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト未定”でメールを選び、“プロジェクトに割り当てる”でこのプロジェクトに割り当ててください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“待归入项目”中选择一封邮件，然后用“归入项目”把它归入这个项目。"
+          }
+        }
+      }
+    },
     "Choose Orra Microphone as the microphone in the meeting app. Orra speaks one translation after another, and waits while you dictate." : {
       "localizations" : {
         "es-419" : {
@@ -7424,6 +7446,28 @@
         }
       }
     },
+    "Mail is slow to answer. Projects tries again later." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail tarda en responder. Proyectos volverá a intentarlo más tarde."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”の応答が遅れています。“プロジェクト”は後でもう一度試します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”响应缓慢。“项目”稍后会再试。"
+          }
+        }
+      }
+    },
     "Mail is slow to answer. The reply may still open. The draft is on the clipboard." : {
       "localizations" : {
         "es-419" : {
@@ -11874,6 +11918,72 @@
         }
       }
     },
+    "Reading mail…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leyendo el correo…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールを読み取り中…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取邮件…"
+          }
+        }
+      }
+    },
+    "Reading mail… %lld emails read." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leyendo el correo… %lld correos leídos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールを読み取り中…%lld件読み取りました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取邮件…已读取 %lld 封。"
+          }
+        }
+      }
+    },
+    "Reading mail… 1 email read." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leyendo el correo… 1 correo leído."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールを読み取り中…1件読み取りました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在读取邮件…已读取 1 封。"
+          }
+        }
+      }
+    },
     "Reading the message in Mail…" : {
       "localizations" : {
         "es-419" : {
@@ -13537,6 +13647,28 @@
         }
       }
     },
+    "Some mail could not be read." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron leer algunos correos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一部のメールを読み取れませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分邮件未能读取。"
+          }
+        }
+      }
+    },
     "Some Projects data could not be deleted. Try again." : {
       "localizations" : {
         "es-419" : {
@@ -13599,6 +13731,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "排序方式"
+          }
+        }
+      }
+    },
+    "Sorting mail…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clasificando el correo…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールを振り分け中…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在归类邮件…"
           }
         }
       }
@@ -16435,6 +16589,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这个键不能作为翻译键。按住它会输入文字或在前台 App 中执行操作。"
+          }
+        }
+      }
+    },
+    "This list could not be read." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer esta lista."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このリストを読み取れませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未能读取这个列表。"
           }
         }
       }

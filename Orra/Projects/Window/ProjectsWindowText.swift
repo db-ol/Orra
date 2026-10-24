@@ -26,6 +26,18 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
+    /// What the scan does, or what ended its last pass.
+    static func scan(_ state: ProjectsRuntime.ScanState) -> String {
+        switch state {
+        case .reading(saved: 0): String(localized: "Reading mail…")
+        case .reading(saved: 1): String(localized: "Reading mail… 1 email read.")
+        case .reading(let saved): String(localized: "Reading mail… \(saved) emails read.")
+        case .mailIsSlow: String(localized: "Mail is slow to answer. Projects tries again later.")
+        case .notAllowed: selection(.notAllowed)
+        case .failed: String(localized: "Some mail could not be read.")
+        }
+    }
+
     /// What Explain Selected Message found, when it shows no email.
     static func selection(_ found: ProjectsRuntime.SelectedMessage) -> String {
         switch found {

@@ -658,6 +658,17 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.rule(.subjectCode("PO-12")) == "Mail with PO-12 in the subject")
     }
 
+    /// The lines about mail: a pass that reads, with what it saved so far, and what stopped
+    /// the last one, each in its own words.
+    @Test func everyStateOfTheScanHasWords() {
+        #expect(ProjectsWindowText.scan(.reading(saved: 0)) == "Reading mail…")
+        #expect(ProjectsWindowText.scan(.reading(saved: 1)) == "Reading mail… 1 email read.")
+        #expect(ProjectsWindowText.scan(.reading(saved: 240)) == "Reading mail… 240 emails read.")
+        let states: [ProjectsRuntime.ScanState] = [.reading(saved: 0), .mailIsSlow, .notAllowed, .failed]
+        #expect(Set(states.map(ProjectsWindowText.scan)).count == states.count)
+        #expect(ProjectsWindowText.scan(.notAllowed) == ProjectsWindowText.selection(.notAllowed))
+    }
+
     // MARK: Render
 
     /// Renders the window's parts into PNG files, for reading the layout and the strings
@@ -692,6 +703,28 @@ struct ProjectsWindowViewTests {
             Spacer()
         }
         try await render(rows, size: NSSize(width: 340, height: 560), to: folder.appendingPathComponent("\(language)-projects-list.png"))
+
+        // The lines about mail as they show under a list with mail, then an empty list,
+        // which says that the fixture's Mail is not open.
+        let mailLines: [ProjectsWindowView.MailLine] = [
+            .init(text: ProjectsWindowText.scan(.reading(saved: 240)), isActivity: true),
+            .init(text: String(localized: "Sorting mail…"), isActivity: true),
+            .init(text: ProjectsWindowText.scan(.mailIsSlow), action: .tryAgain),
+            .init(text: ProjectsWindowText.scan(.notAllowed), action: .settings),
+            .init(text: ProjectsWindowText.scan(.failed), action: .tryAgain),
+        ]
+        let lines = VStack(alignment: .leading, spacing: 12) {
+            ForEach(mailLines, id: \.text) { line in
+                ProjectsWindowView.MailLineView(line: line, alignment: .leading, runtime: runtime, openSettings: {})
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            Divider()
+            ProjectsWindowView.EmptyList(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {})
+                .frame(maxWidth: .infinity, minHeight: 220)
+        }
+        .padding(10)
+        try await render(lines, size: NSSize(width: 340, height: 620), to: folder.appendingPathComponent("\(language)-projects-mail-lines.png"))
 
         let project = try #require(runtime.projectList.first)
         try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}, removeRule: { _ in }), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
@@ -826,7 +859,7 @@ struct ProjectsWindowViewTests {
             messageID: id, change: .tone(.formal),
             check: DraftCheck.Result(draft: draft.replacingOccurrences(of: "Hi Mei", with: "Dear Mei").replacingOccurrences(of: "today", with: "on Monday"), language: .en, outsideRecipients: ["kai@kiln.example"]))
         #expect(try await store.save(version, startedAt: today, at: today) == 1)
-        return try #require(await runtime.list(.project(project)).first { $0.messageID == id })
+        return try #require(try await runtime.list(.project(project)).first { $0.messageID == id })
     }
 
     private func render(_ view: some View, size: NSSize, to file: URL) async throws {

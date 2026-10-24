@@ -70,10 +70,10 @@ struct ProjectsSuggestedSectionTests {
         // did, however long sorting takes on a busy test runner, and its time limit bounds
         // the wait.
         try await runtime.add(project)
-        while await runtime.list(.project(project.id)).count < 3 {
+        while try await runtime.list(.project(project.id)).count < 3 {
             try await Task.sleep(for: .milliseconds(5))
         }
-        #expect(Set(await runtime.list(.project(project.id)).map(\.messageID)) == ["h1@harbor.example", "h2@harbor.example", "h3@harbor.example"])
+        #expect(Set(try await runtime.list(.project(project.id)).map(\.messageID)) == ["h1@harbor.example", "h2@harbor.example", "h3@harbor.example"])
         await service.refresh()
         #expect(service.suggestions.map(\.name) == ["kiln.example"])
 

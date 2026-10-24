@@ -25,6 +25,9 @@ import os
 ///   again when a project is added or changed, when the index of that project finishes, and
 ///   when the user accepts a rule, since the mail read before had nothing to go to. A newer
 ///   change ends the one under way, whose list is out of date.
+/// - The window lists each batch the scan saves at once, before sorting ends, and says what
+///   the scan does: a pass that reads the mailboxes back to the days, and what ended the last
+///   pass, see `ScanState`. Try Again starts the scan again at once, see `readAgain()`.
 /// - Mail's handle of each email the scan lists is kept for Open Reply in Mail. The handles
 ///   hold for one Mail session, so the scan stops when Mail quits and starts again with Mail,
 ///   which lists every chosen mailbox back to the chosen days again.
@@ -203,6 +206,20 @@ final class ProjectsRuntime {
         case failed(MailBridgeError)
     }
 
+    /// What the window says about the scan: a pass that reads the mailboxes back to the
+    /// days, or what ended the last pass. Nil while the scan only looks for new mail.
+    nonisolated enum ScanState: Equatable, Sendable {
+        /// A pass reads a mailbox back to the chosen days, which takes a while, with the
+        /// emails it saved so far.
+        case reading(saved: Int)
+        /// Mail did not answer in time, so the scan waits longer before it asks again.
+        case mailIsSlow
+        /// macOS does not allow Orra to control Mail.
+        case notAllowed
+        /// Mail could not give some mail, or what the scan read could not be saved.
+        case failed
+    }
+
     /// What runs while Projects is on.
     struct Running {
         let database: ProjectsDatabase
@@ -238,6 +255,8 @@ final class ProjectsRuntime {
     private(set) var windowHoldsModel = false
     /// Whether Mail runs, as last read.
     private(set) var mailIsRunning = false
+    /// What the scan does, or what ended its last pass, for the window.
+    private(set) var scanState: ScanState?
     /// How many emails wait for a reply, for the menu.
     private(set) var replyDueCount = 0
     /// Counts the changes of the mail the window lists, so it reads its lists again.
@@ -256,6 +275,8 @@ final class ProjectsRuntime {
     @ObservationIgnored private var isFollowing = false
     @ObservationIgnored private var scanStarted = false
     @ObservationIgnored private var scanCheck: Task<Void, Never>?
+    /// Whether the pass under way could not save what it read.
+    @ObservationIgnored private var passSaveFailed = false
     @ObservationIgnored private var sortTask: Task<Void, Never>?
     @ObservationIgnored private var sortAgain = false
     @ObservationIgnored private var countTask: Task<Void, Never>?
@@ -342,6 +363,11 @@ final class ProjectsRuntime {
     /// Why the model work waits now, nil while it runs or when none runs.
     var pause: ProjectsModelQueue.Pause? {
         running?.queue.pause
+    }
+
+    /// Whether sorting works on a batch of mail now, for the window.
+    var isSorting: Bool {
+        (running?.sorting.unfinishedBatches ?? 0) > 0
     }
 
     /// The user's projects, in the order they were added.
@@ -572,6 +598,7 @@ final class ProjectsRuntime {
                 linkedMailboxes: { [weak self] in await self?.linkedMailboxes() ?? [] }
             ),
             save: { [weak self] messages in try await self?.saveScanned(messages) },
+            report: { [weak self] report in self?.scanReported(report) },
             ownerOverride: dependencies.ownerOverride(),
             isOn: { [projects] in projects.isOn },
             isDictating: dependencies.isDictating,
@@ -631,6 +658,8 @@ final class ProjectsRuntime {
         scanCheck = nil
         running.scan.stop()
         scanStarted = false
+        show(nil)
+        passSaveFailed = false
         sortTask?.cancel()
         sortTask = nil
         sortAgain = false
@@ -764,6 +793,8 @@ final class ProjectsRuntime {
                     scan.stop()
                     scanStarted = false
                 }
+                // The window says that Mail is not open.
+                show(nil)
             }
         }
         updateScan()
@@ -772,6 +803,13 @@ final class ProjectsRuntime {
     /// Settings changed whether Orra may control Mail. A scan that waits after a refusal
     /// starts again at once.
     func mailAccessChanged() {
+        readAgain()
+    }
+
+    /// Try Again in the window, after Mail did not answer or the scan failed: the scan stops
+    /// with the wait it is in and starts again at once, once the check allows it. Its first
+    /// pass reads the mailboxes back to the days, so it also reads what a failed save lost.
+    func readAgain() {
         restartScan()
         updateScan()
     }
@@ -782,6 +820,7 @@ final class ProjectsRuntime {
         guard let running, scanStarted else { return }
         running.scan.stop()
         scanStarted = false
+        show(nil)
         updateScan()
     }
 
@@ -796,6 +835,8 @@ final class ProjectsRuntime {
                 running.scan.stop()
                 scanStarted = false
             }
+            // The window says that Projects reads no mail yet.
+            show(nil)
             return
         }
         guard !scanStarted, scanCheck == nil, dependencies.bridge.isRunning() else { return }
@@ -811,8 +852,12 @@ final class ProjectsRuntime {
                   self.dependencies.choice.isConfirmed else { return }
             guard permission == .allowed || permission == .unknown else {
                 Logger.projectsMail.notice("Mail scan: not started, permission \(String(describing: permission), privacy: .public)")
+                if permission == .denied || permission == .notAsked {
+                    self.show(.notAllowed)
+                }
                 return
             }
+            self.show(nil)
             current.scan.start()
             self.scanStarted = true
         }
@@ -821,6 +866,55 @@ final class ProjectsRuntime {
     /// Whether the scan runs, for tests.
     var isScanning: Bool {
         scanStarted
+    }
+
+    /// What a pass of the scan told: one that reads the mailboxes back to the days shows as
+    /// reading, and its end shows what stopped it, if anything. A poll changes nothing until
+    /// it ends, so the window does not flicker each minute. Neither does a pass after one
+    /// that failed, which reads back what failed and may fail the same way, as a mailbox
+    /// Mail no longer has does at each pass.
+    private func scanReported(_ report: MailScan.Report) {
+        guard running != nil else { return }
+        switch report {
+        case .began(let readsBack):
+            passSaveFailed = false
+            if readsBack, scanState != .failed {
+                show(.reading(saved: 0))
+            }
+        case .ended(let pass):
+            show(Self.scanState(after: pass, saveFailed: passSaveFailed))
+        }
+    }
+
+    /// What the window says once a pass ended: why it stopped, that some mail could not be
+    /// read or saved, or nothing. A message Mail gives with no source, or not at all, ends no
+    /// pass, and later passes read it again. A pass the store ended, since it could not save
+    /// what the pass read or say which mail it knows, says that some mail could not be read,
+    /// and the next pass reads that mailbox back. A pass that Projects, the confirm or Mail
+    /// ended says nothing, since the window says why on its own.
+    nonisolated static func scanState(after pass: MailScan.Pass, saveFailed: Bool) -> ScanState? {
+        if pass.skipped == .storeFailed {
+            return .failed
+        }
+        guard pass.skipped == nil else { return nil }
+        if saveFailed {
+            return .failed
+        }
+        switch pass.error {
+        case .notAnswered?, .timedOut?: return .mailIsSlow
+        case .denied?, .notAsked?: return .notAllowed
+        case .notFound?, .changedWhileReading?, .unexpectedReply?, .failed?: return .failed
+        case .mailNotRunning?: return nil
+        case nil: return pass.unreadable > 0 ? .failed : nil
+        }
+    }
+
+    /// Changes what the window says about the scan, only when it differs, since each change
+    /// makes the window draw again.
+    private func show(_ state: ScanState?) {
+        if scanState != state {
+            scanState = state
+        }
     }
 
     /// The user's addresses and name: the Debug override, else Mail's accounts once the
@@ -837,8 +931,11 @@ final class ProjectsRuntime {
         return lastOwner ?? SortingService.Owner(addresses: [])
     }
 
-    /// Saves what the scan read and sorts the mail that waits. A failed save is logged with
-    /// its code and thrown, so the scan reads that mail again in its next pass.
+    /// Saves what the scan read, lists it in the window at once as not sorted yet, and sorts
+    /// the mail that waits. A batch sorting still works on, such as while the model is paused
+    /// or slow, does not hold the new mail back from the window. A failed save is logged with
+    /// its code and thrown, so the scan reads that mail again in its next pass, and the window
+    /// says so.
     private func saveScanned(_ messages: [MailScan.Message]) async throws {
         guard let running, !messages.isEmpty else { return }
         // Kept before the first wait, so a stop or Mail's quit meanwhile lets them go. Handles
@@ -853,8 +950,18 @@ final class ProjectsRuntime {
         do {
             let saved = try await running.store.save(messages.map { Self.storeMessage($0, now: now) }, ownAddresses: owner.addresses, at: now)
             Logger.projects.notice("Projects saved \(saved.count, privacy: .public) of \(messages.count, privacy: .public) emails the scan read")
+            if self.running?.database === running.database, !saved.isEmpty {
+                if case .reading(let before)? = scanState {
+                    show(.reading(saved: before + saved.count))
+                }
+                mailChanged()
+            }
         } catch {
             Logger.projects.error("Projects could not save the emails the scan read: \(Self.logName(error), privacy: .public)")
+            if self.running?.database === running.database {
+                passSaveFailed = true
+                show(.failed)
+            }
             throw error
         }
         requestSort()
@@ -961,14 +1068,16 @@ final class ProjectsRuntime {
         }
     }
 
-    /// The emails of a list of the window, newest first, at most `limit`.
-    func list(_ place: MailStore.Place, limit: Int = MailStore.listPage) async -> [MailStore.Listed] {
+    /// The emails of a list of the window, newest first, at most `limit`, none while
+    /// Projects does not run. Throws when the store could not read them, which the window
+    /// says, since an empty list would say there is no mail.
+    func list(_ place: MailStore.Place, limit: Int = MailStore.listPage) async throws -> [MailStore.Listed] {
         guard let store = running?.store else { return [] }
         do {
             return try await store.list(place, limit: limit)
         } catch {
             Logger.projects.error("Projects could not read a list of mail: \(Self.logName(error), privacy: .public)")
-            return []
+            throw error
         }
     }
 

@@ -2,12 +2,12 @@ import Foundation
 import Observation
 
 /// What the Projects window shows and what the user does there: the list chosen in the
-/// sidebar, its newest mail a page at a time with the deadline marks of the explained ones,
-/// the selected email, the way back after a source showed another email, a move or an
-/// Explain Again that waits for the user's yes, the rule offered after moves, the project
-/// Settings asks to edit, the explanations under way, the email view of each email the user
-/// opened with the window's one handoff at a time, the line after Explain Selected Message,
-/// and Suggested Projects. ProjectsRuntime does the work.
+/// sidebar and whether it could be read, its newest mail a page at a time with the deadline
+/// marks of the explained ones, the selected email, the way back after a source showed
+/// another email, a move or an Explain Again that waits for the user's yes, the rule offered
+/// after moves, the project Settings asks to edit, the explanations under way, the email
+/// view of each email the user opened with the window's one handoff at a time, the line
+/// after Explain Selected Message, and Suggested Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -72,6 +72,7 @@ final class ProjectsWindowModel {
                 aloneEmail = nil
                 total = 0
                 limit = runtime.listPage
+                listFailed = false
             }
         }
     }
@@ -103,6 +104,9 @@ final class ProjectsWindowModel {
     /// The visits the window left to show the email of a source, the newest last, while the
     /// window is open and until the user chooses another email.
     private var history: [Visit] = []
+    /// Whether the store could not read the chosen list the last time, which the list says
+    /// with Try Again in place of No Mail.
+    private(set) var listFailed = false
     /// The rule offered after two moves of the same kind, until the user answers.
     var ruleOffer: SortingService.RuleOffer?
     var notice: Notice?
@@ -202,7 +206,7 @@ final class ProjectsWindowModel {
     /// read, such as an email a source cites, it reads down to that email, at most
     /// `maximumPagesDown` pages. An older one is read alone. When sorting filed the email
     /// Explain Selected Message or a source showed in another list, that list shows with
-    /// it.
+    /// it. A list the store could not read shows no mail, and says so.
     func reload() async {
         guard let place else {
             rows = []
@@ -210,25 +214,36 @@ final class ProjectsWindowModel {
             total = 0
             return
         }
-        var listed = await runtime.list(place, limit: limit)
-        guard place == self.place else { return }
+        var listed: [MailStore.Listed]
         var alone: MailStore.Listed?
-        if let id = followed ?? selectedMessageID, !listed.contains(where: { $0.messageID == id }),
-           let found = await runtime.position(of: id), place == self.place {
-            let page = runtime.listPage
-            if found.place == place, found.index < Self.maximumPagesDown * page {
-                // Whole pages, as Load Older Emails reads them.
-                limit = max(limit, (found.index / page + 1) * page)
-                listed = await runtime.list(place, limit: limit)
-            } else if found.place == place {
-                alone = await runtime.listed(id)
-            } else if id == followed {
-                await show(id, in: found.place)
-                return
+        do {
+            listed = try await runtime.list(place, limit: limit)
+            guard place == self.place else { return }
+            if let id = followed ?? selectedMessageID, !listed.contains(where: { $0.messageID == id }),
+               let found = await runtime.position(of: id), place == self.place {
+                let page = runtime.listPage
+                if found.place == place, found.index < Self.maximumPagesDown * page {
+                    // Whole pages, as Load Older Emails reads them.
+                    limit = max(limit, (found.index / page + 1) * page)
+                    listed = try await runtime.list(place, limit: limit)
+                } else if found.place == place {
+                    alone = await runtime.listed(id)
+                } else if id == followed {
+                    await show(id, in: found.place)
+                    return
+                }
             }
+        } catch {
+            guard place == self.place else { return }
+            rows = []
+            aloneEmail = nil
+            total = 0
+            listFailed = true
+            return
         }
         let total = await runtime.count(place)
         guard place == self.place else { return }
+        listFailed = false
         rows = listed
         aloneEmail = alone
         self.total = total

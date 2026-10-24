@@ -210,7 +210,7 @@ struct ProjectsWindowView: View {
                 }
                 .overlay {
                     if model.rows.isEmpty {
-                        ContentUnavailableView("No Mail", systemImage: "tray")
+                        EmptyList(runtime: runtime, model: model, openSettings: openSettings)
                     }
                 }
                 .onChange(of: model.showCount) {
@@ -432,8 +432,96 @@ extension ProjectsWindowView {
         }
     }
 
-    /// The lines under the list: why the model work waits, whether Mail is open, whether
-    /// Projects reads mail yet, Explain Selected Message at work, and what the last action
+    /// A line about mail coming into the window, see `StatusLines.mailLines(runtime:)`.
+    nonisolated struct MailLine: Equatable, Sendable {
+        /// What the button under the line does.
+        nonisolated enum Action: Sendable {
+            /// Starts the scan again at once, see ProjectsRuntime.readAgain().
+            case tryAgain
+            /// Opens Settings at the Projects page.
+            case settings
+        }
+
+        var text: String
+        /// Whether Projects works on it now, which a spinner shows.
+        var isActivity = false
+        var action: Action?
+    }
+
+    /// A line about mail coming in, with a spinner while Projects works on it, and its
+    /// button.
+    struct MailLineView: View {
+        let line: MailLine
+        let alignment: HorizontalAlignment
+        let runtime: ProjectsRuntime
+        let openSettings: () -> Void
+
+        var body: some View {
+            VStack(alignment: alignment, spacing: 6) {
+                HStack(spacing: 8) {
+                    if line.isActivity {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Text(verbatim: line.text)
+                }
+                switch line.action {
+                case .tryAgain?:
+                    Button("Try Again") {
+                        runtime.readAgain()
+                    }
+                case .settings?:
+                    Button("Settings…", action: openSettings)
+                case nil:
+                    EmptyView()
+                }
+            }
+        }
+    }
+
+    /// What the list says while it shows no mail, in place of No Mail when that would not
+    /// be the whole story: that the store could not read it, with Try Again, or the lines
+    /// about mail coming in. Else No Mail, and for a project how mail gets there.
+    struct EmptyList: View {
+        let runtime: ProjectsRuntime
+        let model: ProjectsWindowModel
+        let openSettings: () -> Void
+
+        var body: some View {
+            let lines = StatusLines.mailLines(runtime: runtime)
+            if model.listFailed {
+                VStack(spacing: 6) {
+                    Text("This list could not be read.")
+                    Button("Try Again") {
+                        Task { await model.reload() }
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .padding()
+            } else if !lines.isEmpty {
+                VStack(spacing: 16) {
+                    ForEach(lines, id: \.text) { line in
+                        MailLineView(line: line, alignment: .center, runtime: runtime, openSettings: openSettings)
+                    }
+                }
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding()
+            } else {
+                ContentUnavailableView {
+                    Label("No Mail", systemImage: "tray")
+                } description: {
+                    if case .project? = model.place {
+                        Text("Choose an email in Needs a Project and assign it to this project with Assign to Project.")
+                    }
+                }
+            }
+        }
+    }
+
+    /// The lines under the list: the lines about mail coming in while the list shows mail,
+    /// Explain Selected Message at work, why the model work waits, and what the last action
     /// found.
     struct StatusLines: View {
         let runtime: ProjectsRuntime
@@ -442,7 +530,10 @@ extension ProjectsWindowView {
 
         var body: some View {
             let lines = Self.lines(runtime: runtime, notice: model.notice)
-            if !lines.isEmpty || runtime.phase == .failed || model.isReadingSelection {
+            // While the list shows no mail, the lines about mail show in its middle instead,
+            // see EmptyList.
+            let mailLines = model.rows.isEmpty && !model.listFailed ? [] : Self.mailLines(runtime: runtime)
+            if !lines.isEmpty || !mailLines.isEmpty || runtime.phase == .failed || model.isReadingSelection {
                 VStack(alignment: .leading, spacing: 6) {
                     Divider()
                     if runtime.phase == .failed {
@@ -452,6 +543,9 @@ extension ProjectsWindowView {
                                 runtime.retry()
                             }
                         }
+                    }
+                    ForEach(mailLines, id: \.text) { line in
+                        MailLineView(line: line, alignment: .leading, runtime: runtime, openSettings: openSettings)
                     }
                     if model.isReadingSelection {
                         HStack(spacing: 8) {
@@ -475,35 +569,61 @@ extension ProjectsWindowView {
             }
         }
 
-        /// Whether a line sends the user to Settings: no mailbox confirmed, Orra not allowed
-        /// to control Mail, or a message in a mailbox Projects does not read.
+        /// What Projects does with mail now, reading or sorting it, then why it reads none
+        /// or stopped reading: no mailbox confirmed, Mail not open, Orra not allowed to
+        /// control Mail, Mail slow to answer, or mail that could not be read. Try Again goes
+        /// with the last two, where asking Mail again helps.
+        static func mailLines(runtime: ProjectsRuntime) -> [MailLine] {
+            guard runtime.phase == .on else { return [] }
+            var lines: [MailLine] = []
+            if let state = runtime.scanState, case .reading = state {
+                lines.append(MailLine(text: ProjectsWindowText.scan(state), isActivity: true))
+            } else if runtime.isSorting {
+                lines.append(MailLine(text: String(localized: "Sorting mail…"), isActivity: true))
+            }
+            if !runtime.choice.isConfirmed {
+                lines.append(MailLine(text: ProjectsWindowText.selection(.noMailboxChosen), action: .settings))
+            } else if !runtime.mailIsRunning {
+                lines.append(MailLine(text: String(localized: "Mail is not open. Projects reads new mail while Mail runs.")))
+            } else if let state = runtime.scanState {
+                switch state {
+                case .reading: break
+                case .mailIsSlow, .failed: lines.append(MailLine(text: ProjectsWindowText.scan(state), action: .tryAgain))
+                case .notAllowed: lines.append(MailLine(text: ProjectsWindowText.scan(state), action: .settings))
+                }
+            }
+            return lines
+        }
+
+        /// Whether the notice sends the user to Settings: Orra not allowed to control Mail,
+        /// or a message in a mailbox Projects does not read or no mailbox chosen. Not when
+        /// a line about mail says the same, which has the button.
         static func leadsToSettings(runtime: ProjectsRuntime, notice: ProjectsWindowModel.Notice?) -> Bool {
-            guard runtime.phase == .on else { return false }
+            guard runtime.phase == .on, noticeLine(runtime: runtime, notice: notice) != nil else { return false }
             switch notice {
             case .selection(.notAllowed)?, .selection(.notInChosenMailbox)?, .selection(.noMailboxChosen)?: return true
-            default: return !runtime.choice.isConfirmed
+            default: return false
             }
         }
 
+        /// Why the model work waits, and what the last action found.
         static func lines(runtime: ProjectsRuntime, notice: ProjectsWindowModel.Notice?) -> [String] {
             var lines: [String] = []
             if let pause = runtime.pause {
                 lines.append(ProjectsWindowText.pause(pause))
             }
-            if runtime.phase == .on {
-                if !runtime.choice.isConfirmed {
-                    lines.append(ProjectsWindowText.selection(.noMailboxChosen))
-                } else if !runtime.mailIsRunning {
-                    lines.append(String(localized: "Mail is not open. Projects reads new mail while Mail runs."))
-                }
-            }
-            if let notice {
-                let line = ProjectsWindowText.notice(notice)
-                if !line.isEmpty, !lines.contains(line) {
-                    lines.append(line)
-                }
+            if let line = noticeLine(runtime: runtime, notice: notice) {
+                lines.append(line)
             }
             return lines
+        }
+
+        /// The notice's line, nil when it says nothing or a line about mail says the same.
+        private static func noticeLine(runtime: ProjectsRuntime, notice: ProjectsWindowModel.Notice?) -> String? {
+            guard let notice else { return nil }
+            let line = ProjectsWindowText.notice(notice)
+            guard !line.isEmpty, !mailLines(runtime: runtime).contains(where: { $0.text == line }) else { return nil }
+            return line
         }
     }
 }
