@@ -4623,7 +4623,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Explicar este correo de nuevo reemplaza su borrador y tus cambios por un borrador nuevo."
+            "value" : "Al explicar este correo de nuevo, se reemplazan su borrador y tus cambios por un borrador nuevo."
           }
         },
         "ja" : {
@@ -12594,7 +12594,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このMacに保存しました。"
+            "value" : "このMacに保存されています。"
           }
         },
         "zh-Hans" : {
@@ -14172,7 +14172,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法保存草稿。关闭窗口前请先拷贝它。"
+            "value" : "无法保存草稿。请在关闭窗口前先拷贝草稿。"
           }
         }
       }
