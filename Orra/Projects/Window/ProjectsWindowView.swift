@@ -70,12 +70,10 @@ struct ProjectsWindowView: View {
                 { ProjectsSuggestedSection.dismiss(suggestion, from: model.suggestions, runtime: runtime) }
             })
         }
-        // Edit Project… beside a linked mailbox in Settings. A sheet that shows already
-        // stays, with what the user typed in it.
-        .onChange(of: model.projectToEdit, initial: true) { _, id in
-            guard let id else { return }
-            model.projectToEdit = nil
-            if setup == nil, let project = runtime.projectList.first(where: { $0.id == id }) {
+        // Edit Project… beside a linked mailbox in Settings. A sheet or a dialog that shows
+        // already stays as it is, with the list behind it.
+        .onChange(of: model.projectToEdit, initial: true) {
+            if let project = model.takeProjectToEdit(presenting: setup != nil || forgetting != nil) {
                 setup = ProjectsSetupView.Draft(project)
             }
         }

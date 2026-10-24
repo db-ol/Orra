@@ -84,8 +84,8 @@ final class ProjectsWindowModel {
     @ObservationIgnored private var deadlinesRead: Set<String> = []
     /// A move that waits for the user's yes.
     var pendingMove: PendingMove?
-    /// The project whose Edit Project sheet the window opens next, as Settings asks.
-    var projectToEdit: UUID?
+    /// The project whose Edit Project sheet Settings asks for, until the window takes it.
+    private(set) var projectToEdit: UUID?
     /// Counts the times the window let go of its email views, so the email view shown reads
     /// its email again into a new one.
     private(set) var emailViewGeneration = 0
@@ -272,12 +272,23 @@ final class ProjectsWindowModel {
         }
     }
 
-    /// Shows a project's page and opens its Edit Project sheet, as Edit Project… beside a
-    /// linked mailbox in Settings asks. A project that is gone changes nothing.
+    /// Asks for a project's Edit Project sheet, as Edit Project… beside a linked mailbox in
+    /// Settings does. The window takes the request with `takeProjectToEdit(presenting:)`.
     func edit(_ project: UUID) {
-        guard runtime.projectList.contains(where: { $0.id == project }) else { return }
-        place = .project(project)
         projectToEdit = project
+    }
+
+    /// Takes the request of `edit(_:)`: shows the project's page and returns the project,
+    /// whose Edit Project sheet the window opens. While the window shows a sheet or a
+    /// dialog, the request goes and the window stays as it is, and so it does for a project
+    /// that is gone.
+    /// - Parameter presenting: whether the window shows a sheet or an alert of its own.
+    func takeProjectToEdit(presenting: Bool) -> Project? {
+        guard let id = projectToEdit else { return nil }
+        projectToEdit = nil
+        guard !presenting, pendingMove == nil, let project = runtime.projectList.first(where: { $0.id == id }) else { return nil }
+        place = .project(id)
+        return project
     }
 
     /// Explains an email, on the user's click.

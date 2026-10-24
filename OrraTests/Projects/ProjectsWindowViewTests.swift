@@ -326,19 +326,31 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsSetupView.choices(["Work/Archive"], current: "Work/Archive") == ["Work/Archive"])
     }
 
-    /// Edit Project… beside a linked mailbox in Settings shows the project's page and asks
-    /// the window for its Edit Project sheet. A project that is gone changes nothing.
+    /// Edit Project… beside a linked mailbox in Settings shows the project's page with its
+    /// Edit Project sheet. While the window shows a sheet or a dialog, the request goes and
+    /// the window stays as it is. A project that is gone changes nothing.
     @Test func settingsOpensEditProjectOfALinkedMailbox() async throws {
         let fixture = try await Fixture()
         defer { fixture.cleanUp() }
         let model = ProjectsWindowModel(runtime: fixture.runtime)
         let project = try #require(fixture.runtime.projectList.first)
         model.edit(UUID())
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
+        model.edit(project.id)
+        #expect(model.projectToEdit == project.id)
+        #expect(model.takeProjectToEdit(presenting: true) == nil)
+        model.pendingMove = ProjectsWindowModel.PendingMove(messageID: "a@harbor.example", project: nil)
+        model.edit(project.id)
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
         #expect(model.place == .needsProject)
         #expect(model.projectToEdit == nil)
+
+        model.pendingMove = nil
         model.edit(project.id)
+        #expect(model.takeProjectToEdit(presenting: false) == project)
         #expect(model.place == .project(project.id))
-        #expect(model.projectToEdit == project.id)
+        #expect(model.projectToEdit == nil)
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
         await fixture.stop()
     }
 
