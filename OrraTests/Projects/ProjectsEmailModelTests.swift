@@ -475,6 +475,7 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsEmailModel.note(ReviseService.Failure.tooLong) == .tooLong)
         #expect(ProjectsEmailModel.note(RewriteError.promptTooLong) == .tooLong)
         #expect(ProjectsEmailModel.note(ProjectsRuntime.Failure.windowClosed) == .noModel)
+        #expect(ProjectsEmailModel.note(ProjectsRuntime.Failure.modelNotLoaded) == .modelNotLoaded)
         #expect(ProjectsEmailModel.note(ReviseService.Failure.emptyDraft) == .emptyDraft)
         #expect(ProjectsEmailModel.note(CocoaError(.fileNoSuchFile)) == .other)
     }

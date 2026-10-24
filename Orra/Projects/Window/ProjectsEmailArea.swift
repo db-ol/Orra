@@ -23,6 +23,9 @@ struct ProjectsEmailArea: View {
     let runtime: ProjectsRuntime
     let model: ProjectsWindowModel
     let email: MailStore.Listed
+    /// Opens Settings at the Projects page, nil where the view is shown without it, which
+    /// leaves out its button.
+    var openSettings: (() -> Void)? = nil
 
     /// Reads the explanation again when the email changes project, is explained, Retention
     /// removed its explanation, or the window let go of its email view, such as after Forget
@@ -153,9 +156,28 @@ struct ProjectsEmailArea: View {
             }
         }
         if case .failed(let failure)? = state {
-            Text(verbatim: ProjectsWindowText.explainFailure(failure))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(verbatim: ProjectsWindowText.explainFailure(failure))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // The way out when the model is missing or could not be loaded. The button
+                // keeps its whole name, and the line wraps beside it.
+                switch failure {
+                case .noModel:
+                    if let openSettings {
+                        Button("Open Projects Settings…", action: openSettings)
+                            .fixedSize()
+                    }
+                case .modelNotLoaded:
+                    Button("Try Loading Again") {
+                        Task { await model.loadModelAgain(explaining: email.messageID) }
+                    }
+                    .fixedSize()
+                    .disabled(runtime.phase != .on)
+                case .tooLong, .other:
+                    EmptyView()
+                }
+            }
         } else if !email.hasText {
             // Retention removed its text, or it was too large to read.
             Text("This email has no text to explain.")

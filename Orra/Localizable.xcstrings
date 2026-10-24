@@ -3312,6 +3312,28 @@
         }
       }
     },
+    "Could not be loaded" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo cargar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込めませんでした"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法载入"
+          }
+        }
+      }
+    },
     "Could not be read" : {
       "localizations" : {
         "es-419" : {
@@ -3950,6 +3972,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载语音模型（%@）"
+          }
+        }
+      }
+    },
+    "Download the cleanup model to explain this email." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descarga el modelo de limpieza para explicar este correo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメールを説明するには、整文モデルをダウンロードしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要解释这封邮件，请先下载整理模型。"
           }
         }
       }
@@ -8786,6 +8830,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开麦克风设置…"
+          }
+        }
+      }
+    },
+    "Open Projects Settings…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir configuración de Proyectos…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”設定を開く…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“项目”设置…"
           }
         }
       }
@@ -13907,6 +13973,28 @@
         }
       }
     },
+    "The cleanup model could not be loaded." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo cargar el modelo de limpieza."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整文モデルを読み込めませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法载入整理模型。"
+          }
+        }
+      }
+    },
     "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup." : {
       "localizations" : {
         "es-419" : {
@@ -16408,6 +16496,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在任何 App 中试试：按一下说话键，说点什么，再按一下。文字会出现在你正在输入的位置。"
+          }
+        }
+      }
+    },
+    "Try Loading Again" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volver a cargar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度読み込む"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新载入"
           }
         }
       }

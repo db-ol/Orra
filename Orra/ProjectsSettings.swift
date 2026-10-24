@@ -77,7 +77,7 @@ struct ProjectsSettings: View {
             }
             Section {
                 LabeledContent {
-                    Text(verbatim: Self.modelStatus(cleanup.models.state))
+                    Text(verbatim: Self.modelStatus(cleanup.models.state, engine: cleanup.engineState))
                         .foregroundStyle(.secondary)
                 } label: {
                     DescribedLabel(
@@ -282,10 +282,11 @@ struct ProjectsSettings: View {
         return app?.bundleIdentifier == "com.apple.mail"
     }
 
-    /// Where the cleanup model stands, in the words of this page.
-    static func modelStatus(_ state: ModelInstaller.State) -> String {
+    /// Where the cleanup model stands, in the words of this page. `engine` tells a model on
+    /// this Mac that could not be loaded, see ModelDownload.
+    static func modelStatus(_ state: ModelInstaller.State, engine: TextCleanup.EngineState = .unloaded) -> String {
         switch state {
-        case .installed: String(localized: "On this Mac")
+        case .installed: engine == .failed ? String(localized: "Could not be loaded") : String(localized: "On this Mac")
         case .checking, .verifying: String(localized: "Checking…")
         case .downloading: String(localized: "Downloading…")
         case .missing, .failed: String(localized: "Not on this Mac yet")
@@ -364,7 +365,8 @@ struct ProjectsSettings: View {
 
     /// The cleanup model's download while Projects is on: its progress with Cancel
     /// Download while nothing else waits for it, or what stands in the way with the button
-    /// that downloads it, which names the size. Nothing once the model is on this Mac.
+    /// that downloads it, which names the size. Once the model is on this Mac, Try Loading
+    /// Again when it could not be loaded, and otherwise nothing.
     private struct ModelDownload: View {
         let cleanup: TextCleanup
 
@@ -408,7 +410,19 @@ struct ProjectsSettings: View {
                     Text(verbatim: line)
                         .foregroundStyle(.secondary)
                 }
-            case .installed, .checking:
+            case .installed:
+                if cleanup.engineState == .failed {
+                    HStack {
+                        Text("Until it is, Projects cannot explain mail or draft replies.")
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button("Try Loading Again") {
+                            Task { await cleanup.retryLoading() }
+                        }
+                    }
+                }
+            case .checking:
                 EmptyView()
             }
         }
