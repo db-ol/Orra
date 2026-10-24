@@ -57,7 +57,7 @@ struct MailScanTests {
             bridge: mail.bridge,
             choice: choice,
             lookups: store.lookups,
-            save: { store.save($0) },
+            save: { try store.save($0) },
             ownerOverride: owner,
             isOn: isOn,
             isDictating: isDictating,
@@ -227,6 +227,54 @@ struct MailScanTests {
         await scan.scan()
         #expect(mail.listings == [1...20])
         #expect(mail.sourcesRead.isEmpty)
+    }
+
+    /// A save that fails, as on a full disk, counts nothing it did not save, and leaves the
+    /// mailbox to be read back to the days again. The next pass reads the mail of the failed
+    /// save, past the newest mail the store knows, rather than stop there.
+    @Test func aFailedSaveLeavesTheMailboxToBeReadAgain() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(600, hoursApart: 0.5), in: .inbox)
+        store.failingSaves = [2]
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.skipped == .storeFailed)
+        #expect(first.read == 390)
+        #expect(first.saved == 200)
+        #expect(store.saved.count == 200)
+
+        mail.clearCalls()
+        let second = await scan.scan()
+        #expect(second.skipped == nil)
+        #expect(mail.listings == [1...200, 191...390, 381...580, 571...600])
+        #expect(mail.sourcesRead == Array(201...600))
+        #expect(second.saved == 400)
+        #expect(Set(store.saved.map(\.messageID)).count == 600)
+
+        // Now it polls.
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...20])
+    }
+
+    /// A lookup of the mail the store knows that fails ends the pass too, and no message
+    /// counts as known for it, so the next pass reads the mailbox back to the days again.
+    @Test func aFailedLookupOfKnownMailLeavesTheMailboxToBeReadAgain() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(450), in: .inbox)
+        store.failingLookups = [2]
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.skipped == .storeFailed)
+        #expect(first.saved == 200)
+        #expect(first.known == 0)
+        #expect(mail.sourcesRead == Array(1...200))
+
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...200, 191...390, 381...450])
+        #expect(mail.sourcesRead == Array(201...450))
+        #expect(Set(store.saved.map(\.messageID)).count == 450)
     }
 
     /// Choosing more days reads further back once, past the messages already known.
@@ -984,12 +1032,23 @@ struct MailScanTests {
         /// Holds each lookup of known messages until the test resumes it.
         var holdsKnown = false
         var heldKnown: CheckedContinuation<Void, Never>?
+        /// The saves that fail, counted from 1, as on a full disk. A failed save keeps
+        /// nothing.
+        var failingSaves: Set<Int> = []
+        /// The lookups of known messages that fail, counted from 1.
+        var failingLookups: Set<Int> = []
+        private var saves = 0
+        private var lookupCount = 0
 
         var lookups: MailScan.Lookups {
             MailScan.Lookups(
                 known: { ids in
                     if self.holdsKnown {
                         await withCheckedContinuation { self.heldKnown = $0 }
+                    }
+                    self.lookupCount += 1
+                    if self.failingLookups.contains(self.lookupCount) {
+                        throw Self.diskIOError
                     }
                     return Set(ids).intersection(self.saved.map(\.messageID))
                 },
@@ -1003,7 +1062,14 @@ struct MailScanTests {
         /// Runs once, after the next save, as when the user or Mail acts while a pass reads.
         var afterSave: (() -> Void)?
 
-        func save(_ messages: [MailScan.Message]) {
+        /// SQLITE_IOERR, as the store throws it.
+        static let diskIOError = ProjectsDatabase.Failure(step: .step, code: 10)
+
+        func save(_ messages: [MailScan.Message]) throws {
+            saves += 1
+            if failingSaves.contains(saves) {
+                throw Self.diskIOError
+            }
             saved += messages
             batches.append(messages.map(\.messageID))
             if let afterSave {

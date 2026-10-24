@@ -541,10 +541,10 @@ final class ProjectsRuntime {
             ),
             choice: dependencies.choice,
             lookups: MailScan.Lookups(
-                known: { [store] ids in await Self.known(ids, in: store) },
+                known: { [store] ids in try await Self.known(ids, in: store) },
                 linkedMailboxes: { [weak self] in await self?.linkedMailboxes() ?? [] }
             ),
-            save: { [weak self] messages in await self?.saveScanned(messages) },
+            save: { [weak self] messages in try await self?.saveScanned(messages) },
             ownerOverride: dependencies.ownerOverride(),
             isOn: { [projects] in projects.isOn },
             isDictating: dependencies.isDictating,
@@ -801,8 +801,9 @@ final class ProjectsRuntime {
         return lastOwner ?? SortingService.Owner(addresses: [])
     }
 
-    /// Saves what the scan read and sorts the mail that waits.
-    private func saveScanned(_ messages: [MailScan.Message]) async {
+    /// Saves what the scan read and sorts the mail that waits. A failed save is logged with
+    /// its code and thrown, so the scan reads that mail again in its next pass.
+    private func saveScanned(_ messages: [MailScan.Message]) async throws {
         guard let running, !messages.isEmpty else { return }
         // Kept before the first wait, so a stop or Mail's quit meanwhile lets them go. Handles
         // from before Mail quit are not kept.
@@ -818,6 +819,7 @@ final class ProjectsRuntime {
             Logger.projects.notice("Projects saved \(saved.count, privacy: .public) of \(messages.count, privacy: .public) emails the scan read")
         } catch {
             Logger.projects.error("Projects could not save the emails the scan read: \(Self.logName(error), privacy: .public)")
+            throw error
         }
         requestSort()
     }
@@ -1560,14 +1562,14 @@ final class ProjectsRuntime {
         )
     }
 
-    /// Which of these the store knows. A store that cannot answer counts them all as known,
-    /// so the scan never reads every message again for it.
-    private nonisolated static func known(_ ids: [String], in store: MailStore) async -> Set<String> {
+    /// Which of these the store knows. A failure is logged with its code and thrown, so the
+    /// scan ends its pass rather than read every message again, or skip mail it never saved.
+    private nonisolated static func known(_ ids: [String], in store: MailStore) async throws -> Set<String> {
         do {
             return try await store.known(ids)
         } catch {
             MailStore.log(error, "reading known Message-IDs")
-            return Set(ids)
+            throw error
         }
     }
 
