@@ -413,7 +413,7 @@ struct ProjectsSettings: View {
             case .installed:
                 if cleanup.engineState == .failed {
                     HStack {
-                        Text("Until it is, Projects cannot explain mail or draft replies.")
+                        Text("Until it loads, Projects cannot explain mail or draft replies.")
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer()

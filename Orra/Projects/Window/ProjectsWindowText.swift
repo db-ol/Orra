@@ -52,7 +52,7 @@ nonisolated enum ProjectsWindowText {
 
     static func explainFailure(_ failure: ProjectsWindowModel.ExplainFailure) -> String {
         switch failure {
-        case .noModel: String(localized: "Download the cleanup model to explain this email.")
+        case .noModel: String(localized: "The cleanup model is not on this Mac.")
         case .modelNotLoaded: String(localized: "The cleanup model could not be loaded.")
         case .tooLong: String(localized: "This email is too long to explain.")
         case .other: String(localized: "The email could not be explained. Try again.")

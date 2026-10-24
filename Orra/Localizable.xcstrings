@@ -3976,28 +3976,6 @@
         }
       }
     },
-    "Download the cleanup model to explain this email." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Descarga el modelo de limpieza para explicar este correo."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このメールを説明するには、整文モデルをダウンロードしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要解释这封邮件，请先下载整理模型。"
-          }
-        }
-      }
-    },
     "Download the cleanup model?" : {
       "localizations" : {
         "es-419" : {
@@ -16782,6 +16760,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在此之前，“项目”无法解释邮件或起草回复。"
+          }
+        }
+      }
+    },
+    "Until it loads, Projects cannot explain mail or draft replies." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasta que se cargue, Proyectos no puede explicar el correo ni redactar respuestas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込めるまで、“プロジェクト”はメールの説明や返信の下書きができません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成功载入之前，“项目”无法解释邮件或起草回复。"
           }
         }
       }

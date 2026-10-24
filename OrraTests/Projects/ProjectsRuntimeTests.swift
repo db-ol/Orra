@@ -932,9 +932,8 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
-    /// An explanation that finds no model says why: the model is not on this Mac, so the
-    /// line asks for its download, or it is and could not be loaded, which a download does
-    /// not mend.
+    /// An explanation that finds no model says why: the model is not on this Mac, also while
+    /// it downloads, or it is and could not be loaded, which a download does not mend.
     @Test(arguments: [false, true])
     func anExplanationWithoutTheModelSaysWhetherItIsMissingOrCouldNotBeLoaded(installed: Bool) async throws {
         defer { cleanUp() }
@@ -949,7 +948,7 @@ struct ProjectsRuntimeTests {
             Issue.record("The explanation should have failed, not \(String(describing: window.explaining["f@harbor.example"]))")
             return
         }
-        #expect(ProjectsWindowText.explainFailure(failure) == (installed ? "The cleanup model could not be loaded." : "Download the cleanup model to explain this email."))
+        #expect(ProjectsWindowText.explainFailure(failure) == (installed ? "The cleanup model could not be loaded." : "The cleanup model is not on this Mac."))
         runtime.windowClosed()
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
