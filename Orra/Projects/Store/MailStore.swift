@@ -591,6 +591,17 @@ nonisolated struct MailStore: Sendable {
         return await Self.splitAgain(email)
     }
 
+    /// Whether the store keeps the email's text to explain: false once Retention removed
+    /// it, for an email the scan found too large to read, and for one the store does not
+    /// hold.
+    func hasText(_ messageID: String) async throws -> Bool {
+        try await database.transaction { database in
+            try !database.run(
+                "SELECT 1 FROM mail_messages WHERE message_id = ? AND text IS NOT NULL AND too_large = 0",
+                [.text(messageID)]).isEmpty
+        }
+    }
+
     /// The email with the own text that QuotedHistory finds in its visible text now. The
     /// store keeps the own text as the scan split it when it saved the email, and splitting
     /// the same visible text again gives the same own text unless QuotedHistory changed

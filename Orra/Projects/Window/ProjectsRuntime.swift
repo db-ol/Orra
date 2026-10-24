@@ -161,6 +161,8 @@ final class ProjectsRuntime {
         case windowClosed
         /// The store holds no email with this Message-ID.
         case unknownEmail
+        /// The store keeps no text of the email to explain, see ProjectsWindowText.noText.
+        case noText
         /// The list holds no project with this ID.
         case unknownProject
     }
@@ -1300,6 +1302,7 @@ final class ProjectsRuntime {
         defer { mailChanged() }
         return try await userRequest {
             guard let email = try await store.explainEmail(messageID) else { throw Failure.unknownEmail }
+            guard try await store.hasText(messageID) else { throw Failure.noText }
             return try await service.explain(email)
         }
     }

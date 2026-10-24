@@ -1169,6 +1169,34 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// An email whose text Retention removed, or one too large to read, is not explained,
+    /// also when Explain Selected Message reaches it outside the list the window shows.
+    @Test func explainingNeedsTheEmailsText() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("old@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today.addingTimeInterval(-91 * Retention.day))
+        var large = Self.message("large@harbor.example", from: "mei@harbor.example", day: 1)
+        large.text = ""
+        large.visibleText = ""
+        large.isTooLarge = true
+        try await store.save([large], ownAddresses: [Self.own], at: Self.today)
+        try await Retention.apply(to: store, now: Self.today)
+        runtime.windowOpened()
+        for id in ["old@harbor.example", "large@harbor.example"] {
+            await #expect(throws: ProjectsRuntime.Failure.noText) {
+                _ = try await runtime.explain(id)
+            }
+        }
+        // The email view says why, so the window shows no failure.
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain("large@harbor.example")
+        #expect(window.explaining["large@harbor.example"] == nil)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// An email the scan found too large to read shows with why it has no text, and is not
     /// explained, since Explain stays off for it.
     @Test(.timeLimit(.minutes(1)))

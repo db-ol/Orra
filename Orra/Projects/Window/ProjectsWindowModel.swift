@@ -274,6 +274,9 @@ final class ProjectsWindowModel {
             emailModel(for: messageID).perform { await $0.explained() }
         } catch is CancellationError {
             explaining[messageID] = nil
+        } catch ProjectsRuntime.Failure.noText {
+            // The email view says why, see ProjectsWindowText.noText.
+            explaining[messageID] = nil
         } catch RewriteError.notLoaded {
             explaining[messageID] = .failed(.noModel)
         } catch RewriteError.promptTooLong {
