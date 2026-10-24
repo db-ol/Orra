@@ -1064,6 +1064,32 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// The email itself is found also when its headers hold an address that is not read
+    /// exactly, which the scan left out, or no To, for which the scan took what Mail lists.
+    @Test(.timeLimit(.minutes(1)), arguments: ["Project Team, \(ProjectsRuntimeTests.own)", nil])
+    func explainSelectedMessageFindsTheEmailWithRecipientsReadAsTheScanReadThem(to: String?) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let id = "x@harbor.example"
+        var email = FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")
+        email.to = to
+        let selected = MailMessageRef(id: 100, mailbox: .inbox)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.selection = [selected]
+        }
+        choice.choose([.inbox])
+        choice.confirm()
+        try await waitUntilListed(id, in: .needsProject, runtime) { _ in true }
+        #expect(await runtime.messageSelectedInMail() == .found(id))
+        #expect(runtime.mailReference(for: id) == selected)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     @Test func explainingNeedsTheWindowAndTheModel() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
@@ -1839,9 +1865,12 @@ struct ProjectsRuntimeTests {
             var subject: String
             var text: String
             var type = "text/plain"
+            /// The value of To, nil for a message without the field.
+            var to: String? = ProjectsRuntimeTests.own
 
             var source: String {
-                "Message-ID: <\(messageID)>\r\nDate: Sun, 18 Oct 2026 09:00:00 +0000\r\nFrom: \(from)\r\nTo: \(ProjectsRuntimeTests.own)\r\nSubject: \(subject)\r\nContent-Type: \(type); charset=utf-8\r\n\r\n\(text)\r\n"
+                let to = to.map { "To: \($0)\r\n" } ?? ""
+                return "Message-ID: <\(messageID)>\r\nDate: Sun, 18 Oct 2026 09:00:00 +0000\r\nFrom: \(from)\r\n\(to)Subject: \(subject)\r\nContent-Type: \(type); charset=utf-8\r\n\r\n\(text)\r\n"
             }
         }
 

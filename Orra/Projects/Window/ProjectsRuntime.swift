@@ -1253,23 +1253,41 @@ final class ProjectsRuntime {
     }
 
     /// Whether a message selected in Mail is the email the store holds with its Message-ID,
-    /// for Explain Selected Message: the same sender, Reply-To, To and Cc, see
-    /// `isSameEmail`, and the same date when its headers give one. A copy of the email in
-    /// another mailbox has the same headers. The subject is left out, since the store keeps
-    /// it as Mail lists it, which may differ from the header in its spaces or its decoding
-    /// (a guess).
+    /// for Explain Selected Message. Its headers are read as the scan read the email's for
+    /// the store, see `MailScan.Message`: the first sender in From, the addresses of
+    /// Reply-To, To and Cc as sets, and the date. A From, To, Cc or Date that the headers
+    /// lack matches, since the scan then took what Mail lists. So the email itself always
+    /// matches, also with an entry not read exactly, and a copy of it in another mailbox
+    /// has the same headers. The subject is left out, since the store keeps it as Mail
+    /// lists it, which may differ from the header in its spaces or its decoding (a guess).
+    /// Open Reply in Mail checks the message again, strictly, see `isSameEmail`.
     @concurrent
     nonisolated static func isSelectedEmail(_ email: ExplainService.Email, headers text: String) async -> Bool {
-        if let date = MailHeaders(parsing: text).date, date != email.date {
+        let headers = MailHeaders(parsing: text)
+        func addresses(_ people: [ExplainPrompt.Person]) -> Set<String> {
+            Set(people.compactMap { ProjectsAddress.normalized($0.address) })
+        }
+        func matches(_ read: [MailAddressHeader], _ people: [ExplainPrompt.Person]) -> Bool {
+            Set(read.map(\.address)) == addresses(people)
+        }
+        guard headers.messageID == email.messageID else { return false }
+        if let date = headers.date, date != email.date {
             return false
         }
-        return await isSameEmail(email, headers: text, all: true)
+        if let sender = headers.from.first, sender.address != ProjectsAddress.normalized(email.sender.address) {
+            return false
+        }
+        return matches(headers.replyTo, email.replyTo)
+            && (headers.to.isEmpty || matches(headers.to, email.to))
+            && (headers.cc.isEmpty || matches(headers.cc, email.cc))
     }
 
     // MARK: Explaining
 
     /// Explains an email, saves the explanation and returns it. Only while the window is
-    /// open. Throws what ExplainService throws, and CancellationError when Projects stops.
+    /// open, and only while the store keeps the email's text: the window offers no Explain
+    /// without it, but Explain Selected Message may reach an email its list does not show.
+    /// Throws what ExplainService throws, and CancellationError when Projects stops.
     func explain(_ messageID: String) async throws -> Explanation {
         guard let running else { throw Failure.off }
         guard let service = explainService else { throw Failure.windowClosed }
