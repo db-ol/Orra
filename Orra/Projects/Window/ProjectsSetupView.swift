@@ -199,6 +199,7 @@ struct ProjectsSetupView: View {
                         dismissSuggestion()
                         done(nil)
                     }
+                    .help(ProjectsSuggestedSection.dismissalNote)
                 }
                 if saveFailed {
                     Text(verbatim: ProjectsWindowText.notice(.projectNotSaved))

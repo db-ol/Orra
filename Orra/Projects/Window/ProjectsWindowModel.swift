@@ -18,8 +18,8 @@ final class ProjectsWindowModel {
         case ruleNotSaved
     }
 
-    /// A move from a Move To menu that waits for the user's yes, since it takes away a draft
-    /// the user changed, see `requestMove(_:to:)`.
+    /// A move from an Assign to Project menu that waits for the user's yes, since it takes
+    /// away a draft the user changed, see `requestMove(_:to:)`.
     nonisolated struct PendingMove: Equatable, Sendable {
         var messageID: String
         /// The project, nil for Needs a Project.
@@ -223,9 +223,10 @@ final class ProjectsWindowModel {
         return index > 0 ? rows[index - 1].messageID : nil
     }
 
-    /// A move from a Move To menu. A move takes the explanation and the draft away, since
-    /// they hold text of the project they were made for (#146). When the user changed the
-    /// draft, or the model made versions of it, the move waits for the user's yes.
+    /// A move from an Assign to Project menu. A move takes the explanation and the draft
+    /// away, since they hold text of the project they were made for (#146). When the user
+    /// changed the draft, or the model made versions of it, the move waits for the user's
+    /// yes.
     func requestMove(_ messageID: String, to project: UUID?) async {
         if await takesDraftAway(messageID) {
             pendingMove = PendingMove(messageID: messageID, project: project)

@@ -108,16 +108,16 @@ struct ProjectsWindowView: View {
             Text("This removes the project with its index, mail and drafts from Projects. Your mail in Mail and the files in its folders stay as they are.")
         }
         .confirmationDialog(
-            "Move this email?",
+            "Change this email's project?",
             isPresented: Binding(get: { model.pendingMove != nil }, set: { if !$0 { model.pendingMove = nil } }),
             presenting: model.pendingMove
         ) { move in
-            Button("Move") {
+            Button("Change Project") {
                 Task { await model.confirmMove(move) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("Moving it removes its explanation and its draft with your changes, since they were made for its project. You can explain it again after the move.")
+            Text("This removes its explanation and its draft with your changes, since they were made for the project it is in now. You can explain it again after the change. The email stays where it is in Mail.")
         }
     }
 
@@ -205,7 +205,7 @@ struct ProjectsWindowView: View {
     }
 
     private func moveMenu(_ email: MailStore.Listed) -> some View {
-        Menu("Move To") {
+        Menu("Assign to Project") {
             MoveMenuItems(runtime: runtime, model: model, email: email)
         }
         .disabled(runtime.phase != .on)
@@ -302,10 +302,11 @@ extension ProjectsWindowView {
         }
     }
 
-    /// The items of a Move To menu, in the list's context menu and on the email view's
-    /// project chip: Needs a Project and the other projects. A click moves the email, after
-    /// the user's yes when the move takes a changed draft away, see
-    /// ProjectsWindowModel.requestMove(_:to:).
+    /// The items of an Assign to Project menu, in the list's context menu and on the email
+    /// view's project chip: Needs a Project and the other projects. A click moves the email
+    /// to that list in Orra, after the user's yes when the move takes a changed draft away,
+    /// see ProjectsWindowModel.requestMove(_:to:). The words say assign, not move, since the
+    /// email stays where it is in Mail.
     struct MoveMenuItems: View {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel
