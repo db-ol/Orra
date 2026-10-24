@@ -953,9 +953,15 @@ final class ProjectsRuntime {
     }
 
     /// Saves a changed project, indexes its folders as they are now and sorts Needs a
-    /// Project again. A linked mailbox it no longer has is not read further.
+    /// Project again. A linked mailbox it no longer has is not read further. Its rules stay
+    /// as the list has them, since Edit Project does not change rules, so a rule added or
+    /// removed while its sheet was open stays so.
     func update(_ project: Project) async throws {
         guard let running else { throw Failure.off }
+        var project = project
+        if let saved = running.list.project(project.id) {
+            project.rules = saved.rules
+        }
         let linked = linkedNames
         try await running.list.update(project)
         if !linkedNames.isSuperset(of: linked) {

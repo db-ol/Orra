@@ -234,6 +234,9 @@ struct ProjectsWindowView: View {
             } removeRule: { rule in
                 Task { await model.removeRule(rule, from: project.id) }
             }
+            // A page of its own for each project, so a Remove Rule dialog that is open goes
+            // away with its project rather than act on the next one.
+            .id(project.id)
         } else {
             ContentUnavailableView("No Email Selected", systemImage: "envelope")
         }
