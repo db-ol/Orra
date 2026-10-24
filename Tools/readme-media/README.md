@@ -30,8 +30,11 @@ To make the GIFs of one language, or one GIF in one language:
     /tmp/readme-media . all ja
     /tmp/readme-media . vocabulary es
 
-A run can write a scene that did not change with other bytes, since the text of a few frames
-can come out slightly different while the fonts load. Put back the GIFs you did not mean to
+The first frames a run draws can come out slightly different while the fonts load, so the
+tool draws every frame once before it writes a GIF or a PNG. A run can still write a GIF
+with other bytes that look the same, also for a scene that did not change, and two runs can
+differ. This happens with the English GIFs of dictation, vocabulary and updates and the
+Japanese GIFs of vocabulary and updates, for example. Put back the GIFs you did not mean to
 change with git checkout.
 
 To check one frame of one scene as a PNG in the current folder:
@@ -58,9 +61,19 @@ languages are en, zh, ja and es.
   - cleanup says an English sentence, since with Japanese or Spanish Clean Up Text works on
     English sentences only.
 - Japanese speech is quoted with 「」, any other with “”.
-- The Japanese and Spanish GIFs draw a few details closer to the app than the English and
-  Chinese ones (see Lang.keepsFirstDrawing in Kit.swift). Give the English and Chinese GIFs
-  these details the next time they are made.
+- The talk key is in Hold, as for everyone who set Orra up before 0.5.0. The translation key
+  is in Press to start and stop, the mode it starts in since 0.5.1 for everyone who never
+  turned Translation on: a tap starts, the person speaks, and a second tap pastes. The text
+  under each key is the hint of its mode without the key's name, which is on the key. The
+  Spanish talk key shows its name, Tecla para hablar, since its hint does not fit there.
+  While the translation key records, the capsule shows Press right Option to finish in the
+  language of the GIF, as the app does.
+- The caption window shows the three display modes with Both chosen, the caption target,
+  which is the dictation language of the GIF, and Copy, dimmed until the first sentence.
+  A sentence shows its original in the small style while its translation is pending.
+- The Japanese and Spanish GIFs of vocabulary and updates draw a few details closer to the
+  app than the English and Chinese ones (see Lang.keepsFirstDrawing in Kit.swift). Give the
+  English and Chinese GIFs these details the next time they are made.
 - Use the names the app uses (Live Captions, Speak Translations to Others) and the website's
   example sentences where a scene has one.
 - Make up no numbers, and show no real person, company or other project.

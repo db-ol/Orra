@@ -60,8 +60,9 @@ nonisolated enum ProjectsWindowText {
     }
 
     /// The offer of a rule after two moves of the same kind: a sender rule or a domain rule.
+    /// It says assign, not file or move, since Orra moves nothing in Mail.
     static func ruleOffer(_ rule: SortingCandidate.Rule, project: String) -> String {
-        String(localized: "Always file mail from \(who(rule)) in \(project)?")
+        String(localized: "Always assign mail from \(who(rule)) to \(project)?")
     }
 
     /// A rule of a project, for the project page.
@@ -141,32 +142,39 @@ nonisolated enum ProjectsWindowText {
     /// Why the email is where it is: the user's move, or sorting's reasons.
     static func reasons(_ email: MailStore.Listed) -> [String] {
         if email.movedByUser {
-            return [String(localized: "You moved it here")]
+            return [String(localized: "You assigned it here")]
         }
         return email.reasons.map(reason)
     }
 
-    /// A warning about the email, a project file or a reply, whatever found it.
+    /// A warning about the email, a project file or a reply, whatever found it. Each says what
+    /// its check found and no more. The content checks match words, not intent, so a payment
+    /// or a password is mentioned, not asked for. A quote counts as not found when Projects
+    /// did not read the mail it quotes, and a sender as unknown when Projects knows neither
+    /// the address nor its domain, see ContentChecks. A domain looks alike when it looks like
+    /// the user's own, a project's or that of someone the user exchanged mail with, see
+    /// SenderChecks. No check in code finds false urgency, a forward request or a request for
+    /// confidential data yet.
     static func warning(_ warning: ProjectsWarning) -> String {
         switch warning {
-        case .hiddenText: String(localized: "It hides text from its reader.")
+        case .hiddenText: String(localized: "It holds text its reader cannot see.")
         case .instructionToAssistant: String(localized: "A line in it speaks to an assistant.")
         case .documentInstruction: String(localized: "A line in a project file speaks to an assistant.")
         case .claimsToBeOrra: String(localized: "Text in it claims to come from Orra.")
-        case .lookalikeDomain: String(localized: "The sender's domain looks like the domain of a project person.")
+        case .lookalikeDomain: String(localized: "The sender's domain looks like a domain Projects knows, but it is a different one.")
         case .senderNameMismatch: String(localized: "The sender's name does not match the address.")
-        case .forgedQuote: String(localized: "It quotes you with words you never sent.")
-        case .paymentChange: String(localized: "It changes where to pay.")
-        case .paymentTermsChange: String(localized: "It changes amounts, dates or other terms of payment.")
-        case .unknownSenderPayment: String(localized: "It asks for payment, and the sender is not one of the project's people.")
+        case .forgedQuote: String(localized: "It quotes you. Projects did not find those words in the sent mail it read.")
+        case .paymentChange: String(localized: "It mentions a change of where to pay.")
+        case .paymentTermsChange: String(localized: "It mentions a change of amounts, dates or other terms of payment.")
+        case .unknownSenderPayment: String(localized: "It mentions payment, and Projects does not know the sender.")
         case .falseUrgency: String(localized: "It pushes you to act at once.")
         case .link: String(localized: "It holds a link.")
         case .forwardRequest: String(localized: "It asks you to forward mail or files.")
         case .confidentialDataRequest: String(localized: "It asks for confidential project data.")
-        case .personalDataRequest: String(localized: "It asks for personal data, such as an ID number.")
-        case .credentialRequest: String(localized: "It asks for a password, a code or another credential.")
+        case .personalDataRequest: String(localized: "It mentions personal data, such as an ID number. Check what it asks you to do.")
+        case .credentialRequest: String(localized: "It mentions a password, a code or another credential. Check what it asks you to do.")
         case .recipientNotInProjectPeople: String(localized: "A reply reaches someone who is not one of the project's people.")
-        case .attachmentNameSpoofing: String(localized: "An attachment's name hides its real type.")
+        case .attachmentNameSpoofing: String(localized: "An attachment may run code, or its name hides its real type.")
         }
     }
 
@@ -213,6 +221,48 @@ nonisolated enum ProjectsWindowText {
         case .noReply(.listMail): String(localized: "No reply needed. It went to a list or came from a machine.")
         case .noDraft: String(localized: "This email is in a language Projects writes no drafts in.")
         case .missing: String(localized: "The model wrote no draft. Explain the email again to try once more.")
+        }
+    }
+
+    /// What What it says shows when it holds no point: that the model did not finish the
+    /// section, or that it named none.
+    static func noPoints(_ explanation: Explanation) -> String {
+        explanation.problems.contains(.missing(.points)) ? unfinished : String(localized: "The model named no points.")
+    }
+
+    /// What Before you reply shows when it holds no question. Only a section the model wrote
+    /// and left empty says that nothing was found. An answer without the section, as one
+    /// that stopped early, checked nothing.
+    static func noQuestions(_ explanation: Explanation) -> String {
+        explanation.problems.contains(.missing(.questions)) ? unfinished : String(localized: "No decisions found.")
+    }
+
+    /// A section the model's answer does not hold.
+    private static var unfinished: String {
+        String(localized: "The model did not finish this part. Explain the email again to try once more.")
+    }
+
+    /// The line under a point that has no source, in place of its chips. A source the
+    /// prompt does not have is dropped, so a point that named only such sources has none.
+    static func noSource(_ point: Explanation.Point) -> String? {
+        point.sources.isEmpty ? String(localized: "No source provided") : nil
+    }
+
+    /// The notice in the explanation when Projects did not read the text of an attachment
+    /// of a kind it reads, nil when it read them all. The list under Original Email says
+    /// why. A kind it never reads, such as an image, gives no notice, since many emails
+    /// carry one in their signature, and the list names it. The kind comes from the name
+    /// and the type, since an attachment Mail has not downloaded, one in an email too large
+    /// to read and one saved earlier have that state whatever their kind.
+    static func unreadAttachments(_ attachments: [MailAttachment]) -> String? {
+        let unread = attachments.filter { attachment in
+            attachment.state != .read && attachment.state != .otherType
+                && MailAttachment.format(name: attachment.name, type: attachment.type) != nil
+        }.count
+        switch unread {
+        case 0: return nil
+        case 1: return String(localized: "Projects could not read an attachment. See Original Email.")
+        default: return String(localized: "Projects could not read some attachments. See Original Email.")
         }
     }
 
@@ -394,7 +444,7 @@ nonisolated enum ProjectsWindowText {
         case .notAFolder: String(localized: "This folder is missing or cannot be read.")
         case .home: String(localized: "Projects never reads your home folder.")
         case .volumeRoot: String(localized: "Projects never reads a whole disk.")
-        case .mailData: String(localized: "Projects never reads the data of Mail.")
+        case .mailData: String(localized: "Projects never reads Mail's local data files.")
         }
     }
 }

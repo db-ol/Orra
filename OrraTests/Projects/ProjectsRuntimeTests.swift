@@ -87,19 +87,10 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    /// Waits for a condition, which work on other tasks makes true. A bound, not a measure.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<2_000 {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        Issue.record("The condition did not come true")
-    }
-
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown)
         made.0.follow()
-        try await waitUntil { made.0.phase == .on }
+        try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
     }
 
@@ -1269,8 +1260,8 @@ struct ProjectsRuntimeTests {
         #expect(handed.withLock { $0 } == [1])
     }
 
-    /// A move from a Move To menu keeps the window on its list and selects the next email.
-    /// When it takes away versions of the draft, it waits for the user's yes.
+    /// A move from an Assign to Project menu keeps the window on its list and selects the
+    /// next email. When it takes away versions of the draft, it waits for the user's yes.
     @Test func aMoveStaysOnTheListAndAsksBeforeItTakesADraftAway() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()

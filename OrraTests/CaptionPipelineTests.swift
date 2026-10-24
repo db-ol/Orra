@@ -127,16 +127,28 @@ final class FakeCaptionModels {
     }
 }
 
-/// Waits until the condition holds, for at most a minute, and fails the test at the caller's
-/// line when it does not. The limit is time, not a count of turns, since 2,000 turns of
-/// 2 ms ran out on the busy CI runner before the work a test waited for was done.
+/// Waits until the condition holds, for a minute not counting stalls, and fails the test at
+/// the caller's line when it does not. The limit is time, not a count of turns, since 2,000
+/// turns of 2 ms ran out on the busy CI runner before the work a test waited for was done.
+/// A gap of more than a second between two looks counts as one second. On that runner the
+/// test process can go a minute without running this loop or the work the test waits for,
+/// so time the loop does not get must not use up the minute. A long gap still counts as a
+/// second, so a wait made only of long gaps ends after 60 looks. A failed wait throws, so
+/// the test ends there instead of going on to await work that may never finish. The failure
+/// says how long the wait took and names the longest gap.
 @MainActor
 func eventually(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
-    let deadline = ContinuousClock.now + .seconds(60)
+    let started = ContinuousClock.now
+    var deadline = started + .seconds(60)
+    var longestGap = Duration.zero
     while !condition(), ContinuousClock.now < deadline {
+        let looked = ContinuousClock.now
         try await Task.sleep(for: .milliseconds(2))
+        let gap = looked.duration(to: .now)
+        longestGap = max(longestGap, gap)
+        deadline += max(gap - .seconds(1), .zero)
     }
-    #expect(condition(), sourceLocation: sourceLocation)
+    try #require(condition(), "Waited \(started.duration(to: .now)). The longest gap between two looks was \(longestGap).", sourceLocation: sourceLocation)
 }
 
 @MainActor

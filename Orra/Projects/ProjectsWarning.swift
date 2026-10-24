@@ -12,7 +12,8 @@ nonisolated enum ProjectsWarning: String, CaseIterable, Sendable, Codable {
     case documentInstruction = "document_instruction"
     /// Text that claims to come from Orra.
     case claimsToBeOrra = "claims_to_be_orra"
-    /// A sender domain that looks like the domain of a project person.
+    /// A sender domain that looks like one Projects knows, such as the user's own or a
+    /// project's, without being it.
     case lookalikeDomain = "lookalike_domain"
     /// A display name that does not match its address, or a known name with an unknown address.
     case senderNameMismatch = "sender_name_mismatch"
@@ -22,7 +23,7 @@ nonisolated enum ProjectsWarning: String, CaseIterable, Sendable, Codable {
     case paymentChange = "payment_change"
     /// A change of amounts, dates or other terms of payment.
     case paymentTermsChange = "payment_terms_change"
-    /// A request for payment from a sender who is not among the project's people.
+    /// Talk of payment from a sender Projects does not know.
     case unknownSenderPayment = "unknown_sender_payment"
     /// Pressure to act at once.
     case falseUrgency = "false_urgency"
