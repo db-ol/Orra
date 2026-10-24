@@ -52,12 +52,10 @@ struct VoiceSampleFileTests {
             }
         }
 
-        /// Returns once the restore waits for the speech model.
-        func untilWaiting() async throws {
-            for _ in 0..<400 where !waited.value {
-                try await Task.sleep(for: .milliseconds(5))
-            }
-            #expect(waited.value)
+        /// Returns once the restore waits for the speech model, and ends the test at the
+        /// caller's line when it does not, see `waitUntil`.
+        func untilWaiting(sourceLocation: SourceLocation = #_sourceLocation) async throws {
+            try await waitUntil({ waited.value }, sourceLocation: sourceLocation)
         }
 
         func open() {

@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// The email itself in the email view, as Mail shows it: To and Cc, the names of its
-/// attachments, the sender's own words with the signature, each message it forwards under
-/// that message's own header block, and the text it quotes folded away under Quoted Text.
-/// The subject, the sender and the date stand in the header of the email view above it.
+/// The email itself in the email view, as Mail shows it: To and Cc, its attachments with
+/// whether Projects read their text (the email view's only list of them, see
+/// ProjectsAttachmentList), the sender's own words with the signature, each message it
+/// forwards under that message's own header block, and the text it quotes folded away under
+/// Quoted Text. The subject, the sender and the date stand in the header of the email view
+/// above it.
 ///
 /// Before the email is explained the view shows it under the header, and after that the
 /// user switches between the explanation and this view at any time, so the email's own text
@@ -21,9 +23,6 @@ struct ProjectsEmailOriginal: View {
         /// The people of To and Cc, each as "Name <address>" or the address alone.
         var to: [String] = []
         var cc: [String] = []
-        /// The names of the attachments, as Mail lists them with the message. Whether Projects
-        /// read their text shows in ProjectsAttachmentList, under the project chip.
-        var attachments: [String] = []
         /// The sender's own words, before the first forwarded message.
         var note: String
         var signature: String = ""
@@ -50,7 +49,6 @@ struct ProjectsEmailOriginal: View {
             return Content(
                 to: email.to.map(person),
                 cc: email.cc.map(person),
-                attachments: email.attachments.map(\.name),
                 note: split.note,
                 signature: split.signature,
                 // A marker with neither a header nor text shows nothing.
@@ -69,12 +67,18 @@ struct ProjectsEmailOriginal: View {
     }
 
     let content: Content
+    /// The attachments with their states, from the list of the window.
+    var attachments: [MailAttachment] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            let people = rows([("To:", content.to.joined(separator: ", ")), ("Cc:", content.cc.joined(separator: ", ")), ("Attachments:", content.attachments.joined(separator: ", "))])
+            let people = rows([("To:", content.to.joined(separator: ", ")), ("Cc:", content.cc.joined(separator: ", "))])
             if !people.isEmpty {
                 Fields(rows: people)
+                Divider()
+            }
+            if !attachments.isEmpty {
+                ProjectsAttachmentList(attachments: attachments)
                 Divider()
             }
             if !content.note.isEmpty {

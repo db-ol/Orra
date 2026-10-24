@@ -59,6 +59,9 @@ final class ProjectsRuntime {
         var modelEnvironment: (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment
         /// Whether the cleanup model is on this Mac, read where it can be observed.
         var modelIsInstalled: () -> Bool
+        /// Try Loading Again: looks at the cleanup model's files, hashes included, and loads
+        /// the model again, see TextCleanup.retryLoading().
+        var retryLoadingModel: @Sendable () async -> Void
         /// The cleanup model's tokenizer, or nil without the model, see ProjectsTokenCounter.
         var loadTokenCounter: @Sendable () async throws -> (@Sendable (String) -> Int)?
         /// Hands a draft to Mail or to the clipboard on the user's click, see ReplyHandoff.
@@ -88,6 +91,7 @@ final class ProjectsRuntime {
             whenDictationStarts: @escaping (@escaping () -> Void) -> Void = { _ in },
             modelEnvironment: @escaping (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment,
             modelIsInstalled: @escaping () -> Bool,
+            retryLoadingModel: @escaping @Sendable () async -> Void = {},
             loadTokenCounter: @escaping @Sendable () async throws -> (@Sendable (String) -> Int)?,
             handoff: ReplyHandoff,
             watchesMemoryPressure: Bool = true,
@@ -107,6 +111,7 @@ final class ProjectsRuntime {
             self.whenDictationStarts = whenDictationStarts
             self.modelEnvironment = modelEnvironment
             self.modelIsInstalled = modelIsInstalled
+            self.retryLoadingModel = retryLoadingModel
             self.loadTokenCounter = loadTokenCounter
             self.handoff = handoff
             self.watchesMemoryPressure = watchesMemoryPressure
@@ -165,6 +170,9 @@ final class ProjectsRuntime {
         case noText
         /// The list holds no project with this ID.
         case unknownProject
+        /// The cleanup model is on this Mac but is not loaded, as after a load that failed,
+        /// so a request of the user found no model, see `userRequest(_:)`.
+        case modelNotLoaded
     }
 
     /// What Explain Selected Message found in Mail (decision 18).
@@ -951,6 +959,18 @@ final class ProjectsRuntime {
         resortNeedsProject()
     }
 
+    /// Removes a rule from its project, for Remove Rule on the project page. Mail read from
+    /// now on is sorted without it. The mail it filed stays where it is, and Needs a
+    /// Project is not sorted again.
+    func removeRule(_ rule: Project.Rule, from projectID: UUID) async throws {
+        guard let running else { throw Failure.off }
+        guard var project = running.list.project(projectID) else { throw Failure.unknownProject }
+        guard project.rules.contains(rule) else { return }
+        project.rules.removeAll { $0 == rule }
+        try await running.list.update(project)
+        running.sorting.projectsChanged()
+    }
+
     // MARK: Projects
 
     /// Adds a project, starts indexing its folders and sorts Needs a Project again.
@@ -961,9 +981,15 @@ final class ProjectsRuntime {
     }
 
     /// Saves a changed project, indexes its folders as they are now and sorts Needs a
-    /// Project again. A linked mailbox it no longer has is not read further.
+    /// Project again. A linked mailbox it no longer has is not read further. Its rules stay
+    /// as the list has them, since Edit Project does not change rules, so a rule added or
+    /// removed while its sheet was open stays so.
     func update(_ project: Project) async throws {
         guard let running else { throw Failure.off }
+        var project = project
+        if let saved = running.list.project(project.id) {
+            project.rules = saved.rules
+        }
         let linked = linkedNames
         try await running.list.update(project)
         if !linkedNames.isSuperset(of: linked) {
@@ -1310,17 +1336,23 @@ final class ProjectsRuntime {
     /// Runs a request of the user, such as an explanation or a revision of the email view,
     /// in a task the runtime keeps. Turning Projects off or Delete All ends it, and waits
     /// for it before the files close, so nothing of it runs or saves after that. Cancelling
-    /// the caller's task ends it too.
+    /// the caller's task ends it too. A request that finds no model throws
+    /// Failure.modelNotLoaded while the model is on this Mac, so the window offers Try
+    /// Loading Again rather than a download.
     func userRequest<T: Sendable>(_ work: @escaping @MainActor () async throws -> T) async throws -> T {
         guard running != nil else { throw Failure.off }
         let task = Task { try await work() }
         let id = UUID()
         userRequests[id] = UserRequest(cancel: { task.cancel() }, ended: Task { _ = await task.result })
         defer { userRequests[id] = nil }
-        return try await withTaskCancellationHandler {
-            try await task.value
-        } onCancel: {
-            task.cancel()
+        do {
+            return try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+        } catch RewriteError.notLoaded where dependencies.modelIsInstalled() {
+            throw Failure.modelNotLoaded
         }
     }
 

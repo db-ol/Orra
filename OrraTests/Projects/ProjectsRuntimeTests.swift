@@ -40,8 +40,9 @@ struct ProjectsRuntimeTests {
     /// The runtime with fakes, and its switch and mailbox choice. `installed` says whether
     /// the cleanup model is on this Mac, `countsTokens` gives the explain service a
     /// tokenizer, `openFails` makes the start fail at the database, `folders` stands in for
-    /// how the index reaches project folders, and `keyDown` for the presses of the talk key.
-    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    /// how the index reaches project folders, `keyDown` for the presses of the talk key, and
+    /// `retryLoading` for Try Loading Again.
+    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: isVisible, physicalMemory: 32 << 30, storage: storage)
         if isOn {
             projects.turnOn()
@@ -67,6 +68,7 @@ struct ProjectsRuntimeTests {
             whenDictationStarts: { [keyDown] handler in keyDown?.handlers.append(handler) },
             modelEnvironment: { _ in model.environment },
             modelIsInstalled: { installed.value },
+            retryLoadingModel: retryLoading,
             loadTokenCounter: { [tokenizer] in try await tokenizer.load(counter) },
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail.bridge, isOrraActive: { true }, bringMailToFront: {}),
             watchesMemoryPressure: false,
@@ -87,19 +89,10 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    /// Waits for a condition, which work on other tasks makes true. A bound, not a measure.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<2_000 {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        Issue.record("The condition did not come true")
-    }
-
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
-        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown)
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading)
         made.0.follow()
-        try await waitUntil { made.0.phase == .on }
+        try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
     }
 
@@ -527,6 +520,39 @@ struct ProjectsRuntimeTests {
         try await runtime.forget(garden.id)
         #expect(runtime.projectList.map(\.id) == [harbor.id])
         #expect(await runtime.list(.project(garden.id)).isEmpty)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Remove Rule on the project page: the rule is gone for good, mail read after it is
+    /// sorted without it, and the mail it filed stays in the project.
+    @Test(.timeLimit(.minutes(1)))
+    func aRemovedRuleFilesNoNewMailAndLeavesWhatItFiled() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let rule = Project.Rule(kind: .sender, value: "ana@kiln.example")
+        let garden = Project(name: "Garden", rules: [rule])
+        try await runtime.add(garden)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("g1@kiln.example", from: "ana@kiln.example", day: 1)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("g1@kiln.example", in: .project(garden.id), runtime) { $0.level == .sure }
+
+        try await runtime.removeRule(rule, from: garden.id)
+        #expect(runtime.projectList.first { $0.id == garden.id }?.rules == [])
+        let saved = ProjectList(storage: storage)
+        try await saved.load()
+        #expect(saved.project(garden.id)?.rules == [])
+        await #expect(throws: ProjectsRuntime.Failure.unknownProject) {
+            try await runtime.removeRule(rule, from: UUID())
+        }
+
+        // Her next email waits in Needs a Project, since the model is not there to agree
+        // with the one vote left, that she wrote in the project before.
+        try await store.save([Self.message("g2@kiln.example", from: "ana@kiln.example", day: 2)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("g2@kiln.example", in: .needsProject, runtime) { $0.level != nil }
+        #expect(await runtime.list(.project(garden.id)).map(\.messageID) == ["g1@kiln.example"])
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -1169,6 +1195,126 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// An explanation that finds no model says why: the model is not on this Mac, also while
+    /// it downloads, or it is and could not be loaded, which a download does not mend.
+    @Test(arguments: [false, true])
+    func anExplanationWithoutTheModelSaysWhetherItIsMissingOrCouldNotBeLoaded(installed: Bool) async throws {
+        defer { cleanUp() }
+        // The fake model never loads. Without the model files there is no tokenizer either.
+        let (runtime, projects, _) = try await started(installed: Installed(installed), countsTokens: installed)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("f@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.windowOpened()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain("f@harbor.example")
+        guard case .failed(let failure)? = window.explaining["f@harbor.example"] else {
+            Issue.record("The explanation should have failed, not \(String(describing: window.explaining["f@harbor.example"]))")
+            return
+        }
+        #expect(ProjectsWindowText.explainFailure(failure) == (installed ? "The cleanup model could not be loaded." : "The cleanup model is not on this Mac."))
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A change, a translation or the answer check that finds no model gets the note for
+    /// why, as an explanation does.
+    @Test(arguments: [false, true])
+    func aRequestOnTheDraftWithoutTheModelSaysWhetherItIsMissingOrCouldNotBeLoaded(installed: Bool) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started(installed: Installed(installed))
+        do {
+            try await runtime.userRequest { () async throws -> Void in throw RewriteError.notLoaded }
+            Issue.record("The request should have failed")
+        } catch {
+            #expect(ProjectsEmailModel.note(error) == (installed ? .modelNotLoaded : .noModel))
+        }
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Try Loading Again looks at the model again, and then explains the email with it.
+    @Test func tryLoadingAgainLoadsTheModelAndExplainsTheEmail() async throws {
+        defer { cleanUp() }
+        let retries = Count()
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true, retryLoading: { [model] in
+            retries.add()
+            model.isThere.withLock { $0 = true }
+        })
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("f@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.windowOpened()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain("f@harbor.example")
+        #expect(window.explaining["f@harbor.example"] == .failed(.modelNotLoaded))
+        #expect(retries.value == 0)
+        await window.loadModelAgain(explaining: "f@harbor.example")
+        #expect(retries.value == 1)
+        #expect(window.explaining["f@harbor.example"] == nil)
+        #expect(window.explained["f@harbor.example"] == 1)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A change of the draft that begins while Try Loading Again looks at the model keeps
+    /// the draft. No explanation follows the load, since a new one would start the draft
+    /// again and drop the version the change makes.
+    @Test func tryLoadingAgainLeavesOutTheExplanationWhileTheDraftChanges() async throws {
+        defer { cleanUp() }
+        let meanwhile = Meanwhile()
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true, retryLoading: { [model] in
+            model.isThere.withLock { $0 = true }
+            await meanwhile.run()
+        })
+        let store = try #require(runtime.running?.store)
+        let id = "f@harbor.example"
+        try await store.save([Self.message(id, from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        let check = DraftCheckInput(
+            draft: "", language: .en, recipients: [DraftCheckInput.Person(name: "", address: "mei@harbor.example")], projectPeople: [],
+            own: [DraftCheckInput.Person(name: "Me", address: Self.own)], incomingText: "Could you send the plan?", today: Self.today)
+        let explanation = Explanation(
+            messageID: id, project: nil, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [], questions: [], draft: .checked(DraftCheck.Result(draft: "Hi Mei,\n\nHere is the plan.\n\nMe", language: .en)), draftCheck: check,
+            sources: [:], removed: [:], problems: [], unknownSources: [])
+        #expect(try await store.save(explanation, at: Self.today))
+        runtime.windowOpened()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain(id)
+        #expect(window.explaining[id] == .failed(.modelNotLoaded))
+        let email = window.emailModel(for: id)
+        await email.load()
+        #expect(email.hasDraft)
+        // The user changes the draft while the model is looked at. The change's job waits
+        // at the model until the test ends it.
+        meanwhile.work = { [model] in
+            model.blocks.withLock { $0 = true }
+            email.perform { await $0.makeChange(.tone(.warm)) }
+            for _ in 0..<1_000 where !email.isBusy {
+                await Task.yield()
+            }
+        }
+        // A task, so the test fails rather than waits for good when an explanation waits
+        // behind the change.
+        let returned = Count()
+        let retrying = Task {
+            await window.loadModelAgain(explaining: id)
+            returned.add()
+        }
+        try await waitUntil { returned.value == 1 }
+        #expect(email.isBusy)
+        #expect(window.explaining[id] == nil)
+        #expect(window.explained[id] == nil)
+        email.cancelWork()
+        retrying.cancel()
+        await retrying.value
+        try await waitUntil { !email.isBusy }
+        #expect(await runtime.explanation(for: id) == explanation)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// An email whose text Retention removed, or one too large to read, is not explained,
     /// also when Explain Selected Message reaches it outside the list the window shows.
     @Test func explainingNeedsTheEmailsText() async throws {
@@ -1540,8 +1686,8 @@ struct ProjectsRuntimeTests {
         #expect(handed.withLock { $0 } == [1])
     }
 
-    /// A move from a Move To menu keeps the window on its list and selects the next email.
-    /// When it takes away versions of the draft, it waits for the user's yes.
+    /// A move from an Assign to Project menu keeps the window on its list and selects the
+    /// next email. When it takes away versions of the draft, it waits for the user's yes.
     @Test func aMoveStaysOnTheListAndAsksBeforeItTakesADraftAway() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
@@ -1787,6 +1933,16 @@ struct ProjectsRuntimeTests {
 
         nonisolated var value: Int {
             count.withLock { $0 }
+        }
+    }
+
+    /// What a test does while Try Loading Again looks at the model, set once the window is
+    /// there.
+    @MainActor final class Meanwhile {
+        var work: () async -> Void = {}
+
+        func run() async {
+            await work()
         }
     }
 
