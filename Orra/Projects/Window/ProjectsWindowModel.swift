@@ -3,10 +3,10 @@ import Observation
 
 /// What the Projects window shows and what the user does there: the list chosen in the
 /// sidebar, its mail with the deadline marks of the explained ones, the selected email, a
-/// move that waits for the user's yes, the rule offered after moves, the explanations under
-/// way, the email view of each email the user opened with the window's one handoff at a
-/// time, the line after Explain Selected Message, and Suggested Projects. ProjectsRuntime
-/// does the work.
+/// move that waits for the user's yes, the rule offered after moves, the project Settings
+/// asks to edit, the explanations under way, the email view of each email the user opened
+/// with the window's one handoff at a time, the line after Explain Selected Message, and
+/// Suggested Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -83,6 +83,8 @@ final class ProjectsWindowModel {
     @ObservationIgnored private var deadlinesRead: Set<String> = []
     /// A move that waits for the user's yes.
     var pendingMove: PendingMove?
+    /// The project whose Edit Project sheet the window opens next, as Settings asks.
+    var projectToEdit: UUID?
     /// Counts the times the window let go of its email views, so the email view shown reads
     /// its email again into a new one.
     private(set) var emailViewGeneration = 0
@@ -258,6 +260,14 @@ final class ProjectsWindowModel {
         } catch {
             notice = .ruleNotSaved
         }
+    }
+
+    /// Shows a project's page and opens its Edit Project sheet, as Edit Project… beside a
+    /// linked mailbox in Settings asks. A project that is gone changes nothing.
+    func edit(_ project: UUID) {
+        guard runtime.projectList.contains(where: { $0.id == project }) else { return }
+        place = .project(project)
+        projectToEdit = project
     }
 
     /// Explains an email, on the user's click.

@@ -113,9 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The Mail mailboxes Projects reads, which Settings shows and the scan reads. Creating
     /// it reads only the preferences.
     let mailChoice = MailChoice()
-    /// Mail access and the mailboxes on the Projects page of Settings. Creating it sends
-    /// nothing to Mail.
-    lazy var projectsMail = ProjectsSettings.MailAccess(bridge: .live, choice: mailChoice) { [projects] in
+    /// Mail access and the mailboxes on the Projects page of Settings, with those the
+    /// projects link. Creating it sends nothing to Mail.
+    lazy var projectsMail = ProjectsSettings.MailAccess(bridge: .live, choice: mailChoice, projects: { [weak self] in
+        self?.projectsRuntime.projectList ?? []
+    }) { [projects] in
         projects.isOn
     }
     /// Projects while its switch is on: its database, index, mail scan, sorting and model

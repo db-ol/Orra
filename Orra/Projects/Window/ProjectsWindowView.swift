@@ -70,6 +70,15 @@ struct ProjectsWindowView: View {
                 { ProjectsSuggestedSection.dismiss(suggestion, from: model.suggestions, runtime: runtime) }
             })
         }
+        // Edit Project… beside a linked mailbox in Settings. A sheet that shows already
+        // stays, with what the user typed in it.
+        .onChange(of: model.projectToEdit, initial: true) { _, id in
+            guard let id else { return }
+            model.projectToEdit = nil
+            if setup == nil, let project = runtime.projectList.first(where: { $0.id == id }) {
+                setup = ProjectsSetupView.Draft(project)
+            }
+        }
         .onChange(of: model.ruleOffer) { _, offer in
             // The offer shows above the list, so VoiceOver says it.
             if let offer, let project = runtime.projectList.first(where: { $0.id == offer.project }) {

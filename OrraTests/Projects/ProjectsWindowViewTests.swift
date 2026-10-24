@@ -326,6 +326,22 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsSetupView.choices(["Work/Archive"], current: "Work/Archive") == ["Work/Archive"])
     }
 
+    /// Edit Project… beside a linked mailbox in Settings shows the project's page and asks
+    /// the window for its Edit Project sheet. A project that is gone changes nothing.
+    @Test func settingsOpensEditProjectOfALinkedMailbox() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let model = ProjectsWindowModel(runtime: fixture.runtime)
+        let project = try #require(fixture.runtime.projectList.first)
+        model.edit(UUID())
+        #expect(model.place == .needsProject)
+        #expect(model.projectToEdit == nil)
+        model.edit(project.id)
+        #expect(model.place == .project(project.id))
+        #expect(model.projectToEdit == project.id)
+        await fixture.stop()
+    }
+
     @Test func everySkipReasonAndRefusalHasWords() {
         for reason in FileSkipReason.allCases {
             #expect(!ProjectsWindowText.skipReason(reason).isEmpty)
