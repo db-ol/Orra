@@ -87,10 +87,10 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown)
         made.0.follow()
-        try await waitUntil { made.0.phase == .on }
+        try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
     }
 

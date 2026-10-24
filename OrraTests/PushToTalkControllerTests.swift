@@ -243,11 +243,11 @@ struct PushToTalkControllerTests {
         return controller
     }
 
-    private func dictate(_ controller: PushToTalkController) async throws {
+    private func dictate(_ controller: PushToTalkController, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         controller.handle(.pressed(isRepeat: false))
-        try await waitUntil { mic.calls.contains("start") }
+        try await waitUntil({ mic.calls.contains("start") }, sourceLocation: sourceLocation)
         controller.handle(.released)
-        try await waitUntil { controller.state == .idle }
+        try await waitUntil({ controller.state == .idle }, sourceLocation: sourceLocation)
     }
 
     @Test func startsIdleWithoutTheHotkey() async {
@@ -1052,7 +1052,7 @@ struct PushToTalkControllerTests {
     /// Starts a dictation that the limit stops while the key is up, in `mode`, and waits until
     /// it was pasted. The key waits an hour for the press meant to stop, as in
     /// `startedController`, unless a test asks for less.
-    private func dictationStoppedAtLimit(_ mode: TriggerMode, limitNoticeWindow: Duration = .seconds(3600)) async throws -> (PushToTalkController, HotkeyTap, CueRecorder, ContinuousClock.Instant) {
+    private func dictationStoppedAtLimit(_ mode: TriggerMode, limitNoticeWindow: Duration = .seconds(3600), sourceLocation: SourceLocation = #_sourceLocation) async throws -> (PushToTalkController, HotkeyTap, CueRecorder, ContinuousClock.Instant) {
         let controller = try await startedController(limit: .milliseconds(200), limitNoticeWindow: limitNoticeWindow)
         controller.setTriggerMode(mode, for: .talk)
         let cues = CueRecorder(controller)
@@ -1064,7 +1064,7 @@ struct PushToTalkControllerTests {
             press(tap, at: &now)
         }
         #expect(controller.state == .handsFree)
-        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        try await waitUntil({ controller.state == .idle && !inserter.inserted.isEmpty }, sourceLocation: sourceLocation)
         #expect(mic.calls == ["start", "stop"])
         return (controller, tap, cues, now)
     }
@@ -2308,12 +2308,12 @@ struct PushToTalkControllerTests {
     }
 
     /// A hold of `key` that records and is released.
-    private func dictate(_ controller: PushToTalkController, with key: TalkKey) async throws {
+    private func dictate(_ controller: PushToTalkController, with key: TalkKey, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         let starts = mic.calls.filter { $0 == "start" }.count
         controller.handle(.pressed(isRepeat: false), key: .key(key))
-        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        try await waitUntil({ mic.calls.filter { $0 == "start" }.count > starts }, sourceLocation: sourceLocation)
         controller.handle(.released, key: .key(key))
-        try await waitUntil { controller.state == .idle }
+        try await waitUntil({ controller.state == .idle }, sourceLocation: sourceLocation)
     }
 
     /// The translation key pastes the translation of the text the rules left. Copy Last

@@ -215,8 +215,8 @@ struct CleanupIdleUnloadTests {
         try await settle()
     }
 
-    private func unloadWhileIdle(_ cleanup: TextCleanup) async throws {
-        try await advance(by: idle)
+    private func unloadWhileIdle(_ cleanup: TextCleanup, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        try await advance(by: idle, sourceLocation: sourceLocation)
         await cleanup.waitForLoad()
         #expect(cleanup.engineState == .unloadedWhileIdle)
         #expect(!fake.isLoaded)
