@@ -241,6 +241,35 @@ struct TextCleanupTests {
         #expect(fake.loads == 2)
     }
 
+    /// Try Again on a line that stayed after the model loaded or began to load, such as Try
+    /// Loading Again in the Projects window after a load from Settings, leaves the model as
+    /// it is. Nothing looks at the files again and nothing loads twice, so cleanup never
+    /// goes without the model meanwhile.
+    @Test(arguments: [false, true])
+    func tryAgainLeavesAModelThatIsLoadedOrLoadingAlone(whileLoading: Bool) async throws {
+        defer { temporary.remove() }
+        try temporary.writeAll(to: temporary.installed)
+        let fake = FakeEngine()
+        fake.holdsLoads = whileLoading
+        let cleanup = makeCleanup(isOn: true, fetch: FileFetch { _, _, _, _, _, _ in }, engine: fake.engine)
+        await cleanup.start()
+        if whileLoading {
+            try await fake.waitForLoads(1)
+        } else {
+            await cleanup.waitForLoad()
+        }
+        let state = cleanup.engineState
+        #expect(state == (whileLoading ? .loading : .ready))
+        await cleanup.retryLoading()
+        #expect(cleanup.engineState == state)
+        #expect(cleanup.models.state == .installed(temporary.installed))
+        fake.letGo()
+        await cleanup.waitForLoad()
+        #expect(cleanup.engineState == .ready)
+        #expect(fake.loads == 1)
+        #expect(await cleanup.model.waitUntilLoaded())
+    }
+
     /// A finished download loads the model.
     @Test func aFinishedDownloadLoadsTheModel() async {
         defer { temporary.remove() }

@@ -3422,6 +3422,28 @@
         }
       }
     },
+    "Could not be loaded" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo cargar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込めませんでした"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法载入"
+          }
+        }
+      }
+    },
     "Could not be read" : {
       "localizations" : {
         "es-419" : {
@@ -8878,6 +8900,28 @@
         }
       }
     },
+    "Open Projects Settings…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir configuración de Proyectos…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”設定を開く…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“项目”设置…"
+          }
+        }
+      }
+    },
     "Open Projects Window" : {
       "localizations" : {
         "es-419" : {
@@ -14105,6 +14149,28 @@
         }
       }
     },
+    "The cleanup model could not be loaded." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo cargar el modelo de limpieza."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整文モデルを読み込めませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法载入整理模型。"
+          }
+        }
+      }
+    },
     "The cleanup model is not on this Mac yet. Until it is, Orra pastes the text without cleanup." : {
       "localizations" : {
         "es-419" : {
@@ -16698,6 +16764,28 @@
         }
       }
     },
+    "Try Loading Again" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volver a cargar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度読み込む"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新载入"
+          }
+        }
+      }
+    },
     "Try next" : {
       "localizations" : {
         "es-419" : {
@@ -16958,6 +17046,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在此之前，“项目”无法解释邮件或起草回复。"
+          }
+        }
+      }
+    },
+    "Until it loads, Projects cannot explain mail or draft replies." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hasta que se cargue, Proyectos no puede explicar el correo ni redactar respuestas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込めるまで、“プロジェクト”はメールの説明や返信の下書きができません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成功载入之前，“项目”无法解释邮件或起草回复。"
           }
         }
       }

@@ -58,6 +58,9 @@ struct SettingsPageTests {
     /// and the privacy page in the interface language.
     @Test func theProjectsPageSaysWhereTheModelAndTheDataStand() {
         #expect(ProjectsSettings.modelStatus(.installed(URL(fileURLWithPath: "/"))) == "On this Mac")
+        #expect(ProjectsSettings.modelStatus(.installed(URL(fileURLWithPath: "/")), engine: .ready) == "On this Mac")
+        // A model on this Mac that could not be loaded says so.
+        #expect(ProjectsSettings.modelStatus(.installed(URL(fileURLWithPath: "/")), engine: .failed) == "Could not be loaded")
         #expect(ProjectsSettings.modelStatus(.missing(bytesPresent: 0)) == "Not on this Mac yet")
         #expect(ProjectsSettings.modelStatus(.failed(.offline)) == "Not on this Mac yet")
         #expect(ProjectsSettings.modelStatus(.downloading(bytes: 5, source: nil)) == "Downloading…")

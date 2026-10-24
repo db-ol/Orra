@@ -171,10 +171,13 @@ struct ProjectsWindowViewTests {
             #expect(!ProjectsWindowText.status(status).isEmpty)
         }
         for work in [ProjectsWindowText.EmailWork.change, .translation, .answers] {
-            for note in [ProjectsEmailModel.Note.noModel, .tooLong, .noAnswer, .heldBack, .notKept, .emptyDraft, .other] {
+            for note in [ProjectsEmailModel.Note.noModel, .modelNotLoaded, .tooLong, .noAnswer, .heldBack, .notKept, .emptyDraft, .other] {
                 #expect(!ProjectsWindowText.note(note, for: work).isEmpty)
             }
+            #expect(ProjectsWindowText.note(.noModel, for: work) != ProjectsWindowText.note(.modelNotLoaded, for: work))
         }
+        let failures: [ProjectsWindowModel.ExplainFailure] = [.noModel, .modelNotLoaded, .tooLong, .other]
+        #expect(Set(failures.map(ProjectsWindowText.explainFailure)).count == failures.count)
         let outcomes: [ReplyHandoff.Outcome] = [
             .replyOpened, .copied, .copiedMailNotRunning, .copiedReplyFailed(.timedOut), .copiedReplyFailed(.denied),
             .copiedReplyFailed(.notFound), .copiedReplyFailed(.failed(code: -1)), .emptyDraft, .notCopied,

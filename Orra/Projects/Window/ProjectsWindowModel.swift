@@ -29,8 +29,10 @@ final class ProjectsWindowModel {
 
     /// Why an explanation did not come.
     nonisolated enum ExplainFailure: Equatable, Sendable {
-        /// The cleanup model is not on this Mac, or did not load.
+        /// The cleanup model is not on this Mac.
         case noModel
+        /// The cleanup model is on this Mac but could not be loaded.
+        case modelNotLoaded
         /// Even the trimmed prompt is too long for the model.
         case tooLong
         case other
@@ -312,11 +314,26 @@ final class ProjectsWindowModel {
             explaining[messageID] = nil
         } catch RewriteError.notLoaded {
             explaining[messageID] = .failed(.noModel)
+        } catch ProjectsRuntime.Failure.modelNotLoaded {
+            explaining[messageID] = .failed(.modelNotLoaded)
         } catch RewriteError.promptTooLong {
             explaining[messageID] = .failed(.tooLong)
         } catch {
             explaining[messageID] = .failed(.other)
         }
+    }
+
+    /// Try Loading Again, after the cleanup model could not be loaded: looks at the model's
+    /// files and loads it again, then explains the email. A new explanation starts the
+    /// draft again, so it is left out when a change or an undo of the draft began
+    /// meanwhile. Explain is there again once that is done.
+    func loadModelAgain(explaining messageID: String) async {
+        guard explaining[messageID] != .explaining else { return }
+        explaining[messageID] = .explaining
+        await runtime.dependencies.retryLoadingModel()
+        explaining[messageID] = nil
+        guard emailModels[messageID]?.isBusy != true else { return }
+        await explain(messageID)
     }
 
     /// Explain Selected Message: finds the message selected in Mail, shows it in its list

@@ -227,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelIsInstalled: { [cleanup] in
                 if case .installed = cleanup.models.state { true } else { false }
             },
+            retryLoadingModel: { [cleanup] in await cleanup.retryLoading() },
             loadTokenCounter: { try await ProjectsTokenCounter.installed(in: folders)?.count },
             handoff: ReplyHandoff(
                 copy: { ConcealedClipboard.copy($0, to: .general) },

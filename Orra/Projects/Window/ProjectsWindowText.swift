@@ -54,6 +54,7 @@ nonisolated enum ProjectsWindowText {
     static func explainFailure(_ failure: ProjectsWindowModel.ExplainFailure) -> String {
         switch failure {
         case .noModel: String(localized: "The cleanup model is not on this Mac.")
+        case .modelNotLoaded: String(localized: "The cleanup model could not be loaded.")
         case .tooLong: String(localized: "This email is too long to explain.")
         case .other: String(localized: "The email could not be explained. Try again.")
         }
@@ -270,6 +271,7 @@ nonisolated enum ProjectsWindowText {
     static func note(_ note: ProjectsEmailModel.Note, for work: EmailWork) -> String {
         switch note {
         case .noModel: return String(localized: "The cleanup model is not on this Mac.")
+        case .modelNotLoaded: return String(localized: "The cleanup model could not be loaded.")
         case .emptyDraft: return String(localized: "The draft is empty.")
         case .heldBack: return String(localized: "The new version came back in another language, so the draft stays as it was.")
         case .notKept: return String(localized: "The email changed meanwhile, so the new version was not kept.")
