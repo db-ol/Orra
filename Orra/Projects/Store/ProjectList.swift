@@ -117,9 +117,21 @@ nonisolated struct Project: Sendable, Equatable, Identifiable, Codable {
 
     /// Where the folders are now, in the order of `folders`. A bookmark that no longer
     /// finds its folder is left out. It never shows a window and never mounts a volume.
-    /// Off the main actor, since it reads the disk.
-    @concurrent
+    /// It reads the disk on a thread of its own: a folder on a share that hangs can hold
+    /// that thread for long, and a thread that Swift tasks share would hold up their other
+    /// work, such as the dictation's.
     static func resolve(_ bookmarks: [Data]) async -> [URL] {
+        await withCheckedContinuation { continuation in
+            let thread = Thread {
+                continuation.resume(returning: resolveNow(bookmarks))
+            }
+            thread.name = "Orra project folders"
+            thread.qualityOfService = .utility
+            thread.start()
+        }
+    }
+
+    private static func resolveNow(_ bookmarks: [Data]) -> [URL] {
         bookmarks.compactMap { bookmark in
             var isStale = false
             return try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &isStale)

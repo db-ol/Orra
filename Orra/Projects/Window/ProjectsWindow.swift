@@ -49,6 +49,14 @@ final class ProjectsWindow {
         window.orderFrontRegardless()
     }
 
+    /// Brings the window to the front with Edit Project open for a project, as Edit
+    /// Project… beside a linked mailbox in Settings asks. A sheet or a dialog that shows
+    /// there already stays as it is.
+    func edit(_ project: UUID) {
+        show()
+        model?.edit(project)
+    }
+
     /// Closes the window, such as when Projects turns off.
     func close() {
         window?.close()

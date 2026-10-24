@@ -202,23 +202,21 @@ struct CleanupIdleUnloadTests {
         }
     }
 
-    /// Waits until the condition holds, for at most a few seconds.
-    private func settle(_ condition: () -> Bool) async throws {
-        for _ in 0..<2_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(2))
-        }
-        #expect(condition())
+    /// Waits until the condition holds, and ends the test at the caller's line when it does
+    /// not, see `waitUntil`.
+    private func settle(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        try await waitUntil(condition, sourceLocation: sourceLocation)
     }
 
     /// Moves the clock once the idle timer or a wait is sleeping on it.
-    private func advance(by duration: Duration) async throws {
-        try await settle { clock.sleeping > 0 }
+    private func advance(by duration: Duration, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        try await settle({ clock.sleeping > 0 }, sourceLocation: sourceLocation)
         clock.advance(by: duration)
         try await settle()
     }
 
-    private func unloadWhileIdle(_ cleanup: TextCleanup) async throws {
-        try await advance(by: idle)
+    private func unloadWhileIdle(_ cleanup: TextCleanup, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        try await advance(by: idle, sourceLocation: sourceLocation)
         await cleanup.waitForLoad()
         #expect(cleanup.engineState == .unloadedWhileIdle)
         #expect(!fake.isLoaded)
@@ -718,8 +716,8 @@ struct CleanupIdleUnloadTests {
     // MARK: Projects
 
     /// Cleanup and translation off unless asked, with or without the stand in model files,
-    /// started as at launch unless asked.
-    private func makeCleanupForProjects(isOn: Bool = false, installed: Bool = true, started: Bool = true) async throws -> TextCleanup {
+    /// started as at launch unless asked. `fetch` stands in for the network of a download.
+    private func makeCleanupForProjects(isOn: Bool = false, installed: Bool = true, started: Bool = true, fetch: FileFetch = FileFetch { _, _, _, _, _, _ in }) async throws -> TextCleanup {
         if installed {
             try temporary.writeAll(to: temporary.installed)
         }
@@ -729,7 +727,7 @@ struct CleanupIdleUnloadTests {
             models: ModelInstaller(
                 manifest: temporary.manifest,
                 folders: temporary.folders,
-                environment: ModelDownload.Environment(fetch: FileFetch { _, _, _, _, _, _ in }, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
+                environment: ModelDownload.Environment(fetch: fetch, freeSpace: { _ in 100_000_000_000 }, sleep: { _ in })
             ),
             engine: fake.engine,
             idleUnloadDelay: idle,
@@ -870,6 +868,79 @@ struct CleanupIdleUnloadTests {
         await waiting.value
         #expect(result == true)
         #expect(fake.events == ["load"])
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+    }
+
+    /// The download the user agreed to for Projects ends during a dictation while only
+    /// Projects holds the model. The model loads after the paste, as for a holder that came
+    /// during the dictation, and a Projects job that asks meanwhile waits for that load.
+    @Test func aDownloadThatEndsDuringADictationLoadsForProjectsAfterIt() async throws {
+        defer { temporary.remove() }
+        let servers = StubServers()
+        defer { servers.close() }
+        let cleanup = try await makeCleanupForProjects(installed: false, fetch: servers.fetch)
+        cleanup.projectsStarted()
+        cleanup.confirmProjectsDownload()
+        cleanup.dictationStarted()
+        await cleanup.models.waitForDownload()
+        guard case .installed = cleanup.models.state else {
+            Issue.record("Expected the download to finish, got \(cleanup.models.state)")
+            return
+        }
+        await cleanup.waitForLoad()
+        #expect(fake.events.isEmpty)
+        #expect(cleanup.engineState == .unloaded)
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.waitUntilLoadedForProjects()
+        }
+        try await settle { clock.sleeping > 0 }
+        #expect(result == nil)
+        cleanup.dictationEnded()
+        #expect(cleanup.engineState == .loading)
+        clock.advance(by: .milliseconds(100))
+        await waiting.value
+        #expect(result == true)
+        #expect(fake.events == ["load"])
+        cleanup.projectsStopped()
+        await cleanup.waitForLoad()
+    }
+
+    /// The Projects window closes and opens again while the model unloads, so its load waits
+    /// behind the unload, and a dictation starts before that load has begun. The load waits
+    /// until the dictation is over. A Projects job that waited for it keeps waiting, and gets
+    /// the model after the paste.
+    @Test func aQueuedLoadForProjectsWaitsForADictationThatStartsBeforeItsTurn() async throws {
+        defer { temporary.remove() }
+        let cleanup = try await makeCleanupForProjects()
+        cleanup.projectsStarted()
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load"])
+        fake.holdsUnloads = true
+        cleanup.projectsStopped()
+        try await settle { fake.isHolding }
+        cleanup.projectsStarted()
+        #expect(cleanup.engineState == .loading)
+        var result: Bool?
+        let waiting = Task {
+            result = await cleanup.waitUntilLoadedForProjects()
+        }
+        try await settle()
+        cleanup.dictationStarted()
+        fake.letGo()
+        await cleanup.waitForLoad()
+        #expect(fake.events == ["load", "unload"])
+        #expect(cleanup.engineState == .unloaded)
+        try await settle { clock.sleeping > 0 }
+        #expect(result == nil)
+        cleanup.dictationEnded()
+        #expect(cleanup.engineState == .loading)
+        clock.advance(by: .milliseconds(100))
+        await waiting.value
+        #expect(result == true)
+        #expect(fake.events == ["load", "unload", "load"])
+        #expect(fake.mostRunning == 1)
         cleanup.projectsStopped()
         await cleanup.waitForLoad()
     }

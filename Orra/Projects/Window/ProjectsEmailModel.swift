@@ -118,6 +118,8 @@ final class ProjectsEmailModel {
     nonisolated enum Note: Equatable, Sendable {
         /// The cleanup model is not on this Mac, or the window closed.
         case noModel
+        /// The cleanup model is on this Mac but could not be loaded.
+        case modelNotLoaded
         /// The draft or the change does not fit into a prompt.
         case tooLong
         /// The model wrote nothing that can be used, or was cut short.
@@ -863,6 +865,8 @@ final class ProjectsEmailModel {
         switch error {
         case RewriteError.notLoaded, ProjectsRuntime.Failure.windowClosed, ProjectsRuntime.Failure.off:
             return .noModel
+        case ProjectsRuntime.Failure.modelNotLoaded:
+            return .modelNotLoaded
         case RewriteError.promptTooLong, ReviseService.Failure.tooLong:
             return .tooLong
         case ReviseService.Failure.emptyAnswer, ReviseService.Failure.cutShort, ReviseService.Failure.unreadableAnswer, ReviseService.Failure.wrongLanguage:

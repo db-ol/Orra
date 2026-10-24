@@ -529,7 +529,7 @@ struct ProjectsEmailModelTests {
         let model = model(explanation: { current }, email: Self.forwardEmail)
         await model.load()
         #expect(model.original == ProjectsEmailOriginal.Content(
-            to: ["Lin <me@studio.example>"], cc: ["kai@kiln.example"], attachments: ["lamps.pdf"],
+            to: ["Lin <me@studio.example>"], cc: ["kai@kiln.example"],
             note: "Lin, see Kai's note.", signature: "Mei",
             forwards: [QuotedHistory.Forward(sender: "Kai Moss <kai@kiln.example>", date: "Mon, Oct 12, 2026 at 9:30 AM", subject: "Lamps", text: "Twelve lamps, delivery in week 47.")],
             quoted: "On Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?"))
@@ -669,6 +669,7 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsEmailModel.note(ReviseService.Failure.tooLong) == .tooLong)
         #expect(ProjectsEmailModel.note(RewriteError.promptTooLong) == .tooLong)
         #expect(ProjectsEmailModel.note(ProjectsRuntime.Failure.windowClosed) == .noModel)
+        #expect(ProjectsEmailModel.note(ProjectsRuntime.Failure.modelNotLoaded) == .modelNotLoaded)
         #expect(ProjectsEmailModel.note(ReviseService.Failure.emptyDraft) == .emptyDraft)
         #expect(ProjectsEmailModel.note(CocoaError(.fileNoSuchFile)) == .other)
     }
@@ -1251,13 +1252,5 @@ struct ProjectsEmailModelTests {
         #expect(later.hasPrefix("Deadline "))
         // A day that has passed, such as in a window left open past midnight, has no mark.
         #expect(ProjectsWindowText.deadline(Self.today.addingTimeInterval(-86_400), now: Self.today, calendar: calendar) == nil)
-    }
-
-    /// Waits for a condition, polling, for at most a few seconds.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(condition())
     }
 }

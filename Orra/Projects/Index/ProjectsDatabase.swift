@@ -84,7 +84,8 @@ actor ProjectsDatabase {
 
     /// The schema, in order. First the index of the project folders, see FolderIndex, then
     /// the tables of MailStore, see `MailStore.migration`, the text of attachments, see
-    /// `MailStore.attachmentTextMigration`, and the text the user typed into drafts, see
+    /// `MailStore.attachmentTextMigration`, whether an email was too large to read, see
+    /// `MailStore.tooLargeMigration`, and the text the user typed into drafts, see
     /// `MailStore.editedDraftMigration`.
     ///
     /// - index_files: one row for each file the index read, with its text or with why it
@@ -133,6 +134,7 @@ actor ProjectsDatabase {
             """),
         MailStore.migration,
         MailStore.attachmentTextMigration,
+        MailStore.tooLargeMigration,
         MailStore.editedDraftMigration,
     ]
 

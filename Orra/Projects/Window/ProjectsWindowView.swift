@@ -70,6 +70,15 @@ struct ProjectsWindowView: View {
                 { ProjectsSuggestedSection.dismiss(suggestion, from: model.suggestions, runtime: runtime) }
             })
         }
+        // Edit Project… beside a linked mailbox in Settings. A sheet, an alert or a dialog of
+        // the window that shows already stays as it is, with the list behind it. The Remove
+        // Rule dialog is the project page's own, and a sheet that follows it saves the rules
+        // as the list has them then, see ProjectsRuntime.update(_:).
+        .onChange(of: model.projectToEdit, initial: true) {
+            if let project = model.takeProjectToEdit(presenting: setup != nil || forgetting != nil) {
+                setup = ProjectsSetupView.Draft(project)
+            }
+        }
         .onChange(of: model.ruleOffer) { _, offer in
             // The offer shows above the list, so VoiceOver says it.
             if let offer, let project = runtime.projectList.first(where: { $0.id == offer.project }) {
@@ -108,16 +117,16 @@ struct ProjectsWindowView: View {
             Text("This removes the project with its index, mail and drafts from Projects. Your mail in Mail and the files in its folders stay as they are.")
         }
         .confirmationDialog(
-            "Move this email?",
+            "Change this email's project?",
             isPresented: Binding(get: { model.pendingMove != nil }, set: { if !$0 { model.pendingMove = nil } }),
             presenting: model.pendingMove
         ) { move in
-            Button("Move") {
+            Button("Change Project") {
                 Task { await model.confirmMove(move) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("Moving it removes its explanation and its draft with your changes, since they were made for its project. You can explain it again after the move.")
+            Text("This removes its explanation and its draft with your changes, since they were made for the project it is in now. You can explain it again after the change. The email stays where it is in Mail.")
         }
         .confirmationDialog(
             "Replace your draft?",
@@ -217,7 +226,7 @@ struct ProjectsWindowView: View {
     }
 
     private func moveMenu(_ email: MailStore.Listed) -> some View {
-        Menu("Move To") {
+        Menu("Assign to Project") {
             MoveMenuItems(runtime: runtime, model: model, email: email)
         }
         .disabled(runtime.phase != .on)
@@ -228,13 +237,18 @@ struct ProjectsWindowView: View {
     @ViewBuilder
     private var detail: some View {
         if let email = model.selectedEmail {
-            ProjectsEmailArea(runtime: runtime, model: model, email: email)
+            ProjectsEmailArea(runtime: runtime, model: model, email: email, openSettings: openSettings)
         } else if case .project(let id)? = model.place, let project = runtime.projectList.first(where: { $0.id == id }) {
             ProjectsProjectPage(runtime: runtime, project: project) {
                 setup = ProjectsSetupView.Draft(project)
             } forget: {
                 forgetting = project
+            } removeRule: { rule in
+                Task { await model.removeRule(rule, from: project.id) }
             }
+            // A page of its own for each project, so a Remove Rule dialog that is open goes
+            // away with its project rather than act on the next one.
+            .id(project.id)
         } else {
             ContentUnavailableView("No Email Selected", systemImage: "envelope")
         }
@@ -314,10 +328,11 @@ extension ProjectsWindowView {
         }
     }
 
-    /// The items of a Move To menu, in the list's context menu and on the email view's
-    /// project chip: Needs a Project and the other projects. A click moves the email, after
-    /// the user's yes when the move takes a changed draft away, see
-    /// ProjectsWindowModel.requestMove(_:to:).
+    /// The items of an Assign to Project menu, in the list's context menu and on the email
+    /// view's project chip: Needs a Project and the other projects. A click moves the email
+    /// to that list in Orra, after the user's yes when the move takes a changed draft away,
+    /// see ProjectsWindowModel.requestMove(_:to:). The words say assign, not move, since the
+    /// email stays where it is in Mail.
     struct MoveMenuItems: View {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel

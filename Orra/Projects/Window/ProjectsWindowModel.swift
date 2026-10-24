@@ -3,10 +3,10 @@ import Observation
 
 /// What the Projects window shows and what the user does there: the list chosen in the
 /// sidebar, its mail with the deadline marks of the explained ones, the selected email, a
-/// move or an Explain Again that waits for the user's yes, the rule offered after moves, the
-/// explanations under way, the email view of each email the user opened with the window's
-/// one handoff at a time, the line after Explain Selected Message, and Suggested Projects.
-/// ProjectsRuntime does the work.
+/// move or an Explain Again that waits for the user's yes, the rule offered after moves,
+/// the project Settings asks to edit, the explanations under way, the email view of each
+/// email the user opened with the window's one handoff at a time, the line after Explain
+/// Selected Message, and Suggested Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -16,10 +16,11 @@ final class ProjectsWindowModel {
         case projectNotSaved
         case projectNotForgotten
         case ruleNotSaved
+        case ruleNotRemoved
     }
 
-    /// A move from a Move To menu that waits for the user's yes, since it takes away a draft
-    /// the user changed, see `requestMove(_:to:)`.
+    /// A move from an Assign to Project menu that waits for the user's yes, since it takes
+    /// away a draft the user changed, see `requestMove(_:to:)`.
     nonisolated struct PendingMove: Equatable, Sendable {
         var messageID: String
         /// The project, nil for Needs a Project.
@@ -28,8 +29,10 @@ final class ProjectsWindowModel {
 
     /// Why an explanation did not come.
     nonisolated enum ExplainFailure: Equatable, Sendable {
-        /// The cleanup model is not on this Mac, or did not load.
+        /// The cleanup model is not on this Mac.
         case noModel
+        /// The cleanup model is on this Mac but could not be loaded.
+        case modelNotLoaded
         /// Even the trimmed prompt is too long for the model.
         case tooLong
         case other
@@ -83,6 +86,8 @@ final class ProjectsWindowModel {
     @ObservationIgnored private var deadlinesRead: Set<String> = []
     /// A move that waits for the user's yes.
     var pendingMove: PendingMove?
+    /// The project whose Edit Project sheet Settings asks for, until the window takes it.
+    private(set) var projectToEdit: UUID?
     /// The email whose Explain Again waits for the user's yes, since it replaces a draft
     /// the user changed, see `requestExplain(_:)`.
     var pendingExplain: String?
@@ -229,9 +234,10 @@ final class ProjectsWindowModel {
         return index > 0 ? rows[index - 1].messageID : nil
     }
 
-    /// A move from a Move To menu. A move takes the explanation and the draft away, since
-    /// they hold text of the project they were made for (#146). When the user changed the
-    /// draft, or the model made versions of it, the move waits for the user's yes.
+    /// A move from an Assign to Project menu. A move takes the explanation and the draft
+    /// away, since they hold text of the project they were made for (#146). When the user
+    /// changed the draft, or the model made versions of it, the move waits for the user's
+    /// yes.
     func requestMove(_ messageID: String, to project: UUID?) async {
         if await takesDraftAway(messageID) {
             pendingMove = PendingMove(messageID: messageID, project: project)
@@ -287,6 +293,38 @@ final class ProjectsWindowModel {
         }
     }
 
+    /// Remove Rule on the project page, after the user's yes. A removal that works takes
+    /// away the line of one that did not.
+    func removeRule(_ rule: Project.Rule, from project: UUID) async {
+        do {
+            try await runtime.removeRule(rule, from: project)
+            if notice == .ruleNotRemoved {
+                notice = nil
+            }
+        } catch {
+            notice = .ruleNotRemoved
+        }
+    }
+
+    /// Asks for a project's Edit Project sheet, as Edit Project… beside a linked mailbox in
+    /// Settings does. The window takes the request with `takeProjectToEdit(presenting:)`.
+    func edit(_ project: UUID) {
+        projectToEdit = project
+    }
+
+    /// Takes the request of `edit(_:)`: shows the project's page and returns the project,
+    /// whose Edit Project sheet the window opens. While the window shows a sheet or a
+    /// dialog, the request goes and the window stays as it is, and so it does for a project
+    /// that is gone.
+    /// - Parameter presenting: whether the window shows a sheet or an alert of its own.
+    func takeProjectToEdit(presenting: Bool) -> Project? {
+        guard let id = projectToEdit else { return nil }
+        projectToEdit = nil
+        guard !presenting, pendingMove == nil, pendingExplain == nil, let project = runtime.projectList.first(where: { $0.id == id }) else { return nil }
+        place = .project(id)
+        return project
+    }
+
     /// Explains an email, on the user's click.
     func explain(_ messageID: String) async {
         guard explaining[messageID] != .explaining else { return }
@@ -301,8 +339,13 @@ final class ProjectsWindowModel {
             emailModel(for: messageID).perform { await $0.explained() }
         } catch is CancellationError {
             explaining[messageID] = nil
+        } catch ProjectsRuntime.Failure.noText {
+            // The email view says why, see ProjectsWindowText.noText.
+            explaining[messageID] = nil
         } catch RewriteError.notLoaded {
             explaining[messageID] = .failed(.noModel)
+        } catch ProjectsRuntime.Failure.modelNotLoaded {
+            explaining[messageID] = .failed(.modelNotLoaded)
         } catch RewriteError.promptTooLong {
             explaining[messageID] = .failed(.tooLong)
         } catch {
@@ -310,9 +353,24 @@ final class ProjectsWindowModel {
         }
     }
 
+    /// Try Loading Again, after the cleanup model could not be loaded: looks at the model's
+    /// files and loads it again, then explains the email. A new explanation starts the
+    /// draft again, so it is left out when a change or an undo of the draft began
+    /// meanwhile, and it asks first when the user changed the draft, as Explain Again
+    /// does. Explain is there again once that is done.
+    func loadModelAgain(explaining messageID: String) async {
+        guard explaining[messageID] != .explaining else { return }
+        explaining[messageID] = .explaining
+        await runtime.dependencies.retryLoadingModel()
+        explaining[messageID] = nil
+        guard emailModels[messageID]?.isBusy != true else { return }
+        await requestExplain(messageID)
+    }
+
     /// Explain Selected Message: finds the message selected in Mail, shows it in its list
-    /// and explains it, or says why not (decision 18). It waits a moment for sorting to file
-    /// a message the scan just saved, never for the sorting of other mail, so the user's
+    /// and explains it, or says why not (decision 18). An email with no text to explain is
+    /// only shown, see ProjectsWindowText.noText. It waits a moment for sorting to file a
+    /// message the scan just saved, never for the sorting of other mail, so the user's
     /// explanation goes before the background work. For an email whose draft the user
     /// changed, it asks first, as Explain Again does. Its button stays off until the
     /// explanation started or the question shows.
@@ -330,6 +388,8 @@ final class ProjectsWindowModel {
         await show(messageID, in: await runtime.place(of: messageID))
         let asks = await takesDraftAway(messageID)
         isReadingSelection = false
+        // An email with no text to explain says why in its view, where Explain stays off.
+        if let email = selectedEmail, ProjectsWindowText.noText(email) != nil { return }
         guard !asks else {
             pendingExplain = messageID
             return
