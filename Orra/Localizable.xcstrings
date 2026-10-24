@@ -10791,7 +10791,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“项目”无法读取一个附件。请查看“邮件原文”。"
+            "value" : "有一个附件“项目”无法读取。请查看“邮件原文”。"
           }
         }
       }
@@ -15998,7 +15998,7 @@
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta sugerencia seguirá oculta. Aún puedes crear el proyecto por tu cuenta."
+            "value" : "Esta sugerencia quedará oculta. Aún puedes crear el proyecto por tu cuenta."
           }
         },
         "ja" : {
