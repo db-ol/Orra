@@ -1279,6 +1279,23 @@ final class ProjectsRuntime {
         return (try? await store.removeNewestVersion(of: messageID, at: dependencies.now())) ?? false
     }
 
+    /// The text the user typed into the email's draft, nil when there is none.
+    func editedDraft(of messageID: String) async -> MailStore.EditedDraft? {
+        try? await running?.store.editedDraft(of: messageID)
+    }
+
+    /// Keeps the text the user typed into the email's draft, or with nil removes it, and
+    /// says whether the store did. A failed write is logged with its code.
+    func saveEditedDraft(_ edited: MailStore.EditedDraft?, for messageID: String) async -> Bool {
+        guard let store = running?.store else { return false }
+        do {
+            return try await store.save(edited, for: messageID, at: dependencies.now())
+        } catch {
+            MailStore.log(error, "saving the text typed into a draft")
+            return false
+        }
+    }
+
     /// What a revision, the translation and the answer check of the explanation's draft
     /// need: the values the first draft was checked with, the email's own text, the user's
     /// name and language, and today. Nil when the explanation has no draft in Chinese or

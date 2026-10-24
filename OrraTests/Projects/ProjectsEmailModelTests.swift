@@ -3,11 +3,11 @@ import Synchronization
 import Testing
 @testable import Orra
 
-/// The email view of one email: the draft as the user edits it, a change from the change
-/// box or a tone with its highlight and Undo, the talk key's words in the change box, the
-/// answer check once per draft the model made, Show in My Language, the handoff to Mail with
-/// one at a time for the window, the requests that the window's close ends, the source chips
-/// and the deadline mark.
+/// The email view of one email: the draft as the user edits it and the save of what the
+/// user typed, a change from the change box or a tone with its highlight, Undo and Cancel
+/// Change, the talk key's words in the change box, the answer check once per draft the model
+/// made, Show in My Language, the handoff to Mail with one at a time for the window, the
+/// requests that the window's close ends, the source chips and the deadline mark.
 ///
 /// A fake model answers by the kind of request, a fake store keeps the versions, and a fake
 /// Mail never sends an Apple Event. Made up people at .example addresses, nothing from the
@@ -54,10 +54,20 @@ struct ProjectsEmailModelTests {
             var prompts: [String] = []
             var versions: [MailStore.DraftVersion] = []
             var savesVersions = true
+            /// The text the user typed into the draft, as the store keeps it.
+            var edited: MailStore.EditedDraft?
+            /// Whether the store keeps what the user typed.
+            var savesEdits = true
+            /// The saves of what the user typed, nil for a removal.
+            var editSaves: [String?] = []
             var copies: [String] = []
             var replies: [Bool] = []
             /// The checks of Mail's handle before a reply, true for a reply to all.
             var referenceChecks: [Bool] = []
+            /// Whether the check of Mail's handle waits for `referenceRelease`, also once its
+            /// task is cancelled, as an event already sent to Mail does.
+            var referenceHolds = false
+            var referenceRelease: CheckedContinuation<Void, Never>?
             var broughtForward = 0
             var mailIsRunning = true
             /// Whether Mail's reply waits until the test lets it go.
@@ -106,10 +116,21 @@ struct ProjectsEmailModelTests {
             }
         }
 
+        /// Keeps a version in place of what the user typed, as the store does.
         nonisolated func save(_ version: ReviseService.Version) {
             state.withLock { state in
                 guard state.savesVersions else { return }
                 state.versions.append(MailStore.DraftVersion(number: (state.versions.last?.number ?? 0) + 1, made: ProjectsEmailModelTests.today, version: version))
+                state.edited = nil
+            }
+        }
+
+        nonisolated func save(_ edited: MailStore.EditedDraft?) -> Bool {
+            state.withLock { state in
+                state.editSaves.append(edited?.text)
+                guard state.savesEdits else { return false }
+                state.edited = edited
+                return true
             }
         }
 
@@ -156,7 +177,7 @@ struct ProjectsEmailModelTests {
         email original: ExplainService.Email? = nil
     ) -> ProjectsEmailModel {
         let fakes = fakes
-        return ProjectsEmailModel(messageID: Self.id, actions: ProjectsEmailModel.Actions(
+        let model = ProjectsEmailModel(messageID: Self.id, actions: ProjectsEmailModel.Actions(
             explanation: { _ in explanation() },
             versions: { _ in fakes.value.versions },
             removeNewestVersion: { _ in
@@ -169,6 +190,8 @@ struct ProjectsEmailModelTests {
                     return true
                 }
             },
+            editedDraft: { _ in fakes.value.edited },
+            saveEditedDraft: { _, edited in fakes.save(edited) },
             reviseContext: { explanation in
                 guard let check = explanation.draftCheck else { return nil }
                 return ReviseService.Context(
@@ -198,6 +221,11 @@ struct ProjectsEmailModelTests {
             },
             mailReference: { _, all in
                 fakes.update { $0.referenceChecks.append(all) }
+                if fakes.value.referenceHolds {
+                    await withCheckedContinuation { continuation in
+                        fakes.update { $0.referenceRelease = continuation }
+                    }
+                }
                 if let referenceFailure { throw referenceFailure }
                 return reference
             },
@@ -220,6 +248,9 @@ struct ProjectsEmailModelTests {
                 return ProjectsDraftDiff.segments(from: before, to: after)
             }
         ), handoffs: handoffs)
+        // What the user types is saved at once.
+        model.saveDelay = .zero
+        return model
     }
 
     /// The model's answer check for the two questions of the email.
@@ -249,6 +280,83 @@ struct ProjectsEmailModelTests {
         #expect(model.explanation == nil)
         #expect(!model.hasDraft)
         #expect(model.text.isEmpty)
+    }
+
+    // MARK: What the user types
+
+    /// What the user types into the draft is saved with the key of the draft it went into,
+    /// and a new email view, as after the window closed, starts from it. Saved on this Mac
+    /// shows once the save worked, and never for the model's draft as it made it.
+    @Test func whatTheUserTypesIsSavedAndANewEmailViewStartsFromIt() async throws {
+        let model = model()
+        await model.load()
+        #expect(model.saveNote == nil)
+        let typed = Self.draft + "\nP.S. See you Friday."
+        model.text = typed
+        // The save has not run yet.
+        #expect(model.saveNote == nil)
+        try await waitUntil { model.saveNote == .saved }
+        #expect(fakes.value.edited == MailStore.EditedDraft(text: typed, editedFrom: MailStore.draftKey(Self.draft, version: 0)))
+        #expect(ProjectsWindowText.save(.saved) == "Saved on this Mac.")
+
+        let reopened = self.model()
+        await reopened.load()
+        #expect(reopened.text == typed)
+        #expect(reopened.isEdited)
+        #expect(reopened.saveNote == .saved)
+
+        // Back to the model's draft, so what the user typed goes.
+        reopened.text = Self.draft
+        try await waitUntil { fakes.value.edited == nil }
+        #expect(reopened.saveNote == nil)
+        #expect(fakes.value.editSaves == [typed, nil])
+    }
+
+    /// Saved on this Mac never shows before a save worked. A save that fails says so, and
+    /// the next key press tries again.
+    @Test func savedOnThisMacShowsOnlyOnceTheSaveWorked() async throws {
+        let model = model()
+        await model.load()
+        fakes.update { $0.savesEdits = false }
+        model.text = Self.draft + "\nThanks."
+        try await waitUntil { model.saveNote == .notSaved }
+        #expect(fakes.value.edited == nil)
+        #expect(ProjectsWindowText.save(.notSaved) == "The draft could not be saved. Copy it before you close the window.")
+        fakes.update { $0.savesEdits = true }
+        model.text += " Lin"
+        try await waitUntil { model.saveNote == .saved }
+        #expect(fakes.value.edited?.text == Self.draft + "\nThanks. Lin")
+    }
+
+    /// A change made from what the user typed takes its place in the store, and Undo puts
+    /// it back and saves it again. Text saved with the key of another draft, such as by a
+    /// save that ended after a change, never comes back over the newest draft, and goes.
+    @Test func typedTextComesBackOnlyOverTheDraftItWentInto() async throws {
+        let model = model()
+        await model.load()
+        let typed = Self.draft.replacingOccurrences(of: "today", with: "tonight")
+        model.text = typed
+        try await waitUntil { model.saveNote == .saved }
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan tonight.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer]
+            $0.checks = [Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        #expect(model.text == firmer)
+        #expect(fakes.value.edited == nil)
+        #expect(model.saveNote == .saved)
+        await model.undo()
+        #expect(model.text == typed)
+        try await waitUntil { fakes.value.edited?.text == typed }
+        #expect(fakes.value.edited?.editedFrom == MailStore.draftKey(Self.draft, version: 0))
+
+        fakes.update { $0.edited = MailStore.EditedDraft(text: "Words for version 1", editedFrom: MailStore.draftKey(firmer, version: 1)) }
+        let reopened = self.model()
+        await reopened.load()
+        #expect(reopened.text == Self.draft)
+        try await waitUntil { fakes.value.edited == nil }
+        #expect(reopened.saveNote == nil)
     }
 
     @Test func theSourcesNameThisEmailEarlierMailAndFiles() async {
@@ -477,6 +585,45 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsEmailModel.note(ProjectsRuntime.Failure.windowClosed) == .noModel)
         #expect(ProjectsEmailModel.note(ReviseService.Failure.emptyDraft) == .emptyDraft)
         #expect(ProjectsEmailModel.note(CocoaError(.fileNoSuchFile)) == .other)
+    }
+
+    /// Cancel Change ends a change that waits, such as for a dictation or Live Captions,
+    /// and leaves the draft and the change box as they were. Meanwhile Copy takes the draft
+    /// as it is, while Open Reply in Mail and Reply All wait.
+    @Test func cancelChangeLeavesTheDraftAndTheBoxAsTheyWere() async throws {
+        let model = model()
+        await model.load()
+        fakes.update {
+            $0.revisions = ["Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order].\n\nLin"]
+            $0.requestWaits = true
+        }
+        model.instruction = "Firmer."
+        model.perform { await $0.applyInstruction() }
+        try await waitUntil { model.changing != nil }
+        #expect(model.canCopy)
+        #expect(!model.canHandOff)
+        model.copy()
+        #expect(fakes.value.copies == [Self.draft])
+        model.cancelChange()
+        try await waitUntil { !model.isWorking }
+        #expect(model.changing == nil)
+        #expect(model.changeNote == nil)
+        #expect(model.text == Self.draft)
+        #expect(model.instruction == "Firmer.")
+        #expect(model.versions.isEmpty)
+        #expect(fakes.value.versions.isEmpty)
+        // The model was never asked.
+        #expect(fakes.value.prompts.isEmpty)
+        #expect(model.canHandOff)
+
+        // The next change runs as before.
+        fakes.update {
+            $0.requestWaits = false
+            $0.checks = [Self.bothAnswered]
+        }
+        #expect(await model.applyInstruction())
+        #expect(model.instruction.isEmpty)
+        #expect(model.versions.map(\.version.change) == [.instruction("Firmer.")])
     }
 
     /// The new tone left a placeholder out, which the view names.
@@ -792,6 +939,27 @@ struct ProjectsEmailModelTests {
         #expect(model.handoffNote == .outcome(.replyOpened))
         #expect(fakes.value.copies == [Self.draft])
         #expect(fakes.value.broughtForward == 0)
+    }
+
+    /// The window closes while Mail reads the headers of its message for Open Reply, and
+    /// Mail then answers with an error, such as a timeout. The draft is not copied, Mail is
+    /// not asked for a reply and does not come to the front, and no note is left.
+    @Test func closingTheWindowWhileMailChecksItsMessageLeavesTheClipboardAndMail() async throws {
+        let model = model(referenceFailure: .timedOut)
+        await model.load()
+        fakes.update { $0.referenceHolds = true }
+        model.perform { await $0.openReply(all: false) }
+        try await waitUntil { fakes.value.referenceRelease != nil }
+        model.cancelWork()
+        fakes.state.withLock { state in
+            state.referenceRelease?.resume()
+            state.referenceRelease = nil
+        }
+        try await waitUntil { !model.isHandingOff }
+        #expect(fakes.value.copies.isEmpty)
+        #expect(fakes.value.replies.isEmpty)
+        #expect(fakes.value.broughtForward == 0)
+        #expect(model.handoffNote == nil)
     }
 
     @Test func theFlagsFollowTheTextInTheEditor() async {

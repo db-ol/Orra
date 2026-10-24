@@ -163,17 +163,45 @@ struct RetentionTests {
         await store.close()
     }
 
-    /// The text goes with the explanation and the draft versions that hold it, also while
-    /// the draft is recent.
+    /// The text the user typed into a draft goes with the draft, 30 days after its last
+    /// change, and typing counts as a change. Nothing of it stays in the file.
+    @Test func typedTextGoesThirtyDaysAfterTheLastChangeOfItsDraft() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("typed@test.example", day: 0), Self.message("old@test.example", day: 0)], ownAddresses: [Self.work], at: Self.start)
+        for id in ["typed@test.example", "old@test.example"] {
+            try await store.save(Self.explanation(id, draft: Self.draft), at: Self.date(1))
+        }
+        let secret = "marmotlantern"
+        let typed = MailStore.EditedDraft(text: "The \(secret) sizes are confirmed.", editedFrom: MailStore.draftKey("The sizes are confirmed.", version: 0))
+        #expect(try await store.save(typed, for: "typed@test.example", at: Self.date(20)))
+        #expect(try await store.save(typed, for: "old@test.example", at: Self.date(1)))
+        // 31 days after the explanations, 11 after the typing into one of them.
+        #expect(try await Retention.apply(to: store, now: Self.date(32)) == Retention.Removed(explanations: 1, editedDrafts: 1))
+        #expect(try await store.editedDraft(of: "old@test.example") == nil)
+        #expect(try await store.explanation(for: "old@test.example") == nil)
+        #expect(try await store.editedDraft(of: "typed@test.example") == typed)
+        #expect(try await store.explanation(for: "typed@test.example") != nil)
+        #expect(try await Retention.apply(to: store, now: Self.date(49)).isEmpty)
+        #expect(try await Retention.apply(to: store, now: Self.date(51)) == Retention.Removed(explanations: 1, editedDrafts: 1))
+        #expect(try await store.editedDraft(of: "typed@test.example") == nil)
+        #expect(bytesOnDisk(store.database).range(of: Data(secret.utf8)) == nil)
+        await store.close()
+    }
+
+    /// The text goes with the explanation and the drafts that hold it, also while the draft
+    /// is recent.
     @Test func draftVersionsGoWithTheText() async throws {
         defer { cleanUp() }
         let store = try await openStore()
         try await store.save([Self.message("a@test.example", day: 0)], ownAddresses: [Self.work], at: Self.start)
         try await store.save(Self.explanation("a@test.example", draft: Self.draft), at: Self.date(80))
         #expect(try await store.save(ReviseService.Version(messageID: "a@test.example", change: .tone(.formal), check: DraftCheck.Result(draft: "Dear Ms Song,", language: .en)), startedAt: Self.date(85), at: Self.date(85)) == 1)
+        #expect(try await store.save(MailStore.EditedDraft(text: "Dear Ms Song, thanks.", editedFrom: MailStore.draftKey("Dear Ms Song,", version: 1)), for: "a@test.example", at: Self.date(86)))
         let removed = try await Retention.apply(to: store, now: Self.date(91))
-        #expect(removed == Retention.Removed(texts: 1, explanations: 1, draftVersions: 1))
+        #expect(removed == Retention.Removed(texts: 1, explanations: 1, draftVersions: 1, editedDrafts: 1))
         #expect(try await store.versions(of: "a@test.example").isEmpty)
+        #expect(try await store.editedDraft(of: "a@test.example") == nil)
         #expect(try await store.explanation(for: "a@test.example") == nil)
         #expect(try await Retention.apply(to: store, now: Self.date(116)).isEmpty)
         await store.close()

@@ -70,7 +70,9 @@ struct ProjectsEmailArea: View {
                     } else {
                         ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
                     }
-                    DraftSection(runtime: runtime, emailModel: emailModel, explanation: explanation)
+                    DraftSection(
+                        runtime: runtime, emailModel: emailModel, explanation: explanation,
+                        isExplaining: model.explaining[email.messageID] == .explaining)
                 } else {
                     // Before it is explained: the rule findings, and the email itself.
                     let warnings = ProjectsWarning.allCases.filter(email.warnings.contains).map { ExplanationSections.Item(warning: $0, places: []) }
@@ -135,8 +137,9 @@ struct ProjectsEmailArea: View {
         HStack(spacing: 10) {
             Group {
                 if email.isExplained {
+                    // Asks first when the new draft would replace one the user changed.
                     Button("Explain Again") {
-                        Task { await model.explain(email.messageID) }
+                        Task { await model.requestExplain(email.messageID) }
                     }
                 } else {
                     Button("Explain") {

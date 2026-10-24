@@ -119,6 +119,18 @@ struct ProjectsWindowView: View {
         } message: { _ in
             Text("Moving it removes its explanation and its draft with your changes, since they were made for its project. You can explain it again after the move.")
         }
+        .confirmationDialog(
+            "Replace your draft?",
+            isPresented: Binding(get: { model.pendingExplain != nil }, set: { if !$0 { model.pendingExplain = nil } }),
+            presenting: model.pendingExplain
+        ) { messageID in
+            Button("Replace Draft") {
+                Task { await model.confirmExplain(messageID) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Explaining this email again replaces its draft and your changes to it with a new draft.")
+        }
     }
 
     // MARK: The sidebar

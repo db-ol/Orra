@@ -3,8 +3,8 @@ import Foundation
 import os
 
 /// The mail Projects read, where sorting filed it, its reply mark, its latest explanation,
-/// the versions of its draft and the counts of the user's moves, in the Projects database
-/// (plan section 5, projects-store).
+/// the versions of its draft, the text the user typed into the draft and the counts of the
+/// user's moves, in the Projects database (plan section 5, projects-store).
 ///
 /// - Its tables come with `migration`, the second step of ProjectsDatabase. Every call runs
 ///   its statements and reads or writes their JSON on the database's actor, never on the
@@ -21,6 +21,9 @@ import os
 ///   filed in the project after it. `add(project:)` registers a new project.
 /// - An explanation belongs to the project it was made for. When an email changes project,
 ///   its explanation and draft go, so no text of the project before stays with it.
+/// - The text the user typed into a draft is kept apart from the versions the model made,
+///   with the key of the draft it was typed into, see `draftKey(_:version:)`. A new
+///   explanation or a new version takes its place.
 /// - The thread of each email is worked out when it is saved, see MailThreads, and joined
 ///   again when an earlier message of the thread comes later.
 /// - Text goes into the file only for the time Retention allows. What a delete removes is
@@ -112,6 +115,15 @@ nonisolated struct MailStore: Sendable {
         var version: ReviseService.Version
     }
 
+    /// The text the user typed into an email's draft, as the editor of the email view held
+    /// it.
+    nonisolated struct EditedDraft: Sendable, Equatable {
+        var text: String
+        /// The key of the draft the model made that the user typed into, see
+        /// `draftKey(_:version:)`.
+        var editedFrom: String
+    }
+
     /// The tables of the store, the second step of ProjectsDatabase.migrations.
     ///
     /// - mail_projects: the projects the list holds, which every row of a project hangs on.
@@ -128,7 +140,8 @@ nonisolated struct MailStore: Sendable {
     /// - mail_gone: the hash of each Message-ID that Forget Project or Retention removed,
     ///   until the scan can no longer reach it, see `goneKey(_:)` and `Retention.goneIDs`.
     ///
-    /// `attachmentTextMigration` adds the text of the attachments, the third step.
+    /// `attachmentTextMigration` adds the text of the attachments, the third step, and
+    /// `editedDraftMigration` the text the user typed into drafts, the fourth.
     static let migration = ProjectsDatabase.Migration(version: 2, sql: """
         CREATE TABLE mail_projects (
             id TEXT PRIMARY KEY
@@ -209,6 +222,19 @@ nonisolated struct MailStore: Sendable {
     /// saved before keeps its attachments' names only.
     static let attachmentTextMigration = ProjectsDatabase.Migration(version: 3, sql: """
         ALTER TABLE mail_messages ADD COLUMN attachment_text TEXT;
+        """)
+
+    /// The fourth step of ProjectsDatabase.migrations: the text the user typed into each
+    /// email's draft, with the key of the draft it was typed into and when it last changed.
+    /// A table of its own, so a save while the user types writes a short row, never the
+    /// email's row with its text. Retention counts it as a change of the draft.
+    static let editedDraftMigration = ProjectsDatabase.Migration(version: 4, sql: """
+        CREATE TABLE mail_edited_drafts (
+            message INTEGER PRIMARY KEY REFERENCES mail_messages (id) ON DELETE CASCADE,
+            text TEXT NOT NULL,
+            edited_from TEXT NOT NULL,
+            changed REAL NOT NULL
+        );
         """)
 
     /// The most messages of a subject looked at to join a reply to its thread by subject.
@@ -449,7 +475,7 @@ nonisolated struct MailStore: Sendable {
                 WHERE message_id = ?1 AND moved_by_user = 0 AND (?2 IS NULL OR ?2 IN (SELECT id FROM mail_projects))
                 RETURNING id
                 """, parameters)
-            try Self.dropVersionsWithoutExplanation(rows, in: database)
+            try Self.dropDraftsWithoutExplanation(rows, in: database)
             return !rows.isEmpty
         }
     }
@@ -464,12 +490,15 @@ nonisolated struct MailStore: Sendable {
         draft_changed = CASE WHEN project IS ?2 THEN draft_changed END
         """
 
-    /// Removes the draft versions of the emails in `rows`, by their id in the first column,
-    /// that have no explanation.
-    private static func dropVersionsWithoutExplanation(_ rows: [[ProjectsDatabase.Value]], in database: isolated ProjectsDatabase) throws {
+    /// Removes the draft versions and the text the user typed into the draft of the emails
+    /// in `rows`, by their id in the first column, that have no explanation.
+    private static func dropDraftsWithoutExplanation(_ rows: [[ProjectsDatabase.Value]], in database: isolated ProjectsDatabase) throws {
         for id in rows.compactMap({ $0.first?.integer }) {
             try database.run(
                 "DELETE FROM mail_draft_versions WHERE message = ?1 AND (SELECT explanation FROM mail_messages WHERE id = ?1) IS NULL",
+                [.integer(id)])
+            try database.run(
+                "DELETE FROM mail_edited_drafts WHERE message = ?1 AND (SELECT explanation FROM mail_messages WHERE id = ?1) IS NULL",
                 [.integer(id)])
         }
     }
@@ -493,7 +522,7 @@ nonisolated struct MailStore: Sendable {
                 WHERE message_id = ?1 AND (?2 IS NULL OR ?2 IN (SELECT id FROM mail_projects))
                 RETURNING id
                 """, parameters)
-            try Self.dropVersionsWithoutExplanation(rows, in: database)
+            try Self.dropDraftsWithoutExplanation(rows, in: database)
             return !rows.isEmpty
         }
     }
@@ -706,8 +735,9 @@ nonisolated struct MailStore: Sendable {
 
     /// Saves the email's latest explanation in place of the one before, and adds its
     /// warnings to the email's. A new explanation starts the draft again, so the versions of
-    /// the draft before go. Says whether it saved: nothing is saved for an email the store
-    /// does not hold, or one that moved to another project while it was explained.
+    /// the draft before and the text the user typed into it go. Says whether it saved:
+    /// nothing is saved for an email the store does not hold, or one that moved to another
+    /// project while it was explained.
     @discardableResult
     func save(_ explanation: Explanation, at now: Date) async throws -> Bool {
         let data = try JSONEncoder().encode(explanation)
@@ -726,6 +756,7 @@ nonisolated struct MailStore: Sendable {
                 WHERE id = ?1
                 """, [.integer(id), .blob(data), .real(now.timeIntervalSince1970), .integer(hasDraft ? 1 : 0), .text(try Self.json(warnings))])
             try database.run("DELETE FROM mail_draft_versions WHERE message = ?", [.integer(id)])
+            try database.run("DELETE FROM mail_edited_drafts WHERE message = ?", [.integer(id)])
             return true
         }
     }
@@ -744,7 +775,8 @@ nonisolated struct MailStore: Sendable {
     /// Adds a version of the email's draft and returns its number. Returns nil and saves
     /// nothing when the store does not hold the email, or when its explanation, which holds
     /// the first draft, is gone or newer than the revision: a revision that ends after the
-    /// email was explained again, moved or forgotten never lands on the new draft.
+    /// email was explained again, moved or forgotten never lands on the new draft. The new
+    /// version takes the place of the text the user typed, which it was made from.
     /// - Parameters:
     ///   - started: when the revision started, from the clock that `now` reads.
     @discardableResult
@@ -759,6 +791,9 @@ nonisolated struct MailStore: Sendable {
                 """, [.text(version.messageID), .real(now.timeIntervalSince1970), .blob(data), .real(started.timeIntervalSince1970)]
             ).first?.first?.integer else { return nil }
             try database.run("UPDATE mail_messages SET draft_changed = ? WHERE message_id = ?", [.real(now.timeIntervalSince1970), .text(version.messageID)])
+            try database.run(
+                "DELETE FROM mail_edited_drafts WHERE message = (SELECT id FROM mail_messages WHERE message_id = ?)",
+                [.text(version.messageID)])
             return Int(number)
         }
     }
@@ -793,6 +828,47 @@ nonisolated struct MailStore: Sendable {
             try database.run("UPDATE mail_messages SET draft_changed = ? WHERE message_id = ?", [.real(now.timeIntervalSince1970), .text(messageID)])
             return true
         }
+    }
+
+    /// Keeps the text the user typed into the email's draft in place of the one before, or
+    /// with nil removes it, and says whether it did. Nothing is kept for an email whose
+    /// explanation holds no draft, such as one that moved to another project meanwhile.
+    /// - Parameters:
+    ///   - now: when the user changed the draft, which Retention counts from.
+    @discardableResult
+    func save(_ edited: EditedDraft?, for messageID: String, at now: Date) async throws -> Bool {
+        try await database.transaction { database in
+            guard let id = try database.run(
+                "SELECT id FROM mail_messages WHERE message_id = ? AND explanation_draft = 1", [.text(messageID)]
+            ).first?.first?.integer else { return false }
+            if let edited {
+                try database.run("""
+                    INSERT INTO mail_edited_drafts (message, text, edited_from, changed) VALUES (?1, ?2, ?3, ?4)
+                    ON CONFLICT (message) DO UPDATE SET text = excluded.text, edited_from = excluded.edited_from, changed = excluded.changed
+                    """, [.integer(id), .text(edited.text), .text(edited.editedFrom), .real(now.timeIntervalSince1970)])
+            } else {
+                try database.run("DELETE FROM mail_edited_drafts WHERE message = ?", [.integer(id)])
+            }
+            return true
+        }
+    }
+
+    /// The text the user typed into the email's draft, nil when there is none.
+    func editedDraft(of messageID: String) async throws -> EditedDraft? {
+        let rows = try await database.run("""
+            SELECT e.text, e.edited_from FROM mail_edited_drafts e JOIN mail_messages m ON m.id = e.message
+            WHERE m.message_id = ?
+            """, [.text(messageID)])
+        guard let row = rows.first, row.count == 2, let text = row[0].text, let editedFrom = row[1].text else { return nil }
+        return EditedDraft(text: text, editedFrom: editedFrom)
+    }
+
+    /// The key of a draft the model made, which the text the user typed into it is kept
+    /// with: SHA-256 in hex of its version number, 0 for the explanation's draft, and its
+    /// text. So that text comes back only over the draft it was typed into, never over a
+    /// version or an explanation that came after it.
+    static func draftKey(_ draft: String, version: Int) -> String {
+        SHA256.hash(data: Data("\(version)\n\(draft)".utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// The explanation's save closure. A failed write is logged with its code.
