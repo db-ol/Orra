@@ -1051,7 +1051,8 @@ struct PushToTalkControllerTests {
 
     /// Starts a dictation that the limit stops while the key is up, in `mode`, and waits until
     /// it was pasted. The key waits an hour for the press meant to stop, as in
-    /// `startedController`, unless a test asks for less.
+    /// `startedController`, unless a test asks for less. The dictations after it get the
+    /// usual limit.
     private func dictationStoppedAtLimit(_ mode: TriggerMode, limitNoticeWindow: Duration = .seconds(3600), sourceLocation: SourceLocation = #_sourceLocation) async throws -> (PushToTalkController, HotkeyTap, CueRecorder, ContinuousClock.Instant) {
         let controller = try await startedController(limit: .milliseconds(200), limitNoticeWindow: limitNoticeWindow)
         controller.setTriggerMode(mode, for: .talk)
@@ -1066,6 +1067,11 @@ struct PushToTalkControllerTests {
         #expect(controller.state == .handsFree)
         try await waitUntil({ controller.state == .idle && !inserter.inserted.isEmpty }, sourceLocation: sourceLocation)
         #expect(mic.calls == ["start", "stop"])
+        // The dictations that follow are to record as usual, so they get the usual limit.
+        // With 200 ms the limit could stop one of them before the test ends it. A hold in
+        // Hold mode lasts longer than that, since its press alone waits 300 ms, and a wait
+        // for the call that starts the microphone fails when the stop comes before it looks.
+        controller.maximumRecordingDuration = RecordingLimits.maximumDuration
         return (controller, tap, cues, now)
     }
 
@@ -1107,12 +1113,6 @@ struct PushToTalkControllerTests {
     /// hold records as usual, from its key down, and clears the notice.
     @Test func inHoldModeAHoldAfterTheLimitRecords() async throws {
         let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.hold)
-        // This hold is to record as usual, so it gets the usual limit. It lasts longer than
-        // the 200 ms limit of the first dictation, since the press alone waits 300 ms. With
-        // that limit the test passed only when the limit ran out during the wait, where a
-        // limit does nothing, or when the release came first. A busy main actor delays
-        // both, and then the limit stopped this hold too.
-        controller.maximumRecordingDuration = RecordingLimits.maximumDuration
         var now = initial
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: HotkeyTapTests.rightControlDown, at: now)
         #expect(controller.state == .arming)
@@ -1190,6 +1190,8 @@ struct PushToTalkControllerTests {
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(cues.list.last == .finished(message: Self.limitNotice))
         #expect(mic.calls == ["start", "stop"])
+        // The next dictation gets the usual limit, as in `dictationStoppedAtLimit`.
+        controller.maximumRecordingDuration = RecordingLimits.maximumDuration
         press(tap, at: &now)
         #expect(controller.state == .handsFree)
         try await waitUntil { mic.calls.count == 3 }
@@ -1208,6 +1210,8 @@ struct PushToTalkControllerTests {
         #expect(controller.state == .listening)
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(cues.list.last == .finished(message: Self.limitNotice))
+        // The next hold gets the usual limit, as in `dictationStoppedAtLimit`.
+        controller.maximumRecordingDuration = RecordingLimits.maximumDuration
         now = now.advanced(by: .seconds(1))
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [], at: now)
         #expect(controller.state == .idle)
