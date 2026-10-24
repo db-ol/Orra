@@ -1027,7 +1027,7 @@ struct ProjectsRuntimeTests {
         let window = ProjectsWindowModel(runtime: runtime)
         await window.explainSelectedMessage()
         #expect(window.notice == .selection(.otherEmail))
-        #expect(ProjectsWindowText.selection(.otherEmail) == "Another email Projects read has the same Message-ID as this message, so Projects cannot explain it.")
+        #expect(ProjectsWindowText.selection(.otherEmail) == "This message looks like an email Projects read, but its sender, recipients or date differ, so Projects cannot explain it.")
         #expect(window.selectedEmail == nil)
         #expect(window.explaining[id] == nil)
 

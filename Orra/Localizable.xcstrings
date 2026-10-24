@@ -1862,28 +1862,6 @@
         }
       }
     },
-    "Another email Projects read has the same Message-ID as this message, so Projects cannot explain it." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Otro correo que leyó Proyectos tiene el mismo Message-ID que este mensaje, así que Proyectos no puede explicarlo."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“プロジェクト”が読み取った別のメールに、このメッセージと同じMessage-IDがあるため、説明できません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“项目”读取过的另一封邮件与这封邮件的 Message-ID 相同，因此无法解释这封邮件。"
-          }
-        }
-      }
-    },
     "Answered" : {
       "localizations" : {
         "es-419" : {
@@ -15945,6 +15923,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这封邮件所在的邮箱不在“项目”的读取范围内。请先在设置中选择这个邮箱。"
+          }
+        }
+      }
+    },
+    "This message looks like an email Projects read, but its sender, recipients or date differ, so Projects cannot explain it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este mensaje se parece a un correo que leyó Proyectos, pero su remitente, sus destinatarios o su fecha son distintos, así que Proyectos no puede explicarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメッセージは“プロジェクト”が読み取ったメールに似ていますが、差出人、宛先、日付のいずれかが異なるため、説明できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这封邮件看起来像“项目”读取过的一封邮件，但发件人、收件人或日期不同，因此“项目”无法解释它。"
           }
         }
       }
