@@ -643,6 +643,58 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Projects starts with a saved project whose folder takes long to resolve, such as on
+    /// a share that hangs. Turning Projects off does not wait for it, and once it resolves,
+    /// the folder is neither read nor watched.
+    @Test(.timeLimit(.minutes(1))) func aStalledFolderResolveDoesNotHoldUpTurningProjectsOff() async throws {
+        defer { cleanUp() }
+        let project = try await savedProjectWithAFolder()
+        let folders = StallingFolders()
+        let (runtime, projects, _) = make(folders: folders)
+        runtime.follow()
+        try await waitUntil { folders.isHolding }
+
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        folders.letGo()
+        try await waitUntil { folders.heldResolveReturned }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(folders.readFiles.isEmpty)
+        #expect(folders.watchedFolders.isEmpty)
+        #expect(runtime.indexReport(project.id) == nil)
+    }
+
+    /// The same for Delete All Projects Data, which stops Projects first: it does not wait
+    /// for the folder, and Projects starts again with no data while the folder still
+    /// resolves.
+    @Test(.timeLimit(.minutes(1))) func aStalledFolderResolveDoesNotHoldUpDeleteAll() async throws {
+        defer { cleanUp() }
+        let project = try await savedProjectWithAFolder()
+        let folders = StallingFolders()
+        let (runtime, projects, _) = make(folders: folders)
+        runtime.follow()
+        try await waitUntil { folders.isHolding }
+
+        let deleted = Count()
+        let deleting = Task {
+            await projects.deleteAllData()
+            deleted.add()
+        }
+        try await waitUntil { deleted.value == 1 }
+        #expect(!projects.deleteFailed)
+        try await waitUntil { runtime.phase == .on }
+        #expect(runtime.projectList.isEmpty)
+        folders.letGo()
+        try await waitUntil { folders.heldResolveReturned }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(folders.readFiles.isEmpty)
+        #expect(folders.watchedFolders.isEmpty)
+        #expect(runtime.indexReport(project.id) == nil)
+        await deleting.value
+        await projects.turnOff(keepingData: false)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: The model
 
     @Test func sortingAsksTheModelOnlyWhileTheWindowHoldsIt() async throws {
@@ -1445,6 +1497,17 @@ struct ProjectsRuntimeTests {
             if condition(rows) { return rows }
             try await Task.sleep(for: .milliseconds(5))
         }
+    }
+
+    /// A project with a folder, saved by a run of Projects that ended, so the next start
+    /// finds it in the project list and resolves its folder.
+    private func savedProjectWithAFolder() async throws -> Project {
+        let (first, projects, _) = try await started()
+        let project = Project(name: "Harbor", folders: [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))])
+        try await first.add(project)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { first.phase == .off }
+        return project
     }
 
     /// A folder under the test's folder that holds one text file.

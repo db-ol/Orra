@@ -554,8 +554,12 @@ final class ProjectsRuntime {
             model: model, queue: queue, sorting: sorting, scan: scan, retention: retention
         )
         phase = .on
+        // A folder can take long to resolve, and a stop or a delete waits for this start,
+        // so each project's folders resolve in a task of their own.
         for project in list.projects {
-            await startIndex(project)
+            Task { [weak self] in
+                await self?.startIndex(project)
+            }
         }
         followIndex(index)
         mailIsRunning = dependencies.bridge.isRunning()
@@ -999,13 +1003,16 @@ final class ProjectsRuntime {
 
     /// Starts indexing a project's folders as they are now. With `resortAfter`, Needs a
     /// Project is sorted again once the sweep that starts here ends. A folder can take long
-    /// to resolve, such as on a share that hangs. When the project's folders changed
-    /// meanwhile, or Projects stopped, this starts nothing, since the start for the change
-    /// or the next start of Projects counts.
+    /// to resolve, such as on a share that hangs, so no start or stop of Projects waits for
+    /// this. When the project's folders changed meanwhile, or Projects stopped or is turning
+    /// off, this starts nothing, since the start for the change or the next start of
+    /// Projects counts.
     private func startIndex(_ project: Project, resortAfter: Bool = false) async {
         guard let index = running?.index else { return }
         let folders = await dependencies.resolveFolders(project.folders)
-        guard running?.index === index, running?.list.project(project.id)?.folders == project.folders else { return }
+        // The switch itself, since `wantsOn` follows it a moment later.
+        guard projects.isOn, !projects.isDeleting, running?.index === index,
+              running?.list.project(project.id)?.folders == project.folders else { return }
         index.start(project: project.id, folders: folders)
         if resortAfter, !folders.isEmpty, index.reports[project.id]?.isIndexing == true {
             resortAfterIndex.insert(project.id)
