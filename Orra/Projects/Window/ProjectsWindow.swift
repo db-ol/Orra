@@ -8,9 +8,9 @@ import SwiftUI
 /// While it is open it holds the cleanup model, and closing it lets the model go and ends
 /// the background work, see ProjectsRuntime.windowOpened(). Orra shows in the Dock while it
 /// is open, as for Settings, see DockIcon. It closes when Projects turns off. Closing it
-/// ends the requests of its email views and lets go of the window with its lists,
-/// selection and edited drafts, so no mail it showed stays in memory, and the next open
-/// builds it anew where it was last.
+/// saves the text the user typed into drafts, ends the requests of its email views and
+/// lets go of the window with its lists and selection, so no mail it showed stays in
+/// memory, and the next open builds it anew where it was last, with those drafts.
 final class ProjectsWindow {
     /// The size the window first opens at.
     static let defaultSize = CGSize(width: 1_040, height: 640)
@@ -47,6 +47,14 @@ final class ProjectsWindow {
         NSApplication.shared.activate()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+    }
+
+    /// Brings the window to the front with Edit Project open for a project, as Edit
+    /// Project… beside a linked mailbox in Settings asks. A sheet or a dialog that shows
+    /// there already stays as it is.
+    func edit(_ project: UUID) {
+        show()
+        model?.edit(project)
     }
 
     /// Closes the window, such as when Projects turns off.
@@ -93,7 +101,8 @@ final class ProjectsWindow {
         closeObserver = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self, weak model] _ in
             MainActor.assumeIsolated {
                 self?.runtime.windowClosed()
-                // A change or a check the user can no longer see ends with the window.
+                // A change or a check the user can no longer see ends with the window, and
+                // the text the user typed into drafts is saved.
                 model?.forgetEmails()
                 self?.letGo()
             }

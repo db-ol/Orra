@@ -62,11 +62,33 @@ struct MailStoreTests {
 
     // MARK: Saving
 
-    @Test func theTablesAreTheSecondStepOfTheSchemaAndTheAttachmentTextTheThird() async throws {
+    /// The tables are the second step, the text of attachments the third, whether an email
+    /// was too large to read the fourth, and the text the user typed into drafts the fifth.
+    @Test func theTablesAreTheSecondStepOfTheSchemaAndTheLaterStepsFollowInOrder() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3])
-        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(3)])
+        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3, 4, 5])
+        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(5)])
+        await store.close()
+    }
+
+    /// An email too large for the scan to read keeps that mark, also once Retention removed
+    /// its text, so the window tells the two apart.
+    @Test func anEmailTooLargeToReadKeepsItsMark() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        var large = Self.message("large@test.example", from: "kim@quay.example", text: "")
+        large.visibleText = ""
+        large.isTooLarge = true
+        try await store.save([large, Self.message("small@test.example", from: "kim@quay.example", day: 1)], ownAddresses: [Self.work], at: Self.date(2))
+        var listed = try await store.list(.needsProject)
+        #expect(listed.map(\.messageID) == ["small@test.example", "large@test.example"])
+        #expect(listed.map(\.isTooLarge) == [false, true])
+        #expect(listed.map(\.hasText) == [true, true])
+        try await Retention.apply(to: store, now: Self.date(93))
+        listed = try await store.list(.needsProject)
+        #expect(listed.map(\.isTooLarge) == [false, true])
+        #expect(listed.map(\.hasText) == [false, false])
         await store.close()
     }
 
@@ -662,7 +684,9 @@ struct MailStoreTests {
         #expect(try await store.save(Self.explanation("a@test.example", project: nil), at: Self.date(1)))
         let formal = ReviseService.Version(
             messageID: "a@test.example", change: .tone(.formal),
-            check: DraftCheck.Result(draft: "尊敬的宋女士：尺寸已确认。", language: .zh), droppedPlaceholders: ["[待确认：交期]"])
+            check: DraftCheck.Result(draft: "尊敬的宋女士：尺寸已确认。", language: .zh), droppedPlaceholders: ["[待确认：交期]"],
+            madeFrom: "您好，尺寸已确认。交期下周告知。")
+        // Without the text it was made from, as an earlier build saved it.
         let shorter = ReviseService.Version(
             messageID: "a@test.example", change: .instruction("更短一点"),
             check: DraftCheck.Result(draft: "尺寸已确认。", language: .zh, flags: [.decidesQuestion(placeholders: 0, questions: 1)]))
@@ -679,6 +703,44 @@ struct MailStoreTests {
         #expect(try await store.save(Self.explanation("a@test.example", draft: .missing, project: nil), at: Self.date(6)))
         #expect(try await store.versions(of: "a@test.example").isEmpty)
         #expect(try await store.removeNewestVersion(of: "a@test.example", at: Self.date(7)) == false)
+        await store.close()
+    }
+
+    /// The text the user typed into a draft is kept apart from the versions, with the key of
+    /// the draft it went into, only for an explanation that holds a draft. A new version or
+    /// a new explanation takes its place.
+    @Test func typedTextIsKeptUntilANewVersionOrExplanation() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let id = "a@test.example"
+        try await store.save([Self.message(id, from: "song.yutong@harborlights.example")], ownAddresses: [Self.work], at: Self.start)
+        let typed = MailStore.EditedDraft(text: "您好，尺寸已确认。交期下周告知。", editedFrom: MailStore.draftKey("您好，尺寸已确认。[待确认：交期]", version: 0, explained: Self.date(1)))
+        #expect(try await store.save(typed, for: id, at: Self.date(1)) == false)
+        #expect(try await store.save(Self.explanation(id, draft: .missing, project: nil), at: Self.date(1)))
+        #expect(try await store.save(typed, for: id, at: Self.date(1)) == false)
+        #expect(try await store.save(Self.explanation(id, project: nil), at: Self.date(1)))
+        #expect(try await store.save(typed, for: id, at: Self.date(2)))
+        #expect(try await store.editedDraft(of: id) == typed)
+        #expect(try await store.save(typed, for: "unknown@test.example", at: Self.date(2)) == false)
+
+        let warm = ReviseService.Version(messageID: id, change: .tone(.warm), check: DraftCheck.Result(draft: "您好！尺寸已确认。", language: .zh))
+        #expect(try await store.save(warm, startedAt: Self.date(2), at: Self.date(3)) == 1)
+        #expect(try await store.editedDraft(of: id) == nil)
+        // Typed again, and removed once the editor holds the model's draft again.
+        #expect(try await store.save(typed, for: id, at: Self.date(4)))
+        #expect(try await store.save(nil, for: id, at: Self.date(4)))
+        #expect(try await store.editedDraft(of: id) == nil)
+        #expect(try await store.save(typed, for: id, at: Self.date(5)))
+        #expect(try await store.save(Self.explanation(id, project: nil), at: Self.date(6)))
+        #expect(try await store.editedDraft(of: id) == nil)
+
+        // The key names the explanation, the version and the text of the draft.
+        let explained = Self.date(1)
+        #expect(MailStore.draftKey("Hi", version: 0, explained: explained) != MailStore.draftKey("Hi", version: 1, explained: explained))
+        #expect(MailStore.draftKey("Hi", version: 1, explained: explained) != MailStore.draftKey("Hi!", version: 1, explained: explained))
+        #expect(MailStore.draftKey("Hi", version: 0, explained: explained) != MailStore.draftKey("Hi", version: 0, explained: Self.date(6)))
+        #expect(MailStore.draftKey("Hi", version: 1, explained: explained) == MailStore.draftKey("Hi", version: 1, explained: explained))
+        #expect(MailStore.draftKey("Hi", version: 1, explained: explained).count == 64)
         await store.close()
     }
 
@@ -706,8 +768,8 @@ struct MailStoreTests {
     }
 
     /// An explanation holds text of the project it was made for. When the email changes
-    /// project, the explanation and the draft go, so forgetting the project before leaves
-    /// none of its text behind.
+    /// project, the explanation and the draft go, with the text the user typed into it, so
+    /// forgetting the project before leaves none of its text behind.
     @Test func anEmailThatChangesProjectLosesItsExplanationAndDraft() async throws {
         defer { cleanUp() }
         let store = try await openStore()
@@ -724,6 +786,7 @@ struct MailStoreTests {
             explanation.messageID = id
             #expect(try await store.save(explanation, at: Self.date(4)))
             #expect(try await store.save(ReviseService.Version(messageID: id, change: .tone(.warm), check: DraftCheck.Result(draft: "\(secret) draft", language: .en)), startedAt: Self.date(4), at: Self.date(4)) == 1)
+            #expect(try await store.save(MailStore.EditedDraft(text: "\(secret) typed", editedFrom: MailStore.draftKey("\(secret) draft", version: 1, explained: explanation.today)), for: id, at: Self.date(4)))
         }
 
         #expect(try await store.move("moved@test.example", to: Self.maple))
@@ -734,9 +797,11 @@ struct MailStoreTests {
         for id in ["moved@test.example", "sorted@test.example"] {
             #expect(try await store.explanation(for: id) == nil)
             #expect(try await store.versions(of: id).isEmpty)
+            #expect(try await store.editedDraft(of: id) == nil)
         }
         #expect(try await store.explanation(for: "stays@test.example") != nil)
         #expect(try await store.versions(of: "stays@test.example").count == 1)
+        #expect(try await store.editedDraft(of: "stays@test.example")?.text == "\(secret) typed")
         // An explanation made for the project before is not saved after the move.
         explanation.messageID = "moved@test.example"
         #expect(try await store.save(explanation, at: Self.date(5)) == false)

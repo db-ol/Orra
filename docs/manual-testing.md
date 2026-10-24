@@ -3310,6 +3310,123 @@ Projects Data and Start Reading Mail again first.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
 
+The words of the Projects window by what Orra knows, added on 2026-10-24, not verified
+yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
+English, then in 简体中文, 日本語 and Español. ProjectsWindowViewTests checks the words
+themselves, and a model answer that stops early, which is hard to make by hand.
+
+- [ ] An email that only mentions a password, such as a notice never to share one, shows
+  "It mentions a password, a code or another credential. Check what it asks you to do."
+  No warning above "The model also noted:" says that an email asks for a password,
+  personal data or a payment. The model's own lines under it may still say so, since its
+  prompt still uses those words.
+- [ ] An email that quotes you from mail older than the period Projects reads shows "It
+  quotes you. Projects did not find those words in the sent mail it read."
+- [ ] In an explanation, a point without a chip shows No source provided under it, and an
+  empty Before you reply says No decisions found.
+- [ ] The attachments show once, under Original Email after To and Cc, each with its kind,
+  size and whether Projects read its text. Explanation has no list. When Projects did not
+  read a PDF or a Word file, such as one Mail has not downloaded, What it says ends with
+  "Projects could not read an attachment. See Original Email." An email whose only
+  attachment is an image has no such line, also when Mail has not downloaded the image.
+  An email over 16 MB, which Projects saves without its text, still lists its
+  attachments.
+- [ ] Control-click an email in the list: the menu reads Assign to Project, as the help
+  tag of the project chip does. After you assign two emails from one sender to one
+  project, the offer reads "Always assign mail from … to …?". Assigning an email whose
+  draft you changed asks "Change this email's project?" and says that the email stays
+  where it is in Mail. In Mail it does. The chip then says You assigned it here.
+- [ ] Hovering Dismiss Suggestion, in the sheet and in a suggestion's menu, shows "This
+  suggestion will stay hidden. You can still create the project yourself." Note whether
+  the menu shows the help tag.
+- [ ] Adding ~/Library/Mail as a project folder says "Projects never reads Mail's local
+  data files."
+- [ ] In 简体中文, the setup sheet and the project page say 联系人 and 添加联系人, and the
+  menu reads 归入项目. In each language, note any new line that reads oddly or does not
+  fit its place.
+
+Loading the model for Projects, added on 2026-10-24, not verified yet. Check in a Debug
+build with Projects on, Clean Up Text, Translation and Live Captions off, and the synthetic
+mail imported, as in the test guide. The cleanup model is in
+~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3.5-4B-4bit-0e7ffd5c. Watch
+its loads with
+`/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`,
+which shows loads and waits with their times, never text. A changed first byte of
+model.safetensors in that folder makes the load fail. In the folder, note the byte with
+`xxd -p -l 1 model.safetensors`, which prints 0f for this model, change it with
+`echo '0: 00' | xxd -r - model.safetensors`, and put it back with the byte you noted, as in
+`echo '0: 0f' | xxd -r - model.safetensors`.
+
+- [ ] Quit Orra, move that folder out of Models, and launch. Open the Projects window and
+  click Explain on an email. The line under it reads "The cleanup model is not on this
+  Mac." with Open Projects Settings…, which opens Settings at Projects with the download
+  button.
+- [ ] Start the download there and keep the Projects window open. Shortly before the
+  download ends, double press the talk key for hands free and talk until it is done, then
+  press once more. The log shows "The cleanup model loads for Projects after the dictation"
+  before the paste and "Cleanup model loaded and warmed up" only after it, and the
+  dictation pastes as quickly as without the download.
+- [ ] Repeat with Clean Up Text on. The model loads as soon as the download ends, during the
+  dictation, and the dictation is cleaned up as before.
+- [ ] Quit Orra, change the byte, and launch. Open the Projects window and click Explain.
+  The line reads "The cleanup model could not be loaded." with Try Loading Again, never
+  that the model is not on this Mac. Settings > Projects shows Could not be loaded beside
+  Cleanup model, with "Until it loads, Projects cannot explain mail or draft replies." and
+  Try Loading Again. On an email explained before, Change Draft says "The cleanup model
+  could not be loaded." too.
+- [ ] Put the byte back and click Try Loading Again in the window. Explaining… shows, the
+  line under the list reads "Loading the cleanup model…" while the model loads, and then
+  the explanation shows.
+- [ ] Quit Orra, change the byte again, launch, and click Explain Again on an email
+  explained before. Put the byte back, click Try Loading Again in Settings > Projects, and
+  wait for On this Mac. In the window, Try Loading Again is dimmed while Change Draft runs
+  on that email. Once the change is done, click it. The explanation starts at once, with
+  no "Loading the cleanup model…" under the list, and the log shows "Cleanup model loaded
+  and warmed up" only once since the launch.
+- [ ] Only with time for a download of about 3 GB: quit Orra, change the byte again,
+  launch, and click Try Loading Again without putting it back. The hashes are checked and
+  the damaged file is deleted, so the line says that the model is not on this Mac, and
+  Settings > Projects offers Resume Download.
+- [ ] With Orra's language set to 中文, 日本語 and Español, the new lines and buttons read
+  naturally and fit beside each other.
+
+A load that waits behind an unload, as when the Projects window closes and opens again at
+once, must not start before the paste of a dictation that starts right away. That gap is
+too short to catch by hand, so
+CleanupIdleUnloadTests.aQueuedLoadForProjectsWaitsForADictationThatStartsBeforeItsTurn
+checks it.
+
+The draft you write in the Projects window, added on 2026-10-24, not verified yet. Check in
+a Debug build with the synthetic mail imported, as in the test guide, and the cleanup model
+on the Mac. This build adds a step to the Projects database. A Debug build from before it
+then says that Projects could not open its data on this Mac, until you use Delete All
+Projects Data… in its Settings.
+
+- [ ] Type a sentence into the draft of an explained email. Saved on this Mac shows under
+  the draft about half a second after the last key press, and not while you type. After
+  the first key press, the checks and buttons under the draft stay where they are.
+- [ ] Close the Projects window and open it again. The draft holds your sentence, and Saved
+  on this Mac shows. Turn Projects off in Settings with Keep Data and on again: the draft
+  still holds it.
+- [ ] Change that draft with Tone, close the window and open it again, then click Undo
+  Change. The draft holds your sentence again.
+- [ ] Click Explain Again on that email. Orra asks "Replace your draft?" first. Cancel
+  leaves the draft as it was. Replace Draft explains the email again with a new draft, and
+  the draft cannot be edited until the new one shows. An email whose draft you did not
+  change and that has no versions explains again without asking.
+- [ ] Type into the new draft again, then select that email in Mail and click Explain
+  Selected Message. Orra asks the same first.
+- [ ] Turn on Live Captions, then click Change Draft. The change waits, the line under it
+  says "Paused while Live Captions run." and Cancel Change shows. Copy puts the draft as it
+  is on the clipboard, while Open Reply in Mail stays dimmed. Cancel Change ends the change,
+  and the draft and your words in the change box stay. With captions off, the same change
+  runs.
+- [ ] Click Open Reply in Mail and close the Projects window at once. When Mail answers
+  after the close, also with an error, the clipboard keeps what it held. This is hard to
+  time by hand, so
+  ProjectsEmailModelTests.closingTheWindowWhileMailChecksItsMessageLeavesTheClipboardAndMail
+  checks it.
+
 Every email Projects keeps, added on 2026-10-24, not verified yet. Check in a Debug build
 with a test mailbox in Mail that holds several thousand made up messages from one company
 domain, all received within the period Projects reads, and no project for that domain.
@@ -3356,6 +3473,92 @@ Welcome window above, then choose Hold for the talk key in the welcome window:
   LocalizationTests.theEnglishMicrophonePromptMatchesTheCatalog compares with the catalog.
 - [ ] Settings > About reads "Orra goes online only to download the models you ask for,
   and to check for updates when you allow it."
+
+Project domains, rules and the reading scope, added on 2026-10-24, not verified yet. Check
+in a Debug build with Projects on, Mail open, Mail access allowed and the synthetic mail
+imported, as in the test guide. For the check of Remove Rule, before Start Reading Mail,
+make a mailbox On My Mac named Held Back, leave it unticked in Settings, and drag into it
+one email of a sender who has three or more emails in the synthetic mail.
+
+- [ ] Edit Project says under Domains that addresses at these domains count as the
+  project's people, and to add people at a shared provider such as gmail.com under People.
+  Type gmail.com, @QQ.com or vip.163.com: the line under the field says many unrelated
+  people have addresses at that domain, and Save stays dimmed. harbor.example saves.
+- [ ] Link a mailbox in Edit Project that is not ticked in Settings. Settings > Projects
+  lists it under Mailboxes with "Also read for" and the project's name. Edit Project…
+  beside it opens the Projects window on the project's page with Edit Project open, also
+  when the window was closed. An Edit Project sheet, a Forget Project alert or a Change
+  Project dialog that is open in the window already stays as it was, and so does the list
+  behind it.
+- [ ] Rename that linked mailbox in Mail, then click Read Mailbox Names from Mail in Edit
+  Project and Cancel. Settings > Projects says under the mailbox that Mail has no mailbox
+  with this name now, as the project page does. Choosing the new name in Edit Project
+  takes the line away.
+- [ ] After Start Reading Mail, the line under Mailboxes says changes apply only to the
+  mail Projects reads from now on. Untick a mailbox, or choose a shorter period: the mail
+  Projects saved from it stays in the window.
+- [ ] Assign two emails of the sender with an email in Held Back to a project and click
+  Add Rule. The project page lists the rule with Remove Rule…, which asks first. Cancel
+  keeps it. Remove Rule takes it off the page, and the emails it filed stay in the
+  project. Now tick Held Back in Settings: its email shows in the Projects window, and its
+  chip does not show A rule you made. After Orra starts again the rule is still gone.
+- [ ] With Mail access not asked yet, after the `tccutil reset` in Mail access for
+  Projects above, Allow Mail Access… shows Orra's explanation first. It reads "Projects
+  reads mail only in the mailboxes you choose, and only while Mail is open."
+- [ ] The new lines read well in Chinese, Japanese and Spanish.
+
+Stalled folders, failed saves and expired drafts in Projects, added on 2026-10-24, not
+verified yet. Check in a Debug build with the synthetic mail imported, as in the test
+guide. ProjectsRuntimeTests holds a folder that never resolves while Projects turns off,
+turns on again or deletes its data, and fails the save of the message that Explain
+Selected Message waits for. MailScanTests fails a save and a lookup of the store in the
+middle of a pass. A full disk can make a save fail, and only the tests make a lookup
+fail. The checks that age the data run sqlite3 while Projects is off, with `<database>`
+standing for
+`"$HOME/Library/Application Support/io.github.db-ol.Orra/Projects/Index/projects.sqlite"`,
+quotes included.
+
+- [ ] Add a folder on a network share to a project, quit Orra, make the share stop
+  answering while it stays mounted (turn off the server or its network), and open Orra
+  with Projects on. Turning Projects off, and Delete All Projects Data, each finish within
+  a few seconds. Once the share answers again, the log of the projects-index category
+  shows no Index sweep line while Projects is off.
+- [ ] With three projects whose folders are on that share while it does not answer, turn
+  Projects off and on three times, then dictate a sentence in another app. The text
+  pastes as quickly as with Projects off.
+- [ ] Save an email that Projects read with File > Save As, Format Raw Message Source,
+  change its From line in a text editor, and drag the file into a mailbox Projects reads.
+  Select that copy in Mail and click Explain Selected Message. The window says the
+  message looks like an email Projects read, but its sender, recipients or date differ,
+  and it selects nothing and explains nothing. Select the original and click it again:
+  the original shows and is explained, and Open Reply in Mail opens the reply of the
+  original.
+- [ ] Copy an email Projects read into another mailbox Projects reads, select the copy in
+  Mail and click Explain Selected Message. It shows and explains the email.
+- [ ] Select an email Projects read that has no To line, such as one sent to you in Bcc,
+  and click Explain Selected Message. It shows and explains the email.
+- [ ] Explain an email that gets a draft and turn Projects off with Keep Data. Run
+  `sqlite3 <database> "UPDATE mail_messages SET draft_changed = draft_changed - 31 * 86400 WHERE draft_changed IS NOT NULL"`
+  and turn Projects on. The email keeps its explanation, the draft area reads "Projects
+  removed this draft 30 days after its last change. Explain the email again for a new
+  one.", and Explain Again writes a new draft.
+- [ ] Turn Projects off with Keep Data, run
+  `sqlite3 <database> "UPDATE mail_messages SET saved = saved - 91 * 86400 WHERE id = (SELECT MAX(id) FROM mail_messages)"`
+  and turn Projects on. That email reads "Projects removed its copy of this email's text
+  90 days after reading it. Read the email in Mail.", Explain is dimmed, and Explain
+  Selected Message on it in Mail shows it without explaining it.
+- [ ] An email over 16 MB, such as one with large attachments, read after this change,
+  reads "Projects did not read this email, as it is too large. Read it in Mail.", and
+  Explain is dimmed. Mail read before this change has no such mark, so use Delete All
+  Projects Data and Start Reading Mail again first.
+- [ ] Settings > Projects reads under Data "Projects keeps the text of each email and its
+  explanation for 90 days after reading it, and a draft for 30 days after its last
+  change. It keeps the rest of an email, such as its sender and subject, until 180 days
+  after it read the newest email of its thread. It removes old data only while it is on."
+- [ ] Check the six new lines in Chinese, Japanese and Spanish: the three of the email
+  view above, the two of Explain Selected Message, for a message that looks like an email
+  Projects read and for "Projects could not save this message on this Mac. Try again
+  later.", and the one under Data.
 
 ## Not implemented
 

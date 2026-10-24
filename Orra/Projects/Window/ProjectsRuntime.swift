@@ -59,6 +59,9 @@ final class ProjectsRuntime {
         var modelEnvironment: (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment
         /// Whether the cleanup model is on this Mac, read where it can be observed.
         var modelIsInstalled: () -> Bool
+        /// Try Loading Again: looks at the cleanup model's files, hashes included, and loads
+        /// the model again, see TextCleanup.retryLoading().
+        var retryLoadingModel: @Sendable () async -> Void
         /// The cleanup model's tokenizer, or nil without the model, see ProjectsTokenCounter.
         var loadTokenCounter: @Sendable () async throws -> (@Sendable (String) -> Int)?
         /// Hands a draft to Mail or to the clipboard on the user's click, see ReplyHandoff.
@@ -88,6 +91,7 @@ final class ProjectsRuntime {
             whenDictationStarts: @escaping (@escaping () -> Void) -> Void = { _ in },
             modelEnvironment: @escaping (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment,
             modelIsInstalled: @escaping () -> Bool,
+            retryLoadingModel: @escaping @Sendable () async -> Void = {},
             loadTokenCounter: @escaping @Sendable () async throws -> (@Sendable (String) -> Int)?,
             handoff: ReplyHandoff,
             watchesMemoryPressure: Bool = true,
@@ -107,6 +111,7 @@ final class ProjectsRuntime {
             self.whenDictationStarts = whenDictationStarts
             self.modelEnvironment = modelEnvironment
             self.modelIsInstalled = modelIsInstalled
+            self.retryLoadingModel = retryLoadingModel
             self.loadTokenCounter = loadTokenCounter
             self.handoff = handoff
             self.watchesMemoryPressure = watchesMemoryPressure
@@ -161,8 +166,13 @@ final class ProjectsRuntime {
         case windowClosed
         /// The store holds no email with this Message-ID.
         case unknownEmail
+        /// The store keeps no text of the email to explain, see ProjectsWindowText.noText.
+        case noText
         /// The list holds no project with this ID.
         case unknownProject
+        /// The cleanup model is on this Mac but is not loaded, as after a load that failed,
+        /// so a request of the user found no model, see `userRequest(_:)`.
+        case modelNotLoaded
     }
 
     /// What Explain Selected Message found in Mail (decision 18).
@@ -181,6 +191,13 @@ final class ProjectsRuntime {
         case notRead(days: Int)
         /// The scan has not reached the message yet, since a pass still reads the mailboxes.
         case stillReading
+        /// The pass of the scan for the message ended as the store failed to save what it
+        /// read, or to say which mail it knows, such as on a full disk.
+        case notSaved
+        /// The store holds another email with the message's Message-ID, see
+        /// `isSelectedEmail`, such as when the message was made to look like it. The store
+        /// keeps one email for each Message-ID, so that email is not shown for it.
+        case otherEmail
         /// Orra may not control Mail.
         case notAllowed
         case failed(MailBridgeError)
@@ -290,6 +307,12 @@ final class ProjectsRuntime {
     @ObservationIgnored private var resortAfterIndex: Set<UUID> = []
     /// The requests of the user under way, which stopping ends, see `userRequest(_:)`.
     @ObservationIgnored private var userRequests: [UUID: UserRequest] = [:]
+    /// The resolves of project folders under way, by their bookmarks, see
+    /// `resolve(_:)`. They outlive a stop, since a resolve cannot be cancelled.
+    @ObservationIgnored private var resolving: [[Data]: Task<[URL], Never>] = [:]
+    /// The newest write of the text the user typed into each email's draft since Projects
+    /// started, by Message-ID, which stopping waits for, see `saveEditedDraft(_:for:)`.
+    @ObservationIgnored private var draftSaves: [String: Task<Bool, Never>] = [:]
 
     /// A request of the user under way: how to end it, and a task that ends with it.
     private struct UserRequest {
@@ -545,25 +568,31 @@ final class ProjectsRuntime {
             ),
             choice: dependencies.choice,
             lookups: MailScan.Lookups(
-                known: { [store] ids in await Self.known(ids, in: store) },
+                known: { [store] ids in try await Self.known(ids, in: store) },
                 linkedMailboxes: { [weak self] in await self?.linkedMailboxes() ?? [] }
             ),
-            save: { [weak self] messages in await self?.saveScanned(messages) },
+            save: { [weak self] messages in try await self?.saveScanned(messages) },
             ownerOverride: dependencies.ownerOverride(),
             isOn: { [projects] in projects.isOn },
             isDictating: dependencies.isDictating,
             now: dependencies.now,
             sleep: dependencies.sleep
         )
-        let retention = Retention.start(store: store, now: dependencies.now, sleep: dependencies.sleep)
+        let retention = Retention.start(store: store, now: dependencies.now, sleep: dependencies.sleep, removed: { [weak self] in
+            await self?.mailChanged()
+        })
         forgetReferences()
         running = Running(
             database: database, store: store, list: list, index: index, search: search, memory: memory,
             model: model, queue: queue, sorting: sorting, scan: scan, retention: retention
         )
         phase = .on
+        // A folder can take long to resolve, and a stop or a delete waits for this start,
+        // so each project's folders resolve in a task of their own.
         for project in list.projects {
-            await startIndex(project)
+            Task { [weak self] in
+                await self?.startIndex(project)
+            }
         }
         followIndex(index)
         mailIsRunning = dependencies.bridge.isRunning()
@@ -616,6 +645,10 @@ final class ProjectsRuntime {
         countTask?.cancel()
         countTask = nil
         self.running = nil
+        // The writes of the text the user typed into drafts, with those that closing the
+        // window started. None starts from here on, since nothing runs.
+        let draftSaves = Array(self.draftSaves.values)
+        self.draftSaves = [:]
         phase = .stopping
         lastOwner = nil
         knownMailboxes = [:]
@@ -630,6 +663,9 @@ final class ProjectsRuntime {
         // the files after they close.
         for request in requests {
             await request.ended.value
+        }
+        for save in draftSaves {
+            _ = await save.value
         }
         await running.list.close()
         await running.store.close()
@@ -801,8 +837,9 @@ final class ProjectsRuntime {
         return lastOwner ?? SortingService.Owner(addresses: [])
     }
 
-    /// Saves what the scan read and sorts the mail that waits.
-    private func saveScanned(_ messages: [MailScan.Message]) async {
+    /// Saves what the scan read and sorts the mail that waits. A failed save is logged with
+    /// its code and thrown, so the scan reads that mail again in its next pass.
+    private func saveScanned(_ messages: [MailScan.Message]) async throws {
         guard let running, !messages.isEmpty else { return }
         // Kept before the first wait, so a stop or Mail's quit meanwhile lets them go. Handles
         // from before Mail quit are not kept.
@@ -818,6 +855,7 @@ final class ProjectsRuntime {
             Logger.projects.notice("Projects saved \(saved.count, privacy: .public) of \(messages.count, privacy: .public) emails the scan read")
         } catch {
             Logger.projects.error("Projects could not save the emails the scan read: \(Self.logName(error), privacy: .public)")
+            throw error
         }
         requestSort()
     }
@@ -977,6 +1015,18 @@ final class ProjectsRuntime {
         resortNeedsProject()
     }
 
+    /// Removes a rule from its project, for Remove Rule on the project page. Mail read from
+    /// now on is sorted without it. The mail it filed stays where it is, and Needs a
+    /// Project is not sorted again.
+    func removeRule(_ rule: Project.Rule, from projectID: UUID) async throws {
+        guard let running else { throw Failure.off }
+        guard var project = running.list.project(projectID) else { throw Failure.unknownProject }
+        guard project.rules.contains(rule) else { return }
+        project.rules.removeAll { $0 == rule }
+        try await running.list.update(project)
+        running.sorting.projectsChanged()
+    }
+
     // MARK: Projects
 
     /// Adds a project, starts indexing its folders and sorts Needs a Project again.
@@ -987,9 +1037,15 @@ final class ProjectsRuntime {
     }
 
     /// Saves a changed project, indexes its folders as they are now and sorts Needs a
-    /// Project again. A linked mailbox it no longer has is not read further.
+    /// Project again. A linked mailbox it no longer has is not read further. Its rules stay
+    /// as the list has them, since Edit Project does not change rules, so a rule added or
+    /// removed while its sheet was open stays so.
     func update(_ project: Project) async throws {
         guard let running else { throw Failure.off }
+        var project = project
+        if let saved = running.list.project(project.id) {
+            project.rules = saved.rules
+        }
         let linked = linkedNames
         try await running.list.update(project)
         if !linkedNames.isSuperset(of: linked) {
@@ -1040,18 +1096,38 @@ final class ProjectsRuntime {
 
     /// Where a project's folders are now.
     func folders(of project: Project) async -> [URL] {
-        await dependencies.resolveFolders(project.folders)
+        await resolve(project.folders)
+    }
+
+    /// Where these folders are now. A resolve of the same folders under way is waited for,
+    /// not started again, so a share that hangs holds one thread for each set of folders,
+    /// however often Projects is turned off and on meanwhile.
+    private func resolve(_ bookmarks: [Data]) async -> [URL] {
+        if let resolve = resolving[bookmarks] {
+            return await resolve.value
+        }
+        let resolveFolders = dependencies.resolveFolders
+        let resolve = Task { await resolveFolders(bookmarks) }
+        resolving[bookmarks] = resolve
+        let folders = await resolve.value
+        if resolving[bookmarks] == resolve {
+            resolving[bookmarks] = nil
+        }
+        return folders
     }
 
     /// Starts indexing a project's folders as they are now. With `resortAfter`, Needs a
     /// Project is sorted again once the sweep that starts here ends. A folder can take long
-    /// to resolve, such as on a share that hangs. When the project's folders changed
-    /// meanwhile, or Projects stopped, this starts nothing, since the start for the change
-    /// or the next start of Projects counts.
+    /// to resolve, such as on a share that hangs, so no start or stop of Projects waits for
+    /// this, and a later start waits for the same resolve, see `resolve(_:)`. When the
+    /// project's folders changed meanwhile, or Projects stopped or is turning off, this
+    /// starts nothing, since the start for the change or the next start of Projects counts.
     private func startIndex(_ project: Project, resortAfter: Bool = false) async {
         guard let index = running?.index else { return }
-        let folders = await dependencies.resolveFolders(project.folders)
-        guard running?.index === index, running?.list.project(project.id)?.folders == project.folders else { return }
+        let folders = await resolve(project.folders)
+        // The switch itself, since `wantsOn` follows it a moment later.
+        guard projects.isOn, !projects.isDeleting, running?.index === index,
+              running?.list.project(project.id)?.folders == project.folders else { return }
         index.start(project: project.id, folders: folders)
         if resortAfter, !folders.isEmpty, index.reports[project.id]?.isIndexing == true {
             resortAfterIndex.insert(project.id)
@@ -1265,10 +1341,42 @@ final class ProjectsRuntime {
         return addresses("To") == addresses(email.to) && addresses("Cc") == addresses(email.cc)
     }
 
+    /// Whether a message selected in Mail is the email the store holds with its Message-ID,
+    /// for Explain Selected Message. Its headers are read as the scan read the email's for
+    /// the store, see `MailScan.Message`: the first sender in From, the addresses of
+    /// Reply-To, To and Cc as sets, and the date. A From, To, Cc or Date that the headers
+    /// lack matches, since the scan then took what Mail lists. So the email itself always
+    /// matches, also with an entry not read exactly, and a copy of it in another mailbox
+    /// has the same headers. The subject is left out, since the store keeps it as Mail
+    /// lists it, which may differ from the header in its spaces or its decoding (a guess).
+    /// Open Reply in Mail checks the message again, strictly, see `isSameEmail`.
+    @concurrent
+    nonisolated static func isSelectedEmail(_ email: ExplainService.Email, headers text: String) async -> Bool {
+        let headers = MailHeaders(parsing: text)
+        func addresses(_ people: [ExplainPrompt.Person]) -> Set<String> {
+            Set(people.compactMap { ProjectsAddress.normalized($0.address) })
+        }
+        func matches(_ read: [MailAddressHeader], _ people: [ExplainPrompt.Person]) -> Bool {
+            Set(read.map(\.address)) == addresses(people)
+        }
+        guard headers.messageID == email.messageID else { return false }
+        if let date = headers.date, date != email.date {
+            return false
+        }
+        if let sender = headers.from.first, sender.address != ProjectsAddress.normalized(email.sender.address) {
+            return false
+        }
+        return matches(headers.replyTo, email.replyTo)
+            && (headers.to.isEmpty || matches(headers.to, email.to))
+            && (headers.cc.isEmpty || matches(headers.cc, email.cc))
+    }
+
     // MARK: Explaining
 
     /// Explains an email, saves the explanation and returns it. Only while the window is
-    /// open. Throws what ExplainService throws, and CancellationError when Projects stops.
+    /// open, and only while the store keeps the email's text: the window offers no Explain
+    /// without it, but Explain Selected Message may reach an email its list does not show.
+    /// Throws what ExplainService throws, and CancellationError when Projects stops.
     func explain(_ messageID: String) async throws -> Explanation {
         guard let running else { throw Failure.off }
         guard let service = explainService else { throw Failure.windowClosed }
@@ -1276,6 +1384,7 @@ final class ProjectsRuntime {
         defer { mailChanged() }
         return try await userRequest {
             guard let email = try await store.explainEmail(messageID) else { throw Failure.unknownEmail }
+            guard try await store.hasText(messageID) else { throw Failure.noText }
             return try await service.explain(email)
         }
     }
@@ -1283,17 +1392,23 @@ final class ProjectsRuntime {
     /// Runs a request of the user, such as an explanation or a revision of the email view,
     /// in a task the runtime keeps. Turning Projects off or Delete All ends it, and waits
     /// for it before the files close, so nothing of it runs or saves after that. Cancelling
-    /// the caller's task ends it too.
+    /// the caller's task ends it too. A request that finds no model throws
+    /// Failure.modelNotLoaded while the model is on this Mac, so the window offers Try
+    /// Loading Again rather than a download.
     func userRequest<T: Sendable>(_ work: @escaping @MainActor () async throws -> T) async throws -> T {
         guard running != nil else { throw Failure.off }
         let task = Task { try await work() }
         let id = UUID()
         userRequests[id] = UserRequest(cancel: { task.cancel() }, ended: Task { _ = await task.result })
         defer { userRequests[id] = nil }
-        return try await withTaskCancellationHandler {
-            try await task.value
-        } onCancel: {
-            task.cancel()
+        do {
+            return try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+        } catch RewriteError.notLoaded where dependencies.modelIsInstalled() {
+            throw Failure.modelNotLoaded
         }
     }
 
@@ -1323,6 +1438,33 @@ final class ProjectsRuntime {
     func removeNewestVersion(of messageID: String) async -> Bool {
         guard let store = running?.store else { return false }
         return (try? await store.removeNewestVersion(of: messageID, at: dependencies.now())) ?? false
+    }
+
+    /// The text the user typed into the email's draft, nil when there is none.
+    func editedDraft(of messageID: String) async -> MailStore.EditedDraft? {
+        try? await running?.store.editedDraft(of: messageID)
+    }
+
+    /// Keeps the text the user typed into the email's draft, or with nil removes it, and
+    /// gives the write, which says whether the store did. The write starts at once in the
+    /// store that runs now, after the one before it for the same email, so the newest text
+    /// lands last. A stop waits for it before it closes the store, also when the window
+    /// that saved it closes as Projects turns off. A failed write is logged with its code.
+    func saveEditedDraft(_ edited: MailStore.EditedDraft?, for messageID: String) -> Task<Bool, Never> {
+        guard let store = running?.store else { return Task { false } }
+        let before = draftSaves[messageID]
+        let now = dependencies.now()
+        let save = Task {
+            _ = await before?.value
+            do {
+                return try await store.save(edited, for: messageID, at: now)
+            } catch {
+                MailStore.log(error, "saving the text typed into a draft")
+                return false
+            }
+        }
+        draftSaves[messageID] = save
+        return save
     }
 
     /// What a revision, the translation and the answer check of the explanation's draft
@@ -1408,11 +1550,16 @@ final class ProjectsRuntime {
     /// Reads more only of a message in a chosen or linked mailbox (decision 18). A message
     /// the scan has not read yet makes it read the mailboxes once. Reads nothing more once
     /// Projects stops or the choice is forgotten, which the user can do while Mail answers.
+    /// Finds the email the store holds with the message's Message-ID only when the message
+    /// is that email, see `isSelectedEmail`, and only then keeps its handle, unless Mail
+    /// quit meanwhile.
     func messageSelectedInMail() async -> SelectedMessage {
         guard let running else { return .noMailboxChosen }
         guard dependencies.choice.isConfirmed else { return .noMailboxChosen }
         let bridge = dependencies.bridge
         guard bridge.isRunning() else { return .mailNotRunning }
+        // The handle of the message holds for this Mail session only.
+        let session = referenceSession
         do {
             guard let selected = try await bridge.selection().first else { return .nothingSelected }
             guard stillReads(running) else { return .noMailboxChosen }
@@ -1427,13 +1574,26 @@ final class ProjectsRuntime {
             let headers = try await bridge.headers(selected)
             guard let messageID = await Self.messageID(in: headers) else { return .notRead(days: dependencies.choice.days) }
             guard stillReads(running) else { return .noMailboxChosen }
-            remember(selected, for: messageID)
-            if try await running.store.explainEmail(messageID) == nil {
+            var email = try await running.store.explainEmail(messageID)
+            if email == nil {
                 switch await readUntilSaved(messageID, store: running.store, scan: running.scan) {
-                case .saved: break
+                case .saved: email = try await running.store.explainEmail(messageID)
                 case .notFound: return .notRead(days: dependencies.choice.days)
                 case .stillReading: return .stillReading
+                case .storeFailed: return .notSaved
                 }
+            }
+            guard let email else { return .notRead(days: dependencies.choice.days) }
+            // Mail may hold another message with this Message-ID, and the store keeps the
+            // one the scan read first.
+            guard await Self.isSelectedEmail(email, headers: headers) else {
+                Logger.projects.notice("Explain Selected Message: the message is not the email the store holds with its Message-ID")
+                return .otherEmail
+            }
+            guard stillReads(running) else { return .noMailboxChosen }
+            // Not when Mail quit meanwhile, which let go of the handles of its session.
+            if session == referenceSession {
+                remember(selected, for: messageID)
             }
             return .found(messageID)
         } catch let error as MailBridgeError {
@@ -1485,6 +1645,8 @@ final class ProjectsRuntime {
         case notFound
         /// A pass still read the mailboxes when the wait ended.
         case stillReading
+        /// A pass of its own ended without the message, as the store failed.
+        case storeFailed
     }
 
     /// Runs a pass of the scan and waits until it saved the message, for at most about
@@ -1498,6 +1660,7 @@ final class ProjectsRuntime {
                 let result = await scan.scan()
                 pass.isRunning = false
                 pass.isDone = result.skipped != .busy
+                pass.storeFailed = result.skipped == .storeFailed
             }
         }
         startPass()
@@ -1507,7 +1670,10 @@ final class ProjectsRuntime {
                 return .saved
             }
             if pass.isDone {
-                return (try? await store.explainEmail(messageID)) != nil ? .saved : .notFound
+                if (try? await store.explainEmail(messageID)) != nil {
+                    return .saved
+                }
+                return pass.storeFailed ? .storeFailed : .notFound
             }
             if !pass.isRunning {
                 startPass()
@@ -1517,11 +1683,12 @@ final class ProjectsRuntime {
         return (try? await store.explainEmail(messageID)) != nil ? .saved : .stillReading
     }
 
-    /// Whether a pass of the scan that Explain Selected Message started runs, and whether
-    /// one ran to its end.
+    /// Whether a pass of the scan that Explain Selected Message started runs, whether one
+    /// ran to its end, and whether that one ended as the store failed.
     private final class PassState {
         var isRunning = false
         var isDone = false
+        var storeFailed = false
     }
 
     /// How long Explain Selected Message waits for the scan to read the message.
@@ -1567,18 +1734,19 @@ final class ProjectsRuntime {
             hiddenText: hidden,
             attachments: message.attachments,
             // Hidden text in the email or in an attachment shows before it is explained.
-            warnings: hidden.isEmpty && !message.attachments.contains { $0.hiddenRuns > 0 } ? [] : [.hiddenText]
+            warnings: hidden.isEmpty && !message.attachments.contains { $0.hiddenRuns > 0 } ? [] : [.hiddenText],
+            isTooLarge: message.isTooLarge
         )
     }
 
-    /// Which of these the store knows. A store that cannot answer counts them all as known,
-    /// so the scan never reads every message again for it.
-    private nonisolated static func known(_ ids: [String], in store: MailStore) async -> Set<String> {
+    /// Which of these the store knows. A failure is logged with its code and thrown, so the
+    /// scan ends its pass rather than read every message again, or skip mail it never saved.
+    private nonisolated static func known(_ ids: [String], in store: MailStore) async throws -> Set<String> {
         do {
             return try await store.known(ids)
         } catch {
             MailStore.log(error, "reading known Message-IDs")
-            return Set(ids)
+            throw error
         }
     }
 

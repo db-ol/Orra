@@ -61,7 +61,7 @@ Optional. A text model on your Mac removes the fillers the rules leave and appli
 Optional. Press a second key, speak, and press it again. If you set the key to Hold, keep it down while you speak instead. Orra pastes what you say translated between English and your dictation language, Chinese, Japanese or Spanish, with the same model on your Mac. A small badge shows that this dictation will be translated: 译 with Chinese, 訳 with Japanese and ⇄ with Spanish.
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/translation.gif" alt="In a chat, Sam asks “When can I see the designs?” Holding the translation key, someone says 我这边周五之前能把设计稿发给你. The capsule shows a 译 badge, and “I can send you the designs before Friday.” appears in the message field." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/en/translation.gif" alt="In a chat, Sam asks “When can I see the designs?” Someone presses the translation key, says 我这边周五之前能把设计稿发给你 and presses it again. The capsule shows a 译 badge and “Press right Option to finish”, and “I can send you the designs before Friday.” appears in the message field." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -73,7 +73,7 @@ For meetings across languages. Read what others say in your language, and let th
 New in 0.4.0.
 
 </td>
-<td width="50%"><img src="docs/images/readme/en/meeting.gif" alt="In a video call, Alex speaks English and the Live Captions window shows each sentence with its Chinese translation. Then the user holds the translation key and says 可以，我周三之前把测试做完, and the call hears “Sure, I’ll finish testing by Wednesday.” from Orra Microphone." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/en/meeting.gif" alt="In a video call, Alex speaks English and the Live Captions window shows each sentence with its Chinese translation. At its top, Both and Chinese are chosen, next to the Copy button. Then the user presses the translation key, says 可以，我周三之前把测试做完 and presses it again, and the call hears “Sure, I’ll finish testing by Wednesday.” from Orra Microphone." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">

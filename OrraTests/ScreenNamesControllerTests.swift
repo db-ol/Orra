@@ -74,19 +74,19 @@ struct ScreenNamesControllerTests {
 
     /// A dictation whose reading of the screen has ended before the release, unless the
     /// reading holds.
-    private func dictate(_ controller: PushToTalkController, screen: FakeScreen, beforeRelease: () -> Void = {}) async throws {
+    private func dictate(_ controller: PushToTalkController, screen: FakeScreen, beforeRelease: () -> Void = {}, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         let reads = screen.reads.count
         let starts = mic.calls.filter { $0 == "start" }.count
         controller.handle(.pressed(isRepeat: false))
-        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        try await waitUntil({ mic.calls.filter { $0 == "start" }.count > starts }, sourceLocation: sourceLocation)
         if controller.usesScreenNames {
-            try await waitUntil { screen.reads.count > reads }
+            try await waitUntil({ screen.reads.count > reads }, sourceLocation: sourceLocation)
         }
         // The fake answers in the same step it is asked, unless it holds.
         await Task.yield()
         beforeRelease()
         controller.handle(.released)
-        try await waitUntil { controller.state == .idle }
+        try await waitUntil({ controller.state == .idle }, sourceLocation: sourceLocation)
     }
 
     @Test func offNothingIsReadAndTheModelGetsTheVocabularyAsBefore() async throws {

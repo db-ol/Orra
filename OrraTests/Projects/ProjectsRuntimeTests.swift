@@ -40,8 +40,9 @@ struct ProjectsRuntimeTests {
     /// The runtime with fakes, and its switch and mailbox choice. `installed` says whether
     /// the cleanup model is on this Mac, `countsTokens` gives the explain service a
     /// tokenizer, `openFails` makes the start fail at the database, `folders` stands in for
-    /// how the index reaches project folders, and `keyDown` for the presses of the talk key.
-    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    /// how the index reaches project folders, `keyDown` for the presses of the talk key, and
+    /// `retryLoading` for Try Loading Again.
+    private func make(isOn: Bool = true, isVisible: Bool = true, opens: Count? = nil, installed: Installed = Installed(), countsTokens: Bool = false, openFails: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}) -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let projects = ProjectsSwitch(defaults: defaults, isVisible: isVisible, physicalMemory: 32 << 30, storage: storage)
         if isOn {
             projects.turnOn()
@@ -67,6 +68,7 @@ struct ProjectsRuntimeTests {
             whenDictationStarts: { [keyDown] handler in keyDown?.handlers.append(handler) },
             modelEnvironment: { _ in model.environment },
             modelIsInstalled: { installed.value },
+            retryLoadingModel: retryLoading,
             loadTokenCounter: { [tokenizer] in try await tokenizer.load(counter) },
             handoff: ReplyHandoff(copy: { _ in true }, mail: mail.bridge, isOrraActive: { true }, bringMailToFront: {}),
             watchesMemoryPressure: false,
@@ -87,19 +89,10 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    /// Waits for a condition, which work on other tasks makes true. A bound, not a measure.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<2_000 {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        Issue.record("The condition did not come true")
-    }
-
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
-        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown)
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+        let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading)
         made.0.follow()
-        try await waitUntil { made.0.phase == .on }
+        try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
     }
 
@@ -628,6 +621,39 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Remove Rule on the project page: the rule is gone for good, mail read after it is
+    /// sorted without it, and the mail it filed stays in the project.
+    @Test(.timeLimit(.minutes(1)))
+    func aRemovedRuleFilesNoNewMailAndLeavesWhatItFiled() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let rule = Project.Rule(kind: .sender, value: "ana@kiln.example")
+        let garden = Project(name: "Garden", rules: [rule])
+        try await runtime.add(garden)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("g1@kiln.example", from: "ana@kiln.example", day: 1)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("g1@kiln.example", in: .project(garden.id), runtime) { $0.level == .sure }
+
+        try await runtime.removeRule(rule, from: garden.id)
+        #expect(runtime.projectList.first { $0.id == garden.id }?.rules == [])
+        let saved = ProjectList(storage: storage)
+        try await saved.load()
+        #expect(saved.project(garden.id)?.rules == [])
+        await #expect(throws: ProjectsRuntime.Failure.unknownProject) {
+            try await runtime.removeRule(rule, from: UUID())
+        }
+
+        // Her next email waits in Needs a Project, since the model is not there to agree
+        // with the one vote left, that she wrote in the project before.
+        try await store.save([Self.message("g2@kiln.example", from: "ana@kiln.example", day: 2)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("g2@kiln.example", in: .needsProject, runtime) { $0.level != nil }
+        #expect(await runtime.list(.project(garden.id)).map(\.messageID) == ["g1@kiln.example"])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// Unticking a mailbox stops the pass that reads it, since a pass fixes its mailboxes
     /// when it begins. Ticking one more lets the pass go on.
     @Test func aMailboxTheUserUnticksIsNotReadFurther() async throws {
@@ -736,6 +762,86 @@ struct ProjectsRuntimeTests {
         await index.waitUntilIdle()
         #expect(folders.watchedFolders.last == ["Alpha", "Beta"])
         #expect(runtime.indexReport(project.id)?.indexed == 2)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Projects starts with a saved project whose folder takes long to resolve, such as on
+    /// a share that hangs. Turning Projects off does not wait for it, and once it resolves,
+    /// the folder is neither read nor watched.
+    @Test(.timeLimit(.minutes(1))) func aStalledFolderResolveDoesNotHoldUpTurningProjectsOff() async throws {
+        defer { cleanUp() }
+        let project = try await savedProjectWithAFolder()
+        let folders = StallingFolders()
+        let (runtime, projects, _) = make(folders: folders)
+        runtime.follow()
+        try await waitUntil { folders.isHolding }
+
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+        folders.letGo()
+        try await waitUntil { folders.heldResolveReturned }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(folders.readFiles.isEmpty)
+        #expect(folders.watchedFolders.isEmpty)
+        #expect(runtime.indexReport(project.id) == nil)
+    }
+
+    /// The same for Delete All Projects Data, which stops Projects first: it does not wait
+    /// for the folder, and Projects starts again with no data while the folder still
+    /// resolves.
+    @Test(.timeLimit(.minutes(1))) func aStalledFolderResolveDoesNotHoldUpDeleteAll() async throws {
+        defer { cleanUp() }
+        let project = try await savedProjectWithAFolder()
+        let folders = StallingFolders()
+        let (runtime, projects, _) = make(folders: folders)
+        runtime.follow()
+        try await waitUntil { folders.isHolding }
+
+        let deleted = Count()
+        let deleting = Task {
+            await projects.deleteAllData()
+            deleted.add()
+        }
+        try await waitUntil { deleted.value == 1 }
+        #expect(!projects.deleteFailed)
+        try await waitUntil { runtime.phase == .on }
+        #expect(runtime.projectList.isEmpty)
+        folders.letGo()
+        try await waitUntil { folders.heldResolveReturned }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(folders.readFiles.isEmpty)
+        #expect(folders.watchedFolders.isEmpty)
+        #expect(runtime.indexReport(project.id) == nil)
+        await deleting.value
+        await projects.turnOff(keepingData: false)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Turning Projects off and on again while the folder still resolves starts no other
+    /// resolve of it, so a share that hangs holds one thread however often the user tries.
+    /// Once it resolves, Projects as it runs now indexes the folder.
+    @Test(.timeLimit(.minutes(1))) func aStalledFolderResolveServesTheNextStartsToo() async throws {
+        defer { cleanUp() }
+        let project = try await savedProjectWithAFolder()
+        let folders = StallingFolders()
+        let (runtime, projects, _) = make(folders: folders)
+        runtime.follow()
+        try await waitUntil { folders.isHolding }
+
+        for _ in 0..<2 {
+            await projects.turnOff(keepingData: true)
+            try await waitUntil { runtime.phase == .off }
+            projects.turnOn()
+            try await waitUntil { runtime.phase == .on }
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(folders.resolves == 1)
+        #expect(folders.watchedFolders.isEmpty)
+        folders.letGo()
+        try await waitUntil { folders.watchedFolders == [["Alpha"]] }
+        #expect(runtime.indexReport(project.id) != nil)
+        #expect(folders.resolves == 1)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -1007,6 +1113,80 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Mail may hold another message with the Message-ID of an email the store holds, such
+    /// as one made to look like it, or one a mail program sent with an ID it used before.
+    /// Explain Selected Message shows and explains the email the store holds only when the
+    /// message selected is that email, and keeps no handle of another message for it.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageShowsNoOtherEmailWithItsMessageID() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let id = "x@harbor.example"
+        let email = FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")
+        let fields = email.source.components(separatedBy: "\r\n\r\n")[0] + "\r\n"
+        let date = "Date: Sun, 18 Oct 2026 09:00:00 +0000\r\n"
+        mail.update {
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.headers[999] = fields.replacingOccurrences(of: "Mei Tan <mei@harbor.example>", with: "Mallory <mallory@other.example>")
+            $0.selection = [MailMessageRef(id: 999, mailbox: FakeMail.clients)]
+        }
+        choice.choose([.inbox, FakeMail.clients])
+        choice.confirm()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(!runtime.isScanning)
+        // Mail opens: the scan starts once Explain Selected Message reached Mail, and reads
+        // the email of the inbox, not the message selected.
+        mail.update { $0.isRunning = true }
+        #expect(await runtime.messageSelectedInMail() == .otherEmail)
+        let kept = MailMessageRef(id: 100, mailbox: .inbox)
+        #expect(runtime.mailReference(for: id) == kept)
+
+        // The store held the email before the click.
+        try await waitUntilListed(id, in: .needsProject, runtime) { _ in true }
+        #expect(await runtime.messageSelectedInMail() == .otherEmail)
+        #expect(runtime.mailReference(for: id) == kept)
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explainSelectedMessage()
+        #expect(window.notice == .selection(.otherEmail))
+        #expect(ProjectsWindowText.selection(.otherEmail) == "This message looks like an email Projects read, but its sender, recipients or date differ, so Projects cannot explain it.")
+        #expect(window.selectedEmail == nil)
+        #expect(window.explaining[id] == nil)
+
+        // Mei's sender and recipients, with another date.
+        mail.update { $0.headers[999] = fields.replacingOccurrences(of: date, with: "Date: Mon, 19 Oct 2026 08:00:00 +0000\r\n") }
+        #expect(await runtime.messageSelectedInMail() == .otherEmail)
+        #expect(runtime.mailReference(for: id) == kept)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A copy of the email in another mailbox the user chose is the email itself.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageFindsTheEmailInAnotherMailbox() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let id = "x@harbor.example"
+        let email = FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")
+        let copy = MailMessageRef(id: 300, mailbox: FakeMail.clients)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.headers[300] = email.source.components(separatedBy: "\r\n\r\n")[0] + "\r\n"
+            $0.selection = [copy]
+        }
+        choice.choose([.inbox, FakeMail.clients])
+        choice.confirm()
+        try await waitUntilListed(id, in: .needsProject, runtime) { _ in true }
+        #expect(await runtime.messageSelectedInMail() == .found(id))
+        #expect(runtime.mailReference(for: id) == copy)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// An email past the first page of its list opens from a source and from Explain
     /// Selected Message, in a project and in Set Aside. The window finds its list and its
     /// place there in the store, and reads the list down to it.
@@ -1066,6 +1246,67 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// The email itself is found also when its headers hold an address that is not read
+    /// exactly, which the scan left out, or no To, for which the scan took what Mail lists.
+    @Test(.timeLimit(.minutes(1)), arguments: ["Project Team, \(ProjectsRuntimeTests.own)", nil])
+    func explainSelectedMessageFindsTheEmailWithRecipientsReadAsTheScanReadThem(to: String?) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let id = "x@harbor.example"
+        var email = FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")
+        email.to = to
+        let selected = MailMessageRef(id: 100, mailbox: .inbox)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.selection = [selected]
+        }
+        choice.choose([.inbox])
+        choice.confirm()
+        try await waitUntilListed(id, in: .needsProject, runtime) { _ in true }
+        #expect(await runtime.messageSelectedInMail() == .found(id))
+        #expect(runtime.mailReference(for: id) == selected)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Mail quits and opens again while Explain Selected Message reads the message. The
+    /// email is found, and the handle from the Mail session that ended is not kept.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageKeepsNoHandleOfAMailSessionThatEnded() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let id = "x@harbor.example"
+        let email = FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")
+        let copy = MailMessageRef(id: 300, mailbox: FakeMail.clients)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.headers[300] = email.source.components(separatedBy: "\r\n\r\n")[0] + "\r\n"
+            $0.selection = [copy]
+        }
+        runtime.mailRunningChanged()
+        choice.choose([.inbox, FakeMail.clients])
+        choice.confirm()
+        try await waitUntilListed(id, in: .needsProject, runtime) { _ in true }
+        mail.update { $0.holds = ["selection"] }
+        let found = Task { await runtime.messageSelectedInMail() }
+        try await waitUntil { mail.calls.contains("selection") }
+        mail.update { $0.isRunning = false }
+        runtime.mailRunningChanged()
+        mail.update { $0.isRunning = true }
+        runtime.mailRunningChanged()
+        mail.update { $0.holds = [] }
+        #expect(await found.value == .found(id))
+        #expect(runtime.mailReference(for: id) != copy)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// The window reads a list down to an older email for a few pages at most. An email
     /// older than that shows alone in the email view, and the list keeps what it read.
     @Test(.timeLimit(.minutes(1)))
@@ -1097,6 +1338,30 @@ struct ProjectsRuntimeTests {
         #expect(window.selectedEmail?.messageID == filed[0])
         #expect(window.rows.count == 2 * pages)
         #expect(!window.rows.contains { $0.messageID == filed[0] })
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The store fails to save the message that the scan reads for Explain Selected
+    /// Message, as on a full disk. The window says so, not that Projects has not read it.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageSaysWhenTheMessageCouldNotBeSaved() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        let store = try #require(runtime.running?.store)
+        // No new email saves, while the store still reads.
+        try await store.database.run("CREATE TEMP TRIGGER no_new_mail BEFORE INSERT ON mail_messages BEGIN SELECT RAISE(ABORT, 'full'); END")
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [FakeMail.Message(id: 5, messageID: "e@harbor.example", from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")]
+            $0.selection = [MailMessageRef(id: 5, mailbox: FakeMail.workInbox)]
+        }
+        choice.choose([.inbox])
+        choice.confirm()
+        #expect(await runtime.messageSelectedInMail() == .notSaved)
+        #expect(ProjectsWindowText.selection(.notSaved) == "Projects could not save this message on this Mac. Try again later.")
+        #expect(try await store.explainEmail("e@harbor.example") == nil)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -1228,6 +1493,191 @@ struct ProjectsRuntimeTests {
             _ = try await runtime.explain("missing@harbor.example")
         }
         runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// An explanation that finds no model says why: the model is not on this Mac, also while
+    /// it downloads, or it is and could not be loaded, which a download does not mend.
+    @Test(arguments: [false, true])
+    func anExplanationWithoutTheModelSaysWhetherItIsMissingOrCouldNotBeLoaded(installed: Bool) async throws {
+        defer { cleanUp() }
+        // The fake model never loads. Without the model files there is no tokenizer either.
+        let (runtime, projects, _) = try await started(installed: Installed(installed), countsTokens: installed)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("f@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.windowOpened()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain("f@harbor.example")
+        guard case .failed(let failure)? = window.explaining["f@harbor.example"] else {
+            Issue.record("The explanation should have failed, not \(String(describing: window.explaining["f@harbor.example"]))")
+            return
+        }
+        #expect(ProjectsWindowText.explainFailure(failure) == (installed ? "The cleanup model could not be loaded." : "The cleanup model is not on this Mac."))
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A change, a translation or the answer check that finds no model gets the note for
+    /// why, as an explanation does.
+    @Test(arguments: [false, true])
+    func aRequestOnTheDraftWithoutTheModelSaysWhetherItIsMissingOrCouldNotBeLoaded(installed: Bool) async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started(installed: Installed(installed))
+        do {
+            try await runtime.userRequest { () async throws -> Void in throw RewriteError.notLoaded }
+            Issue.record("The request should have failed")
+        } catch {
+            #expect(ProjectsEmailModel.note(error) == (installed ? .modelNotLoaded : .noModel))
+        }
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Try Loading Again looks at the model again, and then explains the email with it.
+    @Test func tryLoadingAgainLoadsTheModelAndExplainsTheEmail() async throws {
+        defer { cleanUp() }
+        let retries = Count()
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true, retryLoading: { [model] in
+            retries.add()
+            model.isThere.withLock { $0 = true }
+        })
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("f@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.windowOpened()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain("f@harbor.example")
+        #expect(window.explaining["f@harbor.example"] == .failed(.modelNotLoaded))
+        #expect(retries.value == 0)
+        await window.loadModelAgain(explaining: "f@harbor.example")
+        #expect(retries.value == 1)
+        #expect(window.explaining["f@harbor.example"] == nil)
+        #expect(window.explained["f@harbor.example"] == 1)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A change of the draft that begins while Try Loading Again looks at the model keeps
+    /// the draft. No explanation follows the load, since a new one would start the draft
+    /// again and drop the version the change makes.
+    @Test func tryLoadingAgainLeavesOutTheExplanationWhileTheDraftChanges() async throws {
+        defer { cleanUp() }
+        let meanwhile = Meanwhile()
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true, retryLoading: { [model] in
+            model.isThere.withLock { $0 = true }
+            await meanwhile.run()
+        })
+        let store = try #require(runtime.running?.store)
+        let id = "f@harbor.example"
+        try await store.save([Self.message(id, from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today)
+        let check = DraftCheckInput(
+            draft: "", language: .en, recipients: [DraftCheckInput.Person(name: "", address: "mei@harbor.example")], projectPeople: [],
+            own: [DraftCheckInput.Person(name: "Me", address: Self.own)], incomingText: "Could you send the plan?", today: Self.today)
+        let explanation = Explanation(
+            messageID: id, project: nil, language: .en, today: Self.today, reply: .reply(.en), warnings: [], modelWarnings: [],
+            points: [], questions: [], draft: .checked(DraftCheck.Result(draft: "Hi Mei,\n\nHere is the plan.\n\nMe", language: .en)), draftCheck: check,
+            sources: [:], removed: [:], problems: [], unknownSources: [])
+        #expect(try await store.save(explanation, at: Self.today))
+        runtime.windowOpened()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain(id)
+        #expect(window.explaining[id] == .failed(.modelNotLoaded))
+        let email = window.emailModel(for: id)
+        await email.load()
+        #expect(email.hasDraft)
+        // The user changes the draft while the model is looked at. The change's job waits
+        // at the model until the test ends it.
+        meanwhile.work = { [model] in
+            model.blocks.withLock { $0 = true }
+            email.perform { await $0.makeChange(.tone(.warm)) }
+            for _ in 0..<1_000 where !email.isBusy {
+                await Task.yield()
+            }
+        }
+        // A task, so the test fails rather than waits for good when an explanation waits
+        // behind the change.
+        let returned = Count()
+        let retrying = Task {
+            await window.loadModelAgain(explaining: id)
+            returned.add()
+        }
+        try await waitUntil { returned.value == 1 }
+        #expect(email.isBusy)
+        #expect(window.explaining[id] == nil)
+        #expect(window.explained[id] == nil)
+        email.cancelWork()
+        retrying.cancel()
+        await retrying.value
+        try await waitUntil { !email.isBusy }
+        #expect(await runtime.explanation(for: id) == explanation)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// An email whose text Retention removed, or one too large to read, is not explained,
+    /// also when Explain Selected Message reaches it outside the list the window shows.
+    @Test func explainingNeedsTheEmailsText() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("old@harbor.example", from: "mei@harbor.example")], ownAddresses: [Self.own], at: Self.today.addingTimeInterval(-91 * Retention.day))
+        var large = Self.message("large@harbor.example", from: "mei@harbor.example", day: 1)
+        large.text = ""
+        large.visibleText = ""
+        large.isTooLarge = true
+        try await store.save([large], ownAddresses: [Self.own], at: Self.today)
+        try await Retention.apply(to: store, now: Self.today)
+        runtime.windowOpened()
+        for id in ["old@harbor.example", "large@harbor.example"] {
+            await #expect(throws: ProjectsRuntime.Failure.noText) {
+                _ = try await runtime.explain(id)
+            }
+        }
+        // The email view says why, so the window shows no failure.
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explain("large@harbor.example")
+        #expect(window.explaining["large@harbor.example"] == nil)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// An email the scan found too large to read shows with why it has no text, and is not
+    /// explained, since Explain stays off for it.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageShowsAnEmailTooLargeToReadWithoutExplainingIt() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let store = try #require(runtime.running?.store)
+        let id = "big@harbor.example"
+        let email = FakeMail.Message(id: 5, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Drawings", text: "")
+        // As the scan reads an email over MailScan.largestSource: its headers only.
+        let listing = MailListing(
+            message: MailMessageRef(id: 5, mailbox: .inbox), messageID: id, dateReceived: Self.today, sender: email.from,
+            subject: email.subject, to: [Self.own], cc: [], size: MailScan.largestSource + 1)
+        let scanned = await MailScan.parsed(headers: email.source.components(separatedBy: "\r\n\r\n")[0], attachments: [], listing: listing)
+        #expect(scanned.isTooLarge)
+        try await store.save([ProjectsRuntime.storeMessage(scanned, now: Self.today)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.selection = [MailMessageRef(id: 5, mailbox: FakeMail.workInbox)]
+        }
+        choice.choose([.inbox])
+        choice.confirm()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explainSelectedMessage()
+        let shown = try #require(window.selectedEmail)
+        #expect(shown.messageID == id)
+        #expect(shown.isTooLarge)
+        #expect(ProjectsWindowText.noText(shown) == "Projects did not read this email, as it is too large. Read it in Mail.")
+        #expect(window.explaining[id] == nil)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -1538,8 +1988,8 @@ struct ProjectsRuntimeTests {
         #expect(handed.withLock { $0 } == [1])
     }
 
-    /// A move from a Move To menu keeps the window on its list and selects the next email.
-    /// When it takes away versions of the draft, it waits for the user's yes.
+    /// A move from an Assign to Project menu keeps the window on its list and selects the
+    /// next email. When it takes away versions of the draft, it waits for the user's yes.
     @Test func aMoveStaysOnTheListAndAsksBeforeItTakesADraftAway() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
@@ -1749,6 +2199,17 @@ struct ProjectsRuntimeTests {
         }
     }
 
+    /// A project with a folder, saved by a run of Projects that ended, so the next start
+    /// finds it in the project list and resolves its folder.
+    private func savedProjectWithAFolder() async throws -> Project {
+        let (first, projects, _) = try await started()
+        let project = Project(name: "Harbor", folders: [try Project.bookmark(of: folder("Alpha", holding: "alpha.txt"))])
+        try await first.add(project)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { first.phase == .off }
+        return project
+    }
+
     /// A folder under the test's folder that holds one text file.
     private func folder(_ name: String, holding file: String) throws -> URL {
         let folder = root.appendingPathComponent(name, isDirectory: true)
@@ -1795,6 +2256,16 @@ struct ProjectsRuntimeTests {
         }
     }
 
+    /// What a test does while Try Loading Again looks at the model, set once the window is
+    /// there.
+    @MainActor final class Meanwhile {
+        var work: () async -> Void = {}
+
+        func run() async {
+            await work()
+        }
+    }
+
     /// The presses of the talk key, as EngineTurns.whenDictationStarts hands them on.
     final class KeyDown {
         var handlers: [() -> Void] = []
@@ -1826,6 +2297,7 @@ struct ProjectsRuntimeTests {
             var held: CheckedContinuation<Void, Never>?
             var letGo = false
             var heldResolveReturned = false
+            var resolves = 0
             var readFiles: [String] = []
             var watchedFolders: [[String]] = []
         }
@@ -1834,6 +2306,11 @@ struct ProjectsRuntimeTests {
 
         nonisolated var isHolding: Bool {
             state.withLock { $0.held != nil }
+        }
+
+        /// How many resolves of one or more bookmarks started.
+        nonisolated var resolves: Int {
+            state.withLock { $0.resolves }
         }
 
         nonisolated var heldResolveReturned: Bool {
@@ -1861,6 +2338,9 @@ struct ProjectsRuntimeTests {
 
         nonisolated func resolve(_ bookmarks: [Data]) async -> [URL] {
             let holds = state.withLock { state in
+                if !bookmarks.isEmpty {
+                    state.resolves += 1
+                }
                 guard state.holdsNext, !bookmarks.isEmpty else { return false }
                 state.holdsNext = false
                 return true
@@ -1948,9 +2428,12 @@ struct ProjectsRuntimeTests {
             var subject: String
             var text: String
             var type = "text/plain"
+            /// The value of To, nil for a message without the field.
+            var to: String? = ProjectsRuntimeTests.own
 
             var source: String {
-                "Message-ID: <\(messageID)>\r\nDate: Sun, 18 Oct 2026 09:00:00 +0000\r\nFrom: \(from)\r\nTo: \(ProjectsRuntimeTests.own)\r\nSubject: \(subject)\r\nContent-Type: \(type); charset=utf-8\r\n\r\n\(text)\r\n"
+                let to = to.map { "To: \($0)\r\n" } ?? ""
+                return "Message-ID: <\(messageID)>\r\nDate: Sun, 18 Oct 2026 09:00:00 +0000\r\nFrom: \(from)\r\n\(to)Subject: \(subject)\r\nContent-Type: \(type); charset=utf-8\r\n\r\n\(text)\r\n"
             }
         }
 

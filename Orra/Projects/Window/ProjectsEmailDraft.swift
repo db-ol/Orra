@@ -4,14 +4,18 @@ extension ProjectsEmailArea {
     /// The draft and its tools, in the email's language:
     /// - the draft as plain text the user may edit, with Show in My Language beside it, or
     ///   under it in a narrow window, the tone, and the flags of the draft check inline.
-    ///   "Drafts need checking" always shows. The toggle names the language it shows.
+    ///   "Drafts need checking" always shows. The toggle names the language it shows. Saved
+    ///   on this Mac shows once the store keeps the user's changes, never before, and its
+    ///   line keeps its place while a save waits. The editor waits while the email is
+    ///   explained again, which replaces the draft.
     /// - the answer check, such as "They asked 3 things, your draft answers 2", and the
     ///   people outside the project a reply to all reaches
     /// - Open Reply in Mail, Reply All and Copy, with the hint to press Command V in Mail.
     ///   There is no Send button.
     /// - the change box, which makes a new version, and the newest change highlighted, with
     ///   Undo. The talk key's words go straight into it while it has the focus (decision 13),
-    ///   see ProjectsWindow.takeDictation(_:).
+    ///   see ProjectsWindow.takeDictation(_:). A change under way shows why it waits, if it
+    ///   does, and Cancel Change. Copy takes the draft as it is meanwhile.
     ///
     /// Without a draft it says why: no reply is due, the language gets no draft, or the model
     /// wrote none. The requests run through `ProjectsEmailModel.perform(_:)`, so closing the
@@ -20,6 +24,8 @@ extension ProjectsEmailArea {
         let runtime: ProjectsRuntime
         let emailModel: ProjectsEmailModel
         let explanation: Explanation
+        /// Whether the email is explained again, which replaces the draft.
+        let isExplaining: Bool
         /// The width of the draft's column, for putting the translation beside the editor or
         /// under it.
         @State private var width: CGFloat = 0
@@ -82,13 +88,32 @@ extension ProjectsEmailArea {
                     .padding(6)
                     .background(.background, in: RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
-                    .disabled(emailModel.isBusy)
+                    // What the user types while the email is explained again would go with
+                    // the draft it replaces.
+                    .disabled(emailModel.isBusy || isExplaining)
                 if emailModel.offersTranslation, emailModel.showsTranslation {
                     translation
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            switch emailModel.saveNote {
+            case .saved?:
+                Text(verbatim: ProjectsWindowText.save(.saved))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            case .notSaved?:
+                warningLine(ProjectsWindowText.save(.notSaved))
+                    .font(.callout)
+            case nil:
+                // The line keeps its place while a save waits, so what is under it stays
+                // put while the user types.
+                if emailModel.isEdited || !emailModel.versions.isEmpty {
+                    Text(verbatim: ProjectsWindowText.save(.saved))
+                        .font(.callout)
+                        .hidden()
+                }
+            }
             checks
             answers
             handoff
@@ -242,11 +267,11 @@ extension ProjectsEmailArea {
 
         // MARK: The change box
 
-        /// The change box with Change Draft, and the change under way or why the last one
-        /// gave nothing. It tells the email view while it has the focus, so the talk key's
-        /// words go there. It stays open to typing and to the talk key while a change runs,
-        /// so it keeps the focus. Words said meanwhile change the draft next, see
-        /// ProjectsEmailModel.takeDictation(_:revises:).
+        /// The change box with Change Draft, and the change under way with why it waits and
+        /// Cancel Change, or why the last one gave nothing. It tells the email view while it
+        /// has the focus, so the talk key's words go there. It stays open to typing and to
+        /// the talk key while a change runs, so it keeps the focus. Words said meanwhile
+        /// change the draft next, see ProjectsEmailModel.takeDictation(_:revises:).
         private struct ChangeBox: View {
             let runtime: ProjectsRuntime
             let emailModel: ProjectsEmailModel
@@ -274,6 +299,19 @@ extension ProjectsEmailArea {
                                 .controlSize(.small)
                             Text("Changing the draft…")
                                 .foregroundStyle(.secondary)
+                            // An undo puts the saved text back at once, so only a change can
+                            // be cancelled.
+                            if emailModel.changing != nil {
+                                Button("Cancel Change") {
+                                    emailModel.cancelChange()
+                                }
+                            }
+                        }
+                        // Why the change waits, such as for a dictation or Live Captions.
+                        if emailModel.changing != nil, let pause = runtime.pause {
+                            Text(verbatim: ProjectsWindowText.pause(pause))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     } else if let note = emailModel.changeNote {
                         Text(verbatim: ProjectsWindowText.note(note, for: .change))
@@ -341,25 +379,28 @@ extension ProjectsEmailArea {
 
         @ViewBuilder
         private var handoff: some View {
-            let canHandOff = !emailModel.isBusy && !emailModel.isHandingOff
             HStack(spacing: 8) {
-                Button("Open Reply in Mail") {
-                    emailModel.perform { await $0.openReply(all: false) }
-                }
-                if emailModel.offersReplyAll {
-                    Button("Reply All") {
-                        emailModel.perform { await $0.openReply(all: true) }
+                Group {
+                    Button("Open Reply in Mail") {
+                        emailModel.perform { await $0.openReply(all: false) }
+                    }
+                    if emailModel.offersReplyAll {
+                        Button("Reply All") {
+                            emailModel.perform { await $0.openReply(all: true) }
+                        }
                     }
                 }
+                .disabled(!emailModel.canHandOff)
+                // A change that waits leaves the draft as it is, which Copy takes.
                 Button("Copy") {
                     emailModel.copy()
                 }
+                .disabled(!emailModel.canCopy)
                 if emailModel.isHandingOff {
                     ProgressView()
                         .controlSize(.small)
                 }
             }
-            .disabled(!canHandOff)
             if let note = emailModel.handoffNote {
                 Text(verbatim: ProjectsWindowText.handoff(note))
                     .foregroundStyle(.secondary)
