@@ -666,6 +666,7 @@ final class ProjectsEmailModel {
         // Saving the version removed the text the user typed, which the version holds as
         // the text it was made from.
         savedText = draft
+        saveFailed = false
         return true
     }
 
@@ -688,6 +689,7 @@ final class ProjectsEmailModel {
             text = last.version.madeFrom ?? modelDraft ?? ""
             // That text went with the version, so the editor's text is saved again.
             savedText = nil
+            saveFailed = false
         } else {
             await load()
         }

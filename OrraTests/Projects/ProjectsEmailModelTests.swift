@@ -313,7 +313,9 @@ struct ProjectsEmailModelTests {
     }
 
     /// Saved on this Mac never shows before a save worked. A save that fails says so, and
-    /// the next key press tries again.
+    /// the next key press tries again. A change saves a version that holds the editor's
+    /// text, so a save that failed before it says nothing at the next key press, nor after
+    /// Undo, which puts that text back to be saved.
     @Test func savedOnThisMacShowsOnlyOnceTheSaveWorked() async throws {
         let model = model()
         await model.load()
@@ -326,6 +328,23 @@ struct ProjectsEmailModelTests {
         model.text += " Lin"
         try await waitUntil { model.saveNote == .saved }
         #expect(fakes.value.edited?.text == Self.draft + "\nThanks. Lin")
+
+        fakes.update { $0.savesEdits = false }
+        model.text += "."
+        try await waitUntil { model.saveNote == .notSaved }
+        fakes.update {
+            $0.revisions = ["Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order].\n\nLin"]
+            $0.checks = [Self.bothAnswered]
+        }
+        #expect(await model.makeChange(.tone(.firm)))
+        #expect(model.saveNote == .saved)
+        // The save of this key press has not run yet.
+        model.text += " Thanks."
+        #expect(model.saveNote == nil)
+        try await waitUntil { model.saveNote == .notSaved }
+        await model.undo()
+        #expect(model.text == Self.draft + "\nThanks. Lin.")
+        #expect(model.saveNote == nil)
     }
 
     /// A change made from what the user typed takes its place in the store, and Undo puts
