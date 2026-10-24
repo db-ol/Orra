@@ -50,6 +50,7 @@ struct MailScanTests {
         isOn: @escaping () -> Bool = { true },
         owner: SortingService.Owner? = nil,
         isDictating: @escaping () -> Bool = { false },
+        report: @escaping (MailScan.Report) -> Void = { _ in },
         sleep: @escaping (Duration) async throws -> Void = { _ in }
     ) -> MailScan {
         let store = store
@@ -58,6 +59,7 @@ struct MailScanTests {
             choice: choice,
             lookups: store.lookups,
             save: { store.save($0) },
+            report: report,
             ownerOverride: owner,
             isOn: isOn,
             isDictating: isDictating,
@@ -346,6 +348,38 @@ struct MailScanTests {
         let pass = await second.value
         #expect(pass.skipped == nil)
         #expect(pass.saved == 3)
+    }
+
+    /// A pass tells the window whether it reads a mailbox back to the days, which takes a
+    /// while, and how it ended. A poll does not read back. A pass asked for while another
+    /// reads tells nothing, and a pass that `stop()` ended tells nothing more.
+    @Test func aPassTellsWhetherItReadsBackAndHowItEnded() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(3), in: .inbox)
+        let reports = Reports()
+        let scan = scan(choice([.inbox]), report: { reports.all.append($0) })
+        let first = await scan.scan()
+        #expect(reports.all == [.began(readsBack: true), .ended(first)])
+        reports.all = []
+        let poll = await scan.scan()
+        #expect(reports.all == [.began(readsBack: false), .ended(poll)])
+
+        reports.all = []
+        mail.receive([FakeMail.mail(10, in: .inbox, received: Self.now - 60)], in: .inbox)
+        store.holdsKnown = true
+        let held = Task { await scan.scan() }
+        try await waitUntil { store.heldKnown != nil }
+        #expect(await scan.scan().skipped == .busy)
+        scan.stop()
+        store.holdsKnown = false
+        store.heldKnown?.resume()
+        _ = await held.value
+        #expect(reports.all == [.began(readsBack: false)])
+
+        // Once stopped, the scan reads back again.
+        reports.all = []
+        let again = await scan.scan()
+        #expect(reports.all == [.began(readsBack: true), .ended(again)])
     }
 
     /// A chosen mailbox that Mail no longer has skips only that mailbox.
@@ -1016,6 +1050,12 @@ struct MailScanTests {
     /// Whether Projects is on, for a test that turns it off.
     final class Switch {
         var isOn = true
+    }
+
+    /// What the passes told the window, in order.
+    @MainActor
+    final class Reports {
+        var all: [MailScan.Report] = []
     }
 
     /// The waits the loop asked for.

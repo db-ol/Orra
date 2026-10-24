@@ -33,6 +33,8 @@ import os
 /// - It polls every minute. When Mail does not answer (-600 while it runs), times out
 ///   (-1712), or Orra may not control it, the pass ends and the scan waits twice as long
 ///   each time, up to 30 minutes.
+/// - It tells the window when a pass begins, whether that pass reads a mailbox back to the
+///   days, and how it ended, see `Report`.
 ///
 /// The user's own addresses and name come from Mail's accounts, or from the override that
 /// a Debug build passes in, with which the scan never asks Mail for the accounts.
@@ -91,7 +93,7 @@ final class MailScan {
         var linkedMailboxes: () async -> [MailMailbox]
     }
 
-    /// What one pass did, for the log and the tests.
+    /// What one pass did, for the log, the window and the tests.
     nonisolated struct Pass: Sendable, Equatable {
         /// Why a pass asked Mail nothing, or nothing more.
         nonisolated enum Skip: Sendable, Equatable {
@@ -123,6 +125,15 @@ final class MailScan {
         var unreadable = 0
         /// The error that ended the pass, or else the last one that ended a mailbox.
         var error: MailBridgeError?
+    }
+
+    /// What a pass tells the window. A pass that `stop()` ended, or one that found another
+    /// under way, tells nothing more.
+    nonisolated enum Report: Sendable, Equatable {
+        /// A pass began to read. `readsBack` when it reads a mailbox back to the days, which
+        /// takes much longer than a poll.
+        case began(readsBack: Bool)
+        case ended(Pass)
     }
 
     /// The positions a range covers (plan section 5).
@@ -173,6 +184,7 @@ final class MailScan {
     private let choice: MailChoice
     private let lookups: Lookups
     private let save: ([Message]) async -> Void
+    private let report: (Report) -> Void
     private let ownerOverride: SortingService.Owner?
     private let isOn: () -> Bool
     private let isDictating: () -> Bool
@@ -189,6 +201,7 @@ final class MailScan {
     ///   - save: saves the new messages of a range, newest first. Each later call of a pass
     ///     holds older mail than the one before, so a caller that sorts the mail should do
     ///     so after the pass, oldest first, such as with `SortingService.sortWaiting()`.
+    ///   - report: hears when each pass begins and ends, for the window.
     ///   - ownerOverride: the user's addresses and name in a Debug build that sets them, so
     ///     Mail's accounts are never read.
     ///   - isOn: whether Projects is on.
@@ -201,6 +214,7 @@ final class MailScan {
         choice: MailChoice,
         lookups: Lookups,
         save: @escaping ([Message]) async -> Void,
+        report: @escaping (Report) -> Void = { _ in },
         ownerOverride: SortingService.Owner? = nil,
         isOn: @escaping () -> Bool,
         isDictating: @escaping () -> Bool = { false },
@@ -211,6 +225,7 @@ final class MailScan {
         self.choice = choice
         self.lookups = lookups
         self.save = save
+        self.report = report
         self.ownerOverride = ownerOverride
         self.isOn = isOn
         self.isDictating = isDictating
@@ -320,6 +335,9 @@ final class MailScan {
         if current == task {
             current = nil
         }
+        if !task.isCancelled {
+            report(.ended(pass))
+        }
         return pass
     }
 
@@ -343,6 +361,10 @@ final class MailScan {
         // of all accounts lists too, is then saved with the mailbox that files it.
         let mailboxes = ((await lookups.linkedMailboxes()) + choice.mailboxes).filter { unique.insert($0).inserted }
         let days = choice.days
+        if !Task.isCancelled {
+            // As `read(_:cutoff:days:seen:pass:)` decides whether it polls a mailbox.
+            report(.began(readsBack: mailboxes.contains { (progress[$0]?.readDays ?? 0) < days }))
+        }
         let cutoff = now().addingTimeInterval(-Double(days) * 86_400)
         var seen = Set<String>()
         for mailbox in mailboxes {

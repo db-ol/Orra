@@ -3310,6 +3310,35 @@ Projects Data and Start Reading Mail again first.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
 
+What the Projects window says about mail, added on 2026-10-24, not verified yet.
+ProjectsRuntimeTests checks each line with a fake Mail, and also a save that fails and a
+list the store cannot read, which a person cannot easily cause. ProjectsWindowViewTests
+renders the lines to projects-mail-lines with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS.
+Check in a Debug build with the synthetic mail, as in the test guide, and with Mail open
+unless a check says otherwise:
+
+- [ ] Delete All Projects Data, then Start Reading Mail. Until the first emails are saved,
+  Needs a Project shows Reading mail… in its middle, never No Mail. Each batch then shows
+  at once, marked Not sorted yet, with Reading mail… and the count of emails read under the
+  list. The line goes when the mailboxes are read, and does not come back every minute.
+- [ ] With the cleanup model on this Mac, open the window while mail waits for the model.
+  Sorting mail… shows under the list while the model sorts, and in the middle of an empty
+  project. Dictate meanwhile: Paused while you dictate. shows too.
+- [ ] Quit Mail. A list with no mail says Mail is not open. Projects reads new mail while
+  Mail runs. Open Mail again: Reading mail… shows while Projects reads back, then nothing.
+- [ ] Turn Mail off for Orra in Privacy & Security, Automation. Within a few minutes the
+  window says Orra is not allowed to read Mail yet. Allow it in Settings., and Settings…
+  opens the Projects page. Turn Mail on again and open that page: the line goes, and
+  Projects reads again.
+- [ ] Run `kill -STOP $(pgrep -x Mail)` and wait two minutes. The window says Mail is slow
+  to answer. Projects tries again later., with Try Again. Run `kill -CONT $(pgrep -x Mail)`
+  and click Try Again: Projects reads at once, and the line goes.
+- [ ] An empty project shows No Mail with Choose an email in Needs a Project and move it
+  here with Move To. Set Aside and Needs a Project show No Mail alone once all is read and
+  sorted.
+- [ ] Switch Orra to Chinese, Japanese and Spanish. Each new line reads naturally and fits
+  the list at the window's smallest width.
+
 Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
 checks that a download agreed to in the caption window turns on neither cleanup nor
 translation and stops when captions stop, as docs/privacy.md says, and that it goes on

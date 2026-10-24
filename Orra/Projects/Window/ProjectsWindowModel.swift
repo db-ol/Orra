@@ -2,11 +2,11 @@ import Foundation
 import Observation
 
 /// What the Projects window shows and what the user does there: the list chosen in the
-/// sidebar, its mail with the deadline marks of the explained ones, the selected email, a
-/// move that waits for the user's yes, the rule offered after moves, the explanations under
-/// way, the email view of each email the user opened with the window's one handoff at a
-/// time, the line after Explain Selected Message, and Suggested Projects. ProjectsRuntime
-/// does the work.
+/// sidebar and whether it could be read, its mail with the deadline marks of the explained
+/// ones, the selected email, a move that waits for the user's yes, the rule offered after
+/// moves, the explanations under way, the email view of each email the user opened with the
+/// window's one handoff at a time, the line after Explain Selected Message, and Suggested
+/// Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -49,6 +49,7 @@ final class ProjectsWindowModel {
                 followed = nil
                 selectedMessageID = nil
                 rows = []
+                listFailed = false
             }
         }
     }
@@ -64,6 +65,9 @@ final class ProjectsWindowModel {
     }
     /// The emails of the chosen list, newest first.
     private(set) var rows: [MailStore.Listed] = []
+    /// Whether the store could not read the chosen list the last time, which the list says
+    /// with Try Again in place of No Mail.
+    private(set) var listFailed = false
     /// The rule offered after two moves of the same kind, until the user answers.
     var ruleOffer: SortingService.RuleOffer?
     var notice: Notice?
@@ -143,14 +147,24 @@ final class ProjectsWindowModel {
     }
 
     /// Reads the chosen list again, and follows the email Explain Selected Message showed
-    /// when sorting filed it in another list.
+    /// when sorting filed it in another list. A list the store could not read shows no
+    /// mail, and says so.
     func reload() async {
         guard let place else {
             rows = []
             return
         }
-        let listed = await runtime.list(place)
+        let listed: [MailStore.Listed]
+        do {
+            listed = try await runtime.list(place)
+        } catch {
+            guard place == self.place else { return }
+            rows = []
+            listFailed = true
+            return
+        }
         guard place == self.place else { return }
+        listFailed = false
         rows = listed
         if let followed, !listed.contains(where: { $0.messageID == followed }) {
             let now = await runtime.place(of: followed)

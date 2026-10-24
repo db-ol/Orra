@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import os
 
 /// Sorts new mail into the user's projects: the rules first, and the model as tie breaker
@@ -31,7 +32,11 @@ import os
 /// habit does not win forever. Moves run one at a time too, apart from the batches, so a
 /// move never waits for the model.
 ///
+/// The window shows that sorting works while a batch is not finished, see
+/// `unfinishedBatches`.
+///
 /// Logs counts and times only.
+@Observable
 final class SortingService {
     /// One email as the service sorts it, from the mail the scan read.
     nonisolated struct Email: Sendable, Equatable {
@@ -171,22 +176,22 @@ final class SortingService {
         "outlook.com.mx", "yahoo.com.ar", "hotmail.com.ar",
     ]
 
-    private let lookups: Lookups
-    private let saves: Saves
-    private let windowIsOpen: () -> Bool
-    private let ask: (ProjectsModelRequest) async throws -> String
-    private let now: () -> Date
+    @ObservationIgnored private let lookups: Lookups
+    @ObservationIgnored private let saves: Saves
+    @ObservationIgnored private let windowIsOpen: () -> Bool
+    @ObservationIgnored private let ask: (ProjectsModelRequest) async throws -> String
+    @ObservationIgnored private let now: () -> Date
     /// The projects prepared for sorting, until they change.
-    private var setup: Setup?
+    @ObservationIgnored private var setup: Setup?
     /// Counts the calls of `projectsChanged()`, so a preparation under way is not kept.
-    private var setupGeneration = 0
+    @ObservationIgnored private var setupGeneration = 0
     /// The batch under way or the last one, which the next one waits for.
-    private var tail: Task<Void, Never>?
+    @ObservationIgnored private var tail: Task<Void, Never>?
     /// The batches not finished yet, by their number, which `stop()` cancels.
     private var batches: [Int: Task<Void, Never>] = [:]
-    private var batchCount = 0
+    @ObservationIgnored private var batchCount = 0
     /// The move under way or the last one, which the next one waits for.
-    private var lastMove: Task<RuleOffer?, Never>?
+    @ObservationIgnored private var lastMove: Task<RuleOffer?, Never>?
 
     /// - Parameters:
     ///   - windowIsOpen: whether the Projects window is open. The model is asked only while
@@ -209,8 +214,8 @@ final class SortingService {
 
     // MARK: Sorting
 
-    /// The batches not finished yet: the one under way and those waiting for it. Tests wait
-    /// on it to know that a batch they started waits.
+    /// The batches not finished yet: the one under way and those waiting for it. The window
+    /// observes it, and tests wait on it to know that a batch they started waits.
     var unfinishedBatches: Int {
         batches.count
     }
