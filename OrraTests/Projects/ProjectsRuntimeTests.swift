@@ -522,6 +522,39 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Remove Rule on the project page: the rule is gone for good, mail read after it is
+    /// sorted without it, and the mail it filed stays in the project.
+    @Test(.timeLimit(.minutes(1)))
+    func aRemovedRuleFilesNoNewMailAndLeavesWhatItFiled() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let rule = Project.Rule(kind: .sender, value: "ana@kiln.example")
+        let garden = Project(name: "Garden", rules: [rule])
+        try await runtime.add(garden)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("g1@kiln.example", from: "ana@kiln.example", day: 1)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("g1@kiln.example", in: .project(garden.id), runtime) { $0.level == .sure }
+
+        try await runtime.removeRule(rule, from: garden.id)
+        #expect(runtime.projectList.first { $0.id == garden.id }?.rules == [])
+        let saved = ProjectList(storage: storage)
+        try await saved.load()
+        #expect(saved.project(garden.id)?.rules == [])
+        await #expect(throws: ProjectsRuntime.Failure.unknownProject) {
+            try await runtime.removeRule(rule, from: UUID())
+        }
+
+        // Her next email waits in Needs a Project, since the model is not there to agree
+        // with the one vote left, that she wrote in the project before.
+        try await store.save([Self.message("g2@kiln.example", from: "ana@kiln.example", day: 2)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("g2@kiln.example", in: .needsProject, runtime) { $0.level != nil }
+        #expect(await runtime.list(.project(garden.id)).map(\.messageID) == ["g1@kiln.example"])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// Unticking a mailbox stops the pass that reads it, since a pass fixes its mailboxes
     /// when it begins. Ticking one more lets the pass go on.
     @Test func aMailboxTheUserUnticksIsNotReadFurther() async throws {

@@ -417,6 +417,33 @@ struct ProjectsSettingsTests {
         #expect(MailAccess.rows(listed: [], chosen: [.inbox]) == [.inbox])
     }
 
+    /// The scan reads the mailboxes a project links along with the ticked ones, so unticking
+    /// one here does not stop it. The page lists each linked one with its project, ticked or
+    /// not, once for each project that links it, and marks one that Mail no longer has,
+    /// which the scan skips.
+    @Test func aLinkedMailboxShowsWithItsProjectTickedOrNot() async throws {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        let archive = try #require(ProjectsRuntime.mailboxName(Self.archive))
+        let harbor = Project(name: "Harbor lobby", mailboxes: [archive, "/Harbor 2026"])
+        let kiln = Project(name: "Kiln", mailboxes: [archive])
+        let access = MailAccess(
+            bridge: mail.bridge, choice: MailChoice(defaults: defaults, suggestsInboxAndSent: false),
+            projects: { [harbor, kiln, Project(name: "Garden")] }, missingMailboxes: { ["/Harbor 2026"] }, isOn: { true })
+        await access.show()
+        access.choose(Self.archive, true)
+        access.choose(Self.archive, false)
+        #expect(!access.isChosen(Self.archive))
+        #expect(access.links == [
+            MailAccess.Link(mailbox: archive, project: harbor.id, projectName: "Harbor lobby"),
+            MailAccess.Link(mailbox: "/Harbor 2026", project: harbor.id, projectName: "Harbor lobby", isMissing: true),
+            MailAccess.Link(mailbox: archive, project: kiln.id, projectName: "Kiln"),
+        ])
+        #expect(access.links.map { MailAccess.note(for: $0) } == ["Also read for “Harbor lobby”", "Also read for “Harbor lobby”", "Also read for “Kiln”"])
+        // Without projects, as while Projects is off, there is nothing to list.
+        #expect(MailAccess(bridge: mail.bridge, choice: MailChoice(defaults: defaults), isOn: { true }).links.isEmpty)
+    }
+
     @Test func mailboxesAreNamedInTheUsersLanguage() {
         #expect(MailAccess.title(.inbox) == "Inbox (all accounts)")
         #expect(MailAccess.title(.sent) == "Sent (all accounts)")

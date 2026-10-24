@@ -368,6 +368,37 @@ struct ProjectsWindowViewTests {
         draft.domains = "harbor"
         #expect(draft.validDomains == nil)
         #expect(draft.project == nil)
+        #expect(draft.checkedDomains == .failure(.notADomain))
+        #expect(ProjectsSetupView.problem(with: .notADomain) == "Write each domain like harbor.example.")
+    }
+
+    /// A domain counts every address at it as one of the project's people, for sorting and
+    /// for the checks of a reply. So a mail provider that many unrelated people share, or a
+    /// domain under one, is refused, as sorting refuses it for a rule. Its people go under
+    /// People instead. The provider the sheet names as an example is one of them.
+    @Test func theSetupRefusesASharedMailProviderAsADomain() throws {
+        let shared = try #require(SortingService.sharedMailDomains.min())
+        var draft = ProjectsSetupView.Draft()
+        draft.name = "Harbor"
+        draft.domains = "harbor.example, @" + shared.uppercased()
+        #expect(draft.checkedDomains == .failure(.sharedProvider(shared)))
+        #expect(draft.validDomains == nil)
+        #expect(draft.project == nil)
+        #expect(ProjectsSetupView.problem(with: .sharedProvider(shared)) == "Many unrelated people have addresses at \(shared). Add each person under People instead.")
+
+        draft.domains = "harbor.example, vip." + shared
+        #expect(draft.checkedDomains == .failure(.sharedProvider("vip." + shared)))
+        draft.domains = ProjectsSetupView.sharedProviderExample
+        #expect(draft.checkedDomains == .failure(.sharedProvider(ProjectsSetupView.sharedProviderExample)))
+        // A domain that only ends in the same letters is another one.
+        draft.domains = "harbor.example, x" + shared
+        #expect(draft.project?.domains == ["harbor.example", "x" + shared])
+
+        // A project saved before with such a domain cannot be saved again until it goes.
+        var edited = ProjectsSetupView.Draft(Project(name: "Harbor", domains: ["harbor.example", shared]))
+        #expect(edited.project == nil)
+        edited.domains = "harbor.example"
+        #expect(edited.project?.domains == ["harbor.example"])
     }
 
     @Test func editingAProjectKeepsWhatTheSheetDoesNotShow() throws {
@@ -385,6 +416,60 @@ struct ProjectsWindowViewTests {
         #expect(draft.project?.rules == original.rules)
         #expect(ProjectsSetupView.choices(["Work/Archive"], current: "Work/Clients/Harbor") == ["Work/Clients/Harbor", "Work/Archive"])
         #expect(ProjectsSetupView.choices(["Work/Archive"], current: "Work/Archive") == ["Work/Archive"])
+    }
+
+    /// Edit Project… beside a linked mailbox in Settings shows the project's page with its
+    /// Edit Project sheet. While the window shows a sheet or a dialog, the request goes and
+    /// the window stays as it is. A project that is gone changes nothing.
+    @Test func settingsOpensEditProjectOfALinkedMailbox() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let model = ProjectsWindowModel(runtime: fixture.runtime)
+        let project = try #require(fixture.runtime.projectList.first)
+        model.edit(UUID())
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
+        model.edit(project.id)
+        #expect(model.projectToEdit == project.id)
+        #expect(model.takeProjectToEdit(presenting: true) == nil)
+        model.pendingMove = ProjectsWindowModel.PendingMove(messageID: "a@harbor.example", project: nil)
+        model.edit(project.id)
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
+        #expect(model.place == .needsProject)
+        #expect(model.projectToEdit == nil)
+
+        model.pendingMove = nil
+        model.edit(project.id)
+        #expect(model.takeProjectToEdit(presenting: false) == project)
+        #expect(model.place == .project(project.id))
+        #expect(model.projectToEdit == nil)
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
+        await fixture.stop()
+    }
+
+    /// Remove Rule on the project page takes the rule off the project, and says so when it
+    /// could not, until a try works. An Edit Project sheet opened before the removal does
+    /// not bring the rule back when it saves, since the sheet does not change rules.
+    @Test func removeRuleTakesTheRuleOffTheProject() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let model = ProjectsWindowModel(runtime: runtime)
+        let project = try #require(runtime.projectList.first)
+        let rule = try #require(project.rules.first)
+        var sheet = ProjectsSetupView.Draft(project)
+        await model.removeRule(rule, from: UUID())
+        #expect(model.notice == .ruleNotRemoved)
+        #expect(ProjectsWindowText.notice(.ruleNotRemoved) == "The rule could not be removed. Try again.")
+        #expect(runtime.projectList.first?.rules == [rule])
+        await model.removeRule(rule, from: project.id)
+        #expect(runtime.projectList.first?.rules.isEmpty == true)
+        #expect(model.notice == nil)
+
+        sheet.description = "Lobby and stairs"
+        try await runtime.update(try #require(sheet.project))
+        #expect(runtime.projectList.first?.description == "Lobby and stairs")
+        #expect(runtime.projectList.first?.rules.isEmpty == true)
+        await fixture.stop()
     }
 
     @Test func everySkipReasonAndRefusalHasWords() {
@@ -434,7 +519,7 @@ struct ProjectsWindowViewTests {
         try await render(rows, size: NSSize(width: 340, height: 560), to: folder.appendingPathComponent("\(language)-projects-list.png"))
 
         let project = try #require(runtime.projectList.first)
-        try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
+        try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}, removeRule: { _ in }), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
 
         var draft = ProjectsSetupView.Draft(project)
         draft.people.append(ProjectsSetupView.Draft.Person(name: "Lu", address: "lu at kiln"))

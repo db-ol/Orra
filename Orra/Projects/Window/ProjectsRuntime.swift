@@ -931,6 +931,18 @@ final class ProjectsRuntime {
         resortNeedsProject()
     }
 
+    /// Removes a rule from its project, for Remove Rule on the project page. Mail read from
+    /// now on is sorted without it. The mail it filed stays where it is, and Needs a
+    /// Project is not sorted again.
+    func removeRule(_ rule: Project.Rule, from projectID: UUID) async throws {
+        guard let running else { throw Failure.off }
+        guard var project = running.list.project(projectID) else { throw Failure.unknownProject }
+        guard project.rules.contains(rule) else { return }
+        project.rules.removeAll { $0 == rule }
+        try await running.list.update(project)
+        running.sorting.projectsChanged()
+    }
+
     // MARK: Projects
 
     /// Adds a project, starts indexing its folders and sorts Needs a Project again.
@@ -941,9 +953,15 @@ final class ProjectsRuntime {
     }
 
     /// Saves a changed project, indexes its folders as they are now and sorts Needs a
-    /// Project again. A linked mailbox it no longer has is not read further.
+    /// Project again. A linked mailbox it no longer has is not read further. Its rules stay
+    /// as the list has them, since Edit Project does not change rules, so a rule added or
+    /// removed while its sheet was open stays so.
     func update(_ project: Project) async throws {
         guard let running else { throw Failure.off }
+        var project = project
+        if let saved = running.list.project(project.id) {
+            project.rules = saved.rules
+        }
         let linked = linkedNames
         try await running.list.update(project)
         if !linkedNames.isSuperset(of: linked) {

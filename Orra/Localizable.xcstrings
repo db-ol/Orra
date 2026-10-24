@@ -1376,6 +1376,28 @@
         }
       }
     },
+    "Addresses at these domains count as the project's people. Their mail goes to the project, and a reply to them counts as staying inside the project. For a mail provider many people share, such as %@, add each person under People instead." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las direcciones de estos dominios cuentan como personas del proyecto. Su correo va al proyecto, y una respuesta a ellas se considera dentro del proyecto. Para un proveedor de correo que comparten muchas personas, como %@, agrega a cada persona en Personas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これらのドメインのアドレスは、すべてプロジェクトの関係者として扱われます。そのメールはこのプロジェクトに振り分けられ、そのアドレスへの返信もプロジェクト内のやり取りとみなされます。%@など多くの人が使うメールサービスの場合は、代わりに“関係者”で1人ずつ追加してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些域名下的地址都算作项目联系人。他们的邮件会归入这个项目，回复给他们也算在项目之内。如果是许多人共用的邮件服务，例如 %@，请改为在“联系人”中逐个添加。"
+          }
+        }
+      }
+    },
     "All set! Hold the talk key and say hello." : {
       "localizations" : {
         "es-419" : {
@@ -1636,6 +1658,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "同时粘贴译文"
+          }
+        }
+      }
+    },
+    "Also read for “%@”" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "También se lee para el proyecto “%@”"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロジェクト“%@”のためにも読み取ります"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "也会为项目“%@”读取"
           }
         }
       }
@@ -2475,6 +2519,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "修改于 %@"
+          }
+        }
+      }
+    },
+    "Changes apply only to the mail Projects reads from now on. Mail it already saved stays until it expires or you delete Projects data." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los cambios solo se aplican al correo que Proyectos lea a partir de ahora. El correo que ya guardó se conserva hasta que caduque o elimines los datos de Proyectos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更は、“プロジェクト”がこれから読み取るメールにのみ適用されます。保存済みのメールは、期限が切れるか、“プロジェクト”のデータを削除するまで残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改只影响“项目”之后读取的邮件。已保存的邮件会一直保留，直到过期或你删除“项目”的数据。"
           }
         }
       }
@@ -7380,6 +7446,28 @@
         }
       }
     },
+    "Many unrelated people have addresses at %@. Add each person under People instead." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muchas personas sin relación entre sí tienen direcciones en %@. Agrega a cada persona en Personas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@のアドレスは、互いに関係のない多くの人が使っています。代わりに“関係者”で1人ずつ追加してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "许多互不相关的人都在用 %@ 的邮箱地址。请改为在“联系人”中逐个添加。"
+          }
+        }
+      }
+    },
     "Meeting interpretation" : {
       "localizations" : {
         "es-419" : {
@@ -7596,6 +7684,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从未使用"
+          }
+        }
+      }
+    },
+    "New mail is no longer filed by this rule. Mail it already filed stays where it is." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El correo nuevo ya no se archivará con esta regla. El correo ya archivado no cambia."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今後のメールにはこのルールが使われなくなります。すでに振り分けられたメールはそのままです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以后的邮件不再按这条规则归入项目。已归入项目的邮件保持不变。"
           }
         }
       }
@@ -11214,24 +11324,24 @@
         }
       }
     },
-    "Projects reads mail only in the mailboxes you choose here, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail." : {
+    "Projects reads mail only in the mailboxes you choose, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proyectos lee el correo solo en los buzones que elijas aquí, y solo mientras Mail está abierto. Nunca envía, mueve ni elimina correo. A continuación, macOS te pregunta si Orra puede controlar Mail."
+            "value" : "Proyectos lee el correo solo en los buzones que elijas, y solo mientras Mail está abierto. Nunca envía, mueve ni elimina correo. A continuación, macOS te pregunta si Orra puede controlar Mail."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“プロジェクト”は、ここで選んだメールボックスのメールのみを、“メール”が開いている間だけ読み取ります。メールを送信、移動、削除することはありません。次に、macOSがOrraによる“メール”の制御を許可するかどうかを確認します。"
+            "value" : "“プロジェクト”は、選んだメールボックスのメールのみを、“メール”が開いている間だけ読み取ります。メールを送信、移動、削除することはありません。次に、macOSがOrraによる“メール”の制御を許可するかどうかを確認します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“项目”只读取你在这里选择的邮箱中的邮件，而且只在“邮件”打开时读取。它从不发送、移动或删除邮件。接下来 macOS 会询问是否允许 Orra 控制“邮件”。"
+            "value" : "“项目”只读取你选择的邮箱中的邮件，而且只在“邮件”打开时读取。它从不发送、移动或删除邮件。接下来 macOS 会询问是否允许 Orra 控制“邮件”。"
           }
         }
       }
@@ -11936,6 +12046,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "去掉“呃”“嗯”这类语气词"
+          }
+        }
+      }
+    },
+    "Remove Rule" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar regla"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールを削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除规则"
+          }
+        }
+      }
+    },
+    "Remove Rule…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar regla…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールを削除…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除规则…"
+          }
+        }
+      }
+    },
+    "Remove this rule?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Eliminar esta regla?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このルールを削除しますか?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要移除这条规则吗？"
           }
         }
       }
@@ -14965,6 +15141,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这封邮件的其余部分在“邮件”中。"
+          }
+        }
+      }
+    },
+    "The rule could not be removed. Try again." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo eliminar la regla. Vuelve a intentarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールを削除できませんでした。もう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法移除这条规则。请再试一次。"
           }
         }
       }

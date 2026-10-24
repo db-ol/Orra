@@ -24,6 +24,9 @@ struct ProjectsSettings: View {
     /// Opens the Projects window, nil where the page is shown without it, which leaves out
     /// its button and never opens the window.
     var openWindow: (() -> Void)? = nil
+    /// Opens the Projects window with Edit Project for a project, nil where the page is
+    /// shown without it, which leaves out the button beside each linked mailbox.
+    var editProject: ((UUID) -> Void)? = nil
     @State private var isConfirmingDelete = false
     @State private var isAskingKeepOrDelete = false
     @Environment(\.openURL) private var openURL
@@ -96,7 +99,7 @@ struct ProjectsSettings: View {
                 MailAccessSection(mail: mail) {
                     openURL(Self.automationSettings)
                 }
-                MailboxesSection(mail: mail, openWindow: openWindow)
+                MailboxesSection(mail: mail, openWindow: openWindow, editProject: editProject)
             }
             if projects.isOn {
                 Section {
@@ -180,7 +183,7 @@ struct ProjectsSettings: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Projects reads mail only in the mailboxes you choose here, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail.")
+            Text("Projects reads mail only in the mailboxes you choose, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail.")
         }
         .alert("Delete all Projects data?", isPresented: $isConfirmingDelete) {
             Button("Delete All", role: .destructive) {
@@ -469,12 +472,16 @@ struct ProjectsSettings: View {
     /// The mailboxes Projects reads, ticked one by one, the days, and Start Reading Mail,
     /// before which nothing is read. The two of all accounts show on their own, and each
     /// account's mailboxes and those On My Mac under a disclosure that is open while one of
-    /// them is ticked, so the days and Start Reading Mail stay near.
+    /// them is ticked, so the days and Start Reading Mail stay near. The mailboxes linked to
+    /// a project follow, since Projects reads them too, ticked or not.
     private struct MailboxesSection: View {
         let mail: MailAccess
         /// Opens the Projects window once Start Reading Mail confirms the choice, where the
         /// mail Projects reads shows. Nil where the page is shown without the window.
         let openWindow: (() -> Void)?
+        /// Opens Edit Project for the project of a linked mailbox. Nil where the page is
+        /// shown without the window.
+        let editProject: ((UUID) -> Void)?
         /// The groups the user opened or closed, by their place.
         @State private var expanded: [String: Bool] = [:]
 
@@ -523,6 +530,9 @@ struct ProjectsSettings: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                ForEach(mail.links, id: \.self) { link in
+                    linkRow(link)
+                }
                 Picker(selection: Binding(
                     get: { mail.choice.days },
                     set: { mail.choice.choose(days: $0) }
@@ -557,6 +567,42 @@ struct ProjectsSettings: View {
                 }
             } header: {
                 Text("Mailboxes")
+            } footer: {
+                if mail.choice.isConfirmed {
+                    Text("Changes apply only to the mail Projects reads from now on. Mail it already saved stays until it expires or you delete Projects data.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+
+        /// A mailbox a project links, with its project and the button that opens Edit
+        /// Project. One that Mail no longer has says so, as on the project page.
+        private func linkRow(_ link: MailAccess.Link) -> some View {
+            HStack {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: ProjectsWindowText.mailbox(link.mailbox))
+                        Text(verbatim: MailAccess.note(for: link))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        if link.isMissing {
+                            Text("Mail has no mailbox with this name now. Choose it again in Edit Project.")
+                                .font(.callout)
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: "link")
+                }
+                Spacer()
+                if let editProject {
+                    Button("Edit Project…") {
+                        editProject(link.project)
+                    }
+                }
             }
         }
 
@@ -596,6 +642,9 @@ extension ProjectsSettings {
     ///   ticked ones are saved, by MailChoice.
     /// - Start Reading Mail confirms the choice, before which the scan reads nothing
     ///   (decision 17).
+    /// - It lists the mailboxes the projects link, which the scan reads along with the
+    ///   ticked ones, also when they are not ticked here (MailScan). A linked one that Mail
+    ///   no longer has is marked, since the scan skips it.
     @Observable
     final class MailAccess {
         /// What the page says about Orra's access to Mail.
@@ -607,6 +656,17 @@ extension ProjectsSettings {
             case denied
             /// Not asked yet, or not known in this run. Allow Mail Access… asks.
             case unknown
+        }
+
+        /// A mailbox a project links, with that project.
+        nonisolated struct Link: Hashable, Sendable {
+            /// The name the project links it with, see ProjectsRuntime.mailboxName(_:).
+            let mailbox: String
+            let project: UUID
+            let projectName: String
+            /// Whether Mail no longer has a mailbox with this name, so the scan does not
+            /// read it, see ProjectsRuntime.missingMailboxes.
+            var isMissing = false
         }
 
         /// A line under the access after the user clicked Allow Mail Access….
@@ -635,12 +695,20 @@ extension ProjectsSettings {
         /// Whether the last listing failed for a reason other than access or Mail quitting.
         private(set) var listFailed = false
         @ObservationIgnored private let isOn: () -> Bool
+        @ObservationIgnored private let projects: () -> [Project]
+        @ObservationIgnored private let missingMailboxes: () -> Set<String>
 
-        /// - Parameter isOn: whether Projects is on. Nothing is asked or listed while it is
-        ///   off.
-        init(bridge: MailBridge, choice: MailChoice, isOn: @escaping () -> Bool) {
+        /// - Parameters:
+        ///   - projects: the user's projects, for the mailboxes they link. The runtime's
+        ///     list in the app, which is empty while Projects is off.
+        ///   - missingMailboxes: the linked mailboxes Mail no longer has, the runtime's in
+        ///     the app.
+        ///   - isOn: whether Projects is on. Nothing is asked or listed while it is off.
+        init(bridge: MailBridge, choice: MailChoice, projects: @escaping () -> [Project] = { [] }, missingMailboxes: @escaping () -> Set<String> = { [] }, isOn: @escaping () -> Bool) {
             self.bridge = bridge
             self.choice = choice
+            self.projects = projects
+            self.missingMailboxes = missingMailboxes
             self.isOn = isOn
         }
 
@@ -836,6 +904,23 @@ extension ProjectsSettings {
 
         func isChosen(_ mailbox: MailMailbox) -> Bool {
             choice.mailboxes.contains(mailbox)
+        }
+
+        /// The mailboxes the projects link, each with its project, in the order of the
+        /// projects and their mailboxes.
+        var links: [Link] {
+            Self.links(projects(), missing: missingMailboxes())
+        }
+
+        nonisolated static func links(_ projects: [Project], missing: Set<String>) -> [Link] {
+            projects.flatMap { project in
+                project.mailboxes.map { Link(mailbox: $0, project: project.id, projectName: project.name, isMissing: missing.contains($0)) }
+            }
+        }
+
+        /// The line under a linked mailbox.
+        nonisolated static func note(for link: Link) -> String {
+            String(localized: "Also read for “\(link.projectName)”")
         }
 
         /// Ticks or unticks a mailbox, which MailChoice saves at once. Only ticked mailboxes

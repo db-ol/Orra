@@ -70,6 +70,15 @@ struct ProjectsWindowView: View {
                 { ProjectsSuggestedSection.dismiss(suggestion, from: model.suggestions, runtime: runtime) }
             })
         }
+        // Edit Project… beside a linked mailbox in Settings. A sheet, an alert or a dialog of
+        // the window that shows already stays as it is, with the list behind it. The Remove
+        // Rule dialog is the project page's own, and a sheet that follows it saves the rules
+        // as the list has them then, see ProjectsRuntime.update(_:).
+        .onChange(of: model.projectToEdit, initial: true) {
+            if let project = model.takeProjectToEdit(presenting: setup != nil || forgetting != nil) {
+                setup = ProjectsSetupView.Draft(project)
+            }
+        }
         .onChange(of: model.ruleOffer) { _, offer in
             // The offer shows above the list, so VoiceOver says it.
             if let offer, let project = runtime.projectList.first(where: { $0.id == offer.project }) {
@@ -222,7 +231,12 @@ struct ProjectsWindowView: View {
                 setup = ProjectsSetupView.Draft(project)
             } forget: {
                 forgetting = project
+            } removeRule: { rule in
+                Task { await model.removeRule(rule, from: project.id) }
             }
+            // A page of its own for each project, so a Remove Rule dialog that is open goes
+            // away with its project rather than act on the next one.
+            .id(project.id)
         } else {
             ContentUnavailableView("No Email Selected", systemImage: "envelope")
         }
