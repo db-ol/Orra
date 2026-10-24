@@ -124,6 +124,9 @@ struct ProjectsSettings: View {
                 } label: {
                     Label("Stored on this Mac", systemImage: "internaldrive")
                 }
+                Text(verbatim: Self.retention)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if projects.deleteFailed {
                     Text("Some Projects data could not be deleted. Try again.")
                         .foregroundStyle(.secondary)
@@ -305,6 +308,15 @@ struct ProjectsSettings: View {
         default:
             state.menuLines(total: total)
         }
+    }
+
+    /// How long Projects keeps what it read, see Retention, and that it removes old data
+    /// only while it is on, so data kept while it is off stays until it is on again.
+    static var retention: String {
+        func days(_ period: TimeInterval) -> Int {
+            Int(period / Retention.day)
+        }
+        return String(localized: "Projects keeps the text of each email and its explanation for \(days(Retention.mailText)) days after reading it, and a draft for \(days(Retention.drafts)) days after its last change. It keeps the rest of an email, such as its sender and subject, until \(days(Retention.emails)) days after it read the newest email of its thread. It removes old data only while it is on.")
     }
 
     /// What Projects keeps, in the units Finder shows, or Nothing.

@@ -312,6 +312,9 @@ final class ProjectsWindowModel {
             emailModel(for: messageID).perform { await $0.explained() }
         } catch is CancellationError {
             explaining[messageID] = nil
+        } catch ProjectsRuntime.Failure.noText {
+            // The email view says why, see ProjectsWindowText.noText.
+            explaining[messageID] = nil
         } catch RewriteError.notLoaded {
             explaining[messageID] = .failed(.noModel)
         } catch ProjectsRuntime.Failure.modelNotLoaded {
@@ -337,8 +340,9 @@ final class ProjectsWindowModel {
     }
 
     /// Explain Selected Message: finds the message selected in Mail, shows it in its list
-    /// and explains it, or says why not (decision 18). It waits a moment for sorting to file
-    /// a message the scan just saved, never for the sorting of other mail, so the user's
+    /// and explains it, or says why not (decision 18). An email with no text to explain is
+    /// only shown, see ProjectsWindowText.noText. It waits a moment for sorting to file a
+    /// message the scan just saved, never for the sorting of other mail, so the user's
     /// explanation goes before the background work. Its button stays off until the
     /// explanation started.
     func explainSelectedMessage() async {
@@ -354,6 +358,8 @@ final class ProjectsWindowModel {
         await runtime.waitUntilSorted(messageID)
         await show(messageID, in: await runtime.place(of: messageID))
         isReadingSelection = false
+        // An email with no text to explain says why in its view, where Explain stays off.
+        if let email = selectedEmail, ProjectsWindowText.noText(email) != nil { return }
         // Marks the explanation as under way before it first waits.
         await explain(messageID)
     }

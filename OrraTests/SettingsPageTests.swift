@@ -54,9 +54,10 @@ struct SettingsPageTests {
         }
     }
 
-    /// The lines of the Projects page: where the cleanup model stands, what Projects keeps,
-    /// and the privacy page in the interface language.
+    /// The lines of the Projects page: where the cleanup model stands, what Projects keeps
+    /// and for how long, and the privacy page in the interface language.
     @Test func theProjectsPageSaysWhereTheModelAndTheDataStand() {
+        #expect(ProjectsSettings.retention == "Projects keeps the text of each email and its explanation for 90 days after reading it, and a draft for 30 days after its last change. It keeps the rest of an email, such as its sender and subject, until 180 days after it read the newest email of its thread. It removes old data only while it is on.")
         #expect(ProjectsSettings.modelStatus(.installed(URL(fileURLWithPath: "/"))) == "On this Mac")
         #expect(ProjectsSettings.modelStatus(.installed(URL(fileURLWithPath: "/")), engine: .ready) == "On this Mac")
         // A model on this Mac that could not be loaded says so.

@@ -3447,6 +3447,59 @@ one email of a sender who has three or more emails in the synthetic mail.
   reads mail only in the mailboxes you choose, and only while Mail is open."
 - [ ] The new lines read well in Chinese, Japanese and Spanish.
 
+Stalled folders, failed saves and expired drafts in Projects, added on 2026-10-24, not
+verified yet. Check in a Debug build with the synthetic mail imported, as in the test
+guide. ProjectsRuntimeTests holds a folder that never resolves while Projects turns off,
+turns on again or deletes its data, and fails the save of the message that Explain
+Selected Message waits for. MailScanTests fails a save and a lookup of the store in the
+middle of a pass. A full disk can make a save fail, and only the tests make a lookup
+fail. The checks that age the data run sqlite3 while Projects is off, with `<database>`
+standing for
+`"$HOME/Library/Application Support/io.github.db-ol.Orra/Projects/Index/projects.sqlite"`,
+quotes included.
+
+- [ ] Add a folder on a network share to a project, quit Orra, make the share stop
+  answering while it stays mounted (turn off the server or its network), and open Orra
+  with Projects on. Turning Projects off, and Delete All Projects Data, each finish within
+  a few seconds. Once the share answers again, the log of the projects-index category
+  shows no Index sweep line while Projects is off.
+- [ ] With three projects whose folders are on that share while it does not answer, turn
+  Projects off and on three times, then dictate a sentence in another app. The text
+  pastes as quickly as with Projects off.
+- [ ] Save an email that Projects read with File > Save As, Format Raw Message Source,
+  change its From line in a text editor, and drag the file into a mailbox Projects reads.
+  Select that copy in Mail and click Explain Selected Message. The window says the
+  message looks like an email Projects read, but its sender, recipients or date differ,
+  and it selects nothing and explains nothing. Select the original and click it again:
+  the original shows and is explained, and Open Reply in Mail opens the reply of the
+  original.
+- [ ] Copy an email Projects read into another mailbox Projects reads, select the copy in
+  Mail and click Explain Selected Message. It shows and explains the email.
+- [ ] Select an email Projects read that has no To line, such as one sent to you in Bcc,
+  and click Explain Selected Message. It shows and explains the email.
+- [ ] Explain an email that gets a draft and turn Projects off with Keep Data. Run
+  `sqlite3 <database> "UPDATE mail_messages SET draft_changed = draft_changed - 31 * 86400 WHERE draft_changed IS NOT NULL"`
+  and turn Projects on. The email keeps its explanation, the draft area reads "Projects
+  removed this draft 30 days after its last change. Explain the email again for a new
+  one.", and Explain Again writes a new draft.
+- [ ] Turn Projects off with Keep Data, run
+  `sqlite3 <database> "UPDATE mail_messages SET saved = saved - 91 * 86400 WHERE id = (SELECT MAX(id) FROM mail_messages)"`
+  and turn Projects on. That email reads "Projects removed its copy of this email's text
+  90 days after reading it. Read the email in Mail.", Explain is dimmed, and Explain
+  Selected Message on it in Mail shows it without explaining it.
+- [ ] An email over 16 MB, such as one with large attachments, read after this change,
+  reads "Projects did not read this email, as it is too large. Read it in Mail.", and
+  Explain is dimmed. Mail read before this change has no such mark, so use Delete All
+  Projects Data and Start Reading Mail again first.
+- [ ] Settings > Projects reads under Data "Projects keeps the text of each email and its
+  explanation for 90 days after reading it, and a draft for 30 days after its last
+  change. It keeps the rest of an email, such as its sender and subject, until 180 days
+  after it read the newest email of its thread. It removes old data only while it is on."
+- [ ] Check the six new lines in Chinese, Japanese and Spanish: the three of the email
+  view above, the two of Explain Selected Message, for a message that looks like an email
+  Projects read and for "Projects could not save this message on this Mac. Try again
+  later.", and the one under Data.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is

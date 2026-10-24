@@ -36,6 +36,8 @@ nonisolated enum ProjectsWindowText {
         case .notInChosenMailbox: String(localized: "This message is in a mailbox Projects does not read. Choose the mailbox in Settings first.")
         case .notRead(let days): String(localized: "Projects has not read this message. It reads the mail of the last \(days) days in the mailboxes you chose.")
         case .stillReading: String(localized: "Projects is still reading your mail. Try again in a moment.")
+        case .notSaved: String(localized: "Projects could not save this message on this Mac. Try again later.")
+        case .otherEmail: String(localized: "This message looks like an email Projects read, but its sender, recipients or date differ, so Projects cannot explain it.")
         case .notAllowed: String(localized: "Orra is not allowed to read Mail yet. Allow it in Settings.")
         case .failed: String(localized: "Mail did not answer. Try again.")
         }
@@ -222,6 +224,7 @@ nonisolated enum ProjectsWindowText {
         case .noReply(.listMail): String(localized: "No reply needed. It went to a list or came from a machine.")
         case .noDraft: String(localized: "This email is in a language Projects writes no drafts in.")
         case .missing: String(localized: "The model wrote no draft. Explain the email again to try once more.")
+        case .expired: String(localized: "Projects removed this draft \(days(Retention.drafts)) days after its last change. Explain the email again for a new one.")
         }
     }
 
@@ -265,6 +268,21 @@ nonisolated enum ProjectsWindowText {
         case 1: return String(localized: "Projects could not read an attachment. See Original Email.")
         default: return String(localized: "Projects could not read some attachments. See Original Email.")
         }
+    }
+
+    /// Why the email view has no text to explain, nil while it has: the email was too large
+    /// for Projects to read, or Retention removed its text.
+    static func noText(_ email: MailStore.Listed) -> String? {
+        if email.isTooLarge {
+            return String(localized: "Projects did not read this email, as it is too large. Read it in Mail.")
+        }
+        guard !email.hasText else { return nil }
+        return String(localized: "Projects removed its copy of this email's text \(days(Retention.mailText)) days after reading it. Read the email in Mail.")
+    }
+
+    /// A period of Retention in whole days.
+    private static func days(_ period: TimeInterval) -> Int {
+        Int(period / Retention.day)
     }
 
     /// Why a change, a translation or the answer check gave nothing new.

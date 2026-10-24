@@ -33,12 +33,13 @@ struct ProjectsEmailArea: View {
     var openSettings: (() -> Void)? = nil
 
     /// Reads the explanation again when the email changes project, is explained, Retention
-    /// removed its explanation, or the window let go of its email view, such as after Forget
-    /// Project, and made a new one.
+    /// removed its explanation or its draft, or the window let go of its email view, such
+    /// as after Forget Project, and made a new one.
     struct Reload: Hashable {
         var messageID: String
         var project: UUID?
         var isExplained: Bool
+        var hasDraft: Bool
         var explained: Int
         var generation: Int
 
@@ -46,6 +47,7 @@ struct ProjectsEmailArea: View {
             messageID = email.messageID
             project = email.project
             isExplained = email.isExplained
+            hasDraft = email.hasDraft
             explained = model.explained[email.messageID] ?? 0
             generation = model.emailViewGeneration
         }
@@ -143,6 +145,7 @@ struct ProjectsEmailArea: View {
     private var explainControls: some View {
         let state = model.explaining[email.messageID]
         let isChanging = model.emailModel(for: email.messageID).isBusy
+        let noText = ProjectsWindowText.noText(email)
         HStack(spacing: 10) {
             Group {
                 if email.isExplained {
@@ -155,7 +158,7 @@ struct ProjectsEmailArea: View {
                     }
                 }
             }
-            .disabled(state == .explaining || isChanging || !email.hasText || runtime.phase != .on)
+            .disabled(state == .explaining || isChanging || noText != nil || runtime.phase != .on)
             if state == .explaining {
                 ProgressView()
                     .controlSize(.small)
@@ -188,9 +191,8 @@ struct ProjectsEmailArea: View {
                     EmptyView()
                 }
             }
-        } else if !email.hasText {
-            // Retention removed its text, or it was too large to read.
-            Text("This email has no text to explain.")
+        } else if let noText {
+            Text(verbatim: noText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
