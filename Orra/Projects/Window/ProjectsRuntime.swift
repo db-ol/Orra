@@ -286,6 +286,9 @@ final class ProjectsRuntime {
     @ObservationIgnored private var resortAfterIndex: Set<UUID> = []
     /// The requests of the user under way, which stopping ends, see `userRequest(_:)`.
     @ObservationIgnored private var userRequests: [UUID: UserRequest] = [:]
+    /// The resolves of project folders under way, by their bookmarks, see
+    /// `resolve(_:)`. They outlive a stop, since a resolve cannot be cancelled.
+    @ObservationIgnored private var resolving: [[Data]: Task<[URL], Never>] = [:]
 
     /// A request of the user under way: how to end it, and a task that ends with it.
     private struct UserRequest {
@@ -1004,18 +1007,35 @@ final class ProjectsRuntime {
 
     /// Where a project's folders are now.
     func folders(of project: Project) async -> [URL] {
-        await dependencies.resolveFolders(project.folders)
+        await resolve(project.folders)
+    }
+
+    /// Where these folders are now. A resolve of the same folders under way is waited for,
+    /// not started again, so a share that hangs holds one thread for each set of folders,
+    /// however often Projects is turned off and on meanwhile.
+    private func resolve(_ bookmarks: [Data]) async -> [URL] {
+        if let resolve = resolving[bookmarks] {
+            return await resolve.value
+        }
+        let resolveFolders = dependencies.resolveFolders
+        let resolve = Task { await resolveFolders(bookmarks) }
+        resolving[bookmarks] = resolve
+        let folders = await resolve.value
+        if resolving[bookmarks] == resolve {
+            resolving[bookmarks] = nil
+        }
+        return folders
     }
 
     /// Starts indexing a project's folders as they are now. With `resortAfter`, Needs a
     /// Project is sorted again once the sweep that starts here ends. A folder can take long
     /// to resolve, such as on a share that hangs, so no start or stop of Projects waits for
-    /// this. When the project's folders changed meanwhile, or Projects stopped or is turning
-    /// off, this starts nothing, since the start for the change or the next start of
-    /// Projects counts.
+    /// this, and a later start waits for the same resolve, see `resolve(_:)`. When the
+    /// project's folders changed meanwhile, or Projects stopped or is turning off, this
+    /// starts nothing, since the start for the change or the next start of Projects counts.
     private func startIndex(_ project: Project, resortAfter: Bool = false) async {
         guard let index = running?.index else { return }
-        let folders = await dependencies.resolveFolders(project.folders)
+        let folders = await resolve(project.folders)
         // The switch itself, since `wantsOn` follows it a moment later.
         guard projects.isOn, !projects.isDeleting, running?.index === index,
               running?.list.project(project.id)?.folders == project.folders else { return }

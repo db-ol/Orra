@@ -695,6 +695,34 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Turning Projects off and on again while the folder still resolves starts no other
+    /// resolve of it, so a share that hangs holds one thread however often the user tries.
+    /// Once it resolves, Projects as it runs now indexes the folder.
+    @Test(.timeLimit(.minutes(1))) func aStalledFolderResolveServesTheNextStartsToo() async throws {
+        defer { cleanUp() }
+        let project = try await savedProjectWithAFolder()
+        let folders = StallingFolders()
+        let (runtime, projects, _) = make(folders: folders)
+        runtime.follow()
+        try await waitUntil { folders.isHolding }
+
+        for _ in 0..<2 {
+            await projects.turnOff(keepingData: true)
+            try await waitUntil { runtime.phase == .off }
+            projects.turnOn()
+            try await waitUntil { runtime.phase == .on }
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(folders.resolves == 1)
+        #expect(folders.watchedFolders.isEmpty)
+        folders.letGo()
+        try await waitUntil { folders.watchedFolders == [["Alpha"]] }
+        #expect(runtime.indexReport(project.id) != nil)
+        #expect(folders.resolves == 1)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: The model
 
     @Test func sortingAsksTheModelOnlyWhileTheWindowHoldsIt() async throws {
@@ -1680,6 +1708,7 @@ struct ProjectsRuntimeTests {
             var held: CheckedContinuation<Void, Never>?
             var letGo = false
             var heldResolveReturned = false
+            var resolves = 0
             var readFiles: [String] = []
             var watchedFolders: [[String]] = []
         }
@@ -1688,6 +1717,11 @@ struct ProjectsRuntimeTests {
 
         nonisolated var isHolding: Bool {
             state.withLock { $0.held != nil }
+        }
+
+        /// How many resolves of one or more bookmarks started.
+        nonisolated var resolves: Int {
+            state.withLock { $0.resolves }
         }
 
         nonisolated var heldResolveReturned: Bool {
@@ -1715,6 +1749,9 @@ struct ProjectsRuntimeTests {
 
         nonisolated func resolve(_ bookmarks: [Data]) async -> [URL] {
             let holds = state.withLock { state in
+                if !bookmarks.isEmpty {
+                    state.resolves += 1
+                }
                 guard state.holdsNext, !bookmarks.isEmpty else { return false }
                 state.holdsNext = false
                 return true
