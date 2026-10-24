@@ -3328,8 +3328,8 @@ Projects Data… in its Settings.
   leaves the draft as it was. Replace Draft explains the email again with a new draft, and
   the draft cannot be edited until the new one shows. An email whose draft you did not
   change and that has no versions explains again without asking.
-- [ ] Select that email in Mail and click Explain Selected Message. Orra asks the same
-  first.
+- [ ] Type into the new draft again, then select that email in Mail and click Explain
+  Selected Message. Orra asks the same first.
 - [ ] Turn on Live Captions, then click Change Draft. The change waits, the line under it
   says "Paused while Live Captions run." and Cancel Change shows. Copy puts the draft as it
   is on the clipboard, while Open Reply in Mail stays dimmed. Cancel Change ends the change,
