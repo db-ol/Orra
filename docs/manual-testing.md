@@ -3310,6 +3310,47 @@ Projects Data and Start Reading Mail again first.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
 
+Loading the model for Projects, added on 2026-10-24, not verified yet. Check in a Debug
+build with Projects on, Clean Up Text, Translation and Live Captions off, and the synthetic
+mail imported, as in the test guide. The cleanup model is in
+~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3.5-4B-4bit-0e7ffd5c. Watch
+its loads with
+`/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`,
+which shows loads and waits with their times, never text.
+
+- [ ] Quit Orra, move that folder out of Models, and launch. Open the Projects window and
+  click Explain on an email. The line under it reads "Download the cleanup model to explain
+  this email." with Open Projects Settings…, which opens Settings at Projects with the
+  download button.
+- [ ] Start the download there and keep the Projects window open. Shortly before the
+  download ends, double press the talk key for hands free and talk until it is done, then
+  press once more. The log shows "The cleanup model loads for Projects after the dictation"
+  before the paste and "Cleanup model loaded and warmed up" only after it, and the
+  dictation pastes as quickly as without the download.
+- [ ] Repeat with Clean Up Text on. The model loads as soon as the download ends, during the
+  dictation, and the dictation is cleaned up as before.
+- [ ] Close the Projects window and open it again at once, then start a dictation right
+  away. A load that waits behind the unload must not start before the paste. That gap is
+  too short to catch by hand, so
+  CleanupIdleUnloadTests.aQueuedLoadForProjectsWaitsForADictationThatStartsBeforeItsTurn
+  checks it.
+- [ ] Quit Orra, note the first byte of model.safetensors in the model folder
+  (`xxd -l 1 model.safetensors`), change it, and launch. Open the Projects window and click
+  Explain. The line reads "The cleanup model could not be loaded." with Try Loading Again,
+  never that the model is not on this Mac. Settings > Projects shows Could not be loaded
+  beside Cleanup model, with "Until it is, Projects cannot explain mail or draft replies."
+  and Try Loading Again. On an email explained before, Change Draft says "The cleanup model
+  could not be loaded." too.
+- [ ] Put the byte back and click Try Loading Again in the window. Explaining… shows, the
+  line under the list reads "Loading the cleanup model…" while the model loads, and then
+  the explanation shows.
+- [ ] Only with time for a download of about 3 GB: change the byte again, launch, and click
+  Try Loading Again without putting it back. The hashes are checked and the damaged file
+  is deleted, so the line turns into the one about the download, and Settings > Projects
+  offers Resume Download.
+- [ ] With Orra's language set to 中文, 日本語 and Español, the new lines and buttons read
+  naturally and fit beside each other.
+
 Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
 checks that a download agreed to in the caption window turns on neither cleanup nor
 translation and stops when captions stop, as docs/privacy.md says, and that it goes on
