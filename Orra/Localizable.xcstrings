@@ -15013,24 +15013,24 @@
         }
       }
     },
-    "The sender's domain looks like the domain of a project person." : {
+    "The sender's domain looks like a domain Projects knows, but it is a different one." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El dominio de quien envía se parece al de una persona del proyecto."
+            "value" : "El dominio de quien envía se parece a uno que Proyectos conoce, pero es otro."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "送信者のドメインがプロジェクトの関係者のドメインに似ています。"
+            "value" : "送信者のドメインは“プロジェクト”が知っているドメインに似ていますが、別のドメインです。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "发件人的域名与某位项目联系人的域名相似。"
+            "value" : "发件人的域名与“项目”已知的某个域名相似，但并不相同。"
           }
         }
       }

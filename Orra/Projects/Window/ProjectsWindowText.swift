@@ -150,15 +150,17 @@ nonisolated enum ProjectsWindowText {
     /// its check found and no more. The content checks match words, not intent, so a payment
     /// or a password is mentioned, not asked for. A quote counts as not found when Projects
     /// did not read the mail it quotes, and a sender as unknown when Projects knows neither
-    /// the address nor its domain, see ContentChecks. No check in code finds false urgency,
-    /// a forward request or a request for confidential data yet.
+    /// the address nor its domain, see ContentChecks. A domain looks alike when it looks like
+    /// the user's own, a project's or that of someone the user exchanged mail with, see
+    /// SenderChecks. No check in code finds false urgency, a forward request or a request for
+    /// confidential data yet.
     static func warning(_ warning: ProjectsWarning) -> String {
         switch warning {
         case .hiddenText: String(localized: "It holds text its reader cannot see.")
         case .instructionToAssistant: String(localized: "A line in it speaks to an assistant.")
         case .documentInstruction: String(localized: "A line in a project file speaks to an assistant.")
         case .claimsToBeOrra: String(localized: "Text in it claims to come from Orra.")
-        case .lookalikeDomain: String(localized: "The sender's domain looks like the domain of a project person.")
+        case .lookalikeDomain: String(localized: "The sender's domain looks like a domain Projects knows, but it is a different one.")
         case .senderNameMismatch: String(localized: "The sender's name does not match the address.")
         case .forgedQuote: String(localized: "It quotes you. Projects did not find those words in the sent mail it read.")
         case .paymentChange: String(localized: "It mentions a change of where to pay.")

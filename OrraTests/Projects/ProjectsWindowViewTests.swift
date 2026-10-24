@@ -199,6 +199,7 @@ struct ProjectsWindowViewTests {
     /// A warning says what its check found, no more. The word checks match words, not
     /// intent, so a notice that only mentions a password or a new account sets them off. A
     /// quote counts as not found when the mail it quotes is older than what Projects read.
+    /// A domain looks alike when it looks like the user's own, not only a project's.
     @Test func theWarningsSayWhatTheChecksFound() async {
         let own = [SenderChecks.Person(name: "Lin Bai", address: "lin@studio.example")]
         let notice = "We never ask for your password by email. Ignore any message that says we have a new account."
@@ -207,6 +208,8 @@ struct ProjectsWindowViewTests {
         let quote = "On Mon, 12 Oct 2026, Lin Bai <lin@studio.example> wrote:\n> The brass lamps are fine with us."
         let quoted = await ContentChecks.warnings(for: ContentChecks.Input(subject: "Re: Lamps", text: quote, senderIsKnown: true, own: own, sentTexts: ["Thanks for the plan."]))
         #expect(quoted == [.forgedQuote])
+        let lookalike = SenderChecks.warnings(for: SenderChecks.Input(sender: SenderChecks.Person(name: "", address: "accounts@studi0.example"), own: own))
+        #expect(lookalike == [.lookalikeDomain])
 
         #expect(ProjectsWindowText.warning(.paymentChange) == "It mentions a change of where to pay.")
         #expect(ProjectsWindowText.warning(.credentialRequest) == "It mentions a password, a code or another credential. Check what it asks you to do.")
@@ -220,6 +223,9 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.warning(.attachmentNameSpoofing) == "An attachment may run code, or its name hides its real type.")
         // A hidden preheader of a newsletter sets it off too.
         #expect(ProjectsWindowText.warning(.hiddenText) == "It holds text its reader cannot see.")
+        // Known domains are the user's own, the projects' and those of everyone the user
+        // exchanged mail with.
+        #expect(ProjectsWindowText.warning(.lookalikeDomain) == "The sender's domain looks like a domain Projects knows, but it is a different one.")
     }
 
     /// An explanation of the English answer `answer`, as ExplainService makes it.
