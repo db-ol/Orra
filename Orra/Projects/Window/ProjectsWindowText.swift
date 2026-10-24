@@ -248,9 +248,14 @@ nonisolated enum ProjectsWindowText {
     /// The notice in the explanation when Projects did not read the text of an attachment
     /// of a kind it reads, nil when it read them all. The list under Original Email says
     /// why. A kind it never reads, such as an image, gives no notice, since many emails
-    /// carry one in their signature, and the list names it.
+    /// carry one in their signature, and the list names it. The kind comes from the name
+    /// and the type, since an attachment Mail has not downloaded, one in an email too large
+    /// to read and one saved earlier have that state whatever their kind.
     static func unreadAttachments(_ attachments: [MailAttachment]) -> String? {
-        let unread = attachments.filter { $0.state != .read && $0.state != .otherType }.count
+        let unread = attachments.filter { attachment in
+            attachment.state != .read && attachment.state != .otherType
+                && MailAttachment.format(name: attachment.name, type: attachment.type) != nil
+        }.count
         switch unread {
         case 0: return nil
         case 1: return String(localized: "Projects could not read an attachment. See Original Email.")

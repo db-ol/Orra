@@ -261,6 +261,8 @@ struct ProjectsWindowViewTests {
     /// The explanation says when Projects did not read an attachment of a kind it reads,
     /// and leaves the details to the list under Original Email. A kind Projects never reads,
     /// such as an image, gives no notice, since many emails carry one in their signature.
+    /// That holds also when Mail has not downloaded it or the email was too large to read,
+    /// which give an image the same state as a PDF.
     @Test func theExplanationSaysWhenAttachmentsWereNotRead() {
         let plan = MailAttachment(name: "plan.pdf", type: "application/pdf", size: 120_000, state: .read)
         let logo = MailAttachment(name: "logo.png", type: "image/png", size: 4_000, state: .otherType)
@@ -270,6 +272,14 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.unreadAttachments([plan, logo]) == nil)
         #expect(ProjectsWindowText.unreadAttachments([plan, drawings, logo]) == "Projects could not read an attachment. See Original Email.")
         #expect(ProjectsWindowText.unreadAttachments([drawings, scan]) == "Projects could not read some attachments. See Original Email.")
+        let images = [
+            MailAttachment(name: "logo.png", type: "image/png", size: 4_000, state: .notDownloaded),
+            MailAttachment(name: "site.jpg", type: "image/jpeg", size: 9_000_000, state: .emailTooLarge),
+            MailAttachment(name: "badge.gif", type: "image/gif", state: .savedEarlier),
+        ]
+        #expect(ProjectsWindowText.unreadAttachments([plan] + images) == nil)
+        let notDownloaded = MailAttachment(name: "lamps.pdf", type: "application/pdf", size: 48_213, state: .notDownloaded)
+        #expect(ProjectsWindowText.unreadAttachments(images + [notDownloaded]) == "Projects could not read an attachment. See Original Email.")
     }
 
     /// The warnings show the rule findings of the list, also those the explanation does not
