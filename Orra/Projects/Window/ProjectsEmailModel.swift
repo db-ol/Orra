@@ -18,7 +18,7 @@ import Observation
 /// - A change, from the change box or a tone, makes a new version of the draft as the
 ///   editor holds it, checked by DraftCheck. Cancel Change ends it and leaves the draft and
 ///   the change box as they were. Undo removes the newest version and puts back the text it
-///   was made from.
+///   was made from, which the version keeps, also for a window that opens later.
 /// - The answer check runs on its own once for each draft the model makes while the window
 ///   is open: after the explanation, see ProjectsWindowModel.explain(_:), and after each new
 ///   version (decision 9). For a draft made in an earlier window, and after an edit, it runs
@@ -234,9 +234,6 @@ final class ProjectsEmailModel {
     private(set) var isCheckingAnswers = false
     private(set) var answersNote: Note?
     private(set) var handoffNote: HandoffNote?
-    /// The text each saved version was made from, by its number, for the highlight and
-    /// Undo. Only for the versions made while the window is open.
-    @ObservationIgnored private var madeFrom: [Int: String] = [:]
     /// Whether a translation or an answer check was asked for while one ran.
     @ObservationIgnored private var translateAgain = false
     @ObservationIgnored private var checkAgain = false
@@ -373,7 +370,7 @@ final class ProjectsEmailModel {
     /// The newest version with what it changed, worked out off the main actor.
     private func change(of versions: [MailStore.DraftVersion]) async -> LastChange? {
         guard let last = versions.last, let after = last.version.draft else { return nil }
-        var before = madeFrom[last.number]
+        var before = last.version.madeFrom
         if before == nil, versions.count > 1 {
             before = versions[versions.count - 2].version.draft
         }
@@ -413,10 +410,6 @@ final class ProjectsEmailModel {
         let versions = explanation == nil ? [] : await actions.versions(messageID)
         let edited = explanation == nil ? nil : await actions.editedDraft(messageID)
         let changed = !isLoaded || explanation != self.explanation || versions != self.versions
-        if explanation != self.explanation {
-            madeFrom = [:]
-        }
-        madeFrom = madeFrom.filter { number, _ in versions.contains { $0.number == number } }
         if explanation != self.explanation {
             self.explanation = explanation
             showsOriginal = false
@@ -668,10 +661,10 @@ final class ProjectsEmailModel {
             await load()
             return false
         }
-        madeFrom[last.number] = before
         await take(saved)
         text = draft
-        // Saving the version removed the text the user typed, which it was made from.
+        // Saving the version removed the text the user typed, which the version holds as
+        // the text it was made from.
         savedText = draft
         return true
     }
@@ -690,11 +683,10 @@ final class ProjectsEmailModel {
         let saved = await actions.versions(messageID)
         let undone = removed && !saved.contains { $0.number == last.number }
         if undone {
-            let before = madeFrom.removeValue(forKey: last.number)
             await take(saved)
-            text = before ?? modelDraft ?? ""
-            // The store keeps no text the version was made from, so the editor's text is
-            // saved again.
+            // A version an earlier build saved does not hold the text it was made from.
+            text = last.version.madeFrom ?? modelDraft ?? ""
+            // That text went with the version, so the editor's text is saved again.
             savedText = nil
         } else {
             await load()

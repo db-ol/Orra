@@ -378,6 +378,32 @@ struct ProjectsEmailModelTests {
         #expect(reopened.saveNote == nil)
     }
 
+    /// Undo in a window that opens later puts back what the user typed before the change,
+    /// which the version keeps, and the highlight shows the change from that text.
+    @Test func undoInAWindowThatOpensLaterPutsBackWhatTheUserTyped() async throws {
+        let model = model()
+        await model.load()
+        let typed = Self.draft.replacingOccurrences(of: "today", with: "tonight")
+        model.text = typed
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan tonight.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer]
+            $0.checks = [Self.bothAnswered]
+        }
+        #expect(await model.makeChange(.tone(.firm)))
+        #expect(fakes.value.versions.last?.version.madeFrom == typed)
+
+        // The window closed and opens again.
+        let reopened = self.model()
+        await reopened.load()
+        #expect(reopened.text == firmer)
+        #expect(reopened.lastChange?.segments == ProjectsDraftDiff.segments(from: typed, to: firmer))
+        await reopened.undo()
+        #expect(reopened.text == typed)
+        try await waitUntil { fakes.value.edited?.text == typed }
+        #expect(fakes.value.edited?.editedFrom == MailStore.draftKey(Self.draft, version: 0, explained: Self.today))
+    }
+
     @Test func theSourcesNameThisEmailEarlierMailAndFiles() async {
         let model = model()
         await model.load()

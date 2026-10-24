@@ -662,7 +662,9 @@ struct MailStoreTests {
         #expect(try await store.save(Self.explanation("a@test.example", project: nil), at: Self.date(1)))
         let formal = ReviseService.Version(
             messageID: "a@test.example", change: .tone(.formal),
-            check: DraftCheck.Result(draft: "尊敬的宋女士：尺寸已确认。", language: .zh), droppedPlaceholders: ["[待确认：交期]"])
+            check: DraftCheck.Result(draft: "尊敬的宋女士：尺寸已确认。", language: .zh), droppedPlaceholders: ["[待确认：交期]"],
+            madeFrom: "您好，尺寸已确认。交期下周告知。")
+        // Without the text it was made from, as an earlier build saved it.
         let shorter = ReviseService.Version(
             messageID: "a@test.example", change: .instruction("更短一点"),
             check: DraftCheck.Result(draft: "尺寸已确认。", language: .zh, flags: [.decidesQuestion(placeholders: 0, questions: 1)]))

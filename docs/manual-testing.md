@@ -3321,6 +3321,8 @@ Projects Data… in its Settings.
 - [ ] Close the Projects window and open it again. The draft holds your sentence, and Saved
   on this Mac shows. Turn Projects off in Settings with Keep Data and on again: the draft
   still holds it.
+- [ ] Change that draft with Tone, close the window and open it again, then click Undo
+  Change. The draft holds your sentence again.
 - [ ] Click Explain Again on that email. Orra asks "Replace your draft?" first. Cancel
   leaves the draft as it was. Replace Draft explains the email again with a new draft, and
   the draft cannot be edited until the new one shows. An email whose draft you did not

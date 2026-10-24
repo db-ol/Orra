@@ -23,7 +23,8 @@ import os
 ///   its explanation and draft go, so no text of the project before stays with it.
 /// - The text the user typed into a draft is kept apart from the versions the model made,
 ///   with the key of the draft it was typed into, see `draftKey(_:version:explained:)`. A
-///   new explanation or a new version takes its place.
+///   new explanation or a new version takes its place. A version keeps the text it was made
+///   from, for Undo, see ReviseService.Version.madeFrom.
 /// - The thread of each email is worked out when it is saved, see MailThreads, and joined
 ///   again when an earlier message of the thread comes later.
 /// - Text goes into the file only for the time Retention allows. What a delete removes is
@@ -776,7 +777,8 @@ nonisolated struct MailStore: Sendable {
     /// nothing when the store does not hold the email, or when its explanation, which holds
     /// the first draft, is gone or newer than the revision: a revision that ends after the
     /// email was explained again, moved or forgotten never lands on the new draft. The new
-    /// version takes the place of the text the user typed, which it was made from.
+    /// version takes the place of the text the user typed, and holds the text it was made
+    /// from for Undo.
     /// - Parameters:
     ///   - started: when the revision started, from the clock that `now` reads.
     @discardableResult
