@@ -2,19 +2,26 @@ import SwiftUI
 
 /// The email view, the third column of the Projects window while an email is selected
 /// (plan section 5, projects-email-view), top to bottom:
+/// - Back to Previous Email, after an earlier email's chip showed this email. It stays
+///   above the rest, which scrolls, since the chip is often far down.
 /// - the sender, date and subject, the marks, and Explain or Explain Again
-/// - the project chip with its reasons, whose menu moves the email to another project
-/// - the attachments, with whether Projects read their text, see ProjectsAttachmentList
+/// - the project chip with its reasons, whose menu assigns the email to another project in
+///   Orra. The email stays where it is in Mail.
 /// - once the email is explained, the choice between the explanation and the email itself,
-///   see ProjectsEmailOriginal. Before that the email itself shows under its warnings.
+///   see ProjectsEmailOriginal, which also lists the attachments with whether Projects read
+///   their text. Before that the email itself shows under its warnings.
 /// - the warnings, always with those the code found, and what was taken out of the text
 ///   before the model read it
-/// - What it says: the points, each with chips for its sources. A file's chip shows the
-///   excerpt with its page inside Orra, an attachment's chip the excerpt the model read, and
-///   an earlier email's chip shows that email in the window (decision 20). Nothing opens
-///   outside Orra.
+/// - What it says: the points, each with chips for its sources, or a line that it has
+///   none. A file's chip shows the excerpt with its page inside Orra, an attachment's chip
+///   the excerpt the model read, and an earlier email's chip shows that email in the window
+///   (decision 20). Nothing opens outside Orra. A line says when Projects could not read an
+///   attachment.
 /// - Before you reply: the questions only the user can answer
 /// - the draft with its tools, see DraftSection
+///
+/// A section the model's answer does not hold says so, rather than that the model found
+/// nothing, see ProjectsWindowText.noQuestions(_:).
 ///
 /// Mail text, names and model output show as plain text only: `Text(verbatim:)`, or an
 /// AttributedString made from plain strings for the highlight of a change. No Markdown,
@@ -23,14 +30,18 @@ struct ProjectsEmailArea: View {
     let runtime: ProjectsRuntime
     let model: ProjectsWindowModel
     let email: MailStore.Listed
+    /// Opens Settings at the Projects page, nil where the view is shown without it, which
+    /// leaves out its button.
+    var openSettings: (() -> Void)? = nil
 
     /// Reads the explanation again when the email changes project, is explained, Retention
-    /// removed its explanation, or the window let go of its email view, such as after Forget
-    /// Project, and made a new one.
+    /// removed its explanation or its draft, or the window let go of its email view, such
+    /// as after Forget Project, and made a new one.
     struct Reload: Hashable {
         var messageID: String
         var project: UUID?
         var isExplained: Bool
+        var hasDraft: Bool
         var explained: Int
         var generation: Int
 
@@ -38,6 +49,7 @@ struct ProjectsEmailArea: View {
             messageID = email.messageID
             project = email.project
             isExplained = email.isExplained
+            hasDraft = email.hasDraft
             explained = model.explained[email.messageID] ?? 0
             generation = model.emailViewGeneration
         }
@@ -45,43 +57,50 @@ struct ProjectsEmailArea: View {
 
     var body: some View {
         @Bindable var emailModel = model.emailModel(for: email.messageID)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                ProjectChip(runtime: runtime, model: model, email: email)
-                ProjectsAttachmentList(attachments: email.attachments)
+        VStack(spacing: 0) {
+            if model.previousEmail != nil {
+                backBar
                 Divider()
-                if let explanation = emailModel.explanation {
-                    Picker("Show", selection: $emailModel.showsOriginal) {
-                        Text("Explanation").tag(false)
-                        Text("Original Email").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    if emailModel.showsOriginal {
-                        let warnings = ExplanationSections.warnings(explanation, listed: email.warnings)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    ProjectChip(runtime: runtime, model: model, email: email)
+                    Divider()
+                    if let explanation = emailModel.explanation {
+                        Picker("Show", selection: $emailModel.showsOriginal) {
+                            Text("Explanation").tag(false)
+                            Text("Original Email").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        if emailModel.showsOriginal {
+                            let warnings = ExplanationSections.warnings(explanation, listed: email.warnings)
+                            if !warnings.isEmpty {
+                                WarningList(items: warnings, model: model, emailModel: emailModel)
+                            }
+                            original(emailModel)
+                            // The draft is the model's text, so a line sets it apart from the mail's.
+                            Divider()
+                        } else {
+                            ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
+                        }
+                        DraftSection(
+                            runtime: runtime, emailModel: emailModel, explanation: explanation,
+                            isExplaining: model.explaining[email.messageID] == .explaining)
+                    } else {
+                        // Before it is explained: the rule findings, and the email itself.
+                        let warnings = ProjectsWarning.allCases.filter(email.warnings.contains).map { ExplanationSections.Item(warning: $0, places: []) }
                         if !warnings.isEmpty {
                             WarningList(items: warnings, model: model, emailModel: emailModel)
                         }
                         original(emailModel)
-                        // The draft is the model's text, so a line sets it apart from the mail's.
-                        Divider()
-                    } else {
-                        ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
                     }
-                    DraftSection(runtime: runtime, emailModel: emailModel, explanation: explanation)
-                } else {
-                    // Before it is explained: the rule findings, and the email itself.
-                    let warnings = ProjectsWarning.allCases.filter(email.warnings.contains).map { ExplanationSections.Item(warning: $0, places: []) }
-                    if !warnings.isEmpty {
-                        WarningList(items: warnings, model: model, emailModel: emailModel)
-                    }
-                    original(emailModel)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(20)
         }
         .task(id: Reload(email: email, model: model)) {
             // The answer check runs on its own only for a draft made in this window, see
@@ -90,19 +109,37 @@ struct ProjectsEmailArea: View {
         }
     }
 
-    /// The email itself, or its first sentence while it is read.
+    /// The email itself with its attachments, or its attachments and its first sentence
+    /// while it is read. The attachments show also when the store keeps none of its text.
     @ViewBuilder
     private func original(_ emailModel: ProjectsEmailModel) -> some View {
         if let content = emailModel.original {
-            ProjectsEmailOriginal(content: content)
-        } else if !email.summary.isEmpty {
-            Text(verbatim: email.summary)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            ProjectsEmailOriginal(content: content, attachments: email.attachments)
+        } else {
+            ProjectsAttachmentList(attachments: email.attachments)
+            if !email.summary.isEmpty {
+                Text(verbatim: email.summary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
     // MARK: The header
+
+    /// Back to Previous Email, after an earlier email's chip showed this email.
+    private var backBar: some View {
+        Button {
+            Task { await model.showPreviousEmail() }
+        } label: {
+            Label("Back to Previous Email", systemImage: "chevron.backward")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+    }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -132,11 +169,13 @@ struct ProjectsEmailArea: View {
     private var explainControls: some View {
         let state = model.explaining[email.messageID]
         let isChanging = model.emailModel(for: email.messageID).isBusy
+        let noText = ProjectsWindowText.noText(email)
         HStack(spacing: 10) {
             Group {
                 if email.isExplained {
+                    // Asks first when the new draft would replace one the user changed.
                     Button("Explain Again") {
-                        Task { await model.explain(email.messageID) }
+                        Task { await model.requestExplain(email.messageID) }
                     }
                 } else {
                     Button("Explain") {
@@ -144,7 +183,7 @@ struct ProjectsEmailArea: View {
                     }
                 }
             }
-            .disabled(state == .explaining || isChanging || !email.hasText || runtime.phase != .on)
+            .disabled(state == .explaining || isChanging || noText != nil || runtime.phase != .on)
             if state == .explaining {
                 ProgressView()
                     .controlSize(.small)
@@ -153,12 +192,32 @@ struct ProjectsEmailArea: View {
             }
         }
         if case .failed(let failure)? = state {
-            Text(verbatim: ProjectsWindowText.explainFailure(failure))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if !email.hasText {
-            // Retention removed its text, or it was too large to read.
-            Text("This email has no text to explain.")
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(verbatim: ProjectsWindowText.explainFailure(failure))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // The way out when the model is missing or could not be loaded. The button
+                // keeps its whole name, and the line wraps beside it.
+                switch failure {
+                case .noModel:
+                    if let openSettings {
+                        Button("Open Projects Settings…", action: openSettings)
+                            .fixedSize()
+                    }
+                case .modelNotLoaded:
+                    // It explains the email after the load, so it waits for a change or
+                    // an undo of the draft, as Explain does.
+                    Button("Try Loading Again") {
+                        Task { await model.loadModelAgain(explaining: email.messageID) }
+                    }
+                    .fixedSize()
+                    .disabled(isChanging || runtime.phase != .on)
+                case .tooLong, .other:
+                    EmptyView()
+                }
+            }
+        } else if let noText {
+            Text(verbatim: noText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -174,8 +233,8 @@ struct ProjectsEmailArea: View {
 
 extension ProjectsEmailArea {
     /// The email's project, or Needs a Project or Set Aside, with why it is there. One click
-    /// opens the menu that moves it, as Move To in the list does: the window stays on its
-    /// list. The rule offer follows two moves of one kind.
+    /// opens the menu that assigns it to another project, as Assign to Project in the list
+    /// does: the window stays on its list. The rule offer follows two moves of one kind.
     struct ProjectChip: View {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel
@@ -196,8 +255,8 @@ extension ProjectsEmailArea {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .fixedSize()
-                .help("Move To")
-                .accessibilityHint(Text("Move To"))
+                .help("Assign to Project")
+                .accessibilityHint(Text("Assign to Project"))
                 .disabled(runtime.phase != .on)
                 let reasons = ProjectsWindowText.reasons(email)
                 if !reasons.isEmpty {
@@ -254,11 +313,18 @@ extension ProjectsEmailArea {
             }
             section("What it says") {
                 if explanation.points.isEmpty {
-                    Text("The model named no points.")
+                    Text(verbatim: ProjectsWindowText.noPoints(explanation))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(Array(explanation.points.enumerated()), id: \.offset) { _, point in
                     PointRow(point: point, model: model, emailModel: emailModel)
+                }
+                if let notice = ProjectsWindowText.unreadAttachments(email.attachments) {
+                    Text(verbatim: notice)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if !explanation.problems.isEmpty {
                     Text("Part of the model's answer could not be read.")
@@ -269,8 +335,9 @@ extension ProjectsEmailArea {
             if explanation.reply.draftLanguage != nil || !explanation.questions.isEmpty {
                 section("Before you reply") {
                     if explanation.questions.isEmpty {
-                        Text("Nothing for you to decide first.")
+                        Text(verbatim: ProjectsWindowText.noQuestions(explanation))
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(Array(explanation.questions.enumerated()), id: \.offset) { _, question in
                         Label {
@@ -366,6 +433,11 @@ extension ProjectsEmailArea {
                 }
                 if !point.sources.isEmpty {
                     SourceChips(ids: point.sources, model: model, emailModel: emailModel)
+                        .padding(.leading, 14)
+                } else if let line = ProjectsWindowText.noSource(point) {
+                    Text(verbatim: line)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         .padding(.leading, 14)
                 }
                 ForEach(Array(point.flags.enumerated()), id: \.offset) { _, flag in

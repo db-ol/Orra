@@ -139,7 +139,8 @@ struct RecordingFeedbackTests {
     /// The message after a stop at the limit stays for the window of the press that was
     /// meant to stop, and that press dismisses it.
     @Test func theMessageAfterAStopAtTheLimitStaysUntilDismissed() async throws {
-        let feedback = makeFeedback(messageDuration: .milliseconds(20), limitMessageDuration: .seconds(30))
+        // An hour, so the window is not over when the test process stalls for a minute.
+        let feedback = makeFeedback(messageDuration: .milliseconds(20), limitMessageDuration: .seconds(3600))
         feedback.handle(.stoppedAtLimit(message: "Orra records up to 5 minutes at a time, so the recording stopped there."))
         #expect(feedback.display == .message("Orra records up to 5 minutes at a time, so the recording stopped there."))
         try await Task.sleep(for: .milliseconds(100))

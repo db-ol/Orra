@@ -92,6 +92,8 @@ struct ReviseServiceTests {
         #expect(version.draft == written)
         #expect(version.change == .instruction("Say Thursday"))
         #expect(version.messageID == "proof-3@printworks.example")
+        // The draft it was made from, for Undo.
+        #expect(version.madeFrom == Self.draft)
         #expect(version.check.removals.isEmpty)
         #expect(version.check.flags.isEmpty)
         #expect(store.saved == [version])

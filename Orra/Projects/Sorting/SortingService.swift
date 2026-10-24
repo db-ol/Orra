@@ -222,9 +222,11 @@ final class SortingService {
 
     /// Sorts new emails, oldest first, after the batch under way. Returns once they are
     /// saved, or when the caller's task is cancelled or `stop()` is called. The email under
-    /// way then is not saved.
-    func sort(_ emails: [Email]) async {
-        await inTurn { await self.process(emails) }
+    /// way then is not saved. With `rulesOnly`, the model is never asked, and only an email
+    /// the rules file on their own, in a project or in Set Aside, is saved. The others stay
+    /// as they are, such as when Needs a Project is sorted again.
+    func sort(_ emails: [Email], rulesOnly: Bool = false) async {
+        await inTurn { await self.process(emails, rulesOnly: rulesOnly) }
     }
 
     /// Sorts the emails that wait for the model or were never sorted, such as when the
@@ -333,6 +335,8 @@ final class SortingService {
         /// Decisions the store did not save, since the user moved the email meanwhile or
         /// its project is gone.
         var notSaved = 0
+        /// Emails left as they were, since only the rules sorted them and did not file them.
+        var left = 0
     }
 
     /// Runs `work` after the batch before it, and cancels it with the caller's task or
@@ -355,7 +359,7 @@ final class SortingService {
         batches[number] = nil
     }
 
-    private func process(_ emails: [Email]) async {
+    private func process(_ emails: [Email], rulesOnly: Bool = false) async {
         guard !emails.isEmpty, !Task.isCancelled else { return }
         let started = ContinuousClock.now
         let ordered = emails.enumerated()
@@ -367,15 +371,15 @@ final class SortingService {
             // The projects as they are now, prepared again when they changed meanwhile.
             let setup = await currentSetup()
             guard !Task.isCancelled,
-                  await sortOne(Self.limited(email), setup: setup, modelIsThere: &modelIsThere, log: &log) else { break }
+                  await sortOne(Self.limited(email), setup: setup, rulesOnly: rulesOnly, modelIsThere: &modelIsThere, log: &log) else { break }
         }
         let sorted = log.levels.values.reduce(0, +)
-        Logger.projects.notice("Sorting: \(sorted, privacy: .public) of \(emails.count, privacy: .public) emails in \(Self.seconds(started.duration(to: .now)), privacy: .public): \(log.levels[.sure] ?? 0, privacy: .public) sure, \(log.levels[.likely] ?? 0, privacy: .public) likely, \(log.levels[.unsure] ?? 0, privacy: .public) unsure, \(log.levels[.setAside] ?? 0, privacy: .public) set aside. The model was asked \(log.asked, privacy: .public) times for \(Self.seconds(log.modelTime), privacy: .public), \(log.waiting, privacy: .public) wait for it, \(log.notSaved, privacy: .public) not saved since the user moved them or the project is gone")
+        Logger.projects.notice("Sorting: \(sorted, privacy: .public) of \(emails.count, privacy: .public) emails in \(Self.seconds(started.duration(to: .now)), privacy: .public): \(log.levels[.sure] ?? 0, privacy: .public) sure, \(log.levels[.likely] ?? 0, privacy: .public) likely, \(log.levels[.unsure] ?? 0, privacy: .public) unsure, \(log.levels[.setAside] ?? 0, privacy: .public) set aside. The model was asked \(log.asked, privacy: .public) times for \(Self.seconds(log.modelTime), privacy: .public), \(log.waiting, privacy: .public) wait for it, \(log.notSaved, privacy: .public) not saved since the user moved them or the project is gone, \(log.left, privacy: .public) left as they were since the rules alone did not file them")
     }
 
     /// Sorts one email and saves what it found. False when the caller's task was cancelled
     /// before the decision was saved.
-    private func sortOne(_ email: Email, setup: Setup, modelIsThere: inout Bool, log: inout BatchLog) async -> Bool {
+    private func sortOne(_ email: Email, setup: Setup, rulesOnly: Bool, modelIsThere: inout Bool, log: inout BatchLog) async -> Bool {
         let parent = await parent(of: email)
         let people = Self.people(of: email, own: setup.own)
         var projects = setup.projects
@@ -385,6 +389,11 @@ final class SortingService {
             for: email, parent: parent, thread: thread,
             projects: projects, owner: setup.owner, scores: lookups.scores)
         var decision = ruled.decision
+        if rulesOnly, decision.level != .sure, decision.level != .setAside {
+            // The rules do not file it, and the model is not asked, so it stays as it is.
+            log.left += 1
+            return true
+        }
         if decision.waitsForModel, modelIsThere, windowIsOpen(), let prompt = ruled.prompt {
             let asked = ContinuousClock.now
             log.asked += 1

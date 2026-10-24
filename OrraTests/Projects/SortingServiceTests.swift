@@ -337,6 +337,27 @@ struct SortingServiceTests {
         #expect(store.decision("b@test.example")?.waitsForModel == true)
     }
 
+    /// With the rules alone, as when Needs a Project is sorted again past its newest emails,
+    /// only an email the rules file on their own is saved, in a project or in Set Aside.
+    /// The model is never asked, and the others stay as they are, without a decision or a
+    /// reply mark.
+    @Test func withTheRulesAloneOnlyWhatTheRulesFileIsSaved() async {
+        let store = Store()
+        store.seen["kim@quay.example"] = [Self.maple]
+        let model = Model()
+        await service(store, model).sort([
+            email("sure@test.example", from: "Song Yutong <song.yutong@harborlights.example>"),
+            email("news@test.example", from: "news@lighthouse-weekly.example", day: 1, text: "This week in museums.", list: ListMail(listID: "Weekly <weekly.lighthouse-weekly.example>")),
+            email("likely@test.example", from: "kim@quay.example", day: 2),
+            email("open@test.example", from: "lee@elsewhere.example", day: 3),
+        ], rulesOnly: true)
+        #expect(model.requests.isEmpty)
+        #expect(store.decisions.map(\.id) == ["sure@test.example", "news@test.example"])
+        #expect(store.decision("sure@test.example") == SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]))
+        #expect(store.decision("news@test.example") == SortingDecision(project: nil, level: .setAside, reasons: [.listMail]))
+        #expect(store.replies.keys.sorted() == ["news@test.example", "sure@test.example"])
+    }
+
     /// The chip says the email was too long for the model, which never answered.
     @Test func aPromptTooLongGoesToNeedsAProject() async {
         let store = Store()

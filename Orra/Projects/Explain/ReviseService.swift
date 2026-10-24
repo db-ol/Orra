@@ -59,6 +59,10 @@ nonisolated struct ReviseService: Sendable {
         /// of that flag. A tone settles none, so any listed went missing. An instruction may
         /// settle one, so the window shows them for the user to check.
         var droppedPlaceholders: [String] = []
+        /// The draft the change was made from, with what the user typed into it, which Undo
+        /// puts back, also in a window that opens later. Nil in a version an earlier build
+        /// saved.
+        var madeFrom: String?
 
         /// The new version, or nil when it was held back.
         var draft: String? {
@@ -158,7 +162,7 @@ nonisolated struct ReviseService: Sendable {
             check.flags = Self.flags(of: checked, found: check.flags, before: flags, sources: given + context.sourceTexts, today: context.today)
         }
         let dropped = RevisePrompt.Revision.dropped(from: draft, in: check.draft ?? written)
-        let version = Version(messageID: context.messageID, change: change, check: check, droppedPlaceholders: dropped)
+        let version = Version(messageID: context.messageID, change: change, check: check, droppedPlaceholders: dropped, madeFrom: draft)
         if version.draft != nil {
             await save(version)
         }

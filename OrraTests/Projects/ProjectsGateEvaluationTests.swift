@@ -363,6 +363,8 @@ struct ProjectsGateEvaluationTests {
             row["draft_state"] = "no_draft"
         case .missing:
             row["draft_state"] = "missing"
+        case .expired:
+            row["draft_state"] = "expired"
         }
         return row
     }

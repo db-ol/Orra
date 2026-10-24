@@ -20,6 +20,8 @@ import os
 ///   ones start with the newest 20, and end after the first range that holds a message
 ///   known before the pass. A pass that ends midway, for any cause, leaves the next one to
 ///   read back to the days again, and so does one that left a message unread, a few times.
+///   A save or a lookup of the store that fails ends the pass, so mail it did not save is
+///   read again, and a message is never known only because the store could not answer.
 /// - For each new message it reads the raw source and parses it off the main actor with
 ///   MIMEMessage, VisibleText and QuotedHistory. Mail's `content` is never read. The text
 ///   of its attachments comes from the MIME parts of that source, see MailAttachment. A
@@ -30,9 +32,10 @@ import os
 ///   while the user dictates, and a pass runs at utility priority, as background work.
 /// - It saves the new messages of each range through a closure, and asks which messages
 ///   are known through another, so it never waits for the store and tests pass fakes.
+///   Each throws when the store fails.
 /// - It polls every minute. When Mail does not answer (-600 while it runs), times out
 ///   (-1712), or Orra may not control it, the pass ends and the scan waits twice as long
-///   each time, up to 30 minutes.
+///   each time, up to 30 minutes. It does the same when the store fails.
 /// - It tells the window when a pass begins, whether that pass reads a mailbox back to the
 ///   days, and how it ended, see `Report`.
 ///
@@ -87,8 +90,8 @@ final class MailScan {
     /// What the scan reads from the store. Closures, so it never waits for the store and
     /// tests pass fakes.
     struct Lookups {
-        /// Which of these Message-IDs are saved already.
-        var known: ([String]) async -> Set<String>
+        /// Which of these Message-IDs are saved already. Throws when the store cannot say.
+        var known: ([String]) async throws -> Set<String>
         /// The mailboxes linked to a project, read along with the chosen ones.
         var linkedMailboxes: () async -> [MailMailbox]
     }
@@ -102,16 +105,20 @@ final class MailScan {
             case mailNotRunning
             /// Another pass is under way, which reads the same new mail.
             case busy
+            /// The store could not save what the pass read, or say which mail it knows.
+            /// The next pass reads the mailbox back to the days again.
+            case storeFailed
         }
 
         /// Why the pass asked Mail nothing, or why it stopped asking once it had started:
-        /// Projects went off or the confirm was forgotten.
+        /// Projects went off, the confirm was forgotten or the store failed.
         var skipped: Skip?
         var mailboxes = 0
         /// Messages whose source was read.
         var read = 0
         /// Messages over `largestSource`, of which only the headers were read.
         var tooLarge = 0
+        /// Messages the store saved.
         var saved = 0
         /// Messages known already, or read already in this pass from another mailbox.
         var known = 0
@@ -183,7 +190,7 @@ final class MailScan {
     private let bridge: MailBridge
     private let choice: MailChoice
     private let lookups: Lookups
-    private let save: ([Message]) async -> Void
+    private let save: ([Message]) async throws -> Void
     private let report: (Report) -> Void
     private let ownerOverride: SortingService.Owner?
     private let isOn: () -> Bool
@@ -198,9 +205,10 @@ final class MailScan {
     private var current: Task<Pass, Never>?
 
     /// - Parameters:
-    ///   - save: saves the new messages of a range, newest first. Each later call of a pass
-    ///     holds older mail than the one before, so a caller that sorts the mail should do
-    ///     so after the pass, oldest first, such as with `SortingService.sortWaiting()`.
+    ///   - save: saves the new messages of a range, newest first, and throws when it could
+    ///     not. Each later call of a pass holds older mail than the one before, so a caller
+    ///     that sorts the mail should do so after the pass, oldest first, such as with
+    ///     `SortingService.sortWaiting()`.
     ///   - report: hears when each pass begins and ends, for the window.
     ///   - ownerOverride: the user's addresses and name in a Debug build that sets them, so
     ///     Mail's accounts are never read.
@@ -213,7 +221,7 @@ final class MailScan {
         bridge: MailBridge,
         choice: MailChoice,
         lookups: Lookups,
-        save: @escaping ([Message]) async -> Void,
+        save: @escaping ([Message]) async throws -> Void,
         report: @escaping (Report) -> Void = { _ in },
         ownerOverride: SortingService.Owner? = nil,
         isOn: @escaping () -> Bool,
@@ -245,7 +253,7 @@ final class MailScan {
         loop = Task(priority: .utility) { [weak self] in
             var wait = MailScan.pollInterval
             while !Task.isCancelled, let pass = await self?.scan() {
-                wait = MailScan.wait(after: pass.error, previous: wait)
+                wait = MailScan.wait(after: pass.error, storeFailed: pass.skipped == .storeFailed, previous: wait)
                 do {
                     try await sleep(wait)
                 } catch {
@@ -268,15 +276,16 @@ final class MailScan {
     }
 
     /// The wait before the next pass. After Mail did not answer, timed out, or refused
-    /// Orra, twice the last wait, at least two poll intervals and at most `longestWait`.
-    /// Otherwise one poll interval.
-    nonisolated static func wait(after error: MailBridgeError?, previous: Duration) -> Duration {
-        switch error {
-        case .notAnswered?, .timedOut?, .denied?, .notAsked?:
-            min(max(previous * 2, pollInterval * 2), longestWait)
-        default:
-            pollInterval
+    /// Orra, or after the store failed, twice the last wait, at least two poll intervals and
+    /// at most `longestWait`. Otherwise one poll interval. A store that keeps failing, as on
+    /// a full disk, would otherwise have each pass read a range of mail from Mail again,
+    /// only to fail to save it.
+    nonisolated static func wait(after error: MailBridgeError?, storeFailed: Bool = false, previous: Duration) -> Duration {
+        let waitsLonger = switch error {
+        case .notAnswered?, .timedOut?, .denied?, .notAsked?: true
+        default: storeFailed
         }
+        return waitsLonger ? min(max(previous * 2, pollInterval * 2), longestWait) : pollInterval
     }
 
     // MARK: The user
@@ -522,7 +531,12 @@ final class MailScan {
     ) async throws -> Bool {
         let fresh = listings.filter { listed.insert($0.message.id).inserted }
         let ids = fresh.map(\.messageID).filter { !$0.isEmpty }
-        let known = ids.isEmpty ? [] : await lookups.known(ids)
+        let known: Set<String>
+        do {
+            known = ids.isEmpty ? [] : try await lookups.known(ids)
+        } catch {
+            throw Stop(reason: .storeFailed)
+        }
         var found: [Message] = []
         var knownBefore = false
         do {
@@ -560,20 +574,27 @@ final class MailScan {
             }
         } catch {
             // What was read before Mail quit or stopped answering is kept. Nothing is saved
-            // after `stop()`, or once Projects is off.
-            await keep(found, pass: &pass)
+            // after `stop()`, or once Projects is off. The error ends the mailbox, so the
+            // next pass reads it back to the days again, also when this save fails.
+            try? await keep(found, pass: &pass)
             throw error
         }
-        await keep(found, pass: &pass)
+        try await keep(found, pass: &pass)
         if let oldest = listings.last?.dateReceived, oldest < cutoff {
             return true
         }
         return polls && knownBefore
     }
 
-    private func keep(_ found: [Message], pass: inout Pass) async {
+    /// Saves the new messages of a range and counts them. Throws when the store could not
+    /// save them, which ends the pass.
+    private func keep(_ found: [Message], pass: inout Pass) async throws {
         guard !found.isEmpty, !Task.isCancelled, isOn(), choice.isConfirmed else { return }
-        await save(found)
+        do {
+            try await save(found)
+        } catch {
+            throw Stop(reason: .storeFailed)
+        }
         pass.saved += found.count
     }
 

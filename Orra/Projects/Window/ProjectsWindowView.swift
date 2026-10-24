@@ -70,6 +70,15 @@ struct ProjectsWindowView: View {
                 { ProjectsSuggestedSection.dismiss(suggestion, from: model.suggestions, runtime: runtime) }
             })
         }
+        // Edit Project… beside a linked mailbox in Settings. A sheet, an alert or a dialog of
+        // the window that shows already stays as it is, with the list behind it. The Remove
+        // Rule dialog is the project page's own, and a sheet that follows it saves the rules
+        // as the list has them then, see ProjectsRuntime.update(_:).
+        .onChange(of: model.projectToEdit, initial: true) {
+            if let project = model.takeProjectToEdit(presenting: setup != nil || forgetting != nil) {
+                setup = ProjectsSetupView.Draft(project)
+            }
+        }
         .onChange(of: model.ruleOffer) { _, offer in
             // The offer shows above the list, so VoiceOver says it.
             if let offer, let project = runtime.projectList.first(where: { $0.id == offer.project }) {
@@ -108,16 +117,28 @@ struct ProjectsWindowView: View {
             Text("This removes the project with its index, mail and drafts from Projects. Your mail in Mail and the files in its folders stay as they are.")
         }
         .confirmationDialog(
-            "Move this email?",
+            "Change this email's project?",
             isPresented: Binding(get: { model.pendingMove != nil }, set: { if !$0 { model.pendingMove = nil } }),
             presenting: model.pendingMove
         ) { move in
-            Button("Move") {
+            Button("Change Project") {
                 Task { await model.confirmMove(move) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("Moving it removes its explanation and its draft with your changes, since they were made for its project. You can explain it again after the move.")
+            Text("This removes its explanation and its draft with your changes, since they were made for the project it is in now. You can explain it again after the change. The email stays where it is in Mail.")
+        }
+        .confirmationDialog(
+            "Replace your draft?",
+            isPresented: Binding(get: { model.pendingExplain != nil }, set: { if !$0 { model.pendingExplain = nil } }),
+            presenting: model.pendingExplain
+        ) { messageID in
+            Button("Replace Draft") {
+                Task { await model.confirmExplain(messageID) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Explaining this email again replaces its draft and your changes to it with a new draft.")
         }
     }
 
@@ -180,15 +201,29 @@ struct ProjectsWindowView: View {
                 }
                 Divider()
             }
-            List(model.rows, id: \.messageID, selection: $model.selectedMessageID) { email in
-                MailRow(email: email, deadline: model.deadlines[email.messageID].flatMap { ProjectsWindowText.deadline($0, now: runtime.dependencies.now()) })
-                    .contextMenu {
-                        moveMenu(email)
+            ScrollViewReader { scroller in
+                List(model.rows, id: \.messageID, selection: $model.selectedMessageID) { email in
+                    MailRow(email: email, deadline: model.deadlines[email.messageID].flatMap { ProjectsWindowText.deadline($0, now: runtime.dependencies.now()) })
+                        .contextMenu {
+                            moveMenu(email)
+                        }
+                }
+                .overlay {
+                    if model.rows.isEmpty {
+                        EmptyList(runtime: runtime, model: model, openSettings: openSettings)
                     }
+                }
+                .onChange(of: model.showCount) {
+                    // The email a source or Explain Selected Message showed, which may be far
+                    // down the list.
+                    if let id = model.selectedMessageID {
+                        scroller.scrollTo(id, anchor: .center)
+                    }
+                }
             }
-            .overlay {
-                if model.rows.isEmpty {
-                    EmptyList(runtime: runtime, model: model, openSettings: openSettings)
+            if model.hasOlderEmails {
+                OlderEmailsBar(shown: model.rows.count, total: model.total) {
+                    Task { await model.loadOlderEmails() }
                 }
             }
             StatusLines(runtime: runtime, model: model, openSettings: openSettings)
@@ -205,7 +240,7 @@ struct ProjectsWindowView: View {
     }
 
     private func moveMenu(_ email: MailStore.Listed) -> some View {
-        Menu("Move To") {
+        Menu("Assign to Project") {
             MoveMenuItems(runtime: runtime, model: model, email: email)
         }
         .disabled(runtime.phase != .on)
@@ -216,13 +251,18 @@ struct ProjectsWindowView: View {
     @ViewBuilder
     private var detail: some View {
         if let email = model.selectedEmail {
-            ProjectsEmailArea(runtime: runtime, model: model, email: email)
+            ProjectsEmailArea(runtime: runtime, model: model, email: email, openSettings: openSettings)
         } else if case .project(let id)? = model.place, let project = runtime.projectList.first(where: { $0.id == id }) {
             ProjectsProjectPage(runtime: runtime, project: project) {
                 setup = ProjectsSetupView.Draft(project)
             } forget: {
                 forgetting = project
+            } removeRule: { rule in
+                Task { await model.removeRule(rule, from: project.id) }
             }
+            // A page of its own for each project, so a Remove Rule dialog that is open goes
+            // away with its project rather than act on the next one.
+            .id(project.id)
         } else {
             ContentUnavailableView("No Email Selected", systemImage: "envelope")
         }
@@ -302,10 +342,11 @@ extension ProjectsWindowView {
         }
     }
 
-    /// The items of a Move To menu, in the list's context menu and on the email view's
-    /// project chip: Needs a Project and the other projects. A click moves the email, after
-    /// the user's yes when the move takes a changed draft away, see
-    /// ProjectsWindowModel.requestMove(_:to:).
+    /// The items of an Assign to Project menu, in the list's context menu and on the email
+    /// view's project chip: Needs a Project and the other projects. A click moves the email
+    /// to that list in Orra, after the user's yes when the move takes a changed draft away,
+    /// see ProjectsWindowModel.requestMove(_:to:). The words say assign, not move, since the
+    /// email stays where it is in Mail.
     struct MoveMenuItems: View {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel
@@ -367,6 +408,27 @@ extension ProjectsWindowView {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
+        }
+    }
+
+    /// The line under a list that shows only its newest emails, with how many it holds, and
+    /// Load Older Emails.
+    struct OlderEmailsBar: View {
+        let shown: Int
+        let total: Int
+        let load: () -> Void
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Divider()
+                Text(verbatim: ProjectsWindowText.olderEmails(shown: shown, total: total))
+                    .foregroundStyle(.secondary)
+                Button("Load Older Emails", action: load)
+            }
+            .font(.callout)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding([.horizontal, .bottom], 10)
         }
     }
 
@@ -451,7 +513,7 @@ extension ProjectsWindowView {
                     Label("No Mail", systemImage: "tray")
                 } description: {
                     if case .project? = model.place {
-                        Text("Choose an email in Needs a Project and move it here with Move To.")
+                        Text("Choose an email in Needs a Project and assign it to this project with Assign to Project.")
                     }
                 }
             }
