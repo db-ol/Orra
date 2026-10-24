@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The attachments of an email in the email view, each with its name, and its kind, size and
-/// whether Projects read its text on one line below, with a line when hidden text in it was
-/// taken out. Nothing here opens an attachment, and its name shows as plain text only.
+/// The attachments of an email, listed with the email itself in the email view. Each shows
+/// its name, and its kind, size and whether Projects read its text on one line below, with a
+/// line when hidden text in it was taken out. Nothing here opens an attachment, and its name
+/// shows as plain text only.
 struct ProjectsAttachmentList: View {
     let attachments: [MailAttachment]
 
