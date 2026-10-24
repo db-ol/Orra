@@ -119,7 +119,7 @@ struct ProjectsWindowViewTests {
         let view = ProjectsEmailModel(messageID: id, actions: .live(runtime))
         await view.load()
         let draft = try #require(view.modelDraft)
-        #expect(try await store.save(MailStore.EditedDraft(text: draft + "\n\nThanks.", editedFrom: MailStore.draftKey(draft, version: 0)), for: id, at: Self.today))
+        #expect(try await store.save(MailStore.EditedDraft(text: draft + "\n\nThanks.", editedFrom: MailStore.draftKey(draft, version: 0, explained: Self.today)), for: id, at: Self.today))
         let reopened = ProjectsWindowModel(runtime: runtime)
         await reopened.show(id)
         await reopened.requestExplain(id)

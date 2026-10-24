@@ -173,7 +173,7 @@ struct RetentionTests {
             try await store.save(Self.explanation(id, draft: Self.draft), at: Self.date(1))
         }
         let secret = "marmotlantern"
-        let typed = MailStore.EditedDraft(text: "The \(secret) sizes are confirmed.", editedFrom: MailStore.draftKey("The sizes are confirmed.", version: 0))
+        let typed = MailStore.EditedDraft(text: "The \(secret) sizes are confirmed.", editedFrom: MailStore.draftKey("The sizes are confirmed.", version: 0, explained: Self.start))
         #expect(try await store.save(typed, for: "typed@test.example", at: Self.date(20)))
         #expect(try await store.save(typed, for: "old@test.example", at: Self.date(1)))
         // 31 days after the explanations, 11 after the typing into one of them.
@@ -197,7 +197,7 @@ struct RetentionTests {
         try await store.save([Self.message("a@test.example", day: 0)], ownAddresses: [Self.work], at: Self.start)
         try await store.save(Self.explanation("a@test.example", draft: Self.draft), at: Self.date(80))
         #expect(try await store.save(ReviseService.Version(messageID: "a@test.example", change: .tone(.formal), check: DraftCheck.Result(draft: "Dear Ms Song,", language: .en)), startedAt: Self.date(85), at: Self.date(85)) == 1)
-        #expect(try await store.save(MailStore.EditedDraft(text: "Dear Ms Song, thanks.", editedFrom: MailStore.draftKey("Dear Ms Song,", version: 1)), for: "a@test.example", at: Self.date(86)))
+        #expect(try await store.save(MailStore.EditedDraft(text: "Dear Ms Song, thanks.", editedFrom: MailStore.draftKey("Dear Ms Song,", version: 1, explained: Self.start)), for: "a@test.example", at: Self.date(86)))
         let removed = try await Retention.apply(to: store, now: Self.date(91))
         #expect(removed == Retention.Removed(texts: 1, explanations: 1, draftVersions: 1, editedDrafts: 1))
         #expect(try await store.versions(of: "a@test.example").isEmpty)

@@ -28,12 +28,12 @@ struct ProjectsEmailModelTests {
         file: URL(fileURLWithPath: "/Projects/Harbor/lamps.pdf"), page: 3, modified: today,
         heading: "Lamps", text: "Twelve brass lamps, delivery in week 47.")
 
-    static func explanation(draft: String? = draft, flags: [DraftCheck.Flag] = [], recipients: [Person] = [mei]) -> Explanation {
+    static func explanation(draft: String? = draft, flags: [DraftCheck.Flag] = [], recipients: [Person] = [mei], explained: Date = today) -> Explanation {
         let check = DraftCheckInput(
             draft: "", language: .en, recipients: recipients, projectPeople: [mei], own: [me],
             incomingText: emailText, sourceTexts: [file.text], questionsForUser: ["Which lamp order?"], today: today)
         return Explanation(
-            messageID: id, project: UUID(uuidString: "6F1D0B5E-6C1B-4C4B-9F3A-0B8E2C9D7A11"), language: .en, today: today,
+            messageID: id, project: UUID(uuidString: "6F1D0B5E-6C1B-4C4B-9F3A-0B8E2C9D7A11"), language: .en, today: explained,
             reply: .reply(.en),
             warnings: [ExplainPrompt.Finding(warning: .link, place: .email)],
             modelWarnings: [],
@@ -296,7 +296,7 @@ struct ProjectsEmailModelTests {
         // The save has not run yet.
         #expect(model.saveNote == nil)
         try await waitUntil { model.saveNote == .saved }
-        #expect(fakes.value.edited == MailStore.EditedDraft(text: typed, editedFrom: MailStore.draftKey(Self.draft, version: 0)))
+        #expect(fakes.value.edited == MailStore.EditedDraft(text: typed, editedFrom: MailStore.draftKey(Self.draft, version: 0, explained: Self.today)))
         #expect(ProjectsWindowText.save(.saved) == "Saved on this Mac.")
 
         let reopened = self.model()
@@ -349,10 +349,29 @@ struct ProjectsEmailModelTests {
         await model.undo()
         #expect(model.text == typed)
         try await waitUntil { fakes.value.edited?.text == typed }
-        #expect(fakes.value.edited?.editedFrom == MailStore.draftKey(Self.draft, version: 0))
+        #expect(fakes.value.edited?.editedFrom == MailStore.draftKey(Self.draft, version: 0, explained: Self.today))
 
-        fakes.update { $0.edited = MailStore.EditedDraft(text: "Words for version 1", editedFrom: MailStore.draftKey(firmer, version: 1)) }
+        fakes.update { $0.edited = MailStore.EditedDraft(text: "Words for version 1", editedFrom: MailStore.draftKey(firmer, version: 1, explained: Self.today)) }
         let reopened = self.model()
+        await reopened.load()
+        #expect(reopened.text == Self.draft)
+        try await waitUntil { fakes.value.edited == nil }
+        #expect(reopened.saveNote == nil)
+    }
+
+    /// An explanation made again with the same draft is another draft. Text the user typed
+    /// into the draft before, such as by a save that ended after the new explanation, never
+    /// comes back over it, and goes.
+    @Test func typedTextComesBackOnlyForTheExplanationItWentInto() async throws {
+        let model = model()
+        await model.load()
+        model.text = Self.draft + "\nThanks."
+        try await waitUntil { model.saveNote == .saved }
+        let typed = try #require(fakes.value.edited)
+        // The fake store keeps the text typed before.
+        let again = Self.explanation(explained: Self.today.addingTimeInterval(60))
+        #expect(typed.editedFrom != MailStore.draftKey(Self.draft, version: 0, explained: again.today))
+        let reopened = self.model(explanation: { again })
         await reopened.load()
         #expect(reopened.text == Self.draft)
         try await waitUntil { fakes.value.edited == nil }

@@ -690,7 +690,7 @@ struct MailStoreTests {
         let store = try await openStore()
         let id = "a@test.example"
         try await store.save([Self.message(id, from: "song.yutong@harborlights.example")], ownAddresses: [Self.work], at: Self.start)
-        let typed = MailStore.EditedDraft(text: "您好，尺寸已确认。交期下周告知。", editedFrom: MailStore.draftKey("您好，尺寸已确认。[待确认：交期]", version: 0))
+        let typed = MailStore.EditedDraft(text: "您好，尺寸已确认。交期下周告知。", editedFrom: MailStore.draftKey("您好，尺寸已确认。[待确认：交期]", version: 0, explained: Self.date(1)))
         #expect(try await store.save(typed, for: id, at: Self.date(1)) == false)
         #expect(try await store.save(Self.explanation(id, draft: .missing, project: nil), at: Self.date(1)))
         #expect(try await store.save(typed, for: id, at: Self.date(1)) == false)
@@ -710,11 +710,13 @@ struct MailStoreTests {
         #expect(try await store.save(Self.explanation(id, project: nil), at: Self.date(6)))
         #expect(try await store.editedDraft(of: id) == nil)
 
-        // The key names the version and the text of the draft.
-        #expect(MailStore.draftKey("Hi", version: 0) != MailStore.draftKey("Hi", version: 1))
-        #expect(MailStore.draftKey("Hi", version: 1) != MailStore.draftKey("Hi!", version: 1))
-        #expect(MailStore.draftKey("Hi", version: 1) == MailStore.draftKey("Hi", version: 1))
-        #expect(MailStore.draftKey("Hi", version: 1).count == 64)
+        // The key names the explanation, the version and the text of the draft.
+        let explained = Self.date(1)
+        #expect(MailStore.draftKey("Hi", version: 0, explained: explained) != MailStore.draftKey("Hi", version: 1, explained: explained))
+        #expect(MailStore.draftKey("Hi", version: 1, explained: explained) != MailStore.draftKey("Hi!", version: 1, explained: explained))
+        #expect(MailStore.draftKey("Hi", version: 0, explained: explained) != MailStore.draftKey("Hi", version: 0, explained: Self.date(6)))
+        #expect(MailStore.draftKey("Hi", version: 1, explained: explained) == MailStore.draftKey("Hi", version: 1, explained: explained))
+        #expect(MailStore.draftKey("Hi", version: 1, explained: explained).count == 64)
         await store.close()
     }
 
@@ -760,7 +762,7 @@ struct MailStoreTests {
             explanation.messageID = id
             #expect(try await store.save(explanation, at: Self.date(4)))
             #expect(try await store.save(ReviseService.Version(messageID: id, change: .tone(.warm), check: DraftCheck.Result(draft: "\(secret) draft", language: .en)), startedAt: Self.date(4), at: Self.date(4)) == 1)
-            #expect(try await store.save(MailStore.EditedDraft(text: "\(secret) typed", editedFrom: MailStore.draftKey("\(secret) draft", version: 1)), for: id, at: Self.date(4)))
+            #expect(try await store.save(MailStore.EditedDraft(text: "\(secret) typed", editedFrom: MailStore.draftKey("\(secret) draft", version: 1, explained: explanation.today)), for: id, at: Self.date(4)))
         }
 
         #expect(try await store.move("moved@test.example", to: Self.maple))

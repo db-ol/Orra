@@ -282,9 +282,10 @@ final class ProjectsEmailModel {
     }
 
     /// The key of the newest draft the model made, which the text the user types into it is
-    /// saved with, see MailStore.draftKey(_:version:).
+    /// saved with, see MailStore.draftKey(_:version:explained:).
     private var modelDraftKey: String? {
-        modelDraft.map { MailStore.draftKey($0, version: versions.last?.number ?? 0) }
+        guard let explanation, let draft = modelDraft else { return nil }
+        return MailStore.draftKey(draft, version: versions.last?.number ?? 0, explained: explanation.today)
     }
 
     /// The text the user typed into the newest draft the model made, nil when there is none

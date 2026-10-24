@@ -22,8 +22,8 @@ import os
 /// - An explanation belongs to the project it was made for. When an email changes project,
 ///   its explanation and draft go, so no text of the project before stays with it.
 /// - The text the user typed into a draft is kept apart from the versions the model made,
-///   with the key of the draft it was typed into, see `draftKey(_:version:)`. A new
-///   explanation or a new version takes its place.
+///   with the key of the draft it was typed into, see `draftKey(_:version:explained:)`. A
+///   new explanation or a new version takes its place.
 /// - The thread of each email is worked out when it is saved, see MailThreads, and joined
 ///   again when an earlier message of the thread comes later.
 /// - Text goes into the file only for the time Retention allows. What a delete removes is
@@ -120,7 +120,7 @@ nonisolated struct MailStore: Sendable {
     nonisolated struct EditedDraft: Sendable, Equatable {
         var text: String
         /// The key of the draft the model made that the user typed into, see
-        /// `draftKey(_:version:)`.
+        /// `draftKey(_:version:explained:)`.
         var editedFrom: String
     }
 
@@ -864,11 +864,15 @@ nonisolated struct MailStore: Sendable {
     }
 
     /// The key of a draft the model made, which the text the user typed into it is kept
-    /// with: SHA-256 in hex of its version number, 0 for the explanation's draft, and its
-    /// text. So that text comes back only over the draft it was typed into, never over a
-    /// version or an explanation that came after it.
-    static func draftKey(_ draft: String, version: Int) -> String {
-        SHA256.hash(data: Data("\(version)\n\(draft)".utf8)).map { String(format: "%02x", $0) }.joined()
+    /// with: SHA-256 in hex of when its explanation was made, its version number, 0 for the
+    /// explanation's draft, and its text. So that text comes back only over the draft it was
+    /// typed into, never over a version or an explanation that came after it, also when the
+    /// model wrote the same text again.
+    /// - Parameters:
+    ///   - explained: the explanation's `today`, the time it was made.
+    static func draftKey(_ draft: String, version: Int, explained: Date) -> String {
+        let named = "\(explained.timeIntervalSinceReferenceDate)\n\(version)\n\(draft)"
+        return SHA256.hash(data: Data(named.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// The explanation's save closure. A failed write is logged with its code.
