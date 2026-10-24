@@ -369,6 +369,8 @@ struct ExplainEvaluationTests {
             text += "No draft for this language.\n"
         case .missing:
             text += "Missing: the model wrote no draft.\n"
+        case .expired:
+            text += "Expired: Retention removed the draft.\n"
         }
         return text
     }
@@ -388,6 +390,8 @@ struct ExplainEvaluationTests {
             draft = "no draft"
         case .missing:
             draft = "missing"
+        case .expired:
+            draft = "expired"
         }
         let object: [String: Any] = [
             "id": mail.id,

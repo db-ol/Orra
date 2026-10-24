@@ -13,9 +13,10 @@ import os
 /// - **The rest of an email, 180 days:** its headers, people, project, marks, warnings and
 ///   attachment names, types and sizes go with its whole thread, 180 days after Orra read
 ///   the thread's newest message.
-/// - **Drafts, 30 days:** the versions of a draft go 30 days after the draft last changed.
-///   The explanation holds the first draft, so an explanation with a draft goes with it.
-///   It can be explained again while the text is kept.
+/// - **Drafts, 30 days:** the versions of a draft go 30 days after the draft last changed,
+///   and so does the first draft, which the explanation holds. The rest of the explanation
+///   stays as long as the text, see `Explanation.Draft.expired`. It can be explained again
+///   for a new draft while the text is kept.
 /// - **Counts of moves, 180 days:** a count goes 180 days after the last move it counted.
 ///   SortingService already reads such a count as zero after 30 days, so this never changes
 ///   what sorting sees.
@@ -30,6 +31,8 @@ nonisolated enum Retention {
         /// Emails whose text went.
         var texts = 0
         var explanations = 0
+        /// First drafts taken out of their explanations, which stay.
+        var drafts = 0
         var emails = 0
         var draftVersions = 0
         var tallies = 0
@@ -64,16 +67,31 @@ nonisolated enum Retention {
         let cutoffs = (text: cutoff(mailText), emails: cutoff(emails), drafts: cutoff(drafts), tallies: cutoff(tallies), now: cutoff(0))
         let removed = try await store.database.transaction { database in
             var removed = Removed()
-            // Drafts first, with the explanations that hold them.
+            // Drafts first, with the first draft that the explanation holds.
             removed.draftVersions = try database.run("""
                 DELETE FROM mail_draft_versions WHERE message IN (SELECT id FROM mail_messages WHERE draft_changed < ?)
                 RETURNING message
                 """, [cutoffs.drafts]).count
-            removed.explanations = try database.run("""
-                UPDATE mail_messages SET explanation = NULL, explained = NULL, explanation_draft = 0
-                WHERE draft_changed < ? AND explanation_draft = 1
-                RETURNING id
-                """, [cutoffs.drafts]).count
+            for row in try database.run(
+                "SELECT id, explanation FROM mail_messages WHERE draft_changed < ? AND explanation_draft = 1", [cutoffs.drafts]
+            ) where row.count == 2 {
+                guard let id = row[0].integer else { continue }
+                if var explanation = MailStore.decoded(Explanation.self, row[1]) {
+                    // What the draft check needs goes too, since it serves the draft alone.
+                    explanation.draft = .expired
+                    explanation.draftCheck = nil
+                    try database.run(
+                        "UPDATE mail_messages SET explanation = ?, explanation_draft = 0 WHERE id = ?",
+                        [.blob(try JSONEncoder().encode(explanation)), .integer(id)])
+                    removed.drafts += 1
+                } else {
+                    // Written by an Orra whose explanations read differently, so it goes whole.
+                    try database.run(
+                        "UPDATE mail_messages SET explanation = NULL, explained = NULL, explanation_draft = 0 WHERE id = ?",
+                        [.integer(id)])
+                    removed.explanations += 1
+                }
+            }
             try database.run("UPDATE mail_messages SET draft_changed = NULL WHERE draft_changed < ?", [cutoffs.drafts])
             // The text, with the explanation and the draft versions that hold it.
             removed.draftVersions += try database.run("""
@@ -102,7 +120,7 @@ nonisolated enum Retention {
             try await store.database.compactAfterDeletes()
         }
         let seconds = started.duration(to: .now) / .seconds(1)
-        Logger.projects.notice("Retention removed the text of \(removed.texts, privacy: .public) emails, \(removed.explanations, privacy: .public) explanations, \(removed.emails, privacy: .public) emails, \(removed.draftVersions, privacy: .public) draft versions, \(removed.tallies, privacy: .public) counts of moves and \(removed.goneIDs, privacy: .public) gone Message-IDs in \(String(format: "%.3f s", seconds), privacy: .public)")
+        Logger.projects.notice("Retention removed the text of \(removed.texts, privacy: .public) emails, \(removed.explanations, privacy: .public) explanations, \(removed.drafts, privacy: .public) first drafts, \(removed.emails, privacy: .public) emails, \(removed.draftVersions, privacy: .public) draft versions, \(removed.tallies, privacy: .public) counts of moves and \(removed.goneIDs, privacy: .public) gone Message-IDs in \(String(format: "%.3f s", seconds), privacy: .public)")
         return removed
     }
 

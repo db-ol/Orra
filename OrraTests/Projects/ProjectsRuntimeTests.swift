@@ -1056,6 +1056,43 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// An email the scan found too large to read shows with why it has no text, and is not
+    /// explained, since Explain stays off for it.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageShowsAnEmailTooLargeToReadWithoutExplainingIt() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let store = try #require(runtime.running?.store)
+        let id = "big@harbor.example"
+        let email = FakeMail.Message(id: 5, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Drawings", text: "")
+        // As the scan reads an email over MailScan.largestSource: its headers only.
+        let listing = MailListing(
+            message: MailMessageRef(id: 5, mailbox: .inbox), messageID: id, dateReceived: Self.today, sender: email.from,
+            subject: email.subject, to: [Self.own], cc: [], size: MailScan.largestSource + 1)
+        let scanned = await MailScan.parsed(headers: email.source.components(separatedBy: "\r\n\r\n")[0], attachments: [], listing: listing)
+        #expect(scanned.isTooLarge)
+        try await store.save([ProjectsRuntime.storeMessage(scanned, now: Self.today)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.selection = [MailMessageRef(id: 5, mailbox: FakeMail.workInbox)]
+        }
+        choice.choose([.inbox])
+        choice.confirm()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explainSelectedMessage()
+        let shown = try #require(window.selectedEmail)
+        #expect(shown.messageID == id)
+        #expect(shown.isTooLarge)
+        #expect(ProjectsWindowText.noText(shown) == "Projects did not read this email, as it is too large. Read it in Mail.")
+        #expect(window.explaining[id] == nil)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     // MARK: The email view
 
     /// Open Reply in Mail finds mail read before Orra started: the scan keeps Mail's handle

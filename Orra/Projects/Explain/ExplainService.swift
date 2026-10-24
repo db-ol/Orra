@@ -25,6 +25,9 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
         case noDraft
         /// A reply is due, but the model wrote no draft, or wrote that none is due.
         case missing
+        /// The draft went `Retention.drafts` after its last change, see Retention. The rest
+        /// of the explanation stays as long as the email's text.
+        case expired
     }
 
     /// The email's Message-ID, without angle brackets.
@@ -662,6 +665,7 @@ final class ExplainService {
         case .noReply: draft = "no reply due"
         case .noDraft: draft = "no draft for the language"
         case .missing: draft = "missing"
+        case .expired: draft = "expired"
         }
         let flagged = explanation.points.filter { !$0.flags.isEmpty }.count
         return "\(prompt.tokens) prompt tokens with \(files) excerpts, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"

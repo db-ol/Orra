@@ -62,11 +62,31 @@ struct MailStoreTests {
 
     // MARK: Saving
 
-    @Test func theTablesAreTheSecondStepOfTheSchemaAndTheAttachmentTextTheThird() async throws {
+    @Test func theTablesAreTheSecondStepOfTheSchemaAndTheirLaterColumnsTheNext() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3])
-        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(3)])
+        #expect(ProjectsDatabase.migrations.map(\.version) == [1, 2, 3, 4])
+        #expect(try await store.database.run("PRAGMA user_version").first == [.integer(4)])
+        await store.close()
+    }
+
+    /// An email too large for the scan to read keeps that mark, also once Retention removed
+    /// its text, so the window tells the two apart.
+    @Test func anEmailTooLargeToReadKeepsItsMark() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        var large = Self.message("large@test.example", from: "kim@quay.example", text: "")
+        large.visibleText = ""
+        large.isTooLarge = true
+        try await store.save([large, Self.message("small@test.example", from: "kim@quay.example", day: 1)], ownAddresses: [Self.work], at: Self.date(2))
+        var listed = try await store.list(.needsProject)
+        #expect(listed.map(\.messageID) == ["small@test.example", "large@test.example"])
+        #expect(listed.map(\.isTooLarge) == [false, true])
+        #expect(listed.map(\.hasText) == [true, true])
+        try await Retention.apply(to: store, now: Self.date(93))
+        listed = try await store.list(.needsProject)
+        #expect(listed.map(\.isTooLarge) == [false, true])
+        #expect(listed.map(\.hasText) == [false, false])
         await store.close()
     }
 

@@ -10906,6 +10906,28 @@
         }
       }
     },
+    "Projects did not read this email, as it is too large. Read it in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos no leyó este correo, porque es demasiado grande. Léelo en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメールは大きすぎるため、“プロジェクト”は読み取りませんでした。“メール”で読んでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这封邮件太大，所以“项目”没有读取它。请在“邮件”中阅读这封邮件。"
+          }
+        }
+      }
+    },
     "Projects does not read this kind of file." : {
       "localizations" : {
         "es-419" : {
@@ -11276,6 +11298,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“项目”只读取在这段时间内收到的邮件。"
+          }
+        }
+      }
+    },
+    "Projects removed its copy of this email's text %lld days after reading it. Read the email in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos eliminó su copia del texto de este correo %lld días después de leerlo. Lee el correo en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、このメールを読み取ってから%lld日後に、保存していたテキストを削除しました。“メール”で読んでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”在读取这封邮件 %lld 天后删除了保存的文字。请在“邮件”中阅读这封邮件。"
+          }
+        }
+      }
+    },
+    "Projects removed this draft %lld days after its last change. Explain the email again for a new one." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos eliminó este borrador %lld días después de su último cambio. Usa Explicar de nuevo para obtener uno nuevo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最後の変更から%lld日たったため、“プロジェクト”はこの下書きを削除しました。“もう一度説明する”で新しい下書きを作成できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”在这份草稿最后一次修改 %lld 天后删除了它。点按“重新解释”可以获得新的草稿。"
           }
         }
       }
@@ -15703,28 +15769,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本邮件"
-          }
-        }
-      }
-    },
-    "This email has no text to explain." : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este correo no tiene texto para explicar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このメールには説明できるテキストがありません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这封邮件没有可解释的文字。"
           }
         }
       }

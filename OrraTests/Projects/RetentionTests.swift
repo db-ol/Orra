@@ -36,12 +36,19 @@ struct RetentionTests {
     }
 
     private static func explanation(_ id: String, draft: Explanation.Draft) -> Explanation {
-        Explanation(
+        let hasDraft: Bool = if case .checked = draft { true } else { false }
+        return Explanation(
             messageID: id, project: nil, language: .en, today: start, reply: .reply(.en), warnings: [], modelWarnings: [],
             points: [Explanation.Point(text: "The sizes need a confirmation.", sources: ["this email"], flags: [])],
-            questions: [], draft: draft, draftCheck: nil, sources: ["this email": .message(id)], removed: [:], problems: [],
-            unknownSources: [])
+            questions: [], draft: draft, draftCheck: hasDraft ? draftCheck : nil, sources: ["this email": .message(id)], removed: [:],
+            problems: [], unknownSources: [])
     }
+
+    /// What the draft check of a reply to Song Yutong reads.
+    private static let draftCheck = DraftCheckInput(
+        draft: "", language: .en, recipients: [DraftCheckInput.Person(name: "", address: "song.yutong@harborlights.example")],
+        projectPeople: [], own: [DraftCheckInput.Person(name: "Bai Lu", address: work)], incomingText: "Please confirm the sizes.",
+        today: start)
 
     private static let draft = Explanation.Draft.checked(DraftCheck.Result(draft: "The sizes are confirmed.", language: .en))
 
@@ -135,7 +142,10 @@ struct RetentionTests {
         await store.close()
     }
 
-    @Test func draftsGoThirtyDaysAfterTheirLastChangeWithTheExplanationThatHoldsOne() async throws {
+    /// A draft goes 30 days after its last change, with its versions. The explanation that
+    /// holds the first draft stays without it, as long as the email's text, as an
+    /// explanation without a draft does (decision 11).
+    @Test func aDraftGoesThirtyDaysAfterItsLastChangeAndTheExplanationStays() async throws {
         defer { cleanUp() }
         let store = try await openStore()
         try await store.save([
@@ -149,17 +159,37 @@ struct RetentionTests {
         try await store.save(Self.explanation("noDraft@test.example", draft: .noReply(.listMail)), at: Self.date(1))
         let retention = Retention.self
 
-        #expect(try await retention.apply(to: store, now: Self.date(32)) == Retention.Removed(explanations: 1))
-        #expect(try await store.explanation(for: "drafted@test.example") == nil)
-        #expect(try await store.explanation(for: "revised@test.example") != nil)
+        #expect(try await retention.apply(to: store, now: Self.date(32)) == Retention.Removed(drafts: 1))
+        var expired = Self.explanation("drafted@test.example", draft: Self.draft)
+        expired.draft = .expired
+        expired.draftCheck = nil
+        #expect(try await store.explanation(for: "drafted@test.example") == expired)
+        #expect(try await store.list(.needsProject).first { $0.messageID == "drafted@test.example" }?.isExplained == true)
+        #expect(try await store.explanation(for: "revised@test.example")?.draft == Self.draft)
 
-        #expect(try await retention.apply(to: store, now: Self.date(36)) == Retention.Removed(explanations: 1, draftVersions: 1))
+        #expect(try await retention.apply(to: store, now: Self.date(36)) == Retention.Removed(drafts: 1, draftVersions: 1))
         #expect(try await store.versions(of: "revised@test.example").isEmpty)
-        #expect(try await store.explanation(for: "revised@test.example") == nil)
-        // An explanation without a draft stays with the text, which stays too.
-        #expect(try await store.explanation(for: "noDraft@test.example") != nil)
+        #expect(try await store.explanation(for: "revised@test.example")?.draft == .expired)
+        #expect(try await store.explanation(for: "noDraft@test.example")?.draft == .noReply(.listMail))
         #expect(try await store.explainEmail("revised@test.example")?.text == "Please confirm the sizes.")
         #expect(try await retention.apply(to: store, now: Self.date(37)).isEmpty)
+
+        // The explanations go with the text.
+        #expect(try await retention.apply(to: store, now: Self.date(91)) == Retention.Removed(texts: 3, explanations: 3))
+        #expect(try await store.explanation(for: "drafted@test.example") == nil)
+        await store.close()
+    }
+
+    /// An explanation this Orra cannot read, as another Orra wrote it, cannot lose its draft
+    /// alone, so it goes whole when the draft goes.
+    @Test func anExplanationThatDoesNotReadGoesWholeWithItsDraft() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([Self.message("a@test.example", day: 0)], ownAddresses: [Self.work], at: Self.start)
+        try await store.save(Self.explanation("a@test.example", draft: Self.draft), at: Self.date(1))
+        try await store.database.run("UPDATE mail_messages SET explanation = ? WHERE message_id = ?", [.blob(Data("{\"form\": 2}".utf8)), .text("a@test.example")])
+        #expect(try await Retention.apply(to: store, now: Self.date(32)) == Retention.Removed(explanations: 1))
+        #expect(try await store.list(.needsProject).first?.isExplained == false)
         await store.close()
     }
 

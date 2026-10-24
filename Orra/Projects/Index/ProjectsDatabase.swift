@@ -83,8 +83,9 @@ actor ProjectsDatabase {
     nonisolated static let secureDeleteVersion: Int32 = 3_042_000
 
     /// The schema, in order. First the index of the project folders, see FolderIndex, then
-    /// the tables of MailStore, see `MailStore.migration`, and the text of attachments, see
-    /// `MailStore.attachmentTextMigration`.
+    /// the tables of MailStore, see `MailStore.migration`, the text of attachments, see
+    /// `MailStore.attachmentTextMigration`, and whether an email was too large to read, see
+    /// `MailStore.tooLargeMigration`.
     ///
     /// - index_files: one row for each file the index read, with its text or with why it
     ///   gives none, and the size and modification date it had, so it is read again only
@@ -132,6 +133,7 @@ actor ProjectsDatabase {
             """),
         MailStore.migration,
         MailStore.attachmentTextMigration,
+        MailStore.tooLargeMigration,
     ]
 
     /// The database file.

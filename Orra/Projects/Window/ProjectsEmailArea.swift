@@ -132,6 +132,7 @@ struct ProjectsEmailArea: View {
     private var explainControls: some View {
         let state = model.explaining[email.messageID]
         let isChanging = model.emailModel(for: email.messageID).isBusy
+        let noText = ProjectsWindowText.noText(email)
         HStack(spacing: 10) {
             Group {
                 if email.isExplained {
@@ -144,7 +145,7 @@ struct ProjectsEmailArea: View {
                     }
                 }
             }
-            .disabled(state == .explaining || isChanging || !email.hasText || runtime.phase != .on)
+            .disabled(state == .explaining || isChanging || noText != nil || runtime.phase != .on)
             if state == .explaining {
                 ProgressView()
                     .controlSize(.small)
@@ -156,9 +157,8 @@ struct ProjectsEmailArea: View {
             Text(verbatim: ProjectsWindowText.explainFailure(failure))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-        } else if !email.hasText {
-            // Retention removed its text, or it was too large to read.
-            Text("This email has no text to explain.")
+        } else if let noText {
+            Text(verbatim: noText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

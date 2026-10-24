@@ -180,11 +180,26 @@ struct ProjectsWindowViewTests {
             .copiedReplyFailed(.notFound), .copiedReplyFailed(.failed(code: -1)), .emptyDraft, .notCopied,
         ]
         #expect(Set((outcomes.map(ProjectsEmailModel.HandoffNote.outcome) + [.messageNotFound]).map(ProjectsWindowText.handoff)).count == 10)
-        let drafts: [Explanation.Draft] = [.noReply(.sentByUser), .noReply(.answeredLater), .noReply(.listMail), .noDraft, .missing, .checked(DraftCheck.Result(draft: nil, language: .zh))]
+        let drafts: [Explanation.Draft] = [.noReply(.sentByUser), .noReply(.answeredLater), .noReply(.listMail), .noDraft, .missing, .expired, .checked(DraftCheck.Result(draft: nil, language: .zh))]
         #expect(Set(drafts.compactMap(ProjectsWindowText.noDraft)).count == drafts.count)
         #expect(ProjectsWindowText.noDraft(.checked(DraftCheck.Result(draft: "Hi", language: .en))) == nil)
         #expect(ProjectsWindowText.takenOut(.hidden(.tinyFont)) != ProjectsWindowText.takenOut(.addressesAssistant))
         #expect(ProjectsWindowText.finding(OutputChecks.Finding(kind: .dateWeekdayMismatch, text: "10月20日（周一）")) == "Check this date, its weekday is wrong: 10月20日（周一）")
+    }
+
+    /// The email view says why an email has no text to explain: Projects removed it after
+    /// the days of Retention, or never read it, as the email was too large, also once
+    /// Retention went past it. A draft that went says so too.
+    @Test func theEmailViewSaysWhyAnEmailHasNoText() {
+        var email = Self.listed(level: .sure, reply: nil)
+        #expect(ProjectsWindowText.noText(email) == nil)
+        email.hasText = false
+        #expect(ProjectsWindowText.noText(email) == "Projects removed its copy of this email's text 90 days after reading it. Read the email in Mail.")
+        email.isTooLarge = true
+        #expect(ProjectsWindowText.noText(email) == "Projects did not read this email, as it is too large. Read it in Mail.")
+        email.hasText = true
+        #expect(ProjectsWindowText.noText(email) == "Projects did not read this email, as it is too large. Read it in Mail.")
+        #expect(ProjectsWindowText.noDraft(.expired) == "Projects removed this draft 30 days after its last change. Explain the email again for a new one.")
     }
 
     @Test func theChipSaysWhyTheEmailIsWhereItIs() {

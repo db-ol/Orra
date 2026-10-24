@@ -66,6 +66,9 @@ nonisolated struct MailStore: Sendable {
         /// What the user sees about the email before it is explained. An explanation adds
         /// its own warnings.
         var warnings: [ProjectsWarning] = []
+        /// Whether the scan found it too large to read, see MailScan.largestSource, so it
+        /// read only the headers and the names of the attachments.
+        var isTooLarge = false
     }
 
     /// The lists of the Projects window.
@@ -95,6 +98,9 @@ nonisolated struct MailStore: Sendable {
         var isExplained: Bool
         /// Whether the email's text is still kept, see Retention.
         var hasText: Bool
+        /// Whether the scan found the email too large to read, so the store has none of its
+        /// text, see `Message.isTooLarge`.
+        var isTooLarge = false
         /// The line under the subject (decision 16): the explanation's first point, or the
         /// first sentence of the email's own text until it is explained. Empty once
         /// Retention removed both.
@@ -128,7 +134,8 @@ nonisolated struct MailStore: Sendable {
     /// - mail_gone: the hash of each Message-ID that Forget Project or Retention removed,
     ///   until the scan can no longer reach it, see `goneKey(_:)` and `Retention.goneIDs`.
     ///
-    /// `attachmentTextMigration` adds the text of the attachments, the third step.
+    /// `attachmentTextMigration` adds the text of the attachments, the third step, and
+    /// `tooLargeMigration` whether an email was too large to read, the fourth.
     static let migration = ProjectsDatabase.Migration(version: 2, sql: """
         CREATE TABLE mail_projects (
             id TEXT PRIMARY KEY
@@ -209,6 +216,13 @@ nonisolated struct MailStore: Sendable {
     /// saved before keeps its attachments' names only.
     static let attachmentTextMigration = ProjectsDatabase.Migration(version: 3, sql: """
         ALTER TABLE mail_messages ADD COLUMN attachment_text TEXT;
+        """)
+
+    /// The fourth step of ProjectsDatabase.migrations: whether the scan found an email too
+    /// large to read, see `Message.isTooLarge`, so the window tells it from one whose text
+    /// Retention removed. Mail saved before counts as read.
+    static let tooLargeMigration = ProjectsDatabase.Migration(version: 4, sql: """
+        ALTER TABLE mail_messages ADD COLUMN too_large INTEGER NOT NULL DEFAULT 0;
         """)
 
     /// The most messages of a subject looked at to join a reply to its thread by subject.
@@ -892,6 +906,7 @@ nonisolated struct MailStore: Sendable {
         var isExplained: Bool
         /// The text of the explanation's first point, nil without one.
         var firstPoint: String?
+        var isTooLarge: Bool
         /// The To, Cc and Reply-To, by their role.
         var people: [String: [Person]] = [:]
 
@@ -926,7 +941,7 @@ nonisolated struct MailStore: Sendable {
             return Listed(
                 messageID: messageID, date: date, sender: sender, subject: subject, project: project,
                 level: level, reasons: reasons, movedByUser: movedByUser, reply: reply, warnings: warnings,
-                isExplained: isExplained, hasText: text != nil,
+                isExplained: isExplained, hasText: text != nil, isTooLarge: isTooLarge,
                 summary: point.isEmpty ? MailStore.firstSentence(text ?? "") : String(point.prefix(MailStore.summaryLength)),
                 attachments: attachments)
         }
@@ -938,7 +953,8 @@ nonisolated struct MailStore: Sendable {
         id, message_id, mailbox, date, sender_name, sender, subject, in_reply_to, refs, list_id, list_unsubscribe, \
         precedence, attachments, hidden_text, warnings, project, level, reasons, moved_by_user, reply, \
         substr(text, 1, \(textLength)), substr(visible_text, 1, \(textLength)), explanation IS NOT NULL, \
-        CASE WHEN json_valid(CAST(explanation AS TEXT)) THEN json_extract(CAST(explanation AS TEXT), '$.points[0].text') END
+        CASE WHEN json_valid(CAST(explanation AS TEXT)) THEN json_extract(CAST(explanation AS TEXT), '$.points[0].text') END, \
+        too_large
         """
     }
 
@@ -968,7 +984,7 @@ nonisolated struct MailStore: Sendable {
     }
 
     private static func row(_ values: [ProjectsDatabase.Value]) -> Row? {
-        guard values.count == 24, let id = values[0].integer, let messageID = values[1].text, let date = values[3].real,
+        guard values.count == 25, let id = values[0].integer, let messageID = values[1].text, let date = values[3].real,
               let senderName = values[4].text, let sender = values[5].text, let subject = values[6].text else { return nil }
         return Row(
             id: id,
@@ -991,7 +1007,8 @@ nonisolated struct MailStore: Sendable {
             text: values[20].text,
             visibleText: values[21].text,
             isExplained: values[22].integer == 1,
-            firstPoint: values[23].text
+            firstPoint: values[23].text,
+            isTooLarge: values[24].integer == 1
         )
     }
 
@@ -1000,8 +1017,8 @@ nonisolated struct MailStore: Sendable {
             INSERT INTO mail_messages (
                 message_id, mailbox, date, saved, sender_name, sender, sender_key, subject, subject_key, thread_root,
                 in_reply_to, refs, list_id, list_unsubscribe, precedence, attachments, hidden_text, warnings,
-                text, visible_text, words, attachment_text)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
+                text, visible_text, words, attachment_text, too_large)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
             RETURNING id
             """, [
                 .text(message.messageID),
@@ -1026,6 +1043,7 @@ nonisolated struct MailStore: Sendable {
                 .text(message.visibleText),
                 .text(words),
                 message.attachments.contains { $0.text != nil } ? .text(try json(message.attachments.map(\.text))) : .null,
+                .integer(message.isTooLarge ? 1 : 0),
             ]).first?.first?.integer else { return }
         let people: [(role: String, people: [Person])] = [
             ("from", [message.sender]), ("to", message.to), ("cc", message.cc), ("replyTo", message.replyTo),

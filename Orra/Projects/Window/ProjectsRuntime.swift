@@ -1558,7 +1558,8 @@ final class ProjectsRuntime {
             hiddenText: hidden,
             attachments: message.attachments,
             // Hidden text in the email or in an attachment shows before it is explained.
-            warnings: hidden.isEmpty && !message.attachments.contains { $0.hiddenRuns > 0 } ? [] : [.hiddenText]
+            warnings: hidden.isEmpty && !message.attachments.contains { $0.hiddenRuns > 0 } ? [] : [.hiddenText],
+            isTooLarge: message.isTooLarge
         )
     }
 
