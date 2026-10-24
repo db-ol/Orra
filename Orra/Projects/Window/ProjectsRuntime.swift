@@ -1428,12 +1428,15 @@ final class ProjectsRuntime {
     /// the scan has not read yet makes it read the mailboxes once. Reads nothing more once
     /// Projects stops or the choice is forgotten, which the user can do while Mail answers.
     /// Finds the email the store holds with the message's Message-ID only when the message
-    /// is that email, see `isSelectedEmail`, and only then keeps its handle.
+    /// is that email, see `isSelectedEmail`, and only then keeps its handle, unless Mail
+    /// quit meanwhile.
     func messageSelectedInMail() async -> SelectedMessage {
         guard let running else { return .noMailboxChosen }
         guard dependencies.choice.isConfirmed else { return .noMailboxChosen }
         let bridge = dependencies.bridge
         guard bridge.isRunning() else { return .mailNotRunning }
+        // The handle of the message holds for this Mail session only.
+        let session = referenceSession
         do {
             guard let selected = try await bridge.selection().first else { return .nothingSelected }
             guard stillReads(running) else { return .noMailboxChosen }
@@ -1463,7 +1466,11 @@ final class ProjectsRuntime {
                 Logger.projects.notice("Explain Selected Message: the message is not the email the store holds with its Message-ID")
                 return .otherEmail
             }
-            remember(selected, for: messageID)
+            guard stillReads(running) else { return .noMailboxChosen }
+            // Not when Mail quit meanwhile, which let go of the handles of its session.
+            if session == referenceSession {
+                remember(selected, for: messageID)
+            }
             return .found(messageID)
         } catch let error as MailBridgeError {
             Logger.projects.notice("Explain Selected Message failed: \(String(describing: error), privacy: .public)")

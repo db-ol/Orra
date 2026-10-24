@@ -1090,6 +1090,41 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Mail quits and opens again while Explain Selected Message reads the message. The
+    /// email is found, and the handle from the Mail session that ended is not kept.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageKeepsNoHandleOfAMailSessionThatEnded() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let id = "x@harbor.example"
+        let email = FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")
+        let copy = MailMessageRef(id: 300, mailbox: FakeMail.clients)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.headers[300] = email.source.components(separatedBy: "\r\n\r\n")[0] + "\r\n"
+            $0.selection = [copy]
+        }
+        runtime.mailRunningChanged()
+        choice.choose([.inbox, FakeMail.clients])
+        choice.confirm()
+        try await waitUntilListed(id, in: .needsProject, runtime) { _ in true }
+        mail.update { $0.holds = ["selection"] }
+        let found = Task { await runtime.messageSelectedInMail() }
+        try await waitUntil { mail.calls.contains("selection") }
+        mail.update { $0.isRunning = false }
+        runtime.mailRunningChanged()
+        mail.update { $0.isRunning = true }
+        runtime.mailRunningChanged()
+        mail.update { $0.holds = [] }
+        #expect(await found.value == .found(id))
+        #expect(runtime.mailReference(for: id) != copy)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     @Test func explainingNeedsTheWindowAndTheModel() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
