@@ -3,10 +3,10 @@ import Observation
 
 /// What the Projects window shows and what the user does there: the list chosen in the
 /// sidebar, its mail with the deadline marks of the explained ones, the selected email, a
-/// move that waits for the user's yes, the rule offered after moves, the project Settings
-/// asks to edit, the explanations under way, the email view of each email the user opened
-/// with the window's one handoff at a time, the line after Explain Selected Message, and
-/// Suggested Projects. ProjectsRuntime does the work.
+/// move or an Explain Again that waits for the user's yes, the rule offered after moves,
+/// the project Settings asks to edit, the explanations under way, the email view of each
+/// email the user opened with the window's one handoff at a time, the line after Explain
+/// Selected Message, and Suggested Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -88,6 +88,9 @@ final class ProjectsWindowModel {
     var pendingMove: PendingMove?
     /// The project whose Edit Project sheet Settings asks for, until the window takes it.
     private(set) var projectToEdit: UUID?
+    /// The email whose Explain Again waits for the user's yes, since it replaces a draft
+    /// the user changed, see `requestExplain(_:)`.
+    var pendingExplain: String?
     /// Counts the times the window let go of its email views, so the email view shown reads
     /// its email again into a new one.
     private(set) var emailViewGeneration = 0
@@ -131,10 +134,13 @@ final class ProjectsWindowModel {
     }
 
     /// Lets go of the email views with their drafts, translations and answer checks, and
-    /// ends their requests, such as when the window closes or a project is forgotten.
+    /// ends their requests, such as when the window closes or a project is forgotten. The
+    /// text the user typed into each draft is saved first, so the next email view opens
+    /// with it.
     func forgetEmails() {
         for model in emailModels.values {
             model.cancelWork()
+            model.saveTextNow()
         }
         emailModels = [:]
         emailViewGeneration += 1
@@ -246,13 +252,34 @@ final class ProjectsWindowModel {
         await self.move(move.messageID, to: move.project)
     }
 
-    /// Whether the user changed the email's draft in this window, or it has versions.
+    /// Whether the user changed the email's draft, in this window or one before, or it has
+    /// versions.
     private func takesDraftAway(_ messageID: String) async -> Bool {
         if let model = emailModels[messageID], model.isEdited || !model.versions.isEmpty {
             return true
         }
         guard rows.first(where: { $0.messageID == messageID })?.isExplained ?? true else { return false }
+        if await runtime.editedDraft(of: messageID) != nil {
+            return true
+        }
         return !(await runtime.versions(of: messageID)).isEmpty
+    }
+
+    /// Explain Again. A new explanation brings a new draft in place of the one before, so
+    /// when the user changed the draft, or the model made versions of it, it waits for the
+    /// user's yes.
+    func requestExplain(_ messageID: String) async {
+        if await takesDraftAway(messageID) {
+            pendingExplain = messageID
+        } else {
+            await explain(messageID)
+        }
+    }
+
+    /// The user said yes to the Explain Again that waited.
+    func confirmExplain(_ messageID: String) async {
+        pendingExplain = nil
+        await explain(messageID)
     }
 
     /// Adds the offered rule to its project.
@@ -293,7 +320,7 @@ final class ProjectsWindowModel {
     func takeProjectToEdit(presenting: Bool) -> Project? {
         guard let id = projectToEdit else { return nil }
         projectToEdit = nil
-        guard !presenting, pendingMove == nil, let project = runtime.projectList.first(where: { $0.id == id }) else { return nil }
+        guard !presenting, pendingMove == nil, pendingExplain == nil, let project = runtime.projectList.first(where: { $0.id == id }) else { return nil }
         place = .project(id)
         return project
     }
@@ -329,22 +356,24 @@ final class ProjectsWindowModel {
     /// Try Loading Again, after the cleanup model could not be loaded: looks at the model's
     /// files and loads it again, then explains the email. A new explanation starts the
     /// draft again, so it is left out when a change or an undo of the draft began
-    /// meanwhile. Explain is there again once that is done.
+    /// meanwhile, and it asks first when the user changed the draft, as Explain Again
+    /// does. Explain is there again once that is done.
     func loadModelAgain(explaining messageID: String) async {
         guard explaining[messageID] != .explaining else { return }
         explaining[messageID] = .explaining
         await runtime.dependencies.retryLoadingModel()
         explaining[messageID] = nil
         guard emailModels[messageID]?.isBusy != true else { return }
-        await explain(messageID)
+        await requestExplain(messageID)
     }
 
     /// Explain Selected Message: finds the message selected in Mail, shows it in its list
     /// and explains it, or says why not (decision 18). An email with no text to explain is
     /// only shown, see ProjectsWindowText.noText. It waits a moment for sorting to file a
     /// message the scan just saved, never for the sorting of other mail, so the user's
-    /// explanation goes before the background work. Its button stays off until the
-    /// explanation started.
+    /// explanation goes before the background work. For an email whose draft the user
+    /// changed, it asks first, as Explain Again does. Its button stays off until the
+    /// explanation started or the question shows.
     func explainSelectedMessage() async {
         guard !isReadingSelection else { return }
         isReadingSelection = true
@@ -357,9 +386,14 @@ final class ProjectsWindowModel {
         }
         await runtime.waitUntilSorted(messageID)
         await show(messageID, in: await runtime.place(of: messageID))
+        let asks = await takesDraftAway(messageID)
         isReadingSelection = false
         // An email with no text to explain says why in its view, where Explain stays off.
         if let email = selectedEmail, ProjectsWindowText.noText(email) != nil { return }
+        guard !asks else {
+            pendingExplain = messageID
+            return
+        }
         // Marks the explanation as under way before it first waits.
         await explain(messageID)
     }

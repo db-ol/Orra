@@ -367,6 +367,14 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
+    /// The line under the draft about saving it.
+    static func save(_ note: ProjectsEmailModel.SaveNote) -> String {
+        switch note {
+        case .saved: String(localized: "Saved on this Mac.")
+        case .notSaved: String(localized: "The draft could not be saved. Copy it before you close the window.")
+        }
+    }
+
     /// What the last handoff did, with the hint to press Command V in Mail.
     static func handoff(_ note: ProjectsEmailModel.HandoffNote) -> String {
         switch note {

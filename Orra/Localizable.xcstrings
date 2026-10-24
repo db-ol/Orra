@@ -2193,6 +2193,28 @@
         }
       }
     },
+    "Cancel Change" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelar cambio"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更をキャンセル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消修改"
+          }
+        }
+      }
+    },
     "Cancel Download" : {
       "localizations" : {
         "es-419" : {
@@ -4724,6 +4746,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "解释所选邮件"
+          }
+        }
+      }
+    },
+    "Explaining this email again replaces its draft and your changes to it with a new draft." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al explicar este correo de nuevo, se reemplazan su borrador y tus cambios por un borrador nuevo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このメールをもう一度説明すると、下書きとあなたの変更は新しい下書きに置き換えられます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新解释这封邮件会用新草稿替换现在的草稿和你的改动。"
           }
         }
       }
@@ -12358,6 +12402,50 @@
         }
       }
     },
+    "Replace Draft" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reemplazar borrador"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下書きを置き換える"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "替换草稿"
+          }
+        }
+      }
+    },
+    "Replace your draft?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Reemplazar tu borrador?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下書きを置き換えますか?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要替换你的草稿吗？"
+          }
+        }
+      }
+    },
     "Reply All" : {
       "localizations" : {
         "es-419" : {
@@ -12843,6 +12931,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存在这台 Mac 上，尚未载入。"
+          }
+        }
+      }
+    },
+    "Saved on this Mac." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardado en esta Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacに保存されています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存在这台 Mac 上。"
           }
         }
       }
@@ -14415,6 +14525,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法拷贝草稿。请重试。"
+          }
+        }
+      }
+    },
+    "The draft could not be saved. Copy it before you close the window." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar el borrador. Cópialo antes de cerrar la ventana."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下書きを保存できませんでした。ウインドウを閉じる前にコピーしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存草稿。请在关闭窗口前先拷贝草稿。"
           }
         }
       }

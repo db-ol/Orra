@@ -78,6 +78,124 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    // MARK: The user's draft
+
+    /// The text the user typed into a draft stays when the window closes, and when Projects
+    /// is turned off with Keep Data and on again. The email view opens with it.
+    @Test func theUsersTextOfADraftStaysWhenTheWindowCloses() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let model = ProjectsWindowModel(runtime: runtime)
+        await model.show(explained.messageID)
+        let email = model.emailModel(for: explained.messageID)
+        await email.load()
+        // Only closing the window saves it.
+        email.saveDelay = .seconds(3_600)
+        let edited = email.text + "\n\nP.S. The plan follows tonight."
+        email.text = edited
+        // The window closes, as ProjectsWindow does.
+        model.forgetEmails()
+        // The window opens again with a new email view.
+        func shown() async throws -> String {
+            var text = ""
+            for _ in 0..<400 {
+                let reopened = ProjectsEmailModel(messageID: explained.messageID, actions: .live(runtime))
+                await reopened.load()
+                text = reopened.text
+                if text == edited { break }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            return text
+        }
+        #expect(try await shown() == edited)
+
+        await fixture.projects.turnOff(keepingData: true)
+        for _ in 0..<2_000 where runtime.phase != .off {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        fixture.projects.turnOn()
+        for _ in 0..<2_000 where runtime.phase != .on {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(try await shown() == edited)
+        await fixture.stop()
+    }
+
+    /// Projects turns off with Keep Data while the window is open, right after the user
+    /// typed into a draft. Closing the window saves the text, and Projects closes its files
+    /// only once that write is done, so the email view opens with it after Projects is on
+    /// again.
+    @Test func theUsersTextOfADraftStaysWhenProjectsTurnsOffWithTheWindowOpen() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let model = ProjectsWindowModel(runtime: runtime)
+        // Turning off closes the window, which lets go of its email views, as
+        // ProjectsWindow does.
+        runtime.closeWindow = { model.forgetEmails() }
+        await model.show(explained.messageID)
+        let email = model.emailModel(for: explained.messageID)
+        await email.load()
+        // Only closing the window saves it.
+        email.saveDelay = .seconds(3_600)
+        let edited = email.text + "\n\nP.S. The plan follows tonight."
+        email.text = edited
+
+        await fixture.projects.turnOff(keepingData: true)
+        for _ in 0..<2_000 where runtime.phase != .off {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        fixture.projects.turnOn()
+        for _ in 0..<2_000 where runtime.phase != .on {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let reopened = ProjectsEmailModel(messageID: explained.messageID, actions: .live(runtime))
+        await reopened.load()
+        #expect(reopened.text == edited)
+        await fixture.stop()
+    }
+
+    /// Explain Again, and a move to another project, ask first when they would take away a
+    /// draft the user changed: one with a version, or with text the user typed in a window
+    /// before. Without either, Explain Again goes ahead at once.
+    @Test func explainAgainAsksBeforeItReplacesAChangedDraft() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let store = try #require(runtime.running?.store)
+        let explained = try await Self.explainedEmail(in: runtime)
+        let id = explained.messageID
+        let model = ProjectsWindowModel(runtime: runtime)
+        await model.show(id)
+        await model.requestExplain(id)
+        #expect(model.pendingExplain == id)
+        #expect(model.explaining[id] == nil)
+
+        // Without the version, nothing of the user's goes. The fixture's window is closed,
+        // so the explanation it starts fails at once.
+        #expect(await runtime.removeNewestVersion(of: id))
+        let next = ProjectsWindowModel(runtime: runtime)
+        await next.show(id)
+        await next.requestExplain(id)
+        #expect(next.pendingExplain == nil)
+        #expect(next.explaining[id] == .failed(.other))
+
+        let view = ProjectsEmailModel(messageID: id, actions: .live(runtime))
+        await view.load()
+        let draft = try #require(view.modelDraft)
+        #expect(try await store.save(MailStore.EditedDraft(text: draft + "\n\nThanks.", editedFrom: MailStore.draftKey(draft, version: 0, explained: Self.today)), for: id, at: Self.today))
+        let reopened = ProjectsWindowModel(runtime: runtime)
+        await reopened.show(id)
+        await reopened.requestExplain(id)
+        #expect(reopened.pendingExplain == id)
+        await reopened.requestMove(id, to: nil)
+        #expect(reopened.pendingMove == ProjectsWindowModel.PendingMove(messageID: id, project: nil))
+        await fixture.stop()
+    }
+
     // MARK: The talk key
 
     /// Decision 13: the talk key's words go into the change box of the selected email only
@@ -208,6 +326,7 @@ struct ProjectsWindowViewTests {
         }
         let failures: [ProjectsWindowModel.ExplainFailure] = [.noModel, .modelNotLoaded, .tooLong, .other]
         #expect(Set(failures.map(ProjectsWindowText.explainFailure)).count == failures.count)
+        #expect(ProjectsWindowText.save(.saved) != ProjectsWindowText.save(.notSaved))
         let outcomes: [ReplyHandoff.Outcome] = [
             .replyOpened, .copied, .copiedMailNotRunning, .copiedReplyFailed(.timedOut), .copiedReplyFailed(.denied),
             .copiedReplyFailed(.notFound), .copiedReplyFailed(.failed(code: -1)), .emptyDraft, .notCopied,
@@ -484,8 +603,15 @@ struct ProjectsWindowViewTests {
         #expect(model.takeProjectToEdit(presenting: false) == nil)
         #expect(model.place == .needsProject)
         #expect(model.projectToEdit == nil)
-
+        // The question before Explain Again replaces a changed draft is such a dialog too.
         model.pendingMove = nil
+        model.pendingExplain = "a@harbor.example"
+        model.edit(project.id)
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
+        #expect(model.place == .needsProject)
+        #expect(model.projectToEdit == nil)
+
+        model.pendingExplain = nil
         model.edit(project.id)
         #expect(model.takeProjectToEdit(presenting: false) == project)
         #expect(model.place == .project(project.id))

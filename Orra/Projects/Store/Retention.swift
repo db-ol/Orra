@@ -8,15 +8,17 @@ import os
 /// longer.
 ///
 /// - **Mail text, 90 days:** the email's own text, its visible text, the text of its
-///   attachments, the words that find it, and its latest explanation and draft versions,
-///   which hold the text, go 90 days after Orra read the email.
+///   attachments, the words that find it, and its latest explanation, draft versions and
+///   the text the user typed into the draft, which hold the text, go 90 days after Orra
+///   read the email.
 /// - **The rest of an email, 180 days:** its headers, people, project, marks, warnings and
 ///   attachment names, types and sizes go with its whole thread, 180 days after Orra read
 ///   the thread's newest message.
-/// - **Drafts, 30 days:** the versions of a draft go 30 days after the draft last changed,
-///   and so does the first draft, which the explanation holds. The rest of the explanation
-///   stays as long as the text, see `Explanation.Draft.expired`. It can be explained again
-///   for a new draft while the text is kept.
+/// - **Drafts, 30 days:** the versions of a draft and the text the user typed into it go 30
+///   days after the draft last changed, by a new version or by the user's typing, and so
+///   does the first draft, which the explanation holds. The rest of the explanation stays as
+///   long as the text, see `Explanation.Draft.expired`. It can be explained again for a new
+///   draft while the text is kept.
 /// - **Counts of moves, 180 days:** a count goes 180 days after the last move it counted.
 ///   SortingService already reads such a count as zero after 30 days, so this never changes
 ///   what sorting sees.
@@ -35,6 +37,8 @@ nonisolated enum Retention {
         var drafts = 0
         var emails = 0
         var draftVersions = 0
+        /// Texts the user typed into drafts.
+        var editedDrafts = 0
         var tallies = 0
         /// Hashes of Message-IDs of removed mail that no scan can reach any more.
         var goneIDs = 0
@@ -67,9 +71,22 @@ nonisolated enum Retention {
         let cutoffs = (text: cutoff(mailText), emails: cutoff(emails), drafts: cutoff(drafts), tallies: cutoff(tallies), now: cutoff(0))
         let removed = try await store.database.transaction { database in
             var removed = Removed()
+            // The user's typing changes the draft too. It is saved apart from the email's
+            // row, so its time joins the row's here.
+            try database.run("""
+                UPDATE mail_messages SET draft_changed = (SELECT e.changed FROM mail_edited_drafts e WHERE e.message = mail_messages.id)
+                WHERE id IN (
+                    SELECT e.message FROM mail_edited_drafts e JOIN mail_messages m ON m.id = e.message
+                    WHERE m.draft_changed IS NULL OR e.changed > m.draft_changed
+                )
+                """)
             // Drafts first, with the first draft that the explanation holds.
             removed.draftVersions = try database.run("""
                 DELETE FROM mail_draft_versions WHERE message IN (SELECT id FROM mail_messages WHERE draft_changed < ?)
+                RETURNING message
+                """, [cutoffs.drafts]).count
+            removed.editedDrafts = try database.run("""
+                DELETE FROM mail_edited_drafts WHERE message IN (SELECT id FROM mail_messages WHERE draft_changed < ?)
                 RETURNING message
                 """, [cutoffs.drafts]).count
             for row in try database.run(
@@ -93,9 +110,13 @@ nonisolated enum Retention {
                 }
             }
             try database.run("UPDATE mail_messages SET draft_changed = NULL WHERE draft_changed < ?", [cutoffs.drafts])
-            // The text, with the explanation and the draft versions that hold it.
+            // The text, with the explanation and the drafts that hold it.
             removed.draftVersions += try database.run("""
                 DELETE FROM mail_draft_versions WHERE message IN (SELECT id FROM mail_messages WHERE saved < ?)
+                RETURNING message
+                """, [cutoffs.text]).count
+            removed.editedDrafts += try database.run("""
+                DELETE FROM mail_edited_drafts WHERE message IN (SELECT id FROM mail_messages WHERE saved < ?)
                 RETURNING message
                 """, [cutoffs.text]).count
             removed.explanations += try database.run("""
@@ -120,7 +141,7 @@ nonisolated enum Retention {
             try await store.database.compactAfterDeletes()
         }
         let seconds = started.duration(to: .now) / .seconds(1)
-        Logger.projects.notice("Retention removed the text of \(removed.texts, privacy: .public) emails, \(removed.explanations, privacy: .public) explanations, \(removed.drafts, privacy: .public) first drafts, \(removed.emails, privacy: .public) emails, \(removed.draftVersions, privacy: .public) draft versions, \(removed.tallies, privacy: .public) counts of moves and \(removed.goneIDs, privacy: .public) gone Message-IDs in \(String(format: "%.3f s", seconds), privacy: .public)")
+        Logger.projects.notice("Retention removed the text of \(removed.texts, privacy: .public) emails, \(removed.explanations, privacy: .public) explanations, \(removed.drafts, privacy: .public) first drafts, \(removed.emails, privacy: .public) emails, \(removed.draftVersions, privacy: .public) draft versions, \(removed.editedDrafts, privacy: .public) texts typed into drafts, \(removed.tallies, privacy: .public) counts of moves and \(removed.goneIDs, privacy: .public) gone Message-IDs in \(String(format: "%.3f s", seconds), privacy: .public)")
         return removed
     }
 

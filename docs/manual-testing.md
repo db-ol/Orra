@@ -3396,6 +3396,37 @@ too short to catch by hand, so
 CleanupIdleUnloadTests.aQueuedLoadForProjectsWaitsForADictationThatStartsBeforeItsTurn
 checks it.
 
+The draft you write in the Projects window, added on 2026-10-24, not verified yet. Check in
+a Debug build with the synthetic mail imported, as in the test guide, and the cleanup model
+on the Mac. This build adds a step to the Projects database. A Debug build from before it
+then says that Projects could not open its data on this Mac, until you use Delete All
+Projects Data… in its Settings.
+
+- [ ] Type a sentence into the draft of an explained email. Saved on this Mac shows under
+  the draft about half a second after the last key press, and not while you type. After
+  the first key press, the checks and buttons under the draft stay where they are.
+- [ ] Close the Projects window and open it again. The draft holds your sentence, and Saved
+  on this Mac shows. Turn Projects off in Settings with Keep Data and on again: the draft
+  still holds it.
+- [ ] Change that draft with Tone, close the window and open it again, then click Undo
+  Change. The draft holds your sentence again.
+- [ ] Click Explain Again on that email. Orra asks "Replace your draft?" first. Cancel
+  leaves the draft as it was. Replace Draft explains the email again with a new draft, and
+  the draft cannot be edited until the new one shows. An email whose draft you did not
+  change and that has no versions explains again without asking.
+- [ ] Type into the new draft again, then select that email in Mail and click Explain
+  Selected Message. Orra asks the same first.
+- [ ] Turn on Live Captions, then click Change Draft. The change waits, the line under it
+  says "Paused while Live Captions run." and Cancel Change shows. Copy puts the draft as it
+  is on the clipboard, while Open Reply in Mail stays dimmed. Cancel Change ends the change,
+  and the draft and your words in the change box stay. With captions off, the same change
+  runs.
+- [ ] Click Open Reply in Mail and close the Projects window at once. When Mail answers
+  after the close, also with an error, the clipboard keeps what it held. This is hard to
+  time by hand, so
+  ProjectsEmailModelTests.closingTheWindowWhileMailChecksItsMessageLeavesTheClipboardAndMail
+  checks it.
+
 Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
 checks that a download agreed to in the caption window turns on neither cleanup nor
 translation and stops when captions stop, as docs/privacy.md says, and that it goes on
