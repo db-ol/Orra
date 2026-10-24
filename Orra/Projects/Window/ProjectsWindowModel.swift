@@ -263,10 +263,14 @@ final class ProjectsWindowModel {
         }
     }
 
-    /// Remove Rule on the project page, after the user's yes.
+    /// Remove Rule on the project page, after the user's yes. A removal that works takes
+    /// away the line of one that did not.
     func removeRule(_ rule: Project.Rule, from project: UUID) async {
         do {
             try await runtime.removeRule(rule, from: project)
+            if notice == .ruleNotRemoved {
+                notice = nil
+            }
         } catch {
             notice = .ruleNotRemoved
         }

@@ -355,8 +355,8 @@ struct ProjectsWindowViewTests {
     }
 
     /// Remove Rule on the project page takes the rule off the project, and says so when it
-    /// could not. An Edit Project sheet opened before the removal does not bring the rule
-    /// back when it saves, since the sheet does not change rules.
+    /// could not, until a try works. An Edit Project sheet opened before the removal does
+    /// not bring the rule back when it saves, since the sheet does not change rules.
     @Test func removeRuleTakesTheRuleOffTheProject() async throws {
         let fixture = try await Fixture()
         defer { fixture.cleanUp() }
@@ -365,16 +365,18 @@ struct ProjectsWindowViewTests {
         let project = try #require(runtime.projectList.first)
         let rule = try #require(project.rules.first)
         var sheet = ProjectsSetupView.Draft(project)
+        await model.removeRule(rule, from: UUID())
+        #expect(model.notice == .ruleNotRemoved)
+        #expect(ProjectsWindowText.notice(.ruleNotRemoved) == "The rule could not be removed. Try again.")
+        #expect(runtime.projectList.first?.rules == [rule])
         await model.removeRule(rule, from: project.id)
         #expect(runtime.projectList.first?.rules.isEmpty == true)
         #expect(model.notice == nil)
+
         sheet.description = "Lobby and stairs"
         try await runtime.update(try #require(sheet.project))
         #expect(runtime.projectList.first?.description == "Lobby and stairs")
         #expect(runtime.projectList.first?.rules.isEmpty == true)
-        await model.removeRule(rule, from: UUID())
-        #expect(model.notice == .ruleNotRemoved)
-        #expect(ProjectsWindowText.notice(.ruleNotRemoved) == "The rule could not be removed. Try again.")
         await fixture.stop()
     }
 
