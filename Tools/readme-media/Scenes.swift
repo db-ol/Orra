@@ -16,30 +16,65 @@ func allScenes(icon: NSImage?) -> [Scene] {
 
 // MARK: - A dictation from key down to paste
 
-/// The times of one dictation: key down, speaking, release, paste.
+/// How the key starts and ends a dictation, as under Keys in Settings, General.
+enum KeyMode {
+    /// The key is down while the person speaks, and its release pastes.
+    case hold
+    /// A tap of the key starts, and the next tap pastes. Meanwhile the capsule says how to
+    /// finish.
+    case pressToStartAndStop(finishHint: String)
+}
+
+/// The times of one dictation: key down, speaking, release, paste. In Press to start and
+/// stop the key is tapped twice, and each tap counts at its release, as in the app, where a
+/// press shorter than 0.3 s starts hands free at its release and the next press of the key
+/// pastes at its release.
 struct Dictation {
     let said: [(text: String, dropped: Bool)]
     let start: Double
     let processing: Double
+    var mode = KeyMode.hold
+
+    /// How long a tap holds the key down.
+    static let tap = 0.2
 
     var characters: Int { said.reduce(0) { $0 + $1.text.count } }
     var rate: Double { speakingRate(said.map(\.text).joined()) }
     var keyDown: Double { start }
-    var speakStart: Double { start + 0.25 }
+    /// Whether the key is tapped twice, in Press to start and stop.
+    var taps: Bool {
+        if case .pressToStartAndStop = mode { return true }
+        return false
+    }
+
+    /// When the capsule starts listening: at the key down for Hold, at the first tap's
+    /// release for Press to start and stop.
+    var listenStart: Double { taps ? start + Self.tap : start }
+    var speakStart: Double { listenStart + 0.25 }
     var speakEnd: Double { speakStart + Double(characters) / rate }
-    var release: Double { speakEnd + 0.35 }
+    /// The key down of the second tap.
+    var secondKeyDown: Double { speakEnd + 0.35 }
+    /// The release that ends the recording.
+    var release: Double { taps ? secondKeyDown + Self.tap : speakEnd + 0.35 }
     var pasteAt: Double { release + processing }
 
-    func pressed(_ t: Double) -> Bool { t >= keyDown && t < release }
+    func pressed(_ t: Double) -> Bool {
+        guard taps else { return t >= keyDown && t < release }
+        return (t >= keyDown && t < listenStart) || (t >= secondKeyDown && t < release)
+    }
+
     func shown(_ t: Double) -> Int { t < speakStart ? 0 : min(characters, Int((t - speakStart) * rate)) }
     func pasted(_ t: Double) -> Bool { t >= pasteAt }
 
     func capsule(_ t: Double) -> CapsuleState {
-        if t < keyDown || t >= pasteAt { return .idle }
-        if t < speakStart { return .listening(level: 0) }
-        if t < speakEnd { return .listening(level: voiceLevel(t)) }
-        if t < release { return .listening(level: 0.05) }
-        return .transcribing(phase: (t - release) / 1.2)
+        // In Press to start and stop the first tap records silently until its release.
+        if t < listenStart || t >= pasteAt { return .idle }
+        if t >= release { return .transcribing(phase: (t - release) / 1.2) }
+        let level = t < speakStart ? 0 : t < speakEnd ? voiceLevel(t) : 0.05
+        if case .pressToStartAndStop(let hint) = mode {
+            return .handsFree(level: level, hint: hint)
+        }
+        return .listening(level: level)
     }
 }
 
@@ -86,11 +121,30 @@ struct PastedLine: View {
     }
 }
 
-// The captions are Hold %@ to talk and Hold %@ to translate without the key's name, which is
-// on the key. The Spanish ones are Orra's names of the keys, since “Mantén presionada %@ para
-// hablar” does not fit under the key on one line.
+// The talk key is in Hold, as for everyone who set Orra up before 0.5.0. Its caption is Hold
+// %@ to talk without the key's name, which is on the key. The Spanish one is Orra's name of
+// the key, since “Mantén presionada %@ para hablar” does not fit under the key on one line.
+//
+// The translation key is in Press to start and stop, where it starts since 0.5.1 for
+// everyone who never turned Translation on. Its caption is the hint of that mode, Press %@
+// to translate, and again to finish, without the key's name, on two lines. The Chinese one
+// says 按一下 where the hint has the key's name. While it records, the capsule shows Press
+// %@ to finish with the name, as the app does.
 let talkKey = (symbol: "⌃", name: "control", caption: L("Hold to talk", "按住说话", "押したまま話す", "Tecla para hablar"))
-let translationKey = (symbol: "⌥", name: "option", caption: L("Hold to translate", "按住翻译", "押したまま翻訳", "Tecla de traducción"))
+let translationKey = (
+    symbol: "⌥",
+    name: "option",
+    caption: L("Press to translate,\nand again to finish", "按一下翻译，\n再按一下结束", "押して翻訳し、\nもう一度押して終了", "Presiona para traducir\ny otra vez para terminar")
+)
+let translationFinishHint = L(
+    "Press right Option to finish",
+    "按右侧 Option 键结束",
+    "右Optionキーを押して終了",
+    "Presiona la tecla Opción derecha para terminar"
+)
+func translationKeyMode(_ lang: Lang) -> KeyMode {
+    .pressToStartAndStop(finishHint: translationFinishHint(lang))
+}
 
 /// The badge of the translation key with Automatic, as TranslationCue.badge draws it for
 /// each dictation language.
@@ -207,7 +261,7 @@ let translationPasted = L(
 )
 
 func translation(_ lang: Lang) -> Dictation {
-    Dictation(said: translationSaid[lang]!, start: 0.8, processing: 0.8)
+    Dictation(said: translationSaid[lang]!, start: 0.8, processing: 0.8, mode: translationKeyMode(lang))
 }
 
 @MainActor
@@ -492,7 +546,7 @@ let meetingReplySaid: [Lang: [(text: String, dropped: Bool)]] = [
 let spokenReply = "Sure, I’ll finish testing by Wednesday."
 
 func meetingReply(_ lang: Lang) -> Dictation {
-    Dictation(said: meetingReplySaid[lang]!, start: 6.6, processing: 0.7)
+    Dictation(said: meetingReplySaid[lang]!, start: 6.6, processing: 0.7, mode: translationKeyMode(lang))
 }
 
 /// The voice speaks the translation of the reply from just after its paste, so its times
@@ -540,7 +594,8 @@ struct Tile<Footer: View>: View {
 @MainActor
 let meetingScene = Scene(
     name: "meeting",
-    size: CGSize(width: 600, height: 420),
+    // Taller than the others, for the caption of the translation key on two lines.
+    size: CGSize(width: 600, height: 440),
     duration: { voiceEnd($0) + 2.6 },
     frame: { t, lang in
         let reply = meetingReply(lang)
@@ -584,39 +639,59 @@ let meetingScene = Scene(
                 captionPanel(lang: lang, captions: shown, t: t)
                     .position(x: 300, y: 268)
                 KeyCap(symbol: translationKey.symbol, name: translationKey.name, caption: translationKey.caption(lang), pressed: reply.pressed(t))
-                    .position(x: 62, y: 380)
+                    .position(x: 70, y: 392)
                 if t >= reply.keyDown {
                     SaidLine(segments: reply.said, shown: reply.shown(t), strike: false)
                         .frame(width: 440, height: 24, alignment: .topLeading)
-                        .position(x: 360, y: 368)
+                        .position(x: 360, y: 376)
                 }
-                OrraCapsule(state: t < reply.keyDown || t >= reply.pasteAt ? .idle : reply.capsule(t), badge: translationBadge(lang))
-                    .position(x: 300, y: 400)
+                // Centered below the captions, or just right of the key's caption when it
+                // is too wide for that, as in Spanish. A hidden copy of the capsule with
+                // the hint, its widest state, keeps every state at the same center, as the
+                // app keeps it.
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: 146, height: 1)
+                    ZStack {
+                        OrraCapsule(state: .handsFree(level: 0, hint: translationFinishHint(lang)), badge: translationBadge(lang))
+                            .hidden()
+                        OrraCapsule(state: reply.capsule(t), badge: translationBadge(lang))
+                    }
+                    .frame(minWidth: 308)
+                    Spacer(minLength: 0)
+                }
+                .frame(width: 600)
+                .position(x: 300, y: 420)
             }
         )
     }
 )
 
+/// The names of the three display modes, as the caption window shows them.
+let captionModes = [
+    L("Original", "原文", "原文", "Original"),
+    L("Translated", "译文", "訳文", "Traducción"),
+    L("Both", "双语", "両方", "Ambos"),
+]
+
+/// The caption target, the dictation language of each GIF, by its name in the interface.
+let captionTarget = L("Chinese", "中文", "日本語", "Español")
+
+/// The Live Captions window as CaptionWindow.swift draws it: the title, then the display
+/// mode on the left with Both chosen, the caption target and Copy on the right, then the
+/// captions. Copy is dimmed until the first sentence, as the app keeps it off until then.
 @MainActor
 func captionPanel(lang: Lang, captions: [Caption], t: Double) -> some View {
     VStack(spacing: 8) {
         T(L("Live Captions", "实时字幕", "ライブキャプション", "Subtítulos en vivo")(lang))
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(Color.white.opacity(0.7))
-        HStack(spacing: 0) {
-            T(L("Translation only", "只显示译文", "訳文のみ", "Solo traducción")(lang))
-                .foregroundStyle(Color.white.opacity(0.75))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 3)
-            T(L("Original and translation", "原文和译文逐句对照", "原文と訳文", "Original y traducción")(lang))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 3)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.22)))
+        HStack(spacing: 10) {
+            CaptionModes(names: captionModes.map { $0(lang) }, chosen: 2)
+            Spacer(minLength: 0)
+            MenuLabel(symbol: "translate", title: captionTarget(lang))
+            MenuLabel(symbol: "doc.on.doc", title: nil)
+                .opacity(captions.isEmpty ? 0.35 : 1)
         }
-        .font(.system(size: 11))
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.08)))
         VStack(alignment: .leading, spacing: 8) {
             if captions.isEmpty {
                 T(L(
@@ -630,16 +705,12 @@ func captionPanel(lang: Lang, captions: [Caption], t: Double) -> some View {
             }
             ForEach(captions.indices, id: \.self) { index in
                 let caption = captions[index]
+                // The original in the small style, alone while its translation is
+                // pending, then above it.
                 VStack(alignment: .leading, spacing: 1) {
+                    T(caption.original).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.55))
                     if t >= caption.translationAt {
-                        T(caption.original).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.55))
                         T(caption.translation(lang)).font(.system(size: 16)).foregroundStyle(.white)
-                    } else if !lang.keepsFirstDrawing {
-                        // The app shows an original in the small style while its translation
-                        // is pending.
-                        T(caption.original).font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.55))
-                    } else {
-                        T(caption.original).font(.system(size: 16)).foregroundStyle(.white)
                     }
                 }
             }
@@ -656,6 +727,53 @@ func captionPanel(lang: Lang, captions: [Caption], t: Double) -> some View {
     )
     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
     .shadow(color: .black.opacity(0.2), radius: 10, y: 3)
+}
+
+/// A segmented control on the dark window, with a thin line between two segments that are
+/// not chosen.
+struct CaptionModes: View {
+    let names: [String]
+    let chosen: Int
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(names.indices, id: \.self) { index in
+                if index > 0 {
+                    Rectangle()
+                        .fill(Color.white.opacity(index == chosen || index - 1 == chosen ? 0 : 0.18))
+                        .frame(width: 1, height: 12)
+                }
+                T(names[index])
+                    .foregroundStyle(index == chosen ? .white : Color.white.opacity(0.75))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(index == chosen ? Color.white.opacity(0.22) : .clear))
+            }
+        }
+        .font(.system(size: 11))
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.08)))
+    }
+}
+
+/// A borderless menu button on the dark window: a symbol, an optional title and the small
+/// arrow of the menu.
+struct MenuLabel: View {
+    let symbol: String
+    let title: String?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 12))
+            if let title {
+                T(title).font(.system(size: 11))
+            }
+            Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.6))
+        }
+        .foregroundStyle(Color.white.opacity(0.85))
+        .fixedSize()
+    }
 }
 
 // MARK: - Updates
