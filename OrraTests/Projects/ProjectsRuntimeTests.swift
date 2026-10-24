@@ -729,6 +729,76 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// A message Mail gives with no source, as it may before it downloaded its body, ends no
+    /// pass. The window still says that some mail could not be read, with Try Again, in
+    /// place of No Mail. The next pass reads the inbox back for it, and the line stays until
+    /// that pass ends, so it does not change each minute while Mail cannot give it.
+    @Test func mailThatMailCannotGiveSaysSoUntilAPassReadsIt() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [Self.lunch]
+            $0.withoutSource = [Self.lunch.id]
+        }
+        runtime.mailRunningChanged()
+        choice.choose([.inbox])
+        choice.confirm()
+        try await waitUntil { runtime.scanState == .failed }
+        #expect(problems(runtime) == [Line(text: "Some mail could not be read.", action: .tryAgain)])
+        #expect(try await runtime.list(.needsProject).isEmpty)
+
+        // The next pass, as the scan runs each minute, gets the source and waits there.
+        let scan = try #require(runtime.running?.scan)
+        mail.clearCalls()
+        mail.update {
+            $0.withoutSource = []
+            $0.holds = ["source"]
+        }
+        let next = Task { await scan.scan() }
+        try await waitUntil { mail.calls.contains("source") }
+        #expect(runtime.scanState == .failed)
+        mail.update { $0.holds = [] }
+        #expect(await next.value.saved == 1)
+        #expect(runtime.scanState == nil)
+        try await waitUntilListed(Self.lunch.messageID, in: .needsProject, runtime) { _ in true }
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A chosen mailbox that Mail no longer has, as after a rename in Mail, fails at each
+    /// pass. The window says so with Try Again, and a pass after that changes nothing while
+    /// it reads, so the line does not turn into Reading mail… each minute.
+    @Test func aMailboxMailNoLongerHasKeepsItsLineAtEachPass() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [Self.lunch]
+            $0.gone = [FakeMail.archive]
+        }
+        runtime.mailRunningChanged()
+        choice.choose([FakeMail.archive, .inbox])
+        choice.confirm()
+        try await waitUntil { runtime.scanState == .failed }
+        try await waitUntilListed(Self.lunch.messageID, in: .needsProject, runtime) { _ in true }
+
+        // The next pass, as the scan polls each minute, waits while Mail counts the inbox.
+        let scan = try #require(runtime.running?.scan)
+        mail.clearCalls()
+        mail.update { $0.holds = ["count"] }
+        let poll = Task { await scan.scan() }
+        try await waitUntil { mail.calls.filter { $0 == "count" }.count == 2 }
+        #expect(runtime.scanState == .failed)
+        mail.update { $0.holds = [] }
+        #expect(await poll.value.error == .notFound)
+        #expect(problems(runtime) == [Line(text: "Some mail could not be read.", action: .tryAgain)])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// Sorting says so while a batch runs, such as while the model sorts with the window
     /// open.
     @Test func sortingSaysSoWhileABatchRuns() async throws {
@@ -774,14 +844,16 @@ struct ProjectsRuntimeTests {
     }
 
     /// What the window says once a pass ended: Mail slow to answer, Orra not allowed, mail
-    /// that could not be read or saved, or nothing. A pass that Projects, the confirm or
-    /// Mail ended says nothing, since the window says why on its own.
+    /// that could not be read or saved, or nothing. Messages Mail could not give are mail
+    /// that could not be read, also when it gave the others. A pass that Projects, the
+    /// confirm or Mail ended says nothing, since the window says why on its own.
     @Test func whatEndedAPassIsWhatTheWindowSays() {
         typealias Pass = MailScan.Pass
-        func state(_ error: MailBridgeError?, saveFailed: Bool = false) -> ProjectsRuntime.ScanState? {
-            ProjectsRuntime.scanState(after: Pass(error: error), saveFailed: saveFailed)
+        func state(_ error: MailBridgeError?, read: Int = 0, unreadable: Int = 0, saveFailed: Bool = false) -> ProjectsRuntime.ScanState? {
+            ProjectsRuntime.scanState(after: Pass(read: read, unreadable: unreadable, error: error), saveFailed: saveFailed)
         }
         #expect(state(nil) == nil)
+        #expect(state(nil, read: 3) == nil)
         #expect(state(.timedOut) == .mailIsSlow)
         #expect(state(.notAnswered(code: -609)) == .mailIsSlow)
         #expect(state(.denied) == .notAllowed)
@@ -791,8 +863,12 @@ struct ProjectsRuntimeTests {
         }
         #expect(state(.mailNotRunning) == nil)
         #expect(state(nil, saveFailed: true) == .failed)
+        #expect(state(nil, unreadable: 2) == .failed)
+        #expect(state(nil, read: 3, unreadable: 1) == .failed)
+        #expect(state(.timedOut, unreadable: 1) == .mailIsSlow)
+        #expect(state(.mailNotRunning, unreadable: 1) == nil)
         for skip in [Pass.Skip.off, .notConfirmed, .mailNotRunning] {
-            #expect(ProjectsRuntime.scanState(after: Pass(skipped: skip), saveFailed: true) == nil)
+            #expect(ProjectsRuntime.scanState(after: Pass(skipped: skip, unreadable: 1), saveFailed: true) == nil)
         }
     }
 
@@ -1873,6 +1949,10 @@ struct ProjectsRuntimeTests {
             var sourcesCancelled = 0
             /// What every call to Mail fails with, such as a timeout.
             var failure: MailBridgeError?
+            /// Mailboxes Mail no longer has, as after a rename in Mail.
+            var gone: Set<MailMailbox> = []
+            /// Messages Mail gives with no source, as it may before it downloaded their body.
+            var withoutSource: Set<Int> = []
             /// Calls, by name, that answer only once the test takes them out, also when
             /// their caller is cancelled, as an event Mail already got.
             var holds: Set<String> = []
@@ -1945,7 +2025,10 @@ struct ProjectsRuntimeTests {
                 accounts: { try self.answer("accounts") { _ in [] } },
                 mailboxes: { try self.answer("mailboxes") { _ in [.inbox, .sent, Self.clients, Self.archive] } },
                 count: { mailbox in
-                    let count = try self.answer("count") { mailbox == .inbox ? $0.inbox.count : 0 }
+                    let count = try self.answer("count") { state in
+                        guard !state.gone.contains(mailbox) else { throw MailBridgeError.notFound }
+                        return mailbox == .inbox ? state.inbox.count : 0
+                    }
                     await self.waitWhileHeld("count")
                     return count
                 },
@@ -1972,7 +2055,7 @@ struct ProjectsRuntimeTests {
                 source: { reference in
                     let source = try self.answer("source") { state in
                         guard let message = state.inbox.first(where: { $0.id == reference.id }) else { throw MailBridgeError.notFound }
-                        return message.source
+                        return state.withoutSource.contains(message.id) ? "" : message.source
                     }
                     await self.waitWhileHeld("source")
                     if self.state.withLock({ $0.sourceBlocks }) {

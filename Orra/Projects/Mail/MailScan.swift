@@ -131,7 +131,7 @@ final class MailScan {
     /// under way, tells nothing more.
     nonisolated enum Report: Sendable, Equatable {
         /// A pass began to read. `readsBack` when it reads a mailbox back to the days, which
-        /// takes much longer than a poll.
+        /// takes much longer than a poll, or tries to, as for a mailbox Mail no longer has.
         case began(readsBack: Bool)
         case ended(Pass)
     }

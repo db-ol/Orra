@@ -826,13 +826,15 @@ final class ProjectsRuntime {
 
     /// What a pass of the scan told: one that reads the mailboxes back to the days shows as
     /// reading, and its end shows what stopped it, if anything. A poll changes nothing until
-    /// it ends, so the window does not flicker each minute.
+    /// it ends, so the window does not flicker each minute. Neither does a pass after one
+    /// that failed, which reads back what failed and may fail the same way, as a mailbox
+    /// Mail no longer has does at each pass.
     private func scanReported(_ report: MailScan.Report) {
         guard running != nil else { return }
         switch report {
         case .began(let readsBack):
             passSaveFailed = false
-            if readsBack {
+            if readsBack, scanState != .failed {
                 show(.reading(saved: 0))
             }
         case .ended(let pass):
@@ -840,9 +842,10 @@ final class ProjectsRuntime {
         }
     }
 
-    /// What the window says once a pass ended: why it stopped, or nothing when it read what
-    /// it could. A pass that Projects, the confirm or Mail ended says nothing, since the
-    /// window says why on its own.
+    /// What the window says once a pass ended: why it stopped, that some mail could not be
+    /// read or saved, or nothing. A message Mail gives with no source, or not at all, ends no
+    /// pass, and later passes read it again. A pass that Projects, the confirm or Mail ended
+    /// says nothing, since the window says why on its own.
     nonisolated static func scanState(after pass: MailScan.Pass, saveFailed: Bool) -> ScanState? {
         guard pass.skipped == nil else { return nil }
         if saveFailed {
@@ -852,7 +855,8 @@ final class ProjectsRuntime {
         case .notAnswered?, .timedOut?: return .mailIsSlow
         case .denied?, .notAsked?: return .notAllowed
         case .notFound?, .changedWhileReading?, .unexpectedReply?, .failed?: return .failed
-        case .mailNotRunning?, nil: return nil
+        case .mailNotRunning?: return nil
+        case nil: return pass.unreadable > 0 ? .failed : nil
         }
     }
 

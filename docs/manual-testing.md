@@ -3311,11 +3311,11 @@ Projects Data and Start Reading Mail again first.
   email view shows it as a forwarded message, and its explanation uses what it says.
 
 What the Projects window says about mail, added on 2026-10-24, not verified yet.
-ProjectsRuntimeTests checks each line with a fake Mail, and also a save that fails and a
-list the store cannot read, which a person cannot easily cause. ProjectsWindowViewTests
-renders the lines to projects-mail-lines with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS.
-Check in a Debug build with the synthetic mail, as in the test guide, and with Mail open
-unless a check says otherwise:
+ProjectsRuntimeTests checks each line with a fake Mail, and also a save that fails, a
+message Mail gives with no source and a list the store cannot read, which a person cannot
+easily cause. ProjectsWindowViewTests renders the lines to projects-mail-lines with
+TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. Check in a Debug build with the synthetic
+mail, as in the test guide, and with Mail open unless a check says otherwise:
 
 - [ ] Delete All Projects Data, then Start Reading Mail. Until the first emails are saved,
   Needs a Project shows Reading mail… in its middle, never No Mail. Each batch then shows
@@ -3326,6 +3326,8 @@ unless a check says otherwise:
   project. Dictate meanwhile: Paused while you dictate. shows too.
 - [ ] Quit Mail. A list with no mail says Mail is not open. Projects reads new mail while
   Mail runs. Open Mail again: Reading mail… shows while Projects reads back, then nothing.
+  If Mail is slow to answer. shows right after Mail opens, note it, since Projects then
+  waits two minutes before it asks Mail again.
 - [ ] Turn Mail off for Orra in Privacy & Security, Automation. Within a few minutes the
   window says Orra is not allowed to read Mail yet. Allow it in Settings., and Settings…
   opens the Projects page. Turn Mail on again and open that page: the line goes, and
@@ -3333,6 +3335,11 @@ unless a check says otherwise:
 - [ ] Run `kill -STOP $(pgrep -x Mail)` and wait two minutes. The window says Mail is slow
   to answer. Projects tries again later., with Try Again. Run `kill -CONT $(pgrep -x Mail)`
   and click Try Again: Projects reads at once, and the line goes.
+- [ ] Choose a mailbox On My Mac that holds a synthetic email, let Projects read it, then
+  rename the mailbox in Mail. Within a minute the window says Some mail could not be
+  read., with Try Again. The line stays as it is, and Reading mail… does not show each
+  minute. Rename the mailbox back: the line goes within a minute, or at once with Try
+  Again.
 - [ ] An empty project shows No Mail with Choose an email in Needs a Project and move it
   here with Move To. Set Aside and Needs a Project show No Mail alone once all is read and
   sorted.
