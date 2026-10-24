@@ -209,6 +209,12 @@ final class SortingService {
 
     // MARK: Sorting
 
+    /// The batches not finished yet: the one under way and those waiting for it. Tests wait
+    /// on it to know that a batch they started waits.
+    var unfinishedBatches: Int {
+        batches.count
+    }
+
     /// Sorts new emails, oldest first, after the batch under way. Returns once they are
     /// saved, or when the caller's task is cancelled or `stop()` is called. The email under
     /// way then is not saved.

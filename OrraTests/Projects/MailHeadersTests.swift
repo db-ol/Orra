@@ -135,6 +135,33 @@ struct MailHeadersTests {
         ])
     }
 
+    /// A check that must see every address Mail may reply to counts the entries not read
+    /// exactly: one left out, and one with a second address in angle brackets or text after
+    /// the one. Empty entries and groups without members do not count.
+    @Test func entriesNotReadExactlyAreCounted() {
+        let mixed = MailAddressHeader.read(
+            #""Tan, Mei" <Mei.Tan@Orchard.example>, lu@orchard.example (Lu Wen), Team: a@x.example, B@X.example;, "#
+                + #"=?UTF-8?B?6aG+6L+c?= <theo@studio.example>, not an address, <broken@>"#)
+        #expect(mixed.mailboxes.count == 5)
+        #expect(mixed.unclear == 2)
+        #expect(MailAddressHeader.read("Mei <mei@harbor.example> (Mei Tan), , undisclosed-recipients:;, lu@orchard.example,").unclear == 0)
+        let unclear = [
+            #""mallory x"@other.example"#, "mallory@[192.0.2.1]", "mallory@other.example.", "<>",
+            "<mallory@other.example> <mei@harbor.example>", "<mei@harbor.example> mallory@other.example",
+            #"<mei@harbor.example> "mallory@other.example""#, "<mei@harbor.example>: mallory@other.example",
+        ]
+        for value in unclear {
+            #expect(MailAddressHeader.read("lu@orchard.example, " + value).unclear == 1, "\(value)")
+        }
+        let many = (0...1_000).map { "p\($0)@harbor.example" }.joined(separator: ", ")
+        #expect(MailAddressHeader.read(many).mailboxes.count == 1_000)
+        #expect(MailAddressHeader.read(many).unclear == 1)
+        let headers = MailHeaders(parsing: "To: lu@orchard.example\r\nCc: lu@orchard.example\r\nCc: mallory@other.example.\r\n")
+        #expect(headers.exactAddresses("To")?.map(\.address) == ["lu@orchard.example"])
+        #expect(headers.exactAddresses("Cc") == nil)
+        #expect(headers.exactAddresses("Reply-To") == [])
+    }
+
     @Test func addressFieldsOfAMessage() {
         let headers = MailHeaders(parsing: """
             From: Noor Saleh <noor.saleh@harbor.example>

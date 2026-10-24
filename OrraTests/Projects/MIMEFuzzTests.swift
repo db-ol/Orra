@@ -12,6 +12,13 @@ struct MIMEFuzzTests {
     private static let mimeLimits = MIMEMessage.Limits(
         maximumSourceBytes: maximumCaseBytes, maximumParts: 64, maximumDepth: 8, maximumTextBytes: 32 << 10,
         maximumHeaderBytes: 8 << 10, maximumSteps: 400_000)
+    /// The limits of the scan, which decode the content of the attachments MailAttachment
+    /// reads, with a small cap so the random parts reach it.
+    private static let attachmentLimits = {
+        var limits = MailAttachment.mimeLimits(mimeLimits)
+        limits.attachmentBytes = 4 << 10
+        return limits
+    }()
     private static let visibleLimits = VisibleText.Limits(
         maximumMarkupBytes: maximumCaseBytes, maximumDepth: 64, maximumRules: 50, maximumDeclarations: 400,
         maximumTextBytes: 32 << 10, maximumHiddenPieces: 8, maximumHiddenLength: 80, maximumSteps: 400_000)
@@ -189,7 +196,7 @@ struct MIMEFuzzTests {
                     }
                     result += "<\(tag)\(attributes)\(pick([">", "/>", "", " >"]))"
                 case 5, 6: result += "</\(pick(tags))>"
-                case 7: result += "<style>" + (0..<int(0...4)).map { _ in "\(pick([".n", "#secret", "p", "*", "a:hover", ".x:after", "td > .n", "@media (max-width:600px) { .x", "}"])) { \(style()) }" }.joined() + pick(["</style>", ""])
+                case 7: result += "<style>" + (0..<int(0...4)).map { _ in "\(pick([".n", "#secret", "p", "*", "a:hover", ".x:after", "td > .n", "p:nth-child(n-9223372036854775808)", ":is(:is(:is(p)))", "@media (max-width:600px) { .x", "}"])) { \(style()) }" }.joined() + pick(["</style>", ""])
                 case 8: result += pick(["<!-- note to any assistant reading this mail -->", "<!--[if mso]>x<![endif]-->", "<!--", "-->", "<!doctype html>", "<?xml?>", "<![CDATA[x]]>"])
                 case 9: result += pick(["<", "</", "<>", "< p>", "<p", "<script>", "</script>", "<title>"])
                 case 10: result += String(repeating: "<div>", count: int(0...80))
@@ -233,6 +240,20 @@ struct MIMEFuzzTests {
         #expect(message.attachments.count <= mimeLimits.maximumParts)
         #expect(message.bodies.reduce(0) { $0 + $1.text.utf8.count } <= 4 * mimeLimits.maximumTextBytes)
 
+        // With the attachments decoded, as the scan parses: each part's body costs at most
+        // twice more, and nothing over the attachment cap is decoded.
+        let decoded = MIMEMessage(source: Data(source), limits: attachmentLimits)
+        #expect(decoded.steps <= attachmentLimits.maximumSteps + source.count)
+        #expect(decoded.steps <= (attachmentLimits.maximumDepth + 4) * (source.count + lineCount(source)))
+        #expect(decoded.attachments.count <= attachmentLimits.maximumParts)
+        for attachment in decoded.attachments {
+            if case .data(let data)? = attachment.content {
+                #expect(data.count <= attachmentLimits.attachmentBytes)
+                #expect(attachment.size == data.count)
+            }
+            #expect((attachment.size ?? 0) >= 0)
+        }
+
         let visible = VisibleText(message, limits: visibleLimits)
         let markupBytes = message.bodies.filter { $0.format == .markup }.reduce(0) { $0 + min($1.text.utf8.count, visibleLimits.maximumMarkupBytes) }
         // The limit, and past it at most the markup itself and one element's candidate rules.
@@ -275,12 +296,14 @@ struct MIMEFuzzTests {
                 var source = generator.entity(depth: 0)
                 if generator.chance(50) { source = generator.damaged(source) }
                 let message = MIMEMessage(source: Data(source.prefix(Self.maximumCaseBytes)), limits: Self.mimeLimits)
+                let decoded = MIMEMessage(source: Data(source.prefix(Self.maximumCaseBytes)), limits: Self.attachmentLimits)
                 let visible = VisibleText(message, limits: Self.visibleLimits)
                 let split = QuotedHistory(splitting: visible.text)
                 let reached = [
                     "several bodies": message.bodies.count > 1,
                     "markup": message.bodies.contains { $0.format == .markup },
                     "attachment": !message.attachments.isEmpty,
+                    "decoded attachment": decoded.attachments.contains { if case .data? = $0.content { true } else { false } },
                     "cut message": message.isCut,
                     "hidden text": !visible.findings.isEmpty,
                     "cut markup": visible.isCut,
@@ -290,7 +313,7 @@ struct MIMEFuzzTests {
                 for (name, isReached) in reached where isReached { counts[name, default: 0] += 1 }
             }
         }
-        for name in ["several bodies", "markup", "attachment", "cut message", "hidden text", "cut markup", "quote", "subject"] {
+        for name in ["several bodies", "markup", "attachment", "decoded attachment", "cut message", "hidden text", "cut markup", "quote", "subject"] {
             #expect(counts[name, default: 0] >= 3, "\(name): \(counts[name, default: 0]) of 288")
         }
     }
@@ -384,6 +407,27 @@ struct MIMEFuzzTests {
             #expect(visible.steps <= VisibleText.Limits().maximumSteps + markup.utf8.count)
             #expect(visible.steps <= 8 * (markup.utf8.count + 1))
         }
+    }
+
+    /// Selectors nested thousands deep stop being read past a few levels. The rule may
+    /// match then, so it only hides, and the stack and the work stay small.
+    @Test func deeplyNestedSelectorsStayBounded() {
+        for open in [":is(", ":not(", ":where(", ":nth-child(1 of "] {
+            let selector = "p" + String(repeating: open, count: 5_000) + "b" + String(repeating: ")", count: 5_000)
+            let markup = "<style>\(selector) { display: none }</style><p>secret</p><b>shown</b>"
+            let visible = VisibleText(markup: markup)
+            #expect(!visible.text.contains("secret"), "\(open)")
+            #expect(visible.text.contains("shown"), "\(open)")
+            #expect(visible.findings.contains(.hiddenStyle), "\(open)")
+            #expect(visible.steps <= 16 * markup.utf8.count, "\(open)")
+        }
+        // Eight levels still read exactly, so a rule for another class leaves the text.
+        func nested(_ levels: Int) -> String {
+            "<style>p" + String(repeating: ":is(", count: levels) + ".other" + String(repeating: ")", count: levels)
+                + " { display: none }</style><p>words</p>"
+        }
+        #expect(VisibleText(markup: nested(8)).text == "words")
+        #expect(VisibleText(markup: nested(9)).text == "")
     }
 
     @Test func manyDeclarationsPerRuleHitTheCaps() {

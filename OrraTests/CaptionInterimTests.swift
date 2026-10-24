@@ -144,14 +144,17 @@ struct CaptionInterimTests {
 
     @Test func aWaitingSentenceGoesBeforeInterimText() async throws {
         let models = FakeCaptionModels(["Hello everyone.", "Next slide please."])
-        // The first sentence's text takes long, while the next one is heard.
-        models.recognitionDelays = [.milliseconds(400)]
+        // The first sentence's text takes until the next one is heard. A delay of 400 ms
+        // stood for that, and on a busy test runner the feeding below took longer.
+        models.holdsFirstTranscription = true
         var reports: [CaptionSentence] = []
         let pipeline = CaptionPipeline(engines: models.engines(), interimInterval: 1) { reports.append($0) }
         try await feedLive(pipeline, CaptionAudio.silence(0.5) + CaptionAudio.tone(0.6) + CaptionAudio.silence(0.7) + CaptionAudio.tone(1.2))
         // The second sentence passed 1 s while the first was transcribed, so it got no
         // interim text, and the first is not held up by one.
+        try await eventually { models.isHolding }
         #expect(models.transcribed == 1)
+        models.letGo()
         try await eventually { reports.count == 2 }
         try await feedLive(pipeline, CaptionAudio.silence(1))
         await pipeline.finish()

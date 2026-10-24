@@ -11,6 +11,9 @@ nonisolated enum InsertionResult: Equatable, Sendable {
     /// A password field had the focus, so nothing was pasted and the pasteboard was left
     /// alone.
     case skippedPasswordField
+    /// Another app came to the front while the old contents were read, so nothing was
+    /// pasted and the pasteboard was left alone.
+    case skippedAppChanged
     /// There was nothing to insert.
     case nothingToInsert
 }
@@ -21,7 +24,9 @@ nonisolated enum InsertionResult: Equatable, Sendable {
 /// The text goes on the pasteboard through ConcealedClipboard, concealed and kept on this
 /// Mac. The old contents come back only if nothing else changed the pasteboard meanwhile.
 /// Reading the old contents can wait on the app that copied them, so it happens off the
-/// main thread, where the keyboard tap runs.
+/// main thread, where the keyboard tap runs. Command V goes only to the app that was in
+/// front when the insert began. When another app comes to the front while the old contents
+/// are read, nothing is pasted and the pasteboard is left alone.
 ///
 /// Secure input does not stop the paste. It keeps other apps from reading keys, and
 /// posting Command V is reported to still work. It is one flag for the whole session, and
@@ -60,7 +65,7 @@ final class TextInserter {
         secureInputHolder: @escaping () -> pid_t?,
         frontmostApp: @escaping () -> pid_t?,
         focusedField: @escaping (pid_t) async -> FocusedField.Kind,
-        readSnapshot: @escaping (String) async -> PasteboardSnapshot = { await PasteboardSnapshot.read(pasteboardNamed: $0) },
+        readSnapshot: @escaping (String) async -> PasteboardSnapshot = { @Sendable name in await PasteboardSnapshot.read(pasteboardNamed: name) },
         keyCodeForV: @escaping () -> CGKeyCode,
         restoreDelay: Duration = .milliseconds(500)
     ) {
@@ -88,13 +93,19 @@ final class TextInserter {
     @discardableResult
     func insert(_ text: String) async -> InsertionResult {
         guard !text.isEmpty else { return .nothingToInsert }
+        // The app that gets the paste. The controller checked it just before, with nothing
+        // to wait for in between.
+        let app = frontmostApp()
         // If the previous dictation is still waiting to restore, keep its snapshot. A new
         // one would only capture Orra's own text.
         let readsSnapshot = pendingSnapshot == nil
         var snapshot = if let pendingSnapshot { pendingSnapshot } else { await readPasteboard() }
-        // Asked right before the paste, because reading the old contents can take a while
-        // and the focus can move into a password field meanwhile. A skip leaves an earlier
-        // dictation's restore alone.
+        // Reading the old contents can take a while, and the user can switch apps
+        // meanwhile. Checked before the field, so the app that came to the front is never
+        // asked about its field. A skip leaves an earlier dictation's restore alone.
+        guard frontmostApp() == app else { return .skippedAppChanged }
+        // Asked right before the paste, because the focus can also move into a password
+        // field while the old contents are read.
         if await skipsPaste() {
             return .skippedPasswordField
         }
@@ -102,6 +113,8 @@ final class TextInserter {
             // Something was copied while Orra asked about the field.
             snapshot = await readPasteboard()
         }
+        // Nothing waits from here to Command V.
+        guard frontmostApp() == app else { return .skippedAppChanged }
         restoreTask?.cancel()
         pendingSnapshot = nil
 
@@ -143,6 +156,16 @@ final class TextInserter {
     }
 }
 
+/// Where Orra reads the pasteboard off the main thread, where the keyboard tap runs. Asking
+/// for data the copying app has not provided yet waits for that app, up to two minutes
+/// when it hangs. NSPasteboard must not be used from two threads at once, so the paste's
+/// read of the old contents and the menu's read of the copied word run here one after the
+/// other.
+@globalActor
+actor PasteboardAccess {
+    nonisolated static let shared = PasteboardAccess()
+}
+
 /// A copy of everything on a pasteboard, so it can be put back.
 nonisolated struct PasteboardSnapshot: Sendable {
     nonisolated struct Entry: Sendable {
@@ -155,8 +178,8 @@ nonisolated struct PasteboardSnapshot: Sendable {
     let items: [[Entry]]
 
     /// Reads every type of every item. Asking for data the copying app has not provided
-    /// yet waits for that app, so this runs off the main actor.
-    @concurrent
+    /// yet waits for that app, so this runs on PasteboardAccess, off the main actor.
+    @PasteboardAccess
     static func read(pasteboardNamed name: String) async -> PasteboardSnapshot {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name(name))
         let changeCount = pasteboard.changeCount

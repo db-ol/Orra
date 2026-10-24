@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// The Projects window, which Projects… in the menu opens while Projects is on. AppKit, like
-/// the welcome window, since an accessory app cannot open a SwiftUI window from AppKit code.
+/// The Projects window, which Open Projects Window opens while Projects is on: in the menu
+/// bar menu, the Dock menu and the Projects page of Settings. AppKit, like the welcome
+/// window, since an accessory app cannot open a SwiftUI window from AppKit code.
 ///
 /// While it is open it holds the cleanup model, and closing it lets the model go and ends
 /// the background work, see ProjectsRuntime.windowOpened(). Orra shows in the Dock while it
@@ -34,9 +35,11 @@ final class ProjectsWindow {
         self.openSettings = openSettings
     }
 
-    /// Brings the window to the front, while Projects is on.
+    /// Brings the window to the front, while Projects is on, see
+    /// ProjectsRuntime.canOpenWindow. It takes the model once Projects runs, see
+    /// ProjectsRuntime.windowOpened().
     func show() {
-        guard runtime.showsMenuItem else { return }
+        guard runtime.canOpenWindow else { return }
         let window = self.window ?? makeWindow()
         self.window = window
         willShow()

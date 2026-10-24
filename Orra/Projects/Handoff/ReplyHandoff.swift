@@ -9,9 +9,10 @@ import os
 /// MailBridge.reply. Then, while Orra is still in front, the draft goes on the clipboard
 /// again and Mail comes to the front through NSRunningApplication's activate on Mail's
 /// process, not through an Apple Event of its own (decision 19), and the user presses
-/// Command V. While Mail does not run, Open Reply only copies and says so, since Orra never
-/// opens Mail. When the reply fails, the draft stays on the clipboard. Copy only puts the
-/// draft on the clipboard.
+/// Command V. When the window closes while Mail makes the reply, the reply window still
+/// opens, but the clipboard and Mail stay as they are. While Mail does not run, Open Reply
+/// only copies and says so, since Orra never opens Mail. When the reply fails, the draft
+/// stays on the clipboard. Copy only puts the draft on the clipboard.
 ///
 /// The window runs one handoff at a time. It turns off Open Reply, Reply All and Copy while
 /// one runs, so the clipboard holds the draft of the reply window that Mail brings forward.
@@ -27,8 +28,8 @@ struct ReplyHandoff {
     /// What a handoff did, for the window to say. None holds mail data.
     nonisolated enum Outcome: Equatable, Sendable {
         /// Mail opened the reply window. The draft went on the clipboard, and while Orra was
-        /// still in front it went there again and Mail was asked to come to the front. The
-        /// window says to press Command V there.
+        /// still in front and the window open it went there again and Mail was asked to come
+        /// to the front. The window says to press Command V there.
         case replyOpened
         /// The draft is on the clipboard and nothing else happened: Copy, or Open Reply ended
         /// before Mail was asked, such as when the window closed.
@@ -88,6 +89,13 @@ struct ReplyHandoff {
             // mailNotRunning here means that Mail quit before it answered.
             let error = error as? MailBridgeError ?? .failed(code: (error as NSError).code)
             return error == .mailNotRunning ? .copiedMailNotRunning : .copiedReplyFailed(error)
+        }
+        // The window closed while Mail made the reply, such as when the user closed it or
+        // Projects turned off. Mail was asked, so the reply window opens, but the clipboard
+        // and Mail stay as they are.
+        guard !Task.isCancelled else {
+            Logger.projects.info("Reply handoff: the window closed, Mail stays where it is")
+            return .replyOpened
         }
         // A reply can take seconds. When the user went to another app meanwhile, Orra leaves
         // the clipboard and Mail as they are, so a copy made there is kept and Mail never

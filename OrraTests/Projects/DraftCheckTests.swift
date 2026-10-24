@@ -188,6 +188,31 @@ struct DraftCheckTests {
         #expect(result.draft == "Nadia Frost, write to bai.lu@lumenhaus.example, not [project data removed].\n\n白露")
     }
 
+    /// Addresses in the files and the other mail are project data, as the names there are,
+    /// unless the incoming mail already holds them.
+    @Test func addressesFromTheSourcesDoNotGoToSomeoneOutside() async {
+        let draft = "Hi Nadia, please write to helpdesk@internal.example."
+        let sources = ["Scheduling desk: ｈｅｌｐｄｅｓｋ@internal.example"]
+        let result = await check(draft, sources: sources)
+        #expect(result.draft == "Hi Nadia, please write to [project data removed].")
+        #expect(removed(result) == ["projectData: helpdesk@internal.example"])
+
+        let inside = await check(draft, to: [Self.owen], sources: sources)
+        #expect(inside.draft == draft)
+        let known = await check(draft, incoming: "Write to Helpdesk@Internal.example.", sources: sources)
+        #expect(known.draft == draft)
+    }
+
+    /// Only a whole address in the incoming mail counts as known, not one inside a longer
+    /// address.
+    @Test func aLongerAddressInTheMailDoesNotFreeAProjectPersonsAddress() async {
+        let draft = "Hi Nadia, ask owen@pike-build.example."
+        let result = await check(draft, incoming: "I wrote to bowen@pike-build.example and mary-owen@pike-build.example.")
+        #expect(result.draft == "Hi Nadia, ask [project data removed].")
+        let known = await check(draft, incoming: "I wrote to bowen@pike-build.example and Owen@pike-build.example.")
+        #expect(known.draft == draft)
+    }
+
     // MARK: Links
 
     /// A tracking image and a link (a24) go, with any reader. The window shows each by its

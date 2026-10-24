@@ -91,7 +91,7 @@ Orra solo busca una versión nueva después de que se lo permites, y solo la ins
 
 - **[Descarga Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**, la versión más reciente, ábrelo y arrastra Orra a la carpeta Aplicaciones. Las versiones anteriores y las notas de la versión están en [la página de versiones](https://github.com/db-ol/Orra/releases).
 - **Orra Microphone**, opcional, para Leer traducciones a los demás: descarga [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg), firmado y notariado, y ábrelo para instalarlo. [Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md) (en inglés) explica cómo quitarlo o compilarlo por tu cuenta.
-- Requiere una Mac con Apple Chip y macOS 15.6 o posterior, y unos 3 GB de espacio disponible en el disco, más 2.8 GB para el modelo local opcional, que limpia y traduce, y unos 2 GB para el modelo de síntesis de voz opcional de Leer traducciones a los demás.
+- Requiere una Mac con Apple Chip y macOS 15.6 o posterior, y unos 3 GB de espacio disponible en el disco, más 3.05 GB para el modelo local opcional, que limpia y traduce, y unos 2 GB para el modelo de síntesis de voz opcional de Leer traducciones a los demás.
 - La app está firmada con un Developer ID y notariada por Apple, así que se abre sin advertencias.
 - No está en la Mac App Store, porque el entorno aislado (sandbox) de la App Store no permite que una app detecte una tecla en otras apps ni pegue texto en ellas.
 

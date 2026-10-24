@@ -184,6 +184,97 @@ struct ProjectsSwitchTests {
         #expect(!FileManager.default.fileExists(atPath: storage.folder.path))
     }
 
+    /// While the Projects page shows, it measures now and again after each wait, so the Data
+    /// row follows what the scan and the index write meanwhile (seen on 2026-10-20: the row
+    /// said Nothing after the scan had saved 105 emails). It ends with its task.
+    @Test func theDataRowFollowsWhatProjectsWritesWhileThePageShows() async throws {
+        defer { cleanUp() }
+        let projects = makeSwitch()
+        projects.turnOn()
+        var waits: [Duration] = []
+        var shown: [Int64?] = []
+        await projects.followStorage(every: .seconds(5)) { interval in
+            waits.append(interval)
+            shown.append(projects.storedBytes)
+            switch waits.count {
+            // Projects started and the scan saved mail while the page showed.
+            case 1: try storeData(bytes: 1_000)
+            case 2: try storeData(bytes: 3_000)
+            // The page went away.
+            default: throw CancellationError()
+            }
+        }
+        #expect(shown == [0, 1_000, 3_000])
+        #expect(projects.storedBytes == 3_000)
+        #expect(waits == [.seconds(5), .seconds(5), .seconds(5)])
+        #expect(ProjectsSwitch.storageRefresh == .seconds(5))
+    }
+
+    /// While Projects is off nothing writes, so the page looks once and stops.
+    @Test func whileProjectsIsOffTheDataRowLooksOnce() async throws {
+        defer { cleanUp() }
+        try storeData(bytes: 2_000)
+        let projects = makeSwitch()
+        var waits = 0
+        await projects.followStorage { _ in
+            waits += 1
+            throw CancellationError()
+        }
+        #expect(waits == 0)
+        #expect(projects.storedBytes == 2_000)
+    }
+
+    /// No look starts while a delete runs, since the delete measures on its own once it is
+    /// done.
+    @Test func theDataRowDoesNotLookWhileADeleteRuns() async throws {
+        defer { cleanUp() }
+        try storeData(bytes: 1_000)
+        let projects = makeSwitch()
+        projects.turnOn()
+        let (closing, closed) = AsyncStream.makeStream(of: Void.self)
+        let (released, release) = AsyncStream.makeStream(of: Void.self)
+        projects.closeBeforeDelete = {
+            closed.yield()
+            for await _ in released { break }
+        }
+        let deleting = Task { await projects.deleteAllData() }
+        for await _ in closing { break }
+        try #require(projects.isDeleting)
+        var waits = 0
+        await projects.followStorage { _ in
+            waits += 1
+            throw CancellationError()
+        }
+        #expect(waits == 1)
+        #expect(projects.storedBytes == nil)
+        release.yield()
+        await deleting.value
+        #expect(projects.storedBytes == 0)
+        #expect(!projects.deleteFailed)
+    }
+
+    /// A look that a delete overtook drops what it found, so it never brings back the size
+    /// from before the delete. The look reads the disk off the main actor, and the delete
+    /// begins on the main actor before the look comes back.
+    @Test(.timeLimit(.minutes(1))) func aLookThatADeleteOvertookDropsWhatItFound() async throws {
+        defer { cleanUp() }
+        try storeData(bytes: 1_000)
+        let projects = makeSwitch()
+        projects.turnOn()
+        let (released, release) = AsyncStream.makeStream(of: Void.self)
+        projects.closeBeforeDelete = {
+            for await _ in released { break }
+        }
+        let look = Task { await projects.measureStorage() }
+        let deleting = Task { await projects.deleteAllData() }
+        await look.value
+        #expect(projects.isDeleting)
+        #expect(projects.storedBytes == nil)
+        release.yield()
+        await deleting.value
+        #expect(projects.storedBytes == 0)
+    }
+
     /// Delete All Projects Data leaves the switch as it is.
     @Test func deletingAllDataKeepsTheSwitch() async throws {
         defer { cleanUp() }

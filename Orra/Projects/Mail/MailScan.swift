@@ -21,11 +21,13 @@ import os
 ///   known before the pass. A pass that ends midway, for any cause, leaves the next one to
 ///   read back to the days again, and so does one that left a message unread, a few times.
 /// - For each new message it reads the raw source and parses it off the main actor with
-///   MIMEMessage, VisibleText and QuotedHistory. Mail's `content` is never read. A message
-///   over `largestSource` bytes by the listing's size is too large: only its headers and
-///   its attachments' names and types are read. Of attachments only names and types are
-///   kept (decision 14). A message Mail cannot give, or gives with no source, is not saved,
-///   and a later pass reads it again.
+///   MIMEMessage, VisibleText and QuotedHistory. Mail's `content` is never read. The text
+///   of its attachments comes from the MIME parts of that source, see MailAttachment. A
+///   message over `largestSource` bytes by the listing's size is too large: only its
+///   headers and its attachments' names, types and sizes are read. A message Mail cannot
+///   give, or gives with no source, is not saved, and a later pass reads it again.
+/// - Dictation goes first: parsing a message and reading each of its attachments wait
+///   while the user dictates, and a pass runs at utility priority, as background work.
 /// - It saves the new messages of each range through a closure, and asks which messages
 ///   are known through another, so it never waits for the store and tests pass fakes.
 /// - It polls every minute. When Mail does not answer (-600 while it runs), times out
@@ -37,13 +39,6 @@ import os
 ///
 /// Logs counts, times and error codes only.
 final class MailScan {
-    /// An attachment as the scan keeps it: its name and type, never its content.
-    nonisolated struct Attachment: Sendable, Equatable {
-        var name: String
-        /// The MIME type in lowercase, such as application/pdf.
-        var mimeType: String
-    }
-
     /// A new message, read and parsed.
     nonisolated struct Message: Sendable, Equatable {
         /// Mail's handle of the message, in the mailbox it was read in. It holds for this
@@ -70,15 +65,16 @@ final class MailScan {
         var inReplyTo: [String]
         var references: [String]
         var list: ListMail
-        /// The attachments that have a file name, in the order of their parts.
-        var attachments: [Attachment]
+        /// The attachments that have a file name, in the order of their parts, with the text
+        /// of those MailAttachment reads.
+        var attachments: [MailAttachment]
         /// The size in bytes, as Mail counts it.
         var size: Int
         /// The text a reader sees and the text the email hides. Nil for a message over
         /// `largestSource`, whose source is never read.
         var visible: VisibleText?
-        /// The visible text split into the email's own text, its quoted history and its
-        /// signature. Nil when `visible` is.
+        /// The visible text split into the email's own text, its quoted history, its
+        /// signature and the messages it forwards. Nil when `visible` is.
         var history: QuotedHistory?
 
         var isTooLarge: Bool {
@@ -149,6 +145,8 @@ final class MailScan {
     nonisolated static let pollInterval = Duration.seconds(60)
     /// The longest wait while Mail does not answer (a guess).
     nonisolated static let longestWait = Duration.seconds(30 * 60)
+    /// How often the scan looks whether a dictation ended, as the folder index does.
+    nonisolated static let dictationPoll = Duration.milliseconds(100)
 
     /// The order of a mailbox's positions.
     nonisolated enum Order: Sendable, Equatable {
@@ -177,6 +175,7 @@ final class MailScan {
     private let save: ([Message]) async -> Void
     private let ownerOverride: SortingService.Owner?
     private let isOn: () -> Bool
+    private let isDictating: () -> Bool
     private let now: () -> Date
     private let sleep: (Duration) async throws -> Void
     private var progress: [MailMailbox: Progress] = [:]
@@ -193,6 +192,8 @@ final class MailScan {
     ///   - ownerOverride: the user's addresses and name in a Debug build that sets them, so
     ///     Mail's accounts are never read.
     ///   - isOn: whether Projects is on.
+    ///   - isDictating: whether a dictation runs, from the press of a key until it is pasted
+    ///     or cancelled, see EngineTurns.isDictating.
     ///   - now: the time, which the days count back from.
     ///   - sleep: waits between passes, Task.sleep in the app.
     init(
@@ -202,6 +203,7 @@ final class MailScan {
         save: @escaping ([Message]) async -> Void,
         ownerOverride: SortingService.Owner? = nil,
         isOn: @escaping () -> Bool,
+        isDictating: @escaping () -> Bool = { false },
         now: @escaping () -> Date = Date.init,
         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
@@ -211,6 +213,7 @@ final class MailScan {
         self.save = save
         self.ownerOverride = ownerOverride
         self.isOn = isOn
+        self.isDictating = isDictating
         self.now = now
         self.sleep = sleep
     }
@@ -224,7 +227,7 @@ final class MailScan {
         let sleep = self.sleep
         // The loop holds the scan only during a pass, so a scan let go without `stop()`
         // ends its loop at the next wake.
-        loop = Task { [weak self] in
+        loop = Task(priority: .utility) { [weak self] in
             var wait = MailScan.pollInterval
             while !Task.isCancelled, let pass = await self?.scan() {
                 wait = MailScan.wait(after: pass.error, previous: wait)
@@ -306,7 +309,7 @@ final class MailScan {
         guard current == nil else {
             return Pass(skipped: .busy)
         }
-        let task = Task { await self.readMailboxes() }
+        let task = Task(priority: .utility) { await self.readMailboxes() }
         current = task
         let pass = await withTaskCancellationHandler {
             await task.value
@@ -566,37 +569,54 @@ final class MailScan {
         // (unverified). Saved, it would stay known with no text.
         guard !source.isEmpty else { throw MailBridgeError.unexpectedReply }
         pass.read += 1
-        return await Self.parsed(source: source, listing: listing)
+        await waitWhileDictating()
+        return await Self.parsed(source: source, listing: listing) { [weak self] in
+            await self?.waitWhileDictating()
+        }
+    }
+
+    /// Returns once no dictation runs, or once the pass is cancelled.
+    private func waitWhileDictating() async {
+        while isDictating() && !Task.isCancelled {
+            try? await sleep(Self.dictationPoll)
+        }
     }
 
     // MARK: Parsing
 
-    /// Parses a source off the main actor, since a large message takes a while.
+    /// Parses a source off the main actor, since a large message takes a while, and reads
+    /// the text of its attachments from their parts, each once `waitWhileDictating` returns.
     @concurrent
-    nonisolated static func parsed(source: String, listing: MailListing) async -> Message {
-        let mime = MIMEMessage(source: source)
+    nonisolated static func parsed(
+        source: String,
+        listing: MailListing,
+        waitWhileDictating: @Sendable () async -> Void = {}
+    ) async -> Message {
+        let mime = MIMEMessage(source: source, limits: MailAttachment.mimeLimits())
         let visible = VisibleText(mime)
-        let attachments = mime.attachments.compactMap { part -> Attachment? in
-            guard let name = part.name, !name.isEmpty else { return nil }
-            return Attachment(name: name, mimeType: part.mimeType)
-        }
+        let date = mime.headers.date ?? listing.dateReceived ?? .distantPast
+        let attachments = await MailAttachment.read(mime.attachments, modified: date, waitWhileDictating: waitWhileDictating)
         return message(listing, headers: mime.headers, attachments: attachments, visible: visible)
     }
 
     /// A message that is too large, from its headers and Mail's list of its attachments.
     @concurrent
     nonisolated static func parsed(headers: String, attachments: [MailAttachmentInfo], listing: MailListing) async -> Message {
-        let named = attachments.filter { !$0.name.isEmpty }.map { Attachment(name: $0.name, mimeType: $0.mimeType) }
+        let named = attachments.filter { !$0.name.isEmpty }.map { attachment in
+            MailAttachment(name: attachment.name, type: attachment.mimeType, size: attachment.size,
+                           state: attachment.isDownloaded ? .emailTooLarge : .notDownloaded)
+        }
         return message(listing, headers: MailHeaders(parsing: headers), attachments: named, visible: nil)
     }
 
-    private nonisolated static func message(_ listing: MailListing, headers: MailHeaders, attachments: [Attachment], visible: VisibleText?) -> Message {
+    private nonisolated static func message(_ listing: MailListing, headers: MailHeaders, attachments: [MailAttachment], visible: VisibleText?) -> Message {
         func listed(_ addresses: [String]) -> [MailAddressHeader] {
             addresses.map { MailAddressHeader(name: "", address: $0) }
         }
         let from = headers.from
         let to = headers.to
         let cc = headers.cc
+        let subject = listing.subject.isEmpty ? headers.subject ?? "" : listing.subject
         return Message(
             reference: listing.message,
             messageID: listing.messageID,
@@ -607,7 +627,7 @@ final class MailScan {
             replyTo: headers.replyTo,
             to: to.isEmpty ? listed(listing.to) : to,
             cc: cc.isEmpty ? listed(listing.cc) : cc,
-            subject: listing.subject.isEmpty ? headers.subject ?? "" : listing.subject,
+            subject: subject,
             inReplyTo: headers.inReplyTo,
             references: headers.references,
             list: ListMail(
@@ -618,7 +638,8 @@ final class MailScan {
             attachments: attachments,
             size: listing.size,
             visible: visible,
-            history: visible.map { QuotedHistory(splitting: $0.text) }
+            // The subject tells a forward that Outlook writes like a reply.
+            history: visible.map { QuotedHistory(splitting: $0.text, subject: subject) }
         )
     }
 

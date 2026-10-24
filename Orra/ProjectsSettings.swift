@@ -7,6 +7,11 @@ import SwiftUI
 /// access with the mailboxes Projects reads, whether the talk key's words change the draft
 /// as soon as the dictation ends, and what it keeps on this Mac with a way to delete it.
 ///
+/// While Projects is on, the page opens with Open Projects Window, and its title is Projects
+/// Settings, so it is not taken for the Projects window itself. The window also opens by
+/// itself once setting up is done here: when the user confirms the mailbox choice, or turns
+/// Projects on with a choice confirmed before. Never at launch.
+///
 /// The page sits outside Orra/Projects, since it is the one place where Projects may link to
 /// the privacy page and to System Settings. Code in Orra/Projects never opens a URL. The page
 /// is compiled in every build, so Xcode keeps its strings in the catalog.
@@ -16,12 +21,21 @@ struct ProjectsSettings: View {
     /// Mail access and the mailboxes Projects reads, nil where the page is shown without
     /// them, which leaves out the parts about Mail.
     var mail: MailAccess? = nil
+    /// Opens the Projects window, nil where the page is shown without it, which leaves out
+    /// its button and never opens the window.
+    var openWindow: (() -> Void)? = nil
     @State private var isConfirmingDelete = false
     @State private var isAskingKeepOrDelete = false
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         Form {
+            if projects.isOn, let openWindow {
+                WindowSection(openWindow: openWindow)
+                    // Delete All Projects Data stops Projects and closes the window while
+                    // the switch stays on.
+                    .disabled(projects.isDeleting)
+            }
             Section {
                 Toggle(isOn: Binding(
                     get: { projects.isOn },
@@ -82,7 +96,7 @@ struct ProjectsSettings: View {
                 MailAccessSection(mail: mail) {
                     openURL(Self.automationSettings)
                 }
-                MailboxesSection(mail: mail)
+                MailboxesSection(mail: mail, openWindow: openWindow)
             }
             if projects.isOn {
                 Section {
@@ -121,9 +135,12 @@ struct ProjectsSettings: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Projects")
-        .task {
-            await projects.measureStorage()
+        // Not Projects, the title of the Projects window, so the two are not mistaken.
+        .navigationTitle("Projects Settings")
+        // What Projects keeps grows while the page shows and Projects is on, as the scan
+        // saves mail and the index reads folders, so the Data row looks again on its own.
+        .task(id: projects.isOn) {
+            await projects.followStorage()
         }
         // Lists Mail's mailboxes each time the page shows while Projects is on, and when
         // Projects turns on here.
@@ -204,6 +221,7 @@ struct ProjectsSettings: View {
         guard projects.canTurnOn, !projects.isDeleting else { return }
         if cleanup.turnOnProjects() {
             projects.turnOn()
+            openWindowAfterTurningOn()
         }
     }
 
@@ -213,8 +231,20 @@ struct ProjectsSettings: View {
         projects.turnOn()
         if projects.isOn {
             cleanup.confirmProjectsDownload()
+            openWindowAfterTurningOn()
         } else {
             cleanup.isConfirmingProjectsDownload = false
+        }
+    }
+
+    /// Opens the Projects window after the user turned Projects on here, only when they
+    /// confirmed a mailbox choice before, as after turning Projects off and keeping the
+    /// data, since Projects reads mail at once then. Before the first confirm, the steps
+    /// that remain are on this page, so the window would only cover them. It opens then when
+    /// Start Reading Mail confirms the choice.
+    private func openWindowAfterTurningOn() {
+        if projects.isOn, mail?.choice.isConfirmed == true {
+            openWindow?()
         }
     }
 
@@ -278,6 +308,28 @@ struct ProjectsSettings: View {
         guard let bytes else { return String(localized: "Checking…") }
         guard bytes > 0 else { return String(localized: "Nothing") }
         return ModelInstaller.State.size(bytes)
+    }
+
+    /// The Projects window's own section at the top of the page while Projects is on, with
+    /// Open Projects Window, since the projects and the mail are in that window, not here.
+    private struct WindowSection: View {
+        let openWindow: () -> Void
+
+        var body: some View {
+            Section {
+                HStack(spacing: 12) {
+                    DescribedLabel(
+                        title: "Projects window",
+                        detail: "Your projects, with their mail, explanations and drafts, are in a window of their own. You can also open it from the Orra menu.",
+                        systemImage: "macwindow"
+                    )
+                    Spacer()
+                    Button("Open Projects Window", action: openWindow)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                }
+            }
+        }
     }
 
     /// The privacy page in the language of Orra's interface, English for any other.
@@ -420,6 +472,9 @@ struct ProjectsSettings: View {
     /// them is ticked, so the days and Start Reading Mail stay near.
     private struct MailboxesSection: View {
         let mail: MailAccess
+        /// Opens the Projects window once Start Reading Mail confirms the choice, where the
+        /// mail Projects reads shows. Nil where the page is shown without the window.
+        let openWindow: (() -> Void)?
         /// The groups the user opened or closed, by their place.
         @State private var expanded: [String: Bool] = [:]
 
@@ -493,7 +548,9 @@ struct ProjectsSettings: View {
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer()
                         Button("Start Reading Mail") {
-                            mail.startReading()
+                            if mail.startReading() {
+                                openWindow?()
+                            }
                         }
                         .disabled(!mail.canStartReading)
                     }
@@ -799,11 +856,14 @@ extension ProjectsSettings {
         }
 
         /// Start Reading Mail: confirms the choice, after which the scan reads the chosen
-        /// mailboxes while Mail runs.
-        func startReading() {
-            guard canStartReading else { return }
+        /// mailboxes while Mail runs. Returns whether it confirmed, so the page opens the
+        /// Projects window, where the mail shows.
+        @discardableResult
+        func startReading() -> Bool {
+            guard canStartReading else { return false }
             choice.confirm()
             Logger.projectsMail.notice("Mail choice confirmed: \(self.choice.mailboxes.count, privacy: .public) mailboxes, \(self.choice.days, privacy: .public) days")
+            return true
         }
 
         /// A mailbox's name in the picker: the inbox and the sent mailbox of all accounts in

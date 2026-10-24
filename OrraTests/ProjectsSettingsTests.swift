@@ -460,6 +460,43 @@ struct ProjectsSettingsTests {
         #expect(mail.asks.isEmpty)
     }
 
+    // MARK: The Projects window
+
+    /// Start Reading Mail says whether it confirmed the choice, so the page opens the
+    /// Projects window then, and only then: not before access is allowed and a mailbox is
+    /// ticked, not while Projects is off, and not a second time.
+    @Test func onlyTheConfirmOfStartReadingMailOpensTheWindow() async {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        var on = true
+        let access = access(isOn: { on })
+        await access.show()
+        // No mailbox ticked yet.
+        #expect(!access.startReading())
+        access.choose(Self.imported, true)
+        on = false
+        #expect(!access.startReading())
+        #expect(!access.choice.isConfirmed)
+        on = true
+        #expect(access.startReading())
+        #expect(access.choice.isConfirmed)
+        // Confirmed once, so the button is gone and nothing opens again.
+        #expect(!access.startReading())
+    }
+
+    /// Without access, Start Reading Mail confirms nothing and opens nothing, even with a
+    /// mailbox ticked.
+    @Test func withoutAccessStartReadingMailOpensNothing() async {
+        defer { cleanUp() }
+        mail.remembered = .denied
+        mail.listingError = .denied
+        let access = access(suggests: true)
+        await access.show()
+        #expect(access.isChosen(.inbox))
+        #expect(!access.startReading())
+        #expect(!access.choice.isConfirmed)
+    }
+
     /// Mail as a test plays it: whether it runs, what macOS answers when asked, what the
     /// bridge remembers, the mailboxes, and one mailbox with mail for the scan. Records the
     /// asks, the listings and the reads of mail.

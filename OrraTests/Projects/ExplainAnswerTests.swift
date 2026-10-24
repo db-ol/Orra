@@ -88,6 +88,14 @@ struct ExplainAnswerTests {
         #expect(answer.points[5].text == "己 [待确认：合计]")
     }
 
+    /// The text of an attachment is a source of its own.
+    @Test func anAttachmentIsASource() {
+        let answer = ExplainAnswer("Points:\n- The invoice is ¥4,960. [A1]\n- Delivery is in week 47. [a2, F1]", sources: ["this email", "A1", "A2", "F1"])
+        #expect(answer.points.map(\.sources) == [["A1"], ["A2", "F1"]])
+        #expect(answer.points.first?.text == "The invoice is ¥4,960.")
+        #expect(answer.unknownSources.isEmpty)
+    }
+
     @Test func theEmailLabelFollowsThePromptsTable() {
         let answer = read("Points:\n- The proof is late [本邮件]", Self.englishSources)
         #expect(answer.points.first?.sources == ["this email"])

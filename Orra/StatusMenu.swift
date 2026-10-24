@@ -139,11 +139,16 @@ struct StatusMenu: View {
             }
         }
 
-        // Projects, only while it is on, with the count of mail waiting for a reply. The
-        // section above draws the divider before it.
+        // Projects, only while it is on, with the count of mail waiting for a reply. It
+        // names the window it opens and carries the outline of the icon of Projects in
+        // Settings, as a symbol next to text, so it stands out among the lines of text. A
+        // heading of its own would draw a second divider next to the one the section above
+        // draws.
         if projects.showsMenuItem {
-            Button(ProjectsWindowText.menuTitle(replyDue: projects.replyDueCount)) {
+            Button {
                 showProjects()
+            } label: {
+                Label(ProjectsWindowText.menuTitle(replyDue: projects.replyDueCount), systemImage: "briefcase")
             }
             Divider()
         }
@@ -220,6 +225,20 @@ struct StatusMenu: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+}
+
+extension StatusMenu {
+    /// The Dock icon's menu while Projects is on: Open Projects Window, as in the menu bar
+    /// menu, so a user who looks in the Dock finds the window too. Nil while Projects is
+    /// off, which leaves macOS's own items alone.
+    static func dockMenu(projects: ProjectsRuntime, target: AnyObject, action: Selector) -> NSMenu? {
+        guard projects.showsMenuItem else { return nil }
+        let menu = NSMenu()
+        let item = NSMenuItem(title: ProjectsWindowText.menuTitle(replyDue: projects.replyDueCount), action: action, keyEquivalent: "")
+        item.target = target
+        menu.addItem(item)
+        return menu
     }
 }
 

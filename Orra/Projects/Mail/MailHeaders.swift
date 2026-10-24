@@ -131,6 +131,19 @@ nonisolated struct MailHeaders: Sendable, Equatable {
         values(name).flatMap(MailAddressHeader.list)
     }
 
+    /// The mailboxes of every field with this name, or nil when an entry was not read
+    /// exactly, see `MailAddressHeader.read(_:)`. For a check that must see every address
+    /// another reader such as Mail may take from the fields.
+    func exactAddresses(_ name: String) -> [MailAddressHeader]? {
+        var mailboxes: [MailAddressHeader] = []
+        for value in values(name) {
+            let read = MailAddressHeader.read(value)
+            guard read.unclear == 0 else { return nil }
+            mailboxes += read.mailboxes
+        }
+        return mailboxes
+    }
+
     /// The date the sender's client wrote, or nil when the Date field is missing or cannot
     /// be read.
     var date: Date? {
@@ -581,10 +594,21 @@ nonisolated struct MailAddressHeader: Sendable, Hashable {
     /// `ProjectsAddress.normalized(_:)` does not take is left out, and so is every entry
     /// past the first 1,000.
     static func list(_ value: String) -> [MailAddressHeader] {
+        read(value).mailboxes
+    }
+
+    /// The mailboxes of an address list, as `list(_:)` gives them, and how many entries were
+    /// not read exactly: those left out, and those with a second address in angle brackets
+    /// or text after the one, which another reader may take another address from. An empty
+    /// entry, as after a last comma, does not count.
+    static func read(_ value: String) -> (mailboxes: [MailAddressHeader], unclear: Int) {
         var result: [MailAddressHeader] = []
+        var unclear = 0
         var phrase = ""
         var angle: String?
         var comment = ""
+        // Whether the entry has more after its address in angle brackets.
+        var moreAfterAngle = false
         var index = value.startIndex
 
         func finish() {
@@ -592,10 +616,15 @@ nonisolated struct MailAddressHeader: Sendable, Hashable {
                 phrase = ""
                 angle = nil
                 comment = ""
+                moreAfterAngle = false
             }
             let bare = phrase.trimmingCharacters(in: .whitespaces)
             let addressText = angle ?? bare
-            guard result.count < maximumMailboxes, let address = ProjectsAddress.normalized(addressText) else { return }
+            guard result.count < maximumMailboxes, let address = ProjectsAddress.normalized(addressText) else {
+                if angle != nil || !bare.isEmpty { unclear += 1 }
+                return
+            }
+            if moreAfterAngle { unclear += 1 }
             var name = angle == nil ? "" : bare
             if name.isEmpty { name = comment }
             name = MailHeaders.decodedWords(name).split(whereSeparator: \.isWhitespace).joined(separator: " ")
@@ -606,6 +635,7 @@ nonisolated struct MailAddressHeader: Sendable, Hashable {
             let character = value[index]
             switch character {
             case "\"":
+                if angle != nil { moreAfterAngle = true }
                 var quoted = ""
                 var cursor = value.index(after: index)
                 while cursor < value.endIndex, value[cursor] != "\"" {
@@ -626,6 +656,7 @@ nonisolated struct MailAddressHeader: Sendable, Hashable {
                 index = end
                 continue
             case "<":
+                if angle != nil { moreAfterAngle = true }
                 let close = value[index...].firstIndex(of: ">") ?? value.endIndex
                 angle = String(value[value.index(after: index)..<close])
                 index = close < value.endIndex ? value.index(after: close) : close
@@ -637,12 +668,13 @@ nonisolated struct MailAddressHeader: Sendable, Hashable {
                 phrase = ""
                 comment = ""
             default:
+                if angle != nil, !character.isWhitespace { moreAfterAngle = true }
                 phrase.append(character)
             }
             index = value.index(after: index)
         }
         finish()
-        return result
+        return (result, unclear)
     }
 
     private static let maximumMailboxes = 1_000

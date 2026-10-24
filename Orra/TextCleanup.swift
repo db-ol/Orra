@@ -94,6 +94,9 @@ final class TextCleanup {
     /// True from the press of the talk key or the translation key until the dictation is over. No idle unload
     /// happens in between.
     @ObservationIgnored private var isDictating = false
+    /// True when the first holder of Projects came during a dictation, so its load waits
+    /// until the dictation is over, see `projectsStarted()`.
+    @ObservationIgnored private var projectsLoadWaitsForDictation = false
     /// Transcripts waiting for the load under way, resumed when it ends, when the last of
     /// cleanup and translation is turned off or when their wait is over.
     @ObservationIgnored private var loadWaiters: [Int: CheckedContinuation<Void, Never>] = [:]
@@ -231,9 +234,14 @@ final class TextCleanup {
         return true
     }
 
-    /// The dictation is over, pasted or not. Starts the idle timer.
+    /// The dictation is over, pasted or not. Loads the model for Projects when its first
+    /// holder came during the dictation, and starts the idle timer.
     func dictationEnded() {
         isDictating = false
+        if projectsLoadWaitsForDictation {
+            projectsLoadWaitsForDictation = false
+            loadForProjects()
+        }
         scheduleIdleUnload()
     }
 
@@ -393,11 +401,22 @@ final class TextCleanup {
     /// request of the user when it starts. Each holder gives it back with
     /// `projectsStopped()`. While one remains, the model is never unloaded for being idle.
     /// The first holder loads the model when it is in place, or again when it was unloaded
-    /// while idle. Without the model nothing is downloaded, and
-    /// `waitUntilLoadedForProjects()` says it is not there.
+    /// while idle. During a dictation that load waits until the dictation is over, so it
+    /// never competes with the speech model (AGENTS.md). Without the model nothing is
+    /// downloaded, and `waitUntilLoadedForProjects()` says it is not there.
     func projectsStarted() {
         projectsHolders += 1
         guard projectsHolders == 1 else { return }
+        guard !isDictating else {
+            projectsLoadWaitsForDictation = true
+            return
+        }
+        loadForProjects()
+    }
+
+    /// Loads the model for the holders of Projects, when it is in place and not loaded.
+    private func loadForProjects() {
+        guard projectsNeedModel else { return }
         let installed: URL? = if case .installed(let folder) = models.state { folder } else { nil }
         guard !modelNeededNow(loadingAgainFrom: installed, for: "Projects"), let installed, !isLoaded else { return }
         load(from: installed)
@@ -411,6 +430,7 @@ final class TextCleanup {
         guard projectsHolders > 0 else { return }
         projectsHolders -= 1
         guard projectsHolders == 0 else { return }
+        projectsLoadWaitsForDictation = false
         if needsModel {
             enqueue { [engine] in await engine.clearCache() }
             scheduleIdleUnload()
@@ -423,13 +443,14 @@ final class TextCleanup {
     private static let projectsCheckInterval: Duration = .milliseconds(100)
 
     /// Whether Projects can run a job on the model now. Waits while Orra looks for the
-    /// model on disk, at launch or after Try Again, and for a load under way, for as long
-    /// as they take, since no dictation waits for this. False when no holder of
-    /// `projectsStarted()` remains, when the model is not on this Mac, when it failed to
-    /// load, and at once when the task is cancelled.
+    /// model on disk, at launch or after Try Again, while a load waits for the end of a
+    /// dictation, and for a load under way, for as long as they take, since no dictation
+    /// waits for this. False when no holder of `projectsStarted()` remains, when the model
+    /// is not on this Mac, when it failed to load, and at once when the task is cancelled.
     func waitUntilLoadedForProjects() async -> Bool {
-        // A model found on disk loads for the holders, see `load(from:)`.
-        while projectsNeedModel, models.state == .checking {
+        // A model found on disk loads for the holders, see `load(from:)`, and one the
+        // holders wanted during a dictation loads after it, see `projectsStarted()`.
+        while projectsNeedModel, models.state == .checking || projectsLoadWaitsForDictation {
             guard (try? await sleep(Self.projectsCheckInterval)) != nil else { return false }
         }
         guard projectsNeedModel else { return false }

@@ -1,15 +1,17 @@
 import Foundation
+import UniformTypeIdentifiers
 
 /// The words of the Projects window and its menu item for the values Projects code returns,
 /// mapped to localized text in one place (plan section 2.8).
 nonisolated enum ProjectsWindowText {
-    /// The menu item that opens the window, with the count of mail waiting for a reply, in
-    /// the language of `locale`, Orra's own by default.
+    /// The menu item that opens the window, in the menu bar menu and the Dock menu, with the
+    /// count of mail waiting for a reply, in the language of `locale`, Orra's own by default.
+    /// It names the window, as the button on the Projects page of Settings does.
     static func menuTitle(replyDue: Int, locale: Locale = .interface) -> String {
         if replyDue > 0 {
-            String(localized: LocalizedStringResource("Projects (\(replyDue) to Reply)…", locale: locale))
+            String(localized: LocalizedStringResource("Open Projects Window (\(replyDue) to Reply)", locale: locale))
         } else {
-            String(localized: LocalizedStringResource("Projects…", locale: locale))
+            String(localized: LocalizedStringResource("Open Projects Window", locale: locale))
         }
     }
 
@@ -324,6 +326,48 @@ nonisolated enum ProjectsWindowText {
             let name = chunk.file.lastPathComponent
             guard let page = chunk.page else { return name }
             return String(localized: "\(name), page \(page)")
+        case .attachment(let name, _):
+            return name
+        }
+    }
+
+    /// What VoiceOver reads for a source's chip: its text, and for an attachment that it is
+    /// one, since its chip may show the name of a project file too.
+    static func sourceLabel(_ source: ProjectsEmailModel.Source) -> String {
+        guard case .attachment(let name, _) = source else { return Self.source(source) }
+        return String(localized: "Attachment \(name)")
+    }
+
+    /// An attachment's kind as Finder names it, such as PDF document, and its size, in the
+    /// language of `locale`.
+    static func attachmentKind(_ attachment: MailAttachment, locale: Locale = .interface) -> String {
+        let fileExtension = MIMEMessage.fileExtension(of: attachment.name)
+        let type = [UTType(filenameExtension: fileExtension), UTType(mimeType: attachment.type)]
+            .lazy.compactMap { $0 }.first { !$0.isDynamic && $0.localizedDescription != nil }
+        let kind = type?.localizedDescription ?? attachment.type
+        guard let size = attachment.size else { return kind }
+        let bytes = Int64(size).formatted(ByteCountFormatStyle(style: .file, allowedUnits: .all, spellsOutZero: false, includesActualByteCount: false, locale: locale))
+        return String(localized: LocalizedStringResource("\(kind), \(bytes)", locale: locale))
+    }
+
+    /// An attachment's kind and size, and whether Projects read its text, on one line.
+    static func attachmentLine(_ attachment: MailAttachment) -> String {
+        String(localized: "\(attachmentKind(attachment)). \(attachmentState(attachment))")
+    }
+
+    /// Whether Projects read an attachment's text, or why not.
+    static func attachmentState(_ attachment: MailAttachment) -> String {
+        switch attachment.state {
+        case .read where attachment.isCut: String(localized: "Projects read the start of its text.")
+        case .read: String(localized: "Projects read its text.")
+        case .notDownloaded: String(localized: "Mail has not downloaded it, so Projects knows only its name.")
+        case .tooLarge: String(localized: "Projects did not read it, as it is over 10 MB.")
+        case .emailTooLarge: String(localized: "Projects did not read it, as the email is too large.")
+        case .otherType: String(localized: "Projects does not read this kind of file.")
+        case .unreadable: String(localized: "Projects could not read it.")
+        case .noText: String(localized: "Projects found no text in it.")
+        case .notRead: String(localized: "Projects did not read it.")
+        case .savedEarlier: String(localized: "Projects saved this email before it read attachments.")
         }
     }
 

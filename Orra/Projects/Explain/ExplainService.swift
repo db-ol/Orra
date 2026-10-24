@@ -52,7 +52,7 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
     /// wrote no draft, and nil otherwise. Its draft is empty, since `draft` holds the
     /// checked one.
     var draftCheck: DraftCheckInput?
-    /// What the source ids of the points stand for: 本邮件 or this email, F1, M1 and T1.
+    /// What the source ids of the points stand for: 本邮件 or this email, F1, M1, T1 and A1.
     var sources: [String: ExplainPrompt.Source]
     /// What PromptHygiene took out of each place of the prompt, for the user to see. Never
     /// for the model or a log.
@@ -90,12 +90,13 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
 ///   imitates a known one gets a draft that names that domain nowhere and repeats nothing
 ///   from the email, which is why its draft check counts the email as holding nothing.
 ///
-/// The warnings found in code go into the prompt's checks by kind only. A project file
-/// with hidden runs gives a hidden_text warning, and so does an email in which VisibleText
-/// found hidden text. A reply is checked for everyone a reply to all reaches. A recipient
-/// who is neither among the project's people nor at one of its domains gives the
-/// recipient_not_in_project_people warning, and the draft carries no project data to them
-/// that they do not already have.
+/// The warnings found in code go into the prompt's checks by kind only. A project file or
+/// an attachment with hidden runs gives a hidden_text warning, and so does an email in which
+/// VisibleText found hidden text. The content checks read the text of each attachment too,
+/// and what they find there is noted at that attachment.
+/// A reply is checked for everyone a reply to all reaches. A recipient who is neither among
+/// the project's people nor at one of its domains gives the recipient_not_in_project_people
+/// warning, and the draft carries no project data to them that they do not already have.
 ///
 /// Nothing here waits for the store. The log holds counts and times only. The service
 /// keeps the parsed tokenizer once it has loaded it, so the window creates the service
@@ -112,7 +113,9 @@ final class ExplainService {
         var to: [ExplainPrompt.Person] = []
         var cc: [ExplainPrompt.Person] = []
         var subject: String = ""
-        var attachments: [ContentChecks.Input.Attachment] = []
+        /// The attachments with what Projects read of them, see MailAttachment. Their text
+        /// goes into the prompt after the email's, and the checks read it.
+        var attachments: [MailAttachment] = []
         /// The email's own text: visible, and without the quoted history when the quoted
         /// message is in the thread.
         var text: String
@@ -341,17 +344,21 @@ final class ExplainService {
         input.filesWithHiddenText = Set((gathered.hits + gathered.newest).filter { $0.fileHiddenRuns > 0 }.map(\.file))
         input.projectMail = gathered.projectMail
         input.thread = gathered.thread
+        input.attachments = email.attachments
+        input.attachmentWarnings = await attachmentWarnings(email, known: known)
         input.warnings = ProjectsWarning.allCases.filter(Set(warnings).contains)
         let prompt = ExplainPrompt(input, countTokens: countTokens)
         return Prepared(gathered: gathered, reply: reply, prompt: prompt, recipients: recipients)
     }
 
     /// The warnings about the email that code finds: the sender and content checks, and
-    /// hidden text that VisibleText found, in the order of `ProjectsWarning.allCases`.
+    /// hidden text that VisibleText found, in the order of `ProjectsWarning.allCases`. The
+    /// checks of the attachments' names are among them, those of their text are not, see
+    /// `attachmentWarnings(_:known:)`.
     @concurrent
     nonisolated static func ruleWarnings(_ email: Email, known: Known) async -> [ProjectsWarning] {
-        let own = known.ownAddresses.map { SenderChecks.Person(name: known.ownName, address: $0) }
-        let people = known.projects.flatMap { $0.people.map { SenderChecks.Person(name: $0.name, address: $0.address) } } + known.correspondents
+        let own = ownPeople(known)
+        let people = knownPeople(known)
         var warnings = Set(SenderChecks.warnings(for: SenderChecks.Input(
             sender: SenderChecks.Person(name: email.sender.name, address: email.sender.address),
             people: people,
@@ -361,7 +368,7 @@ final class ExplainService {
         warnings.formUnion(await ContentChecks.warnings(for: ContentChecks.Input(
             subject: email.subject,
             text: email.visibleText,
-            attachments: email.attachments,
+            attachments: email.attachments.map { ContentChecks.Input.Attachment(name: $0.name, type: $0.type) },
             senderIsKnown: senderIsKnown(email.sender.address, people: people, projects: known.projects),
             own: own,
             sentTexts: known.sentTexts
@@ -370,6 +377,35 @@ final class ExplainService {
             warnings.insert(.hiddenText)
         }
         return ProjectsWarning.allCases.filter(warnings.contains)
+    }
+
+    /// What the content checks find in the text of each attachment Projects read, by its
+    /// index in the email's attachments, in the order of `ProjectsWarning.allCases`. The
+    /// text is the sender's own, so no quote of the user is looked for in it.
+    @concurrent
+    nonisolated static func attachmentWarnings(_ email: Email, known: Known) async -> [Int: [ProjectsWarning]] {
+        let own = ownPeople(known)
+        let isKnown = senderIsKnown(email.sender.address, people: knownPeople(known), projects: known.projects)
+        var found: [Int: [ProjectsWarning]] = [:]
+        for (index, attachment) in email.attachments.enumerated() {
+            guard let text = attachment.text, !text.isEmpty else { continue }
+            let warnings = Set(await ContentChecks.warnings(for: ContentChecks.Input(
+                subject: "", text: text, senderIsKnown: isKnown, own: own)))
+            if !warnings.isEmpty {
+                found[index] = ProjectsWarning.allCases.filter(warnings.contains)
+            }
+        }
+        return found
+    }
+
+    /// The user, by name and each address, for the checks.
+    private nonisolated static func ownPeople(_ known: Known) -> [SenderChecks.Person] {
+        known.ownAddresses.map { SenderChecks.Person(name: known.ownName, address: $0) }
+    }
+
+    /// The people of every project and everyone the user exchanged mail with, for the checks.
+    private nonisolated static func knownPeople(_ known: Known) -> [SenderChecks.Person] {
+        known.projects.flatMap { $0.people.map { SenderChecks.Person(name: $0.name, address: $0.address) } } + known.correspondents
     }
 
     /// The domains the sender checks guard against every kind of lookalike: those the user
@@ -467,7 +503,7 @@ final class ExplainService {
         // request for data from someone outside the project none of the values the
         // recipients do not already have. A reply that reaches nobody counts as going
         // outside, as in DraftCheck.
-        let found = Set(prompt.checks.filter { $0.place == .email }.map(\.warning))
+        let found = Set(prompt.checks.filter(\.place.isTheEmail).map(\.warning))
         let reachesOutside = prepared.recipients.isEmpty || prepared.recipients.contains { recipient in
             gathered.project.map { !isInProject(recipient.address, $0) } ?? true
         }
@@ -550,10 +586,11 @@ final class ExplainService {
     /// recipients of a reply already have: the email with its quoted history, and the
     /// earlier messages of its thread that every recipient outside the project was on.
     /// `other` is the rest of what the model read: the project's description, the excerpts
-    /// of its files and the other mail in the prompt.
+    /// of its files and the other mail in the prompt, with the people of its headers.
     nonisolated static func sourceTexts(_ prepared: Prepared) -> (incoming: String, other: [String]) {
         let gathered = prepared.gathered
         let email = gathered.email
+        let own = Set(gathered.known.ownAddresses.compactMap(ProjectsAddress.normalized))
         // DraftCheck lets project data go to the project's people anyway, so only the
         // recipients outside the project decide what a reply may repeat. Without a project
         // every recipient is outside. One whose address does not parse was on no earlier
@@ -565,7 +602,8 @@ final class ExplainService {
         for mail in gathered.projectMail + gathered.thread {
             messages[mail.messageID] = mail
         }
-        var incoming = [email.subject, email.visibleText]
+        // The recipients have the attachments too.
+        var incoming = [email.subject, email.visibleText] + email.attachments.compactMap(\.text)
         var other: [String] = []
         if let description = gathered.project?.description, !description.isEmpty {
             other.append(description)
@@ -574,6 +612,9 @@ final class ExplainService {
             switch prepared.prompt.sources[id] {
             case .file(let chunk):
                 other.append(chunk.text)
+            case .attachment:
+                // In `incoming` already.
+                continue
             case .message(let messageID):
                 guard messageID != email.messageID, let mail = messages[messageID] else { continue }
                 let people = Set(([mail.sender] + mail.to + mail.cc).compactMap { ProjectsAddress.normalized($0.address) })
@@ -585,12 +626,25 @@ final class ExplainService {
                     incoming.append(mail.text)
                 } else {
                     other.append(mail.text)
+                    let header = headerPeople(of: mail, own: own)
+                    if !header.isEmpty { other.append(header) }
                 }
             case nil:
                 continue
             }
         }
         return (incoming.joined(separator: "\n\n"), other)
+    }
+
+    /// The people of a mail's header, which the prompt shows with it, one a line and
+    /// without the user, so the draft check protects their names and addresses as it does
+    /// those in the mail's text.
+    private nonisolated static func headerPeople(of mail: ExplainPrompt.Mail, own: Set<String>) -> String {
+        ([mail.sender] + mail.to + mail.cc)
+            .filter { person in ProjectsAddress.normalized(person.address).map { !own.contains($0) } ?? true }
+            .map { $0.name.isEmpty ? $0.address : "\($0.name) <\($0.address)>" }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
     }
 
     // MARK: Log
@@ -600,6 +654,7 @@ final class ExplainService {
         let files = prompt.sources.keys.filter { $0.hasPrefix("F") }.count
         let thread = prompt.sources.keys.filter { $0.hasPrefix("T") }.count
         let projectMail = prompt.sources.keys.filter { $0.hasPrefix("M") }.count
+        let attachments = prompt.sources.keys.filter { $0.hasPrefix("A") }.count
         let draft: String
         switch explanation.draft {
         case .checked(let result):
@@ -609,7 +664,7 @@ final class ExplainService {
         case .missing: draft = "missing"
         }
         let flagged = explanation.points.filter { !$0.flags.isEmpty }.count
-        return "\(prompt.tokens) prompt tokens with \(files) excerpts, \(thread) thread messages and \(projectMail) project mails, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
+        return "\(prompt.tokens) prompt tokens with \(files) excerpts, \(thread) thread messages, \(projectMail) project mails and \(attachments) attachments, \(explanation.points.count) points of which \(flagged) flagged, \(explanation.questions.count) questions, \(explanation.warnings.count) warnings in code and \(explanation.modelWarnings.count) from the model, draft \(draft), \(explanation.problems.count) problems of form"
     }
 
     private nonisolated static func seconds(_ duration: Duration) -> String {

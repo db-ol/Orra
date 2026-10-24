@@ -832,6 +832,41 @@ struct ModelGateReservationTests {
         #expect(gate.snapshot == ModelGate.Snapshot())
     }
 
+    /// At the key down the cleanup model hears of the dictation before the dictation
+    /// reserves the gate, so captions and Projects can take a call that waits at the gate
+    /// out of it before the reservation lets it in.
+    @Test func theKeyDownTellsTheCleanupModelBeforeItReservesTheGate() async throws {
+        let gate = ModelGate()
+        let log = ReservationLog(gate)
+        let transcription = Transcription(load: {}, transcribe: { _, _, _ in "我们下午三点开会。" }).gated(gate)
+        let cleanup = CleanupModel(waitUntilLoaded: { false }, dictationStarted: { log.note("dictation started") }, complete: { _ in "" })
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: transcription,
+            cleanup: cleanup,
+            insert: inserter.insert,
+            frontmostApp: { 100 },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero
+        )
+        await controller.loadModel()
+        try await press(controller, .rightControl)
+        #expect(gate.snapshot == ModelGate.Snapshot(reserved: 1))
+        controller.handle(.released, key: .key(.rightControl))
+        try await waitUntil { controller.state == .idle }
+        // A press that starts the microphone early, and counts later.
+        let starts = mic.calls.filter { $0 == "start" }.count
+        controller.handle(.armed, key: .key(.rightControl))
+        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        controller.handle(.pressed(isRepeat: false), key: .key(.rightControl))
+        #expect(gate.snapshot == ModelGate.Snapshot(reserved: 1))
+        controller.handle(.released, key: .key(.rightControl))
+        try await waitUntil { controller.state == .idle }
+        #expect(log.all == ["dictation started free", "dictation started free"])
+        #expect(gate.snapshot == ModelGate.Snapshot())
+    }
+
     /// The cleanup model loads with a reservation, also for its prompts read with the load,
     /// and the prompts read ahead later go without one.
     @Test func aCleanupLoadReservesTheGate() async throws {

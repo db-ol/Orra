@@ -15,7 +15,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// The name in the sidebar and the window's title.
+    /// The name in the sidebar and the window's title, except Projects, whose page is titled
+    /// Projects Settings so it is not taken for the Projects window.
     var title: LocalizedStringKey {
         switch self {
         case .general: "General"
@@ -171,6 +172,9 @@ struct SettingsView: View {
     /// Mail access and the mailboxes on the Projects page, nil where the page is shown
     /// without them.
     var projectsMail: ProjectsSettings.MailAccess? = nil
+    /// Opens the Projects window from the Projects page, nil where the page is shown
+    /// without it.
+    var openProjectsWindow: (() -> Void)? = nil
     @State private var tab = SettingsTab.general
     /// The part of the page to scroll to, until the page has scrolled there.
     @State private var scrollTarget: SettingsSection?
@@ -238,7 +242,7 @@ struct SettingsView: View {
             VocabularySettings(pushToTalk: pushToTalk, learning: learning)
         case .projects:
             if let projects {
-                ProjectsSettings(projects: projects, cleanup: cleanup, mail: projectsMail)
+                ProjectsSettings(projects: projects, cleanup: cleanup, mail: projectsMail, openWindow: openProjectsWindow)
             }
         case .about:
             AboutSettings(models: models, pushToTalk: pushToTalk, updater: updater)
@@ -745,7 +749,7 @@ private struct AboutSettings: View {
                 Text("Updates")
             }
             Section {
-                Text("Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the speech model or the cleanup model when you ask it to, and to check for updates when you allow it.")
+                Text("Speech is turned into text on this Mac, and so is the optional cleanup. Orra goes online only to download the models you ask for, and to check for updates when you allow it.")
                     .foregroundStyle(.secondary)
                 Link("Source code and privacy details", destination: URL(string: "https://github.com/db-ol/Orra")!)
             }
