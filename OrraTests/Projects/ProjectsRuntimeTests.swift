@@ -557,6 +557,10 @@ struct ProjectsRuntimeTests {
                 + newest.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: 0.5 + Double(index) / 10) }
                 + [Self.message("moved@kiln.example", from: "kai@kiln.example", day: 1)],
             ownAddresses: [Self.own], at: Self.today)
+        // The sorting of new mail reads them first, with no project yet, so none of its
+        // passes is left to change the decisions the test gives them.
+        runtime.requestSort()
+        _ = try await listed(.needsProject, runtime) { $0.count == 7 && $0.allSatisfy { $0.level != nil } }
         let modelSaidNone = SortingDecision(project: nil, level: .unsure, reasons: [.modelSaidNone, .noSignal])
         var sorted = 0
         for id in older + ["h@harbor.example"] + newest where try await store.saveDecision(modelSaidNone, for: id) {
