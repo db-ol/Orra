@@ -3328,6 +3328,44 @@ Welcome window above, then choose Hold for the talk key in the welcome window:
 - [ ] Settings > About reads "Orra goes online only to download the models you ask for,
   and to check for updates when you allow it."
 
+Stalled folders, failed saves and expired drafts in Projects, added on 2026-10-24, not
+verified yet. Check in a Debug build with the synthetic mail imported, as in the test
+guide. ProjectsRuntimeTests holds a folder that never resolves while Projects turns off or
+deletes its data. MailScanTests fails a save and a lookup of the store in the middle of a
+pass, which a person can only do with a full disk. The checks that age the data run
+sqlite3 while Projects is off, with `<database>` standing for
+`"$HOME/Library/Application Support/io.github.db-ol.Orra/Projects/Index/projects.sqlite"`,
+quotes included.
+
+- [ ] Add a folder on a network share to a project, quit Orra, make the share stop
+  answering while it stays mounted (turn off the server or its network), and open Orra
+  with Projects on. Turning Projects off, and Delete All Projects Data, each finish within
+  a few seconds. Once the share answers again, the log of the projects-index category
+  shows no Index sweep line while Projects is off.
+- [ ] Save an email that Projects read with File > Save As, Format Raw Message Source,
+  change its From line in a text editor, and drag the file into a mailbox Projects reads.
+  Select that copy in Mail and click Explain Selected Message. The window says another
+  email Projects read has the same Message-ID, selects nothing and explains nothing.
+  Select the original and click it again: the original shows and is explained, and Open
+  Reply in Mail opens the reply of the original.
+- [ ] Copy an email Projects read into another mailbox Projects reads, select the copy in
+  Mail and click Explain Selected Message. It shows and explains the email.
+- [ ] Explain an email that gets a draft and turn Projects off with Keep Data. Run
+  `sqlite3 <database> "UPDATE mail_messages SET draft_changed = draft_changed - 31 * 86400 WHERE draft_changed IS NOT NULL"`
+  and turn Projects on. The email keeps its explanation, the draft area reads "Projects
+  removed this draft 30 days after its last change. Explain the email again for a new
+  one.", and Explain Again writes a new draft.
+- [ ] Turn Projects off with Keep Data, run
+  `sqlite3 <database> "UPDATE mail_messages SET saved = saved - 91 * 86400 WHERE id = (SELECT MAX(id) FROM mail_messages)"`
+  and turn Projects on. That email reads "Projects removed its copy of this email's text
+  90 days after reading it. Read the email in Mail.", Explain is dimmed, and Explain
+  Selected Message on it in Mail shows it without explaining it.
+- [ ] An email over 16 MB, such as one with large attachments, read after this change,
+  reads "Projects did not read this email, as it is too large. Read it in Mail.", and
+  Explain is dimmed. Mail read before this change has no such mark, so use Delete All
+  Projects Data and Start Reading Mail again first.
+- [ ] Check the four new lines in Chinese, Japanese and Spanish.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
