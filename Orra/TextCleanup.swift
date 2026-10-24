@@ -759,8 +759,12 @@ final class TextCleanup {
     }
 
     /// Try Again after the model failed to load: checks the files, hashes included, and
-    /// loads them again, or leads back to Download when one is damaged.
+    /// loads them again, or leads back to Download when one is damaged. A model that is
+    /// loaded, loading or unloaded while idle stays as it is, as when Try Loading Again in
+    /// the Projects window is clicked after the model loaded from Settings. Otherwise
+    /// cleanup, translation and captions would go without it until the check is over.
     func retryLoading() async {
+        guard engineState == .failed || engineState == .unloaded else { return }
         engineState = .unloaded
         await models.prepare(checkingHashes: true)
     }
