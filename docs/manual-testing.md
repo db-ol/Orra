@@ -3328,6 +3328,32 @@ Welcome window above, then choose Hold for the talk key in the welcome window:
 - [ ] Settings > About reads "Orra goes online only to download the models you ask for,
   and to check for updates when you allow it."
 
+Project domains, rules and the reading scope, added on 2026-10-24, not verified yet. Check
+in a Debug build with Projects on, Mail open, Mail access allowed and the synthetic mail
+imported, as in the test guide.
+
+- [ ] Edit Project says under Domains that addresses at these domains count as the
+  project's people, and to add people at a shared provider such as gmail.com under People.
+  Type gmail.com, @QQ.com or vip.163.com: the line under the field says many unrelated
+  people have addresses at that domain, and Save stays dimmed. harbor.example saves.
+- [ ] A project saved before with such a domain opens in Edit Project with the same line,
+  and saves once the domain is gone.
+- [ ] Link a mailbox in Edit Project that is not ticked in Settings. Settings > Projects
+  lists it under Mailboxes with "Also read for" and the project's name. Edit Project…
+  beside it opens the Projects window on the project's page with Edit Project open, also
+  when the window was closed. A sheet that is open in the window already stays as it was.
+- [ ] After Start Reading Mail, the line under Mailboxes says changes apply only to the
+  mail Projects reads from now on. Untick a mailbox, or choose a shorter period: the mail
+  Projects saved from it stays in the window.
+- [ ] Orra's explanation before the macOS prompt for Mail reads "Projects reads mail only
+  in the mailboxes you choose, and only while Mail is open."
+- [ ] Move two emails from one sender to a project and click Add Rule. The project page
+  lists the rule with Remove Rule…, which asks first. Cancel keeps it. Remove Rule takes it
+  off the page, the emails it filed stay in the project, and a new email from that sender
+  no longer shows A rule you made on its chip. After Orra starts again the rule is still
+  gone.
+- [ ] The new lines read well in Chinese, Japanese and Spanish.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
