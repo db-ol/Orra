@@ -102,17 +102,20 @@ struct ProjectsSuggestedSectionTests {
     }
 
     /// A project made from a suggestion takes every email the suggestion counted, also
-    /// more than the window reads at once. The 1,200 emails were sorted before any project
-    /// existed, so only the sorting again of Needs a Project files them.
+    /// more than sorting reads at once, and more than it asks the model about. The emails
+    /// were sorted before any project existed, so only the sorting again of Needs a Project
+    /// files them.
     @Test(.timeLimit(.minutes(1)))
     func aSuggestedProjectTakesEveryEmailItCounted() async throws {
         let fixture = try await Fixture()
         defer { fixture.cleanUp() }
         let runtime = fixture.runtime
+        runtime.listPage = 3
+        runtime.resortBatchLimit = 2
         let store = try #require(runtime.running?.store)
         let people = ["mei@harbor.example", "lu@harbor.example", "ana@harbor.example"]
-        let mail = (0..<1_200).map { index in
-            Self.message("o\(index)@harbor.example", from: people[index % 3], name: "", subject: "Order \(index)", day: -Double(1_200 - index) / 24)
+        let mail = (0..<12).map { index in
+            Self.message("o\(index)@harbor.example", from: people[index % 3], name: "", subject: "Order \(index)", day: -Double(12 - index) / 24)
         }
         try await store.save(mail, ownAddresses: [Self.me], at: Self.today)
         var sorted = 0
@@ -126,13 +129,13 @@ struct ProjectsSuggestedSectionTests {
         await service.refresh()
         await service.untilNamed()
         let harbor = try #require(service.suggestions.first { $0.name == "harbor.example" })
-        #expect(harbor.group.takes.count == 1_200)
+        #expect(harbor.group.takes.count == mail.count)
         let project = try #require(ProjectsSetupView.Draft(suggestion: harbor).project)
         #expect(project.folders.isEmpty)
         try await runtime.add(project)
         await runtime.untilResorted()
         let filed = try await store.database.run("SELECT COUNT(*) FROM mail_messages WHERE project = ?", [.text(project.id.uuidString)]).first?.first?.integer
-        #expect(filed == 1_200)
+        #expect(filed == Int64(mail.count))
         runtime.windowClosed()
         await fixture.stop()
     }

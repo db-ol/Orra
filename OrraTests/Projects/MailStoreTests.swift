@@ -809,7 +809,7 @@ struct MailStoreTests {
         #expect(try await store.count(.needsProject) == 2)
         for place in [MailStore.Place.project(Self.harbor), .setAside, .needsProject] {
             for (index, email) in try await store.list(place).enumerated() {
-                #expect(email.place == place)
+                #expect(MailStore.Place(project: email.project, level: email.level) == place)
                 let position = try #require(try await store.position(of: email.messageID))
                 #expect(position.place == place && position.index == index, "\(email.messageID)")
             }
@@ -859,6 +859,35 @@ struct MailStoreTests {
         }
         // The two emails of day 2 come in the order they were saved.
         #expect(read == [waiting[0], waiting[1], waiting[2], "same-day@test.example", waiting[3], waiting[4]])
+        await store.close()
+    }
+
+    /// Sorting again reads Needs a Project up to the email before its newest emails that
+    /// sorting may still file, and then reads on from there. The user's moves count for
+    /// neither.
+    @Test func sortingAgainReadsTheOlderEmailsUpToTheNewestOnes() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let waiting = (0..<4).map { "waiting\($0)@test.example" }
+        try await store.save(
+            waiting.enumerated().map { day, id in Self.message(id, from: "kim@quay.example", day: Double(day)) } + [
+                Self.message("moved1@test.example", from: "kim@quay.example", day: 5),
+                Self.message("moved2@test.example", from: "kim@quay.example", day: 6),
+            ], ownAddresses: [Self.work], at: Self.date(7))
+        #expect(try await store.move("moved1@test.example", to: nil))
+        #expect(try await store.move("moved2@test.example", to: nil))
+
+        #expect(try await store.resortEnd(beforeNewest: 4) == nil)
+        #expect(try await store.resortEnd(beforeNewest: 9) == nil)
+        let end = try #require(try await store.resortEnd(beforeNewest: 2))
+        let older = try await store.resortBatch(after: nil, through: end, limit: 9)
+        #expect(older.emails.map(\.messageID) == [waiting[0], waiting[1]])
+        #expect(older.next == end)
+        #expect(try await store.resortBatch(after: older.next, through: end, limit: 9).next == nil)
+        let newest = try await store.resortBatch(after: older.next, limit: 9)
+        #expect(newest.emails.map(\.messageID) == [waiting[2], waiting[3]])
+        let all = try #require(try await store.resortEnd(beforeNewest: 0))
+        #expect(try await store.resortBatch(after: nil, through: all, limit: 9).emails.map(\.messageID) == waiting)
         await store.close()
     }
 

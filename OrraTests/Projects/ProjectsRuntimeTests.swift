@@ -499,18 +499,20 @@ struct ProjectsRuntimeTests {
     }
 
     /// Mail the user moved to Needs a Project never takes the place of mail that sorting may
-    /// still file: 1,000 newer moves there leave the older emails to sort again when a
-    /// project comes.
+    /// still file: newer moves there, more than a batch and a page, leave the older emails
+    /// to sort again when a project comes.
     @Test(.timeLimit(.minutes(1)))
     func sortingAgainLooksPastTheUsersMoves() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
+        runtime.listPage = 2
+        runtime.resortBatchLimit = 2
         let store = try #require(runtime.running?.store)
         let older = (0..<3).map { "h\($0)@harbor.example" }
-        let moved = (0..<1_000).map { "k\($0)@kiln.example" }
+        let moved = (0..<5).map { "k\($0)@kiln.example" }
         try await store.save(
             older.enumerated().map { index, id in Self.message(id, from: "mei@harbor.example", day: Double(index) / 10) }
-                + moved.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: 1 + Double(index) / 1_000) },
+                + moved.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: 1 + Double(index) / 10) },
             ownAddresses: [Self.own], at: Self.today)
         var sorted = 0
         for id in older where try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: id) {
@@ -528,7 +530,63 @@ struct ProjectsRuntimeTests {
         let filed = Set(await runtime.list(.project(harbor.id)).map(\.messageID))
         #expect(filed == Set(older))
         // The moves stay where the user put them.
-        #expect(try await store.database.run("SELECT COUNT(*) FROM mail_messages WHERE project IS NULL AND moved_by_user = 1") == [[.integer(1_000)]])
+        #expect(try await store.database.run("SELECT COUNT(*) FROM mail_messages WHERE project IS NULL AND moved_by_user = 1") == [[.integer(5)]])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Sorting again asks the model only about the newest emails of Needs a Project that
+    /// sorting may still file, a page of the list, and the user's moves take none of those
+    /// places. The rules alone sort the older ones, which stay as they were unless the rules
+    /// file them, also with the window closed, so they never wait for the model.
+    @Test(.timeLimit(.minutes(1)))
+    func sortingAgainAsksTheModelOnlyAboutTheNewestEmails() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true))
+        runtime.listPage = 2
+        runtime.resortBatchLimit = 2
+        let store = try #require(runtime.running?.store)
+        // Oldest first: three emails no rule files, one of Harbor's domain, the two newest
+        // that sorting may file, and a move of the user.
+        let older = (0..<3).map { "o\($0)@kiln.example" }
+        let newest = (0..<2).map { "n\($0)@kiln.example" }
+        try await store.save(
+            older.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: Double(index) / 10) }
+                + [Self.message("h@harbor.example", from: "mei@harbor.example", day: 0.3)]
+                + newest.enumerated().map { index, id in Self.message(id, from: "kai@kiln.example", day: 0.5 + Double(index) / 10) }
+                + [Self.message("moved@kiln.example", from: "kai@kiln.example", day: 1)],
+            ownAddresses: [Self.own], at: Self.today)
+        let modelSaidNone = SortingDecision(project: nil, level: .unsure, reasons: [.modelSaidNone, .noSignal])
+        var sorted = 0
+        for id in older + ["h@harbor.example"] + newest where try await store.saveDecision(modelSaidNone, for: id) {
+            sorted += 1
+        }
+        #expect(sorted == 6)
+        #expect(try await store.move("moved@kiln.example", to: nil))
+
+        runtime.windowOpened()
+        let harbor = Project(name: "Harbor", domains: ["harbor.example"])
+        try await runtime.add(harbor)
+        await runtime.untilResorted()
+        #expect(model.jobs.value == newest.count)
+        let filed = await runtime.list(.project(harbor.id))
+        #expect(Set(filed.map(\.messageID)) == Set(newest + ["h@harbor.example"]))
+        #expect(filed.allSatisfy { $0.level == ($0.messageID == "h@harbor.example" ? .sure : .likely) })
+        let left = await runtime.list(.needsProject)
+        #expect(Set(left.map(\.messageID)) == Set(older + ["moved@kiln.example"]))
+        #expect(left.filter { older.contains($0.messageID) }.allSatisfy { $0.reasons == modelSaidNone.reasons })
+
+        // With the window closed, the newest wait for the model and the oldest stays as it
+        // was.
+        runtime.windowClosed()
+        try await runtime.add(Project(name: "Garden"))
+        await runtime.untilResorted()
+        #expect(model.jobs.value == newest.count)
+        let reasons = Dictionary(uniqueKeysWithValues: await runtime.list(.needsProject).map { ($0.messageID, $0.reasons) })
+        #expect(reasons[older[0]] == modelSaidNone.reasons)
+        #expect(reasons[older[1]]?.contains(.waitingForModel) == true)
+        #expect(reasons[older[2]]?.contains(.waitingForModel) == true)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -945,21 +1003,22 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
-    /// An email older than the newest 1,000 of its list opens from a source and from Explain
+    /// An email past the first page of its list opens from a source and from Explain
     /// Selected Message, in a project and in Set Aside. The window finds its list and its
     /// place there in the store, and reads the list down to it.
     @Test(.timeLimit(.minutes(1)))
-    func anEmailOlderThanTheFirstThousandOfItsListOpens() async throws {
+    func anEmailPastTheFirstPageOfItsListOpens() async throws {
         defer { cleanUp() }
         let (runtime, projects, choice) = try await started()
+        runtime.listPage = 3
         let store = try #require(runtime.running?.store)
         let harbor = Project(name: "Harbor")
         try await runtime.add(harbor)
         await runtime.untilResorted()
         // The two oldest emails of the project and the oldest of Set Aside are past the
-        // newest 1,000.
-        let filed = try await saveOldestFirst(1_002, named: "h", as: SortingDecision(project: harbor.id, level: .sure, reasons: [.person]), in: store)
-        let setAside = try await saveOldestFirst(1_001, named: "n", as: SortingDecision(project: nil, level: .setAside, reasons: [.listMail]), in: store)
+        // first page.
+        let filed = try await saveOldestFirst(5, named: "h", as: SortingDecision(project: harbor.id, level: .sure, reasons: [.person]), in: store)
+        let setAside = try await saveOldestFirst(4, named: "n", as: SortingDecision(project: nil, level: .setAside, reasons: [.listMail]), in: store)
         #expect(try await store.save(MailStoreTests.explanation(filed[0], project: harbor.id), at: Self.today))
 
         // A source cites the oldest email of the project.
@@ -983,7 +1042,8 @@ struct ProjectsRuntimeTests {
         #expect(window.selectedEmail?.messageID == filed[0])
         #expect(window.rows.count == filed.count)
 
-        // Explain Selected Message finds the second oldest of the project selected in Mail.
+        // In a new window, which reads the first page of Needs a Project, Explain Selected
+        // Message finds the second oldest of the project selected in Mail.
         mail.update {
             $0.isRunning = true
             $0.permission = .allowed
@@ -992,40 +1052,81 @@ struct ProjectsRuntimeTests {
         }
         choice.choose([FakeMail.clients])
         choice.confirm()
-        await window.explainSelectedMessage()
-        #expect(window.notice == nil)
-        #expect(window.place == .project(harbor.id))
-        #expect(window.selectedEmail?.messageID == filed[1])
+        let another = ProjectsWindowModel(runtime: runtime)
+        await another.explainSelectedMessage()
+        #expect(another.notice == nil)
+        #expect(another.place == .project(harbor.id))
+        #expect(another.selectedEmail?.messageID == filed[1])
+        #expect(another.limit == 6)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
 
-    /// A list reads its newest 1,000 emails and says how many it holds, and Load Older
-    /// Emails reads 1,000 more. Another list starts again with 1,000.
+    /// The window reads a list down to an older email for a few pages at most. An email
+    /// older than that shows alone in the email view, and the list keeps what it read.
+    @Test(.timeLimit(.minutes(1)))
+    func anEmailPastThePagesTheWindowReadsDownShowsAlone() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        runtime.listPage = 2
+        let store = try #require(runtime.running?.store)
+        let harbor = Project(name: "Harbor")
+        try await runtime.add(harbor)
+        await runtime.untilResorted()
+        let pages = ProjectsWindowModel.maximumPagesDown
+        let filed = try await saveOldestFirst(2 * pages + 1, named: "h", as: SortingDecision(project: harbor.id, level: .sure, reasons: [.person]), in: store)
+        let window = ProjectsWindowModel(runtime: runtime)
+
+        // A source cites the oldest, past the pages the window reads down.
+        await window.show(filed[0])
+        #expect(window.place == .project(harbor.id))
+        #expect(window.selectedEmail?.messageID == filed[0])
+        #expect(window.selectedEmail?.subject == "Order 0")
+        #expect(window.rows.count == 2 && window.limit == 2 && window.hasOlderEmails)
+
+        // A source of that email cites the next one, the last the window reads down to.
+        await window.show(filed[1])
+        #expect(window.selectedEmail?.messageID == filed[1])
+        #expect(window.rows.count == 2 * pages && window.rows.last?.messageID == filed[1])
+
+        await window.showPreviousEmail()
+        #expect(window.selectedEmail?.messageID == filed[0])
+        #expect(window.rows.count == 2 * pages)
+        #expect(!window.rows.contains { $0.messageID == filed[0] })
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A list reads its newest page of emails, 1,000 in the app, and says how many it
+    /// holds, and Load Older Emails reads a page more. Another list starts again with a
+    /// page.
     @Test(.timeLimit(.minutes(1)))
     func loadOlderEmailsReadsAPageMore() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
+        #expect(runtime.listPage == 1_000)
+        runtime.listPage = 3
         let store = try #require(runtime.running?.store)
-        let waiting = try await saveOldestFirst(1_001, named: "w", as: SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), in: store)
+        let waiting = try await saveOldestFirst(4, named: "w", as: SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), in: store)
         let window = ProjectsWindowModel(runtime: runtime)
         #expect(window.place == .needsProject)
         await window.reload()
-        #expect(window.rows.count == 1_000)
+        #expect(window.rows.count == 3)
         #expect(window.rows.first?.messageID == waiting.last)
-        #expect(window.total == 1_001)
+        #expect(window.total == 4)
         #expect(window.hasOlderEmails)
-        #expect(ProjectsWindowText.olderEmails(shown: window.rows.count, total: window.total) == "Showing the newest 1,000 of 1,001 emails.")
+        #expect(ProjectsWindowText.olderEmails(shown: window.rows.count, total: window.total) == "Showing the newest 3 of 4 emails.")
+        #expect(ProjectsWindowText.olderEmails(shown: 1_000, total: 1_234) == "Showing the newest 1,000 of 1,234 emails.")
 
         await window.loadOlderEmails()
-        #expect(window.rows.count == 1_001)
+        #expect(window.rows.count == 4)
         #expect(window.rows.last?.messageID == waiting[0])
-        #expect(window.total == 1_001)
+        #expect(window.total == 4)
         #expect(!window.hasOlderEmails)
 
         window.place = .setAside
         await window.reload()
-        #expect(window.limit == MailStore.listPage)
+        #expect(window.limit == 3)
         #expect(window.rows.isEmpty && window.total == 0 && !window.hasOlderEmails)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
@@ -1033,10 +1134,11 @@ struct ProjectsRuntimeTests {
 
     /// Back to Previous Email returns to the list and the email a source left, with the same
     /// email view, one step at a time after sources that follow one another. Choosing
-    /// another email ends the way back.
+    /// another email, in the list or in Mail, or another list, ends the way back, also when
+    /// the user comes back to the email the source showed.
     @Test func backToPreviousEmailReturnsWhereASourceLeft() async throws {
         defer { cleanUp() }
-        let (runtime, projects, _) = try await started()
+        let (runtime, projects, choice) = try await started()
         let store = try #require(runtime.running?.store)
         let harbor = Project(name: "Harbor")
         try await runtime.add(harbor)
@@ -1074,6 +1176,33 @@ struct ProjectsRuntimeTests {
         await window.show(filed[0])
         #expect(window.previousEmail == filed[2])
         window.selectedMessageID = filed[1]
+        #expect(window.previousEmail == nil)
+        window.selectedMessageID = filed[0]
+        #expect(window.previousEmail == nil)
+
+        await window.show(waiting[0])
+        #expect(window.previousEmail == filed[0])
+        window.place = .setAside
+        window.place = .needsProject
+        await window.reload()
+        window.selectedMessageID = waiting[0]
+        #expect(window.previousEmail == nil)
+
+        // Explain Selected Message finds the email a source showed, after the user chose
+        // another list.
+        await window.show(filed[1])
+        #expect(window.previousEmail == waiting[0])
+        window.place = .setAside
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.selection = [MailMessageRef(id: 8, mailbox: FakeMail.clients)]
+            $0.headers[8] = "Message-ID: <\(filed[1])>\r\nSubject: Order 1\r\n"
+        }
+        choice.choose([FakeMail.clients])
+        choice.confirm()
+        await window.explainSelectedMessage()
+        #expect(window.selectedEmail?.messageID == filed[1])
         #expect(window.previousEmail == nil)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }

@@ -3311,23 +3311,31 @@ Projects Data and Start Reading Mail again first.
   email view shows it as a forwarded message, and its explanation uses what it says.
 
 Every email Projects keeps, added on 2026-10-24, not verified yet. Check in a Debug build
-with a test mailbox in Mail that holds more than 1,000 made up messages from one company
+with a test mailbox in Mail that holds several thousand made up messages from one company
 domain, all received within the period Projects reads, and no project for that domain.
-MailStoreTests, ProjectsRuntimeTests and ProjectsSuggestedSectionTests cover the same with
-made up mail, and ProjectsWindowViewTests renders the line under the list and Back to
-Previous Email with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS.
+MailStoreTests, SortingServiceTests, ProjectsRuntimeTests and ProjectsSuggestedSectionTests
+cover the same with made up mail and pages of a few emails, and ProjectsWindowViewTests
+renders the line under the list and Back to Previous Email with
+TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS.
 
 - [ ] Needs a Project shows its newest 1,000 emails, and under them "Showing the newest
   1,000 of" and how many it holds, with Load Older Emails. Each click shows 1,000 more,
   and the line goes once every email shows. Another list starts again with 1,000.
-- [ ] Select the oldest test message in Mail and click Explain Selected Message. The
-  window selects it in its list, which reads down to it and scrolls to it.
-- [ ] Create the project Suggested Projects offers for the domain. Within a minute every
-  email it counted leaves Needs a Project, also those past the first 1,000.
-- [ ] Explain an email whose points cite an earlier email, and click that email's chip.
-  The window shows it with Back to Previous Email at the top. A click shows the email
-  before in its list, scrolled to it, with your changes to its draft. After two chips in a
-  row it goes back one email at a time, and choosing another email hides it.
+- [ ] Select a test message in Mail past the newest 1,000 of its list and within the
+  newest 5,000, and click Explain Selected Message. The window selects it in its list,
+  which reads down to it and scrolls to it. Do the same for a message past the newest
+  5,000: the email view shows it at once, and the list reads no further and highlights no
+  email.
+- [ ] With the window open, create the project Suggested Projects offers for the domain.
+  Every email it counted leaves Needs a Project, also those past the first 1,000. Note how
+  long that takes. Dictate while it runs: dictation stays as fast as usual. A message that
+  arrives meanwhile is still sorted. Note how long it waits.
+- [ ] Change the draft of an explained email whose points cite an earlier email of the
+  same project, scroll down to that email's chip and click it. The window shows the
+  earlier email with Back to Previous Email above it, without scrolling. A click shows
+  the email before in its list, scrolled to it, with your changes to its draft. After two
+  chips in a row it goes back one email at a time. Choosing another email hides it, and
+  it stays hidden when you choose the cited email again.
 - [ ] The line and both buttons read well in Chinese, Japanese and Spanish, and VoiceOver
   reads Back to Previous Email and Load Older Emails.
 

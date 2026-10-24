@@ -118,11 +118,6 @@ nonisolated struct MailStore: Sendable {
         var summary: String
         /// The attachments with their states, without their text.
         var attachments: [MailAttachment] = []
-
-        /// The list that holds it.
-        var place: Place {
-            Place(project: project, level: level)
-        }
     }
 
     /// A version of a draft, from the user's instruction or a tone. The explanation holds
@@ -844,6 +839,15 @@ nonisolated struct MailStore: Sendable {
         }
     }
 
+    /// An email as a list of the window shows it, read alone, such as one older than the
+    /// emails the window read of its list. Nil when the store does not hold it.
+    func listed(_ messageID: String) async throws -> Listed? {
+        try await database.transaction { database in
+            try Self.rows(where: "message_id = ?", [.text(messageID)], people: false, textLength: Self.summaryReadLength, in: database)
+                .first?.listed
+        }
+    }
+
     /// How many emails a list holds.
     func count(_ place: Place) async throws -> Int {
         let (condition, parameters) = Self.condition(of: place)
@@ -869,18 +873,25 @@ nonisolated struct MailStore: Sendable {
     }
 
     /// The emails of Needs a Project that sorting may still file, oldest first, at most
-    /// `limit`, after `cursor`, with the cursor that reads on after them. Sorting reads all
-    /// of them this way when the projects change. Mail the user moved there is left out
-    /// before the limit, since sorting never files it again.
-    func resortBatch(after cursor: Cursor?, limit: Int) async throws -> (emails: [SortingService.Email], next: Cursor?) {
-        let after = cursor == nil ? "" : " AND (date, id) > (?, ?)"
-        let values = (cursor.map { [.real($0.date), .integer($0.id)] } ?? []) + [ProjectsDatabase.Value.integer(Int64(max(0, limit)))]
+    /// `limit`, after `cursor` and up to `end` with it, with the cursor that reads on after
+    /// them. Sorting reads all of them this way when the projects change. Mail the user
+    /// moved there is left out before the limit, since sorting never files it again.
+    func resortBatch(after cursor: Cursor?, through end: Cursor? = nil, limit: Int) async throws -> (emails: [SortingService.Email], next: Cursor?) {
+        var condition = Self.resortable
+        var values: [ProjectsDatabase.Value] = []
+        if let cursor {
+            condition += " AND (date, id) > (?, ?)"
+            values += [.real(cursor.date), .integer(cursor.id)]
+        }
+        if let end {
+            condition += " AND (date, id) <= (?, ?)"
+            values += [.real(end.date), .integer(end.id)]
+        }
+        values.append(.integer(Int64(max(0, limit))))
+        let query = "SELECT id, date FROM mail_messages WHERE \(condition) ORDER BY date, id LIMIT ?"
+        let parameters = values
         return try await database.transaction { database in
-            let batch = try database.run("""
-                SELECT id, date FROM mail_messages
-                WHERE project IS NULL AND (level IS NULL OR level = 'unsure') AND moved_by_user = 0\(after)
-                ORDER BY date, id LIMIT ?
-                """, values)
+            let batch = try database.run(query, parameters)
             guard let last = batch.last, last.count == 2, let id = last[0].integer, let date = last[1].real else { return ([], nil) }
             let emails = try Self.rows(
                 where: "id IN (SELECT value FROM json_each(?)) ORDER BY date, id",
@@ -890,6 +901,21 @@ nonisolated struct MailStore: Sendable {
             return (emails, Cursor(date: date, id: id))
         }
     }
+
+    /// The newest email of Needs a Project that sorting may still file and that is older
+    /// than the newest `count` of them, in the order of date and row. Sorting again reads up
+    /// to it with the rules alone. Nil when there are no more than `count`.
+    func resortEnd(beforeNewest count: Int) async throws -> Cursor? {
+        let rows = try await database.run(
+            "SELECT date, id FROM mail_messages WHERE \(Self.resortable) ORDER BY date DESC, id DESC LIMIT 1 OFFSET ?",
+            [.integer(Int64(max(0, count)))])
+        guard let row = rows.first, row.count == 2, let date = row[0].real, let id = row[1].integer else { return nil }
+        return Cursor(date: date, id: id)
+    }
+
+    /// The mail of Needs a Project that sorting may still file, in SQL: never mail the user
+    /// moved there.
+    private static let resortable = "project IS NULL AND (level IS NULL OR level = 'unsure') AND moved_by_user = 0"
 
     /// The condition of a list in SQL, with its parameters.
     private static func condition(of place: Place) -> (sql: String, parameters: [ProjectsDatabase.Value]) {
