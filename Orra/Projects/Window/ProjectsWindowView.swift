@@ -70,8 +70,10 @@ struct ProjectsWindowView: View {
                 { ProjectsSuggestedSection.dismiss(suggestion, from: model.suggestions, runtime: runtime) }
             })
         }
-        // Edit Project… beside a linked mailbox in Settings. A sheet or a dialog that shows
-        // already stays as it is, with the list behind it.
+        // Edit Project… beside a linked mailbox in Settings. A sheet, an alert or a dialog of
+        // the window that shows already stays as it is, with the list behind it. The Remove
+        // Rule dialog is the project page's own, and a sheet that follows it saves the rules
+        // as the list has them then, see ProjectsRuntime.update(_:).
         .onChange(of: model.projectToEdit, initial: true) {
             if let project = model.takeProjectToEdit(presenting: setup != nil || forgetting != nil) {
                 setup = ProjectsSetupView.Draft(project)
