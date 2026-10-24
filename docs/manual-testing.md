@@ -3317,7 +3317,9 @@ themselves, and a model answer that stops early, which is hard to make by hand.
 
 - [ ] An email that only mentions a password, such as a notice never to share one, shows
   "It mentions a password, a code or another credential. Check what it asks you to do."
-  No warning says that an email asks for a password, personal data or a payment.
+  No warning above "The model also noted:" says that an email asks for a password,
+  personal data or a payment. The model's own lines under it may still say so, since its
+  prompt still uses those words.
 - [ ] An email that quotes you from mail older than the period Projects reads shows "It
   quotes you. Projects did not find those words in the sent mail it read."
 - [ ] In an explanation, a point without a chip shows No source provided under it, and an
@@ -3326,13 +3328,14 @@ themselves, and a model answer that stops early, which is hard to make by hand.
   size and whether Projects read its text. Explanation has no list. When Projects did not
   read a PDF or a Word file, such as one Mail has not downloaded, What it says ends with
   "Projects could not read an attachment. See Original Email." An email whose only
-  attachment is an image has no such line. An email whose text Retention removed still
-  lists its attachments.
+  attachment is an image has no such line, also when Mail has not downloaded the image.
+  An email over 16 MB, which Projects saves without its text, still lists its
+  attachments.
 - [ ] Control-click an email in the list: the menu reads Assign to Project, as the help
-  tag of the project chip does. After two emails from one sender go to one project, the
-  offer reads "Always assign mail from … to …?". Assigning an email whose draft you changed
-  asks "Change this email's project?" and says that the email stays where it is in Mail.
-  In Mail it does. The chip then says You assigned it here.
+  tag of the project chip does. After you assign two emails from one sender to one
+  project, the offer reads "Always assign mail from … to …?". Assigning an email whose
+  draft you changed asks "Change this email's project?" and says that the email stays
+  where it is in Mail. In Mail it does. The chip then says You assigned it here.
 - [ ] Hovering Dismiss Suggestion, in the sheet and in a suggestion's menu, shows "This
   suggestion will stay hidden. You can still create the project yourself." Note whether
   the menu shows the help tag.
