@@ -3376,9 +3376,9 @@ one email of a sender who has three or more emails in the synthetic mail.
 - [ ] Link a mailbox in Edit Project that is not ticked in Settings. Settings > Projects
   lists it under Mailboxes with "Also read for" and the project's name. Edit Project…
   beside it opens the Projects window on the project's page with Edit Project open, also
-  when the window was closed. An Edit Project sheet, a Forget Project alert or a Move
-  dialog that is open in the window already stays as it was, and so does the list behind
-  it.
+  when the window was closed. An Edit Project sheet, a Forget Project alert or a Change
+  Project dialog that is open in the window already stays as it was, and so does the list
+  behind it.
 - [ ] Rename that linked mailbox in Mail, then click Read Mailbox Names from Mail in Edit
   Project and Cancel. Settings > Projects says under the mailbox that Mail has no mailbox
   with this name now, as the project page does. Choosing the new name in Edit Project
@@ -3386,11 +3386,11 @@ one email of a sender who has three or more emails in the synthetic mail.
 - [ ] After Start Reading Mail, the line under Mailboxes says changes apply only to the
   mail Projects reads from now on. Untick a mailbox, or choose a shorter period: the mail
   Projects saved from it stays in the window.
-- [ ] Move two emails of the sender with an email in Held Back to a project and click Add
-  Rule. The project page lists the rule with Remove Rule…, which asks first. Cancel keeps
-  it. Remove Rule takes it off the page, and the emails it filed stay in the project. Now
-  tick Held Back in Settings: its email shows in the Projects window, and its chip does
-  not show A rule you made. After Orra starts again the rule is still gone.
+- [ ] Assign two emails of the sender with an email in Held Back to a project and click
+  Add Rule. The project page lists the rule with Remove Rule…, which asks first. Cancel
+  keeps it. Remove Rule takes it off the page, and the emails it filed stay in the
+  project. Now tick Held Back in Settings: its email shows in the Projects window, and its
+  chip does not show A rule you made. After Orra starts again the rule is still gone.
 - [ ] With Mail access not asked yet, after the `tccutil reset` in Mail access for
   Projects above, Allow Mail Access… shows Orra's explanation first. It reads "Projects
   reads mail only in the mailboxes you choose, and only while Mail is open."
