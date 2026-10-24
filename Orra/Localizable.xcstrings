@@ -11038,6 +11038,28 @@
         }
       }
     },
+    "Projects keeps the text of each email and its explanation for %lld days after reading it, and a draft for %lld days after its last change. It keeps the rest of an email, such as its sender and subject, until %lld days after it read the newest email of its thread. It removes old data only while it is on." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos conserva el texto de cada correo y su explicación durante %1$lld días después de leerlo, y un borrador durante %2$lld días después de su último cambio. Conserva el resto de cada correo, como el remitente y el asunto, hasta %3$lld días después de leer el correo más reciente de su conversación. Solo elimina los datos antiguos mientras está activado."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、メールのテキストと説明を読み取ってから%1$lld日間、下書きを最後の変更から%2$lld日間保存します。差出人や件名など、メールのそのほかの情報は、スレッドの最新のメールを読み取ってから%3$lld日間保存します。古いデータを削除するのは、“プロジェクト”がオンのときだけです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”会把每封邮件的文字和解释保留到读取后 %1$lld 天，把草稿保留到最后一次修改后 %2$lld 天。邮件的其他信息（例如发件人和主题）会保留到读取同一往来中最新一封邮件后 %3$lld 天。只有在“项目”打开时，才会删除过期的数据。"
+          }
+        }
+      }
+    },
     "Projects leaves out the text these files hide from their reader." : {
       "localizations" : {
         "es-419" : {
