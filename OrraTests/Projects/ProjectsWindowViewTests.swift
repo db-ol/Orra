@@ -276,6 +276,37 @@ struct ProjectsWindowViewTests {
         draft.domains = "harbor"
         #expect(draft.validDomains == nil)
         #expect(draft.project == nil)
+        #expect(draft.checkedDomains == .failure(.notADomain))
+        #expect(ProjectsSetupView.problem(with: .notADomain) == "Write each domain like harbor.example.")
+    }
+
+    /// A domain counts every address at it as one of the project's people, for sorting and
+    /// for the checks of a reply. So a mail provider that many unrelated people share, or a
+    /// domain under one, is refused, as sorting refuses it for a rule. Its people go under
+    /// People instead. The provider the sheet names as an example is one of them.
+    @Test func theSetupRefusesASharedMailProviderAsADomain() throws {
+        let shared = try #require(SortingService.sharedMailDomains.min())
+        var draft = ProjectsSetupView.Draft()
+        draft.name = "Harbor"
+        draft.domains = "harbor.example, @" + shared.uppercased()
+        #expect(draft.checkedDomains == .failure(.sharedProvider(shared)))
+        #expect(draft.validDomains == nil)
+        #expect(draft.project == nil)
+        #expect(ProjectsSetupView.problem(with: .sharedProvider(shared)) == "Many unrelated people have addresses at \(shared). Add each person under People instead.")
+
+        draft.domains = "harbor.example, vip." + shared
+        #expect(draft.checkedDomains == .failure(.sharedProvider("vip." + shared)))
+        draft.domains = ProjectsSetupView.sharedProviderExample
+        #expect(draft.checkedDomains == .failure(.sharedProvider(ProjectsSetupView.sharedProviderExample)))
+        // A domain that only ends in the same letters is another one.
+        draft.domains = "harbor.example, x" + shared
+        #expect(draft.project?.domains == ["harbor.example", "x" + shared])
+
+        // A project saved before with such a domain cannot be saved again until it goes.
+        var edited = ProjectsSetupView.Draft(Project(name: "Harbor", domains: ["harbor.example", shared]))
+        #expect(edited.project == nil)
+        edited.domains = "harbor.example"
+        #expect(edited.project?.domains == ["harbor.example"])
     }
 
     @Test func editingAProjectKeepsWhatTheSheetDoesNotShow() throws {

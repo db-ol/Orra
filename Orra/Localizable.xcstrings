@@ -1376,6 +1376,28 @@
         }
       }
     },
+    "Addresses at these domains count as the project's people. Their mail goes to the project, and a reply to them counts as staying inside the project. For a mail provider many people share, such as %@, add each person under People instead." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las direcciones de estos dominios cuentan como personas del proyecto. Su correo va al proyecto, y una respuesta a ellas se considera dentro del proyecto. Para un proveedor de correo que comparten muchas personas, como %@, agrega a cada persona en Personas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これらのドメインのアドレスは、すべてプロジェクトの関係者として扱われます。そのメールはこのプロジェクトに振り分けられ、そのアドレスへの返信もプロジェクト内のやり取りとみなされます。%@など多くの人が使うメールサービスの場合は、代わりに“関係者”で1人ずつ追加してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些域名下的地址都算作项目人员。他们的邮件会归入这个项目，回复给他们也算在项目之内。如果是许多人共用的邮件服务，例如 %@，请改为在“人员”中逐个添加。"
+          }
+        }
+      }
+    },
     "All set! Hold the talk key and say hello." : {
       "localizations" : {
         "es-419" : {
@@ -7332,6 +7354,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "邮箱"
+          }
+        }
+      }
+    },
+    "Many unrelated people have addresses at %@. Add each person under People instead." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muchas personas sin relación entre sí tienen direcciones en %@. Agrega a cada persona en Personas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@のアドレスは、互いに関係のない多くの人が使っています。代わりに“関係者”で1人ずつ追加してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "许多互不相关的人都在用 %@ 的邮箱地址。请改为在“人员”中逐个添加。"
           }
         }
       }
