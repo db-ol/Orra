@@ -931,6 +931,18 @@ final class ProjectsRuntime {
         resortNeedsProject()
     }
 
+    /// Removes a rule from its project, for Remove Rule on the project page. Mail read from
+    /// now on is sorted without it. The mail it filed stays where it is, and Needs a
+    /// Project is not sorted again.
+    func removeRule(_ rule: Project.Rule, from projectID: UUID) async throws {
+        guard let running else { throw Failure.off }
+        guard var project = running.list.project(projectID) else { throw Failure.unknownProject }
+        guard project.rules.contains(rule) else { return }
+        project.rules.removeAll { $0 == rule }
+        try await running.list.update(project)
+        running.sorting.projectsChanged()
+    }
+
     // MARK: Projects
 
     /// Adds a project, starts indexing its folders and sorts Needs a Project again.

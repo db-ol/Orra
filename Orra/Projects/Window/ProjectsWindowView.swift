@@ -231,6 +231,8 @@ struct ProjectsWindowView: View {
                 setup = ProjectsSetupView.Draft(project)
             } forget: {
                 forgetting = project
+            } removeRule: { rule in
+                Task { await model.removeRule(rule, from: project.id) }
             }
         } else {
             ContentUnavailableView("No Email Selected", systemImage: "envelope")

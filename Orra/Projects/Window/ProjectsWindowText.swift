@@ -47,6 +47,7 @@ nonisolated enum ProjectsWindowText {
         case .projectNotSaved: String(localized: "The project could not be saved. Try again.")
         case .projectNotForgotten: String(localized: "The project could not be forgotten. Try again.")
         case .ruleNotSaved: String(localized: "The rule could not be saved. Try again.")
+        case .ruleNotRemoved: String(localized: "The rule could not be removed. Try again.")
         }
     }
 

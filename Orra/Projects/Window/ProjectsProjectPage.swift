@@ -2,16 +2,20 @@ import SwiftUI
 
 /// A project's page in the third column of the Projects window, while no email is selected:
 /// its description, folders and the state of their index, such as "Files with text: 312"
-/// and "Skipped: 4" with why, the files that hide text, its people, domains, rules and
-/// linked mailbox, and Edit and Forget Project.
+/// and "Skipped: 4" with why, the files that hide text, its people, domains, rules with
+/// Remove Rule and linked mailbox, and Edit and Forget Project.
 struct ProjectsProjectPage: View {
     let runtime: ProjectsRuntime
     let project: Project
     let edit: () -> Void
     let forget: () -> Void
+    /// Removes a rule, after the user's yes.
+    let removeRule: (Project.Rule) -> Void
     @State private var folders: [URL] = []
     @State private var skipped: [FolderIndex.SkippedFile] = []
     @State private var hiddenText: [URL] = []
+    /// The rule that waits for the user's yes before it is removed.
+    @State private var removing: Project.Rule?
 
     /// Reads the folders and the files again when the project or its index changes.
     private struct Reload: Hashable {
@@ -100,7 +104,14 @@ struct ProjectsProjectPage: View {
             if !project.rules.isEmpty {
                 Section("Rules") {
                     ForEach(project.rules, id: \.self) { rule in
-                        Text(verbatim: ProjectsWindowText.rule(rule.sorting))
+                        HStack {
+                            Text(verbatim: ProjectsWindowText.rule(rule.sorting))
+                            Spacer()
+                            Button("Remove Rule…") {
+                                removing = rule
+                            }
+                            .disabled(runtime.phase != .on)
+                        }
                     }
                 }
             }
@@ -121,6 +132,18 @@ struct ProjectsProjectPage: View {
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(
+            "Remove this rule?",
+            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+            presenting: removing
+        ) { rule in
+            Button("Remove Rule", role: .destructive) {
+                removeRule(rule)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Future mail will no longer use this rule. Existing assignments stay unchanged.")
+        }
         .task(id: Reload(project: project.id, folders: project.folders, report: Self.fingerprint(report))) {
             folders = await runtime.folders(of: project)
             skipped = await runtime.skippedFiles(project.id)

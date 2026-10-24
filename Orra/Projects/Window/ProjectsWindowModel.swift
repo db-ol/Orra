@@ -16,6 +16,7 @@ final class ProjectsWindowModel {
         case projectNotSaved
         case projectNotForgotten
         case ruleNotSaved
+        case ruleNotRemoved
     }
 
     /// A move from a Move To menu that waits for the user's yes, since it takes away a draft
@@ -259,6 +260,15 @@ final class ProjectsWindowModel {
             try await runtime.accept(offer)
         } catch {
             notice = .ruleNotSaved
+        }
+    }
+
+    /// Remove Rule on the project page, after the user's yes.
+    func removeRule(_ rule: Project.Rule, from project: UUID) async {
+        do {
+            try await runtime.removeRule(rule, from: project)
+        } catch {
+            notice = .ruleNotRemoved
         }
     }
 

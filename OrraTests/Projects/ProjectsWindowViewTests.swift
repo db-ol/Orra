@@ -342,6 +342,24 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    /// Remove Rule on the project page takes the rule off the project, and says so when it
+    /// could not.
+    @Test func removeRuleTakesTheRuleOffTheProject() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let model = ProjectsWindowModel(runtime: runtime)
+        let project = try #require(runtime.projectList.first)
+        let rule = try #require(project.rules.first)
+        await model.removeRule(rule, from: project.id)
+        #expect(runtime.projectList.first?.rules.isEmpty == true)
+        #expect(model.notice == nil)
+        await model.removeRule(rule, from: UUID())
+        #expect(model.notice == .ruleNotRemoved)
+        #expect(ProjectsWindowText.notice(.ruleNotRemoved) == "The rule could not be removed. Try again.")
+        await fixture.stop()
+    }
+
     @Test func everySkipReasonAndRefusalHasWords() {
         for reason in FileSkipReason.allCases {
             #expect(!ProjectsWindowText.skipReason(reason).isEmpty)
@@ -388,7 +406,7 @@ struct ProjectsWindowViewTests {
         try await render(rows, size: NSSize(width: 340, height: 560), to: folder.appendingPathComponent("\(language)-projects-list.png"))
 
         let project = try #require(runtime.projectList.first)
-        try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
+        try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}, removeRule: { _ in }), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
 
         var draft = ProjectsSetupView.Draft(project)
         draft.people.append(ProjectsSetupView.Draft.Person(name: "Lu", address: "lu at kiln"))

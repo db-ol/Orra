@@ -5104,6 +5104,28 @@
         }
       }
     },
+    "Future mail will no longer use this rule. Existing assignments stay unchanged." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El correo nuevo ya no usará esta regla. El correo ya archivado no cambia."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今後のメールにはこのルールが使われなくなります。すでに振り分けられたメールはそのままです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以后的邮件不再使用这条规则。已归入项目的邮件保持不变。"
+          }
+        }
+      }
+    },
     "General" : {
       "localizations" : {
         "es-419" : {
@@ -12006,6 +12028,72 @@
         }
       }
     },
+    "Remove Rule" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar regla"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールを削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除规则"
+          }
+        }
+      }
+    },
+    "Remove Rule…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar regla…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールを削除…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除规则…"
+          }
+        }
+      }
+    },
+    "Remove this rule?" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Eliminar esta regla?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このルールを削除しますか?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要移除这条规则吗？"
+          }
+        }
+      }
+    },
     "Removed: %@" : {
       "localizations" : {
         "es-419" : {
@@ -15009,6 +15097,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这封邮件的其余部分在“邮件”中。"
+          }
+        }
+      }
+    },
+    "The rule could not be removed. Try again." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo eliminar la regla. Vuelve a intentarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールを削除できませんでした。もう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法移除这条规则。请再试一次。"
           }
         }
       }
