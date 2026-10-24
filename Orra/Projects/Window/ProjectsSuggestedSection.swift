@@ -76,6 +76,7 @@ struct ProjectsSuggestedSection: View {
                         Button("Dismiss Suggestion") {
                             Self.dismiss(suggestion, from: suggestions, runtime: runtime)
                         }
+                        .help(Self.dismissalNote)
                     }
                     .disabled(runtime.phase != .on)
                 }
@@ -90,6 +91,11 @@ struct ProjectsSuggestedSection: View {
             }
         }
     }
+
+    /// The note of Dismiss Suggestion, in the suggestion's menu and in New Project. A
+    /// dismissal is kept and has no undo yet, so the note says that the suggestion stays
+    /// hidden.
+    static let dismissalNote = Text("This suggestion will stay hidden. You can still create the project yourself.")
 
     /// How many emails a suggestion would take from Needs a Project.
     static func takes(_ suggestion: ProjectSuggestionService.Suggestion) -> String {

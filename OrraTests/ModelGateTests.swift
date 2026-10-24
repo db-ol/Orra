@@ -747,16 +747,10 @@ struct ModelGateReservationTests {
     let mic = FakeMicrophone()
     let inserter = FakeInserter()
 
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-    }
-
-    private func press(_ controller: PushToTalkController, _ key: TalkKey) async throws {
+    private func press(_ controller: PushToTalkController, _ key: TalkKey, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         let starts = mic.calls.filter { $0 == "start" }.count
         controller.handle(.pressed(isRepeat: false), key: .key(key))
-        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        try await waitUntil({ mic.calls.filter { $0 == "start" }.count > starts }, sourceLocation: sourceLocation)
     }
 
     @Test func aDictationReservesTheGate() async throws {

@@ -3,10 +3,10 @@ import Observation
 
 /// What the Projects window shows and what the user does there: the list chosen in the
 /// sidebar, its mail with the deadline marks of the explained ones, the selected email, a
-/// move that waits for the user's yes, the rule offered after moves, the explanations under
-/// way, the email view of each email the user opened with the window's one handoff at a
-/// time, the line after Explain Selected Message, and Suggested Projects. ProjectsRuntime
-/// does the work.
+/// move that waits for the user's yes, the rule offered after moves, the project Settings
+/// asks to edit, the explanations under way, the email view of each email the user opened
+/// with the window's one handoff at a time, the line after Explain Selected Message, and
+/// Suggested Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -16,10 +16,11 @@ final class ProjectsWindowModel {
         case projectNotSaved
         case projectNotForgotten
         case ruleNotSaved
+        case ruleNotRemoved
     }
 
-    /// A move from a Move To menu that waits for the user's yes, since it takes away a draft
-    /// the user changed, see `requestMove(_:to:)`.
+    /// A move from an Assign to Project menu that waits for the user's yes, since it takes
+    /// away a draft the user changed, see `requestMove(_:to:)`.
     nonisolated struct PendingMove: Equatable, Sendable {
         var messageID: String
         /// The project, nil for Needs a Project.
@@ -85,6 +86,8 @@ final class ProjectsWindowModel {
     @ObservationIgnored private var deadlinesRead: Set<String> = []
     /// A move that waits for the user's yes.
     var pendingMove: PendingMove?
+    /// The project whose Edit Project sheet Settings asks for, until the window takes it.
+    private(set) var projectToEdit: UUID?
     /// Counts the times the window let go of its email views, so the email view shown reads
     /// its email again into a new one.
     private(set) var emailViewGeneration = 0
@@ -225,9 +228,10 @@ final class ProjectsWindowModel {
         return index > 0 ? rows[index - 1].messageID : nil
     }
 
-    /// A move from a Move To menu. A move takes the explanation and the draft away, since
-    /// they hold text of the project they were made for (#146). When the user changed the
-    /// draft, or the model made versions of it, the move waits for the user's yes.
+    /// A move from an Assign to Project menu. A move takes the explanation and the draft
+    /// away, since they hold text of the project they were made for (#146). When the user
+    /// changed the draft, or the model made versions of it, the move waits for the user's
+    /// yes.
     func requestMove(_ messageID: String, to project: UUID?) async {
         if await takesDraftAway(messageID) {
             pendingMove = PendingMove(messageID: messageID, project: project)
@@ -260,6 +264,38 @@ final class ProjectsWindowModel {
         } catch {
             notice = .ruleNotSaved
         }
+    }
+
+    /// Remove Rule on the project page, after the user's yes. A removal that works takes
+    /// away the line of one that did not.
+    func removeRule(_ rule: Project.Rule, from project: UUID) async {
+        do {
+            try await runtime.removeRule(rule, from: project)
+            if notice == .ruleNotRemoved {
+                notice = nil
+            }
+        } catch {
+            notice = .ruleNotRemoved
+        }
+    }
+
+    /// Asks for a project's Edit Project sheet, as Edit Project… beside a linked mailbox in
+    /// Settings does. The window takes the request with `takeProjectToEdit(presenting:)`.
+    func edit(_ project: UUID) {
+        projectToEdit = project
+    }
+
+    /// Takes the request of `edit(_:)`: shows the project's page and returns the project,
+    /// whose Edit Project sheet the window opens. While the window shows a sheet or a
+    /// dialog, the request goes and the window stays as it is, and so it does for a project
+    /// that is gone.
+    /// - Parameter presenting: whether the window shows a sheet or an alert of its own.
+    func takeProjectToEdit(presenting: Bool) -> Project? {
+        guard let id = projectToEdit else { return nil }
+        projectToEdit = nil
+        guard !presenting, pendingMove == nil, let project = runtime.projectList.first(where: { $0.id == id }) else { return nil }
+        place = .project(id)
+        return project
     }
 
     /// Explains an email, on the user's click.

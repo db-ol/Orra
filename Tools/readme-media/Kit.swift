@@ -12,10 +12,11 @@ enum Lang: String, CaseIterable {
     /// Whether the GIF keeps the details it was first drawn with. The Japanese and Spanish
     /// GIFs were checked against Orra 0.5.0 and draw a few things closer to the app: the
     /// Talk Key submenu, the close button and the 10 second countdown of a learned word's
-    /// notice, which the pointer pauses and closes, a caption in the small style while its
-    /// translation is pending, and the update window when it is ready, with a full bar and no
-    /// line of text. The English and Chinese GIFs keep their first drawing, and their files
-    /// stay the same, until they are made again with these details.
+    /// notice, which the pointer pauses and closes, and the update window when it is ready,
+    /// with a full bar and no line of text. The English and Chinese GIFs of vocabulary and
+    /// updates keep their first drawing, and their files stay the same, until they are made
+    /// again with these details. Every meeting GIF shows a caption in the small style while
+    /// its translation is pending, as the app does.
     var keepsFirstDrawing: Bool {
         self == .en || self == .zh
     }
@@ -90,6 +91,9 @@ enum CapsuleState {
     case hidden
     case idle
     case listening(level: Double)
+    /// A dictation started with a press, with how to finish it, as in Press to start and
+    /// stop.
+    case handsFree(level: Double, hint: String)
     case transcribing(phase: Double)
 }
 
@@ -154,16 +158,25 @@ struct OrraCapsule: View {
                 .frame(width: 40, height: 6)
         case .listening(let level):
             capsule(Bars(heights: Bars.heights(level: level)))
+        case .handsFree(let level, let hint):
+            capsule(Bars(heights: Bars.heights(level: level)), hint: hint)
         case .transcribing(let phase):
             capsule(Bars(heights: Bars.wave(phase: phase)))
         }
     }
 
-    private func capsule(_ bars: Bars) -> some View {
-        HStack(spacing: 8) {
+    /// The bars, the badge and the hint in white, as RecordingIndicator.swift draws them.
+    private func capsule(_ bars: Bars, hint: String? = nil) -> some View {
+        HStack(spacing: hint == nil ? 8 : 10) {
             bars
             if let badge {
                 Badge(text: badge)
+            }
+            if let hint {
+                T(hint)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white)
+                    .fixedSize()
             }
         }
         .padding(.horizontal, 12)
@@ -178,7 +191,8 @@ struct OrraCapsule: View {
 
 // MARK: - Keys, spoken words, windows
 
-/// A key of a Mac keyboard, pressed or not, with what it does below it.
+/// A key of a Mac keyboard, pressed or not, with what it does below it, on one line or
+/// two.
 struct KeyCap: View {
     let symbol: String
     let name: String
@@ -211,6 +225,9 @@ struct KeyCap: View {
             T(caption)
                 .font(.system(size: 11))
                 .foregroundStyle(Palette.muted)
+                // Centered on two lines. One line keeps the default, which draws it a
+                // fraction of a pixel apart, so the GIFs with one line stay the same.
+                .multilineTextAlignment(caption.contains("\n") ? .center : .leading)
         }
     }
 }

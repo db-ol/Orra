@@ -195,8 +195,100 @@ struct ProjectsWindowViewTests {
         email.reasons = [.person, .model]
         #expect(ProjectsWindowText.reasons(email) == ["A person you listed for the project", "The model chose the project"])
         email.movedByUser = true
-        #expect(ProjectsWindowText.reasons(email) == ["You moved it here"])
+        #expect(ProjectsWindowText.reasons(email) == ["You assigned it here"])
         #expect(ProjectsWindowText.reason(.tooLongForModel) == "Too long for the model to sort")
+    }
+
+    /// A warning says what its check found, no more. The word checks match words, not
+    /// intent, so a notice that only mentions a password or a new account sets them off. A
+    /// quote counts as not found when the mail it quotes is older than what Projects read.
+    /// A domain looks alike when it looks like the user's own, not only a project's.
+    @Test func theWarningsSayWhatTheChecksFound() async {
+        let own = [SenderChecks.Person(name: "Lin Bai", address: "lin@studio.example")]
+        let notice = "We never ask for your password by email. Ignore any message that says we have a new account."
+        let found = await ContentChecks.warnings(for: ContentChecks.Input(subject: "Security notice", text: notice, senderIsKnown: true, own: own, sentTexts: []))
+        #expect(found == [.paymentChange, .credentialRequest])
+        let quote = "On Mon, 12 Oct 2026, Lin Bai <lin@studio.example> wrote:\n> The brass lamps are fine with us."
+        let quoted = await ContentChecks.warnings(for: ContentChecks.Input(subject: "Re: Lamps", text: quote, senderIsKnown: true, own: own, sentTexts: ["Thanks for the plan."]))
+        #expect(quoted == [.forgedQuote])
+        let lookalike = SenderChecks.warnings(for: SenderChecks.Input(sender: SenderChecks.Person(name: "", address: "accounts@studi0.example"), own: own))
+        #expect(lookalike == [.lookalikeDomain])
+
+        #expect(ProjectsWindowText.warning(.paymentChange) == "It mentions a change of where to pay.")
+        #expect(ProjectsWindowText.warning(.credentialRequest) == "It mentions a password, a code or another credential. Check what it asks you to do.")
+        #expect(ProjectsWindowText.warning(.forgedQuote) == "It quotes you. Projects did not find those words in the sent mail it read.")
+        #expect(ProjectsWindowText.warning(.paymentTermsChange) == "It mentions a change of amounts, dates or other terms of payment.")
+        #expect(ProjectsWindowText.warning(.personalDataRequest) == "It mentions personal data, such as an ID number. Check what it asks you to do.")
+        // Known means listed for a project, at a listed domain, or written to in the mail
+        // Projects read.
+        #expect(ProjectsWindowText.warning(.unknownSenderPayment) == "It mentions payment, and Projects does not know the sender.")
+        // An executable or a disk image sets it off as well as a name that hides its type.
+        #expect(ProjectsWindowText.warning(.attachmentNameSpoofing) == "An attachment may run code, or its name hides its real type.")
+        // A hidden preheader of a newsletter sets it off too.
+        #expect(ProjectsWindowText.warning(.hiddenText) == "It holds text its reader cannot see.")
+        // Known domains are the user's own, the projects' and those of everyone the user
+        // exchanged mail with.
+        #expect(ProjectsWindowText.warning(.lookalikeDomain) == "The sender's domain looks like a domain Projects knows, but it is a different one.")
+    }
+
+    /// An explanation of the English answer `answer`, as ExplainService makes it.
+    private static func explanation(_ answer: String) -> Explanation {
+        let read = ExplainAnswer(answer, sources: ["this email"])
+        return Explanation(
+            messageID: "a@harbor.example", project: nil, language: .en, today: today, reply: .reply(.en),
+            warnings: [], modelWarnings: read.warnings,
+            points: read.points.map { Explanation.Point(text: $0.text, sources: $0.sources, flags: []) },
+            questions: read.questions, draft: .missing, draftCheck: nil, sources: ["this email": .message("a@harbor.example")],
+            removed: [:], problems: read.problems, unknownSources: read.unknownSources)
+    }
+
+    /// Before you reply says that nothing was found only when the model wrote the section
+    /// and left it empty. An answer without the section, as one that stopped early, says the
+    /// model did not finish it, and so does What it says.
+    @Test func aPartTheModelDidNotFinishSaysSo() {
+        let unfinished = "The model did not finish this part. Explain the email again to try once more."
+        let complete = Self.explanation("Warnings:\n- None\nPoints:\n- Mei asks for the floor plan. [this email]\nBefore you reply:\n- None\nDraft reply:\nHi Mei,")
+        #expect(complete.problems.isEmpty)
+        #expect(ProjectsWindowText.noQuestions(complete) == "No decisions found.")
+        let stopped = Self.explanation("Warnings:\n- None\nPoints:\n- Mei asks for the floor plan. [this email]\n")
+        #expect(stopped.problems == [.missing(.questions), .missing(.draft)])
+        #expect(ProjectsWindowText.noQuestions(stopped) == unfinished)
+        let early = Self.explanation("Warnings:\n- None\n")
+        #expect(early.problems == [.missing(.points), .missing(.questions), .missing(.draft)])
+        #expect(ProjectsWindowText.noPoints(early) == unfinished)
+        let noPoints = Self.explanation("Warnings:\n- None\nPoints:\n- None\nBefore you reply:\n- None\nDraft reply:\nHi Mei,")
+        #expect(ProjectsWindowText.noPoints(noPoints) == "The model named no points.")
+    }
+
+    /// A point the model gave no source for says so, where another has its chips.
+    @Test func aPointWithoutASourceSaysSo() {
+        let explanation = Self.explanation("Warnings:\n- None\nPoints:\n- The lamps arrive in week 47.\n- Mei asks for the floor plan. [this email]\nBefore you reply:\n- None\nDraft reply:\nHi Mei,")
+        #expect(explanation.points.map(\.sources) == [[], ["this email"]])
+        #expect(explanation.points.map(ProjectsWindowText.noSource) == ["No source provided", nil])
+    }
+
+    /// The explanation says when Projects did not read an attachment of a kind it reads,
+    /// and leaves the details to the list under Original Email. A kind Projects never reads,
+    /// such as an image, gives no notice, since many emails carry one in their signature.
+    /// That holds also when Mail has not downloaded it or the email was too large to read,
+    /// which give an image the same state as a PDF.
+    @Test func theExplanationSaysWhenAttachmentsWereNotRead() {
+        let plan = MailAttachment(name: "plan.pdf", type: "application/pdf", size: 120_000, state: .read)
+        let logo = MailAttachment(name: "logo.png", type: "image/png", size: 4_000, state: .otherType)
+        let drawings = MailAttachment(name: "drawings.pdf", type: "application/pdf", size: 24_000_000, state: .tooLarge)
+        let scan = MailAttachment(name: "contract.pdf", type: "application/pdf", size: 900_000, state: .noText)
+        #expect(ProjectsWindowText.unreadAttachments([]) == nil)
+        #expect(ProjectsWindowText.unreadAttachments([plan, logo]) == nil)
+        #expect(ProjectsWindowText.unreadAttachments([plan, drawings, logo]) == "Projects could not read an attachment. See Original Email.")
+        #expect(ProjectsWindowText.unreadAttachments([drawings, scan]) == "Projects could not read some attachments. See Original Email.")
+        let images = [
+            MailAttachment(name: "logo.png", type: "image/png", size: 4_000, state: .notDownloaded),
+            MailAttachment(name: "site.jpg", type: "image/jpeg", size: 9_000_000, state: .emailTooLarge),
+            MailAttachment(name: "badge.gif", type: "image/gif", state: .savedEarlier),
+        ]
+        #expect(ProjectsWindowText.unreadAttachments([plan] + images) == nil)
+        let notDownloaded = MailAttachment(name: "lamps.pdf", type: "application/pdf", size: 48_213, state: .notDownloaded)
+        #expect(ProjectsWindowText.unreadAttachments(images + [notDownloaded]) == "Projects could not read an attachment. See Original Email.")
     }
 
     /// The warnings show the rule findings of the list, also those the explanation does not
@@ -279,6 +371,37 @@ struct ProjectsWindowViewTests {
         draft.domains = "harbor"
         #expect(draft.validDomains == nil)
         #expect(draft.project == nil)
+        #expect(draft.checkedDomains == .failure(.notADomain))
+        #expect(ProjectsSetupView.problem(with: .notADomain) == "Write each domain like harbor.example.")
+    }
+
+    /// A domain counts every address at it as one of the project's people, for sorting and
+    /// for the checks of a reply. So a mail provider that many unrelated people share, or a
+    /// domain under one, is refused, as sorting refuses it for a rule. Its people go under
+    /// People instead. The provider the sheet names as an example is one of them.
+    @Test func theSetupRefusesASharedMailProviderAsADomain() throws {
+        let shared = try #require(SortingService.sharedMailDomains.min())
+        var draft = ProjectsSetupView.Draft()
+        draft.name = "Harbor"
+        draft.domains = "harbor.example, @" + shared.uppercased()
+        #expect(draft.checkedDomains == .failure(.sharedProvider(shared)))
+        #expect(draft.validDomains == nil)
+        #expect(draft.project == nil)
+        #expect(ProjectsSetupView.problem(with: .sharedProvider(shared)) == "Many unrelated people have addresses at \(shared). Add each person under People instead.")
+
+        draft.domains = "harbor.example, vip." + shared
+        #expect(draft.checkedDomains == .failure(.sharedProvider("vip." + shared)))
+        draft.domains = ProjectsSetupView.sharedProviderExample
+        #expect(draft.checkedDomains == .failure(.sharedProvider(ProjectsSetupView.sharedProviderExample)))
+        // A domain that only ends in the same letters is another one.
+        draft.domains = "harbor.example, x" + shared
+        #expect(draft.project?.domains == ["harbor.example", "x" + shared])
+
+        // A project saved before with such a domain cannot be saved again until it goes.
+        var edited = ProjectsSetupView.Draft(Project(name: "Harbor", domains: ["harbor.example", shared]))
+        #expect(edited.project == nil)
+        edited.domains = "harbor.example"
+        #expect(edited.project?.domains == ["harbor.example"])
     }
 
     @Test func editingAProjectKeepsWhatTheSheetDoesNotShow() throws {
@@ -298,6 +421,60 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsSetupView.choices(["Work/Archive"], current: "Work/Archive") == ["Work/Archive"])
     }
 
+    /// Edit Project… beside a linked mailbox in Settings shows the project's page with its
+    /// Edit Project sheet. While the window shows a sheet or a dialog, the request goes and
+    /// the window stays as it is. A project that is gone changes nothing.
+    @Test func settingsOpensEditProjectOfALinkedMailbox() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let model = ProjectsWindowModel(runtime: fixture.runtime)
+        let project = try #require(fixture.runtime.projectList.first)
+        model.edit(UUID())
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
+        model.edit(project.id)
+        #expect(model.projectToEdit == project.id)
+        #expect(model.takeProjectToEdit(presenting: true) == nil)
+        model.pendingMove = ProjectsWindowModel.PendingMove(messageID: "a@harbor.example", project: nil)
+        model.edit(project.id)
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
+        #expect(model.place == .needsProject)
+        #expect(model.projectToEdit == nil)
+
+        model.pendingMove = nil
+        model.edit(project.id)
+        #expect(model.takeProjectToEdit(presenting: false) == project)
+        #expect(model.place == .project(project.id))
+        #expect(model.projectToEdit == nil)
+        #expect(model.takeProjectToEdit(presenting: false) == nil)
+        await fixture.stop()
+    }
+
+    /// Remove Rule on the project page takes the rule off the project, and says so when it
+    /// could not, until a try works. An Edit Project sheet opened before the removal does
+    /// not bring the rule back when it saves, since the sheet does not change rules.
+    @Test func removeRuleTakesTheRuleOffTheProject() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let model = ProjectsWindowModel(runtime: runtime)
+        let project = try #require(runtime.projectList.first)
+        let rule = try #require(project.rules.first)
+        var sheet = ProjectsSetupView.Draft(project)
+        await model.removeRule(rule, from: UUID())
+        #expect(model.notice == .ruleNotRemoved)
+        #expect(ProjectsWindowText.notice(.ruleNotRemoved) == "The rule could not be removed. Try again.")
+        #expect(runtime.projectList.first?.rules == [rule])
+        await model.removeRule(rule, from: project.id)
+        #expect(runtime.projectList.first?.rules.isEmpty == true)
+        #expect(model.notice == nil)
+
+        sheet.description = "Lobby and stairs"
+        try await runtime.update(try #require(sheet.project))
+        #expect(runtime.projectList.first?.description == "Lobby and stairs")
+        #expect(runtime.projectList.first?.rules.isEmpty == true)
+        await fixture.stop()
+    }
+
     @Test func everySkipReasonAndRefusalHasWords() {
         for reason in FileSkipReason.allCases {
             #expect(!ProjectsWindowText.skipReason(reason).isEmpty)
@@ -305,7 +482,8 @@ struct ProjectsWindowViewTests {
         for refusal in [FolderWalk.Refusal.notAFolder, .home, .volumeRoot, .mailData] {
             #expect(!ProjectsWindowText.refusal(refusal).isEmpty)
         }
-        #expect(ProjectsWindowText.ruleOffer(.domain("harbor.example"), project: "Harbor") == "Always file mail from @harbor.example in Harbor?")
+        #expect(ProjectsWindowText.refusal(.mailData) == "Projects never reads Mail's local data files.")
+        #expect(ProjectsWindowText.ruleOffer(.domain("harbor.example"), project: "Harbor") == "Always assign mail from @harbor.example to Harbor?")
         #expect(ProjectsWindowText.rule(.subjectCode("PO-12")) == "Mail with PO-12 in the subject")
     }
 
@@ -344,7 +522,7 @@ struct ProjectsWindowViewTests {
         try await render(rows, size: NSSize(width: 340, height: 560), to: folder.appendingPathComponent("\(language)-projects-list.png"))
 
         let project = try #require(runtime.projectList.first)
-        try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
+        try await render(ProjectsProjectPage(runtime: runtime, project: project, edit: {}, forget: {}, removeRule: { _ in }), size: NSSize(width: 520, height: 900), to: folder.appendingPathComponent("\(language)-projects-page.png"))
 
         var draft = ProjectsSetupView.Draft(project)
         draft.people.append(ProjectsSetupView.Draft.Person(name: "Lu", address: "lu at kiln"))
@@ -363,7 +541,7 @@ struct ProjectsWindowViewTests {
         emailModel.showsOriginal = true
         try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_200), to: folder.appendingPathComponent("\(language)-projects-email-original.png"))
         emailModel.showsOriginal = false
-        try await render(ProjectsEmailOriginal(content: Self.forward).padding(20), size: NSSize(width: 520, height: 560), to: folder.appendingPathComponent("\(language)-projects-email-forward.png"))
+        try await render(ProjectsEmailOriginal(content: Self.forward, attachments: Self.attachments).padding(20), size: NSSize(width: 520, height: 720), to: folder.appendingPathComponent("\(language)-projects-email-forward.png"))
 
         // The width of the email column at the window's first size, with the English draft
         // translated for a reader of Chinese, which puts the translation under the draft.
@@ -383,13 +561,20 @@ struct ProjectsWindowViewTests {
 
     /// A forward as the email view shows it, with every part it can have.
     static let forward = ProjectsEmailOriginal.Content(
-        to: ["Lin <me@studio.example>"], cc: ["Kai Moss <kai@kiln.example>"], attachments: ["lamps.pdf", "plan.docx"],
+        to: ["Lin <me@studio.example>"], cc: ["Kai Moss <kai@kiln.example>"],
         note: "Lin, see the note from the lamp maker below. Can we take the brass ones?", signature: "Mei Tan\nHarbor Lobby",
         forwards: [QuotedHistory.Forward(
             sender: "Lumen Works <orders@lumenworks.example>", date: "Mon, Oct 12, 2026 at 9:30 AM", subject: "Lamps for the lobby",
             to: "Mei Tan <mei@harbor.example>", text: "Twelve brass lamps are ready. Delivery in week 47.")],
         quoted: "On Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps are ready?",
         isCut: true)
+
+    /// Attachments in each kind of state the list shows, one of them not read.
+    static let attachments = [
+        MailAttachment(name: "lamps.pdf", type: "application/pdf", size: 182_000, state: .read, text: "Twelve brass lamps, delivery in week 47."),
+        MailAttachment(name: "logo.png", type: "image/png", size: 4_200, state: .otherType),
+        MailAttachment(name: "plan.docx", type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", size: 2_400_000, state: .notDownloaded),
+    ]
 
     /// The runtime's actions for the email view, with a reader of Chinese and a fake model
     /// that gives a translation of the draft.
@@ -421,7 +606,7 @@ struct ProjectsWindowViewTests {
         try await store.save([MailStore.Message(
             messageID: id, mailbox: nil, date: today, sender: MailStore.Person(name: "Mei Tan", address: "mei@harbor.example"),
             to: [MailStore.Person(address: "me@studio.example")], cc: [MailStore.Person(name: "Kai Moss", address: "kai@kiln.example")],
-            subject: "The lobby lamps", text: text, visibleText: text, warnings: [.link])], ownAddresses: ["me@studio.example"], at: today)
+            subject: "The lobby lamps", text: text, visibleText: text, attachments: attachments, warnings: [.link])], ownAddresses: ["me@studio.example"], at: today)
         // Sorted first, as every email the scan saves is, so it stays where it is. Left
         // unsorted, it would be filed in the project by the sorting of Needs a Project that
         // follows the fixture's index sweep, which can end at any time during the test, and

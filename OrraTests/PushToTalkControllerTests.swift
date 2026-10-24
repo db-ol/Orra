@@ -213,11 +213,13 @@ struct PushToTalkControllerTests {
     }
 
     /// A started controller whose keyboard tap is a fake, so no real tap is installed. The
-    /// fake allows the tap, so the hotkey is active.
+    /// fake allows the tap, so the hotkey is active. After a stop at the limit the key waits
+    /// an hour for the press meant to stop, unless a test asks for less, so the wait is not
+    /// over when the test process stalls for a minute.
     private func startedController(
         translation: TranslationModel = .off,
         limit: Duration = RecordingLimits.maximumDuration,
-        limitNoticeWindow: Duration = RecordingLimits.noticeWindow
+        limitNoticeWindow: Duration = .seconds(3600)
     ) async throws -> PushToTalkController {
         let controller = PushToTalkController(
             capture: mic.capture,
@@ -241,11 +243,11 @@ struct PushToTalkControllerTests {
         return controller
     }
 
-    private func dictate(_ controller: PushToTalkController) async throws {
+    private func dictate(_ controller: PushToTalkController, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         controller.handle(.pressed(isRepeat: false))
-        try await waitUntil { mic.calls.contains("start") }
+        try await waitUntil({ mic.calls.contains("start") }, sourceLocation: sourceLocation)
         controller.handle(.released)
-        try await waitUntil { controller.state == .idle }
+        try await waitUntil({ controller.state == .idle }, sourceLocation: sourceLocation)
     }
 
     @Test func startsIdleWithoutTheHotkey() async {
@@ -888,7 +890,9 @@ struct PushToTalkControllerTests {
     }
 
     @Test func aDictationReleasedBeforeTheCountdownSendsNone() async throws {
-        let controller = await makeController(limit: .seconds(10), countdown: .seconds(5))
+        // An hour, so the release comes long before the countdown even when the test
+        // process stalls for a minute.
+        let controller = await makeController(limit: .seconds(3600), countdown: .seconds(5))
         let cues = CueRecorder(controller)
         try await dictate(controller)
         try await Task.sleep(for: .milliseconds(50))
@@ -1046,8 +1050,10 @@ struct PushToTalkControllerTests {
     }
 
     /// Starts a dictation that the limit stops while the key is up, in `mode`, and waits until
-    /// it was pasted.
-    private func dictationStoppedAtLimit(_ mode: TriggerMode, limitNoticeWindow: Duration = RecordingLimits.noticeWindow) async throws -> (PushToTalkController, HotkeyTap, CueRecorder, ContinuousClock.Instant) {
+    /// it was pasted. The key waits an hour for the press meant to stop, as in
+    /// `startedController`, unless a test asks for less. The dictations after it get the
+    /// usual limit.
+    private func dictationStoppedAtLimit(_ mode: TriggerMode, limitNoticeWindow: Duration = .seconds(3600), sourceLocation: SourceLocation = #_sourceLocation) async throws -> (PushToTalkController, HotkeyTap, CueRecorder, ContinuousClock.Instant) {
         let controller = try await startedController(limit: .milliseconds(200), limitNoticeWindow: limitNoticeWindow)
         controller.setTriggerMode(mode, for: .talk)
         let cues = CueRecorder(controller)
@@ -1059,8 +1065,13 @@ struct PushToTalkControllerTests {
             press(tap, at: &now)
         }
         #expect(controller.state == .handsFree)
-        try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
+        try await waitUntil({ controller.state == .idle && !inserter.inserted.isEmpty }, sourceLocation: sourceLocation)
         #expect(mic.calls == ["start", "stop"])
+        // The dictations that follow are to record as usual, so they get the usual limit.
+        // With 200 ms the limit could stop one of them before the test ends it. A hold in
+        // Hold mode lasts longer than that, since its press alone waits 300 ms, and a wait
+        // for the call that starts the microphone fails when the stop comes before it looks.
+        controller.maximumRecordingDuration = RecordingLimits.maximumDuration
         return (controller, tap, cues, now)
     }
 
@@ -1102,12 +1113,6 @@ struct PushToTalkControllerTests {
     /// hold records as usual, from its key down, and clears the notice.
     @Test func inHoldModeAHoldAfterTheLimitRecords() async throws {
         let (controller, tap, cues, initial) = try await dictationStoppedAtLimit(.hold)
-        // This hold is to record as usual, so it gets the usual limit. It lasts longer than
-        // the 200 ms limit of the first dictation, since the press alone waits 300 ms. With
-        // that limit the test passed only when the limit ran out during the wait, where a
-        // limit does nothing, or when the release came first. A busy main actor delays
-        // both, and then the limit stopped this hold too.
-        controller.maximumRecordingDuration = RecordingLimits.maximumDuration
         var now = initial
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: HotkeyTapTests.rightControlDown, at: now)
         #expect(controller.state == .arming)
@@ -1185,6 +1190,8 @@ struct PushToTalkControllerTests {
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(cues.list.last == .finished(message: Self.limitNotice))
         #expect(mic.calls == ["start", "stop"])
+        // The next dictation gets the usual limit, as in `dictationStoppedAtLimit`.
+        controller.maximumRecordingDuration = RecordingLimits.maximumDuration
         press(tap, at: &now)
         #expect(controller.state == .handsFree)
         try await waitUntil { mic.calls.count == 3 }
@@ -1203,6 +1210,8 @@ struct PushToTalkControllerTests {
         #expect(controller.state == .listening)
         try await waitUntil { controller.state == .idle && !inserter.inserted.isEmpty }
         #expect(cues.list.last == .finished(message: Self.limitNotice))
+        // The next hold gets the usual limit, as in `dictationStoppedAtLimit`.
+        controller.maximumRecordingDuration = RecordingLimits.maximumDuration
         now = now.advanced(by: .seconds(1))
         _ = tap.handle(type: .flagsChanged, keyCode: TalkKey.rightControl.keyCode, flags: [], at: now)
         #expect(controller.state == .idle)
@@ -1250,6 +1259,7 @@ struct PushToTalkControllerTests {
         // The wait is over, so right Control records again.
         press(tap, at: &now)
         #expect(controller.state == .handsFree)
+        try await waitUntil { mic.calls.count == 5 }
         _ = tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now)
         try await waitUntil { controller.state == .idle && mic.calls.count == 6 }
     }
@@ -1443,8 +1453,9 @@ struct PushToTalkControllerTests {
     /// since a microphone can deliver zeros for a while after its start.
     @Test func theStartSoundWaitsForSoundFromTheMicrophone() async throws {
         mic.soundHeld = true
-        // A limit no run reaches, so only the sound can bring the cue.
-        let controller = await makeController(soundWaitLimit: .seconds(60))
+        // A limit no run reaches, so only the sound can bring the cue. An hour, since the
+        // test process can stall for a minute, and a limit of 60 s ran out on CI that way.
+        let controller = await makeController(soundWaitLimit: .seconds(3600))
         let cues = CueRecorder(controller)
         controller.handle(.pressed(isRepeat: false))
         try await waitUntil { mic.calls.contains("start") }
@@ -1479,7 +1490,8 @@ struct PushToTalkControllerTests {
 
     @Test func theHandsFreeCueWaitsForSoundToo() async throws {
         mic.soundHeld = true
-        let controller = await makeController(soundWaitLimit: .seconds(60))
+        // An hour, a limit no run reaches, as above.
+        let controller = await makeController(soundWaitLimit: .seconds(3600))
         let cues = CueRecorder(controller)
         controller.handle(.doublePressed)
         try await waitUntil { mic.calls.contains("start") }
@@ -2300,12 +2312,12 @@ struct PushToTalkControllerTests {
     }
 
     /// A hold of `key` that records and is released.
-    private func dictate(_ controller: PushToTalkController, with key: TalkKey) async throws {
+    private func dictate(_ controller: PushToTalkController, with key: TalkKey, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         let starts = mic.calls.filter { $0 == "start" }.count
         controller.handle(.pressed(isRepeat: false), key: .key(key))
-        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        try await waitUntil({ mic.calls.filter { $0 == "start" }.count > starts }, sourceLocation: sourceLocation)
         controller.handle(.released, key: .key(key))
-        try await waitUntil { controller.state == .idle }
+        try await waitUntil({ controller.state == .idle }, sourceLocation: sourceLocation)
     }
 
     /// The translation key pastes the translation of the text the rules left. Copy Last
@@ -2670,7 +2682,8 @@ struct PushToTalkControllerTests {
     }
 
     @Test func aDoublePressFromIdleStartsTheMicrophoneAndShowsTheHintAtOnce() async throws {
-        let controller = await makeController(listeningCueDelay: .seconds(10))
+        // An hour, far longer than the wait below, so only a hint that comes at once ends it.
+        let controller = await makeController(listeningCueDelay: .seconds(3600))
         let cues = CueRecorder(controller)
         controller.handle(.doublePressed)
         try await waitUntil { !cues.list.isEmpty }
@@ -2739,6 +2752,7 @@ struct PushToTalkControllerTests {
         _ = tap.handle(type: .flagsChanged, keyCode: key.keyCode, flags: [], at: now)
         #expect(controller.state == .handsFree)
         #expect(tap.activeKey == .rightControl)
+        try await waitUntil { mic.calls.contains("start") }
         // Escape is swallowed and cancels.
         #expect(tap.handle(type: .keyDown, keyCode: TalkKeyDetector.escapeKeyCode, flags: [], at: now))
         #expect(controller.state == .idle)
@@ -2986,6 +3000,7 @@ struct PushToTalkControllerTests {
         #expect(controller.state == .arming)
         tap.fireTimer()
         #expect(controller.state == .listening)
+        try await waitUntil { mic.calls.contains("start") }
         controller.setTranslationKeyOn(false)
         // Turning translation off ends the translation key's dictation.
         #expect(controller.state == .idle)

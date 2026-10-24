@@ -3,18 +3,23 @@ import SwiftUI
 /// The email view, the third column of the Projects window while an email is selected
 /// (plan section 5, projects-email-view), top to bottom:
 /// - the sender, date and subject, the marks, and Explain or Explain Again
-/// - the project chip with its reasons, whose menu moves the email to another project
-/// - the attachments, with whether Projects read their text, see ProjectsAttachmentList
+/// - the project chip with its reasons, whose menu assigns the email to another project in
+///   Orra. The email stays where it is in Mail.
 /// - once the email is explained, the choice between the explanation and the email itself,
-///   see ProjectsEmailOriginal. Before that the email itself shows under its warnings.
+///   see ProjectsEmailOriginal, which also lists the attachments with whether Projects read
+///   their text. Before that the email itself shows under its warnings.
 /// - the warnings, always with those the code found, and what was taken out of the text
 ///   before the model read it
-/// - What it says: the points, each with chips for its sources. A file's chip shows the
-///   excerpt with its page inside Orra, an attachment's chip the excerpt the model read, and
-///   an earlier email's chip shows that email in the window (decision 20). Nothing opens
-///   outside Orra.
+/// - What it says: the points, each with chips for its sources, or a line that it has
+///   none. A file's chip shows the excerpt with its page inside Orra, an attachment's chip
+///   the excerpt the model read, and an earlier email's chip shows that email in the window
+///   (decision 20). Nothing opens outside Orra. A line says when Projects could not read an
+///   attachment.
 /// - Before you reply: the questions only the user can answer
 /// - the draft with its tools, see DraftSection
+///
+/// A section the model's answer does not hold says so, rather than that the model found
+/// nothing, see ProjectsWindowText.noQuestions(_:).
 ///
 /// Mail text, names and model output show as plain text only: `Text(verbatim:)`, or an
 /// AttributedString made from plain strings for the highlight of a change. No Markdown,
@@ -52,7 +57,6 @@ struct ProjectsEmailArea: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 ProjectChip(runtime: runtime, model: model, email: email)
-                ProjectsAttachmentList(attachments: email.attachments)
                 Divider()
                 if let explanation = emailModel.explanation {
                     Picker("Show", selection: $emailModel.showsOriginal) {
@@ -93,15 +97,19 @@ struct ProjectsEmailArea: View {
         }
     }
 
-    /// The email itself, or its first sentence while it is read.
+    /// The email itself with its attachments, or its attachments and its first sentence
+    /// while it is read. The attachments show also when the store keeps none of its text.
     @ViewBuilder
     private func original(_ emailModel: ProjectsEmailModel) -> some View {
         if let content = emailModel.original {
-            ProjectsEmailOriginal(content: content)
-        } else if !email.summary.isEmpty {
-            Text(verbatim: email.summary)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            ProjectsEmailOriginal(content: content, attachments: email.attachments)
+        } else {
+            ProjectsAttachmentList(attachments: email.attachments)
+            if !email.summary.isEmpty {
+                Text(verbatim: email.summary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -198,8 +206,8 @@ struct ProjectsEmailArea: View {
 
 extension ProjectsEmailArea {
     /// The email's project, or Needs a Project or Set Aside, with why it is there. One click
-    /// opens the menu that moves it, as Move To in the list does: the window stays on its
-    /// list. The rule offer follows two moves of one kind.
+    /// opens the menu that assigns it to another project, as Assign to Project in the list
+    /// does: the window stays on its list. The rule offer follows two moves of one kind.
     struct ProjectChip: View {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel
@@ -220,8 +228,8 @@ extension ProjectsEmailArea {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .fixedSize()
-                .help("Move To")
-                .accessibilityHint(Text("Move To"))
+                .help("Assign to Project")
+                .accessibilityHint(Text("Assign to Project"))
                 .disabled(runtime.phase != .on)
                 let reasons = ProjectsWindowText.reasons(email)
                 if !reasons.isEmpty {
@@ -278,11 +286,18 @@ extension ProjectsEmailArea {
             }
             section("What it says") {
                 if explanation.points.isEmpty {
-                    Text("The model named no points.")
+                    Text(verbatim: ProjectsWindowText.noPoints(explanation))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(Array(explanation.points.enumerated()), id: \.offset) { _, point in
                     PointRow(point: point, model: model, emailModel: emailModel)
+                }
+                if let notice = ProjectsWindowText.unreadAttachments(email.attachments) {
+                    Text(verbatim: notice)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if !explanation.problems.isEmpty {
                     Text("Part of the model's answer could not be read.")
@@ -293,8 +308,9 @@ extension ProjectsEmailArea {
             if explanation.reply.draftLanguage != nil || !explanation.questions.isEmpty {
                 section("Before you reply") {
                     if explanation.questions.isEmpty {
-                        Text("Nothing for you to decide first.")
+                        Text(verbatim: ProjectsWindowText.noQuestions(explanation))
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(Array(explanation.questions.enumerated()), id: \.offset) { _, question in
                         Label {
@@ -390,6 +406,11 @@ extension ProjectsEmailArea {
                 }
                 if !point.sources.isEmpty {
                     SourceChips(ids: point.sources, model: model, emailModel: emailModel)
+                        .padding(.leading, 14)
+                } else if let line = ProjectsWindowText.noSource(point) {
+                    Text(verbatim: line)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         .padding(.leading, 14)
                 }
                 ForEach(Array(point.flags.enumerated()), id: \.offset) { _, flag in

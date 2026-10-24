@@ -3310,6 +3310,41 @@ Projects Data and Start Reading Mail again first.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
 
+The words of the Projects window by what Orra knows, added on 2026-10-24, not verified
+yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
+English, then in 简体中文, 日本語 and Español. ProjectsWindowViewTests checks the words
+themselves, and a model answer that stops early, which is hard to make by hand.
+
+- [ ] An email that only mentions a password, such as a notice never to share one, shows
+  "It mentions a password, a code or another credential. Check what it asks you to do."
+  No warning above "The model also noted:" says that an email asks for a password,
+  personal data or a payment. The model's own lines under it may still say so, since its
+  prompt still uses those words.
+- [ ] An email that quotes you from mail older than the period Projects reads shows "It
+  quotes you. Projects did not find those words in the sent mail it read."
+- [ ] In an explanation, a point without a chip shows No source provided under it, and an
+  empty Before you reply says No decisions found.
+- [ ] The attachments show once, under Original Email after To and Cc, each with its kind,
+  size and whether Projects read its text. Explanation has no list. When Projects did not
+  read a PDF or a Word file, such as one Mail has not downloaded, What it says ends with
+  "Projects could not read an attachment. See Original Email." An email whose only
+  attachment is an image has no such line, also when Mail has not downloaded the image.
+  An email over 16 MB, which Projects saves without its text, still lists its
+  attachments.
+- [ ] Control-click an email in the list: the menu reads Assign to Project, as the help
+  tag of the project chip does. After you assign two emails from one sender to one
+  project, the offer reads "Always assign mail from … to …?". Assigning an email whose
+  draft you changed asks "Change this email's project?" and says that the email stays
+  where it is in Mail. In Mail it does. The chip then says You assigned it here.
+- [ ] Hovering Dismiss Suggestion, in the sheet and in a suggestion's menu, shows "This
+  suggestion will stay hidden. You can still create the project yourself." Note whether
+  the menu shows the help tag.
+- [ ] Adding ~/Library/Mail as a project folder says "Projects never reads Mail's local
+  data files."
+- [ ] In 简体中文, the setup sheet and the project page say 联系人 and 添加联系人, and the
+  menu reads 归入项目. In each language, note any new line that reads oddly or does not
+  fit its place.
+
 Loading the model for Projects, added on 2026-10-24, not verified yet. Check in a Debug
 build with Projects on, Clean Up Text, Translation and Live Captions off, and the synthetic
 mail imported, as in the test guide. The cleanup model is in
@@ -3378,6 +3413,39 @@ Welcome window above, then choose Hold for the talk key in the welcome window:
   LocalizationTests.theEnglishMicrophonePromptMatchesTheCatalog compares with the catalog.
 - [ ] Settings > About reads "Orra goes online only to download the models you ask for,
   and to check for updates when you allow it."
+
+Project domains, rules and the reading scope, added on 2026-10-24, not verified yet. Check
+in a Debug build with Projects on, Mail open, Mail access allowed and the synthetic mail
+imported, as in the test guide. For the check of Remove Rule, before Start Reading Mail,
+make a mailbox On My Mac named Held Back, leave it unticked in Settings, and drag into it
+one email of a sender who has three or more emails in the synthetic mail.
+
+- [ ] Edit Project says under Domains that addresses at these domains count as the
+  project's people, and to add people at a shared provider such as gmail.com under People.
+  Type gmail.com, @QQ.com or vip.163.com: the line under the field says many unrelated
+  people have addresses at that domain, and Save stays dimmed. harbor.example saves.
+- [ ] Link a mailbox in Edit Project that is not ticked in Settings. Settings > Projects
+  lists it under Mailboxes with "Also read for" and the project's name. Edit Project…
+  beside it opens the Projects window on the project's page with Edit Project open, also
+  when the window was closed. An Edit Project sheet, a Forget Project alert or a Change
+  Project dialog that is open in the window already stays as it was, and so does the list
+  behind it.
+- [ ] Rename that linked mailbox in Mail, then click Read Mailbox Names from Mail in Edit
+  Project and Cancel. Settings > Projects says under the mailbox that Mail has no mailbox
+  with this name now, as the project page does. Choosing the new name in Edit Project
+  takes the line away.
+- [ ] After Start Reading Mail, the line under Mailboxes says changes apply only to the
+  mail Projects reads from now on. Untick a mailbox, or choose a shorter period: the mail
+  Projects saved from it stays in the window.
+- [ ] Assign two emails of the sender with an email in Held Back to a project and click
+  Add Rule. The project page lists the rule with Remove Rule…, which asks first. Cancel
+  keeps it. Remove Rule takes it off the page, and the emails it filed stay in the
+  project. Now tick Held Back in Settings: its email shows in the Projects window, and its
+  chip does not show A rule you made. After Orra starts again the rule is still gone.
+- [ ] With Mail access not asked yet, after the `tccutil reset` in Mail access for
+  Projects above, Allow Mail Access… shows Orra's explanation first. It reads "Projects
+  reads mail only in the mailboxes you choose, and only while Mail is open."
+- [ ] The new lines read well in Chinese, Japanese and Spanish.
 
 ## Not implemented
 

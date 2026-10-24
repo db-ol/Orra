@@ -89,19 +89,10 @@ struct ProjectsRuntimeTests {
         return (runtime, projects, choice)
     }
 
-    /// Waits for a condition, which work on other tasks makes true. A bound, not a measure.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<2_000 {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        Issue.record("The condition did not come true")
-    }
-
-    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
+    private func started(isVisible: Bool = true, installed: Installed = Installed(), countsTokens: Bool = false, folders: StallingFolders? = nil, keyDown: KeyDown? = nil, retryLoading: @escaping @Sendable () async -> Void = {}, sourceLocation: SourceLocation = #_sourceLocation) async throws -> (ProjectsRuntime, ProjectsSwitch, MailChoice) {
         let made = make(isVisible: isVisible, installed: installed, countsTokens: countsTokens, folders: folders, keyDown: keyDown, retryLoading: retryLoading)
         made.0.follow()
-        try await waitUntil { made.0.phase == .on }
+        try await waitUntil({ made.0.phase == .on }, sourceLocation: sourceLocation)
         return made
     }
 
@@ -529,6 +520,39 @@ struct ProjectsRuntimeTests {
         try await runtime.forget(garden.id)
         #expect(runtime.projectList.map(\.id) == [harbor.id])
         #expect(await runtime.list(.project(garden.id)).isEmpty)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Remove Rule on the project page: the rule is gone for good, mail read after it is
+    /// sorted without it, and the mail it filed stays in the project.
+    @Test(.timeLimit(.minutes(1)))
+    func aRemovedRuleFilesNoNewMailAndLeavesWhatItFiled() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let rule = Project.Rule(kind: .sender, value: "ana@kiln.example")
+        let garden = Project(name: "Garden", rules: [rule])
+        try await runtime.add(garden)
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("g1@kiln.example", from: "ana@kiln.example", day: 1)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("g1@kiln.example", in: .project(garden.id), runtime) { $0.level == .sure }
+
+        try await runtime.removeRule(rule, from: garden.id)
+        #expect(runtime.projectList.first { $0.id == garden.id }?.rules == [])
+        let saved = ProjectList(storage: storage)
+        try await saved.load()
+        #expect(saved.project(garden.id)?.rules == [])
+        await #expect(throws: ProjectsRuntime.Failure.unknownProject) {
+            try await runtime.removeRule(rule, from: UUID())
+        }
+
+        // Her next email waits in Needs a Project, since the model is not there to agree
+        // with the one vote left, that she wrote in the project before.
+        try await store.save([Self.message("g2@kiln.example", from: "ana@kiln.example", day: 2)], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("g2@kiln.example", in: .needsProject, runtime) { $0.level != nil }
+        #expect(await runtime.list(.project(garden.id)).map(\.messageID) == ["g1@kiln.example"])
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -1358,8 +1382,8 @@ struct ProjectsRuntimeTests {
         #expect(handed.withLock { $0 } == [1])
     }
 
-    /// A move from a Move To menu keeps the window on its list and selects the next email.
-    /// When it takes away versions of the draft, it waits for the user's yes.
+    /// A move from an Assign to Project menu keeps the window on its list and selects the
+    /// next email. When it takes away versions of the draft, it waits for the user's yes.
     @Test func aMoveStaysOnTheListAndAsksBeforeItTakesADraftAway() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()

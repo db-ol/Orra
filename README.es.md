@@ -61,7 +61,7 @@ Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dej
 Opcional. Presiona una segunda tecla, habla y vuelve a presionarla. Si la configuras en Mantener presionada, mantenla presionada mientras hablas. Orra pega lo que dices traducido entre el inglés y tu idioma de dictado, chino, japonés o español, con el mismo modelo en tu Mac. Una pequeña marca indica que ese dictado se va a traducir: 译 con chino, 訳 con japonés y ⇄ con español.
 
 </td>
-<td width="50%"><img src="docs/images/readme/es/translation.gif" alt="En un chat, Sam pregunta “When can I see the designs?” Con la tecla de traducción presionada, alguien dice “Te puedo mandar los diseños antes del viernes”. La cápsula muestra la marca ⇄, y “I can send you the designs before Friday.” aparece en el campo del mensaje." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/translation.gif" alt="En un chat, Sam pregunta “When can I see the designs?” Alguien presiona la tecla de traducción, dice “Te puedo mandar los diseños antes del viernes” y la vuelve a presionar. La cápsula muestra la marca ⇄ y “Presiona la tecla Opción derecha para terminar”, y “I can send you the designs before Friday.” aparece en el campo del mensaje." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -73,7 +73,7 @@ Para reuniones en distintos idiomas. Lee en tu idioma lo que dicen los demás y 
 Novedad de la versión 0.4.0.
 
 </td>
-<td width="50%"><img src="docs/images/readme/es/meeting.gif" alt="En una videollamada, Alex habla en inglés y la ventana de Subtítulos en vivo muestra cada oración con su traducción al español. Luego, el usuario mantiene presionada la tecla de traducción y dice “Claro, termino las pruebas para el miércoles”, y en la llamada se escucha “Sure, I’ll finish testing by Wednesday.” desde Orra Microphone." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/meeting.gif" alt="En una videollamada, Alex habla en inglés y la ventana de Subtítulos en vivo muestra cada oración con su traducción al español. Arriba están elegidos Ambos y Español, junto al botón para copiar. Luego, el usuario presiona la tecla de traducción, dice “Claro, termino las pruebas para el miércoles” y la vuelve a presionar, y en la llamada se escucha “Sure, I’ll finish testing by Wednesday.” desde Orra Microphone." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
