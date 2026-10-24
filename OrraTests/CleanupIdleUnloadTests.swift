@@ -202,17 +202,15 @@ struct CleanupIdleUnloadTests {
         }
     }
 
-    /// Waits until the condition holds, for at most a few seconds.
-    private func settle(_ condition: () -> Bool) async throws {
-        for _ in 0..<2_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(2))
-        }
-        #expect(condition())
+    /// Waits until the condition holds, and ends the test at the caller's line when it does
+    /// not, see `waitUntil`.
+    private func settle(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        try await waitUntil(condition, sourceLocation: sourceLocation)
     }
 
     /// Moves the clock once the idle timer or a wait is sleeping on it.
-    private func advance(by duration: Duration) async throws {
-        try await settle { clock.sleeping > 0 }
+    private func advance(by duration: Duration, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+        try await settle({ clock.sleeping > 0 }, sourceLocation: sourceLocation)
         clock.advance(by: duration)
         try await settle()
     }

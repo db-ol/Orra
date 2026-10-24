@@ -2671,7 +2671,8 @@ struct PushToTalkControllerTests {
     }
 
     @Test func aDoublePressFromIdleStartsTheMicrophoneAndShowsTheHintAtOnce() async throws {
-        let controller = await makeController(listeningCueDelay: .seconds(10))
+        // An hour, far longer than the wait below, so only a hint that comes at once ends it.
+        let controller = await makeController(listeningCueDelay: .seconds(3600))
         let cues = CueRecorder(controller)
         controller.handle(.doublePressed)
         try await waitUntil { !cues.list.isEmpty }
