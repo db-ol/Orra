@@ -1862,6 +1862,28 @@
         }
       }
     },
+    "Another email Projects read has the same Message-ID as this message, so Projects cannot explain it." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Otro correo que leyó Proyectos tiene el mismo Message-ID que este mensaje, así que Proyectos no puede explicarlo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”が読み取った別のメールに、このメッセージと同じMessage-IDがあるため、説明できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”读取过的另一封邮件与这封邮件的 Message-ID 相同，因此无法解释这封邮件。"
+          }
+        }
+      }
+    },
     "Answered" : {
       "localizations" : {
         "es-419" : {

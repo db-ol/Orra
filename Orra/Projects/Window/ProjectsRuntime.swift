@@ -181,6 +181,10 @@ final class ProjectsRuntime {
         case notRead(days: Int)
         /// The scan has not reached the message yet, since a pass still reads the mailboxes.
         case stillReading
+        /// The store holds another email with the message's Message-ID, see
+        /// `isSelectedEmail`, such as when the message was made to look like it. The store
+        /// keeps one email for each Message-ID, so that email is not shown for it.
+        case otherEmail
         /// Orra may not control Mail.
         case notAllowed
         case failed(MailBridgeError)
@@ -1226,6 +1230,20 @@ final class ProjectsRuntime {
         return addresses("To") == addresses(email.to) && addresses("Cc") == addresses(email.cc)
     }
 
+    /// Whether a message selected in Mail is the email the store holds with its Message-ID,
+    /// for Explain Selected Message: the same sender, Reply-To, To and Cc, see
+    /// `isSameEmail`, and the same date when its headers give one. A copy of the email in
+    /// another mailbox has the same headers. The subject is left out, since the store keeps
+    /// it as Mail lists it, which may differ from the header in its spaces or its decoding
+    /// (a guess).
+    @concurrent
+    nonisolated static func isSelectedEmail(_ email: ExplainService.Email, headers text: String) async -> Bool {
+        if let date = MailHeaders(parsing: text).date, date != email.date {
+            return false
+        }
+        return await isSameEmail(email, headers: text, all: true)
+    }
+
     // MARK: Explaining
 
     /// Explains an email, saves the explanation and returns it. Only while the window is
@@ -1369,6 +1387,8 @@ final class ProjectsRuntime {
     /// Reads more only of a message in a chosen or linked mailbox (decision 18). A message
     /// the scan has not read yet makes it read the mailboxes once. Reads nothing more once
     /// Projects stops or the choice is forgotten, which the user can do while Mail answers.
+    /// Finds the email the store holds with the message's Message-ID only when the message
+    /// is that email, see `isSelectedEmail`, and only then keeps its handle.
     func messageSelectedInMail() async -> SelectedMessage {
         guard let running else { return .noMailboxChosen }
         guard dependencies.choice.isConfirmed else { return .noMailboxChosen }
@@ -1388,14 +1408,22 @@ final class ProjectsRuntime {
             let headers = try await bridge.headers(selected)
             guard let messageID = await Self.messageID(in: headers) else { return .notRead(days: dependencies.choice.days) }
             guard stillReads(running) else { return .noMailboxChosen }
-            remember(selected, for: messageID)
-            if try await running.store.explainEmail(messageID) == nil {
+            var email = try await running.store.explainEmail(messageID)
+            if email == nil {
                 switch await readUntilSaved(messageID, store: running.store, scan: running.scan) {
-                case .saved: break
+                case .saved: email = try await running.store.explainEmail(messageID)
                 case .notFound: return .notRead(days: dependencies.choice.days)
                 case .stillReading: return .stillReading
                 }
             }
+            guard let email else { return .notRead(days: dependencies.choice.days) }
+            // Mail may hold another message with this Message-ID, and the store keeps the
+            // one the scan read first.
+            guard await Self.isSelectedEmail(email, headers: headers) else {
+                Logger.projects.notice("Explain Selected Message: the message is not the email the store holds with its Message-ID")
+                return .otherEmail
+            }
+            remember(selected, for: messageID)
             return .found(messageID)
         } catch let error as MailBridgeError {
             Logger.projects.notice("Explain Selected Message failed: \(String(describing: error), privacy: .public)")

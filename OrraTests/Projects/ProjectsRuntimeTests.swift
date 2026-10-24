@@ -962,6 +962,80 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Mail may hold another message with the Message-ID of an email the store holds, such
+    /// as one made to look like it, or one a mail program sent with an ID it used before.
+    /// Explain Selected Message shows and explains the email the store holds only when the
+    /// message selected is that email, and keeps no handle of another message for it.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageShowsNoOtherEmailWithItsMessageID() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let id = "x@harbor.example"
+        let email = FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")
+        let fields = email.source.components(separatedBy: "\r\n\r\n")[0] + "\r\n"
+        let date = "Date: Sun, 18 Oct 2026 09:00:00 +0000\r\n"
+        mail.update {
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.headers[999] = fields.replacingOccurrences(of: "Mei Tan <mei@harbor.example>", with: "Mallory <mallory@other.example>")
+            $0.selection = [MailMessageRef(id: 999, mailbox: FakeMail.clients)]
+        }
+        choice.choose([.inbox, FakeMail.clients])
+        choice.confirm()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(!runtime.isScanning)
+        // Mail opens: the scan starts once Explain Selected Message reached Mail, and reads
+        // the email of the inbox, not the message selected.
+        mail.update { $0.isRunning = true }
+        #expect(await runtime.messageSelectedInMail() == .otherEmail)
+        let kept = MailMessageRef(id: 100, mailbox: .inbox)
+        #expect(runtime.mailReference(for: id) == kept)
+
+        // The store held the email before the click.
+        try await waitUntilListed(id, in: .needsProject, runtime) { _ in true }
+        #expect(await runtime.messageSelectedInMail() == .otherEmail)
+        #expect(runtime.mailReference(for: id) == kept)
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.explainSelectedMessage()
+        #expect(window.notice == .selection(.otherEmail))
+        #expect(ProjectsWindowText.selection(.otherEmail) == "Another email Projects read has the same Message-ID as this message, so Projects cannot explain it.")
+        #expect(window.selectedEmail == nil)
+        #expect(window.explaining[id] == nil)
+
+        // Mei's sender and recipients, with another date.
+        mail.update { $0.headers[999] = fields.replacingOccurrences(of: date, with: "Date: Mon, 19 Oct 2026 08:00:00 +0000\r\n") }
+        #expect(await runtime.messageSelectedInMail() == .otherEmail)
+        #expect(runtime.mailReference(for: id) == kept)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A copy of the email in another mailbox the user chose is the email itself.
+    @Test(.timeLimit(.minutes(1)))
+    func explainSelectedMessageFindsTheEmailInAnotherMailbox() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, choice) = try await started()
+        runtime.sortingWaitLimit = nil
+        let id = "x@harbor.example"
+        let email = FakeMail.Message(id: 100, messageID: id, from: "Mei Tan <mei@harbor.example>", subject: "Plans", text: "Here are the plans.")
+        let copy = MailMessageRef(id: 300, mailbox: FakeMail.clients)
+        mail.update {
+            $0.isRunning = true
+            $0.permission = .allowed
+            $0.inbox = [email]
+            $0.headers[300] = email.source.components(separatedBy: "\r\n\r\n")[0] + "\r\n"
+            $0.selection = [copy]
+        }
+        choice.choose([.inbox, FakeMail.clients])
+        choice.confirm()
+        try await waitUntilListed(id, in: .needsProject, runtime) { _ in true }
+        #expect(await runtime.messageSelectedInMail() == .found(id))
+        #expect(runtime.mailReference(for: id) == copy)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     @Test func explainingNeedsTheWindowAndTheModel() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()
