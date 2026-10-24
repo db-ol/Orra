@@ -5,8 +5,9 @@ extension ProjectsEmailArea {
     /// - the draft as plain text the user may edit, with Show in My Language beside it, or
     ///   under it in a narrow window, the tone, and the flags of the draft check inline.
     ///   "Drafts need checking" always shows. The toggle names the language it shows. Saved
-    ///   on this Mac shows once the store keeps the user's changes, never before. The editor
-    ///   waits while the email is explained again, which replaces the draft.
+    ///   on this Mac shows once the store keeps the user's changes, never before, and its
+    ///   line keeps its place while a save waits. The editor waits while the email is
+    ///   explained again, which replaces the draft.
     /// - the answer check, such as "They asked 3 things, your draft answers 2", and the
     ///   people outside the project a reply to all reaches
     /// - Open Reply in Mail, Reply All and Copy, with the hint to press Command V in Mail.
@@ -105,7 +106,13 @@ extension ProjectsEmailArea {
                 warningLine(ProjectsWindowText.save(.notSaved))
                     .font(.callout)
             case nil:
-                EmptyView()
+                // The line keeps its place while a save waits, so what is under it stays
+                // put while the user types.
+                if emailModel.isEdited || !emailModel.versions.isEmpty {
+                    Text(verbatim: ProjectsWindowText.save(.saved))
+                        .font(.callout)
+                        .hidden()
+                }
             }
             checks
             answers

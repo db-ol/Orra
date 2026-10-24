@@ -3317,7 +3317,8 @@ then says that Projects could not open its data on this Mac, until you use Delet
 Projects Data… in its Settings.
 
 - [ ] Type a sentence into the draft of an explained email. Saved on this Mac shows under
-  the draft about half a second after the last key press, and not while you type.
+  the draft about half a second after the last key press, and not while you type. After
+  the first key press, the checks and buttons under the draft stay where they are.
 - [ ] Close the Projects window and open it again. The draft holds your sentence, and Saved
   on this Mac shows. Turn Projects off in Settings with Keep Data and on again: the draft
   still holds it.

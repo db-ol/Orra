@@ -10,11 +10,11 @@ import Observation
 ///   switches between the two at any time with `showsOriginal`, and a new explanation shows
 ///   the explanation again.
 /// - The draft is plain text the user may edit. ReviseService saves the versions the model
-///   makes. The text the user types is saved apart from them, a moment after the last key
-///   press and when the window closes, see `saveText()`, so the window opens again with it.
-///   It goes with the draft, see Retention. Explain Again replaces the draft and a move to
-///   another project removes it, both only after the user's yes when the user changed it,
-///   see ProjectsWindowModel.
+///   makes. The text the user types is saved apart from them once the user pauses typing,
+///   and at once when the window closes, see `saveText()`, so the window opens again with
+///   it. It goes with the draft, see Retention. Explain Again replaces the draft and a move
+///   to another project removes it, both only after the user's yes when the user changed
+///   it, see ProjectsWindowModel.
 /// - A change, from the change box or a tone, makes a new version of the draft as the
 ///   editor holds it, checked by DraftCheck. Cancel Change ends it and leaves the draft and
 ///   the change box as they were. Undo removes the newest version and puts back the text it
@@ -198,11 +198,12 @@ final class ProjectsEmailModel {
     /// Whether the view shows the email itself rather than its explanation. Without an
     /// explanation it always does.
     var showsOriginal = false
-    /// The draft as the editor holds it. What the user types is saved a moment after the
-    /// last key press, see `saveText()`.
+    /// The draft as the editor holds it. What the user types is saved once the user pauses
+    /// typing, see `saveText()`.
     var text = "" {
         didSet {
             if text != oldValue {
+                lastEdit = ContinuousClock.now
                 saveText()
             }
         }
@@ -213,9 +214,11 @@ final class ProjectsEmailModel {
     private(set) var savedText: String?
     /// Whether the last save of the editor's text failed.
     private(set) var saveFailed = false
-    /// How long the editor's text waits before it is saved, `typingPause` in the app. Tests
-    /// set none.
+    /// How long the editor's text waits after its last change before it is saved,
+    /// `typingPause` in the app. Tests set none.
     @ObservationIgnored var saveDelay = ProjectsEmailModel.typingPause
+    /// When the editor's text last changed, which the save waits `saveDelay` after.
+    @ObservationIgnored private var lastEdit = ContinuousClock.now
     /// What the user types or says into the change box. The talk key writes here too, see
     /// `takeDictation(_:revises:)`.
     var instruction = ""
@@ -250,8 +253,8 @@ final class ProjectsEmailModel {
     /// The save of the editor's text that waits or runs, see `saveText()`.
     @ObservationIgnored private var saving: Task<Void, Never>?
 
-    /// How long the editor's text waits after a key press before it is saved, so a burst of
-    /// typing makes one write (a guess).
+    /// How long a pause in typing is before the editor's text is saved, so a burst of typing
+    /// makes one write (a guess).
     nonisolated static let typingPause: Duration = .milliseconds(500)
 
     init(messageID: String, actions: Actions, handoffs: Handoffs = Handoffs()) {
@@ -505,15 +508,20 @@ final class ProjectsEmailModel {
 
     // MARK: Saving the user's text
 
-    /// Saves the editor's text after `saveDelay`, unless a save waits or runs already, which
-    /// then saves it. A save that fails leaves `saveFailed` on until the next one works.
+    /// Saves the editor's text once it has not changed for `saveDelay`, unless a save waits
+    /// or runs already, which then saves it. Each key press puts the save off again, so a
+    /// burst of typing makes one write. A save that fails leaves `saveFailed` on until the
+    /// next one works.
     private func saveText() {
         guard saving == nil, isLoaded else { return }
         saving = Task {
             defer { saving = nil }
             while true {
-                try? await Task.sleep(for: saveDelay)
-                // `saveTextNow()` saved in place of this task.
+                while ContinuousClock.now < lastEdit + saveDelay {
+                    try? await Task.sleep(until: lastEdit + saveDelay)
+                    // `saveTextNow()` saved in place of this task.
+                    guard !Task.isCancelled else { return }
+                }
                 guard !Task.isCancelled, let save = startSave() else { return }
                 guard await save.write.value else {
                     saveFailed = true

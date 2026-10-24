@@ -351,6 +351,24 @@ struct ProjectsEmailModelTests {
         #expect(model.saveNote == nil)
     }
 
+    /// A save waits for a pause in typing. A key press while it waits puts it off by the
+    /// whole pause, so Saved on this Mac stays away while the user types and a burst of
+    /// typing makes one write.
+    @Test func aSaveWaitsForAPauseInTyping() async throws {
+        let model = model()
+        await model.load()
+        model.saveDelay = .milliseconds(400)
+        model.text = Self.draft + " Lin"
+        try await Task.sleep(for: .milliseconds(300))
+        let typed = ContinuousClock.now
+        model.text += "."
+        #expect(model.saveNote == nil)
+        try await waitUntil { model.saveNote == .saved }
+        // A save that ran once the first key press was 400 ms old would show sooner.
+        #expect(typed.duration(to: .now) >= .milliseconds(400))
+        #expect(fakes.value.edited?.text == Self.draft + " Lin.")
+    }
+
     /// A change made from what the user typed takes its place in the store, and Undo puts
     /// it back and saves it again. Text saved with the key of another draft, such as by a
     /// save that ended after a change, never comes back over the newest draft, and goes.
