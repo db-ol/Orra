@@ -47,12 +47,12 @@ struct TranslationVoiceDictationTests {
         return controller
     }
 
-    private func dictate(_ controller: PushToTalkController, with key: TalkKey) async throws {
+    private func dictate(_ controller: PushToTalkController, with key: TalkKey, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         let starts = mic.calls.filter { $0 == "start" }.count
         controller.handle(.pressed(isRepeat: false), key: .key(key))
-        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        try await waitUntil({ mic.calls.filter { $0 == "start" }.count > starts }, sourceLocation: sourceLocation)
         controller.handle(.released, key: .key(key))
-        try await waitUntil { controller.state == .idle }
+        try await waitUntil({ controller.state == .idle }, sourceLocation: sourceLocation)
     }
 
     /// A voice sample for Speak Translation is written down by the speech model at 16 kHz,

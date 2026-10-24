@@ -998,12 +998,4 @@ struct ProjectsEmailModelTests {
         // A day that has passed, such as in a window left open past midnight, has no mark.
         #expect(ProjectsWindowText.deadline(Self.today.addingTimeInterval(-86_400), now: Self.today, calendar: calendar) == nil)
     }
-
-    /// Waits for a condition, polling, for at most a few seconds.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(condition())
-    }
 }
