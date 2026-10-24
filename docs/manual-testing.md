@@ -3310,6 +3310,38 @@ Projects Data and Start Reading Mail again first.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
 
+The words of the Projects window by what Orra knows, added on 2026-10-24, not verified
+yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
+English, then in 简体中文, 日本語 and Español. ProjectsWindowViewTests checks the words
+themselves, and a model answer that stops early, which is hard to make by hand.
+
+- [ ] An email that only mentions a password, such as a notice never to share one, shows
+  "It mentions a password, a code or another credential. Check what it asks you to do."
+  No warning says that an email asks for a password, personal data or a payment.
+- [ ] An email that quotes you from mail older than the period Projects reads shows "It
+  quotes you. Projects did not find those words in the sent mail it read."
+- [ ] In an explanation, a point without a chip shows No source provided under it, and an
+  empty Before you reply says No decisions found.
+- [ ] The attachments show once, under Original Email after To and Cc, each with its kind,
+  size and whether Projects read its text. Explanation has no list. When Projects did not
+  read a PDF or a Word file, such as one Mail has not downloaded, What it says ends with
+  "Projects could not read an attachment. See Original Email." An email whose only
+  attachment is an image has no such line. An email whose text Retention removed still
+  lists its attachments.
+- [ ] Control-click an email in the list: the menu reads Assign to Project, as the help
+  tag of the project chip does. After two emails from one sender go to one project, the
+  offer reads "Always assign mail from … to …?". Assigning an email whose draft you changed
+  asks "Change this email's project?" and says that the email stays where it is in Mail.
+  In Mail it does. The chip then says You assigned it here.
+- [ ] Hovering Dismiss Suggestion, in the sheet and in a suggestion's menu, shows "This
+  suggestion will stay hidden. You can still create the project yourself." Note whether
+  the menu shows the help tag.
+- [ ] Adding ~/Library/Mail as a project folder says "Projects never reads Mail's local
+  data files."
+- [ ] In 简体中文, the setup sheet and the project page say 联系人 and 添加联系人, and the
+  menu reads 归入项目. In each language, note any new line that reads oddly or does not
+  fit its place.
+
 Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
 checks that a download agreed to in the caption window turns on neither cleanup nor
 translation and stops when captions stop, as docs/privacy.md says, and that it goes on
