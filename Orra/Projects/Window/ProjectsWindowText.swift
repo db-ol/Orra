@@ -1,15 +1,17 @@
 import Foundation
+import UniformTypeIdentifiers
 
 /// The words of the Projects window and its menu item for the values Projects code returns,
 /// mapped to localized text in one place (plan section 2.8).
 nonisolated enum ProjectsWindowText {
-    /// The menu item that opens the window, with the count of mail waiting for a reply, in
-    /// the language of `locale`, Orra's own by default.
+    /// The menu item that opens the window, in the menu bar menu and the Dock menu, with the
+    /// count of mail waiting for a reply, in the language of `locale`, Orra's own by default.
+    /// It names the window, as the button on the Projects page of Settings does.
     static func menuTitle(replyDue: Int, locale: Locale = .interface) -> String {
         if replyDue > 0 {
-            String(localized: LocalizedStringResource("Projects (\(replyDue) to Reply)…", locale: locale))
+            String(localized: LocalizedStringResource("Open Projects Window (\(replyDue) to Reply)", locale: locale))
         } else {
-            String(localized: LocalizedStringResource("Projects…", locale: locale))
+            String(localized: LocalizedStringResource("Open Projects Window", locale: locale))
         }
     }
 
@@ -24,6 +26,18 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
+    /// What the scan does, or what ended its last pass.
+    static func scan(_ state: ProjectsRuntime.ScanState) -> String {
+        switch state {
+        case .reading(saved: 0): String(localized: "Reading mail…")
+        case .reading(saved: 1): String(localized: "Reading mail… 1 email read.")
+        case .reading(let saved): String(localized: "Reading mail… \(saved) emails read.")
+        case .mailIsSlow: String(localized: "Mail is slow to answer. Projects tries again later.")
+        case .notAllowed: selection(.notAllowed)
+        case .failed: String(localized: "Some mail could not be read.")
+        }
+    }
+
     /// What Explain Selected Message found, when it shows no email.
     static func selection(_ found: ProjectsRuntime.SelectedMessage) -> String {
         switch found {
@@ -34,6 +48,8 @@ nonisolated enum ProjectsWindowText {
         case .notInChosenMailbox: String(localized: "This message is in a mailbox Projects does not read. Choose the mailbox in Settings first.")
         case .notRead(let days): String(localized: "Projects has not read this message. It reads the mail of the last \(days) days in the mailboxes you chose.")
         case .stillReading: String(localized: "Projects is still reading your mail. Try again in a moment.")
+        case .notSaved: String(localized: "Projects could not save this message on this Mac. Try again later.")
+        case .otherEmail: String(localized: "This message looks like an email Projects read, but its sender, recipients or date differ, so Projects cannot explain it.")
         case .notAllowed: String(localized: "Orra is not allowed to read Mail yet. Allow it in Settings.")
         case .failed: String(localized: "Mail did not answer. Try again.")
         }
@@ -45,20 +61,28 @@ nonisolated enum ProjectsWindowText {
         case .projectNotSaved: String(localized: "The project could not be saved. Try again.")
         case .projectNotForgotten: String(localized: "The project could not be forgotten. Try again.")
         case .ruleNotSaved: String(localized: "The rule could not be saved. Try again.")
+        case .ruleNotRemoved: String(localized: "The rule could not be removed. Try again.")
         }
+    }
+
+    /// The line under a list that shows only its newest emails.
+    static func olderEmails(shown: Int, total: Int) -> String {
+        String(localized: "Showing the newest \(shown) of \(total) emails.")
     }
 
     static func explainFailure(_ failure: ProjectsWindowModel.ExplainFailure) -> String {
         switch failure {
         case .noModel: String(localized: "The cleanup model is not on this Mac.")
+        case .modelNotLoaded: String(localized: "The cleanup model could not be loaded.")
         case .tooLong: String(localized: "This email is too long to explain.")
         case .other: String(localized: "The email could not be explained. Try again.")
         }
     }
 
     /// The offer of a rule after two moves of the same kind: a sender rule or a domain rule.
+    /// It says assign, not file or move, since Orra moves nothing in Mail.
     static func ruleOffer(_ rule: SortingCandidate.Rule, project: String) -> String {
-        String(localized: "Always file mail from \(who(rule)) in \(project)?")
+        String(localized: "Always assign mail from \(who(rule)) to \(project)?")
     }
 
     /// A rule of a project, for the project page.
@@ -138,32 +162,39 @@ nonisolated enum ProjectsWindowText {
     /// Why the email is where it is: the user's move, or sorting's reasons.
     static func reasons(_ email: MailStore.Listed) -> [String] {
         if email.movedByUser {
-            return [String(localized: "You moved it here")]
+            return [String(localized: "You assigned it here")]
         }
         return email.reasons.map(reason)
     }
 
-    /// A warning about the email, a project file or a reply, whatever found it.
+    /// A warning about the email, a project file or a reply, whatever found it. Each says what
+    /// its check found and no more. The content checks match words, not intent, so a payment
+    /// or a password is mentioned, not asked for. A quote counts as not found when Projects
+    /// did not read the mail it quotes, and a sender as unknown when Projects knows neither
+    /// the address nor its domain, see ContentChecks. A domain looks alike when it looks like
+    /// the user's own, a project's or that of someone the user exchanged mail with, see
+    /// SenderChecks. No check in code finds false urgency, a forward request or a request for
+    /// confidential data yet.
     static func warning(_ warning: ProjectsWarning) -> String {
         switch warning {
-        case .hiddenText: String(localized: "It hides text from its reader.")
+        case .hiddenText: String(localized: "It holds text its reader cannot see.")
         case .instructionToAssistant: String(localized: "A line in it speaks to an assistant.")
         case .documentInstruction: String(localized: "A line in a project file speaks to an assistant.")
         case .claimsToBeOrra: String(localized: "Text in it claims to come from Orra.")
-        case .lookalikeDomain: String(localized: "The sender's domain looks like the domain of a project person.")
+        case .lookalikeDomain: String(localized: "The sender's domain looks like a domain Projects knows, but it is a different one.")
         case .senderNameMismatch: String(localized: "The sender's name does not match the address.")
-        case .forgedQuote: String(localized: "It quotes you with words you never sent.")
-        case .paymentChange: String(localized: "It changes where to pay.")
-        case .paymentTermsChange: String(localized: "It changes amounts, dates or other terms of payment.")
-        case .unknownSenderPayment: String(localized: "It asks for payment, and the sender is not one of the project's people.")
+        case .forgedQuote: String(localized: "It quotes you. Projects did not find those words in the sent mail it read.")
+        case .paymentChange: String(localized: "It mentions a change of where to pay.")
+        case .paymentTermsChange: String(localized: "It mentions a change of amounts, dates or other terms of payment.")
+        case .unknownSenderPayment: String(localized: "It mentions payment, and Projects does not know the sender.")
         case .falseUrgency: String(localized: "It pushes you to act at once.")
         case .link: String(localized: "It holds a link.")
         case .forwardRequest: String(localized: "It asks you to forward mail or files.")
         case .confidentialDataRequest: String(localized: "It asks for confidential project data.")
-        case .personalDataRequest: String(localized: "It asks for personal data, such as an ID number.")
-        case .credentialRequest: String(localized: "It asks for a password, a code or another credential.")
+        case .personalDataRequest: String(localized: "It mentions personal data, such as an ID number. Check what it asks you to do.")
+        case .credentialRequest: String(localized: "It mentions a password, a code or another credential. Check what it asks you to do.")
         case .recipientNotInProjectPeople: String(localized: "A reply reaches someone who is not one of the project's people.")
-        case .attachmentNameSpoofing: String(localized: "An attachment's name hides its real type.")
+        case .attachmentNameSpoofing: String(localized: "An attachment may run code, or its name hides its real type.")
         }
     }
 
@@ -210,13 +241,72 @@ nonisolated enum ProjectsWindowText {
         case .noReply(.listMail): String(localized: "No reply needed. It went to a list or came from a machine.")
         case .noDraft: String(localized: "This email is in a language Projects writes no drafts in.")
         case .missing: String(localized: "The model wrote no draft. Explain the email again to try once more.")
+        case .expired: String(localized: "Projects removed this draft \(days(Retention.drafts)) days after its last change. Explain the email again for a new one.")
         }
+    }
+
+    /// What What it says shows when it holds no point: that the model did not finish the
+    /// section, or that it named none.
+    static func noPoints(_ explanation: Explanation) -> String {
+        explanation.problems.contains(.missing(.points)) ? unfinished : String(localized: "The model named no points.")
+    }
+
+    /// What Before you reply shows when it holds no question. Only a section the model wrote
+    /// and left empty says that nothing was found. An answer without the section, as one
+    /// that stopped early, checked nothing.
+    static func noQuestions(_ explanation: Explanation) -> String {
+        explanation.problems.contains(.missing(.questions)) ? unfinished : String(localized: "No decisions found.")
+    }
+
+    /// A section the model's answer does not hold.
+    private static var unfinished: String {
+        String(localized: "The model did not finish this part. Explain the email again to try once more.")
+    }
+
+    /// The line under a point that has no source, in place of its chips. A source the
+    /// prompt does not have is dropped, so a point that named only such sources has none.
+    static func noSource(_ point: Explanation.Point) -> String? {
+        point.sources.isEmpty ? String(localized: "No source provided") : nil
+    }
+
+    /// The notice in the explanation when Projects did not read the text of an attachment
+    /// of a kind it reads, nil when it read them all. The list under Original Email says
+    /// why. A kind it never reads, such as an image, gives no notice, since many emails
+    /// carry one in their signature, and the list names it. The kind comes from the name
+    /// and the type, since an attachment Mail has not downloaded, one in an email too large
+    /// to read and one saved earlier have that state whatever their kind.
+    static func unreadAttachments(_ attachments: [MailAttachment]) -> String? {
+        let unread = attachments.filter { attachment in
+            attachment.state != .read && attachment.state != .otherType
+                && MailAttachment.format(name: attachment.name, type: attachment.type) != nil
+        }.count
+        switch unread {
+        case 0: return nil
+        case 1: return String(localized: "Projects could not read an attachment. See Original Email.")
+        default: return String(localized: "Projects could not read some attachments. See Original Email.")
+        }
+    }
+
+    /// Why the email view has no text to explain, nil while it has: the email was too large
+    /// for Projects to read, or Retention removed its text.
+    static func noText(_ email: MailStore.Listed) -> String? {
+        if email.isTooLarge {
+            return String(localized: "Projects did not read this email, as it is too large. Read it in Mail.")
+        }
+        guard !email.hasText else { return nil }
+        return String(localized: "Projects removed its copy of this email's text \(days(Retention.mailText)) days after reading it. Read the email in Mail.")
+    }
+
+    /// A period of Retention in whole days.
+    private static func days(_ period: TimeInterval) -> Int {
+        Int(period / Retention.day)
     }
 
     /// Why a change, a translation or the answer check gave nothing new.
     static func note(_ note: ProjectsEmailModel.Note, for work: EmailWork) -> String {
         switch note {
         case .noModel: return String(localized: "The cleanup model is not on this Mac.")
+        case .modelNotLoaded: return String(localized: "The cleanup model could not be loaded.")
         case .emptyDraft: return String(localized: "The draft is empty.")
         case .heldBack: return String(localized: "The new version came back in another language, so the draft stays as it was.")
         case .notKept: return String(localized: "The email changed meanwhile, so the new version was not kept.")
@@ -294,6 +384,14 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
+    /// The line under the draft about saving it.
+    static func save(_ note: ProjectsEmailModel.SaveNote) -> String {
+        switch note {
+        case .saved: String(localized: "Saved on this Mac.")
+        case .notSaved: String(localized: "The draft could not be saved. Copy it before you close the window.")
+        }
+    }
+
     /// What the last handoff did, with the hint to press Command V in Mail.
     static func handoff(_ note: ProjectsEmailModel.HandoffNote) -> String {
         switch note {
@@ -324,6 +422,48 @@ nonisolated enum ProjectsWindowText {
             let name = chunk.file.lastPathComponent
             guard let page = chunk.page else { return name }
             return String(localized: "\(name), page \(page)")
+        case .attachment(let name, _):
+            return name
+        }
+    }
+
+    /// What VoiceOver reads for a source's chip: its text, and for an attachment that it is
+    /// one, since its chip may show the name of a project file too.
+    static func sourceLabel(_ source: ProjectsEmailModel.Source) -> String {
+        guard case .attachment(let name, _) = source else { return Self.source(source) }
+        return String(localized: "Attachment \(name)")
+    }
+
+    /// An attachment's kind as Finder names it, such as PDF document, and its size, in the
+    /// language of `locale`.
+    static func attachmentKind(_ attachment: MailAttachment, locale: Locale = .interface) -> String {
+        let fileExtension = MIMEMessage.fileExtension(of: attachment.name)
+        let type = [UTType(filenameExtension: fileExtension), UTType(mimeType: attachment.type)]
+            .lazy.compactMap { $0 }.first { !$0.isDynamic && $0.localizedDescription != nil }
+        let kind = type?.localizedDescription ?? attachment.type
+        guard let size = attachment.size else { return kind }
+        let bytes = Int64(size).formatted(ByteCountFormatStyle(style: .file, allowedUnits: .all, spellsOutZero: false, includesActualByteCount: false, locale: locale))
+        return String(localized: LocalizedStringResource("\(kind), \(bytes)", locale: locale))
+    }
+
+    /// An attachment's kind and size, and whether Projects read its text, on one line.
+    static func attachmentLine(_ attachment: MailAttachment) -> String {
+        String(localized: "\(attachmentKind(attachment)). \(attachmentState(attachment))")
+    }
+
+    /// Whether Projects read an attachment's text, or why not.
+    static func attachmentState(_ attachment: MailAttachment) -> String {
+        switch attachment.state {
+        case .read where attachment.isCut: String(localized: "Projects read the start of its text.")
+        case .read: String(localized: "Projects read its text.")
+        case .notDownloaded: String(localized: "Mail has not downloaded it, so Projects knows only its name.")
+        case .tooLarge: String(localized: "Projects did not read it, as it is over 10 MB.")
+        case .emailTooLarge: String(localized: "Projects did not read it, as the email is too large.")
+        case .otherType: String(localized: "Projects does not read this kind of file.")
+        case .unreadable: String(localized: "Projects could not read it.")
+        case .noText: String(localized: "Projects found no text in it.")
+        case .notRead: String(localized: "Projects did not read it.")
+        case .savedEarlier: String(localized: "Projects saved this email before it read attachments.")
         }
     }
 
@@ -349,7 +489,7 @@ nonisolated enum ProjectsWindowText {
         case .notAFolder: String(localized: "This folder is missing or cannot be read.")
         case .home: String(localized: "Projects never reads your home folder.")
         case .volumeRoot: String(localized: "Projects never reads a whole disk.")
-        case .mailData: String(localized: "Projects never reads the data of Mail.")
+        case .mailData: String(localized: "Projects never reads Mail's local data files.")
         }
     }
 }

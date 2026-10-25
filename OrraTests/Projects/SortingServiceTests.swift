@@ -156,13 +156,27 @@ struct SortingServiceTests {
         /// While true, a request waits until `release()`.
         var holds = false
         private var held: [CheckedContinuation<Void, Never>] = []
+        private var waitingForRequests: [CheckedContinuation<Void, Never>] = []
 
         func ask(_ request: ProjectsModelRequest) async throws -> String {
             requests.append(request)
+            let waiting = waitingForRequests
+            waitingForRequests = []
+            for waiter in waiting {
+                waiter.resume()
+            }
             if holds {
                 await withCheckedContinuation { held.append($0) }
             }
             return try answer(request)
+        }
+
+        /// Returns once the model was asked, however long the rules before the request take
+        /// off the main actor on a busy test runner.
+        func waitUntilAsked() async {
+            while requests.isEmpty {
+                await withCheckedContinuation { waitingForRequests.append($0) }
+            }
         }
 
         func release() {
@@ -210,8 +224,16 @@ struct SortingServiceTests {
     }
 
     /// Lets the tasks waiting on the main actor run.
-    private func settle(until condition: () -> Bool = { false }) async {
-        for _ in 0..<2_000 where !condition() {
+    private func settle() async {
+        for _ in 0..<2_000 {
+            await Task.yield()
+        }
+    }
+
+    /// Returns once `count` batches are not finished, so the last one started waits behind
+    /// the one under way.
+    private func waitUntil(_ sorting: SortingService, hasBatches count: Int) async {
+        while sorting.unfinishedBatches < count {
             await Task.yield()
         }
     }
@@ -315,6 +337,27 @@ struct SortingServiceTests {
         #expect(store.decision("b@test.example")?.waitsForModel == true)
     }
 
+    /// With the rules alone, as when Needs a Project is sorted again past its newest emails,
+    /// only an email the rules file on their own is saved, in a project or in Set Aside.
+    /// The model is never asked, and the others stay as they are, without a decision or a
+    /// reply mark.
+    @Test func withTheRulesAloneOnlyWhatTheRulesFileIsSaved() async {
+        let store = Store()
+        store.seen["kim@quay.example"] = [Self.maple]
+        let model = Model()
+        await service(store, model).sort([
+            email("sure@test.example", from: "Song Yutong <song.yutong@harborlights.example>"),
+            email("news@test.example", from: "news@lighthouse-weekly.example", day: 1, text: "This week in museums.", list: ListMail(listID: "Weekly <weekly.lighthouse-weekly.example>")),
+            email("likely@test.example", from: "kim@quay.example", day: 2),
+            email("open@test.example", from: "lee@elsewhere.example", day: 3),
+        ], rulesOnly: true)
+        #expect(model.requests.isEmpty)
+        #expect(store.decisions.map(\.id) == ["sure@test.example", "news@test.example"])
+        #expect(store.decision("sure@test.example") == SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]))
+        #expect(store.decision("news@test.example") == SortingDecision(project: nil, level: .setAside, reasons: [.listMail]))
+        #expect(store.replies.keys.sorted() == ["news@test.example", "sure@test.example"])
+    }
+
     /// The chip says the email was too long for the model, which never answered.
     @Test func aPromptTooLongGoesToNeedsAProject() async {
         let store = Store()
@@ -325,7 +368,8 @@ struct SortingServiceTests {
         #expect(store.decision("a@test.example") == SortingDecision(project: nil, level: .unsure, reasons: [.tooLongForModel]))
     }
 
-    @Test func cancellingTheCallerStopsTheBatchWithoutSaving() async {
+    @Test(.timeLimit(.minutes(1)))
+    func cancellingTheCallerStopsTheBatchWithoutSaving() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
@@ -337,7 +381,7 @@ struct SortingServiceTests {
                 email("b@test.example", from: "song.yutong@harborlights.example", day: 1),
             ])
         }
-        await settle { !model.requests.isEmpty }
+        await model.waitUntilAsked()
         #expect(model.requests.count == 1)
         task.cancel()
         model.release()
@@ -353,8 +397,10 @@ struct SortingServiceTests {
         model.holds = true
         let sorting = service(store, model)
         let first = Task { await sorting.sort([email("a@test.example", from: "kim@quay.example")]) }
-        await settle { !model.requests.isEmpty }
+        await model.waitUntilAsked()
         let second = Task { await sorting.sort([email("b@test.example", from: "song.yutong@harborlights.example")]) }
+        await waitUntil(sorting, hasBatches: 2)
+        // Time for the second batch to save its email, had it not waited.
         await settle()
         #expect(store.decisions.isEmpty)
         model.release()
@@ -436,7 +482,8 @@ struct SortingServiceTests {
         #expect(store.replies["a@test.example"] == .reply(.en))
     }
 
-    @Test func aMoveWhileTheModelThinksIsKept() async {
+    @Test(.timeLimit(.minutes(1)))
+    func aMoveWhileTheModelThinksIsKept() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
@@ -444,7 +491,7 @@ struct SortingServiceTests {
         let sorting = service(store, model)
         let mail = email("a@test.example", from: "kim@quay.example")
         let batch = Task { await sorting.sort([mail]) }
-        await settle { !model.requests.isEmpty }
+        await model.waitUntilAsked()
         // The move does not wait for the model.
         #expect(await sorting.move(mail, to: Self.harbor) == nil)
         model.release()
@@ -507,7 +554,8 @@ struct SortingServiceTests {
         #expect(store.projectReads == 2)
     }
 
-    @Test func projectsThatChangeDuringABatchReachItsNextEmail() async {
+    @Test(.timeLimit(.minutes(1)))
+    func projectsThatChangeDuringABatchReachItsNextEmail() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
@@ -519,7 +567,7 @@ struct SortingServiceTests {
                 email("b@test.example", from: "owen@pike-build.example", day: 1),
             ])
         }
-        await settle { !model.requests.isEmpty }
+        await model.waitUntilAsked()
         // The user deletes the kitchen project while the model thinks.
         store.candidates.remove(at: 1)
         sorting.projectsChanged()
@@ -547,7 +595,8 @@ struct SortingServiceTests {
         #expect(store.projectReads == 2)
     }
 
-    @Test func stopEndsTheBatchUnderWayAndThoseWaiting() async {
+    @Test(.timeLimit(.minutes(1)))
+    func stopEndsTheBatchUnderWayAndThoseWaiting() async {
         let store = Store()
         store.seen["kim@quay.example"] = [Self.maple]
         let model = Model()
@@ -559,9 +608,9 @@ struct SortingServiceTests {
                 email("b@test.example", from: "song.yutong@harborlights.example", day: 1),
             ])
         }
-        await settle { !model.requests.isEmpty }
+        await model.waitUntilAsked()
         let second = Task { await sorting.sort([email("c@test.example", from: "song.yutong@harborlights.example")]) }
-        await settle()
+        await waitUntil(sorting, hasBatches: 2)
         sorting.stop()
         model.release()
         await first.value

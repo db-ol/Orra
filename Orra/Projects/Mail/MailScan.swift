@@ -20,30 +20,30 @@ import os
 ///   ones start with the newest 20, and end after the first range that holds a message
 ///   known before the pass. A pass that ends midway, for any cause, leaves the next one to
 ///   read back to the days again, and so does one that left a message unread, a few times.
+///   A save or a lookup of the store that fails ends the pass, so mail it did not save is
+///   read again, and a message is never known only because the store could not answer.
 /// - For each new message it reads the raw source and parses it off the main actor with
-///   MIMEMessage, VisibleText and QuotedHistory. Mail's `content` is never read. A message
-///   over `largestSource` bytes by the listing's size is too large: only its headers and
-///   its attachments' names and types are read. Of attachments only names and types are
-///   kept (decision 14). A message Mail cannot give, or gives with no source, is not saved,
-///   and a later pass reads it again.
+///   MIMEMessage, VisibleText and QuotedHistory. Mail's `content` is never read. The text
+///   of its attachments comes from the MIME parts of that source, see MailAttachment. A
+///   message over `largestSource` bytes by the listing's size is too large: only its
+///   headers and its attachments' names, types and sizes are read. A message Mail cannot
+///   give, or gives with no source, is not saved, and a later pass reads it again.
+/// - Dictation goes first: parsing a message and reading each of its attachments wait
+///   while the user dictates, and a pass runs at utility priority, as background work.
 /// - It saves the new messages of each range through a closure, and asks which messages
 ///   are known through another, so it never waits for the store and tests pass fakes.
+///   Each throws when the store fails.
 /// - It polls every minute. When Mail does not answer (-600 while it runs), times out
 ///   (-1712), or Orra may not control it, the pass ends and the scan waits twice as long
-///   each time, up to 30 minutes.
+///   each time, up to 30 minutes. It does the same when the store fails.
+/// - It tells the window when a pass begins, whether that pass reads a mailbox back to the
+///   days, and how it ended, see `Report`.
 ///
 /// The user's own addresses and name come from Mail's accounts, or from the override that
 /// a Debug build passes in, with which the scan never asks Mail for the accounts.
 ///
 /// Logs counts, times and error codes only.
 final class MailScan {
-    /// An attachment as the scan keeps it: its name and type, never its content.
-    nonisolated struct Attachment: Sendable, Equatable {
-        var name: String
-        /// The MIME type in lowercase, such as application/pdf.
-        var mimeType: String
-    }
-
     /// A new message, read and parsed.
     nonisolated struct Message: Sendable, Equatable {
         /// Mail's handle of the message, in the mailbox it was read in. It holds for this
@@ -70,15 +70,16 @@ final class MailScan {
         var inReplyTo: [String]
         var references: [String]
         var list: ListMail
-        /// The attachments that have a file name, in the order of their parts.
-        var attachments: [Attachment]
+        /// The attachments that have a file name, in the order of their parts, with the text
+        /// of those MailAttachment reads.
+        var attachments: [MailAttachment]
         /// The size in bytes, as Mail counts it.
         var size: Int
         /// The text a reader sees and the text the email hides. Nil for a message over
         /// `largestSource`, whose source is never read.
         var visible: VisibleText?
-        /// The visible text split into the email's own text, its quoted history and its
-        /// signature. Nil when `visible` is.
+        /// The visible text split into the email's own text, its quoted history, its
+        /// signature and the messages it forwards. Nil when `visible` is.
         var history: QuotedHistory?
 
         var isTooLarge: Bool {
@@ -89,13 +90,13 @@ final class MailScan {
     /// What the scan reads from the store. Closures, so it never waits for the store and
     /// tests pass fakes.
     struct Lookups {
-        /// Which of these Message-IDs are saved already.
-        var known: ([String]) async -> Set<String>
+        /// Which of these Message-IDs are saved already. Throws when the store cannot say.
+        var known: ([String]) async throws -> Set<String>
         /// The mailboxes linked to a project, read along with the chosen ones.
         var linkedMailboxes: () async -> [MailMailbox]
     }
 
-    /// What one pass did, for the log and the tests.
+    /// What one pass did, for the log, the window and the tests.
     nonisolated struct Pass: Sendable, Equatable {
         /// Why a pass asked Mail nothing, or nothing more.
         nonisolated enum Skip: Sendable, Equatable {
@@ -104,16 +105,20 @@ final class MailScan {
             case mailNotRunning
             /// Another pass is under way, which reads the same new mail.
             case busy
+            /// The store could not save what the pass read, or say which mail it knows.
+            /// The next pass reads the mailbox back to the days again.
+            case storeFailed
         }
 
         /// Why the pass asked Mail nothing, or why it stopped asking once it had started:
-        /// Projects went off or the confirm was forgotten.
+        /// Projects went off, the confirm was forgotten or the store failed.
         var skipped: Skip?
         var mailboxes = 0
         /// Messages whose source was read.
         var read = 0
         /// Messages over `largestSource`, of which only the headers were read.
         var tooLarge = 0
+        /// Messages the store saved.
         var saved = 0
         /// Messages known already, or read already in this pass from another mailbox.
         var known = 0
@@ -127,6 +132,15 @@ final class MailScan {
         var unreadable = 0
         /// The error that ended the pass, or else the last one that ended a mailbox.
         var error: MailBridgeError?
+    }
+
+    /// What a pass tells the window. A pass that `stop()` ended, or one that found another
+    /// under way, tells nothing more.
+    nonisolated enum Report: Sendable, Equatable {
+        /// A pass began to read. `readsBack` when it reads a mailbox back to the days, which
+        /// takes much longer than a poll, or tries to, as for a mailbox Mail no longer has.
+        case began(readsBack: Bool)
+        case ended(Pass)
     }
 
     /// The positions a range covers (plan section 5).
@@ -149,6 +163,8 @@ final class MailScan {
     nonisolated static let pollInterval = Duration.seconds(60)
     /// The longest wait while Mail does not answer (a guess).
     nonisolated static let longestWait = Duration.seconds(30 * 60)
+    /// How often the scan looks whether a dictation ended, as the folder index does.
+    nonisolated static let dictationPoll = Duration.milliseconds(100)
 
     /// The order of a mailbox's positions.
     nonisolated enum Order: Sendable, Equatable {
@@ -174,9 +190,11 @@ final class MailScan {
     private let bridge: MailBridge
     private let choice: MailChoice
     private let lookups: Lookups
-    private let save: ([Message]) async -> Void
+    private let save: ([Message]) async throws -> Void
+    private let report: (Report) -> Void
     private let ownerOverride: SortingService.Owner?
     private let isOn: () -> Bool
+    private let isDictating: () -> Bool
     private let now: () -> Date
     private let sleep: (Duration) async throws -> Void
     private var progress: [MailMailbox: Progress] = [:]
@@ -187,21 +205,27 @@ final class MailScan {
     private var current: Task<Pass, Never>?
 
     /// - Parameters:
-    ///   - save: saves the new messages of a range, newest first. Each later call of a pass
-    ///     holds older mail than the one before, so a caller that sorts the mail should do
-    ///     so after the pass, oldest first, such as with `SortingService.sortWaiting()`.
+    ///   - save: saves the new messages of a range, newest first, and throws when it could
+    ///     not. Each later call of a pass holds older mail than the one before, so a caller
+    ///     that sorts the mail should do so after the pass, oldest first, such as with
+    ///     `SortingService.sortWaiting()`.
+    ///   - report: hears when each pass begins and ends, for the window.
     ///   - ownerOverride: the user's addresses and name in a Debug build that sets them, so
     ///     Mail's accounts are never read.
     ///   - isOn: whether Projects is on.
+    ///   - isDictating: whether a dictation runs, from the press of a key until it is pasted
+    ///     or cancelled, see EngineTurns.isDictating.
     ///   - now: the time, which the days count back from.
     ///   - sleep: waits between passes, Task.sleep in the app.
     init(
         bridge: MailBridge,
         choice: MailChoice,
         lookups: Lookups,
-        save: @escaping ([Message]) async -> Void,
+        save: @escaping ([Message]) async throws -> Void,
+        report: @escaping (Report) -> Void = { _ in },
         ownerOverride: SortingService.Owner? = nil,
         isOn: @escaping () -> Bool,
+        isDictating: @escaping () -> Bool = { false },
         now: @escaping () -> Date = Date.init,
         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
@@ -209,8 +233,10 @@ final class MailScan {
         self.choice = choice
         self.lookups = lookups
         self.save = save
+        self.report = report
         self.ownerOverride = ownerOverride
         self.isOn = isOn
+        self.isDictating = isDictating
         self.now = now
         self.sleep = sleep
     }
@@ -224,10 +250,10 @@ final class MailScan {
         let sleep = self.sleep
         // The loop holds the scan only during a pass, so a scan let go without `stop()`
         // ends its loop at the next wake.
-        loop = Task { [weak self] in
+        loop = Task(priority: .utility) { [weak self] in
             var wait = MailScan.pollInterval
             while !Task.isCancelled, let pass = await self?.scan() {
-                wait = MailScan.wait(after: pass.error, previous: wait)
+                wait = MailScan.wait(after: pass.error, storeFailed: pass.skipped == .storeFailed, previous: wait)
                 do {
                     try await sleep(wait)
                 } catch {
@@ -250,15 +276,16 @@ final class MailScan {
     }
 
     /// The wait before the next pass. After Mail did not answer, timed out, or refused
-    /// Orra, twice the last wait, at least two poll intervals and at most `longestWait`.
-    /// Otherwise one poll interval.
-    nonisolated static func wait(after error: MailBridgeError?, previous: Duration) -> Duration {
-        switch error {
-        case .notAnswered?, .timedOut?, .denied?, .notAsked?:
-            min(max(previous * 2, pollInterval * 2), longestWait)
-        default:
-            pollInterval
+    /// Orra, or after the store failed, twice the last wait, at least two poll intervals and
+    /// at most `longestWait`. Otherwise one poll interval. A store that keeps failing, as on
+    /// a full disk, would otherwise have each pass read a range of mail from Mail again,
+    /// only to fail to save it.
+    nonisolated static func wait(after error: MailBridgeError?, storeFailed: Bool = false, previous: Duration) -> Duration {
+        let waitsLonger = switch error {
+        case .notAnswered?, .timedOut?, .denied?, .notAsked?: true
+        default: storeFailed
         }
+        return waitsLonger ? min(max(previous * 2, pollInterval * 2), longestWait) : pollInterval
     }
 
     // MARK: The user
@@ -306,7 +333,7 @@ final class MailScan {
         guard current == nil else {
             return Pass(skipped: .busy)
         }
-        let task = Task { await self.readMailboxes() }
+        let task = Task(priority: .utility) { await self.readMailboxes() }
         current = task
         let pass = await withTaskCancellationHandler {
             await task.value
@@ -316,6 +343,9 @@ final class MailScan {
         // A pass that waited for this one may run already.
         if current == task {
             current = nil
+        }
+        if !task.isCancelled {
+            report(.ended(pass))
         }
         return pass
     }
@@ -340,6 +370,10 @@ final class MailScan {
         // of all accounts lists too, is then saved with the mailbox that files it.
         let mailboxes = ((await lookups.linkedMailboxes()) + choice.mailboxes).filter { unique.insert($0).inserted }
         let days = choice.days
+        if !Task.isCancelled {
+            // As `read(_:cutoff:days:seen:pass:)` decides whether it polls a mailbox.
+            report(.began(readsBack: mailboxes.contains { (progress[$0]?.readDays ?? 0) < days }))
+        }
         let cutoff = now().addingTimeInterval(-Double(days) * 86_400)
         var seen = Set<String>()
         for mailbox in mailboxes {
@@ -497,7 +531,12 @@ final class MailScan {
     ) async throws -> Bool {
         let fresh = listings.filter { listed.insert($0.message.id).inserted }
         let ids = fresh.map(\.messageID).filter { !$0.isEmpty }
-        let known = ids.isEmpty ? [] : await lookups.known(ids)
+        let known: Set<String>
+        do {
+            known = ids.isEmpty ? [] : try await lookups.known(ids)
+        } catch {
+            throw Stop(reason: .storeFailed)
+        }
         var found: [Message] = []
         var knownBefore = false
         do {
@@ -535,20 +574,27 @@ final class MailScan {
             }
         } catch {
             // What was read before Mail quit or stopped answering is kept. Nothing is saved
-            // after `stop()`, or once Projects is off.
-            await keep(found, pass: &pass)
+            // after `stop()`, or once Projects is off. The error ends the mailbox, so the
+            // next pass reads it back to the days again, also when this save fails.
+            try? await keep(found, pass: &pass)
             throw error
         }
-        await keep(found, pass: &pass)
+        try await keep(found, pass: &pass)
         if let oldest = listings.last?.dateReceived, oldest < cutoff {
             return true
         }
         return polls && knownBefore
     }
 
-    private func keep(_ found: [Message], pass: inout Pass) async {
+    /// Saves the new messages of a range and counts them. Throws when the store could not
+    /// save them, which ends the pass.
+    private func keep(_ found: [Message], pass: inout Pass) async throws {
         guard !found.isEmpty, !Task.isCancelled, isOn(), choice.isConfirmed else { return }
-        await save(found)
+        do {
+            try await save(found)
+        } catch {
+            throw Stop(reason: .storeFailed)
+        }
         pass.saved += found.count
     }
 
@@ -566,37 +612,54 @@ final class MailScan {
         // (unverified). Saved, it would stay known with no text.
         guard !source.isEmpty else { throw MailBridgeError.unexpectedReply }
         pass.read += 1
-        return await Self.parsed(source: source, listing: listing)
+        await waitWhileDictating()
+        return await Self.parsed(source: source, listing: listing) { [weak self] in
+            await self?.waitWhileDictating()
+        }
+    }
+
+    /// Returns once no dictation runs, or once the pass is cancelled.
+    private func waitWhileDictating() async {
+        while isDictating() && !Task.isCancelled {
+            try? await sleep(Self.dictationPoll)
+        }
     }
 
     // MARK: Parsing
 
-    /// Parses a source off the main actor, since a large message takes a while.
+    /// Parses a source off the main actor, since a large message takes a while, and reads
+    /// the text of its attachments from their parts, each once `waitWhileDictating` returns.
     @concurrent
-    nonisolated static func parsed(source: String, listing: MailListing) async -> Message {
-        let mime = MIMEMessage(source: source)
+    nonisolated static func parsed(
+        source: String,
+        listing: MailListing,
+        waitWhileDictating: @Sendable () async -> Void = {}
+    ) async -> Message {
+        let mime = MIMEMessage(source: source, limits: MailAttachment.mimeLimits())
         let visible = VisibleText(mime)
-        let attachments = mime.attachments.compactMap { part -> Attachment? in
-            guard let name = part.name, !name.isEmpty else { return nil }
-            return Attachment(name: name, mimeType: part.mimeType)
-        }
+        let date = mime.headers.date ?? listing.dateReceived ?? .distantPast
+        let attachments = await MailAttachment.read(mime.attachments, modified: date, waitWhileDictating: waitWhileDictating)
         return message(listing, headers: mime.headers, attachments: attachments, visible: visible)
     }
 
     /// A message that is too large, from its headers and Mail's list of its attachments.
     @concurrent
     nonisolated static func parsed(headers: String, attachments: [MailAttachmentInfo], listing: MailListing) async -> Message {
-        let named = attachments.filter { !$0.name.isEmpty }.map { Attachment(name: $0.name, mimeType: $0.mimeType) }
+        let named = attachments.filter { !$0.name.isEmpty }.map { attachment in
+            MailAttachment(name: attachment.name, type: attachment.mimeType, size: attachment.size,
+                           state: attachment.isDownloaded ? .emailTooLarge : .notDownloaded)
+        }
         return message(listing, headers: MailHeaders(parsing: headers), attachments: named, visible: nil)
     }
 
-    private nonisolated static func message(_ listing: MailListing, headers: MailHeaders, attachments: [Attachment], visible: VisibleText?) -> Message {
+    private nonisolated static func message(_ listing: MailListing, headers: MailHeaders, attachments: [MailAttachment], visible: VisibleText?) -> Message {
         func listed(_ addresses: [String]) -> [MailAddressHeader] {
             addresses.map { MailAddressHeader(name: "", address: $0) }
         }
         let from = headers.from
         let to = headers.to
         let cc = headers.cc
+        let subject = listing.subject.isEmpty ? headers.subject ?? "" : listing.subject
         return Message(
             reference: listing.message,
             messageID: listing.messageID,
@@ -607,7 +670,7 @@ final class MailScan {
             replyTo: headers.replyTo,
             to: to.isEmpty ? listed(listing.to) : to,
             cc: cc.isEmpty ? listed(listing.cc) : cc,
-            subject: listing.subject.isEmpty ? headers.subject ?? "" : listing.subject,
+            subject: subject,
             inReplyTo: headers.inReplyTo,
             references: headers.references,
             list: ListMail(
@@ -618,7 +681,8 @@ final class MailScan {
             attachments: attachments,
             size: listing.size,
             visible: visible,
-            history: visible.map { QuotedHistory(splitting: $0.text) }
+            // The subject tells a forward that Outlook writes like a reply.
+            history: visible.map { QuotedHistory(splitting: $0.text, subject: subject) }
         )
     }
 

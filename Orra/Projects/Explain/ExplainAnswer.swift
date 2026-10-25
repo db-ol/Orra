@@ -7,8 +7,8 @@ import Foundation
 /// It reads the headings of either language, with or without a colon, markdown marks or
 /// numbers in front, since a small model does not always keep the format. Inside the draft
 /// only a heading with its colon and nothing after it counts, so a line such as "Questions"
-/// stays in the draft. A point ends with its sources in brackets, such as [本邮件], [F2] or
-/// [M1, T1]. Sources that are not in the prompt's table are dropped and flagged, and so are
+/// stays in the draft. A point ends with its sources in brackets, such as [本邮件], [F2],
+/// [A1] or [M1, T1]. Sources that are not in the prompt's table are dropped and flagged, and so are
 /// missing and repeated sections. A repeated section's second copy is not read, but the
 /// heading written again right after itself, as after the prefill, is not a copy. An item
 /// copied from the prompt's own rules is left out, and so is a lead in copied from them
@@ -304,7 +304,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         for part in parts {
             if emailLabels.contains(part.lowercased()) {
                 ids.append(part)
-            } else if let match = part.wholeMatch(of: /(?i)([fmt])\s*(\d{1,3})/) {
+            } else if let match = part.wholeMatch(of: /(?i)([fmta])\s*(\d{1,3})/) {
                 ids.append(match.output.1.uppercased() + match.output.2)
             } else {
                 return nil

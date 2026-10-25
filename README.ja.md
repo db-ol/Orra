@@ -61,7 +61,7 @@
 オプションです。もう1つのキーを押して話し、もう一度押します。キーを“押したまま”に設定した場合は、押したまま話します。Orraは同じモデルを使ってお使いのMac上で、英語と音声入力の言語（中国語、日本語、スペイン語）の間で翻訳し、訳文をペーストします。小さなバッジは、その音声入力が翻訳されることを示します。中国語では“译”、日本語では“訳”、スペイン語では“⇄”です。
 
 </td>
-<td width="50%"><img src="docs/images/readme/ja/translation.gif" alt="チャットでSamが“When can I see the designs?”と尋ねます。誰かが翻訳キーを押したまま“デザインは金曜日までにお送りできます”と話します。カプセルに“訳”バッジが表示され、メッセージ入力欄に“I can send you the designs by Friday.”と入力されます。" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/ja/translation.gif" alt="チャットでSamが“When can I see the designs?”と尋ねます。誰かが翻訳キーを押して“デザインは金曜日までにお送りできます”と話し、もう一度キーを押します。カプセルに“訳”バッジと“右Optionキーを押して終了”が表示され、メッセージ入力欄に“I can send you the designs by Friday.”と入力されます。" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -73,7 +73,7 @@
 0.4.0の新機能です。
 
 </td>
-<td width="50%"><img src="docs/images/readme/ja/meeting.gif" alt="ビデオ通話でAlexが英語で話し、ライブキャプションのウインドウに各文とその日本語訳が表示されます。続いてユーザが翻訳キーを押したまま“いいですよ、水曜日までにテストを終わらせます”と話すと、通話にはOrra Microphoneから“Sure, I’ll finish testing by Wednesday.”と聞こえます。" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/ja/meeting.gif" alt="ビデオ通話でAlexが英語で話し、ライブキャプションのウインドウに各文とその日本語訳が表示されます。ウインドウの上部では“両方”と“日本語”が選ばれていて、その横にコピーボタンがあります。続いてユーザが翻訳キーを押して“いいですよ、水曜日までにテストを終わらせます”と話し、もう一度キーを押すと、通話にはOrra Microphoneから“Sure, I’ll finish testing by Wednesday.”と聞こえます。" width="100%"></td>
 </tr>
 <tr>
 <td colspan="2" valign="middle">
@@ -100,7 +100,7 @@ Orraが新しいバージョンを確認するのは許可したあとだけで�
 
 - **[Orra.dmgをダウンロード](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**（最新バージョン）。開いて、Orraを“アプリケーション”フォルダにドラッグします。以前のバージョンとリリースノートは[リリースページ](https://github.com/db-ol/Orra/releases)にあります。
 - **Orra Microphone**（オプション、“翻訳を相手に読み上げる”用）: 署名と公証を受けた[OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg)をダウンロードし、開いてインストールします。削除する方法や自分でビルドする方法は[Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md)（英語）で説明しています。
-- Appleシリコンを搭載し、macOS 15.6以降を実行しているMacと、約3 GBのディスクの空き容量が必要です。整文、翻訳、“プロジェクト”でのメールの説明に使うオプションのローカルモデルにはさらに2.8 GB、“翻訳を相手に読み上げる”で使うオプションの音声合成モデルには約2 GBが必要です。“プロジェクト”には16 GB以上のメモリが必要です。
+- Appleシリコンを搭載し、macOS 15.6以降を実行しているMacと、約3 GBのディスクの空き容量が必要です。整文、翻訳、“プロジェクト”でのメールの説明に使うオプションのローカルモデルにはさらに3.05 GB、“翻訳を相手に読み上げる”で使うオプションの音声合成モデルには約2 GBが必要です。“プロジェクト”には16 GB以上のメモリが必要です。
 - Developer IDで署名され、Appleの公証を受けているため、警告なしで開けます。
 - Mac App Storeでは配布していません。App Storeのサンドボックスでは、ほかのアプリでのキー操作を検知したり、ほかのアプリにペーストしたりできないためです。
 

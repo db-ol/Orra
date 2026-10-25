@@ -61,7 +61,7 @@
 可选功能。按一下第二个键开始说话，再按一下结束。把它的用法设为“按住”时，则按住它说话。Orra 会用同一个模型在你的 Mac 上，把你说的话在英文和你的听写语言（中文、日语或西班牙语）之间翻译后粘贴。小小的标记表示这次听写会被翻译：中文是“译”，日语是“訳”，西班牙语是“⇄”。
 
 </td>
-<td width="50%"><img src="docs/images/readme/zh/translation.gif" alt="在聊天窗口里，Sam 问“When can I see the designs?”。有人按住翻译键说“我这边周五之前能把设计稿发给你。”胶囊里显示“译”字标记，输入框里出现“I can send you the designs before Friday.”" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/zh/translation.gif" alt="在聊天窗口里，Sam 问“When can I see the designs?”。有人按一下翻译键，说“我这边周五之前能把设计稿发给你”，再按一下。胶囊里显示“译”字标记和“按右侧 Option 键结束”，输入框里出现“I can send you the designs before Friday.”" width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -73,7 +73,7 @@
 0.4.0 新增。
 
 </td>
-<td width="50%"><img src="docs/images/readme/zh/meeting.gif" alt="视频会议里，Alex 说英文，“实时字幕”窗口逐句显示原文和中文译文。然后用户按住翻译键说“可以，我周三之前把测试做完。”，通话里从 Orra Microphone 听到“Sure, I’ll finish testing by Wednesday.”" width="100%"></td>
+<td width="50%"><img src="docs/images/readme/zh/meeting.gif" alt="视频会议里，Alex 说英文，“实时字幕”窗口逐句显示原文和中文译文。窗口顶部选的是“双语”和“中文”，旁边是拷贝按钮。然后用户按一下翻译键，说“可以，我周三之前把测试做完”，再按一下，通话里从 Orra Microphone 听到“Sure, I’ll finish testing by Wednesday.”" width="100%"></td>
 </tr>
 <tr>
 <td colspan="2" valign="middle">
@@ -100,7 +100,7 @@
 
 - **[下载最新版本的 Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**，打开后把 Orra 拖进“应用程序”。旧版本和更新说明在[版本发布页面](https://github.com/db-ol/Orra/releases)。
 - **Orra Microphone**（可选，用于“为对方朗读译文”）：下载已签名并经过公证的 [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg)，打开即可安装。[Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md)（英文）说明了如何移除它，或者自己构建。
-- 需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。可选的本地模型（用来整理、翻译和在“项目”中解释邮件）另需 2.8 GB，“为对方朗读译文”可选的语音合成模型另需约 2 GB。“项目”需要 16 GB 及以上的内存。
+- 需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。可选的本地模型（用来整理、翻译和在“项目”中解释邮件）另需 3.05 GB，“为对方朗读译文”可选的语音合成模型另需约 2 GB。“项目”需要 16 GB 及以上的内存。
 - 使用 Developer ID 签名并经过苹果公证，打开时不会出现安全警告。
 - 不在 Mac App Store 上架，因为 App Store 的沙盒不允许 App 在其他 App 里监听按键或粘贴文字。
 

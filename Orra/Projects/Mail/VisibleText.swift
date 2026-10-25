@@ -2748,14 +2748,34 @@ nonisolated extension VisibleText {
 
     /// Reads a selector list, as in a rule's prelude or in :is().
     private struct SelectorReader {
+        /// The characters of the outermost list, which the readers of lists inside it share,
+        /// so each reads its part without a copy.
         private let characters: [Character]
-        private var index = 0
+        private var index: Int
+        /// Where this reader's list ends in `characters`.
+        private let end: Int
         private let parents: [StyleSelector]?
+        /// How many selector lists, as in :is() or :not(), this one is inside.
+        private let depth: Int
 
         init(_ text: String, parents: [StyleSelector]?) {
-            characters = Array(text)
-            self.parents = parents
+            let characters = Array(text)
+            self.init(characters, in: 0..<characters.count, parents: parents, depth: 0)
         }
+
+        private init(_ characters: [Character], in range: Range<Int>, parents: [StyleSelector]?, depth: Int) {
+            self.characters = characters
+            index = range.lowerBound
+            end = range.upperBound
+            self.parents = parents
+            self.depth = depth
+        }
+
+        /// A selector list nested deeper than this, such as :is() inside eight others, is not
+        /// read. It may match, so the rule only hides. This keeps the stack and the work of a
+        /// rule bounded, about this many times the length of its selector, with one copy of
+        /// its characters.
+        static let maximumDepth = 8
 
         /// The selectors, or nil when one cannot be read, which drops the rule, as in a
         /// browser. In a forgiving list, as in :is(), a selector that cannot be read is
@@ -2772,21 +2792,21 @@ nonisolated extension VisibleText {
                     skipTo(",")
                 }
                 skipSpace()
-                guard index < characters.count, characters[index] == "," else { break }
+                guard index < end, characters[index] == "," else { break }
                 index += 1
             }
-            if index < characters.count, !forgiving { return nil }
+            if index < end, !forgiving { return nil }
             guard !selectors.isEmpty else { return forgiving ? [] : nil }
             return selectors
         }
 
         private mutating func skipSpace() {
-            while index < characters.count, characters[index].isWhitespace { index += 1 }
+            while index < end, characters[index].isWhitespace { index += 1 }
         }
 
         private mutating func skipTo(_ stop: Character) {
             var depth = 0
-            while index < characters.count {
+            while index < end {
                 let character = characters[index]
                 if character == "(" { depth += 1 } else if character == ")" {
                     if depth == 0 { return }
@@ -2805,7 +2825,7 @@ nonisolated extension VisibleText {
             var usesParent = false
             skipSpace()
             // A nested selector may start with a combinator, relative to its parent.
-            if nested, index < characters.count, let combinator = Self.combinator(characters[index]) {
+            if nested, index < end, let combinator = Self.combinator(characters[index]) {
                 index += 1
                 parts.append(parentPart())
                 combinators.append(combinator)
@@ -2819,7 +2839,7 @@ nonisolated extension VisibleText {
                 parts.append(part)
                 let before = index
                 skipSpace()
-                guard index < characters.count else { break }
+                guard index < end else { break }
                 let character = characters[index]
                 if character == "," || character == ")" { break }
                 if let combinator = Self.combinator(character) {
@@ -2868,12 +2888,12 @@ nonisolated extension VisibleText {
         private mutating func compound(exact: inout Bool, stylesPart: inout Bool, specificity: inout Int, usesParent: inout Bool) -> SelectorPart? {
             var part = SelectorPart()
             var any = false
-            while index < characters.count {
+            while index < end {
                 let character = characters[index]
                 switch character {
                 case "*":
                     index += 1
-                    if index < characters.count, characters[index] == "|" { index += 1 }
+                    if index < end, characters[index] == "|" { index += 1 }
                 case "&":
                     index += 1
                     usesParent = true
@@ -2903,9 +2923,9 @@ nonisolated extension VisibleText {
                 default:
                     guard Self.startsIdentifier(character) else { return any ? part : nil }
                     guard let name = identifier() else { return nil }
-                    if index < characters.count, characters[index] == "|", index + 1 < characters.count, characters[index + 1] != "=" {
+                    if index < end, characters[index] == "|", index + 1 < end, characters[index + 1] != "=" {
                         index += 1
-                        if index < characters.count, characters[index] == "*" {
+                        if index < end, characters[index] == "*" {
                             index += 1
                             break
                         }
@@ -2928,12 +2948,12 @@ nonisolated extension VisibleText {
         /// An identifier with its escapes decoded.
         private mutating func identifier() -> String? {
             var bytes: [UInt8] = []
-            while index < characters.count {
+            while index < end {
                 let character = characters[index]
                 if character == "\\" {
                     bytes += "\\".utf8
                     index += 1
-                    guard index < characters.count else { break }
+                    guard index < end else { break }
                     // A hex escape runs over up to six digits and may end in a space.
                     guard characters[index].isHexDigit else {
                         bytes += String(characters[index]).utf8
@@ -2941,12 +2961,12 @@ nonisolated extension VisibleText {
                         continue
                     }
                     var digits = 0
-                    while index < characters.count, characters[index].isHexDigit, digits < 6 {
+                    while index < end, characters[index].isHexDigit, digits < 6 {
                         bytes += String(characters[index]).utf8
                         index += 1
                         digits += 1
                     }
-                    if index < characters.count, characters[index].isWhitespace {
+                    if index < end, characters[index].isWhitespace {
                         bytes += " ".utf8
                         index += 1
                     }
@@ -2962,19 +2982,19 @@ nonisolated extension VisibleText {
 
         private mutating func attribute() -> AttributeTest? {
             skipSpace()
-            if index < characters.count, characters[index] == "*" || characters[index] == "|" {
-                while index < characters.count, characters[index] != "|" { index += 1 }
+            if index < end, characters[index] == "*" || characters[index] == "|" {
+                while index < end, characters[index] != "|" { index += 1 }
                 index += 1
             }
             guard let rawName = identifier() else { return nil }
             var name = rawName.lowercased()
-            if index < characters.count, characters[index] == "|", index + 1 < characters.count, characters[index + 1] != "=" {
+            if index < end, characters[index] == "|", index + 1 < end, characters[index + 1] != "=" {
                 index += 1
                 guard let local = identifier() else { return nil }
                 name = local.lowercased()
             }
             skipSpace()
-            guard index < characters.count else { return nil }
+            guard index < end else { return nil }
             if characters[index] == "]" {
                 index += 1
                 return AttributeTest(name: name, match: .exists, value: "", ignoresCase: false)
@@ -2991,21 +3011,21 @@ nonisolated extension VisibleText {
             }
             index += match == .equals ? 1 : 2
             skipSpace()
-            guard index < characters.count else { return nil }
+            guard index < end else { return nil }
             var value: String
             if characters[index] == "\"" || characters[index] == "'" {
                 let quote = characters[index]
                 index += 1
                 var bytes: [UInt8] = []
-                while index < characters.count, characters[index] != quote {
-                    if characters[index] == "\\", index + 1 < characters.count {
+                while index < end, characters[index] != quote {
+                    if characters[index] == "\\", index + 1 < end {
                         bytes += "\\".utf8
                         index += 1
                     }
                     bytes += String(characters[index]).utf8
                     index += 1
                 }
-                guard index < characters.count else { return nil }
+                guard index < end else { return nil }
                 index += 1
                 value = CSS.unescaped(bytes[...])
             } else {
@@ -3014,16 +3034,16 @@ nonisolated extension VisibleText {
             }
             skipSpace()
             var ignoresCase = Self.caseInsensitiveAttributes.contains(name)
-            if index < characters.count, characters[index] == "i" || characters[index] == "I" {
+            if index < end, characters[index] == "i" || characters[index] == "I" {
                 ignoresCase = true
                 index += 1
                 skipSpace()
-            } else if index < characters.count, characters[index] == "s" || characters[index] == "S" {
+            } else if index < end, characters[index] == "s" || characters[index] == "S" {
                 ignoresCase = false
                 index += 1
                 skipSpace()
             }
-            guard index < characters.count, characters[index] == "]" else { return nil }
+            guard index < end, characters[index] == "]" else { return nil }
             index += 1
             if ignoresCase { value = value.lowercased() }
             return AttributeTest(name: name, match: match, value: value, ignoresCase: ignoresCase)
@@ -3039,25 +3059,25 @@ nonisolated extension VisibleText {
 
         private mutating func pseudoClass(exact: inout Bool, stylesPart: inout Bool, specificity: inout Int) -> PseudoClass? {
             var isElement = false
-            if index < characters.count, characters[index] == ":" {
+            if index < end, characters[index] == ":" {
                 isElement = true
                 index += 1
             }
             guard let rawName = identifier() else { return nil }
             let name = rawName.lowercased()
-            var argument: String?
-            if index < characters.count, characters[index] == "(" {
+            var argument: Range<Int>?
+            if index < end, characters[index] == "(" {
                 let start = index + 1
                 var depth = 0
-                while index < characters.count {
+                while index < end {
                     if characters[index] == "(" { depth += 1 } else if characters[index] == ")" {
                         depth -= 1
                         if depth == 0 { break }
                     }
                     index += 1
                 }
-                guard index < characters.count else { return nil }
-                argument = String(characters[start..<index])
+                guard index < end else { return nil }
+                argument = start..<index
                 index += 1
             }
             if isElement || Self.legacyPseudoElements.contains(name) {
@@ -3095,21 +3115,29 @@ nonisolated extension VisibleText {
                     combinators: [], specificity: 0, isExact: true, stylesPart: false)])
             case "nth-child", "nth-last-child", "nth-of-type", "nth-last-of-type":
                 guard let argument else { return nil }
-                var formula = Substring(argument)
+                var formula = argument
                 var of: [StyleSelector]?
-                if !name.hasSuffix("of-type"), let range = argument.range(of: " of ") {
-                    formula = argument[..<range.lowerBound]
-                    var reader = SelectorReader(String(argument[range.upperBound...]), parents: parents)
+                if !name.hasSuffix("of-type"), let separator = self.separator(" of ", in: argument) {
+                    formula = argument.lowerBound..<separator.lowerBound
+                    guard depth < Self.maximumDepth else {
+                        exact = false
+                        return .unknown
+                    }
+                    var reader = SelectorReader(characters, in: separator.upperBound..<argument.upperBound, parents: parents, depth: depth + 1)
                     guard let selectors = reader.list() else { return nil }
                     if selectors.contains(where: { !$0.isExact }) { exact = false }
                     specificity += selectors.map(\.specificity).max() ?? 0
                     of = selectors
                 }
-                guard let (a, b) = Self.formula(formula) else { return nil }
+                guard let (a, b) = Self.formula(String(characters[formula])[...]) else { return nil }
                 return .nth(a: a, b: b, ofType: name.hasSuffix("of-type"), fromEnd: name.contains("last"), of: of)
             case "not", "is", "where", "matches", "-webkit-any":
                 guard let argument else { return nil }
-                var reader = SelectorReader(argument, parents: parents)
+                guard depth < Self.maximumDepth else {
+                    exact = false
+                    return .unknown
+                }
+                var reader = SelectorReader(characters, in: argument, parents: parents, depth: depth + 1)
                 guard let selectors = reader.list(forgiving: name != "not") else { return nil }
                 if selectors.contains(where: { !$0.isExact }) { exact = false }
                 specificity -= 100
@@ -3125,18 +3153,29 @@ nonisolated extension VisibleText {
             }
         }
 
+        /// Where `text` first is in `range` of the characters.
+        private func separator(_ text: String, in range: Range<Int>) -> Range<Int>? {
+            let text = Array(text)
+            guard range.count >= text.count else { return nil }
+            return (range.lowerBound...(range.upperBound - text.count)).lazy
+                .map { $0..<($0 + text.count) }
+                .first { characters[$0].elementsEqual(text) }
+        }
+
         /// Pseudo elements written with one colon.
         private static let legacyPseudoElements: Set<String> = ["before", "after", "first-line", "first-letter"]
 
-        /// a and b of "an+b", "odd", "even" or a number.
+        /// a and b of "an+b", "odd", "even" or a number. Each is clamped to 32 bits, as
+        /// WebKit clamps them, so matching never overflows.
         private static func formula(_ text: Substring) -> (Int, Int)? {
+            func clamped(_ number: Int) -> Int { min(max(number, Int(Int32.min)), Int(Int32.max)) }
             let value = text.lowercased().filter { !$0.isWhitespace }
             switch value {
             case "odd": return (2, 1)
             case "even": return (2, 0)
             default: break
             }
-            guard let n = value.firstIndex(of: "n") else { return Int(value).map { (0, $0) } }
+            guard let n = value.firstIndex(of: "n") else { return Int(value).map { (0, clamped($0)) } }
             let before = value[..<n]
             let after = value[value.index(after: n)...]
             let a: Int?
@@ -3146,9 +3185,9 @@ nonisolated extension VisibleText {
             default: a = Int(before)
             }
             guard let a else { return nil }
-            guard !after.isEmpty else { return (a, 0) }
+            guard !after.isEmpty else { return (clamped(a), 0) }
             guard let b = Int(after.hasPrefix("+") ? String(after.dropFirst()) : String(after)) else { return nil }
-            return (a, b)
+            return (clamped(a), clamped(b))
         }
     }
 
@@ -4869,10 +4908,11 @@ nonisolated extension VisibleText {
             return look
         }
 
-        /// The size of <font size>, 1 to 7, or relative as +1 or -2.
+        /// The size of <font size>, 1 to 7, or relative as +1 or -2. A number past 7 counts
+        /// as 7 before the sign applies, which gives the same size and never overflows.
         private static func fontSize(attribute: String) -> Double? {
             let value = attribute.trimmingCharacters(in: .whitespaces)
-            guard var size = Int(value.drop { $0 == "+" || $0 == "-" }) else { return nil }
+            guard var size = Int(value.drop { $0 == "+" || $0 == "-" }).map({ min($0, 7) }) else { return nil }
             if value.hasPrefix("+") { size = 3 + size } else if value.hasPrefix("-") { size = 3 - size }
             let sizes: [Double] = [10, 13, 16, 18, 24, 32, 48]
             return sizes[min(max(size, 1), 7) - 1]
@@ -4980,6 +5020,7 @@ nonisolated extension VisibleText {
                 }
                 if let of, !of.contains(where: { matches($0, part: 0, element) }) { return false }
                 if a == 0 { return position == b }
+                // a and b fit in 32 bits, see SelectorReader.formula, so this never overflows.
                 let steps = position - b
                 return steps % a == 0 && steps / a >= 0
             case .not(let selectors):

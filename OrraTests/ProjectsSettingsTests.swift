@@ -417,6 +417,33 @@ struct ProjectsSettingsTests {
         #expect(MailAccess.rows(listed: [], chosen: [.inbox]) == [.inbox])
     }
 
+    /// The scan reads the mailboxes a project links along with the ticked ones, so unticking
+    /// one here does not stop it. The page lists each linked one with its project, ticked or
+    /// not, once for each project that links it, and marks one that Mail no longer has,
+    /// which the scan skips.
+    @Test func aLinkedMailboxShowsWithItsProjectTickedOrNot() async throws {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        let archive = try #require(ProjectsRuntime.mailboxName(Self.archive))
+        let harbor = Project(name: "Harbor lobby", mailboxes: [archive, "/Harbor 2026"])
+        let kiln = Project(name: "Kiln", mailboxes: [archive])
+        let access = MailAccess(
+            bridge: mail.bridge, choice: MailChoice(defaults: defaults, suggestsInboxAndSent: false),
+            projects: { [harbor, kiln, Project(name: "Garden")] }, missingMailboxes: { ["/Harbor 2026"] }, isOn: { true })
+        await access.show()
+        access.choose(Self.archive, true)
+        access.choose(Self.archive, false)
+        #expect(!access.isChosen(Self.archive))
+        #expect(access.links == [
+            MailAccess.Link(mailbox: archive, project: harbor.id, projectName: "Harbor lobby"),
+            MailAccess.Link(mailbox: "/Harbor 2026", project: harbor.id, projectName: "Harbor lobby", isMissing: true),
+            MailAccess.Link(mailbox: archive, project: kiln.id, projectName: "Kiln"),
+        ])
+        #expect(access.links.map { MailAccess.note(for: $0) } == ["Also read for “Harbor lobby”", "Also read for “Harbor lobby”", "Also read for “Kiln”"])
+        // Without projects, as while Projects is off, there is nothing to list.
+        #expect(MailAccess(bridge: mail.bridge, choice: MailChoice(defaults: defaults), isOn: { true }).links.isEmpty)
+    }
+
     @Test func mailboxesAreNamedInTheUsersLanguage() {
         #expect(MailAccess.title(.inbox) == "Inbox (all accounts)")
         #expect(MailAccess.title(.sent) == "Sent (all accounts)")
@@ -458,6 +485,43 @@ struct ProjectsSettingsTests {
         #expect(after.saved == 1)
         #expect(saved.map(\.messageID) == ["m1@studio.example"])
         #expect(mail.asks.isEmpty)
+    }
+
+    // MARK: The Projects window
+
+    /// Start Reading Mail says whether it confirmed the choice, so the page opens the
+    /// Projects window then, and only then: not before access is allowed and a mailbox is
+    /// ticked, not while Projects is off, and not a second time.
+    @Test func onlyTheConfirmOfStartReadingMailOpensTheWindow() async {
+        defer { cleanUp() }
+        mail.remembered = .allowed
+        var on = true
+        let access = access(isOn: { on })
+        await access.show()
+        // No mailbox ticked yet.
+        #expect(!access.startReading())
+        access.choose(Self.imported, true)
+        on = false
+        #expect(!access.startReading())
+        #expect(!access.choice.isConfirmed)
+        on = true
+        #expect(access.startReading())
+        #expect(access.choice.isConfirmed)
+        // Confirmed once, so the button is gone and nothing opens again.
+        #expect(!access.startReading())
+    }
+
+    /// Without access, Start Reading Mail confirms nothing and opens nothing, even with a
+    /// mailbox ticked.
+    @Test func withoutAccessStartReadingMailOpensNothing() async {
+        defer { cleanUp() }
+        mail.remembered = .denied
+        mail.listingError = .denied
+        let access = access(suggests: true)
+        await access.show()
+        #expect(access.isChosen(.inbox))
+        #expect(!access.startReading())
+        #expect(!access.choice.isConfirmed)
     }
 
     /// Mail as a test plays it: whether it runs, what macOS answers when asked, what the

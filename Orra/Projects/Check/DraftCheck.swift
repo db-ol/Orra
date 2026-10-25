@@ -63,7 +63,9 @@ nonisolated struct DraftCheckInput: Sendable, Equatable, Codable {
 /// It reads full width letters and digits as plain ones, and names with any spaces in
 /// them. Names of the project's people are always caught, in Chinese and in pinyin. Other
 /// names come from the source texts: Chinese ones by the rules of `ScreenNames`, Latin ones
-/// from the natural language tagger, so some may be missed.
+/// from the natural language tagger, so some may be missed. Addresses are those of the
+/// project's people and every address in the source texts, and only the whole address in
+/// the incoming mail counts as one it holds.
 ///
 /// It flags what OutputChecks finds, and fewer "to confirm" placeholders than questions
 /// for the user, which means the draft may decide one only the user can. It holds the draft
@@ -428,8 +430,8 @@ nonisolated enum DraftCheck {
                 found += pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text) }
             }
         }
-        let incomingLower = incoming.lowercased()
-        for address in protectedAddresses(input) where !incomingLower.contains(address) {
+        let incomingAddresses = addresses(in: incoming)
+        for address in protectedAddresses(input) where !incomingAddresses.contains(address) {
             found += SenderChecks.occurrences(of: address, in: text)
         }
         return ContentChecks.merged(found.compactMap(folded.original))
@@ -440,11 +442,21 @@ nonisolated enum DraftCheck {
         pattern: #"[零〇一二两三四五六七八九十百千万亿点]+(?:元|块|圆|美元|港元|港币|欧元|英镑|日元|人民币)"#
     )
 
-    /// The addresses of the project's people other than the recipients and the user,
-    /// lowercased.
+    /// The addresses of the project's people and the addresses in the sources, other than
+    /// the recipients' and the user's, lowercased.
     private static func protectedAddresses(_ input: DraftCheckInput) -> Set<String> {
         let allowed = Set((input.recipients + input.own).compactMap { ProjectsAddress.normalized($0.address) })
-        return Set(input.projectPeople.compactMap { ProjectsAddress.normalized($0.address) }).subtracting(allowed)
+        let people = Set(input.projectPeople.compactMap { ProjectsAddress.normalized($0.address) })
+        return people.union(input.sourceTexts.flatMap(addresses)).subtracting(allowed)
+    }
+
+    /// The whole mail addresses in a text, lowercased, read in compatibility form so full
+    /// width letters count too. An address inside a longer one is not one of them, so
+    /// bowen@pike-build.example holds no owen@pike-build.example.
+    private static func addresses(in text: String) -> Set<String> {
+        let plain = text.precomposedStringWithCompatibilityMapping
+        let matches = OutputChecks.mailAddress.matches(in: plain, range: NSRange(plain.startIndex..., in: plain))
+        return Set(matches.compactMap { Range($0.range, in: plain).flatMap { ProjectsAddress.normalized(String(plain[$0])) } })
     }
 
     // MARK: Names

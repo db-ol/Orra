@@ -747,16 +747,10 @@ struct ModelGateReservationTests {
     let mic = FakeMicrophone()
     let inserter = FakeInserter()
 
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-    }
-
-    private func press(_ controller: PushToTalkController, _ key: TalkKey) async throws {
+    private func press(_ controller: PushToTalkController, _ key: TalkKey, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         let starts = mic.calls.filter { $0 == "start" }.count
         controller.handle(.pressed(isRepeat: false), key: .key(key))
-        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        try await waitUntil({ mic.calls.filter { $0 == "start" }.count > starts }, sourceLocation: sourceLocation)
     }
 
     @Test func aDictationReservesTheGate() async throws {
@@ -829,6 +823,41 @@ struct ModelGateReservationTests {
             "transcribe reserved", "cleanup reserved",
             "transcribe free", "transcribe free",
         ])
+        #expect(gate.snapshot == ModelGate.Snapshot())
+    }
+
+    /// At the key down the cleanup model hears of the dictation before the dictation
+    /// reserves the gate, so captions and Projects can take a call that waits at the gate
+    /// out of it before the reservation lets it in.
+    @Test func theKeyDownTellsTheCleanupModelBeforeItReservesTheGate() async throws {
+        let gate = ModelGate()
+        let log = ReservationLog(gate)
+        let transcription = Transcription(load: {}, transcribe: { _, _, _ in "我们下午三点开会。" }).gated(gate)
+        let cleanup = CleanupModel(waitUntilLoaded: { false }, dictationStarted: { log.note("dictation started") }, complete: { _ in "" })
+        let controller = PushToTalkController(
+            capture: mic.capture,
+            transcription: transcription,
+            cleanup: cleanup,
+            insert: inserter.insert,
+            frontmostApp: { 100 },
+            minimumHold: .zero,
+            releaseTail: .zero,
+            listeningCueDelay: .zero
+        )
+        await controller.loadModel()
+        try await press(controller, .rightControl)
+        #expect(gate.snapshot == ModelGate.Snapshot(reserved: 1))
+        controller.handle(.released, key: .key(.rightControl))
+        try await waitUntil { controller.state == .idle }
+        // A press that starts the microphone early, and counts later.
+        let starts = mic.calls.filter { $0 == "start" }.count
+        controller.handle(.armed, key: .key(.rightControl))
+        try await waitUntil { mic.calls.filter { $0 == "start" }.count > starts }
+        controller.handle(.pressed(isRepeat: false), key: .key(.rightControl))
+        #expect(gate.snapshot == ModelGate.Snapshot(reserved: 1))
+        controller.handle(.released, key: .key(.rightControl))
+        try await waitUntil { controller.state == .idle }
+        #expect(log.all == ["dictation started free", "dictation started free"])
         #expect(gate.snapshot == ModelGate.Snapshot())
     }
 

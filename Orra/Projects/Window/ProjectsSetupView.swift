@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 /// Sets up a new project or changes one: its name and description, its folders by the open
 /// panel or by drag, its people with their roles, its domains and a linked Mail mailbox.
 ///
+/// A suggestion of Suggested Projects opens it as a new project, prefilled with the
+/// suggestion's name, description, people, domains and mailbox, which the user can change,
+/// save or dismiss.
+///
 /// The names of Mail's mailboxes are read only when the user asks for them, and only while
 /// Mail runs. Folders are kept as plain bookmarks, see Project.bookmark(of:). Projects never
 /// writes, moves or deletes anything in them.
@@ -40,11 +44,24 @@ struct ProjectsSetupView: View {
         /// Kept as they are, since the sheet does not edit them.
         var rules: [Project.Rule] = []
         var otherMailboxes: [String] = []
+        /// The suggestion a new project was prefilled from, nil for any other.
+        var suggestion: ProjectSuggestionService.Suggestion?
 
         /// A new project.
         init() {
             id = UUID()
             isNew = true
+        }
+
+        /// A new project prefilled from a suggestion of Suggested Projects.
+        init(suggestion: ProjectSuggestionService.Suggestion) {
+            self.init()
+            self.suggestion = suggestion
+            name = suggestion.name
+            description = suggestion.description
+            people = suggestion.group.people.map { Person(name: $0.name, address: $0.address) }
+            domains = suggestion.group.domains.joined(separator: ", ")
+            mailbox = suggestion.group.mailbox
         }
 
         /// A project to change.
@@ -76,19 +93,34 @@ struct ProjectsSetupView: View {
             return people
         }
 
-        /// The domains in lowercase without an @ in front, or nil when one is not a domain.
-        var validDomains: [String]? {
+        /// Why a domain cannot be saved.
+        nonisolated enum DomainProblem: Error, Equatable {
+            case notADomain
+            /// A mail provider that many unrelated people share, or a domain under one, as
+            /// ProjectSuggestions.isSharedProvider(_:) finds it. Every address there would
+            /// count as one of the project's people.
+            case sharedProvider(String)
+        }
+
+        /// The domains in lowercase without an @ in front, or why one cannot be saved.
+        var checkedDomains: Result<[String], DomainProblem> {
             var domains: [String] = []
             let separators = CharacterSet(charactersIn: ",;，、").union(.whitespacesAndNewlines)
             for part in self.domains.components(separatedBy: separators) where !part.isEmpty {
                 let domain = part.hasPrefix("@") ? String(part.dropFirst()) : part
                 guard domain.contains("."), let address = ProjectsAddress.normalized("x@" + domain),
-                      let normalized = address.split(separator: "@").last.map(String.init) else { return nil }
+                      let normalized = address.split(separator: "@").last.map(String.init) else { return .failure(.notADomain) }
+                guard !ProjectSuggestions.isSharedProvider(normalized) else { return .failure(.sharedProvider(normalized)) }
                 if !domains.contains(normalized) {
                     domains.append(normalized)
                 }
             }
-            return domains
+            return .success(domains)
+        }
+
+        /// The domains to save, or nil while one cannot be saved.
+        var validDomains: [String]? {
+            try? checkedDomains.get()
         }
 
         /// The project to save, or nil while the name is empty or a person or a domain is
@@ -111,11 +143,17 @@ struct ProjectsSetupView: View {
 
     /// A domain to show how one is written.
     static let exampleDomain = "harbor.example"
+    /// A mail provider to show which domains the sheet refuses, one of
+    /// SortingService.sharedMailDomains.
+    static let sharedProviderExample = "gmail.com"
 
     let runtime: ProjectsRuntime
     @State var draft: Draft
     /// Called with the project's ID once it is saved, or nil when the user cancels.
     let done: (UUID?) -> Void
+    /// Dismisses the suggestion the project was prefilled from. The sheet shows Dismiss
+    /// Suggestion only with it.
+    var dismissSuggestion: (() -> Void)? = nil
     @State private var isChoosingFolders = false
     /// Why the last folder added was refused.
     @State private var folderProblem: String?
@@ -137,6 +175,17 @@ struct ProjectsSetupView: View {
             .font(.headline)
             .padding(.top, 14)
             Form {
+                if let suggestion = draft.suggestion {
+                    Section {
+                        Label {
+                            Text("Suggested from your mail in Needs a Project, where it would take \(suggestion.group.takes.count) emails. Check the name, the people and the domains, and add the project's folders.")
+                                .fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: "folder.badge.plus")
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
                 Section {
                     TextField("Name", text: $draft.name)
                     TextField("Description", text: $draft.description, axis: .vertical)
@@ -148,21 +197,36 @@ struct ProjectsSetupView: View {
                 }
                 folderSection
                 peopleSection
-                Section("Domains") {
+                Section {
                     TextField("Domains", text: $draft.domains, prompt: Text(verbatim: "\(Self.exampleDomain), port.example"))
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)
-                    if draft.validDomains == nil {
-                        Text("Write each domain like \(Self.exampleDomain).")
+                    if case .failure(let problem) = draft.checkedDomains {
+                        Text(verbatim: Self.problem(with: problem))
                             .font(.callout)
                             .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                } header: {
+                    Text("Domains")
+                } footer: {
+                    Text("Addresses at these domains count as the project's people. Their mail goes to the project, and a reply to them counts as staying inside the project. For a mail provider many people share, such as \(Self.sharedProviderExample), add each person under People instead.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 mailboxSection
             }
             .formStyle(.grouped)
             Divider()
             HStack {
+                if let dismissSuggestion {
+                    Button("Dismiss Suggestion") {
+                        dismissSuggestion()
+                        done(nil)
+                    }
+                    .help(ProjectsSuggestedSection.dismissalNote)
+                }
                 if saveFailed {
                     Text(verbatim: ProjectsWindowText.notice(.projectNotSaved))
                         .foregroundStyle(.secondary)
@@ -387,6 +451,14 @@ struct ProjectsSetupView: View {
             return named ? String(localized: "Add an email address.") : nil
         }
         return ProjectsAddress.normalized(address) == nil ? String(localized: "This is not an email address.") : nil
+    }
+
+    /// Why the domains cannot be saved, in the words of the sheet.
+    static func problem(with domains: Draft.DomainProblem) -> String {
+        switch domains {
+        case .notADomain: String(localized: "Write each domain like \(exampleDomain).")
+        case .sharedProvider(let domain): String(localized: "Many unrelated people have addresses at \(domain). Add each person under People instead.")
+        }
     }
 
     /// The mailboxes the picker offers: those read from Mail, and the linked one even while

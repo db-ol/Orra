@@ -3,11 +3,11 @@ import Synchronization
 import Testing
 @testable import Orra
 
-/// The email view of one email: the draft as the user edits it, a change from the change
-/// box or a tone with its highlight and Undo, the talk key's words in the change box, the
-/// answer check once per draft the model made, Show in My Language, the handoff to Mail with
-/// one at a time for the window, the requests that the window's close ends, the source chips
-/// and the deadline mark.
+/// The email view of one email: the draft as the user edits it and the save of what the
+/// user typed, a change from the change box or a tone with its highlight, Undo and Cancel
+/// Change, the talk key's words in the change box, the answer check once per draft the model
+/// made, Show in My Language, the handoff to Mail with one at a time for the window, the
+/// requests that the window's close ends, the source chips and the deadline mark.
 ///
 /// A fake model answers by the kind of request, a fake store keeps the versions, and a fake
 /// Mail never sends an Apple Event. Made up people at .example addresses, nothing from the
@@ -28,12 +28,12 @@ struct ProjectsEmailModelTests {
         file: URL(fileURLWithPath: "/Projects/Harbor/lamps.pdf"), page: 3, modified: today,
         heading: "Lamps", text: "Twelve brass lamps, delivery in week 47.")
 
-    static func explanation(draft: String? = draft, flags: [DraftCheck.Flag] = [], recipients: [Person] = [mei]) -> Explanation {
+    static func explanation(draft: String? = draft, flags: [DraftCheck.Flag] = [], recipients: [Person] = [mei], explained: Date = today) -> Explanation {
         let check = DraftCheckInput(
             draft: "", language: .en, recipients: recipients, projectPeople: [mei], own: [me],
             incomingText: emailText, sourceTexts: [file.text], questionsForUser: ["Which lamp order?"], today: today)
         return Explanation(
-            messageID: id, project: UUID(uuidString: "6F1D0B5E-6C1B-4C4B-9F3A-0B8E2C9D7A11"), language: .en, today: today,
+            messageID: id, project: UUID(uuidString: "6F1D0B5E-6C1B-4C4B-9F3A-0B8E2C9D7A11"), language: .en, today: explained,
             reply: .reply(.en),
             warnings: [ExplainPrompt.Finding(warning: .link, place: .email)],
             modelWarnings: [],
@@ -54,12 +54,28 @@ struct ProjectsEmailModelTests {
             var prompts: [String] = []
             var versions: [MailStore.DraftVersion] = []
             var savesVersions = true
+            /// The text the user typed into the draft, as the store keeps it.
+            var edited: MailStore.EditedDraft?
+            /// Whether the store keeps what the user typed.
+            var savesEdits = true
+            /// The saves of what the user typed, nil for a removal.
+            var editSaves: [String?] = []
             var copies: [String] = []
             var replies: [Bool] = []
+            /// The checks of Mail's handle before a reply, true for a reply to all.
+            var referenceChecks: [Bool] = []
+            /// Whether the check of Mail's handle waits for `referenceRelease`, also once its
+            /// task is cancelled, as an event already sent to Mail does.
+            var referenceHolds = false
+            var referenceRelease: CheckedContinuation<Void, Never>?
             var broughtForward = 0
             var mailIsRunning = true
             /// Whether Mail's reply waits until the test lets it go.
             var replyWaits = false
+            /// Whether Mail's reply waits for `replyRelease`, also once its task is
+            /// cancelled, as an event already sent to Mail does.
+            var replyHolds = false
+            var replyRelease: CheckedContinuation<Void, Never>?
             var replyStarted = false
             /// The requests that ran as the user's.
             var userRequests = 0
@@ -68,6 +84,9 @@ struct ProjectsEmailModelTests {
             var requestWaits = false
             /// Whether the removal of a version waits until the test lets it go.
             var removeWaits = false
+            /// Whether working out what a change changed waits until the test lets it go.
+            var diffWaits = false
+            var diffStarted = false
         }
 
         let state = Mutex(State())
@@ -97,10 +116,21 @@ struct ProjectsEmailModelTests {
             }
         }
 
+        /// Keeps a version in place of what the user typed, as the store does.
         nonisolated func save(_ version: ReviseService.Version) {
             state.withLock { state in
                 guard state.savesVersions else { return }
                 state.versions.append(MailStore.DraftVersion(number: (state.versions.last?.number ?? 0) + 1, made: ProjectsEmailModelTests.today, version: version))
+                state.edited = nil
+            }
+        }
+
+        nonisolated func save(_ edited: MailStore.EditedDraft?) -> Bool {
+            state.withLock { state in
+                state.editSaves.append(edited?.text)
+                guard state.savesEdits else { return false }
+                state.edited = edited
+                return true
             }
         }
 
@@ -123,6 +153,11 @@ struct ProjectsEmailModelTests {
                         $0.replies.append(all)
                         $0.replyStarted = true
                     }
+                    if value.replyHolds {
+                        await withCheckedContinuation { continuation in
+                            update { $0.replyRelease = continuation }
+                        }
+                    }
                     while value.replyWaits {
                         try await Task.sleep(for: .milliseconds(5))
                     }
@@ -137,10 +172,12 @@ struct ProjectsEmailModelTests {
         explanation: @escaping () -> Explanation? = { ProjectsEmailModelTests.explanation() },
         userLanguage: ProjectsLanguage = .en,
         reference: MailMessageRef? = MailMessageRef(id: 4, mailbox: .inbox),
-        handoffs: ProjectsEmailModel.Handoffs = ProjectsEmailModel.Handoffs()
+        referenceFailure: MailBridgeError? = nil,
+        handoffs: ProjectsEmailModel.Handoffs = ProjectsEmailModel.Handoffs(),
+        email original: ExplainService.Email? = nil
     ) -> ProjectsEmailModel {
         let fakes = fakes
-        return ProjectsEmailModel(messageID: Self.id, actions: ProjectsEmailModel.Actions(
+        let model = ProjectsEmailModel(messageID: Self.id, actions: ProjectsEmailModel.Actions(
             explanation: { _ in explanation() },
             versions: { _ in fakes.value.versions },
             removeNewestVersion: { _ in
@@ -152,6 +189,12 @@ struct ProjectsEmailModelTests {
                     state.versions.removeLast()
                     return true
                 }
+            },
+            editedDraft: { _ in fakes.value.edited },
+            saveEditedDraft: { _, edited in
+                // Saved at once, as the store's write starts at once.
+                let saved = fakes.save(edited)
+                return Task { saved }
             },
             reviseContext: { explanation in
                 guard let check = explanation.draftCheck else { return nil }
@@ -171,13 +214,25 @@ struct ProjectsEmailModelTests {
                 try await request()
             },
             email: { id in
+                if id == Self.id, let original {
+                    return original
+                }
                 guard id == Self.id || id == "lamps-1@harbor.example" else { return nil }
                 return ExplainService.Email(
                     messageID: id, date: Self.today.addingTimeInterval(-86_400 * 3),
                     sender: ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example"),
                     text: id == Self.id ? Self.emailText : "The lamps are ordered.", visibleText: "")
             },
-            mailReference: { _ in reference },
+            mailReference: { _, all in
+                fakes.update { $0.referenceChecks.append(all) }
+                if fakes.value.referenceHolds {
+                    await withCheckedContinuation { continuation in
+                        fakes.update { $0.referenceRelease = continuation }
+                    }
+                }
+                if let referenceFailure { throw referenceFailure }
+                return reference
+            },
             handoff: ReplyHandoff(
                 copy: { text in
                     fakes.update { $0.copies.append(text) }
@@ -188,8 +243,18 @@ struct ProjectsEmailModelTests {
                 bringMailToFront: { fakes.update { $0.broughtForward += 1 } }
             ),
             userLanguage: userLanguage,
-            now: { Self.today }
+            now: { Self.today },
+            highlight: { before, after in
+                fakes.update { $0.diffStarted = true }
+                while fakes.value.diffWaits {
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                return ProjectsDraftDiff.segments(from: before, to: after)
+            }
         ), handoffs: handoffs)
+        // What the user types is saved at once.
+        model.saveDelay = .zero
+        return model
     }
 
     /// The model's answer check for the two questions of the email.
@@ -221,6 +286,165 @@ struct ProjectsEmailModelTests {
         #expect(model.text.isEmpty)
     }
 
+    // MARK: What the user types
+
+    /// What the user types into the draft is saved with the key of the draft it went into,
+    /// and a new email view, as after the window closed, starts from it. Saved on this Mac
+    /// shows once the save worked, and never for the model's draft as it made it.
+    @Test func whatTheUserTypesIsSavedAndANewEmailViewStartsFromIt() async throws {
+        let model = model()
+        await model.load()
+        #expect(model.saveNote == nil)
+        let typed = Self.draft + "\nP.S. See you Friday."
+        model.text = typed
+        // The save has not run yet.
+        #expect(model.saveNote == nil)
+        try await waitUntil { model.saveNote == .saved }
+        #expect(fakes.value.edited == MailStore.EditedDraft(text: typed, editedFrom: MailStore.draftKey(Self.draft, version: 0, explained: Self.today)))
+        #expect(ProjectsWindowText.save(.saved) == "Saved on this Mac.")
+
+        let reopened = self.model()
+        await reopened.load()
+        #expect(reopened.text == typed)
+        #expect(reopened.isEdited)
+        #expect(reopened.saveNote == .saved)
+
+        // Back to the model's draft, so what the user typed goes.
+        reopened.text = Self.draft
+        try await waitUntil { fakes.value.edited == nil }
+        #expect(reopened.saveNote == nil)
+        #expect(fakes.value.editSaves == [typed, nil])
+    }
+
+    /// Saved on this Mac never shows before a save worked. A save that fails says so, and
+    /// the next key press tries again. A change saves a version that holds the editor's
+    /// text, so a save that failed before it says nothing at the next key press, nor after
+    /// Undo, which puts that text back to be saved.
+    @Test func savedOnThisMacShowsOnlyOnceTheSaveWorked() async throws {
+        let model = model()
+        await model.load()
+        fakes.update { $0.savesEdits = false }
+        model.text = Self.draft + "\nThanks."
+        try await waitUntil { model.saveNote == .notSaved }
+        #expect(fakes.value.edited == nil)
+        #expect(ProjectsWindowText.save(.notSaved) == "The draft could not be saved. Copy it before you close the window.")
+        fakes.update { $0.savesEdits = true }
+        model.text += " Lin"
+        try await waitUntil { model.saveNote == .saved }
+        #expect(fakes.value.edited?.text == Self.draft + "\nThanks. Lin")
+
+        fakes.update { $0.savesEdits = false }
+        model.text += "."
+        try await waitUntil { model.saveNote == .notSaved }
+        fakes.update {
+            $0.revisions = ["Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order].\n\nLin"]
+            $0.checks = [Self.bothAnswered]
+        }
+        #expect(await model.makeChange(.tone(.firm)))
+        #expect(model.saveNote == .saved)
+        // The save of this key press has not run yet.
+        model.text += " Thanks."
+        #expect(model.saveNote == nil)
+        try await waitUntil { model.saveNote == .notSaved }
+        await model.undo()
+        #expect(model.text == Self.draft + "\nThanks. Lin.")
+        #expect(model.saveNote == nil)
+    }
+
+    /// A save waits for a pause in typing. A key press while it waits puts it off by the
+    /// whole pause, so Saved on this Mac stays away while the user types and a burst of
+    /// typing makes one write.
+    @Test func aSaveWaitsForAPauseInTyping() async throws {
+        let model = model()
+        await model.load()
+        model.saveDelay = .milliseconds(400)
+        model.text = Self.draft + " Lin"
+        try await Task.sleep(for: .milliseconds(300))
+        let typed = ContinuousClock.now
+        model.text += "."
+        #expect(model.saveNote == nil)
+        try await waitUntil { model.saveNote == .saved }
+        // A save that ran once the first key press was 400 ms old would show sooner.
+        #expect(typed.duration(to: .now) >= .milliseconds(400))
+        #expect(fakes.value.edited?.text == Self.draft + " Lin.")
+    }
+
+    /// A change made from what the user typed takes its place in the store, and Undo puts
+    /// it back and saves it again. Text saved with the key of another draft, such as by a
+    /// save that ended after a change, never comes back over the newest draft, and goes.
+    @Test func typedTextComesBackOnlyOverTheDraftItWentInto() async throws {
+        let model = model()
+        await model.load()
+        let typed = Self.draft.replacingOccurrences(of: "today", with: "tonight")
+        model.text = typed
+        try await waitUntil { model.saveNote == .saved }
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan tonight.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer]
+            $0.checks = [Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        #expect(model.text == firmer)
+        #expect(fakes.value.edited == nil)
+        #expect(model.saveNote == .saved)
+        await model.undo()
+        #expect(model.text == typed)
+        try await waitUntil { fakes.value.edited?.text == typed }
+        #expect(fakes.value.edited?.editedFrom == MailStore.draftKey(Self.draft, version: 0, explained: Self.today))
+
+        fakes.update { $0.edited = MailStore.EditedDraft(text: "Words for version 1", editedFrom: MailStore.draftKey(firmer, version: 1, explained: Self.today)) }
+        let reopened = self.model()
+        await reopened.load()
+        #expect(reopened.text == Self.draft)
+        try await waitUntil { fakes.value.edited == nil }
+        #expect(reopened.saveNote == nil)
+    }
+
+    /// An explanation made again with the same draft is another draft. Text the user typed
+    /// into the draft before, such as by a save that ended after the new explanation, never
+    /// comes back over it, and goes.
+    @Test func typedTextComesBackOnlyForTheExplanationItWentInto() async throws {
+        let model = model()
+        await model.load()
+        model.text = Self.draft + "\nThanks."
+        try await waitUntil { model.saveNote == .saved }
+        let typed = try #require(fakes.value.edited)
+        // The fake store keeps the text typed before.
+        let again = Self.explanation(explained: Self.today.addingTimeInterval(60))
+        #expect(typed.editedFrom != MailStore.draftKey(Self.draft, version: 0, explained: again.today))
+        let reopened = self.model(explanation: { again })
+        await reopened.load()
+        #expect(reopened.text == Self.draft)
+        try await waitUntil { fakes.value.edited == nil }
+        #expect(reopened.saveNote == nil)
+    }
+
+    /// Undo in a window that opens later puts back what the user typed before the change,
+    /// which the version keeps, and the highlight shows the change from that text.
+    @Test func undoInAWindowThatOpensLaterPutsBackWhatTheUserTyped() async throws {
+        let model = model()
+        await model.load()
+        let typed = Self.draft.replacingOccurrences(of: "today", with: "tonight")
+        model.text = typed
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan tonight.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer]
+            $0.checks = [Self.bothAnswered]
+        }
+        #expect(await model.makeChange(.tone(.firm)))
+        #expect(fakes.value.versions.last?.version.madeFrom == typed)
+
+        // The window closed and opens again.
+        let reopened = self.model()
+        await reopened.load()
+        #expect(reopened.text == firmer)
+        #expect(reopened.lastChange?.segments == ProjectsDraftDiff.segments(from: typed, to: firmer))
+        await reopened.undo()
+        #expect(reopened.text == typed)
+        try await waitUntil { fakes.value.edited?.text == typed }
+        #expect(fakes.value.edited?.editedFrom == MailStore.draftKey(Self.draft, version: 0, explained: Self.today))
+    }
+
     @Test func theSourcesNameThisEmailEarlierMailAndFiles() async {
         let model = model()
         await model.load()
@@ -239,6 +463,114 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsWindowText.source(model.sources["T1"]!).hasPrefix("Mei Tan, "))
         #expect(ProjectsEmailArea.SourceChip.isGone(.mail(messageID: "gone@harbor.example", sender: nil, date: nil)))
         #expect(!ProjectsEmailArea.SourceChip.isGone(.thisEmail))
+    }
+
+    /// An attachment's chip shows its name, and the excerpt the model read.
+    @Test func anAttachmentSourceShowsItsNameAndExcerpt() async {
+        var explanation = Self.explanation()
+        explanation.sources["A1"] = .attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps at ¥980 each.")
+        explanation.points[0].sources.append("A1")
+        let model = model(explanation: { explanation })
+        await model.load()
+        #expect(model.sources["A1"] == .attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps at ¥980 each."))
+        #expect(ProjectsWindowText.source(.attachment(name: "lamps-quote.pdf", excerpt: "Twelve brass lamps.")) == "lamps-quote.pdf")
+        #expect(!ProjectsEmailArea.SourceChip.isGone(.attachment(name: "lamps-quote.pdf", excerpt: "")))
+        #expect(ProjectsEmailArea.ExplanationSections.sourceID(.attachment("A1")) == "A1")
+    }
+
+    /// What the attachment list says of each attachment: its kind as Finder names it, its
+    /// size, and whether Projects read it.
+    @Test func theAttachmentListSaysWhatWasRead() {
+        let english = Locale(identifier: "en")
+        let pdf = MailAttachment(name: "lamps-quote.pdf", type: "application/pdf", size: 220_000, state: .read)
+        // The unit is as the locale writes it, such as kB.
+        let kind = ProjectsWindowText.attachmentKind(pdf, locale: english)
+        #expect(kind.hasPrefix("PDF document, 220 ") && kind.lowercased().hasSuffix("kb"))
+        let unknown = MailAttachment(name: "lamps.orraunknown", type: "application/x-orra-unknown", state: .notDownloaded)
+        #expect(ProjectsWindowText.attachmentKind(unknown, locale: english) == "application/x-orra-unknown")
+        let lines: [(MailAttachment.State, Bool, String)] = [
+            (.read, false, "Projects read its text."),
+            (.read, true, "Projects read the start of its text."),
+            (.notDownloaded, false, "Mail has not downloaded it, so Projects knows only its name."),
+            (.tooLarge, false, "Projects did not read it, as it is over 10 MB."),
+            (.emailTooLarge, false, "Projects did not read it, as the email is too large."),
+            (.otherType, false, "Projects does not read this kind of file."),
+            (.unreadable, false, "Projects could not read it."),
+            (.noText, false, "Projects found no text in it."),
+            (.notRead, false, "Projects did not read it."),
+            (.savedEarlier, false, "Projects saved this email before it read attachments."),
+        ]
+        #expect(Set(lines.map(\.0)) == Set(MailAttachment.State.allCases))
+        for (state, isCut, line) in lines {
+            #expect(ProjectsWindowText.attachmentState(MailAttachment(name: "a.pdf", type: "application/pdf", state: state, isCut: isCut)) == line)
+        }
+        // The kind, the size and the state share one line.
+        let text = MailAttachment(name: "notes.txt", type: "text/plain", state: .read)
+        #expect(ProjectsWindowText.attachmentLine(text) == ProjectsWindowText.attachmentKind(text) + ". Projects read its text.")
+        // VoiceOver tells an attachment's chip from a file's of the same name.
+        #expect(ProjectsWindowText.sourceLabel(.attachment(name: "报价单_v2.pdf", excerpt: "")) == "Attachment 报价单_v2.pdf")
+        #expect(ProjectsWindowText.sourceLabel(.thisEmail) == ProjectsWindowText.source(.thisEmail))
+        #expect(ProjectsAttachmentList.Row.icon(pdf) == "doc.text")
+        #expect(ProjectsAttachmentList.Row.icon(unknown) == "doc")
+    }
+
+    // MARK: The email itself
+
+    /// A forward with a signature, an attachment and quoted history, as the store gives it.
+    static let forwardEmail = ExplainService.Email(
+        messageID: id, date: today, sender: ExplainPrompt.Person(name: "Mei Tan", address: "mei@harbor.example"),
+        to: [ExplainPrompt.Person(name: "Lin", address: "me@studio.example")], cc: [ExplainPrompt.Person(address: "kai@kiln.example")],
+        subject: "Fwd: Lamps", attachments: [MailAttachment(name: "lamps.pdf", type: "application/pdf", state: .notDownloaded)],
+        text: "Lin, see Kai's note.",
+        visibleText: "Lin, see Kai's note.\n\n-- \nMei\n\n---------- Forwarded message ---------\nFrom: Kai Moss <kai@kiln.example>\nDate: Mon, Oct 12, 2026 at 9:30 AM\nSubject: Lamps\n\nTwelve lamps, delivery in week 47.\n\nOn Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?")
+
+    @Test func theEmailShowsAsMailShowsItBeforeAndAfterItsExplanation() async {
+        var current: Explanation?
+        let model = model(explanation: { current }, email: Self.forwardEmail)
+        await model.load()
+        #expect(model.original == ProjectsEmailOriginal.Content(
+            to: ["Lin <me@studio.example>"], cc: ["kai@kiln.example"],
+            note: "Lin, see Kai's note.", signature: "Mei",
+            forwards: [QuotedHistory.Forward(sender: "Kai Moss <kai@kiln.example>", date: "Mon, Oct 12, 2026 at 9:30 AM", subject: "Lamps", text: "Twelve lamps, delivery in week 47.")],
+            quoted: "On Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?"))
+
+        // Explained: the explanation shows, and the email stays one click away.
+        current = Self.explanation()
+        await model.load()
+        #expect(!model.showsOriginal)
+        model.showsOriginal = true
+        await model.load()
+        #expect(model.showsOriginal)
+        #expect(model.original?.note == "Lin, see Kai's note.")
+        #expect(model.text == Self.draft)
+
+        // Explained again: the new explanation shows.
+        current = Self.explanation(draft: "Hi Mei,\n\nNoted.\n\nLin")
+        await model.load()
+        #expect(!model.showsOriginal)
+        #expect(model.original?.forwards.count == 1)
+    }
+
+    @Test func anEmailWithoutTextShowsNothingAndALongOneSaysMailHasTheRest() {
+        var email = Self.forwardEmail
+        email.text = ""
+        email.visibleText = "  \n"
+        #expect(ProjectsEmailOriginal.Content.of(email) == nil)
+        // Without the visible text, the own text shows.
+        email.text = "Lin, see Kai's note."
+        #expect(ProjectsEmailOriginal.Content.of(email)?.note == "Lin, see Kai's note.")
+        #expect(ProjectsEmailOriginal.Content.of(email)?.isCut == false)
+        email.visibleText = String(repeating: "灯", count: MailStore.readLength)
+        #expect(ProjectsEmailOriginal.Content.of(email)?.isCut == true)
+        // The view shows the first characters of a long email, and Mail has the rest.
+        email.visibleText = String(repeating: "灯", count: 30_000)
+        let long = ProjectsEmailOriginal.Content.of(email)
+        #expect(long?.note.count == ProjectsEmailOriginal.Content.shownLength)
+        #expect(long?.isCut == true)
+        // A marker with neither a header nor text shows no forwarded message.
+        email.visibleText = "Lin, see below.\n\n---------- Forwarded message ---------"
+        #expect(ProjectsEmailOriginal.Content.of(email)?.forwards == [])
+        #expect(ProjectsEmailOriginal.Content.of(email)?.note == "Lin, see below.")
     }
 
     // MARK: Changes
@@ -337,8 +669,48 @@ struct ProjectsEmailModelTests {
         #expect(ProjectsEmailModel.note(ReviseService.Failure.tooLong) == .tooLong)
         #expect(ProjectsEmailModel.note(RewriteError.promptTooLong) == .tooLong)
         #expect(ProjectsEmailModel.note(ProjectsRuntime.Failure.windowClosed) == .noModel)
+        #expect(ProjectsEmailModel.note(ProjectsRuntime.Failure.modelNotLoaded) == .modelNotLoaded)
         #expect(ProjectsEmailModel.note(ReviseService.Failure.emptyDraft) == .emptyDraft)
         #expect(ProjectsEmailModel.note(CocoaError(.fileNoSuchFile)) == .other)
+    }
+
+    /// Cancel Change ends a change that waits, such as for a dictation or Live Captions,
+    /// and leaves the draft and the change box as they were. Meanwhile Copy takes the draft
+    /// as it is, while Open Reply in Mail and Reply All wait.
+    @Test func cancelChangeLeavesTheDraftAndTheBoxAsTheyWere() async throws {
+        let model = model()
+        await model.load()
+        fakes.update {
+            $0.revisions = ["Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order].\n\nLin"]
+            $0.requestWaits = true
+        }
+        model.instruction = "Firmer."
+        model.perform { await $0.applyInstruction() }
+        try await waitUntil { model.changing != nil }
+        #expect(model.canCopy)
+        #expect(!model.canHandOff)
+        model.copy()
+        #expect(fakes.value.copies == [Self.draft])
+        model.cancelChange()
+        try await waitUntil { !model.isWorking }
+        #expect(model.changing == nil)
+        #expect(model.changeNote == nil)
+        #expect(model.text == Self.draft)
+        #expect(model.instruction == "Firmer.")
+        #expect(model.versions.isEmpty)
+        #expect(fakes.value.versions.isEmpty)
+        // The model was never asked.
+        #expect(fakes.value.prompts.isEmpty)
+        #expect(model.canHandOff)
+
+        // The next change runs as before.
+        fakes.update {
+            $0.requestWaits = false
+            $0.checks = [Self.bothAnswered]
+        }
+        #expect(await model.applyInstruction())
+        #expect(model.instruction.isEmpty)
+        #expect(model.versions.map(\.version.change) == [.instruction("Firmer.")])
     }
 
     /// The new tone left a placeholder out, which the view names.
@@ -466,6 +838,92 @@ struct ProjectsEmailModelTests {
         #expect(model.instruction.isEmpty)
     }
 
+    /// An undo stays busy until the versions, the highlight of the version left and the
+    /// text are all in place, so a second undo, a change or a keystroke never works on the
+    /// version it removes. The highlight of the version left is worked out off the main
+    /// actor, and a poller on the main actor looks while it is.
+    @Test func anUndoStaysBusyUntilItPutsTheTextBack() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let monday = "Hi Mei,\n\nThe lamp order is [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, monday]
+            $0.checks = [Self.bothAnswered, Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        model.instruction = "Say Monday."
+        await model.applyInstruction()
+        #expect(model.versions.map(\.number) == [1, 2])
+        #expect(model.text == monday)
+
+        // The removal waits until the undo has started, so the poller below never meets
+        // the moment before it starts.
+        fakes.update { $0.removeWaits = true }
+        model.perform { await $0.undo() }
+        try await waitUntil { model.isBusy }
+        fakes.update { $0.removeWaits = false }
+        while model.isWorking {
+            if !model.isBusy {
+                // Free while the undo still works: what a click or a keystroke would meet.
+                #expect(model.versions.map(\.number) == [1])
+                #expect(model.text == firmer)
+                await model.undo()
+            }
+            await Task.yield()
+        }
+        #expect(fakes.value.versions.map(\.number) == [1])
+        #expect(model.versions.map(\.number) == [1])
+        #expect(model.text == firmer)
+    }
+
+    /// The undo of the newer of two versions stays busy while it works out the highlight of
+    /// the older one, which is then the newest. Another undo, a change and the editor wait,
+    /// and words said meanwhile change the draft it put back once it is done. A change that
+    /// did not wait would wait for the held highlight, so the time limit ends the test.
+    @Test(.timeLimit(.minutes(1)))
+    func theUndoOfOneOfTwoVersionsWaitsForItsHighlight() async throws {
+        let model = model()
+        await model.load()
+        let firmer = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan today.\n\nLin"
+        let monday = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. I will send the floor plan on Monday.\n\nLin"
+        let priced = "Hi Mei,\n\nPlease confirm the lamp order: [to confirm: lamp order]. The price stays. I will send the floor plan today.\n\nLin"
+        fakes.update {
+            $0.revisions = [firmer, monday, priced]
+            $0.checks = [Self.bothAnswered, Self.bothAnswered, Self.bothAnswered]
+        }
+        await model.makeChange(.tone(.firm))
+        model.instruction = "Say Monday."
+        await model.applyInstruction()
+        #expect(model.versions.map(\.version.change) == [.tone(.firm), .instruction("Say Monday.")])
+        #expect(model.text == monday)
+
+        fakes.update {
+            $0.diffWaits = true
+            $0.diffStarted = false
+        }
+        model.perform { await $0.undo() }
+        try await eventually { fakes.value.diffStarted }
+        // The store removed the newer version, and the highlight of the older one waits.
+        #expect(model.isBusy)
+        #expect(fakes.value.versions.count == 1)
+        let prompts = fakes.value.prompts.count
+        await model.undo()
+        #expect(fakes.value.versions.count == 1)
+        #expect(await model.makeChange(.tone(.warm)) == false)
+        #expect(model.takeDictation("Keep the price.", revises: true))
+        #expect(fakes.value.prompts.count == prompts)
+
+        fakes.update { $0.diffWaits = false }
+        try await eventually { !model.isWorking }
+        #expect(model.versions == fakes.value.versions)
+        #expect(model.versions.map(\.version.change) == [.tone(.firm), .instruction("Keep the price.")])
+        #expect(model.text == priced)
+        let revision = try #require(fakes.value.prompts.last(where: { !$0.contains("<questions>") }))
+        #expect(revision.contains(firmer))
+        #expect(!revision.contains(monday))
+    }
+
     /// Words said while a change runs wait in the box with the setting off, and when the
     /// change gives no new draft, so a failed change is never tried again on its own.
     @Test func wordsSaidWhileAChangeRunsWaitWithTheSettingOffOrAfterAFailure() async throws {
@@ -548,6 +1006,47 @@ struct ProjectsEmailModelTests {
         // Cancelled before Mail answered: the draft is on the clipboard and nothing else.
         #expect(model.handoffNote == .outcome(.copied))
         #expect(fakes.value.broughtForward == 0)
+    }
+
+    /// The window closes once Mail was asked for the reply, which nothing can call back.
+    /// Mail opens the reply window, but the draft is not copied again and Mail does not
+    /// come to the front.
+    @Test func closingTheWindowWhileMailMakesTheReplyLeavesTheClipboardAndMail() async throws {
+        let model = model()
+        await model.load()
+        fakes.update { $0.replyHolds = true }
+        model.perform { await $0.openReply(all: false) }
+        try await waitUntil { fakes.value.replyRelease != nil }
+        model.cancelWork()
+        fakes.state.withLock { state in
+            state.replyRelease?.resume()
+            state.replyRelease = nil
+        }
+        try await waitUntil { !model.isHandingOff }
+        #expect(model.handoffNote == .outcome(.replyOpened))
+        #expect(fakes.value.copies == [Self.draft])
+        #expect(fakes.value.broughtForward == 0)
+    }
+
+    /// The window closes while Mail reads the headers of its message for Open Reply, and
+    /// Mail then answers with an error, such as a timeout. The draft is not copied, Mail is
+    /// not asked for a reply and does not come to the front, and no note is left.
+    @Test func closingTheWindowWhileMailChecksItsMessageLeavesTheClipboardAndMail() async throws {
+        let model = model(referenceFailure: .timedOut)
+        await model.load()
+        fakes.update { $0.referenceHolds = true }
+        model.perform { await $0.openReply(all: false) }
+        try await waitUntil { fakes.value.referenceRelease != nil }
+        model.cancelWork()
+        fakes.state.withLock { state in
+            state.referenceRelease?.resume()
+            state.referenceRelease = nil
+        }
+        try await waitUntil { !model.isHandingOff }
+        #expect(fakes.value.copies.isEmpty)
+        #expect(fakes.value.replies.isEmpty)
+        #expect(fakes.value.broughtForward == 0)
+        #expect(model.handoffNote == nil)
     }
 
     @Test func theFlagsFollowTheTextInTheEditor() async {
@@ -655,6 +1154,36 @@ struct ProjectsEmailModelTests {
         #expect(model.handoffNote == .outcome(.emptyDraft))
     }
 
+    /// Mail's handle is checked for the kind of reply before Mail is asked. When Mail cannot
+    /// say whether its message is this email, the draft is only copied and the note says
+    /// what Mail answered. Mail was not asked to reply, so a timeout does not say that the
+    /// reply may still open.
+    @Test func openReplyChecksMailsHandleFirst() async {
+        let model = model()
+        await model.load()
+        await model.openReply(all: true)
+        #expect(fakes.value.referenceChecks == [true])
+        #expect(fakes.value.replies == [true])
+
+        let failures: [(MailBridgeError, ReplyHandoff.Outcome)] = [
+            (.denied, .copiedReplyFailed(.denied)),
+            (.mailNotRunning, .copiedMailNotRunning),
+            (.timedOut, .copiedReplyFailed(.failed(code: -1712))),
+        ]
+        for (failure, note) in failures {
+            let failing = self.model(referenceFailure: failure)
+            await failing.load()
+            await failing.openReply(all: false)
+            #expect(failing.handoffNote == .outcome(note))
+            #expect(!failing.isHandingOff)
+        }
+        #expect(fakes.value.referenceChecks == [true, false, false, false])
+        #expect(fakes.value.replies == [true])
+        #expect(fakes.value.copies == Array(repeating: Self.draft, count: 5))
+        #expect(fakes.value.broughtForward == 1)
+        #expect(ProjectsWindowText.handoff(.outcome(.copiedReplyFailed(.failed(code: -1712)))) == "Mail did not open the reply. The draft is on the clipboard.")
+    }
+
     /// One handoff at a time for the whole window: while Mail opens the reply to one email,
     /// another email's Open Reply and Copy do nothing, so the clipboard keeps the draft of
     /// the reply window Mail brings forward.
@@ -723,13 +1252,5 @@ struct ProjectsEmailModelTests {
         #expect(later.hasPrefix("Deadline "))
         // A day that has passed, such as in a window left open past midnight, has no mark.
         #expect(ProjectsWindowText.deadline(Self.today.addingTimeInterval(-86_400), now: Self.today, calendar: calendar) == nil)
-    }
-
-    /// Waits for a condition, polling, for at most a few seconds.
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<1_000 where !condition() {
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(condition())
     }
 }

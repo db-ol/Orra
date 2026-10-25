@@ -80,14 +80,6 @@ extension RealModelTests {
             return Array(UnsafeBufferPointer(start: output.floatChannelData![0], count: Int(output.frameLength)))
         }
 
-        /// Waits until `condition` holds, for at most `timeout`.
-        private static func waitUntil(timeout: Duration = .seconds(60), _ condition: () -> Bool) async throws {
-            let deadline = ContinuousClock.now + timeout
-            while !condition(), ContinuousClock.now < deadline {
-                try await Task.sleep(for: .milliseconds(10))
-            }
-        }
-
         @Test func holdsWithoutSpeechGiveNoText() async throws {
             let engine = RealModel.engine()
             try await engine.load()
@@ -161,10 +153,10 @@ extension RealModelTests {
                     mic.recording = AudioRecording(samples: try Self.resample(speech, from: 16_000, to: 48_000), sampleRate: 48_000)
                     let before = inserter.inserted.count
                     controller.handle(.pressed(isRepeat: false))
-                    try await Self.waitUntil { mic.calls.last == "start" }
+                    try await waitUntil { mic.calls.last == "start" }
                     let released = ContinuousClock.now
                     controller.handle(.released)
-                    try await Self.waitUntil { controller.state == .idle }
+                    try await waitUntil { controller.state == .idle }
                     let latency = released.duration(to: .now)
                     #expect(controller.state == .idle)
                     #expect(controller.problem == nil)

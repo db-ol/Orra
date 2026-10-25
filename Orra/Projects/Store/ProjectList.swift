@@ -117,9 +117,21 @@ nonisolated struct Project: Sendable, Equatable, Identifiable, Codable {
 
     /// Where the folders are now, in the order of `folders`. A bookmark that no longer
     /// finds its folder is left out. It never shows a window and never mounts a volume.
-    /// Off the main actor, since it reads the disk.
-    @concurrent
+    /// It reads the disk on a thread of its own: a folder on a share that hangs can hold
+    /// that thread for long, and a thread that Swift tasks share would hold up their other
+    /// work, such as the dictation's.
     static func resolve(_ bookmarks: [Data]) async -> [URL] {
+        await withCheckedContinuation { continuation in
+            let thread = Thread {
+                continuation.resume(returning: resolveNow(bookmarks))
+            }
+            thread.name = "Orra project folders"
+            thread.qualityOfService = .utility
+            thread.start()
+        }
+    }
+
+    private static func resolveNow(_ bookmarks: [Data]) -> [URL] {
         bookmarks.compactMap { bookmark in
             var isStale = false
             return try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &isStale)
@@ -139,6 +151,8 @@ nonisolated struct Project: Sendable, Equatable, Identifiable, Codable {
 ///   it. Forget Project removes the project's mail, drafts and counts, then its index, then
 ///   the project itself, see `forget(_:mail:index:)`.
 /// - `close()` comes before Delete All Projects Data, so no write brings projects.json back.
+/// - It also keeps the suggestions of Suggested Projects the user dismissed, by a hash of
+///   each, so they do not come back, see ProjectSuggestions.dismissalKey(_:).
 ///
 /// Logs counts and error codes only, never a name.
 @Observable
@@ -156,11 +170,15 @@ final class ProjectList {
 
     /// The file's name in the Projects folder.
     nonisolated static let fileName = "projects.json"
+    /// The most dismissed suggestions kept. A newer one takes the place of the oldest.
+    nonisolated static let maximumDismissedSuggestions = 500
     /// The form of the file this Orra writes. A file with a higher one is refused.
     nonisolated static let formatVersion = 1
 
     /// The projects, in the order the user added them.
     private(set) var projects: [Project] = []
+    /// The keys of the suggestions the user dismissed, oldest first.
+    private(set) var dismissedSuggestions: [String] = []
     /// Whether the file was read, or found missing, so changes may be written.
     private(set) var isLoaded = false
     @ObservationIgnored let storage: ProjectsStorage
@@ -186,7 +204,9 @@ final class ProjectList {
     func load() async throws {
         guard !isClosed else { throw Failure.closed }
         do {
-            projects = try await Self.read(Self.file(in: storage))
+            let stored = try await Self.read(Self.file(in: storage))
+            projects = stored.projects
+            dismissedSuggestions = stored.dismissedSuggestions ?? []
             isLoaded = true
             Logger.projects.notice("Projects: loaded \(self.projects.count, privacy: .public) projects")
         } catch {
@@ -267,21 +287,41 @@ final class ProjectList {
         }
     }
 
+    /// Keeps a suggestion the user dismissed, by its key, and saves the list. When the list
+    /// cannot be saved, the suggestion is not kept.
+    func dismissSuggestion(_ key: String) async throws {
+        try checkWritable()
+        guard !dismissedSuggestions.contains(key) else { return }
+        dismissedSuggestions.append(key)
+        if dismissedSuggestions.count > Self.maximumDismissedSuggestions {
+            dismissedSuggestions.removeFirst(dismissedSuggestions.count - Self.maximumDismissedSuggestions)
+        }
+        do {
+            try await save()
+        } catch {
+            dismissedSuggestions.removeAll { $0 == key }
+            throw error
+        }
+    }
+
     /// Waits for the writes under way and refuses every later change, before Delete All
     /// Projects Data, so projects.json is not written again once it is deleted.
     func close() async {
         isClosed = true
         _ = await lastWrite?.result
         projects = []
+        dismissedSuggestions = []
         isLoaded = false
     }
 
     // MARK: The file
 
-    /// What projects.json holds.
+    /// What projects.json holds. A file from before Suggested Projects has no dismissed
+    /// suggestions, and an older Orra reads the file without them.
     private nonisolated struct Stored: Codable {
         var version: Int
         var projects: [Project]
+        var dismissedSuggestions: [String]?
     }
 
     /// The form of projects.json alone.
@@ -296,7 +336,7 @@ final class ProjectList {
 
     /// Writes the list as it is now, after the writes before it.
     private func save() async throws {
-        let data = try Self.encoded(projects)
+        let data = try Self.encoded(Stored(version: Self.formatVersion, projects: projects, dismissedSuggestions: dismissedSuggestions))
         let previous = lastWrite
         let storage = storage
         let write = Task {
@@ -316,23 +356,23 @@ final class ProjectList {
         storage.folder.appendingPathComponent(fileName)
     }
 
-    private nonisolated static func encoded(_ projects: [Project]) throws -> Data {
+    private nonisolated static func encoded(_ stored: Stored) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(Stored(version: formatVersion, projects: projects))
+        return try encoder.encode(stored)
     }
 
     @concurrent
-    private nonisolated static func read(_ file: URL) async throws -> [Project] {
+    private nonisolated static func read(_ file: URL) async throws -> Stored {
         let data: Data
         do {
             data = try Data(contentsOf: file)
         } catch CocoaError.fileReadNoSuchFile {
-            return []
+            return Stored(version: formatVersion, projects: [])
         }
         // The version first, so a newer file is refused before its projects are read.
         guard try JSONDecoder().decode(StoredVersion.self, from: data).version <= formatVersion else { throw Failure.newerFormat }
-        return try JSONDecoder().decode(Stored.self, from: data).projects
+        return try JSONDecoder().decode(Stored.self, from: data)
     }
 
     /// Writes the file atomically, then narrows it to the user, inside a folder only the user

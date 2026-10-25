@@ -174,6 +174,8 @@ extension Transcription {
         guard await Self.isForeign(text, for: language) else { return text }
         let started = ContinuousClock.now
         for pass in language.passes {
+            // A caption cancelled for a dictation starts no pass, see EngineTurns.
+            try Task.checkCancellation()
             let hinted: String
             do {
                 hinted = try await transcribe(samples, context, pass)

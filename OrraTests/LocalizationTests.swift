@@ -217,7 +217,37 @@ struct LocalizationTests {
         let path = try #require(Bundle.main.path(forResource: "zh-Hans", ofType: "lproj"))
         let chinese = try #require(Bundle(path: path))
         #expect(chinese.localizedString(forKey: "Quit Orra", value: nil, table: nil) == "退出 Orra")
-        #expect(chinese.localizedString(forKey: "NSMicrophoneUsageDescription", value: nil, table: "InfoPlist") == "Orra 会在你按住说话键时录下你的声音，并在这台 Mac 上把它转成文字。")
+        #expect(chinese.localizedString(forKey: "NSMicrophoneUsageDescription", value: nil, table: "InfoPlist") == "当你开始听写或翻译，或录制声音样本时，Orra 会使用麦克风，并在这台 Mac 上把你的声音转成文字。")
+    }
+
+    /// The English microphone prompt comes from the build setting
+    /// INFOPLIST_KEY_NSMicrophoneUsageDescription, and the catalog keeps the same text for
+    /// the translations to follow, so the prompt says the same in every language. Only the
+    /// maintainer changes the build setting, in Xcode, for Debug and Release. A new prompt
+    /// goes into the catalog and the build setting together, before Xcode builds the app,
+    /// or Xcode takes the old text back into the catalog.
+    @Test func theEnglishMicrophonePromptMatchesTheCatalog() throws {
+        let prompts = try Self.catalog("InfoPlist")
+        let english = try #require(prompts["NSMicrophoneUsageDescription"].flatMap { Self.translations($0, in: "en").first?.value })
+        #expect(Bundle.main.infoDictionary?["NSMicrophoneUsageDescription"] as? String == english)
+    }
+
+    /// The About text says when Orra goes online. It names no single model, so none of
+    /// the models Orra downloads is left out.
+    @Test func theAboutTextNamesNoSingleModel() throws {
+        let strings = try Self.catalog("Localizable")
+        let about = try #require(strings.first { $0.key.hasPrefix("Speech is turned into text on this Mac") })
+        let models = ["Speech model", "Cleanup model", "Voice model"]
+        for model in models {
+            #expect(!about.key.localizedCaseInsensitiveContains(model), "\(model)")
+        }
+        for language in Self.languages {
+            let text = try #require(Self.translations(about.value, in: language).first?.value)
+            for model in models {
+                let name = try #require(strings[model].flatMap { Self.translations($0, in: language).first?.value })
+                #expect(!text.localizedCaseInsensitiveContains(name), "\(language): \(name)")
+            }
+        }
     }
 
     /// Spanish has a plural form for one, so the countdown never reads "1 segundos".

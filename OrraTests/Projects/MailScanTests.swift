@@ -49,6 +49,8 @@ struct MailScanTests {
         _ choice: MailChoice,
         isOn: @escaping () -> Bool = { true },
         owner: SortingService.Owner? = nil,
+        isDictating: @escaping () -> Bool = { false },
+        report: @escaping (MailScan.Report) -> Void = { _ in },
         sleep: @escaping (Duration) async throws -> Void = { _ in }
     ) -> MailScan {
         let store = store
@@ -56,9 +58,11 @@ struct MailScanTests {
             bridge: mail.bridge,
             choice: choice,
             lookups: store.lookups,
-            save: { store.save($0) },
+            save: { try store.save($0) },
+            report: report,
             ownerOverride: owner,
             isOn: isOn,
+            isDictating: isDictating,
             now: { Self.now },
             sleep: sleep
         )
@@ -227,6 +231,54 @@ struct MailScanTests {
         #expect(mail.sourcesRead.isEmpty)
     }
 
+    /// A save that fails, as on a full disk, counts nothing it did not save, and leaves the
+    /// mailbox to be read back to the days again. The next pass reads the mail of the failed
+    /// save, past the newest mail the store knows, rather than stop there.
+    @Test func aFailedSaveLeavesTheMailboxToBeReadAgain() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(600, hoursApart: 0.5), in: .inbox)
+        store.failingSaves = [2]
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.skipped == .storeFailed)
+        #expect(first.read == 390)
+        #expect(first.saved == 200)
+        #expect(store.saved.count == 200)
+
+        mail.clearCalls()
+        let second = await scan.scan()
+        #expect(second.skipped == nil)
+        #expect(mail.listings == [1...200, 191...390, 381...580, 571...600])
+        #expect(mail.sourcesRead == Array(201...600))
+        #expect(second.saved == 400)
+        #expect(Set(store.saved.map(\.messageID)).count == 600)
+
+        // Now it polls.
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...20])
+    }
+
+    /// A lookup of the mail the store knows that fails ends the pass too, and no message
+    /// counts as known for it, so the next pass reads the mailbox back to the days again.
+    @Test func aFailedLookupOfKnownMailLeavesTheMailboxToBeReadAgain() async {
+        defer { cleanUp() }
+        mail.put(Self.hourly(450), in: .inbox)
+        store.failingLookups = [2]
+        let scan = scan(choice([.inbox]))
+        let first = await scan.scan()
+        #expect(first.skipped == .storeFailed)
+        #expect(first.saved == 200)
+        #expect(first.known == 0)
+        #expect(mail.sourcesRead == Array(1...200))
+
+        mail.clearCalls()
+        await scan.scan()
+        #expect(mail.listings == [1...200, 191...390, 381...450])
+        #expect(mail.sourcesRead == Array(201...450))
+        #expect(Set(store.saved.map(\.messageID)).count == 450)
+    }
+
     /// Choosing more days reads further back once, past the messages already known.
     @Test func moreDaysReadFurtherBack() async {
         defer { cleanUp() }
@@ -344,6 +396,38 @@ struct MailScanTests {
         let pass = await second.value
         #expect(pass.skipped == nil)
         #expect(pass.saved == 3)
+    }
+
+    /// A pass tells the window whether it reads a mailbox back to the days, which takes a
+    /// while, and how it ended. A poll does not read back. A pass asked for while another
+    /// reads tells nothing, and a pass that `stop()` ended tells nothing more.
+    @Test func aPassTellsWhetherItReadsBackAndHowItEnded() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(3), in: .inbox)
+        let reports = Reports()
+        let scan = scan(choice([.inbox]), report: { reports.all.append($0) })
+        let first = await scan.scan()
+        #expect(reports.all == [.began(readsBack: true), .ended(first)])
+        reports.all = []
+        let poll = await scan.scan()
+        #expect(reports.all == [.began(readsBack: false), .ended(poll)])
+
+        reports.all = []
+        mail.receive([FakeMail.mail(10, in: .inbox, received: Self.now - 60)], in: .inbox)
+        store.holdsKnown = true
+        let held = Task { await scan.scan() }
+        try await waitUntil { store.heldKnown != nil }
+        #expect(await scan.scan().skipped == .busy)
+        scan.stop()
+        store.holdsKnown = false
+        store.heldKnown?.resume()
+        _ = await held.value
+        #expect(reports.all == [.began(readsBack: false)])
+
+        // Once stopped, the scan reads back again.
+        reports.all = []
+        let again = await scan.scan()
+        #expect(reports.all == [.began(readsBack: true), .ended(again)])
     }
 
     /// A chosen mailbox that Mail no longer has skips only that mailbox.
@@ -638,6 +722,36 @@ struct MailScanTests {
         for other in [MailBridgeError.mailNotRunning, .notFound, .changedWhileReading, .failed(code: -10_000)] {
             #expect(MailScan.wait(after: other, previous: .seconds(480)) == minute)
         }
+        // A store that fails, as on a full disk, makes it wait as long.
+        #expect(MailScan.wait(after: nil, storeFailed: true, previous: minute) == .seconds(120))
+        #expect(MailScan.wait(after: .notFound, storeFailed: true, previous: .seconds(960)) == .seconds(1_800))
+    }
+
+    /// The loop waits longer while the store fails to save, so a full disk does not have
+    /// each pass read a range of mail again, and goes back to a minute once a save works.
+    @Test func theLoopBacksOffWhileTheStoreFails() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(2), in: .inbox)
+        store.failingSaves = [1, 2]
+        let clock = TestClock()
+        let waits = Waits()
+        let scan = scan(choice([.inbox]), sleep: { duration in
+            waits.add(duration)
+            try await clock.sleep(for: duration)
+        })
+        scan.start()
+        defer { scan.stop() }
+        try await waitUntil { waits.all.count == 1 && clock.sleeping == 1 }
+        #expect(waits.all == [.seconds(120)])
+        clock.advance(by: .seconds(120))
+        try await waitUntil { waits.all.count == 2 && clock.sleeping == 1 }
+        #expect(waits.all == [.seconds(120), .seconds(240)])
+        clock.advance(by: .seconds(240))
+        try await waitUntil { waits.all.count == 3 && clock.sleeping == 1 }
+        #expect(waits.all.last == .seconds(60))
+        #expect(store.saved.count == 2)
+        scan.stop()
+        try await waitUntil { clock.sleeping == 0 }
     }
 
     /// The loop polls every minute, waits longer while Mail times out, and goes back to a
@@ -724,7 +838,7 @@ struct MailScanTests {
 
     // MARK: Parsing
 
-    @Test func theSourceBecomesVisibleTextQuotesAndAttachmentNames() async throws {
+    @Test func theSourceBecomesVisibleTextQuotesAndAttachments() async throws {
         defer { cleanUp() }
         let received = Self.now - Self.hour
         let source = [
@@ -761,6 +875,12 @@ struct MailScanTests {
             "",
             "JVBERi0xLjQK",
             "--outer",
+            "Content-Type: text/plain; charset=utf-8; name=\"terms.txt\"",
+            "Content-Disposition: attachment; filename=\"terms.txt\"",
+            "Content-Transfer-Encoding: base64",
+            "",
+            "RGVsaXZlcnkgb24gMjAgTm92ZW1iZXIsIDUwMCBjb3BpZXMuCg==",
+            "--outer",
             "Content-Type: image/png",
             "Content-Disposition: inline",
             "Content-Transfer-Encoding: base64",
@@ -790,7 +910,13 @@ struct MailScanTests {
         #expect(message.inReplyTo == ["q1.ask@lumenhaus.example"])
         #expect(message.references == ["q0.start@harbor.example", "q1.ask@lumenhaus.example"])
         #expect(message.list.listIdentifier == "news.harbor.example")
-        #expect(message.attachments == [MailScan.Attachment(name: "Quote v2.pdf", mimeType: "application/pdf")])
+        // The text of an attachment comes from its part. Nine bytes are no PDF.
+        #expect(message.attachments.map(\.name) == ["Quote v2.pdf", "terms.txt"])
+        #expect(message.attachments.map(\.type) == ["application/pdf", "text/plain"])
+        #expect(message.attachments.map(\.size) == [9, 37])
+        #expect([.unreadable, .noText].contains(message.attachments.first?.state))
+        #expect(message.attachments.last == MailAttachment(
+            name: "terms.txt", type: "text/plain", size: 37, state: .read, text: "Delivery on 20 November, 500 copies.\n"))
         #expect(!message.isTooLarge)
         let visible = try #require(message.visible)
         #expect(visible.text.contains("The quote is attached."))
@@ -802,8 +928,25 @@ struct MailScanTests {
         #expect(history.quotedText.contains("Could you send the quote?"))
     }
 
+    /// Dictation goes first: a message is parsed, and its attachments read, only once the
+    /// dictation ended.
+    @Test func aMessageIsParsedOnlyOnceTheDictationEnded() async throws {
+        defer { cleanUp() }
+        mail.put(Self.hourly(1), in: .inbox)
+        var polls = 0
+        let scan = scan(choice([.inbox]), isDictating: { polls < 3 }, sleep: { duration in
+            if duration == MailScan.dictationPoll {
+                polls += 1
+            }
+        })
+        let pass = await scan.scan()
+        #expect(polls == 3)
+        #expect(pass.read == 1)
+        #expect(store.saved.count == 1)
+    }
+
     /// A message over the cap keeps Mail's fields, its headers and its attachments' names,
-    /// and its source is never read.
+    /// types and sizes, and its source is never read.
     @Test func aMessageOverTheCapReadsOnlyItsHeadersAndAttachmentNames() async throws {
         defer { cleanUp() }
         var stored = FakeMail.mail(8, in: .inbox, received: Self.now - Self.hour)
@@ -835,7 +978,91 @@ struct MailScanTests {
         // The headers name no recipients, so Mail's list counts.
         #expect(message.to.map(\.address) == ["bai.lu@lumenhaus.example"])
         #expect(message.cc.map(\.address) == ["owen@pike-build.example"])
-        #expect(message.attachments == [MailScan.Attachment(name: "site-1.jpg", mimeType: "image/jpeg")])
+        #expect(message.attachments == [MailAttachment(name: "site-1.jpg", type: "image/jpeg", size: 9_000_000, state: .emailTooLarge)])
+    }
+
+    /// Outlook forwards with the header block of a reply. The subject Mail gives says it is a
+    /// forward, so the forwarded message stays in the own text.
+    @Test func anOutlookForwardKeepsTheForwardedMessage() async throws {
+        let source = [
+            "Message-ID: <fw.lamps@harbor.example>",
+            "Date: Sat, 17 Oct 2026 08:30:00 +0800",
+            "From: Mei Tan <mei.tan@harbor.example>",
+            "Subject: FW: Lamps",
+            "Content-Type: text/plain; charset=utf-8",
+            "",
+            "See below.",
+            "",
+            "From: Kai Moss <kai@kiln.example>",
+            "Sent: Friday, October 16, 2026 4:10 PM",
+            "To: Mei Tan <mei.tan@harbor.example>",
+            "Subject: Lamps",
+            "",
+            "Twelve lamps, delivery in week 47.",
+            "",
+        ].joined(separator: "\r\n")
+        let listing = MailListing(
+            message: MailMessageRef(id: 9, mailbox: .inbox), messageID: "fw.lamps@harbor.example", dateReceived: Self.now,
+            sender: "Mei Tan <mei.tan@harbor.example>", subject: "FW: Lamps", to: [], cc: [], size: source.utf8.count)
+        let history = try #require(await MailScan.parsed(source: source, listing: listing).history)
+        #expect(history.note == "See below.")
+        #expect(history.ownText.hasSuffix("Twelve lamps, delivery in week 47."))
+        #expect(history.forwards.map(\.sender) == ["Kai Moss <kai@kiln.example>"])
+        #expect(history.quotedText == "")
+    }
+
+    /// Apple Mail puts a forwarded message in a blockquote, marker and all, as its HTML
+    /// part shows it. VisibleText quotes it, and the forward still keeps its message.
+    @Test func appleMailsQuotedForwardKeepsTheForwardedMessage() async throws {
+        let span = "<span style=\"font-family: -webkit-system-font, Helvetica Neue, Helvetica, sans-serif;\">"
+        func field(_ label: String, _ value: String) -> String {
+            "<div style=\"margin: 0px;\">\(span)<b>\(label): </b></span>\(span)\(value)<br></span></div>"
+        }
+        let html = "<html><body style=\"overflow-wrap: break-word;\">See below.<br id=\"lineBreakAtBeginningOfMessage\"><div><br><blockquote type=\"cite\">"
+            + "<div>Begin forwarded message:</div><br class=\"Apple-interchange-newline\">"
+            + field("From", "Kai Moss &lt;kai@kiln.example&gt;") + field("Subject", "<b>Lamps</b>")
+            + field("Date", "16 October 2026 at 16:10:00 GMT+8") + field("To", "Mei Tan &lt;mei.tan@harbor.example&gt;")
+            + "<br><div><div>Twelve lamps, delivery in week 47.</div></div></blockquote></div><br></body></html>"
+        let source = [
+            "Message-ID: <fwd.lamps@harbor.example>",
+            "Date: Sat, 17 Oct 2026 08:30:00 +0800",
+            "From: Mei Tan <mei.tan@harbor.example>",
+            "Subject: Fwd: Lamps",
+            "MIME-Version: 1.0",
+            "Content-Type: multipart/alternative; boundary=\"apple\"",
+            "",
+            "--apple",
+            "Content-Type: text/plain; charset=utf-8",
+            "",
+            "See below.",
+            "",
+            "> Begin forwarded message:",
+            "> ",
+            "> From: Kai Moss <kai@kiln.example>",
+            "> Subject: Lamps",
+            "> Date: 16 October 2026 at 16:10:00 GMT+8",
+            "> To: Mei Tan <mei.tan@harbor.example>",
+            "> ",
+            "> Twelve lamps, delivery in week 47.",
+            "--apple",
+            "Content-Type: text/html; charset=utf-8",
+            "",
+            html,
+            "--apple--",
+            "",
+        ].joined(separator: "\r\n")
+        let listing = MailListing(
+            message: MailMessageRef(id: 10, mailbox: .inbox), messageID: "fwd.lamps@harbor.example", dateReceived: Self.now,
+            sender: "Mei Tan <mei.tan@harbor.example>", subject: "Fwd: Lamps", to: [], cc: [], size: source.utf8.count)
+        let parsed = await MailScan.parsed(source: source, listing: listing)
+        #expect(parsed.visible?.text.contains("> Begin forwarded message:") == true)
+        let history = try #require(parsed.history)
+        #expect(history.note == "See below.")
+        #expect(history.forwards == [QuotedHistory.Forward(
+            sender: "Kai Moss <kai@kiln.example>", date: "16 October 2026 at 16:10:00 GMT+8", subject: "Lamps",
+            to: "Mei Tan <mei.tan@harbor.example>", text: "Twelve lamps, delivery in week 47.")])
+        #expect(history.ownText.hasSuffix("Twelve lamps, delivery in week 47."))
+        #expect(history.quotedText == "")
     }
 
     @Test func theOrderOfAMailboxComesFromItsDates() {
@@ -869,12 +1096,23 @@ struct MailScanTests {
         /// Holds each lookup of known messages until the test resumes it.
         var holdsKnown = false
         var heldKnown: CheckedContinuation<Void, Never>?
+        /// The saves that fail, counted from 1, as on a full disk. A failed save keeps
+        /// nothing.
+        var failingSaves: Set<Int> = []
+        /// The lookups of known messages that fail, counted from 1.
+        var failingLookups: Set<Int> = []
+        private var saves = 0
+        private var lookupCount = 0
 
         var lookups: MailScan.Lookups {
             MailScan.Lookups(
                 known: { ids in
                     if self.holdsKnown {
                         await withCheckedContinuation { self.heldKnown = $0 }
+                    }
+                    self.lookupCount += 1
+                    if self.failingLookups.contains(self.lookupCount) {
+                        throw Self.diskIOError
                     }
                     return Set(ids).intersection(self.saved.map(\.messageID))
                 },
@@ -888,7 +1126,14 @@ struct MailScanTests {
         /// Runs once, after the next save, as when the user or Mail acts while a pass reads.
         var afterSave: (() -> Void)?
 
-        func save(_ messages: [MailScan.Message]) {
+        /// SQLITE_IOERR, as the store throws it.
+        static let diskIOError = ProjectsDatabase.Failure(step: .step, code: 10)
+
+        func save(_ messages: [MailScan.Message]) throws {
+            saves += 1
+            if failingSaves.contains(saves) {
+                throw Self.diskIOError
+            }
             saved += messages
             batches.append(messages.map(\.messageID))
             if let afterSave {
@@ -901,6 +1146,12 @@ struct MailScanTests {
     /// Whether Projects is on, for a test that turns it off.
     final class Switch {
         var isOn = true
+    }
+
+    /// What the passes told the window, in order.
+    @MainActor
+    final class Reports {
+        var all: [MailScan.Report] = []
     }
 
     /// The waits the loop asked for.

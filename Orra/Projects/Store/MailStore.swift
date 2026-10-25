@@ -3,8 +3,8 @@ import Foundation
 import os
 
 /// The mail Projects read, where sorting filed it, its reply mark, its latest explanation,
-/// the versions of its draft and the counts of the user's moves, in the Projects database
-/// (plan section 5, projects-store).
+/// the versions of its draft, the text the user typed into the draft and the counts of the
+/// user's moves, in the Projects database (plan section 5, projects-store).
 ///
 /// - Its tables come with `migration`, the second step of ProjectsDatabase. Every call runs
 ///   its statements and reads or writes their JSON on the database's actor, never on the
@@ -21,6 +21,10 @@ import os
 ///   filed in the project after it. `add(project:)` registers a new project.
 /// - An explanation belongs to the project it was made for. When an email changes project,
 ///   its explanation and draft go, so no text of the project before stays with it.
+/// - The text the user typed into a draft is kept apart from the versions the model made,
+///   with the key of the draft it was typed into, see `draftKey(_:version:explained:)`. A
+///   new explanation or a new version takes its place. A version keeps the text it was made
+///   from, for Undo, see ReviseService.Version.madeFrom.
 /// - The thread of each email is worked out when it is saved, see MailThreads, and joined
 ///   again when an earlier message of the thread comes later.
 /// - Text goes into the file only for the time Retention allows. What a delete removes is
@@ -34,12 +38,6 @@ nonisolated struct MailStore: Sendable {
     nonisolated struct Person: Sendable, Equatable, Codable {
         var name: String = ""
         var address: String
-    }
-
-    /// An attachment's name and MIME type. Phase 1 reads no attachment text (decision 14).
-    nonisolated struct Attachment: Sendable, Equatable, Codable {
-        var name: String
-        var type: String
     }
 
     /// One email as the scan read it, through MIMEMessage, VisibleText and QuotedHistory.
@@ -66,10 +64,15 @@ nonisolated struct MailStore: Sendable {
         var visibleText: String
         /// The kinds of text the email hides from its reader, as VisibleText found them.
         var hiddenText: [ProjectsHiddenText] = []
-        var attachments: [Attachment] = []
+        /// The attachments with the text of those the scan read, which is kept apart from
+        /// their names, types and states, for Retention.
+        var attachments: [MailAttachment] = []
         /// What the user sees about the email before it is explained. An explanation adds
         /// its own warnings.
         var warnings: [ProjectsWarning] = []
+        /// Whether the scan found it too large to read, see MailScan.largestSource, so it
+        /// read only the headers and the names of the attachments.
+        var isTooLarge = false
     }
 
     /// The lists of the Projects window.
@@ -78,6 +81,23 @@ nonisolated struct MailStore: Sendable {
         /// Mail with no project yet: not sorted, unsure, or moved there by the user.
         case needsProject
         case setAside
+
+        /// The list of an email filed in `project` with `level`.
+        init(project: UUID?, level: SortingLevel?) {
+            if let project {
+                self = .project(project)
+            } else {
+                self = level == .setAside ? .setAside : .needsProject
+            }
+        }
+    }
+
+    /// Where a read of mail in batches goes on: after the email with this date and row, in
+    /// the order of date and row. It holds the date as the store keeps it, so no email of
+    /// the same date is read twice or left out.
+    nonisolated struct Cursor: Sendable, Equatable {
+        var date: Double
+        var id: Int64
     }
 
     /// An email in a list of the window.
@@ -97,12 +117,21 @@ nonisolated struct MailStore: Sendable {
         var reply: ReplyRule.Decision?
         var warnings: [ProjectsWarning]
         var isExplained: Bool
+        /// Whether its explanation holds a draft. Retention takes the draft out 30 days after
+        /// its last change and keeps the explanation, so this tells the window to read the
+        /// explanation again.
+        var hasDraft = false
         /// Whether the email's text is still kept, see Retention.
         var hasText: Bool
+        /// Whether the scan found the email too large to read, so the store has none of its
+        /// text, see `Message.isTooLarge`.
+        var isTooLarge = false
         /// The line under the subject (decision 16): the explanation's first point, or the
         /// first sentence of the email's own text until it is explained. Empty once
         /// Retention removed both.
         var summary: String
+        /// The attachments with their states, without their text.
+        var attachments: [MailAttachment] = []
     }
 
     /// A version of a draft, from the user's instruction or a tone. The explanation holds
@@ -112,6 +141,15 @@ nonisolated struct MailStore: Sendable {
         var number: Int
         var made: Date
         var version: ReviseService.Version
+    }
+
+    /// The text the user typed into an email's draft, as the editor of the email view held
+    /// it.
+    nonisolated struct EditedDraft: Sendable, Equatable {
+        var text: String
+        /// The key of the draft the model made that the user typed into, see
+        /// `draftKey(_:version:explained:)`.
+        var editedFrom: String
     }
 
     /// The tables of the store, the second step of ProjectsDatabase.migrations.
@@ -129,6 +167,10 @@ nonisolated struct MailStore: Sendable {
     /// - mail_tallies: the moves of one kind to a project, see SortingService.Tally.
     /// - mail_gone: the hash of each Message-ID that Forget Project or Retention removed,
     ///   until the scan can no longer reach it, see `goneKey(_:)` and `Retention.goneIDs`.
+    ///
+    /// `attachmentTextMigration` adds the text of the attachments, the third step,
+    /// `tooLargeMigration` whether an email was too large to read, the fourth, and
+    /// `editedDraftMigration` the text the user typed into drafts, the fifth.
     static let migration = ProjectsDatabase.Migration(version: 2, sql: """
         CREATE TABLE mail_projects (
             id TEXT PRIMARY KEY
@@ -201,6 +243,34 @@ nonisolated struct MailStore: Sendable {
             id_hash TEXT PRIMARY KEY,
             until REAL NOT NULL
         ) WITHOUT ROWID;
+        """)
+
+    /// The third step of ProjectsDatabase.migrations: the text of each email's attachments,
+    /// as a JSON array with the text of each attachment of the `attachments` column in its
+    /// place, or null where none was read. Retention removes it with the email's text. Mail
+    /// saved before keeps its attachments' names only.
+    static let attachmentTextMigration = ProjectsDatabase.Migration(version: 3, sql: """
+        ALTER TABLE mail_messages ADD COLUMN attachment_text TEXT;
+        """)
+
+    /// The fourth step of ProjectsDatabase.migrations: whether the scan found an email too
+    /// large to read, see `Message.isTooLarge`, so the window tells it from one whose text
+    /// Retention removed. Mail saved before counts as read.
+    static let tooLargeMigration = ProjectsDatabase.Migration(version: 4, sql: """
+        ALTER TABLE mail_messages ADD COLUMN too_large INTEGER NOT NULL DEFAULT 0;
+        """)
+
+    /// The fifth step of ProjectsDatabase.migrations: the text the user typed into each
+    /// email's draft, with the key of the draft it was typed into and when it last changed.
+    /// A table of its own, so a save while the user types writes a short row, never the
+    /// email's row with its text. Retention counts it as a change of the draft.
+    static let editedDraftMigration = ProjectsDatabase.Migration(version: 5, sql: """
+        CREATE TABLE mail_edited_drafts (
+            message INTEGER PRIMARY KEY REFERENCES mail_messages (id) ON DELETE CASCADE,
+            text TEXT NOT NULL,
+            edited_from TEXT NOT NULL,
+            changed REAL NOT NULL
+        );
         """)
 
     /// The most messages of a subject looked at to join a reply to its thread by subject.
@@ -441,7 +511,7 @@ nonisolated struct MailStore: Sendable {
                 WHERE message_id = ?1 AND moved_by_user = 0 AND (?2 IS NULL OR ?2 IN (SELECT id FROM mail_projects))
                 RETURNING id
                 """, parameters)
-            try Self.dropVersionsWithoutExplanation(rows, in: database)
+            try Self.dropDraftsWithoutExplanation(rows, in: database)
             return !rows.isEmpty
         }
     }
@@ -456,12 +526,15 @@ nonisolated struct MailStore: Sendable {
         draft_changed = CASE WHEN project IS ?2 THEN draft_changed END
         """
 
-    /// Removes the draft versions of the emails in `rows`, by their id in the first column,
-    /// that have no explanation.
-    private static func dropVersionsWithoutExplanation(_ rows: [[ProjectsDatabase.Value]], in database: isolated ProjectsDatabase) throws {
+    /// Removes the draft versions and the text the user typed into the draft of the emails
+    /// in `rows`, by their id in the first column, that have no explanation.
+    private static func dropDraftsWithoutExplanation(_ rows: [[ProjectsDatabase.Value]], in database: isolated ProjectsDatabase) throws {
         for id in rows.compactMap({ $0.first?.integer }) {
             try database.run(
                 "DELETE FROM mail_draft_versions WHERE message = ?1 AND (SELECT explanation FROM mail_messages WHERE id = ?1) IS NULL",
+                [.integer(id)])
+            try database.run(
+                "DELETE FROM mail_edited_drafts WHERE message = ?1 AND (SELECT explanation FROM mail_messages WHERE id = ?1) IS NULL",
                 [.integer(id)])
         }
     }
@@ -485,7 +558,7 @@ nonisolated struct MailStore: Sendable {
                 WHERE message_id = ?1 AND (?2 IS NULL OR ?2 IN (SELECT id FROM mail_projects))
                 RETURNING id
                 """, parameters)
-            try Self.dropVersionsWithoutExplanation(rows, in: database)
+            try Self.dropDraftsWithoutExplanation(rows, in: database)
             return !rows.isEmpty
         }
     }
@@ -546,10 +619,47 @@ nonisolated struct MailStore: Sendable {
 
     /// An email as the explanation reads it, or nil when the store does not hold it. Its
     /// text is empty once Retention removed it.
+    ///
+    /// Its own text is split again from its visible text, see `splitAgain(_:)`, so an email
+    /// saved before QuotedHistory knew a kind of forward is explained with that forward.
     func explainEmail(_ messageID: String) async throws -> ExplainService.Email? {
-        try await database.transaction { database in
-            try Self.rows(where: "message_id = ?", [.text(messageID)], in: database).first?.explainEmail
+        let email = try await database.transaction { database -> ExplainService.Email? in
+            guard var email = try Self.rows(where: "message_id = ?", [.text(messageID)], in: database).first?.explainEmail else { return nil }
+            // The text of the attachments, until Retention removes it.
+            if let value = try database.run("SELECT attachment_text FROM mail_messages WHERE message_id = ?", [.text(messageID)]).first?.first,
+               let texts = Self.decoded([String?].self, value), texts.count == email.attachments.count {
+                for index in texts.indices {
+                    email.attachments[index].text = texts[index]
+                }
+            }
+            return email
         }
+        guard let email else { return nil }
+        return await Self.splitAgain(email)
+    }
+
+    /// Whether the store keeps the email's text to explain: false once Retention removed
+    /// it, for an email the scan found too large to read, and for one the store does not
+    /// hold.
+    func hasText(_ messageID: String) async throws -> Bool {
+        try await database.transaction { database in
+            try !database.run(
+                "SELECT 1 FROM mail_messages WHERE message_id = ? AND text IS NOT NULL AND too_large = 0",
+                [.text(messageID)]).isEmpty
+        }
+    }
+
+    /// The email with the own text that QuotedHistory finds in its visible text now. The
+    /// store keeps the own text as the scan split it when it saved the email, and splitting
+    /// the same visible text again gives the same own text unless QuotedHistory changed
+    /// since. An email whose visible text is gone keeps its text. Off the main actor and the
+    /// database's, since the split reads the whole text.
+    @concurrent
+    private static func splitAgain(_ email: ExplainService.Email) async -> ExplainService.Email {
+        guard !email.visibleText.allSatisfy(\.isWhitespace) else { return email }
+        var email = email
+        email.text = QuotedHistory(splitting: email.visibleText, subject: email.subject).ownText
+        return email
     }
 
     /// The other messages of the email's thread with their own text, oldest first, at most
@@ -571,27 +681,62 @@ nonisolated struct MailStore: Sendable {
     /// The project's other mail that shares the most words with the query, best first, then
     /// the newest, at most `query.limit`. Mail without a shared word, or without its text,
     /// is left out, as in phase 0.
+    ///
+    /// Splitting and comparing the words of every email of the project runs off the
+    /// database's actor, see `rankedIDs`, so other reads and writes wait only for the two
+    /// reads.
     func projectMail(_ query: ExplainService.MailQuery) async throws -> [ExplainPrompt.Mail] {
         guard query.limit > 0 else { return [] }
+        let words = await Self.queryWords(in: query.text)
+        guard !words.isEmpty else { return [] }
+        let candidates = try await database.run(
+            "SELECT id, message_id, words, date FROM mail_messages WHERE project = ? AND text IS NOT NULL AND words IS NOT NULL",
+            [.text(query.project.uuidString)]
+        )
+        let ids = await Self.rankedIDs(candidates, words: words, excluding: query.excluding, limit: query.limit)
+        return try await projectMail(ids: ids, in: query.project)
+    }
+
+    /// The emails of `ids` in that order that are still in `project`. An email that is
+    /// gone, that moved to another project or to Needs a Project, or whose text Retention
+    /// removed, since `rankedIDs` chose it is left out. Internal for tests.
+    func projectMail(ids: [Int64], in project: UUID) async throws -> [ExplainPrompt.Mail] {
+        guard !ids.isEmpty else { return [] }
         return try await database.transaction { database in
-            let words = Set(ChunkSearch.words(in: query.text).filter { $0.count > 1 })
-            guard !words.isEmpty else { return [] }
-            let ranked = try database.run(
-                "SELECT id, message_id, words, date FROM mail_messages WHERE project = ? AND text IS NOT NULL AND words IS NOT NULL",
-                [.text(query.project.uuidString)]
-            ).compactMap { row -> (id: Int64, shared: Int, date: Double)? in
-                guard row.count == 4, let id = row[0].integer, let messageID = row[1].text, !query.excluding.contains(messageID),
-                      let stored = row[2].text, let date = row[3].real else { return nil }
-                let shared = words.intersection(stored.split(separator: "\n").map(String.init)).count
-                return shared > 0 ? (id, shared, date) : nil
-            }
-            .sorted { ($0.shared, $0.date, $0.id) > ($1.shared, $1.date, $1.id) }
-            .prefix(query.limit)
-            let ids = ranked.map(\.id)
-            let rows = try Self.rows(where: "id IN (SELECT value FROM json_each(?))", [.text(try Self.json(ids))], in: database)
+            let rows = try Self.rows(
+                where: "id IN (SELECT value FROM json_each(?)) AND project = ? AND text IS NOT NULL",
+                [.text(try Self.json(ids)), .text(project.uuidString)],
+                in: database
+            )
             let byID = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             return ids.compactMap { byID[$0]?.promptMail }
         }
+    }
+
+    /// The words of an explain query that count for project mail: those longer than one
+    /// character. Off the main actor and the database's, since the tokenizer reads long
+    /// text.
+    @concurrent
+    private static func queryWords(in text: String) async -> Set<String> {
+        Set(ChunkSearch.words(in: text).filter { $0.count > 1 })
+    }
+
+    /// The ids of the rows (id, Message-ID, words, date) that share the most `words`, then
+    /// the newest, then the highest id, at most `limit`. A row without a shared word, or
+    /// with a Message-ID in `excluding`, is left out. Off the main actor and the
+    /// database's, since it splits the words of every email of a project. Internal for
+    /// tests.
+    @concurrent
+    static func rankedIDs(_ rows: [[ProjectsDatabase.Value]], words: Set<String>, excluding: Set<String>, limit: Int) async -> [Int64] {
+        rows.compactMap { row -> (id: Int64, shared: Int, date: Double)? in
+            guard row.count == 4, let id = row[0].integer, let messageID = row[1].text, !excluding.contains(messageID),
+                  let stored = row[2].text, let date = row[3].real else { return nil }
+            let shared = words.intersection(stored.split(separator: "\n").map(String.init)).count
+            return shared > 0 ? (id, shared, date) : nil
+        }
+        .sorted { ($0.shared, $0.date, $0.id) > ($1.shared, $1.date, $1.id) }
+        .prefix(max(limit, 0))
+        .map(\.id)
     }
 
     /// For ExplainService.Known, from the mail the user sent dated before the email:
@@ -637,8 +782,9 @@ nonisolated struct MailStore: Sendable {
 
     /// Saves the email's latest explanation in place of the one before, and adds its
     /// warnings to the email's. A new explanation starts the draft again, so the versions of
-    /// the draft before go. Says whether it saved: nothing is saved for an email the store
-    /// does not hold, or one that moved to another project while it was explained.
+    /// the draft before and the text the user typed into it go. Says whether it saved:
+    /// nothing is saved for an email the store does not hold, or one that moved to another
+    /// project while it was explained.
     @discardableResult
     func save(_ explanation: Explanation, at now: Date) async throws -> Bool {
         let data = try JSONEncoder().encode(explanation)
@@ -657,6 +803,7 @@ nonisolated struct MailStore: Sendable {
                 WHERE id = ?1
                 """, [.integer(id), .blob(data), .real(now.timeIntervalSince1970), .integer(hasDraft ? 1 : 0), .text(try Self.json(warnings))])
             try database.run("DELETE FROM mail_draft_versions WHERE message = ?", [.integer(id)])
+            try database.run("DELETE FROM mail_edited_drafts WHERE message = ?", [.integer(id)])
             return true
         }
     }
@@ -674,8 +821,11 @@ nonisolated struct MailStore: Sendable {
 
     /// Adds a version of the email's draft and returns its number. Returns nil and saves
     /// nothing when the store does not hold the email, or when its explanation, which holds
-    /// the first draft, is gone or newer than the revision: a revision that ends after the
-    /// email was explained again, moved or forgotten never lands on the new draft.
+    /// the first draft, is gone, holds no draft or is newer than the revision: a revision
+    /// that ends after the email was explained again, moved or forgotten never lands on the
+    /// new draft, and one that ends after Retention removed the draft never brings it back.
+    /// The new version takes the place of the text the user typed, and holds the text it was
+    /// made from for Undo.
     /// - Parameters:
     ///   - started: when the revision started, from the clock that `now` reads.
     @discardableResult
@@ -685,11 +835,14 @@ nonisolated struct MailStore: Sendable {
             guard let number = try database.run("""
                 INSERT INTO mail_draft_versions (message, number, made, version)
                 SELECT m.id, COALESCE((SELECT MAX(v.number) FROM mail_draft_versions v WHERE v.message = m.id), 0) + 1, ?2, ?3
-                FROM mail_messages m WHERE m.message_id = ?1 AND m.explained <= ?4
+                FROM mail_messages m WHERE m.message_id = ?1 AND m.explained <= ?4 AND m.explanation_draft = 1
                 RETURNING number
                 """, [.text(version.messageID), .real(now.timeIntervalSince1970), .blob(data), .real(started.timeIntervalSince1970)]
             ).first?.first?.integer else { return nil }
             try database.run("UPDATE mail_messages SET draft_changed = ? WHERE message_id = ?", [.real(now.timeIntervalSince1970), .text(version.messageID)])
+            try database.run(
+                "DELETE FROM mail_edited_drafts WHERE message = (SELECT id FROM mail_messages WHERE message_id = ?)",
+                [.text(version.messageID)])
             return Int(number)
         }
     }
@@ -726,6 +879,51 @@ nonisolated struct MailStore: Sendable {
         }
     }
 
+    /// Keeps the text the user typed into the email's draft in place of the one before, or
+    /// with nil removes it, and says whether it did. Nothing is kept for an email whose
+    /// explanation holds no draft, such as one that moved to another project meanwhile.
+    /// - Parameters:
+    ///   - now: when the user changed the draft, which Retention counts from.
+    @discardableResult
+    func save(_ edited: EditedDraft?, for messageID: String, at now: Date) async throws -> Bool {
+        try await database.transaction { database in
+            guard let id = try database.run(
+                "SELECT id FROM mail_messages WHERE message_id = ? AND explanation_draft = 1", [.text(messageID)]
+            ).first?.first?.integer else { return false }
+            if let edited {
+                try database.run("""
+                    INSERT INTO mail_edited_drafts (message, text, edited_from, changed) VALUES (?1, ?2, ?3, ?4)
+                    ON CONFLICT (message) DO UPDATE SET text = excluded.text, edited_from = excluded.edited_from, changed = excluded.changed
+                    """, [.integer(id), .text(edited.text), .text(edited.editedFrom), .real(now.timeIntervalSince1970)])
+            } else {
+                try database.run("DELETE FROM mail_edited_drafts WHERE message = ?", [.integer(id)])
+            }
+            return true
+        }
+    }
+
+    /// The text the user typed into the email's draft, nil when there is none.
+    func editedDraft(of messageID: String) async throws -> EditedDraft? {
+        let rows = try await database.run("""
+            SELECT e.text, e.edited_from FROM mail_edited_drafts e JOIN mail_messages m ON m.id = e.message
+            WHERE m.message_id = ?
+            """, [.text(messageID)])
+        guard let row = rows.first, row.count == 2, let text = row[0].text, let editedFrom = row[1].text else { return nil }
+        return EditedDraft(text: text, editedFrom: editedFrom)
+    }
+
+    /// The key of a draft the model made, which the text the user typed into it is kept
+    /// with: SHA-256 in hex of when its explanation was made, its version number, 0 for the
+    /// explanation's draft, and its text. So that text comes back only over the draft it was
+    /// typed into, never over a version or an explanation that came after it, also when the
+    /// model wrote the same text again.
+    /// - Parameters:
+    ///   - explained: the explanation's `today`, the time it was made.
+    static func draftKey(_ draft: String, version: Int, explained: Date) -> String {
+        let named = "\(explained.timeIntervalSinceReferenceDate)\n\(version)\n\(draft)"
+        return SHA256.hash(data: Data(named.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// The explanation's save closure. A failed write is logged with its code.
     func explanationSave(now: @escaping @Sendable () -> Date = Date.init) -> @Sendable (Explanation) async -> Void {
         { explanation in await logged("saving an explanation", ()) { _ = try await save(explanation, at: now()) } }
@@ -740,24 +938,103 @@ nonisolated struct MailStore: Sendable {
 
     // MARK: The window
 
+    /// The emails a list of the window reads at once. Load Older Emails reads as many more.
+    static let listPage = 1_000
+
     /// The emails of a list, newest first, at most `limit`.
-    func list(_ place: Place, limit: Int = 1_000) async throws -> [Listed] {
-        let condition: String
-        var parameters: [ProjectsDatabase.Value] = []
-        switch place {
-        case .project(let id):
-            condition = "project = ?"
-            parameters = [.text(id.uuidString)]
-        case .needsProject:
-            condition = "project IS NULL AND (level IS NULL OR level = 'unsure')"
-        case .setAside:
-            condition = "level = 'setAside'"
-        }
-        parameters.append(.integer(Int64(max(0, limit))))
-        let values = parameters
+    func list(_ place: Place, limit: Int = listPage) async throws -> [Listed] {
+        let (condition, parameters) = Self.condition(of: place)
+        let values = parameters + [.integer(Int64(max(0, limit)))]
         return try await database.transaction { database in
             try Self.rows(where: "\(condition) ORDER BY date DESC, id DESC LIMIT ?", values, people: false, textLength: Self.summaryReadLength, in: database)
                 .map(\.listed)
+        }
+    }
+
+    /// An email as a list of the window shows it, read alone, such as one older than the
+    /// emails the window read of its list. Nil when the store does not hold it.
+    func listed(_ messageID: String) async throws -> Listed? {
+        try await database.transaction { database in
+            try Self.rows(where: "message_id = ?", [.text(messageID)], people: false, textLength: Self.summaryReadLength, in: database)
+                .first?.listed
+        }
+    }
+
+    /// How many emails a list holds.
+    func count(_ place: Place) async throws -> Int {
+        let (condition, parameters) = Self.condition(of: place)
+        return Int(try await database.run("SELECT COUNT(*) FROM mail_messages WHERE \(condition)", parameters).first?.first?.integer ?? 0)
+    }
+
+    /// The list that holds an email and how many emails come before it there, read for
+    /// that email alone, so an email past the emails a list read can show too. Nil when the
+    /// store does not hold it.
+    func position(of messageID: String) async throws -> (place: Place, index: Int)? {
+        try await database.transaction { database in
+            guard let row = try database.run("SELECT project, level FROM mail_messages WHERE message_id = ?", [.text(messageID)]).first,
+                  row.count == 2 else { return nil }
+            let place = Place(project: row[0].text.flatMap(UUID.init(uuidString:)), level: row[1].text.flatMap(SortingLevel.init(rawValue:)))
+            let (condition, parameters) = Self.condition(of: place)
+            // The emails a list shows before this one: newer, or as new with a higher id.
+            let index = try database.run(
+                "SELECT COUNT(*) FROM mail_messages WHERE \(condition) AND (date, id) > (SELECT date, id FROM mail_messages WHERE message_id = ?)",
+                parameters + [.text(messageID)]
+            ).first?.first?.integer ?? 0
+            return (place, Int(index))
+        }
+    }
+
+    /// The emails of Needs a Project that sorting may still file, oldest first, at most
+    /// `limit`, after `cursor` and up to `end` with it, with the cursor that reads on after
+    /// them. Sorting reads all of them this way when the projects change. Mail the user
+    /// moved there is left out before the limit, since sorting never files it again.
+    func resortBatch(after cursor: Cursor?, through end: Cursor? = nil, limit: Int) async throws -> (emails: [SortingService.Email], next: Cursor?) {
+        var condition = Self.resortable
+        var values: [ProjectsDatabase.Value] = []
+        if let cursor {
+            condition += " AND (date, id) > (?, ?)"
+            values += [.real(cursor.date), .integer(cursor.id)]
+        }
+        if let end {
+            condition += " AND (date, id) <= (?, ?)"
+            values += [.real(end.date), .integer(end.id)]
+        }
+        values.append(.integer(Int64(max(0, limit))))
+        let query = "SELECT id, date FROM mail_messages WHERE \(condition) ORDER BY date, id LIMIT ?"
+        let parameters = values
+        return try await database.transaction { database in
+            let batch = try database.run(query, parameters)
+            guard let last = batch.last, last.count == 2, let id = last[0].integer, let date = last[1].real else { return ([], nil) }
+            let emails = try Self.rows(
+                where: "id IN (SELECT value FROM json_each(?)) ORDER BY date, id",
+                [.text(try Self.json(batch.compactMap { $0.first?.integer }))],
+                in: database
+            ).map(\.sortingEmail)
+            return (emails, Cursor(date: date, id: id))
+        }
+    }
+
+    /// The newest email of Needs a Project that sorting may still file and that is older
+    /// than the newest `count` of them, in the order of date and row. Sorting again reads up
+    /// to it with the rules alone. Nil when there are no more than `count`.
+    func resortEnd(beforeNewest count: Int) async throws -> Cursor? {
+        let rows = try await database.run(
+            "SELECT date, id FROM mail_messages WHERE \(Self.resortable) ORDER BY date DESC, id DESC LIMIT 1 OFFSET ?",
+            [.integer(Int64(max(0, count)))])
+        guard let row = rows.first, row.count == 2, let date = row[0].real, let id = row[1].integer else { return nil }
+        return Cursor(date: date, id: id)
+    }
+
+    /// The mail of Needs a Project that sorting may still file, in SQL: never mail the user
+    /// moved there.
+    private static let resortable = "project IS NULL AND (level IS NULL OR level = 'unsure') AND moved_by_user = 0"
+
+    /// The condition of a list in SQL, with its parameters.
+    private static func condition(of place: Place) -> (sql: String, parameters: [ProjectsDatabase.Value]) {
+        switch place {
+        case .project(let id): ("project = ?", [.text(id.uuidString)])
+        case .needsProject: ("project IS NULL AND (level IS NULL OR level = 'unsure')", [])
+        case .setAside: ("level = 'setAside'", [])
         }
     }
 
@@ -810,7 +1087,7 @@ nonisolated struct MailStore: Sendable {
         var inReplyTo: [String]
         var references: [String]
         var list: ListMail
-        var attachments: [Attachment]
+        var attachments: [MailAttachment]
         var hiddenText: [ProjectsHiddenText]
         var warnings: [ProjectsWarning]
         var project: UUID?
@@ -823,6 +1100,8 @@ nonisolated struct MailStore: Sendable {
         var isExplained: Bool
         /// The text of the explanation's first point, nil without one.
         var firstPoint: String?
+        var isTooLarge: Bool
+        var hasDraft: Bool
         /// The To, Cc and Reply-To, by their role.
         var people: [String: [Person]] = [:]
 
@@ -841,7 +1120,7 @@ nonisolated struct MailStore: Sendable {
             ExplainService.Email(
                 messageID: messageID, date: date, sender: MailStore.promptPerson(sender),
                 replyTo: replyTo.map(MailStore.promptPerson), to: to.map(MailStore.promptPerson), cc: cc.map(MailStore.promptPerson),
-                subject: subject, attachments: attachments.map { ContentChecks.Input.Attachment(name: $0.name, type: $0.type) },
+                subject: subject, attachments: attachments,
                 text: text ?? "", visibleText: visibleText ?? "", hiddenText: hiddenText, list: list, project: project)
         }
 
@@ -857,8 +1136,9 @@ nonisolated struct MailStore: Sendable {
             return Listed(
                 messageID: messageID, date: date, sender: sender, subject: subject, project: project,
                 level: level, reasons: reasons, movedByUser: movedByUser, reply: reply, warnings: warnings,
-                isExplained: isExplained, hasText: text != nil,
-                summary: point.isEmpty ? MailStore.firstSentence(text ?? "") : String(point.prefix(MailStore.summaryLength)))
+                isExplained: isExplained, hasDraft: hasDraft, hasText: text != nil, isTooLarge: isTooLarge,
+                summary: point.isEmpty ? MailStore.firstSentence(text ?? "") : String(point.prefix(MailStore.summaryLength)),
+                attachments: attachments)
         }
     }
 
@@ -868,7 +1148,8 @@ nonisolated struct MailStore: Sendable {
         id, message_id, mailbox, date, sender_name, sender, subject, in_reply_to, refs, list_id, list_unsubscribe, \
         precedence, attachments, hidden_text, warnings, project, level, reasons, moved_by_user, reply, \
         substr(text, 1, \(textLength)), substr(visible_text, 1, \(textLength)), explanation IS NOT NULL, \
-        CASE WHEN json_valid(CAST(explanation AS TEXT)) THEN json_extract(CAST(explanation AS TEXT), '$.points[0].text') END
+        CASE WHEN json_valid(CAST(explanation AS TEXT)) THEN json_extract(CAST(explanation AS TEXT), '$.points[0].text') END, \
+        too_large, explanation_draft
         """
     }
 
@@ -898,7 +1179,7 @@ nonisolated struct MailStore: Sendable {
     }
 
     private static func row(_ values: [ProjectsDatabase.Value]) -> Row? {
-        guard values.count == 24, let id = values[0].integer, let messageID = values[1].text, let date = values[3].real,
+        guard values.count == 26, let id = values[0].integer, let messageID = values[1].text, let date = values[3].real,
               let senderName = values[4].text, let sender = values[5].text, let subject = values[6].text else { return nil }
         return Row(
             id: id,
@@ -910,7 +1191,7 @@ nonisolated struct MailStore: Sendable {
             inReplyTo: decoded([String].self, values[7]) ?? [],
             references: decoded([String].self, values[8]) ?? [],
             list: ListMail(listID: values[9].text, listUnsubscribe: values[10].text, precedence: values[11].text),
-            attachments: decoded([Attachment].self, values[12]) ?? [],
+            attachments: decoded([MailAttachment].self, values[12]) ?? [],
             hiddenText: (decoded([String].self, values[13]) ?? []).compactMap(ProjectsHiddenText.init(rawValue:)),
             warnings: (decoded([String].self, values[14]) ?? []).compactMap(ProjectsWarning.init(rawValue:)),
             project: values[15].text.flatMap(UUID.init(uuidString:)),
@@ -921,7 +1202,9 @@ nonisolated struct MailStore: Sendable {
             text: values[20].text,
             visibleText: values[21].text,
             isExplained: values[22].integer == 1,
-            firstPoint: values[23].text
+            firstPoint: values[23].text,
+            isTooLarge: values[24].integer == 1,
+            hasDraft: values[25].integer == 1
         )
     }
 
@@ -930,8 +1213,8 @@ nonisolated struct MailStore: Sendable {
             INSERT INTO mail_messages (
                 message_id, mailbox, date, saved, sender_name, sender, sender_key, subject, subject_key, thread_root,
                 in_reply_to, refs, list_id, list_unsubscribe, precedence, attachments, hidden_text, warnings,
-                text, visible_text, words)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+                text, visible_text, words, attachment_text, too_large)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
             RETURNING id
             """, [
                 .text(message.messageID),
@@ -955,6 +1238,8 @@ nonisolated struct MailStore: Sendable {
                 .text(message.text),
                 .text(message.visibleText),
                 .text(words),
+                message.attachments.contains { $0.text != nil } ? .text(try json(message.attachments.map(\.text))) : .null,
+                .integer(message.isTooLarge ? 1 : 0),
             ]).first?.first?.integer else { return }
         let people: [(role: String, people: [Person])] = [
             ("from", [message.sender]), ("to", message.to), ("cc", message.cc), ("replyTo", message.replyTo),
@@ -1093,11 +1378,13 @@ nonisolated struct MailStore: Sendable {
         text.map(ProjectsDatabase.Value.text) ?? .null
     }
 
-    private static func json(_ value: some Encodable) throws -> String {
+    /// The value as JSON text, for a column or a query parameter.
+    static func json(_ value: some Encodable) throws -> String {
         String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
     }
 
-    private static func decoded<T: Decodable>(_ type: T.Type, _ value: ProjectsDatabase.Value) -> T? {
+    /// The JSON in a column, nil when it holds none.
+    static func decoded<T: Decodable>(_ type: T.Type, _ value: ProjectsDatabase.Value) -> T? {
         let data: Data
         switch value {
         case .text(let text): data = Data(text.utf8)

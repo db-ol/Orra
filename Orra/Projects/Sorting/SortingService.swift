@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import os
 
 /// Sorts new mail into the user's projects: the rules first, and the model as tie breaker
@@ -31,7 +32,11 @@ import os
 /// habit does not win forever. Moves run one at a time too, apart from the batches, so a
 /// move never waits for the model.
 ///
+/// The window shows that sorting works while a batch is not finished, see
+/// `unfinishedBatches`.
+///
 /// Logs counts and times only.
+@Observable
 final class SortingService {
     /// One email as the service sorts it, from the mail the scan read.
     nonisolated struct Email: Sendable, Equatable {
@@ -171,22 +176,22 @@ final class SortingService {
         "outlook.com.mx", "yahoo.com.ar", "hotmail.com.ar",
     ]
 
-    private let lookups: Lookups
-    private let saves: Saves
-    private let windowIsOpen: () -> Bool
-    private let ask: (ProjectsModelRequest) async throws -> String
-    private let now: () -> Date
+    @ObservationIgnored private let lookups: Lookups
+    @ObservationIgnored private let saves: Saves
+    @ObservationIgnored private let windowIsOpen: () -> Bool
+    @ObservationIgnored private let ask: (ProjectsModelRequest) async throws -> String
+    @ObservationIgnored private let now: () -> Date
     /// The projects prepared for sorting, until they change.
-    private var setup: Setup?
+    @ObservationIgnored private var setup: Setup?
     /// Counts the calls of `projectsChanged()`, so a preparation under way is not kept.
-    private var setupGeneration = 0
+    @ObservationIgnored private var setupGeneration = 0
     /// The batch under way or the last one, which the next one waits for.
-    private var tail: Task<Void, Never>?
+    @ObservationIgnored private var tail: Task<Void, Never>?
     /// The batches not finished yet, by their number, which `stop()` cancels.
     private var batches: [Int: Task<Void, Never>] = [:]
-    private var batchCount = 0
+    @ObservationIgnored private var batchCount = 0
     /// The move under way or the last one, which the next one waits for.
-    private var lastMove: Task<RuleOffer?, Never>?
+    @ObservationIgnored private var lastMove: Task<RuleOffer?, Never>?
 
     /// - Parameters:
     ///   - windowIsOpen: whether the Projects window is open. The model is asked only while
@@ -209,11 +214,19 @@ final class SortingService {
 
     // MARK: Sorting
 
+    /// The batches not finished yet: the one under way and those waiting for it. The window
+    /// observes it, and tests wait on it to know that a batch they started waits.
+    var unfinishedBatches: Int {
+        batches.count
+    }
+
     /// Sorts new emails, oldest first, after the batch under way. Returns once they are
     /// saved, or when the caller's task is cancelled or `stop()` is called. The email under
-    /// way then is not saved.
-    func sort(_ emails: [Email]) async {
-        await inTurn { await self.process(emails) }
+    /// way then is not saved. With `rulesOnly`, the model is never asked, and only an email
+    /// the rules file on their own, in a project or in Set Aside, is saved. The others stay
+    /// as they are, such as when Needs a Project is sorted again.
+    func sort(_ emails: [Email], rulesOnly: Bool = false) async {
+        await inTurn { await self.process(emails, rulesOnly: rulesOnly) }
     }
 
     /// Sorts the emails that wait for the model or were never sorted, such as when the
@@ -322,6 +335,8 @@ final class SortingService {
         /// Decisions the store did not save, since the user moved the email meanwhile or
         /// its project is gone.
         var notSaved = 0
+        /// Emails left as they were, since only the rules sorted them and did not file them.
+        var left = 0
     }
 
     /// Runs `work` after the batch before it, and cancels it with the caller's task or
@@ -344,7 +359,7 @@ final class SortingService {
         batches[number] = nil
     }
 
-    private func process(_ emails: [Email]) async {
+    private func process(_ emails: [Email], rulesOnly: Bool = false) async {
         guard !emails.isEmpty, !Task.isCancelled else { return }
         let started = ContinuousClock.now
         let ordered = emails.enumerated()
@@ -356,15 +371,15 @@ final class SortingService {
             // The projects as they are now, prepared again when they changed meanwhile.
             let setup = await currentSetup()
             guard !Task.isCancelled,
-                  await sortOne(Self.limited(email), setup: setup, modelIsThere: &modelIsThere, log: &log) else { break }
+                  await sortOne(Self.limited(email), setup: setup, rulesOnly: rulesOnly, modelIsThere: &modelIsThere, log: &log) else { break }
         }
         let sorted = log.levels.values.reduce(0, +)
-        Logger.projects.notice("Sorting: \(sorted, privacy: .public) of \(emails.count, privacy: .public) emails in \(Self.seconds(started.duration(to: .now)), privacy: .public): \(log.levels[.sure] ?? 0, privacy: .public) sure, \(log.levels[.likely] ?? 0, privacy: .public) likely, \(log.levels[.unsure] ?? 0, privacy: .public) unsure, \(log.levels[.setAside] ?? 0, privacy: .public) set aside. The model was asked \(log.asked, privacy: .public) times for \(Self.seconds(log.modelTime), privacy: .public), \(log.waiting, privacy: .public) wait for it, \(log.notSaved, privacy: .public) not saved since the user moved them or the project is gone")
+        Logger.projects.notice("Sorting: \(sorted, privacy: .public) of \(emails.count, privacy: .public) emails in \(Self.seconds(started.duration(to: .now)), privacy: .public): \(log.levels[.sure] ?? 0, privacy: .public) sure, \(log.levels[.likely] ?? 0, privacy: .public) likely, \(log.levels[.unsure] ?? 0, privacy: .public) unsure, \(log.levels[.setAside] ?? 0, privacy: .public) set aside. The model was asked \(log.asked, privacy: .public) times for \(Self.seconds(log.modelTime), privacy: .public), \(log.waiting, privacy: .public) wait for it, \(log.notSaved, privacy: .public) not saved since the user moved them or the project is gone, \(log.left, privacy: .public) left as they were since the rules alone did not file them")
     }
 
     /// Sorts one email and saves what it found. False when the caller's task was cancelled
     /// before the decision was saved.
-    private func sortOne(_ email: Email, setup: Setup, modelIsThere: inout Bool, log: inout BatchLog) async -> Bool {
+    private func sortOne(_ email: Email, setup: Setup, rulesOnly: Bool, modelIsThere: inout Bool, log: inout BatchLog) async -> Bool {
         let parent = await parent(of: email)
         let people = Self.people(of: email, own: setup.own)
         var projects = setup.projects
@@ -374,6 +389,11 @@ final class SortingService {
             for: email, parent: parent, thread: thread,
             projects: projects, owner: setup.owner, scores: lookups.scores)
         var decision = ruled.decision
+        if rulesOnly, decision.level != .sure, decision.level != .setAside {
+            // The rules do not file it, and the model is not asked, so it stays as it is.
+            log.left += 1
+            return true
+        }
         if decision.waitsForModel, modelIsThere, windowIsOpen(), let prompt = ruled.prompt {
             let asked = ContinuousClock.now
             log.asked += 1

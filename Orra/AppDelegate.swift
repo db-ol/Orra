@@ -113,15 +113,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The Mail mailboxes Projects reads, which Settings shows and the scan reads. Creating
     /// it reads only the preferences.
     let mailChoice = MailChoice()
-    /// Mail access and the mailboxes on the Projects page of Settings. Creating it sends
-    /// nothing to Mail.
-    lazy var projectsMail = ProjectsSettings.MailAccess(bridge: .live, choice: mailChoice) { [projects] in
+    /// Mail access and the mailboxes on the Projects page of Settings, with those the
+    /// projects link. Creating it sends nothing to Mail.
+    lazy var projectsMail = ProjectsSettings.MailAccess(bridge: .live, choice: mailChoice, projects: { [weak self] in
+        self?.projectsRuntime.projectList ?? []
+    }, missingMailboxes: { [weak self] in
+        self?.projectsRuntime.missingMailboxes ?? []
+    }) { [projects] in
         projects.isOn
     }
     /// Projects while its switch is on: its database, index, mail scan, sorting and model
     /// work. Starts nothing while it is off.
     lazy var projectsRuntime = makeProjectsRuntime()
-    /// The Projects window, from Projects… in the menu while Projects is on.
+    /// The Projects window, from Open Projects Window in the menu bar menu, the Dock menu
+    /// and the Projects page of Settings while Projects is on.
     lazy var projectsWindow = ProjectsWindow(runtime: projectsRuntime) { [dockIcon] in
         dockIcon.willShowWindow()
     } openSettings: { [dockIcon] in
@@ -210,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ownerOverride: { ProjectsDebugOwner.load() },
             language: ProjectsLanguage.forExplanations(interface: AppLanguage.launchLocalization),
             isDictating: { [turns] in turns.isDictating },
+            whenDictationStarts: { [turns] in turns.whenDictationStarts($0) },
             modelEnvironment: { [cleanup, turns, captions, speech] memoryPressure in
                 cleanup.projectsEnvironment(
                     isDictating: { turns.isDictating },
@@ -221,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             modelIsInstalled: { [cleanup] in
                 if case .installed = cleanup.models.state { true } else { false }
             },
+            retryLoadingModel: { [cleanup] in await cleanup.retryLoading() },
             loadTokenCounter: { try await ProjectsTokenCounter.installed(in: folders)?.count },
             handoff: ReplyHandoff(
                 copy: { ConcealedClipboard.copy($0, to: .general) },
@@ -379,6 +386,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             LaunchWindow.openSettings(dockIcon: dockIcon)
         }
         return false
+    }
+
+    /// The Dock icon's menu: Open Projects Window while Projects is on, see
+    /// StatusMenu.dockMenu.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        guard !Self.isHostedByXcode else { return nil }
+        return StatusMenu.dockMenu(projects: projectsRuntime, target: self, action: #selector(openProjectsWindow))
+    }
+
+    @objc private func openProjectsWindow() {
+        projectsWindow.show()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

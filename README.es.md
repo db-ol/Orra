@@ -61,7 +61,7 @@ Opcional. Un modelo de texto en tu Mac elimina las muletillas que las reglas dej
 Opcional. Presiona una segunda tecla, habla y vuelve a presionarla. Si la configuras en Mantener presionada, mantenla presionada mientras hablas. Orra pega lo que dices traducido entre el inglés y tu idioma de dictado, chino, japonés o español, con el mismo modelo en tu Mac. Una pequeña marca indica que ese dictado se va a traducir: 译 con chino, 訳 con japonés y ⇄ con español.
 
 </td>
-<td width="50%"><img src="docs/images/readme/es/translation.gif" alt="En un chat, Sam pregunta “When can I see the designs?” Con la tecla de traducción presionada, alguien dice “Te puedo mandar los diseños antes del viernes”. La cápsula muestra la marca ⇄, y “I can send you the designs before Friday.” aparece en el campo del mensaje." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/translation.gif" alt="En un chat, Sam pregunta “When can I see the designs?” Alguien presiona la tecla de traducción, dice “Te puedo mandar los diseños antes del viernes” y la vuelve a presionar. La cápsula muestra la marca ⇄ y “Presiona la tecla Opción derecha para terminar”, y “I can send you the designs before Friday.” aparece en el campo del mensaje." width="100%"></td>
 </tr>
 <tr>
 <td width="50%" valign="middle">
@@ -73,7 +73,7 @@ Para reuniones en distintos idiomas. Lee en tu idioma lo que dicen los demás y 
 Novedad de la versión 0.4.0.
 
 </td>
-<td width="50%"><img src="docs/images/readme/es/meeting.gif" alt="En una videollamada, Alex habla en inglés y la ventana de Subtítulos en vivo muestra cada oración con su traducción al español. Luego, el usuario mantiene presionada la tecla de traducción y dice “Claro, termino las pruebas para el miércoles”, y en la llamada se escucha “Sure, I’ll finish testing by Wednesday.” desde Orra Microphone." width="100%"></td>
+<td width="50%"><img src="docs/images/readme/es/meeting.gif" alt="En una videollamada, Alex habla en inglés y la ventana de Subtítulos en vivo muestra cada oración con su traducción al español. Arriba están elegidos Ambos y Español, junto al botón para copiar. Luego, el usuario presiona la tecla de traducción, dice “Claro, termino las pruebas para el miércoles” y la vuelve a presionar, y en la llamada se escucha “Sure, I’ll finish testing by Wednesday.” desde Orra Microphone." width="100%"></td>
 </tr>
 <tr>
 <td colspan="2" valign="middle">
@@ -100,7 +100,7 @@ Orra solo busca una versión nueva después de que se lo permites, y solo la ins
 
 - **[Descarga Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**, la versión más reciente, ábrelo y arrastra Orra a la carpeta Aplicaciones. Las versiones anteriores y las notas de la versión están en [la página de versiones](https://github.com/db-ol/Orra/releases).
 - **Orra Microphone**, opcional, para Leer traducciones a los demás: descarga [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg), firmado y notariado, y ábrelo para instalarlo. [Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md) (en inglés) explica cómo quitarlo o compilarlo por tu cuenta.
-- Requiere una Mac con Apple Chip y macOS 15.6 o posterior, y unos 3 GB de espacio disponible en el disco, más 2.8 GB para el modelo local opcional, que limpia, traduce y explica el correo en Proyectos, y unos 2 GB para el modelo de síntesis de voz opcional de Leer traducciones a los demás. Proyectos requiere 16 GB de memoria o más.
+- Requiere una Mac con Apple Chip y macOS 15.6 o posterior, y unos 3 GB de espacio disponible en el disco, más 3.05 GB para el modelo local opcional, que limpia, traduce y explica el correo en Proyectos, y unos 2 GB para el modelo de síntesis de voz opcional de Leer traducciones a los demás. Proyectos requiere 16 GB de memoria o más.
 - La app está firmada con un Developer ID y notariada por Apple, así que se abre sin advertencias.
 - No está en la Mac App Store, porque el entorno aislado (sandbox) de la App Store no permite que una app detecte una tecla en otras apps ni pegue texto en ellas.
 

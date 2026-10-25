@@ -1,17 +1,24 @@
 import Foundation
 import Observation
 
-/// One email in the email view of the Projects window (projects-email-view): its
-/// explanation, the versions of its draft, the draft as the user edits it, the translation
-/// next to it, the answer check, the change under way and the handoff to Mail.
+/// One email in the email view of the Projects window (projects-email-view): the email
+/// itself as Mail shows it, its explanation, the versions of its draft, the draft as the
+/// user edits it, the translation next to it, the answer check, the change under way and
+/// the handoff to Mail.
 ///
-/// - The draft is plain text the user may edit. Only the versions the model makes are saved,
-///   by ReviseService. The user's own edits stay in memory while the window is open, so
-///   they last while the user looks at other mail, and go when the window closes, Projects
-///   stops or a project is forgotten, see ProjectsWindowModel.
+/// - The view shows the email itself until it is explained, then its explanation. The user
+///   switches between the two at any time with `showsOriginal`, and a new explanation shows
+///   the explanation again.
+/// - The draft is plain text the user may edit. ReviseService saves the versions the model
+///   makes. The text the user types is saved apart from them once the user pauses typing,
+///   and at once when the window closes, see `saveText()`, so the window opens again with
+///   it. It goes with the draft, see Retention. Explain Again replaces the draft and a move
+///   to another project removes it, both only after the user's yes when the user changed
+///   it, see ProjectsWindowModel.
 /// - A change, from the change box or a tone, makes a new version of the draft as the
-///   editor holds it, checked by DraftCheck. Undo removes the newest version and puts back
-///   the text it was made from.
+///   editor holds it, checked by DraftCheck. Cancel Change ends it and leaves the draft and
+///   the change box as they were. Undo removes the newest version and puts back the text it
+///   was made from, which the version keeps, also for a window that opens later.
 /// - The answer check runs on its own once for each draft the model makes while the window
 ///   is open: after the explanation, see ProjectsWindowModel.explain(_:), and after each new
 ///   version (decision 9). For a draft made in an earlier window, and after an edit, it runs
@@ -21,8 +28,9 @@ import Observation
 ///   the draft as soon as the dictation ends while the setting for it is on (decision 13),
 ///   see `takeDictation(_:revises:)`.
 /// - Open Reply in Mail and Reply All need Mail's handle of the email, which the scan keeps
-///   for this Mail session. Without it the draft is only copied. The window runs one
-///   handoff at a time, for all its emails, see `Handoffs`.
+///   for this Mail session, and headers from Mail that show the message under it is this
+///   email. Without them the draft is only copied. The window runs one handoff at a time,
+///   for all its emails, see `Handoffs`.
 ///
 /// Every request of the model runs through ProjectsModelQueue as one of the user's, inside
 /// ProjectsRuntime.userRequest(_:), so turning Projects off ends it. The requests started
@@ -37,6 +45,12 @@ final class ProjectsEmailModel {
         var versions: (String) async -> [MailStore.DraftVersion]
         /// Removes the newest version, and says whether there was one.
         var removeNewestVersion: (String) async -> Bool
+        /// The text the user typed into the email's draft, nil when there is none.
+        var editedDraft: (String) async -> MailStore.EditedDraft?
+        /// Keeps the text the user typed into the email's draft, or with nil removes it,
+        /// and gives the write, which says whether the store did. The write starts before
+        /// this returns, see ProjectsRuntime.saveEditedDraft(_:for:).
+        var saveEditedDraft: (_ messageID: String, MailStore.EditedDraft?) -> Task<Bool, Never>
         /// What a revision checks with, nil when the explanation has no draft to change.
         var reviseContext: (Explanation) async -> ReviseService.Context?
         /// A service for one request on the draft, started at this time, see
@@ -47,12 +61,18 @@ final class ProjectsEmailModel {
         var userRequest: (@escaping @MainActor () async throws -> Void) async throws -> Void
         /// An email the store holds, for the source chips and the text of this email.
         var email: (String) async -> ExplainService.Email?
-        /// Mail's handle of an email in this Mail session.
-        var mailReference: (String) -> MailMessageRef?
+        /// Mail's handle of an email in this Mail session, for a reply or with the flag a
+        /// reply to all, once Mail confirmed that the message under it is the email, see
+        /// ProjectsRuntime.checkedMailReference(for:all:). Nil when there is none. Throws
+        /// what Mail answered when it could not check.
+        var mailReference: (_ messageID: String, _ all: Bool) async throws -> MailMessageRef?
         var handoff: ReplyHandoff
         /// The language the user reads explanations in.
         var userLanguage: ProjectsLanguage
         var now: () -> Date
+        /// What a change changed, worked out off the main actor, ProjectsDraftDiff.highlight
+        /// in the app.
+        var highlight: (_ before: String, _ after: String) async -> [ProjectsDraftDiff.Segment]
 
         /// The actions of the running app.
         static func live(_ runtime: ProjectsRuntime) -> Actions {
@@ -60,6 +80,8 @@ final class ProjectsEmailModel {
                 explanation: { [weak runtime] id in await runtime?.explanation(for: id) },
                 versions: { [weak runtime] id in await runtime?.versions(of: id) ?? [] },
                 removeNewestVersion: { [weak runtime] id in await runtime?.removeNewestVersion(of: id) ?? false },
+                editedDraft: { [weak runtime] id in await runtime?.editedDraft(of: id) },
+                saveEditedDraft: { [weak runtime] id, edited in runtime?.saveEditedDraft(edited, for: id) ?? Task { false } },
                 reviseContext: { [weak runtime] explanation in await runtime?.reviseContext(for: explanation) },
                 reviseService: { [weak runtime] started in
                     guard let runtime else { throw ProjectsRuntime.Failure.off }
@@ -70,10 +92,11 @@ final class ProjectsEmailModel {
                     try await runtime.userRequest(work)
                 },
                 email: { [weak runtime] id in await runtime?.email(id) },
-                mailReference: { [weak runtime] id in runtime?.mailReference(for: id) },
+                mailReference: { [weak runtime] id, all in try await runtime?.checkedMailReference(for: id, all: all) },
                 handoff: runtime.handoff,
                 userLanguage: runtime.userLanguage,
-                now: runtime.dependencies.now
+                now: runtime.dependencies.now,
+                highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) }
             )
         }
     }
@@ -87,12 +110,16 @@ final class ProjectsEmailModel {
         case mail(messageID: String, sender: String?, date: Date?)
         /// The excerpt of a project file the model read.
         case file(TextChunker.Chunk)
+        /// An attachment of the email, with the excerpt of its text the model read.
+        case attachment(name: String, excerpt: String)
     }
 
     /// Why a change, a translation or the answer check gave nothing new.
     nonisolated enum Note: Equatable, Sendable {
         /// The cleanup model is not on this Mac, or the window closed.
         case noModel
+        /// The cleanup model is on this Mac but could not be loaded.
+        case modelNotLoaded
         /// The draft or the change does not fit into a prompt.
         case tooLong
         /// The model wrote nothing that can be used, or was cut short.
@@ -111,6 +138,15 @@ final class ProjectsEmailModel {
         /// Mail's handle of the email is not known in this Mail session, so no reply opened
         /// and the draft was only copied.
         case messageNotFound
+    }
+
+    /// What the line under the draft says about saving it.
+    nonisolated enum SaveNote: Equatable, Sendable {
+        /// The store keeps the draft with the user's changes as the editor holds it, so
+        /// the window opens again with it.
+        case saved
+        /// The text the user typed could not be saved.
+        case notSaved
     }
 
     /// A translation of a draft, for the draft it was made from.
@@ -158,8 +194,33 @@ final class ProjectsEmailModel {
     private(set) var sources: [String: Source] = [:]
     /// The email's own text, for the chip of this email.
     private(set) var emailText = ""
-    /// The draft as the editor holds it.
-    var text = ""
+    /// The email as Mail shows it, nil until it is read or when the store keeps no text of
+    /// it.
+    private(set) var original: ProjectsEmailOriginal.Content?
+    /// Whether the view shows the email itself rather than its explanation. Without an
+    /// explanation it always does.
+    var showsOriginal = false
+    /// The draft as the editor holds it. What the user types is saved once the user pauses
+    /// typing, see `saveText()`.
+    var text = "" {
+        didSet {
+            if text != oldValue {
+                lastEdit = ContinuousClock.now
+                saveText()
+            }
+        }
+    }
+    /// The text the window opens with again, as far as the store keeps it: what the user
+    /// typed into the draft, or the newest draft the model made. Nil while that is not
+    /// known, such as after an undo, so the editor's text is saved again.
+    private(set) var savedText: String?
+    /// Whether the last save of the editor's text failed.
+    private(set) var saveFailed = false
+    /// How long the editor's text waits after its last change before it is saved,
+    /// `typingPause` in the app. Tests set none.
+    @ObservationIgnored var saveDelay = ProjectsEmailModel.typingPause
+    /// When the editor's text last changed, which the save waits `saveDelay` after.
+    @ObservationIgnored private var lastEdit = ContinuousClock.now
     /// What the user types or says into the change box. The talk key writes here too, see
     /// `takeDictation(_:revises:)`.
     var instruction = ""
@@ -179,9 +240,6 @@ final class ProjectsEmailModel {
     private(set) var isCheckingAnswers = false
     private(set) var answersNote: Note?
     private(set) var handoffNote: HandoffNote?
-    /// The text each saved version was made from, by its number, for the highlight and
-    /// Undo. Only for the versions made while the window is open.
-    @ObservationIgnored private var madeFrom: [Int: String] = [:]
     /// Whether a translation or an answer check was asked for while one ran.
     @ObservationIgnored private var translateAgain = false
     @ObservationIgnored private var checkAgain = false
@@ -191,6 +249,15 @@ final class ProjectsEmailModel {
     @ObservationIgnored private var changesWhenFree = false
     /// The requests started with `perform(_:)` that still run.
     @ObservationIgnored private var work: [UUID: Task<Void, Never>] = [:]
+    /// The change under way, in a task of its own, so Cancel Change ends it and nothing
+    /// else.
+    @ObservationIgnored private var changeTask: Task<Bool, any Error>?
+    /// The save of the editor's text that waits or runs, see `saveText()`.
+    @ObservationIgnored private var saving: Task<Void, Never>?
+
+    /// How long a pause in typing is before the editor's text is saved, so a burst of typing
+    /// makes one write (a guess).
+    nonisolated static let typingPause: Duration = .milliseconds(500)
 
     init(messageID: String, actions: Actions, handoffs: Handoffs = Handoffs()) {
         self.messageID = messageID
@@ -217,6 +284,20 @@ final class ProjectsEmailModel {
         draftCheck?.draft
     }
 
+    /// The key of the newest draft the model made, which the text the user types into it is
+    /// saved with, see MailStore.draftKey(_:version:explained:).
+    private var modelDraftKey: String? {
+        guard let explanation, let draft = modelDraft else { return nil }
+        return MailStore.draftKey(draft, version: versions.last?.number ?? 0, explained: explanation.today)
+    }
+
+    /// The text the user typed into the newest draft the model made, nil when there is none
+    /// or when it was typed into another draft.
+    private func restoredText(_ edited: MailStore.EditedDraft?) -> String? {
+        guard let edited, edited.editedFrom == modelDraftKey else { return nil }
+        return edited.text
+    }
+
     /// Whether the user changed the draft in the editor since the model made it.
     var isEdited: Bool {
         modelDraft.map { $0 != text } ?? false
@@ -235,6 +316,29 @@ final class ProjectsEmailModel {
     /// Whether a handoff of this window runs, so Open Reply in Mail, Reply All and Copy wait.
     var isHandingOff: Bool {
         handoffs.isRunning
+    }
+
+    /// Whether Open Reply in Mail and Reply All can run: no request runs on the draft and
+    /// no handoff of the window runs.
+    var canHandOff: Bool {
+        !isBusy && !isHandingOff
+    }
+
+    /// Whether Copy can run: no handoff of the window runs and no undo puts text back. A
+    /// change that runs or waits leaves the draft as it is until it ends, so Copy takes that
+    /// text.
+    var canCopy: Bool {
+        !isUndoing && !isHandingOff
+    }
+
+    /// Saved on this Mac once the store keeps the draft with the user's changes as the
+    /// editor holds it, never before that save worked. Nothing while the draft is the
+    /// model's own, or while a save waits.
+    var saveNote: SaveNote? {
+        guard text != savedText else {
+            return isEdited || !versions.isEmpty ? .saved : nil
+        }
+        return saveFailed ? .notSaved : nil
     }
 
     /// The flags of the newest draft the model made that still hold for the text in the
@@ -272,14 +376,14 @@ final class ProjectsEmailModel {
     /// The newest version with what it changed, worked out off the main actor.
     private func change(of versions: [MailStore.DraftVersion]) async -> LastChange? {
         guard let last = versions.last, let after = last.version.draft else { return nil }
-        var before = madeFrom[last.number]
+        var before = last.version.madeFrom
         if before == nil, versions.count > 1 {
             before = versions[versions.count - 2].version.draft
         }
         if before == nil, case .checked(let result)? = explanation?.draft {
             before = result.draft
         }
-        return LastChange(version: last, segments: await ProjectsDraftDiff.highlight(from: before ?? "", to: after))
+        return LastChange(version: last, segments: await actions.highlight(before ?? "", after))
     }
 
     /// Takes the versions as they are now, with the highlight of the newest. Nothing changes
@@ -303,33 +407,47 @@ final class ProjectsEmailModel {
 
     // MARK: Loading
 
-    /// Reads the explanation and the versions of the draft. The editor's text stays when
-    /// both are as before, so the user's edits stay.
+    /// Reads the explanation, the versions of the draft and the text the user typed into it.
+    /// The editor's text stays when the explanation and the versions are as before, so the
+    /// user's edits stay. Otherwise the editor starts from the text the user typed into the
+    /// newest draft the model made, or from that draft.
     func load() async {
         let explanation = await actions.explanation(messageID)
         let versions = explanation == nil ? [] : await actions.versions(messageID)
+        let edited = explanation == nil ? nil : await actions.editedDraft(messageID)
         let changed = !isLoaded || explanation != self.explanation || versions != self.versions
         if explanation != self.explanation {
-            madeFrom = [:]
-        }
-        madeFrom = madeFrom.filter { number, _ in versions.contains { $0.number == number } }
-        if explanation != self.explanation {
             self.explanation = explanation
+            showsOriginal = false
         }
         await take(versions)
         isLoaded = true
         if changed {
-            text = modelDraft ?? ""
+            let restored = restoredText(edited)
+            text = restored ?? modelDraft ?? ""
+            // Text typed into another draft, which a save that ended after a change or a new
+            // explanation can leave, goes with the next save.
+            savedText = edited != nil && restored == nil ? nil : text
+            saveFailed = false
             changeNote = nil
             translationNote = nil
             answersNote = nil
             handoffNote = nil
+            saveText()
         }
-        await readSources()
+        let email = await actions.email(messageID)
+        var original: ProjectsEmailOriginal.Content?
+        if let email {
+            original = await ProjectsEmailOriginal.Content.reading(email)
+        }
+        if original != self.original {
+            self.original = original
+        }
+        await readSources(email)
     }
 
     /// Reads what the source ids stand for, and the email's own text.
-    private func readSources() async {
+    private func readSources(_ email: ExplainService.Email?) async {
         guard let explanation else {
             sources = [:]
             emailText = ""
@@ -346,10 +464,12 @@ final class ProjectsEmailModel {
                 sources[id] = .mail(messageID: messageID, sender: sender, date: email?.date)
             case .file(let chunk):
                 sources[id] = .file(chunk)
+            case .attachment(let name, let excerpt):
+                sources[id] = .attachment(name: name, excerpt: excerpt)
             }
         }
         self.sources = sources
-        emailText = await actions.email(messageID).map { $0.text.isEmpty ? $0.visibleText : $0.text } ?? ""
+        emailText = email.map { $0.text.isEmpty ? $0.visibleText : $0.text } ?? ""
     }
 
     /// After a new explanation in this window: reads it, and runs the answer check of its
@@ -386,6 +506,52 @@ final class ProjectsEmailModel {
     /// Whether a request started with `perform(_:)` runs, for tests.
     var isWorking: Bool {
         !work.isEmpty
+    }
+
+    // MARK: Saving the user's text
+
+    /// Saves the editor's text once it has not changed for `saveDelay`, unless a save waits
+    /// or runs already, which then saves it. Each key press puts the save off again, so a
+    /// burst of typing makes one write. A save that fails leaves `saveFailed` on until the
+    /// next one works.
+    private func saveText() {
+        guard saving == nil, isLoaded else { return }
+        saving = Task {
+            defer { saving = nil }
+            while true {
+                while ContinuousClock.now < lastEdit + saveDelay {
+                    try? await Task.sleep(until: lastEdit + saveDelay)
+                    // `saveTextNow()` saved in place of this task.
+                    guard !Task.isCancelled else { return }
+                }
+                guard !Task.isCancelled, let save = startSave() else { return }
+                guard await save.write.value else {
+                    saveFailed = true
+                    return
+                }
+                savedText = save.text
+                saveFailed = false
+            }
+        }
+    }
+
+    /// Starts writing the editor's text, unless the store keeps it already, and gives the
+    /// text with the write. What the user typed goes with the key of the newest draft the
+    /// model made, and the model's draft as it made it removes what the user typed before.
+    private func startSave() -> (text: String, write: Task<Bool, Never>)? {
+        guard let draft = modelDraft, let key = modelDraftKey, text != savedText else { return nil }
+        let typed = text
+        let edited = typed == draft ? nil : MailStore.EditedDraft(text: typed, editedFrom: key)
+        return (typed, actions.saveEditedDraft(messageID, edited))
+    }
+
+    /// Saves the editor's text at once, in place of the save that waits for a pause in
+    /// typing, for an email view the window lets go of, such as when it closes. The write
+    /// starts before this returns, so Projects waits for it when it turns off and closes the
+    /// window, see ProjectsRuntime.saveEditedDraft(_:for:).
+    func saveTextNow() {
+        saving?.cancel()
+        _ = startSave()
     }
 
     /// Runs one request of the model as the user's, see Actions.userRequest.
@@ -442,19 +608,28 @@ final class ProjectsEmailModel {
         changing = change
         changeNote = nil
         handoffNote = nil
+        let task = Task { try await makeVersion(change, from: before, explanation: explanation) }
+        changeTask = task
         let made: Bool
         do {
-            made = try await makeVersion(change, from: before, explanation: explanation)
+            made = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
         } catch is CancellationError {
             made = false
         } catch {
             changeNote = Self.note(error)
             made = false
         }
+        changeTask = nil
         changing = nil
         let changesAgain = changesWhenFree
         changesWhenFree = false
         guard made else { return false }
+        // Copy may have put the draft from before the change on the clipboard meanwhile.
+        handoffNote = nil
         if case .instruction(let words) = change {
             instruction = Self.remainder(of: instruction, after: words)
         }
@@ -465,6 +640,13 @@ final class ProjectsEmailModel {
         }
         await afterNewVersion()
         return true
+    }
+
+    /// Cancel Change: ends the change under way, also while it waits for its turn at the
+    /// model. The draft and the change box stay as they were, and no version is saved. A
+    /// version the store saved before the cancel still shows.
+    func cancelChange() {
+        changeTask?.cancel()
     }
 
     /// What stays in the change box after a change made from `words`: what the user typed
@@ -496,14 +678,19 @@ final class ProjectsEmailModel {
             await load()
             return false
         }
-        madeFrom[last.number] = before
         await take(saved)
         text = draft
+        // Saving the version removed the text the user typed, which the version holds as
+        // the text it was made from.
+        savedText = draft
+        saveFailed = false
         return true
     }
 
     /// Undo of the newest change: removes the newest version and puts back the text it was
-    /// made from. The talk key's words that came meanwhile then change the draft, see
+    /// made from. It stays busy until the versions, the highlight and the text are all in
+    /// place, so neither the editor nor another request works on the version it removes.
+    /// The talk key's words that came meanwhile then change the draft, see
     /// `takeDictation(_:revises:)`.
     func undo() async {
         guard let last = versions.last, !isBusy else { return }
@@ -512,17 +699,22 @@ final class ProjectsEmailModel {
         handoffNote = nil
         let removed = await actions.removeNewestVersion(messageID)
         let saved = await actions.versions(messageID)
+        let undone = removed && !saved.contains { $0.number == last.number }
+        if undone {
+            await take(saved)
+            // A version an earlier build saved does not hold the text it was made from.
+            text = last.version.madeFrom ?? modelDraft ?? ""
+            // That text went with the version, so the editor's text is saved again.
+            savedText = nil
+            saveFailed = false
+        } else {
+            await load()
+        }
         isUndoing = false
+        saveText()
         let changesAgain = changesWhenFree
         changesWhenFree = false
-        guard removed, !saved.contains(where: { $0.number == last.number }) else {
-            await load()
-            return
-        }
-        let before = madeFrom.removeValue(forKey: last.number)
-        await take(saved)
-        text = before ?? modelDraft ?? ""
-        if changesAgain {
+        if undone, changesAgain {
             await applyInstruction()
         }
     }
@@ -611,10 +803,37 @@ final class ProjectsEmailModel {
     // MARK: Handoff
 
     /// Open Reply in Mail, or Reply All with `all`, with the draft in the editor. Nothing
-    /// happens while a handoff of the window runs.
+    /// happens while a handoff of the window runs. Mail first confirms that its message is
+    /// this email, and when it is not, or Mail cannot say, the draft is only copied.
     func openReply(all: Bool) async {
         guard !handoffs.isRunning else { return }
-        guard let reference = actions.mailReference(messageID) else {
+        handoffs.isRunning = true
+        handoffNote = nil
+        defer { handoffs.isRunning = false }
+        let reference: MailMessageRef?
+        do {
+            reference = try await actions.mailReference(messageID, all)
+        } catch is CancellationError {
+            // The window closed before Mail answered, so the clipboard stays as it is.
+            return
+        } catch {
+            // The window closed once the check was sent to Mail, which cannot take it back,
+            // and Mail answered with an error. The clipboard stays as it is here too.
+            guard !Task.isCancelled else { return }
+            var error = error as? MailBridgeError ?? .failed(code: (error as NSError).code)
+            // Mail was not asked to reply, so the note must not say that the reply may still
+            // open.
+            if error == .timedOut { error = .failed(code: -1712) }
+            let copied = actions.handoff.copyOnly(text)
+            guard copied == .copied else {
+                handoffNote = .outcome(copied)
+                return
+            }
+            handoffNote = .outcome(error == .mailNotRunning ? .copiedMailNotRunning : .copiedReplyFailed(error))
+            return
+        }
+        guard !Task.isCancelled else { return }
+        guard let reference else {
             // Mail's handles go when it quits, so say that Mail is not open rather than that
             // the email was not found.
             guard actions.handoff.mail.isRunning() else {
@@ -626,17 +845,13 @@ final class ProjectsEmailModel {
             handoffNote = copied == .copied ? .messageNotFound : .outcome(copied)
             return
         }
-        handoffs.isRunning = true
-        handoffNote = nil
-        let outcome = await actions.handoff.openReply(text, to: reference, all: all)
-        handoffs.isRunning = false
-        handoffNote = .outcome(outcome)
+        handoffNote = .outcome(await actions.handoff.openReply(text, to: reference, all: all))
     }
 
     /// Copy: puts the draft in the editor on the clipboard, unless a handoff of the window
-    /// runs.
+    /// runs or an undo puts text back.
     func copy() {
-        guard !handoffs.isRunning else { return }
+        guard canCopy else { return }
         handoffNote = .outcome(actions.handoff.copyOnly(text))
     }
 
@@ -650,6 +865,8 @@ final class ProjectsEmailModel {
         switch error {
         case RewriteError.notLoaded, ProjectsRuntime.Failure.windowClosed, ProjectsRuntime.Failure.off:
             return .noModel
+        case ProjectsRuntime.Failure.modelNotLoaded:
+            return .modelNotLoaded
         case RewriteError.promptTooLong, ReviseService.Failure.tooLong:
             return .tooLong
         case ReviseService.Failure.emptyAnswer, ReviseService.Failure.cutShort, ReviseService.Failure.unreadableAnswer, ReviseService.Failure.wrongLanguage:

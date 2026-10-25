@@ -16,6 +16,12 @@ final class ScriptedField {
     private(set) var checks = 0
     var opens = true
     private(set) var reads = 0
+    /// Which field of the app has the focus. A reader gives nil while the field it opened
+    /// does not have it, as FieldReader.text does.
+    var focus = 1
+    /// The field that gets the focus while the paste lands, as when the user presses Tab
+    /// right after the release.
+    var focusAfterPaste: Int?
     /// A stand in for Orra's own process.
     let ownProcess: pid_t = 9
 
@@ -28,7 +34,9 @@ final class ScriptedField {
             ownProcess: ownProcess,
             open: { [self] _ in
                 guard opens else { return nil }
+                let opened = focus
                 return { [self] in
+                    guard focus == opened else { return nil }
                     defer { reads += 1 }
                     return texts[min(reads, texts.count - 1)]
                 }
@@ -40,7 +48,13 @@ final class ScriptedField {
                 return frontmost
             },
             secureInputHolder: { [self] in secureInputHolder },
-            sleep: { _ in await Task.yield() }
+            sleep: { [self] duration in
+                // The wait for the paste to land.
+                if duration == .milliseconds(900), let focusAfterPaste {
+                    focus = focusAfterPaste
+                }
+                await Task.yield()
+            }
         )
     }
 }
@@ -150,17 +164,51 @@ struct CorrectionWatcherTests {
         #expect(await watch(field, pasted: "我在用克劳德写代码") == Correction(heard: "克劳德", corrected: "Claude"))
     }
 
-    @Test func aWatchPushedOutByANewPasteReportsWhatItFound() async {
-        let first = ScriptedField(["我在用克劳德写代码", "我在用Claude写代码"])
-        let watcher = CorrectionWatcher(environment: first.environment)
+    /// Holds a watch in its wait once the field was read `at` times, until the test lets it go.
+    @MainActor final class Hold {
+        var at: Int
+        var waiting: CheckedContinuation<Void, Never>?
+        init(at: Int) { self.at = at }
+    }
+
+    /// The field's environment, with the one wait that `hold` names held.
+    static func held(_ field: ScriptedField, _ hold: Hold) -> CorrectionWatcher.Environment {
+        var environment = field.environment
+        environment.sleep = { _ in
+            guard field.reads == hold.at else { await Task.yield(); return }
+            hold.at = -1
+            await withCheckedContinuation { hold.waiting = $0 }
+        }
+        return environment
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aWatchPushedOutByANewPasteReportsWhatItFound() async throws {
+        let field = ScriptedField(["我在用克劳德写代码", "我在用Claude写代码"])
+        // Held after it read the fix, before the quiet reading that would report it, so
+        // only being pushed out can make it report.
+        let hold = Hold(at: 2)
+        let watcher = CorrectionWatcher(environment: Self.held(field, hold))
         var found: [Correction] = []
         watcher.watch(pasted: "我在用克劳德写代码", in: 42) { found.append($0.correction); _ = $1 }
-        for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(5)) }
+        try await eventually { hold.waiting != nil }
+        #expect(found.isEmpty)
         for _ in 1...CorrectionWatcher.maximumWatches {
             watcher.watch(pasted: "不在这里", in: 42) { found.append($0.correction); _ = $1 }
         }
-        for _ in 0..<200 where found.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        hold.waiting?.resume()
+        try await eventually { !found.isEmpty && field.reads >= 2 + CorrectionWatcher.maximumWatches }
+        // Then a while without readings, in which a reading too many would show.
+        var lastReads = -1
+        var quiet = 0
+        for _ in 0..<1_000 where quiet < 40 {
+            try? await Task.sleep(for: .milliseconds(5))
+            quiet = field.reads == lastReads ? quiet + 1 : 0
+            lastReads = field.reads
+        }
         #expect(found == [Correction(heard: "克劳德", corrected: "Claude")])
+        // Two readings of its own, then one of each new watch, which finds no paste.
+        #expect(field.reads == 2 + CorrectionWatcher.maximumWatches)
         watcher.stop()
     }
 
@@ -336,6 +384,15 @@ struct CorrectionWatcherTests {
         let field = ScriptedField(["别的内容", "别的内容改了"])
         #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
         #expect(field.reads == 1)
+    }
+
+    @Test func aFieldFocusedWhileThePasteLandsIsNeverRead() async {
+        // The user moves to another field of the same app before the paste lands. That field
+        // holds the pasted words too.
+        let field = ScriptedField(["我在用克劳德写代码", "我在用克劳德写代码", "我在用Claude写代码"])
+        field.focusAfterPaste = 2
+        #expect(await watch(field, pasted: "我在用克劳德写代码") == nil)
+        #expect(field.reads == 0)
     }
 }
 

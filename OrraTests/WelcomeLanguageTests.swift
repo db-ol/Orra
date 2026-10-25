@@ -70,10 +70,18 @@ struct WelcomeLanguageTests {
     /// SwiftUI looks up a text literal in the locale of the environment, not only formats
     /// with it: each view is drawn and compared with the text it should show.
     @Test func textLiteralsFollowTheLocaleOfTheEnvironment() {
+        // macOS draws a piece of text a little differently the first few times in a run
+        // (three times, one level in about ten pixels) than after that. Other tests draw some
+        // of the same text, so one comparison could take a drawing of each kind. Each view
+        // is drawn five times, and the test compares the last drawings.
         func image(_ view: some View) -> Data? {
-            let renderer = ImageRenderer(content: view.padding().background(Color.white))
-            renderer.scale = 1
-            return renderer.nsImage?.tiffRepresentation
+            var drawn: Data?
+            for _ in 0..<5 {
+                let renderer = ImageRenderer(content: view.padding().background(Color.white))
+                renderer.scale = 1
+                drawn = renderer.nsImage?.tiffRepresentation
+            }
+            return drawn
         }
         let done = image(Text("Done").environment(\.locale, chinese))
         #expect(done != nil)

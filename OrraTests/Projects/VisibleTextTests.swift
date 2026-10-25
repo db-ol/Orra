@@ -376,6 +376,59 @@ struct VisibleTextTests {
         #expect(fewRules.isCut)
     }
 
+    /// Numbers past what a computer word holds, in an+b and in <font size>, read as WebKit
+    /// reads them and never stop the app.
+    @Test(arguments: [
+        ("<style>p:nth-child(n-9223372036854775808){display:none}</style><p>secret</p>", "", ["hiddenStyle: secret"]),
+        ("<style>p:nth-of-type(n-9223372036854775808){display:none}</style><p>secret</p>", "", ["hiddenStyle: secret"]),
+        ("<style>p:nth-last-child(2n-9223372036854775808){display:none}</style><p>one</p><p>two</p>", "two", ["hiddenStyle: one"]),
+        ("<style>p:nth-child(-n+9223372036854775807){display:none}</style><p>secret</p>", "", ["hiddenStyle: secret"]),
+        // The largest a and the smallest a.
+        ("<style>p:nth-child(9223372036854775807n+9223372036854775807){display:none}</style><p>one</p><p>two</p>", "one\n\ntwo", []),
+        ("<style>p:nth-child(-9223372036854775808n+1){display:none}</style><p>one</p><p>two</p>", "two", ["hiddenStyle: one"]),
+        ("<p><font size=\"+9223372036854775807\">Hello</font></p>", "Hello", []),
+        // One below the largest number, where adding 3 first went past it.
+        ("<p><font size=\"+9223372036854775805\">Hello</font></p>", "Hello", []),
+        ("<p><font size=\"-9223372036854775807\">Hello</font></p>", "Hello", []),
+        // Past what a computer word holds, so not a size.
+        ("<p><font size=\"99999999999999999999\">Hello</font></p>", "Hello", []),
+    ])
+    func hugeNumbersInSelectorsAndFontSizes(_ markup: String, _ text: String, _ hidden: [String]) {
+        let read = Self.read(markup)
+        #expect(read.text == text)
+        #expect(read.hidden == hidden)
+    }
+
+    /// A rule nested in a style rule matches its parent's selector again for each element,
+    /// so matching recurses through every level of nested rules and every selector list
+    /// inside them. Seven nested rules, as deep as a style sheet is read, each with :is()
+    /// eight deep, as deep as a selector list is read, stay within the stack of a thread of
+    /// the concurrency pool, which Swift Testing runs this on as the app reads mail.
+    @Test func nestedRulesOfDeepSelectorsStayBounded() {
+        let deep = String(repeating: ":is(", count: 8) + "*" + String(repeating: ")", count: 8)
+        let rules = String(repeating: "& \(deep) {", count: 7) + "display:none" + String(repeating: "}", count: 7)
+        let visible = VisibleText(markup: "<style>div { \(rules) }</style>" + String(repeating: "<div>", count: 10) + "secret")
+        #expect(visible.text.isEmpty)
+        #expect(visible.findings == [.hiddenStyle])
+        #expect(visible.steps <= VisibleText.Limits().maximumSteps)
+    }
+
+    /// Selector lists inside :not(), :is(), :where() and nth-child of read only their own
+    /// part of the selector, so what follows them still counts.
+    @Test(arguments: [
+        ("<style>p:not(.keep){display:none}</style><p>secret</p><p class=\"keep\">shown</p>", "shown"),
+        ("<style>div:is(.a, .b) span{display:none}</style><div class=\"b\"><span>secret</span></div><div class=\"c\"><span>shown</span></div>", "shown"),
+        ("<style>li:nth-child(2 of .x){display:none}</style><ul><li class=\"x\">one</li><li>two</li><li class=\"x\">secret</li></ul>", "- one\n- two"),
+        ("<style>p:is(:not(.a), .b).c{display:none}</style><p class=\"c\">secret</p><p class=\"a c\">shown</p><p class=\"a b c\">secret</p>", "shown"),
+        ("<style>p:where(.a) + p:nth-last-child(1 of :is(.z)){display:none}</style><p class=\"a\">first</p><p class=\"z\">secret</p>", "first"),
+    ])
+    func nestedSelectorListsReadTheirOwnPart(_ markup: String, _ text: String) {
+        let read = Self.read(markup)
+        #expect(read.text == text)
+        #expect(read.hidden.allSatisfy { $0.hasPrefix("hiddenStyle: ") && $0.contains("secret") })
+        #expect(!read.hidden.isEmpty)
+    }
+
     @Test func everyBodyOfAMessageInOrder() async {
         let source = [
             "Content-Type: multipart/mixed; boundary=b",

@@ -19,7 +19,7 @@ Build and test commands, run in the repository root:
 
 Before a release, `Tools/release-gate/run.sh --baseline <folder>` runs the speech corpus,
 ContextASR, cleanup, latency and gate set evaluations in Release and fails on any case that
-got worse than the baseline, see docs/release-gate.md.
+got worse than the baseline or has no result, see docs/release-gate.md.
 
 ## Automatically verified
 
@@ -81,13 +81,34 @@ got worse than the baseline, see docs/release-gate.md.
     translation is on or while it is on itself. Since 2026-10-19 it also checks that the
     Talk Key submenu has no hands free switch, and that Live Captions shows its shortcut
     as text after the name, with no key equivalent. Since 2026-10-20 it also checks that
-    Projects… shows below Meeting Interpretation only while Projects is on, with the count
-    of mail waiting for a reply.
+    Open Projects Window shows with its icon below Meeting Interpretation only while
+    Projects is on, with the count of mail waiting for a reply, and that the Dock menu
+    offers the same item at the same times.
   - ProjectsWindowViewTests, added on 2026-10-20, checks the marks and the date of a mail
     row in the Projects window, and the project setup's checks of people and domains.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
     window's parts to PNG files there, once per test language, which CI never does. The
     sidebar does not draw offscreen, so it is not in them.
+  - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
+    ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
+    made up mail and a fake model: the groups, what each would take, the prompt and its
+    answer, naming only while the window holds the model, the prefilled New Project and a
+    dismissal. ProjectsSuggestedSectionTests renders the sidebar section and the
+    prefilled sheet with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in
+    ProjectSuggestionsEvaluationTests runs it on the synthetic set with the real model in
+    a Release build, see its comment for the command.
+  - QuotedHistoryTests, MailScanTests, ExplainPromptTests, ReplyRuleTests,
+    SortingSignalsTests, MailStoreTests and ProjectsEmailModelTests, since 2026-10-21,
+    cover forwarded messages with made up mail: the forwards of Gmail, Apple Mail (quoted
+    and not), iPhone, Thunderbird, Yahoo, NetEase, Outlook, QQ Mail and Foxmail in their
+    languages, a forward of a forward, history inside a forward, at most 10 forwards, the
+    <forwarded> part of the prompt with its own header and its rule, the tags of the
+    prompt in it, the reply language and the list footer of a forward, mail stored before
+    this change, and the email view's content before and after Explain.
+    ProjectsWindowViewTests renders projects-email-original and projects-email-forward
+    with TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. The opt in ExplainEvaluationTests takes
+    TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_IDS for a few mails and
+    TEST_RUNNER_ORRA_PROJECTS_EXPLAIN_TEXT=own for each mail's own text as the app keeps it.
   - LiveCaptionsShortcutTests, added on 2026-10-19, covers the Live Captions shortcut with
     a fake in place of the hot key API, so no real shortcut is registered: which
     combinations it can be (a key with Control or Command, or F1 to F20 alone or with
@@ -132,12 +153,13 @@ got worse than the baseline, see docs/release-gate.md.
     keeps no older sample, the folder is 0700 and left out of backups and the file 0600,
     what a cut write left is deleted, Remove or the switch turned off right before Quit
     deletes the file at once, and the recording sheet's checkbox applies only with the
-    sample. At launch the saved sample loads once the speech model is ready, and only while
-    Speak translations is on, a file that is not a sample, is too short or has no speech
-    is deleted with one message that stays while Speak translations is turned off and on,
-    the switch turned off and on or Remove while it waits ends the load for good, a sample
-    picked meanwhile wins unless the speech model could not take it, a stray file is
-    deleted while the switch is off, and the code logs neither the audio nor the words.
+    sample and never undoes a change of the switch made meanwhile. At launch the saved
+    sample loads once the speech model is ready, and only while Speak translations is on, a
+    file that is not a sample, is too short or has no speech is deleted with one message
+    that stays while Speak translations is turned off and on, the switch turned off and on
+    or Remove while it waits ends the load for good, a sample picked meanwhile wins unless
+    the speech model could not take it, a stray file is deleted while the switch is off,
+    and the code logs neither the audio nor the words.
   - ModelGateTests covers the model gate of 2026-10-16 without models: shared calls run
     together, the voice model runs alone, a voice request that waits holds back the
     shared calls that came after it, a reservation keeps a voice request that waits out
@@ -153,8 +175,9 @@ got worse than the baseline, see docs/release-gate.md.
     once. ModelGateReservationTests checks that a dictation reserves the gate from the
     press of its key until it is pasted or cancelled, that the speech and cleanup loads
     and the prompts read with the cleanup load run with a reservation, and the voice
-    sample, the word check and the prompts read ahead later without one, and that the
-    prompts read with the load go ahead of a voice request that waits.
+    sample, the word check and the prompts read ahead later without one, that the
+    prompts read with the load go ahead of a voice request that waits, and that the press
+    of a key tells the cleanup model of the dictation before it reserves the gate.
     ModelGateWiringTests checks without models that the app's speech and cleanup models
     from Transcription.qwen3 and CleanupEngine.live queue at the gate, and that every voice
     model of VoiceEngines.live runs alone at the app's gate. CompileLockTests runs only
@@ -286,10 +309,12 @@ got worse than the baseline, see docs/release-gate.md.
     leaving a password field and the pasteboard alone, leaving a field that cannot be
     described alone when the app in front holds secure input, pasting into plain text
     there, asking about the field only under secure input and only right before the paste,
-    telling fields apart by role and subrole, empty text, two dictations in a row,
-    restoring several items and types, reading the pasteboard off the main actor, and
-    finding the key for v in the current layout with and without Command held. They use
-    private named pasteboards and a fake key poster, so no real event is posted.
+    pasting nothing when another app comes to the front while the old contents are read or
+    the field is asked about, telling fields apart by role and subrole, empty text, two
+    dictations in a row, restoring several items and types, reading the pasteboard off the
+    main actor, and finding the key for v in the current layout with and without Command
+    held. They use private named pasteboards and a fake key poster, so no real event is
+    posted.
   - ConcealedClipboardTests covers the copy that the paste, Copy Last Dictation, Live
     Captions and the Projects reply use: concealed, staying, and in place of every earlier
     item, on a private named pasteboard.
@@ -371,7 +396,9 @@ got worse than the baseline, see docs/release-gate.md.
     without losing a word, that every save also writes that list, so words added after
     going back to 0.1.0 and the words of an unreadable save are kept, and the rows, search,
     header and removal of the table in Settings, where removing a learned word lets
-    learning add it again. PushToTalkControllerTests checks that every
+    learning add it again. It checks that the copied word the menu offers is read without
+    holding the main actor, never while Orra dictates, and only from the latest menu's
+    read. PushToTalkControllerTests checks that every
     dictation passes the vocabulary to the model, nil when it is empty, only the 200 most
     recent of a longer list, that a paste dates the words it holds while a text that was not
     pasted dates none, that a change is saved, and that learning is refused only at the cap.
@@ -383,7 +410,8 @@ got worse than the baseline, see docs/release-gate.md.
     widened to its unchanged characters, and the cap of 8 Chinese characters.
     CorrectionWatcherTests drives the watcher with a scripted field, so no app is read: a
     reported fix, no watch at all after a paste into Orra's own process, and no reading
-    after leaving the app, under secure input, or in a field without the pasted text.
+    after leaving the app, under secure input, in a field without the pasted text, or in a
+    field that got the focus while the paste landed.
     CorrectionLearningTests checks that nothing is read while learning is off, that the
     first fix adds the word and tells the user, a quiet new mishearing, Undo, that a
     learned word removed from the vocabulary is learned again, that after a cleanup only
@@ -466,7 +494,9 @@ got worse than the baseline, see docs/release-gate.md.
     Spanish counts one second in the singular, that each language is chosen only when it
     comes before English in the preferred languages, that Chinese is never chosen for
     Traditional Chinese alone, that every Spanish of the Mac gets es-419, and the talk key
-    hints, key names and finish hints in Chinese, Japanese and Spanish.
+    hints, key names and finish hints in Chinese, Japanese and Spanish. Since 2026-10-20
+    it also checks that the English microphone prompt of the build is the one in the
+    catalog, and that the About text in Settings names no single model in any language.
   - SetupDownloadTests covers who gets the cleanup model with the welcome window's one
     download (a new user from 16 GB of memory, never over a saved choice), the line on
     memory under 16 GB, the order of the download (speech model first, cleanup model
@@ -1139,8 +1169,10 @@ got worse than the baseline, see docs/release-gate.md.
     language, that the first pass in Chinese or English stands, that the vocabulary
     stays on those passes, that the text stands when no pass helps or one fails, that
     cancellation still ends the dictation, and that the echo check runs on the new
-    text. PushToTalkControllerTests checks that the dictation pastes the text of the
-    pass in Chinese.
+    text. EngineTurnsTests checks that a caption call whose first pass the talk key
+    cancelled starts no other pass until the dictation ends, and that a call cancelled
+    while it waits for the speech model runs no pass. PushToTalkControllerTests checks that
+    the dictation pastes the text of the pass in Chinese.
   - With Japanese or Spanish as the dictation language, since 2026-10-18,
     LanguageGuardTests checks that Japanese with kana, Japanese and Chinese in Han
     characters only and their mix with English count as Japanese, that Spanish and Latin
@@ -1542,6 +1574,9 @@ are in place since 2026-10-05:
   dictate. Typing on the Mac does not stall while Orra saves the old clipboard.
 - [ ] Release the talk key and switch to another app at once. The text is not pasted
   there, the menu says so, and "Copy Last Dictation" copies it.
+- [ ] Copy a large range in Excel, or copy something on an iPhone, then dictate and press
+  Command Tab while Orra saves the old clipboard. The text is not pasted in the other app,
+  and the menu says another app came to the front.
 - [ ] Pasting works in Notes, a browser text field, VS Code and Terminal.
 - [x] In the password field of a login form in Safari and in Chrome, nothing is pasted,
   the clipboard keeps what it had, the menu says "Orra does not paste into password
@@ -1977,8 +2012,14 @@ corrections under Recognition in Settings, Dictation first:
 - [ ] In an app whose text macOS cannot read, such as Sublime Text, the log says "the
   focused element is not a text field Orra can read" and nothing is learned. Copy the
   right word there: the Orra menu offers to add it to the vocabulary.
+- [ ] Copy a word in a remote desktop or virtual machine window, then open the Orra menu.
+  The menu opens at once, typing in other apps does not stall, and the offer to add the
+  word comes a moment later.
 - [ ] In Messages or WeChat, fix a misheard name and press Return to send: the fix still
   counts. Click into another field during the watch: nothing is read from it.
+- [ ] Dictate into one field and press Tab into another field of the same app as soon as
+  the text appears. Nothing is read from that field, and the learning log says the field
+  lost the focus.
 - [ ] Dictating into a password field, or switching apps right after the paste, records
   nothing.
 - [ ] Dictate into a text field in Orra's own Settings window, such as the new word field
@@ -3263,6 +3304,351 @@ mail.
   only while cleanup and translation are off and captions do not run. Turning Projects
   off stops the download unless cleanup, translation or captions wait for it.
 - [ ] Reading mail never marks a message as read and never moves one.
+
+The way to the Projects window, added on 2026-10-20, not verified yet. Check in a Debug
+build.
+
+- [ ] With Projects on, Settings > Projects starts with Open Projects Window, and the
+  title of the Settings window reads Projects Settings, while the window it opens reads
+  Projects.
+- [ ] Start Reading Mail opens the Projects window, and the mail shows there as Projects
+  reads it. Turning Projects off with Keep Data and on again opens it too. Turning
+  Projects on before any mailbox choice opens nothing, and launching Orra with Projects
+  on opens nothing.
+- [ ] The menu bar menu shows Open Projects Window with the briefcase icon, below
+  Meeting Interpretation, with the count of mail waiting for a reply. On macOS 15, note
+  whether the icon shows.
+- [ ] While Orra shows in the Dock, Control-click its icon: the menu offers Open Projects
+  Window while Projects is on, and nothing of Projects while it is off.
+- [ ] Keep Settings > Projects open while Projects reads mail. Stored on this Mac grows
+  within a few seconds of the mail showing in the Projects window, and never stays at
+  Nothing.
+- [ ] While Delete All Projects Data runs with Projects on, Open Projects Window is dimmed
+  and the Projects window stays closed.
+
+Suggested Projects, added on 2026-10-20, not verified yet. Check in a Debug build with the
+synthetic mail imported and no project made, as in the test guide.
+
+- [ ] Within a minute of opening the Projects window, the sidebar shows Suggested
+  Projects below Needs a Project and Set Aside, at most 8, each named in the language of
+  its mail with the number of emails it would take. Closing the window ends the naming,
+  and the log of the projects-model category shows no new job after the close.
+- [ ] A click anywhere on a suggestion's row opens New Project with its name, description,
+  people and domains, and a line that says where it comes from. Hovering a row shows its
+  whole name and description. Cancel creates nothing. Save creates the project, the
+  suggestion goes at once, and its mail leaves Needs a Project.
+- [ ] Dismiss Suggestion, in the sheet or in the row's menu, hides it. It stays hidden
+  after the window closes and after Orra starts again.
+- [ ] Without the cleanup model, the suggestions show with a domain or a name as their
+  name.
+
+The email itself in the Projects window, added on 2026-10-21, not verified yet. Check in a
+Debug build with the synthetic mail imported, as in the test guide. Mail read before this
+change keeps its old text in the store for sorting, so for a clean check use Delete All
+Projects Data and Start Reading Mail again first.
+
+- [ ] Before Explain, the email view shows the whole email: To and Cc, the attachment
+  names, the sender's words and signature, each forwarded message under its own header
+  block with a bar on its side, and Quoted Text folded. 转发：宋佳关于入职时间 shows the
+  forwarded message from 宋佳 with its date.
+- [ ] After Explain, Explanation and Original Email switch between the explanation and
+  the email at any time. The warnings and the draft stay in both, and a line sets the
+  draft apart from the email. Explain Again shows the explanation again.
+- [ ] The explanation of 转发：宋佳关于入职时间 names the request to move the start to 23
+  November and cites this email.
+- [ ] Clicking an address or a web address in the email opens nothing. Text can be
+  selected and copied.
+- [ ] An email longer than the view shows ends with The rest of this email is in Mail.
+- [ ] VoiceOver reads Explanation and Original Email as one control, reads each header
+  row of a forwarded message in one stop, and names the Forwarded Message group.
+- [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
+  email view shows it as a forwarded message, and its explanation uses what it says.
+
+The words of the Projects window by what Orra knows, added on 2026-10-24, not verified
+yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
+English, then in 简体中文, 日本語 and Español. ProjectsWindowViewTests checks the words
+themselves, and a model answer that stops early, which is hard to make by hand.
+
+- [ ] An email that only mentions a password, such as a notice never to share one, shows
+  "It mentions a password, a code or another credential. Check what it asks you to do."
+  No warning above "The model also noted:" says that an email asks for a password,
+  personal data or a payment. The model's own lines under it may still say so, since its
+  prompt still uses those words.
+- [ ] An email that quotes you from mail older than the period Projects reads shows "It
+  quotes you. Projects did not find those words in the sent mail it read."
+- [ ] In an explanation, a point without a chip shows No source provided under it, and an
+  empty Before you reply says No decisions found.
+- [ ] The attachments show once, under Original Email after To and Cc, each with its kind,
+  size and whether Projects read its text. Explanation has no list. When Projects did not
+  read a PDF or a Word file, such as one Mail has not downloaded, What it says ends with
+  "Projects could not read an attachment. See Original Email." An email whose only
+  attachment is an image has no such line, also when Mail has not downloaded the image.
+  An email over 16 MB, which Projects saves without its text, still lists its
+  attachments.
+- [ ] Control-click an email in the list: the menu reads Assign to Project, as the help
+  tag of the project chip does. After you assign two emails from one sender to one
+  project, the offer reads "Always assign mail from … to …?". Assigning an email whose
+  draft you changed asks "Change this email's project?" and says that the email stays
+  where it is in Mail. In Mail it does. The chip then says You assigned it here.
+- [ ] Hovering Dismiss Suggestion, in the sheet and in a suggestion's menu, shows "This
+  suggestion will stay hidden. You can still create the project yourself." Note whether
+  the menu shows the help tag.
+- [ ] Adding ~/Library/Mail as a project folder says "Projects never reads Mail's local
+  data files."
+- [ ] In 简体中文, the setup sheet and the project page say 联系人 and 添加联系人, and the
+  menu reads 归入项目. In each language, note any new line that reads oddly or does not
+  fit its place.
+
+Loading the model for Projects, added on 2026-10-24, not verified yet. Check in a Debug
+build with Projects on, Clean Up Text, Translation and Live Captions off, and the synthetic
+mail imported, as in the test guide. The cleanup model is in
+~/Library/Application Support/io.github.db-ol.Orra/Models/Qwen3.5-4B-4bit-0e7ffd5c. Watch
+its loads with
+`/usr/bin/log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "rewrite"'`,
+which shows loads and waits with their times, never text. A changed first byte of
+model.safetensors in that folder makes the load fail. In the folder, note the byte with
+`xxd -p -l 1 model.safetensors`, which prints 0f for this model, change it with
+`echo '0: 00' | xxd -r - model.safetensors`, and put it back with the byte you noted, as in
+`echo '0: 0f' | xxd -r - model.safetensors`.
+
+- [ ] Quit Orra, move that folder out of Models, and launch. Open the Projects window and
+  click Explain on an email. The line under it reads "The cleanup model is not on this
+  Mac." with Open Projects Settings…, which opens Settings at Projects with the download
+  button.
+- [ ] Start the download there and keep the Projects window open. Shortly before the
+  download ends, double press the talk key for hands free and talk until it is done, then
+  press once more. The log shows "The cleanup model loads for Projects after the dictation"
+  before the paste and "Cleanup model loaded and warmed up" only after it, and the
+  dictation pastes as quickly as without the download.
+- [ ] Repeat with Clean Up Text on. The model loads as soon as the download ends, during the
+  dictation, and the dictation is cleaned up as before.
+- [ ] Quit Orra, change the byte, and launch. Open the Projects window and click Explain.
+  The line reads "The cleanup model could not be loaded." with Try Loading Again, never
+  that the model is not on this Mac. Settings > Projects shows Could not be loaded beside
+  Cleanup model, with "Until it loads, Projects cannot explain mail or draft replies." and
+  Try Loading Again. On an email explained before, Change Draft says "The cleanup model
+  could not be loaded." too.
+- [ ] Put the byte back and click Try Loading Again in the window. Explaining… shows, the
+  line under the list reads "Loading the cleanup model…" while the model loads, and then
+  the explanation shows.
+- [ ] Quit Orra, change the byte again, launch, and click Explain Again on an email
+  explained before. Put the byte back, click Try Loading Again in Settings > Projects, and
+  wait for On this Mac. In the window, Try Loading Again is dimmed while Change Draft runs
+  on that email. Once the change is done, click it. The explanation starts at once, with
+  no "Loading the cleanup model…" under the list, and the log shows "Cleanup model loaded
+  and warmed up" only once since the launch.
+- [ ] Only with time for a download of about 3 GB: quit Orra, change the byte again,
+  launch, and click Try Loading Again without putting it back. The hashes are checked and
+  the damaged file is deleted, so the line says that the model is not on this Mac, and
+  Settings > Projects offers Resume Download.
+- [ ] With Orra's language set to 中文, 日本語 and Español, the new lines and buttons read
+  naturally and fit beside each other.
+
+A load that waits behind an unload, as when the Projects window closes and opens again at
+once, must not start before the paste of a dictation that starts right away. That gap is
+too short to catch by hand, so
+CleanupIdleUnloadTests.aQueuedLoadForProjectsWaitsForADictationThatStartsBeforeItsTurn
+checks it.
+
+The draft you write in the Projects window, added on 2026-10-24, not verified yet. Check in
+a Debug build with the synthetic mail imported, as in the test guide, and the cleanup model
+on the Mac. This build adds a step to the Projects database. A Debug build from before it
+then says that Projects could not open its data on this Mac, until you use Delete All
+Projects Data… in its Settings.
+
+- [ ] Type a sentence into the draft of an explained email. Saved on this Mac shows under
+  the draft about half a second after the last key press, and not while you type. After
+  the first key press, the checks and buttons under the draft stay where they are.
+- [ ] Close the Projects window and open it again. The draft holds your sentence, and Saved
+  on this Mac shows. Turn Projects off in Settings with Keep Data and on again: the draft
+  still holds it.
+- [ ] Change that draft with Tone, close the window and open it again, then click Undo
+  Change. The draft holds your sentence again.
+- [ ] Click Explain Again on that email. Orra asks "Replace your draft?" first. Cancel
+  leaves the draft as it was. Replace Draft explains the email again with a new draft, and
+  the draft cannot be edited until the new one shows. An email whose draft you did not
+  change and that has no versions explains again without asking.
+- [ ] Type into the new draft again, then select that email in Mail and click Explain
+  Selected Message. Orra asks the same first.
+- [ ] Turn on Live Captions, then click Change Draft. The change waits, the line under it
+  says "Paused while Live Captions run." and Cancel Change shows. Copy puts the draft as it
+  is on the clipboard, while Open Reply in Mail stays dimmed. Cancel Change ends the change,
+  and the draft and your words in the change box stay. With captions off, the same change
+  runs.
+- [ ] Click Open Reply in Mail and close the Projects window at once. When Mail answers
+  after the close, also with an error, the clipboard keeps what it held. This is hard to
+  time by hand, so
+  ProjectsEmailModelTests.closingTheWindowWhileMailChecksItsMessageLeavesTheClipboardAndMail
+  checks it.
+
+Every email Projects keeps, added on 2026-10-24, not verified yet. Check in a Debug build
+with a test mailbox in Mail that holds several thousand made up messages from one company
+domain, all received within the period Projects reads, and no project for that domain.
+MailStoreTests, SortingServiceTests, ProjectsRuntimeTests and ProjectsSuggestedSectionTests
+cover the same with made up mail and pages of a few emails, and ProjectsWindowViewTests
+renders the line under the list and Back to Previous Email with
+TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS.
+
+- [ ] Needs a Project shows its newest 1,000 emails, and under them "Showing the newest
+  1,000 of" and how many it holds, with Load Older Emails. Each click shows 1,000 more,
+  and the line goes once every email shows. Another list starts again with 1,000.
+- [ ] Select a test message in Mail past the newest 1,000 of its list and within the
+  newest 5,000, and click Explain Selected Message. The window selects it in its list,
+  which reads down to it and scrolls to it. Do the same for a message past the newest
+  5,000: the email view shows it at once, and the list reads no further and highlights no
+  email.
+- [ ] With the window open, create the project Suggested Projects offers for the domain.
+  Every email it counted leaves Needs a Project, also those past the first 1,000. Note how
+  long that takes. Dictate while it runs: dictation stays as fast as usual. A message that
+  arrives meanwhile is still sorted. Note how long it waits.
+- [ ] Change the draft of an explained email whose points cite an earlier email of the
+  same project, scroll down to that email's chip and click it. The window shows the
+  earlier email with Back to Previous Email above it, without scrolling. A click shows
+  the email before in its list, scrolled to it, with your changes to its draft. After two
+  chips in a row it goes back one email at a time. Choosing another email hides it, and
+  it stays hidden when you choose the cited email again.
+- [ ] The line and both buttons read well in Chinese, Japanese and Spanish, and VoiceOver
+  reads Back to Previous Email and Load Older Emails.
+
+What the Projects window says about mail, added on 2026-10-24, not verified yet.
+ProjectsRuntimeTests checks each line with a fake Mail, and also a save that fails, a
+message Mail gives with no source and a list the store cannot read, which a person cannot
+easily cause. ProjectsWindowViewTests renders the lines to projects-mail-lines with
+TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS. Check in a Debug build with the synthetic
+mail, as in the test guide, and with Mail open unless a check says otherwise:
+
+- [ ] Delete All Projects Data, then Start Reading Mail. Until the first emails are saved,
+  Needs a Project shows Reading mail… in its middle, never No Mail. Each batch then shows
+  at once, marked Not sorted yet, with Reading mail… and the count of emails read under the
+  list. The line goes when the mailboxes are read, and does not come back every minute.
+- [ ] With the cleanup model on this Mac, open the window while mail waits for the model.
+  Sorting mail… shows under the list while the model sorts, and in the middle of an empty
+  project. Dictate meanwhile: Paused while you dictate. shows too.
+- [ ] Quit Mail. A list with no mail says Mail is not open. Projects reads new mail while
+  Mail runs. Open Mail again: Reading mail… shows while Projects reads back, then nothing.
+  If Mail is slow to answer. shows right after Mail opens, note it, since Projects then
+  waits two minutes before it asks Mail again.
+- [ ] Turn Mail off for Orra in Privacy & Security, Automation. Within a few minutes the
+  window says Orra is not allowed to read Mail yet. Allow it in Settings., and Settings…
+  opens the Projects page. Turn Mail on again and open that page: the line goes, and
+  Projects reads again.
+- [ ] Run `kill -STOP $(pgrep -x Mail)` and wait two minutes. The window says Mail is slow
+  to answer. Projects tries again later., with Try Again. Run `kill -CONT $(pgrep -x Mail)`
+  and click Try Again: Projects reads at once, and the line goes.
+- [ ] Choose a mailbox On My Mac that holds a synthetic email, let Projects read it, then
+  rename the mailbox in Mail. Within a minute the window says Some mail could not be
+  read., with Try Again. The line stays as it is, and Reading mail… does not show each
+  minute. Rename the mailbox back: the line goes within a minute, or at once with Try
+  Again.
+- [ ] An empty project shows No Mail with Choose an email in Needs a Project and assign it
+  to this project with Assign to Project. Set Aside and Needs a Project show No Mail alone
+  once all is read and sorted.
+- [ ] Switch Orra to Chinese, Japanese and Spanish. Each new line reads naturally and fits
+  the list at the window's smallest width.
+
+Texts in line with the app, added on 2026-10-20, not verified yet. CaptionCleanupTests
+checks that a download agreed to in the caption window turns on neither cleanup nor
+translation and stops when captions stop, as docs/privacy.md says, and that it goes on
+when Clean Up Text or Translation is turned on meanwhile. Prepare a first launch as in
+Welcome window above, then choose Hold for the talk key in the welcome window:
+
+- [ ] With Double press in Hold to keep recording on, as it starts, the microphone step
+  reads "Orra records only while you hold the talk key, or after you press it twice
+  quickly, until you press it once more." With it off in Settings, the step reads "Orra
+  records only while you hold the talk key."
+- [ ] Allow Microphone Access… shows the macOS prompt with "Orra uses the microphone when
+  you start a dictation or a translation, or record a voice sample, and turns your voice
+  into text on this Mac." Check it in English, Chinese, Japanese and Spanish. The
+  English comes from the build setting INFOPLIST_KEY_NSMicrophoneUsageDescription, which
+  LocalizationTests.theEnglishMicrophonePromptMatchesTheCatalog compares with the catalog.
+- [ ] Settings > About reads "Orra goes online only to download the models you ask for,
+  and to check for updates when you allow it."
+
+Project domains, rules and the reading scope, added on 2026-10-24, not verified yet. Check
+in a Debug build with Projects on, Mail open, Mail access allowed and the synthetic mail
+imported, as in the test guide. For the check of Remove Rule, before Start Reading Mail,
+make a mailbox On My Mac named Held Back, leave it unticked in Settings, and drag into it
+one email of a sender who has three or more emails in the synthetic mail.
+
+- [ ] Edit Project says under Domains that addresses at these domains count as the
+  project's people, and to add people at a shared provider such as gmail.com under People.
+  Type gmail.com, @QQ.com or vip.163.com: the line under the field says many unrelated
+  people have addresses at that domain, and Save stays dimmed. harbor.example saves.
+- [ ] Link a mailbox in Edit Project that is not ticked in Settings. Settings > Projects
+  lists it under Mailboxes with "Also read for" and the project's name. Edit Project…
+  beside it opens the Projects window on the project's page with Edit Project open, also
+  when the window was closed. An Edit Project sheet, a Forget Project alert or a Change
+  Project dialog that is open in the window already stays as it was, and so does the list
+  behind it.
+- [ ] Rename that linked mailbox in Mail, then click Read Mailbox Names from Mail in Edit
+  Project and Cancel. Settings > Projects says under the mailbox that Mail has no mailbox
+  with this name now, as the project page does. Choosing the new name in Edit Project
+  takes the line away.
+- [ ] After Start Reading Mail, the line under Mailboxes says changes apply only to the
+  mail Projects reads from now on. Untick a mailbox, or choose a shorter period: the mail
+  Projects saved from it stays in the window.
+- [ ] Assign two emails of the sender with an email in Held Back to a project and click
+  Add Rule. The project page lists the rule with Remove Rule…, which asks first. Cancel
+  keeps it. Remove Rule takes it off the page, and the emails it filed stay in the
+  project. Now tick Held Back in Settings: its email shows in the Projects window, and its
+  chip does not show A rule you made. After Orra starts again the rule is still gone.
+- [ ] With Mail access not asked yet, after the `tccutil reset` in Mail access for
+  Projects above, Allow Mail Access… shows Orra's explanation first. It reads "Projects
+  reads mail only in the mailboxes you choose, and only while Mail is open."
+- [ ] The new lines read well in Chinese, Japanese and Spanish.
+
+Stalled folders, failed saves and expired drafts in Projects, added on 2026-10-24, not
+verified yet. Check in a Debug build with the synthetic mail imported, as in the test
+guide. ProjectsRuntimeTests holds a folder that never resolves while Projects turns off,
+turns on again or deletes its data, and fails the save of the message that Explain
+Selected Message waits for. MailScanTests fails a save and a lookup of the store in the
+middle of a pass. A full disk can make a save fail, and only the tests make a lookup
+fail. The checks that age the data run sqlite3 while Projects is off, with `<database>`
+standing for
+`"$HOME/Library/Application Support/io.github.db-ol.Orra/Projects/Index/projects.sqlite"`,
+quotes included.
+
+- [ ] Add a folder on a network share to a project, quit Orra, make the share stop
+  answering while it stays mounted (turn off the server or its network), and open Orra
+  with Projects on. Turning Projects off, and Delete All Projects Data, each finish within
+  a few seconds. Once the share answers again, the log of the projects-index category
+  shows no Index sweep line while Projects is off.
+- [ ] With three projects whose folders are on that share while it does not answer, turn
+  Projects off and on three times, then dictate a sentence in another app. The text
+  pastes as quickly as with Projects off.
+- [ ] Save an email that Projects read with File > Save As, Format Raw Message Source,
+  change its From line in a text editor, and drag the file into a mailbox Projects reads.
+  Select that copy in Mail and click Explain Selected Message. The window says the
+  message looks like an email Projects read, but its sender, recipients or date differ,
+  and it selects nothing and explains nothing. Select the original and click it again:
+  the original shows and is explained, and Open Reply in Mail opens the reply of the
+  original.
+- [ ] Copy an email Projects read into another mailbox Projects reads, select the copy in
+  Mail and click Explain Selected Message. It shows and explains the email.
+- [ ] Select an email Projects read that has no To line, such as one sent to you in Bcc,
+  and click Explain Selected Message. It shows and explains the email.
+- [ ] Explain an email that gets a draft and turn Projects off with Keep Data. Run
+  `sqlite3 <database> "UPDATE mail_messages SET draft_changed = draft_changed - 31 * 86400 WHERE draft_changed IS NOT NULL"`
+  and turn Projects on. The email keeps its explanation, the draft area reads "Projects
+  removed this draft 30 days after its last change. Explain the email again for a new
+  one.", and Explain Again writes a new draft.
+- [ ] Turn Projects off with Keep Data, run
+  `sqlite3 <database> "UPDATE mail_messages SET saved = saved - 91 * 86400 WHERE id = (SELECT MAX(id) FROM mail_messages)"`
+  and turn Projects on. That email reads "Projects removed its copy of this email's text
+  90 days after reading it. Read the email in Mail.", Explain is dimmed, and Explain
+  Selected Message on it in Mail shows it without explaining it.
+- [ ] An email over 16 MB, such as one with large attachments, read after this change,
+  reads "Projects did not read this email, as it is too large. Read it in Mail.", and
+  Explain is dimmed. Mail read before this change has no such mark, so use Delete All
+  Projects Data and Start Reading Mail again first.
+- [ ] Settings > Projects reads under Data "Projects keeps the text of each email and its
+  explanation for 90 days after reading it, and a draft for 30 days after its last
+  change. It keeps the rest of an email, such as its sender and subject, until 180 days
+  after it read the newest email of its thread. It removes old data only while it is on."
+- [ ] Check the six new lines in Chinese, Japanese and Spanish: the three of the email
+  view above, the two of Explain Selected Message, for a message that looks like an email
+  Projects read and for "Projects could not save this message on this Mac. Try again
+  later.", and the one under Data.
 
 ## Not implemented
 

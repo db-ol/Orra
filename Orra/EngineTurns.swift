@@ -29,6 +29,8 @@ final class EngineTurns {
     @ObservationIgnored private var dictations = 0
     /// How often a waiting caption call looks again whether the dictation is over.
     @ObservationIgnored private let pollInterval: Duration
+    /// What runs at each press of a key, see `whenDictationStarts(_:)`.
+    @ObservationIgnored private var startHandlers: [() -> Void] = []
 
     init(pollInterval: Duration = .milliseconds(100)) {
         self.pollInterval = pollInterval
@@ -39,6 +41,17 @@ final class EngineTurns {
         isDictating = true
         dictations += 1
         running?.cancel()
+        for handler in startHandlers {
+            handler()
+        }
+    }
+
+    /// Runs `handler` at each press of a key from now on, after `isDictating` turned true
+    /// and before the dictation reserves the model gate, so other model work can leave the
+    /// gate as captions do. Projects ends its call under way this way, see
+    /// ProjectsModelQueue.dictationStarted.
+    func whenDictationStarts(_ handler: @escaping () -> Void) {
+        startHandlers.append(handler)
     }
 
     /// The dictation was pasted or cancelled.
