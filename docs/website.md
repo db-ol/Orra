@@ -56,12 +56,6 @@ https://db-ol.github.io/Orra/.
   dimmed until the first sentence comes in. Its symbols are small SVGs in style.css. Where
   the row does not fit, the modes turn into a pop up menu with the chosen one, as in the
   app. style.css sets that width for each language, so change it when a label changes.
-- The Projects section, after Meeting Interpretation, says in two short paragraphs what the
-  Projects row of the README says, and links the Projects part of the user guide in the
-  page's language. Its heading carries the Preview label that Settings shows beside the
-  name, the preview-label class in style.css, in the word Orra uses in that language.
-  Remove the label from all four pages when Projects leaves the preview. The sections after
-  it keep the plain and the soft background alternating.
 - site/icon.png and site/favicon.png are the app icon at 512 and 64 pixels. They are exported
   from Orra/AppIcon.icon with the ictool that ships inside Icon Composer.
 

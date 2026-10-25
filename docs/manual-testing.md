@@ -3255,8 +3255,9 @@ Projects sections below check the details in a Debug build.
   languages, and ProjectsLatencyMeasurementTests passes on a 16 GB Mac with Mail and a
   browser open.
 - [ ] The README, the privacy page and the user guide in four languages say what the app
-  does. The site shows the Projects section with its Preview label in light and dark mode,
-  at 375 pixels and on a wide window, and its link opens the Projects part of the guide.
+  does. The site has no Projects section yet, since it describes the latest release. Once
+  this release is published, a pull request of its own adds the section with the new
+  version, as docs/website.md asks.
 
 Mail access for Projects, added on 2026-10-19, not verified yet. Projects reads mail in the
 Mail app through three Apple Events, see Orra/Projects/Mail/MailEvents.swift: get and count,

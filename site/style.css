@@ -518,22 +518,6 @@ h1 {
   padding: 100px 0;
 }
 
-/* The Preview label beside the heading of Projects, a thin capsule as in Settings. */
-.preview-label {
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: 0.15em;
-  padding: 2px 12px;
-  border: 1px solid var(--muted);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.5;
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-
 .soft {
   background: var(--bg-soft);
 }
@@ -889,7 +873,7 @@ h3 {
   margin-bottom: 20px;
 }
 
-footer {
+.closing footer {
   background: var(--bg-soft);
   border-top: 1px solid var(--border);
   color: var(--muted);
