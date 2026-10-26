@@ -12,7 +12,8 @@ import Foundation
 /// missing and repeated sections. A repeated section's second copy is not read, but the
 /// heading written again right after itself, as after the prefill, is not a copy. An item
 /// copied from the prompt's own rules is left out, and so is a lead in copied from them
-/// before a colon, see `Echo`. A list ends before an item that repeats an earlier one, see
+/// before a colon, see `Echo`. A list leaves out an item that repeats an earlier one, and in
+/// an answer without a draft the last list that repeated ends before its first repeat, see
 /// `loop`. The answer is data, and nothing here follows it: the window shows it as plain
 /// text only.
 nonisolated struct ExplainAnswer: Sendable, Equatable {
@@ -47,9 +48,9 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         case unknownSources
     }
 
-    /// Where a list of the answer repeated an item. A small model that repeats a few lines
-    /// goes on with them until its limit, as the English answers of a40 and a48 did in the
-    /// release gate, and then writes no draft.
+    /// Where an answer without a draft repeated a list. A small model that repeats a few
+    /// lines goes on with them until its limit, as the English answers of a40 and a48 did in
+    /// the release gate, and then writes no draft.
     nonisolated struct Loop: Sendable, Equatable {
         var section: Section
         /// The answer up to the end of the last item the list keeps, without a reasoning
@@ -63,7 +64,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         var end: String.Index
     }
 
-    /// The most items a list keeps once an item repeats, the most points the prompt asks for.
+    /// The most items the list of `loop` keeps, the most points the prompt asks for.
     static let loopItems = 6
 
     var warnings: [String] = []
@@ -73,9 +74,10 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     /// Source ids the points named that the prompt does not have, each once.
     var unknownSources: [String] = []
     var problems: [Problem] = []
-    /// The first list that repeated an item word for word, or nil. Each list ends before its
-    /// first repeat and then keeps at most `loopItems` items. Case, spaces and punctuation
-    /// do not count, source ids do, and each Chinese character is a word.
+    /// In an answer without a draft, the last list that repeated an item, or nil: a list the
+    /// model repeats until its limit has no list after it. That list ends before its first
+    /// repeat and keeps at most `loopItems` items. Every other list only leaves out its
+    /// repeats, see `repeats(in:)`.
     var loop: Loop?
 
     /// Reads `answer`, which starts with the prompt's prefill. `sources` holds the ids of
@@ -119,21 +121,32 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         for section in Section.allCases where sections[section] == nil {
             problems.append(.missing(section))
         }
-        // The items as written, each list up to its first repeat.
-        var lists: [Section: [String]] = [:]
-        for section in [Section.warnings, .points, .questions] {
-            var items = Self.items(sections[section] ?? [])
-            if let repeated = Self.firstRepeat(in: items) {
-                items = Array(items.prefix(min(repeated, Self.loopItems)))
-                if loop == nil, let last = items.last {
-                    loop = Loop(section: section, kept: String(text[..<last.end]))
-                }
+        if let lines = sections[.draft] {
+            draft = Self.draft(lines.map(\.text))
+            if draft == .missing {
+                problems.append(.missing(.draft))
             }
-            lists[section] = items.map(\.text)
         }
-        warnings = (lists[.warnings] ?? []).compactMap(echo.withoutCopy)
-        questions = (lists[.questions] ?? []).compactMap(echo.withoutCopy)
-        for item in (lists[.points] ?? []).compactMap(echo.withoutCopy) {
+        // The items as written, each list without its repeats. Without a draft, the last
+        // list that repeated an item is the loop and ends before its first repeat. The items
+        // before that repeat are all there, since none of them repeats.
+        var lists: [Section: [Line]] = [:]
+        var looped: (section: Section, first: Int)?
+        for section in [Section.warnings, .points, .questions] {
+            let items = Self.items(sections[section] ?? [])
+            let repeats = Self.repeats(in: items)
+            lists[section] = items.indices.filter { !repeats.contains($0) }.map { items[$0] }
+            if draft == .missing, let first = repeats.first {
+                looped = (section, first)
+            }
+        }
+        if let looped, let items = lists[looped.section]?.prefix(min(looped.first, Self.loopItems)), let last = items.last {
+            lists[looped.section] = Array(items)
+            loop = Loop(section: looped.section, kept: String(text[..<last.end]))
+        }
+        warnings = (lists[.warnings] ?? []).map(\.text).compactMap(echo.withoutCopy)
+        questions = (lists[.questions] ?? []).map(\.text).compactMap(echo.withoutCopy)
+        for item in (lists[.points] ?? []).map(\.text).compactMap(echo.withoutCopy) {
             let (point, unknown) = Self.point(item, known: known)
             for id in unknown where !unknownSources.contains(id) {
                 unknownSources.append(id)
@@ -144,12 +157,6 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         }
         if !unknownSources.isEmpty {
             problems.append(.unknownSources)
-        }
-        if let lines = sections[.draft] {
-            draft = Self.draft(lines.map(\.text))
-            if draft == .missing {
-                problems.append(.missing(.draft))
-            }
         }
     }
 
@@ -210,16 +217,19 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         return ["无", "没有", "暂无", "none", "nothing", "n/a", "na"].contains(word)
     }
 
-    /// Where the first item with the words of an earlier one is, or nil when none repeats.
-    private static func firstRepeat(in items: [Line]) -> Int? {
+    /// Where the items with the words of an earlier one are, in order. Case, spaces and
+    /// punctuation do not count, source ids do, and each Chinese character is a word. An
+    /// item without letters or digits repeats nothing.
+    private static func repeats(in items: [Line]) -> [Int] {
         var seen: Set<[String]> = []
+        var repeats: [Int] = []
         for (index, item) in items.enumerated() {
             let words = Self.words(item.text)
             if !words.isEmpty, !seen.insert(words).inserted {
-                return index
+                repeats.append(index)
             }
         }
-        return nil
+        return repeats
     }
 
     /// The words of a text, lowercased: runs of letters and digits, with each Chinese

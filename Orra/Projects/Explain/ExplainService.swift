@@ -513,19 +513,19 @@ final class ExplainService {
 
     /// The second request when the answer repeated an item of a list and has no draft, as
     /// when the model repeats a few lines until its limit, or nil. ExplainAnswer ends the
-    /// list before the repeat with at most `ExplainAnswer.loopItems` items, and the second
-    /// prompt is the first one with the answer up to there and the heading of the next
-    /// section, so the model goes on from that heading. The answer goes in as a block, see
-    /// `ExplainPrompt.block`, so a chat template token the model spelled out cannot end its
-    /// turn. The two answers together write at most `ExplainPrompt.maximumTokens`. Nil when
-    /// the second prompt would pass the budget. Off the main actor, since it reads the
-    /// answer and counts the prompt.
+    /// last list that repeated before the repeat with at most `ExplainAnswer.loopItems`
+    /// items, see `ExplainAnswer.loop`, and the second prompt is the first one with the
+    /// answer up to there and the heading of the next section, so the model goes on from
+    /// that heading. The answer goes in as a block, see `ExplainPrompt.block`, so a chat
+    /// template token the model spelled out cannot end its turn. The two answers together
+    /// write at most `ExplainPrompt.maximumTokens`. Nil when the second prompt would pass
+    /// the budget. Off the main actor, since it reads the answer and counts the prompt.
     @concurrent
     nonisolated static func rest(_ prepared: Prepared, written: String, countTokens: @Sendable (String) -> Int) async -> Rest? {
         let prompt = prepared.prompt
         let prefill = ExplainPrompt.prefill(prompt.language)
         let answer = ExplainAnswer(prefill + written, sources: prompt.sources.keys, rules: prompt.rules)
-        guard let loop = answer.loop, answer.problems.contains(.missing(.draft)),
+        guard let loop = answer.loop,
               let next = ExplainAnswer.Section.allCases.drop(while: { $0 != loop.section }).dropFirst().first else { return nil }
         let kept = loop.kept.hasPrefix(prefill) ? String(loop.kept.dropFirst(prefill.count)) : loop.kept
         let text = ExplainPrompt.block(kept) + "\n\n" + ExplainPrompt.Headings(prompt.language).heading(next) + "\n"
