@@ -233,6 +233,11 @@ struct ProjectsWindowViewTests {
         let content = GrowingContent()
         let window = ProjectsWindow.window(hosting: GrowingView(content: content))
         defer { window.close() }
+        // The hosting view makes its size constraints only while the window otherwise lays
+        // out with Auto Layout, as the Projects window on screen does. Nothing in this window
+        // uses it, so a constraint that always holds stands in.
+        let view = try #require(window.contentView)
+        view.widthAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
         func size() -> CGSize {
             window.contentRect(forFrameRect: window.frame).size
         }
@@ -243,7 +248,7 @@ struct ProjectsWindowViewTests {
         try await layOut(window)
         #expect(size() == ProjectsWindow.defaultSize)
         // The content gives the window no height of its own to grow to.
-        #expect(window.contentView?.intrinsicContentSize.height == NSView.noIntrinsicMetric)
+        #expect(view.intrinsicContentSize.height == NSView.noIntrinsicMetric)
 
         // The user makes the window shorter, above its minimum.
         let shorter = CGSize(width: ProjectsWindow.defaultSize.width, height: 500)
