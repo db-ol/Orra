@@ -141,7 +141,11 @@ struct ProjectsGateEvaluationTests {
             services[language] = ExplainService(
                 lookups: Self.lookups(context, search: search, database: database),
                 run: { request in
-                    promptTokens = counter.count(request.prompt)
+                    // The explanation's own prompt, not the longer one of a second request
+                    // for the rest of an answer that repeated itself.
+                    if promptTokens == 0 {
+                        promptTokens = counter.count(request.prompt)
+                    }
                     return try await queue.run(request)
                 },
                 loadTokenCounter: { counter.count },
