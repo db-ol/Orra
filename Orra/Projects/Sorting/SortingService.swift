@@ -148,7 +148,7 @@ final class SortingService {
         /// For these addresses, the projects whose mail held one of them before, with those
         /// of the addresses found in each. The addresses are in the form of ProjectsAddress,
         /// at most `maximumRecipients` and the sender. Needs a Project and Set Aside do not
-        /// count.
+        /// count, and neither does a guess of the model, see MailStore.peopleSeen.
         var peopleSeen: ([String]) async -> [UUID: Set<String>]
         /// The other messages known in the email's thread, earlier and later ones.
         var thread: (Email) async -> [ThreadMessage]

@@ -3604,8 +3604,8 @@ guide:
 
 - [ ] Delete All Projects Data and read orra-test with no project. Make the five projects
   one at a time from Suggested Projects, as they are suggested, then edit each to the
-  values of projects.json with its folder. Once Sorting mail… is gone, at most 6 of the
-  105 mails sit in a wrong project.
+  people, domains, description and folder the synthetic set gives it. Once Sorting mail…
+  is gone, at most 6 of the 105 mails sit in a wrong project.
 - [ ] Remove a person from a project. Their mail leaves it at once unless another setting
   or a thread files it, and the model may file it again as suggested.
 - [ ] Explain an email whose sender is not one of its project's people. Once it has a
