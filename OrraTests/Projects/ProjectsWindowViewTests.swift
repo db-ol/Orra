@@ -396,6 +396,13 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.changeSummary(segments) == "Removed: Hi\nAdded: Dear\nRemoved: Friday\nAdded: Monday")
     }
 
+    /// VoiceOver reads the header row of a disclosure, such as Quoted Text, as a button with
+    /// whether it is open.
+    @Test func aDisclosureRowSaysWhetherItIsOpen() {
+        #expect(RowDisclosureStyle.state(isExpanded: false) == "Collapsed")
+        #expect(RowDisclosureStyle.state(isExpanded: true) == "Expanded")
+    }
+
     // MARK: The email view
 
     @Test func everyValueOfTheEmailViewHasWords() {
@@ -876,6 +883,19 @@ struct ProjectsWindowViewTests {
         try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_200), to: folder.appendingPathComponent("\(language)-projects-email-original.png"))
         emailModel.showsOriginal = false
         try await render(ProjectsEmailOriginal(content: Self.forward, attachments: Self.attachments).padding(20), size: NSSize(width: 520, height: 720), to: folder.appendingPathComponent("\(language)-projects-email-forward.png"))
+        // A disclosure row folded and open, as every disclosure of the window shows it.
+        let disclosures = VStack(alignment: .leading, spacing: 12) {
+            DisclosureGroup("Quoted Text", isExpanded: .constant(false)) {
+                Text(verbatim: Self.forward.quoted)
+            }
+            DisclosureGroup("Quoted Text", isExpanded: .constant(true)) {
+                Text(verbatim: Self.forward.quoted)
+            }
+        }
+        .disclosureGroupStyle(RowDisclosureStyle())
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        try await render(disclosures, size: NSSize(width: 480, height: 200), to: folder.appendingPathComponent("\(language)-projects-disclosures.png"))
 
         // The width of the email column at the window's first size, with the English draft
         // translated for a reader of Chinese, which puts the translation under the draft.

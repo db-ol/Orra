@@ -401,6 +401,7 @@ struct ReportView: View {
             DisclosureGroup("Show the report", isExpanded: $showsReport) {
                 report
             }
+            .disclosureGroupStyle(RowDisclosureStyle())
             if attachesReport, case .failed = reporter.state {
                 // Outside the report, which is hidden at first, since it keeps Continue on GitHub off.
                 HStack {

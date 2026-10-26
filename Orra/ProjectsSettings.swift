@@ -520,13 +520,12 @@ struct ProjectsSettings: View {
                             set: { expanded[place] = $0 }
                         )) {
                             ForEach(group.mailboxes, id: \.self) { mailbox in
-                                // A disclosure centers its rows otherwise.
                                 row(mailbox, in: place)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         } label: {
                             Text(verbatim: place)
                         }
+                        .disclosureGroupStyle(RowDisclosureStyle())
                     } else {
                         ForEach(group.mailboxes, id: \.self) { row($0, in: nil) }
                     }

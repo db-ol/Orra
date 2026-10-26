@@ -243,6 +243,7 @@ extension ProjectsEmailArea {
                     } label: {
                         Text(verbatim: ProjectsWindowText.answers(asked: answers.asked, answered: answers.answered))
                     }
+                    .disclosureGroupStyle(RowDisclosureStyle())
                 }
             } else if emailModel.isCheckingAnswers {
                 HStack(spacing: 6) {

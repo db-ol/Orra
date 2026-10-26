@@ -191,6 +191,7 @@ struct ProjectsProjectPage: View {
                         }
                     }
                 }
+                .disclosureGroupStyle(RowDisclosureStyle())
             }
         } else {
             Text("Not indexed yet.")

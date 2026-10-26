@@ -98,6 +98,7 @@ struct ProjectsEmailOriginal: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
                 }
+                .disclosureGroupStyle(RowDisclosureStyle())
             }
             if content.isCut {
                 Text("The rest of this email is in Mail.")

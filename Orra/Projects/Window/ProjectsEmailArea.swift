@@ -491,6 +491,7 @@ extension ProjectsEmailArea {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 4)
             }
+            .disclosureGroupStyle(RowDisclosureStyle())
         }
 
         /// Each finding with its place, the email's first.
