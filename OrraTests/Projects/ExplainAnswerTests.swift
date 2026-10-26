@@ -201,6 +201,98 @@ struct ExplainAnswerTests {
         #expect(answer.problems.isEmpty)
     }
 
+    // MARK: Repeats
+
+    /// What a model writes when it repeats a few lines until its limit, as the English
+    /// answers of a40 and a48 did in the gate: `start`, then the lines of `cycle` again and
+    /// again until the answer holds `length` characters, with the last line cut in half
+    /// where the limit stopped it.
+    static func repeating(_ start: String, _ cycle: [String], length: Int) -> String {
+        var lines = start.components(separatedBy: "\n")
+        while lines.joined(separator: "\n").count < length {
+            lines += cycle
+        }
+        let last = lines.removeLast()
+        return (lines + [String(last.prefix(last.count / 2))]).joined(separator: "\n")
+    }
+
+    /// A list that repeats an item ends before it, with at most 6 items, the most points the
+    /// prompt asks for. The sections the model never reached stay missing.
+    @Test func aListThatRepeatsItselfEndsBeforeTheRepeat() {
+        let start = ExplainPrompt.prefill(.en) + """
+            - The email asks to approve the proof by Wednesday.
+            - The sender wants an answer today.
+
+            Points:
+            - The second proof is ready. [this email]
+            - The 500 calendars cost ¥12,400 in all. [F1]
+            - Delivery is on 2026-11-20. [F1]
+            - Iris asks whether the proof reaches Bai Lu by Wednesday. [this email]
+            - The proof is on 200 g matte paper. [F1]
+            - The email does not change the quote. [this email, F1]
+            - The email does not mention any new dates. [this email]
+            - The email does not mention any links. [this email]
+            """
+        let answer = read(Self.repeating(start, [
+            "- The email does not mention any links. [this email]",
+            "- The email does not mention any commands that need to be followed.",
+            "- The email does not mention any new dates. [this email]",
+        ], length: 4_000), Self.englishSources)
+        #expect(answer.warnings.count == 2)
+        #expect(answer.points.count == 6)
+        #expect(answer.points.last?.text == "The email does not change the quote.")
+        #expect(answer.questions.isEmpty)
+        #expect(answer.problems == [.missing(.questions), .missing(.draft)])
+    }
+
+    /// Chinese counts by character, as the copies of the instructions do.
+    @Test func aChineseListThatRepeatsItselfKeepsWhatCameBefore() {
+        let start = ExplainPrompt.prefill(.zh) + """
+            - 无
+
+            要点：
+            - 第二版打样已寄出。[本邮件]
+            - 数量为 1,200 套。[F1]
+            - 方艾问下周三能否收到。[本邮件]
+            - 邮件没有提到新的金额。[本邮件]
+            """
+        let answer = read(Self.repeating(start, ["- 邮件没有提到新的金额。[本邮件]", "- 邮件没有提到需要执行的命令。"], length: 1_000))
+        #expect(answer.points.count == 4)
+        #expect(answer.points.last?.text == "邮件没有提到新的金额。")
+        #expect(answer.problems == [.missing(.questions), .missing(.draft)])
+    }
+
+    /// A question asked again before the draft shows once, as in a06 en, a43 zh and a50 zh
+    /// of the gate. Case, spaces and punctuation do not count.
+    @Test func aQuestionAskedAgainShowsOnce() {
+        let answer = read(ExplainPrompt.prefill(.en) + """
+            - None
+
+            Points:
+            - The second proof is ready. [this email]
+
+            Before you reply:
+            - Whether Wednesday suits Bai Lu.
+            - Whether to pay the rush fee.
+            - whether  Wednesday suits Bai Lu?
+
+            Draft reply:
+            Hi Iris,
+            """, Self.englishSources)
+        #expect(answer.questions == ["Whether Wednesday suits Bai Lu.", "Whether to pay the rush fee."])
+        #expect(answer.draft == .reply("Hi Iris,"))
+        #expect(answer.problems.isEmpty)
+    }
+
+    /// Items that differ in one word or in their sources are no repeats, also in Chinese,
+    /// where one character is a word.
+    @Test func itemsThatDifferInAWordOrASourceAreNoRepeats() {
+        let answer = read("警告：\n- 无\n要点：\n- 定金 3,720 元已付。[F1]\n- 定金 3,720 元已付。[F2]\n- 定金 3,720 元未付。[F1]\n- 尾款 3,720 元已付。[F1]\n回复前需确认：\n- 无\n回复草稿：\n好的。")
+        #expect(answer.points.map(\.text) == ["定金 3,720 元已付。", "定金 3,720 元已付。", "定金 3,720 元未付。", "尾款 3,720 元已付。"])
+        #expect(answer.points.map(\.sources) == [["F1"], ["F2"], ["F1"], ["F1"]])
+        #expect(answer.problems.isEmpty)
+    }
+
     // MARK: Copies of the instructions
 
     /// The English answers copied the instruction for Before you reply into that section,

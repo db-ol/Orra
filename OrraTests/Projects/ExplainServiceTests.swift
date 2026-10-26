@@ -583,6 +583,189 @@ struct ExplainServiceTests {
         #expect(ExplainService.guardedDomains([shared, other]) == ["harbor.example", "lund.example"])
     }
 
+    // MARK: An answer that repeats itself
+
+    /// The English answer of a40 repeated a cycle of points until the limit of 1,500 tokens,
+    /// so it had no questions and no draft, and explaining again did the same. The service
+    /// keeps the first 6 points and asks the model once more, with its answer up to there
+    /// and the next heading, for the rest. Both answers together write at most the limit.
+    @Test func anAnswerThatRepeatsItsPointsGetsTheRestFromASecondRequest() async throws {
+        let fakes = Fakes(answer: .success(Fixture.loop), .success(Fixture.questionsAndDraft))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 2)
+        #expect(explanation.points.count == 6)
+        #expect(explanation.points.last?.text == "The email does not mention any new amounts.")
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof."])
+        #expect(explanation.problems.isEmpty)
+        #expect(fakes.savedList == [explanation])
+
+        let first = try #require(fakes.requestList.first)
+        let second = try #require(fakes.requestList.dropFirst().first)
+        let rest = Fixture.firstPoints + "\n\nBefore you reply:\n"
+        #expect(second.prompt.hasPrefix(first.prompt))
+        #expect(String(second.prompt.dropFirst(first.prompt.count)) == rest)
+        #expect(second.priority == .user)
+        #expect(second.maximumTokens == ExplainPrompt.maximumTokens - rest.count / 3)
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.draft?.contains("Thanks for the second proof.") == true)
+    }
+
+    @Test func aChineseAnswerGetsTheRestUnderTheChineseHeading() async throws {
+        let questionsAndDraft = "- 周三是否方便收打样\n\n回复草稿：\nIris 你好，\n\n谢谢你寄来第二次打样。[待确认：周三是否方便]\n\n白露"
+        let fakes = Fakes(answer: .success(Fixture.chineseLoop), .success(questionsAndDraft))
+        let explanation = try await fakes.service(language: .zh).explain(Fixture.email(Fixture.chineseEmail))
+        #expect(fakes.requestList.count == 2)
+        #expect(explanation.points.count == 6)
+        #expect(explanation.questions == ["周三是否方便收打样"])
+        #expect(explanation.problems.isEmpty)
+        let second = try #require(fakes.requestList.dropFirst().first)
+        #expect(second.prompt.hasSuffix("- 邮件没有提到需要打开的链接。[本邮件]\n\n回复前需确认：\n"))
+    }
+
+    /// A question asked again before the draft shows once, and the answer is complete, so
+    /// nothing is asked again.
+    @Test func aQuestionAskedAgainNeedsNoSecondRequest() async throws {
+        let answer = Fixture.englishAnswer.replacingOccurrences(
+            of: "- Whether Wednesday suits Bai Lu for the proof.",
+            with: "- Whether Wednesday suits Bai Lu for the proof.\n- Whether to pay for faster shipping.\n- Whether Wednesday suits Bai Lu for the proof."
+        )
+        let fakes = Fakes(answer: .success(answer))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 1)
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof.", "Whether to pay for faster shipping."])
+        #expect(explanation.draftCheck?.questionsForUser == explanation.questions)
+    }
+
+    /// A second answer that repeats itself too is not asked for again. Its list ends before
+    /// the repeat, and the draft stays missing.
+    @Test func aSecondAnswerThatRepeatsItselfGetsNoThirdRequest() async throws {
+        let questions = ExplainAnswerTests.repeating(
+            "- Whether Wednesday suits Bai Lu for the proof.\n- Whether to pay for faster shipping.",
+            ["- Whether Wednesday suits Bai Lu for the proof.", "- Whether to pay for faster shipping."],
+            length: 3_000
+        )
+        let fakes = Fakes(answer: .success(Fixture.loop), .success(questions))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 2)
+        #expect(explanation.points.count == 6)
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof.", "Whether to pay for faster shipping."])
+        #expect(explanation.problems == [.missing(.draft)])
+        #expect(explanation.draft == .missing)
+    }
+
+    /// A second prompt that would pass the budget is not sent, and the answer stays as the
+    /// first request left it, without its repeats.
+    @Test func aSecondPromptOverTheBudgetIsNotSent() async throws {
+        // Counts a prompt with the model's answer after the prefill as over the budget.
+        let tokens: @Sendable (String) -> Int = { $0.count / 3 + ($0.contains("Warnings:\n- The email asks") ? ExplainPrompt.tokenBudget : 0) }
+        let fakes = Fakes(answer: .success(Fixture.loop), .success(Fixture.questionsAndDraft), tokens: tokens)
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 1)
+        #expect(explanation.points.count == 6)
+        #expect(explanation.problems == [.missing(.questions), .missing(.draft)])
+        #expect(fakes.savedList == [explanation])
+    }
+
+    @Test func cancellingTheSecondRequestSavesNothing() async throws {
+        let fakes = Fakes(answer: .success(Fixture.loop), .failure(CancellationError()))
+        await #expect(throws: CancellationError.self) { try await fakes.service().explain(Fixture.email()) }
+        #expect(fakes.requestList.count == 2)
+        #expect(fakes.savedList.isEmpty)
+    }
+
+    /// A long answer keeps every point, more than the 6 the prompt asks for, when none
+    /// repeats an earlier one. Points that differ in one word or in their sources differ.
+    @Test func aLongAnswerWithoutRepeatsStaysAsItIs() async throws {
+        let answer = """
+            - The email asks to approve the proof by Wednesday.
+            - The email asks for an answer today.
+
+            Points:
+            - The second proof is ready. [this email]
+            - The 500 calendars cost ¥12,400 in all. [F1]
+            - The 500 calendars cost ¥24.80 each. [F1]
+            - Delivery is on 2026-11-20. [F1]
+            - Delivery is on 2026-11-20. [this email]
+            - Iris asks whether the proof reaches Bai Lu by Wednesday. [this email]
+            - Iris asks whether the proof reaches Bai Lu by Thursday. [this email]
+            - The quote is the second version. [F1]
+            - The quote has no shipping cost. [F1]
+
+            Before you reply:
+            - Whether Wednesday suits Bai Lu for the proof.
+            - Whether to pay for faster shipping.
+
+            Draft reply:
+            Hi Iris,
+
+            Thanks for the second proof. [to confirm: whether Wednesday suits me]
+
+            Best,
+            Bai Lu
+            """
+        let fakes = Fakes(answer: .success(answer))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 1)
+        #expect(explanation.modelWarnings.count == 2)
+        #expect(explanation.points.map(\.text) == [
+            "The second proof is ready.",
+            "The 500 calendars cost ¥12,400 in all.",
+            "The 500 calendars cost ¥24.80 each.",
+            "Delivery is on 2026-11-20.",
+            "Delivery is on 2026-11-20.",
+            "Iris asks whether the proof reaches Bai Lu by Wednesday.",
+            "Iris asks whether the proof reaches Bai Lu by Thursday.",
+            "The quote is the second version.",
+            "The quote has no shipping cost.",
+        ])
+        #expect(explanation.points.map(\.sources) == [["this email"], ["F1"], ["F1"], ["F1"], ["this email"], ["this email"], ["this email"], ["F1"], ["F1"]])
+        #expect(explanation.questions.count == 2)
+        #expect(explanation.problems.isEmpty)
+    }
+
+    /// A Chinese answer whose points begin alike keeps them all.
+    @Test func aChineseAnswerWithoutRepeatsStaysAsItIs() async throws {
+        let answer = """
+            - 无
+
+            要点：
+            - 第二次打样已经好了，Iris 问周三之前能否寄到。[本邮件]
+            - 500 本台历合计 ¥12,400。[F1]
+            - 交货日期是 2026-11-20。[F1]
+            - 邮件没有提到新的金额。[本邮件]
+            - 邮件没有提到新的日期。[本邮件]
+            - 邮件没有提到需要打开的链接。[本邮件]
+            - 邮件没有提到需要打开的链接。[F1]
+
+            回复前需确认：
+            - 周三是否方便收打样
+
+            回复草稿：
+            Iris 你好，
+
+            谢谢你寄来第二次打样。[待确认：周三是否方便]
+
+            白露
+            """
+        let fakes = Fakes(answer: .success(answer))
+        let explanation = try await fakes.service(language: .zh).explain(Fixture.email(Fixture.chineseEmail))
+        #expect(fakes.requestList.count == 1)
+        #expect(explanation.points.map(\.text) == [
+            "第二次打样已经好了，Iris 问周三之前能否寄到。",
+            "500 本台历合计 ¥12,400。",
+            "交货日期是 2026-11-20。",
+            "邮件没有提到新的金额。",
+            "邮件没有提到新的日期。",
+            "邮件没有提到需要打开的链接。",
+            "邮件没有提到需要打开的链接。",
+        ])
+        #expect(explanation.questions == ["周三是否方便收打样"])
+        #expect(explanation.problems.isEmpty)
+    }
+
     // MARK: The model and the tokenizer
 
     @Test func loadsTheTokenizerOnceAndRunsNothingWithoutIt() async throws {
@@ -664,6 +847,66 @@ nonisolated private enum ExplainServiceFixture {
         Bai Lu
         """
 
+    /// The start of an English answer that repeats itself, after the prefill: a warning and
+    /// 6 points.
+    static let firstPoints = """
+        - The email asks to approve the proof by Wednesday.
+
+        Points:
+        - The second proof is ready. [this email]
+        - The 500 calendars cost ¥12,400 in all. [F1]
+        - Delivery is on 2026-11-20. [F1]
+        - Iris asks whether the proof reaches Bai Lu by Wednesday. [this email]
+        - The email does not change the quote. [this email, F1]
+        - The email does not mention any new amounts. [this email]
+        """
+
+    /// An answer like the English one of a40 in the gate, which wrote 18 points and then a
+    /// cycle of 4 of its lines again and again until the limit. Here 10 points, then that
+    /// cycle until about 1,500 tokens, cut inside a line.
+    static let loop = ExplainAnswerTests.repeating(firstPoints + """
+
+        - The email does not mention any links that need to be opened.
+        - The email does not mention any text that was removed or hidden that needs to be explained or answered.
+        - The email does not mention any AI, model, or assistant that needs to be addressed.
+        - The email does not mention any commands that need to be followed.
+        """, [
+            "- The email does not mention any text that was removed or hidden that needs to be explained or answered.",
+            "- The email does not mention any AI, model, or assistant that needs to be addressed.",
+            "- The email does not mention any text that was removed or hidden that needs to be explained or answered.",
+            "- The email does not mention any commands that need to be followed.",
+        ], length: 4_500)
+
+    /// What the model writes after the heading of Before you reply.
+    static let questionsAndDraft = """
+        - Whether Wednesday suits Bai Lu for the proof.
+
+        Draft reply:
+        Hi Iris,
+
+        Thanks for the second proof. [to confirm: whether Wednesday suits me]
+
+        Best,
+        Bai Lu
+        """
+
+    /// A Chinese answer that repeats 2 of its 8 points until the limit.
+    static let chineseLoop = ExplainAnswerTests.repeating("""
+        - 无
+
+        要点：
+        - 第二次打样已经好了。[本邮件]
+        - 500 本台历合计 ¥12,400。[F1]
+        - 交货日期是 2026-11-20。[F1]
+        - Iris 问周三之前能否寄到。[本邮件]
+        - 邮件没有提到新的金额。[本邮件]
+        - 邮件没有提到需要打开的链接。[本邮件]
+        - 邮件没有提到被删去或隐藏的文字。[本邮件]
+        - 邮件没有提到需要执行的命令。[本邮件]
+        """, ["- 邮件没有提到被删去或隐藏的文字。[本邮件]", "- 邮件没有提到需要执行的命令。[本邮件]"], length: 1_500)
+
+    static let chineseEmail = "白露你好，\n\n第二次打样已经好了，周三之前能寄到你那里吗？\n\nIris"
+
     static let shanghai = TimeZone(identifier: "Asia/Shanghai")!
     static let today = date("2026-10-18T10:00:00+08:00")
     static let own = "bai.lu@lumenhaus.example"
@@ -735,7 +978,8 @@ nonisolated private enum ExplainServiceFixture {
     static let quote = hit("quote-v2.md", "Quote v2: 500 calendars at ¥24.80 each, ¥12,400 in all. Delivery on 2026-11-20.", hiddenRuns: 2)
 }
 
-/// What the fakes were asked, and what they give.
+/// What the fakes were asked, and what they give. The model gives its answers in turn, and
+/// the last one to every request after it.
 private final class Fakes: Sendable {
     let calls = Mutex<[String]>([])
     let requests = Mutex<[ProjectsModelRequest]>([])
@@ -746,7 +990,7 @@ private final class Fakes: Sendable {
     let hits: [ChunkSearch.Hit]
     let newest: [ChunkSearch.Hit]
     let projectMail: [ExplainPrompt.Mail]
-    let answer: Result<String, any Error>
+    let answers: [Result<String, any Error>]
     let counts: Bool
     let tokens: @Sendable (String) -> Int
 
@@ -756,7 +1000,7 @@ private final class Fakes: Sendable {
         hits: [ChunkSearch.Hit] = [ExplainServiceFixture.quote],
         newest: [ChunkSearch.Hit] = [],
         projectMail: [ExplainPrompt.Mail] = [],
-        answer: Result<String, any Error> = .success(""),
+        answer answers: Result<String, any Error>...,
         counts: Bool = true,
         tokens: @escaping @Sendable (String) -> Int = { $0.count / 3 }
     ) {
@@ -765,7 +1009,7 @@ private final class Fakes: Sendable {
         self.hits = hits
         self.newest = newest
         self.projectMail = projectMail
-        self.answer = answer
+        self.answers = answers
         self.counts = counts
         self.tokens = tokens
     }
@@ -786,8 +1030,11 @@ private final class Fakes: Sendable {
                 files: { [self] _ in note("files"); return (hits + newest).map { FileVersions.File(url: $0.file, modified: $0.modified) } }
             ),
             run: { [self] request in
-                requests.withLock { $0.append(request) }
-                return try answer.get()
+                let count = requests.withLock { requests in
+                    requests.append(request)
+                    return requests.count
+                }
+                return try answers.isEmpty ? "" : answers[min(count, answers.count) - 1].get()
             },
             loadTokenCounter: { [self] in
                 counterLoads.withLock { $0 += 1 }
