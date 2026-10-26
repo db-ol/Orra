@@ -83,17 +83,7 @@ final class ProjectsWindow {
         let model = ProjectsWindowModel(runtime: runtime)
         self.model = model
         let view = ProjectsWindowView(runtime: runtime, model: model, openSettings: openSettings)
-        let controller = NSHostingController(rootView: view)
-        controller.sceneBridgingOptions = [.toolbars, .title]
-        let window = NSWindow(contentViewController: controller)
-        window.title = String(localized: "Projects")
-        // The sidebar reaches the top of the window under one toolbar, as in Mail.
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window.toolbarStyle = .unified
-        window.tabbingMode = .disallowed
-        window.isReleasedWhenClosed = false
-        window.setContentSize(Self.defaultSize)
-        window.contentMinSize = Self.minimumSize
+        let window = Self.window(hosting: view)
         if !window.setFrameUsingName(Self.frameName) {
             window.center()
         }
@@ -107,6 +97,24 @@ final class ProjectsWindow {
                 self?.letGo()
             }
         }
+        return window
+    }
+
+    /// The window with `content` in it, at the size it first opens at. `makeWindow()` adds
+    /// the frame it keeps between launches, which tests leave out, as they build it with a
+    /// view of their own.
+    static func window(hosting content: some View) -> NSWindow {
+        let controller = NSHostingController(rootView: content)
+        controller.sceneBridgingOptions = [.toolbars, .title]
+        let window = NSWindow(contentViewController: controller)
+        window.title = String(localized: "Projects")
+        // The sidebar reaches the top of the window under one toolbar, as in Mail.
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+        window.setContentSize(Self.defaultSize)
+        window.contentMinSize = Self.minimumSize
         return window
     }
 

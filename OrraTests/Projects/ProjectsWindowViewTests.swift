@@ -196,6 +196,64 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    // MARK: The window
+
+    /// How tall the content of `GrowingView` is, which a test changes.
+    @Observable final class GrowingContent {
+        var height: CGFloat = 200
+    }
+
+    /// A column that scrolls, as the email view does, with content as tall as
+    /// `GrowingContent` says.
+    private struct GrowingView: View {
+        let content: GrowingContent
+
+        var body: some View {
+            ScrollView {
+                Color.clear
+                    .frame(height: content.height)
+            }
+        }
+    }
+
+    /// Lays the window out a few times with a pause in between, as between events, so SwiftUI
+    /// shows a change of the content and AppKit sizes the window after it.
+    private func layOut(_ window: NSWindow) async throws {
+        for _ in 0..<10 {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    /// The window keeps the size it opened at, and a shorter one the user gives it, when what
+    /// it shows grows far taller than the window, such as a long email in the email view,
+    /// which scrolls. The window is made as `show()` makes it, but never ordered front, so no
+    /// window appears.
+    @Test func theWindowKeepsItsSizeWhenItsContentGrows() async throws {
+        let content = GrowingContent()
+        let window = ProjectsWindow.window(hosting: GrowingView(content: content))
+        defer { window.close() }
+        func size() -> CGSize {
+            window.contentRect(forFrameRect: window.frame).size
+        }
+        try await layOut(window)
+        #expect(size() == ProjectsWindow.defaultSize)
+
+        content.height = 3_000
+        try await layOut(window)
+        #expect(size() == ProjectsWindow.defaultSize)
+        // The content gives the window no height of its own to grow to.
+        #expect(window.contentView?.intrinsicContentSize.height == NSView.noIntrinsicMetric)
+
+        // The user makes the window shorter, above its minimum.
+        let shorter = CGSize(width: ProjectsWindow.defaultSize.width, height: 500)
+        window.setContentSize(shorter)
+        content.height = 4_000
+        try await layOut(window)
+        #expect(size() == shorter)
+        #expect(!window.isVisible)
+    }
+
     // MARK: The talk key
 
     /// Decision 13: the talk key's words go into the change box of the selected email only
