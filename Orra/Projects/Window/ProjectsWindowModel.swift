@@ -139,8 +139,9 @@ final class ProjectsWindowModel {
     /// Whether the email view shows an email's explanation above its draft, with the email
     /// itself under Original Email, or the email first, after Hide Explanation. One choice for
     /// every email while the window is open, kept in memory only. Explain and Explain Again
-    /// show the explanation again from their click on, see `explain(_:)`, so an explanation
-    /// that ends later changes nothing on the email shown then.
+    /// show the explanation again as it starts, while its email is shown, see `explain(_:)`.
+    /// An explanation that starts or ends while another email is shown changes nothing on
+    /// that email.
     var showsExplanation = true
     /// The email view of each email the user opened while the window is open, so edits to
     /// a draft stay while the user looks at other mail.
@@ -454,8 +455,12 @@ final class ProjectsWindowModel {
     /// Explains an email, on the user's click.
     func explain(_ messageID: String) async {
         guard explaining[messageID] != .explaining else { return }
-        // Explain and Explain Again show what they make, also after Hide Explanation.
-        showsExplanation = true
+        // Explain and Explain Again show what they make, also after Hide Explanation. One
+        // that starts while another email is shown, such as after Try Loading Again waited
+        // for the model, leaves that email as the user set it.
+        if messageID == selectedMessageID {
+            showsExplanation = true
+        }
         explaining[messageID] = .explaining
         do {
             _ = try await runtime.explain(messageID)

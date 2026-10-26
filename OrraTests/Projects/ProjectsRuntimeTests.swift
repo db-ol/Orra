@@ -2149,6 +2149,38 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
+    /// Try Loading Again explains its email once the model is loaded. When the user selected
+    /// another email meanwhile and clicked Hide Explanation, that email stays as the user
+    /// set it.
+    @Test func tryLoadingAgainLeavesHideExplanationOfAnotherEmail() async throws {
+        defer { cleanUp() }
+        let meanwhile = Meanwhile()
+        let (runtime, projects, _) = try await started(installed: Installed(true), countsTokens: true, retryLoading: { [model] in
+            model.isThere.withLock { $0 = true }
+            await meanwhile.run()
+        })
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("f@harbor.example", from: "mei@harbor.example"), Self.message("g@harbor.example", from: "mei@harbor.example", day: 1)], ownAddresses: [Self.own], at: Self.today)
+        runtime.windowOpened()
+        let window = ProjectsWindowModel(runtime: runtime)
+        await window.show("f@harbor.example")
+        await window.explain("f@harbor.example")
+        #expect(window.explaining["f@harbor.example"] == .failed(.modelNotLoaded))
+        // While the model is looked at, the user selects the other email and hides its
+        // explanation.
+        meanwhile.work = {
+            await window.show("g@harbor.example")
+            window.showsExplanation = false
+        }
+        await window.loadModelAgain(explaining: "f@harbor.example")
+        #expect(window.explained["f@harbor.example"] == 1)
+        #expect(window.selectedMessageID == "g@harbor.example")
+        #expect(!window.showsExplanation)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
     /// An email whose text Retention removed, or one too large to read, is not explained,
     /// also when Explain Message Selected in Mail reaches it outside the list the window
     /// shows.
