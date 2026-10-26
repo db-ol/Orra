@@ -1972,6 +1972,28 @@
         }
       }
     },
+    "Assigning, editing and deleting in Projects change only what it keeps on this Mac, never your mail in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al asignar, editar o eliminar en Proyectos, solo cambia lo que Proyectos guarda en esta Mac, nunca tu correo en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”での割り当て、編集、削除で変わるのは、このMacに保存された“プロジェクト”のデータだけです。“メール”内のメールは変わりません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“项目”里归入、编辑和删除，只会改动它保存在这台 Mac 上的数据，不会改动“邮件” App 里的邮件。"
+          }
+        }
+      }
+    },
     "Attach the diagnostic report" : {
       "localizations" : {
         "es-419" : {
@@ -7908,24 +7930,24 @@
         }
       }
     },
-    "New mail is no longer filed by this rule. Mail it already filed stays where it is." : {
+    "New mail is no longer assigned by this rule. Mail it already assigned stays in the project." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El correo nuevo ya no se archivará con esta regla. El correo ya archivado no cambia."
+            "value" : "Esta regla ya no asignará el correo nuevo. El correo que ya asignó sigue en el proyecto."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "今後のメールにはこのルールが使われなくなります。すでに振り分けられたメールはそのままです。"
+            "value" : "今後のメールは、このルールで割り当てられなくなります。このルールですでに割り当てられたメールは、プロジェクトに残ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "以后的邮件不再按这条规则归入项目。已归入项目的邮件保持不变。"
+            "value" : "以后的邮件不再按这条规则归入项目。这条规则已归入的邮件仍留在项目中。"
           }
         }
       }

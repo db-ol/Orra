@@ -3,9 +3,10 @@ import os
 import SwiftUI
 
 /// Projects, a page of Settings shown only in builds that show Projects: the switch with what
-/// Projects reads, keeps and never does, the model it works with and its download, Mail
-/// access with the mailboxes Projects reads, whether the talk key's words change the draft
-/// as soon as the dictation ends, and what it keeps on this Mac with a way to delete it.
+/// Projects reads, keeps, changes and never does, the model it works with and its download,
+/// Mail access with the mailboxes Projects reads, whether the talk key's words change the
+/// draft as soon as the dictation ends, and what it keeps on this Mac with a way to delete
+/// it.
 ///
 /// While Projects is on, the page opens with Open Projects Window, and its title is Projects
 /// Settings, so it is not taken for the Projects window itself. The window also opens by
@@ -70,6 +71,11 @@ struct ProjectsSettings: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // True while the Mail bridge sends only its read requests and reply, which
+                // Tools/ci/check_rules.py holds (rule 10).
+                Text("Assigning, editing and deleting in Projects change only what it keeps on this Mac, never your mail in Mail.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Link("Privacy details", destination: Self.privacyPage(for: AppLanguage.launchLocalization))
             } header: {
                 Text("Sorts your mail into projects and explains each email with the files of its project.")
