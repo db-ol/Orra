@@ -116,7 +116,7 @@ Orra 和“项目”保存什么、Orra 什么时候联网、怎样删除模型�
 
 ## 社区与支持
 
-- **报告问题。** 在 Orra 的菜单里选择“报告问题…”，或者直接在 [GitHub 上提交问题](https://github.com/db-ol/Orra/issues/new/choose)。请不要附上你听写的私人内容。
+- **报告问题。** 在 Orra 的菜单里选择“报告问题…”，或者直接在 [GitHub 上提交问题](https://github.com/db-ol/Orra/issues/new/choose)。请不要附上你听写的私人内容。报告“项目”的问题时，还请不要写入邮件正文、姓名和电子邮件地址，也不要附上邮件截图。
 - **疑问和建议。** 欢迎在 [Discussions](https://github.com/db-ol/Orra/discussions) 提问。
 - **微信。** 扫码加入 Orra 微信群。<br>
   <img src="docs/images/wechat-group.png" alt="Orra 微信群二维码" width="160">

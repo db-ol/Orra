@@ -116,7 +116,7 @@ Projects reads mail through the Mail app on your Mac and the files in the folder
 
 ## Community & Support
 
-- **Report a problem.** Choose Report a Problem… in Orra's menu, or [open an issue on GitHub](https://github.com/db-ol/Orra/issues/new/choose). Please leave out anything private you dictated.
+- **Report a problem.** Choose Report a Problem… in Orra's menu, or [open an issue on GitHub](https://github.com/db-ol/Orra/issues/new/choose). Please leave out anything private you dictated. For a problem in Projects, also leave out mail text, names, email addresses and screenshots of mail.
 - **Questions and ideas.** Ask in [Discussions](https://github.com/db-ol/Orra/discussions).
 - **WeChat.** Scan to join the Orra WeChat group.<br>
   <img src="docs/images/wechat-group.png" alt="QR code for the Orra WeChat group" width="160">

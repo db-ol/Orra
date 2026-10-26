@@ -116,7 +116,7 @@ Orraと“プロジェクト”が保存するもの、Orraがインターネッ
 
 ## コミュニティとサポート
 
-- **問題の報告。** Orraメニューで“問題を報告…”を選択するか、[GitHubでIssueを作成](https://github.com/db-ol/Orra/issues/new/choose)してください。音声入力した個人的な内容は含めないでください。
+- **問題の報告。** Orraメニューで“問題を報告…”を選択するか、[GitHubでIssueを作成](https://github.com/db-ol/Orra/issues/new/choose)してください。音声入力した個人的な内容は含めないでください。“プロジェクト”の問題では、メールの本文、名前、メールアドレス、メールのスクリーンショットも含めないでください。
 - **質問とアイデア。** [Discussions](https://github.com/db-ol/Orra/discussions)で質問してください。
 - **WeChat。** スキャンするとOrraのWeChatグループに参加できます。<br>
   <img src="docs/images/wechat-group.png" alt="OrraのWeChatグループのQRコード" width="160">

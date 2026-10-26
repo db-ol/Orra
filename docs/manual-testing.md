@@ -3232,17 +3232,17 @@ or press the key to start and again to finish where they say hold:
 - [ ] The welcome window's translation line names the dictation language.
 
 Projects as a preview in release builds, added on 2026-10-20 and brought in line with the
-Projects changes of 2026-10-24, not verified yet. Every build shows Projects since then. No
-unit test can tell, since the tests build in Debug, where Projects always showed. Check in a
-Release build (docs/development.md, A faster build for daily use), after Delete All Projects
-Data… and the cleanup steps of Projects in a Debug build in docs/development.md, so nothing
-of a Debug run carries over. Import a test mailbox into Mail (File > Import Mailboxes…). A
-release build ignores projectsDebugOwnAddresses and projectsDebugOwnName. After Start
-Reading Mail it reads the names and addresses of your real Mail accounts to tell the mail
-you sent, so the owner of the test set counts as someone else. The reply count, the sorting
-and Suggested Projects then differ from a Debug run, which is not a bug. Check those in a
-Debug build. The checks of Mail access below hold for a release build too, and the other
-Projects sections below check the details in a Debug build.
+Projects changes of 2026-10-24 and 2026-10-26, not verified yet. Every build shows Projects
+since then. No unit test can tell, since the tests build in Debug, where Projects always
+showed. Check in a Release build (docs/development.md, A faster build for daily use), after
+Delete All Projects Data… and the cleanup steps of Projects in a Debug build in
+docs/development.md, so nothing of a Debug run carries over. Import a test mailbox into Mail
+(File > Import Mailboxes…). A release build ignores projectsDebugOwnAddresses and
+projectsDebugOwnName. After Start Reading Mail it reads the names and addresses of your real
+Mail accounts to tell the mail you sent, so the owner of the test set counts as someone
+else. The reply count, the sorting and Suggested Projects then differ from a Debug run,
+which is not a bug. Check those in a Debug build. The checks of Mail access below hold for a
+release build too, and the other Projects sections below check the details in a Debug build.
 
 - [ ] Settings shows Projects after Vocabulary with Preview under its name, and its page
   shows Preview beside the switch, in English, Chinese, Japanese and Spanish. The switch is
@@ -3263,8 +3263,9 @@ Projects sections below check the details in a Debug build.
 - [ ] Explain an email of that project: Warnings, What it says with source chips, Before
   you reply and the draft. A file's chip shows the passage with its page inside Orra, an
   attachment's chip its passage, and an earlier email's chip that email. Nothing opens
-  outside Orra. Explanation and Original Email switch, and the original shows To, Cc, the
-  attachments, each forwarded message under its own header and Quoted Text folded.
+  outside Orra. The email itself follows the draft under Original Email, and
+  Hide Explanation puts it first. It shows To, Cc, the attachments, each forwarded message
+  under its own header and Quoted Text folded.
 - [ ] An email with a PDF or docx attachment lists it as read, and an explanation can cite
   it. An attachment Mail has not downloaded keeps its name only and says so.
 - [ ] Tone, Show in Chinese or Show in English, the answer check, Change Draft and Undo
@@ -3284,7 +3285,8 @@ Projects sections below check the details in a Debug build.
   Mac goes down. Turning Projects off asks Keep Data or Delete Data. Settings > Projects says
   under Data how long Projects keeps the text of an email with its explanation, a draft and
   the rest of an email: 90, 30 and 180 days.
-- [ ] Report a Problem shows one Projects line with counts only.
+- [ ] Report a Problem shows one Projects line with counts only, and asks, above the title,
+  to leave out mail for a problem in Projects.
 - [ ] Before the first release that shows Projects: Tools/release-gate/run.sh, which runs
   the projects suite by default since then, passes the projects bar in both content
   languages, and ProjectsLatencyMeasurementTests passes on a 16 GB Mac with Mail and a
