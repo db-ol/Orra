@@ -129,8 +129,10 @@ struct CaptionView: View {
             CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup, turns: turns)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
+                    // Says where captions come from, since a test with one's own voice
+                    // gives none.
                     if captions.store.sentences.isEmpty {
-                        Text("Captions appear here when someone speaks.")
+                        Text("Captions of what the Mac plays, such as a call or a video, appear here. What you say into your microphone is not captioned.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(captions.store.shown) { sentence in

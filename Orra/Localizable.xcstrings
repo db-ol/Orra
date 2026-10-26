@@ -2303,24 +2303,24 @@
         }
       }
     },
-    "Captions appear here when someone speaks." : {
+    "Captions of what the Mac plays, such as a call or a video, appear here. What you say into your microphone is not captioned." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Los subtítulos aparecen aquí cuando alguien habla."
+            "value" : "Aquí aparecen los subtítulos de lo que reproduce la Mac, como una llamada o un video. Lo que dices al micrófono no se subtitula."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "誰かが話すと、ここにキャプションが表示されます。"
+            "value" : "Macで再生中の音声（通話や動画など）のキャプションがここに表示されます。マイクに向かって話した声は表示されません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有人说话时，字幕会显示在这里。"
+            "value" : "Mac 播放的声音（比如通话或视频）的字幕会显示在这里。你对着麦克风说的话不会显示。"
           }
         }
       }
