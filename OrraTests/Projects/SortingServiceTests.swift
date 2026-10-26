@@ -49,11 +49,15 @@ struct SortingServiceTests {
         var seen: [String: Set<UUID>] = [:]
         var threads: [String: [SortingService.ThreadMessage]] = [:]
         var waiting: [SortingService.Email] = []
+        /// The emails as sorting again reads them, see `SortingService.Lookups.emails`.
+        var emails: [SortingService.Email] = []
         var tallies: [String: SortingService.Tally] = [:]
 
         var decisions: [(id: String, decision: SortingDecision)] = []
         var replies: [String: ReplyRule.Decision] = [:]
         var moves: [(id: String, project: UUID?)] = []
+        /// The emails kept in place to wait for the model, see `SortingService.Saves.wait`.
+        var waits: [String] = []
         var projectReads = 0
         var fileReads: [UUID] = []
         /// Runs once while the projects are read, as a change the user makes meanwhile.
@@ -93,6 +97,7 @@ struct SortingServiceTests {
                     return scores
                 },
                 waiting: { self.waiting },
+                emails: { ids in self.emails.filter { ids.contains($0.messageID) } },
                 tally: { rule, project in
                     // A store's read suspends, so two moves could interleave here.
                     await Task.yield()
@@ -122,7 +127,8 @@ struct SortingServiceTests {
                     self.moves.append((id, project))
                     self.filed[id] = SortingService.Filed(project: project, movedByUser: true)
                 },
-                tally: { rule, project, tally in self.tallies[Self.key(rule, project)] = tally }
+                tally: { rule, project, tally in self.tallies[Self.key(rule, project)] = tally },
+                wait: { self.waits.append($0) }
             )
         }
 
@@ -216,11 +222,12 @@ struct SortingServiceTests {
         subject: String = "Hello",
         text: String = "Could you send the plan?",
         inReplyTo: [String] = [],
-        list: ListMail = ListMail()
+        list: ListMail = ListMail(),
+        decided: SortingDecision? = nil
     ) -> SortingService.Email {
         SortingService.Email(
             messageID: id, sender: sender, recipients: recipients, date: Self.start.addingTimeInterval(day * 86_400),
-            subject: subject, text: text, inReplyTo: inReplyTo, references: inReplyTo, list: list)
+            subject: subject, text: text, inReplyTo: inReplyTo, references: inReplyTo, list: list, decided: decided)
     }
 
     /// Lets the tasks waiting on the main actor run.
@@ -337,27 +344,6 @@ struct SortingServiceTests {
         #expect(store.decision("b@test.example")?.waitsForModel == true)
     }
 
-    /// With the rules alone, as when Needs a Project is sorted again past its newest emails,
-    /// only an email the rules file on their own is saved, in a project or in Set Aside.
-    /// The model is never asked, and the others stay as they are, without a decision or a
-    /// reply mark.
-    @Test func withTheRulesAloneOnlyWhatTheRulesFileIsSaved() async {
-        let store = Store()
-        store.seen["kim@quay.example"] = [Self.maple]
-        let model = Model()
-        await service(store, model).sort([
-            email("sure@test.example", from: "Song Yutong <song.yutong@harborlights.example>"),
-            email("news@test.example", from: "news@lighthouse-weekly.example", day: 1, text: "This week in museums.", list: ListMail(listID: "Weekly <weekly.lighthouse-weekly.example>")),
-            email("likely@test.example", from: "kim@quay.example", day: 2),
-            email("open@test.example", from: "lee@elsewhere.example", day: 3),
-        ], rulesOnly: true)
-        #expect(model.requests.isEmpty)
-        #expect(store.decisions.map(\.id) == ["sure@test.example", "news@test.example"])
-        #expect(store.decision("sure@test.example") == SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]))
-        #expect(store.decision("news@test.example") == SortingDecision(project: nil, level: .setAside, reasons: [.listMail]))
-        #expect(store.replies.keys.sorted() == ["news@test.example", "sure@test.example"])
-    }
-
     /// The chip says the email was too long for the model, which never answered.
     @Test func aPromptTooLongGoesToNeedsAProject() async {
         let store = Store()
@@ -407,6 +393,174 @@ struct SortingServiceTests {
         await first.value
         await second.value
         #expect(store.decisions.map(\.id) == ["a@test.example", "b@test.example"])
+    }
+
+    // MARK: Sorting again
+
+    /// With the rules alone, as when sorting again goes past the newest emails a change
+    /// reaches, only an email the rules file on their own is saved, in a project or in Set
+    /// Aside. The model is never asked, and the others stay as they are, without a decision
+    /// or a reply mark.
+    @Test func withTheRulesAloneOnlyWhatTheRulesFileIsSaved() async {
+        let store = Store()
+        store.seen["kim@quay.example"] = [Self.maple]
+        let model = Model()
+        store.emails = [
+            email("sure@test.example", from: "Song Yutong <song.yutong@harborlights.example>"),
+            email("news@test.example", from: "news@lighthouse-weekly.example", day: 1, text: "This week in museums.", list: ListMail(listID: "Weekly <weekly.lighthouse-weekly.example>")),
+            email("likely@test.example", from: "kim@quay.example", day: 2),
+            email("open@test.example", from: "lee@elsewhere.example", day: 3),
+        ]
+        await service(store, model).sortAgain(store.emails.map(\.messageID), after: [Self.harbor], rulesOnly: true)
+        #expect(model.requests.isEmpty)
+        #expect(store.decisions.map(\.id) == ["sure@test.example", "news@test.example"])
+        #expect(store.decision("sure@test.example") == SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]))
+        #expect(store.decision("news@test.example") == SortingDecision(project: nil, level: .setAside, reasons: [.listMail]))
+        #expect(store.replies.keys.sorted() == ["news@test.example", "sure@test.example"])
+    }
+
+    /// An email the rules decide as before is left as it is in both passes, without a new
+    /// decision or reply mark.
+    @Test func sortingAgainWritesNothingForAnEmailThatStays() async {
+        let store = Store()
+        let model = Model()
+        let sorting = service(store, model)
+        store.emails = [email("a@test.example", from: "song.yutong@harborlights.example", decided: SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]))]
+        await sorting.sortAgain(["a@test.example"], after: [Self.harbor], rulesOnly: true)
+        await sorting.sortAgain(["a@test.example"], after: [Self.harbor], rulesOnly: false)
+        #expect(store.decisions.isEmpty)
+        #expect(store.replies.isEmpty)
+        #expect(store.waits.isEmpty)
+        #expect(model.requests.isEmpty)
+    }
+
+    /// A filing whose setting is gone goes to Needs a Project with the rules alone, and waits
+    /// for nothing there, so it never votes for its old project while the model decides.
+    @Test func theRulesAloneSendAFilingWhoseSettingIsGoneToNeedsAProject() async {
+        let store = Store()
+        let model = Model()
+        // Harbor does not list kim.
+        store.emails = [email("a@test.example", from: "kim@quay.example", decided: SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]))]
+        await service(store, model).sortAgain(["a@test.example"], after: [Self.harbor], rulesOnly: true)
+        #expect(model.requests.isEmpty)
+        #expect(store.decisions.map(\.id) == ["a@test.example"])
+        #expect(store.decision("a@test.example") == SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]))
+    }
+
+    /// An email that waits for the model is the model's to sort in the model pass, also when
+    /// the rules decide it as before. The rules alone leave it as it is.
+    @Test func theModelPassAsksAboutAnEmailThatWaits() async {
+        let store = Store()
+        store.seen["kim@quay.example"] = [Self.maple]
+        let model = Model()
+        let sorting = service(store, model)
+        store.emails = [email("a@test.example", from: "kim@quay.example", decided: SortingDecision(project: nil, level: .unsure, reasons: [.waitingForModel]))]
+        await sorting.sortAgain(["a@test.example"], after: [Self.harbor], rulesOnly: true)
+        #expect(model.requests.isEmpty)
+        #expect(store.decisions.isEmpty)
+        await sorting.sortAgain(["a@test.example"], after: [Self.harbor], rulesOnly: false)
+        #expect(model.requests.count == 1)
+        #expect(store.decision("a@test.example") == SortingDecision(project: Self.maple, level: .likely, reasons: [.peopleSeen, .model]))
+    }
+
+    /// With the window closed, a likely filing that sorting asks about again keeps its place
+    /// and waits for the model, also when the mail that waits is sorted. Once the model
+    /// files it as before, it is saved, so it waits no longer.
+    @Test func aLikelyFilingKeepsItsPlaceWhileTheModelCannotAnswer() async {
+        let store = Store()
+        store.seen["kim@quay.example"] = [Self.maple]
+        let model = Model()
+        let window = Window()
+        window.isOpen = false
+        let sorting = service(store, model, window: window)
+        let likely = SortingDecision(project: Self.maple, level: .likely, reasons: [.peopleSeen, .model])
+        var mail = email("a@test.example", from: "kim@quay.example", decided: likely)
+        store.emails = [mail]
+        await sorting.sortAgain([mail.messageID], after: [Self.maple], rulesOnly: false)
+        #expect(store.waits == ["a@test.example"])
+        mail.waits = true
+        store.waiting = [mail]
+        await sorting.sortWaiting()
+        #expect(store.waits == ["a@test.example", "a@test.example"])
+        #expect(store.decisions.isEmpty)
+        #expect(model.requests.isEmpty)
+
+        window.isOpen = true
+        store.emails = [mail]
+        await sorting.sortAgain([mail.messageID], after: [Self.maple], rulesOnly: false)
+        #expect(model.requests.count == 1)
+        #expect(store.decisions.map(\.id) == ["a@test.example"])
+        #expect(store.decision("a@test.example") == likely)
+    }
+
+    /// In one pass, the message a reply answers comes first. When the model files it in
+    /// another project, the reply follows it there by its thread.
+    @Test func aReplyFollowsTheMessageItAnswersToItsNewProject() async {
+        let store = Store()
+        store.filed["parent@test.example"] = SortingService.Filed(project: Self.maple)
+        let model = Model()
+        store.emails = [
+            email("reply@test.example", from: "lee@elsewhere.example", day: 1, inReplyTo: ["parent@test.example"], decided: SortingDecision(project: Self.maple, level: .sure, reasons: [.thread])),
+            email("parent@test.example", from: "kim@quay.example", decided: SortingDecision(project: Self.maple, level: .likely, reasons: [.model])),
+        ]
+        // No signal ranks a project first, so P1, which the model answers, is Harbor.
+        await service(store, model).sortAgain(["reply@test.example", "parent@test.example"], after: [Self.harbor], rulesOnly: false)
+        #expect(model.requests.count == 1)
+        #expect(store.decisions.map(\.id) == ["parent@test.example", "reply@test.example"])
+        #expect(store.decision("parent@test.example") == SortingDecision(project: Self.harbor, level: .likely, reasons: [.model]))
+        #expect(store.decision("reply@test.example") == SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread]))
+    }
+
+    /// Sorting again asks the model again where the prompt it answered changed, also when
+    /// no project the prompt shows changed, as when Forget Project takes one of them away
+    /// and another takes its place. A prompt it answered as it is asks nothing, though a
+    /// project it shows changed.
+    @Test func theModelIsAskedAgainWhereItsPromptChanged() async {
+        let store = Store()
+        // A fourth project, which the prompt does not show while the other three are there.
+        store.candidates.append(SortingCandidate(id: UUID(), name: "Quay lamps / 码头灯具"))
+        store.seen["kim@quay.example"] = [Self.maple]
+        let model = Model()
+        let sorting = service(store, model)
+        let likely = SortingDecision(project: Self.maple, level: .likely, reasons: [.peopleSeen, .model])
+        await sorting.sort([email("a@test.example", from: "kim@quay.example")])
+        #expect(store.decision("a@test.example") == likely)
+        #expect(model.requests.count == 1)
+        store.emails = [email("a@test.example", from: "kim@quay.example", decided: likely)]
+
+        await sorting.sortAgain(["a@test.example"], after: [Self.maple], rulesOnly: false)
+        #expect(model.requests.count == 1)
+
+        store.candidates.removeAll { $0.id == Self.harbor }
+        sorting.projectsChanged()
+        await sorting.sortAgain(["a@test.example"], after: [Self.harbor], rulesOnly: false)
+        #expect(model.requests.count == 2)
+        #expect(model.requests.last?.prompt.contains("Quay lamps") == true)
+    }
+
+    /// Sorting again reads each email when the turn of its batch comes, so it compares the
+    /// email with where the batch before filed it.
+    @Test(.timeLimit(.minutes(1)))
+    func sortingAgainReadsEachEmailWhenItsTurnComes() async {
+        let store = Store()
+        store.seen["kim@quay.example"] = [Self.maple]
+        let model = Model()
+        model.holds = true
+        let sorting = service(store, model)
+        let first = Task { await sorting.sort([email("new@test.example", from: "kim@quay.example")]) }
+        await model.waitUntilAsked()
+        // Filed in Harbor by a setting that is gone when the change comes.
+        store.emails = [email("a@test.example", from: "kim@quay.example", decided: SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]))]
+        let again = Task { await sorting.sortAgain(["a@test.example"], after: [Self.harbor], rulesOnly: true) }
+        await waitUntil(sorting, hasBatches: 2)
+        // The batch before files it likely in Maple meanwhile.
+        store.emails[0].decided = SortingDecision(project: Self.maple, level: .likely, reasons: [.peopleSeen, .model])
+        model.release()
+        await first.value
+        await again.value
+        // The rules alone leave the likely filing as it is, rather than send it to Needs a
+        // Project.
+        #expect(store.decisions.map(\.id) == ["new@test.example"])
     }
 
     // MARK: Hygiene and threads
@@ -528,7 +682,8 @@ struct SortingServiceTests {
         #expect(store.replies["q@test.example"] == .noReply(.answeredLater))
         #expect(store.replies["own@test.example"] == nil)
         #expect(store.replies["later@test.example"] == nil)
-        #expect(store.decision("ans@test.example") == SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread]))
+        // Harbor lists the person the user wrote to.
+        #expect(store.decision("ans@test.example") == SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread, .person]))
     }
 
     @Test func aMessageTheUserAnsweredLaterNeedsNoReply() async {

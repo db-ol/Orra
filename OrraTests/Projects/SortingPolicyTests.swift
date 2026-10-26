@@ -33,6 +33,14 @@ struct SortingPolicyTests {
         #expect(decide(signals) == SortingDecision(project: Self.a, level: .sure, reasons: [.thread]))
     }
 
+    /// A setting of the user that names the thread's project too is its second reason.
+    @Test func aThreadKeepsTheSettingsOfItsProjectAsReasons() {
+        let person = SortingSignals(thread: Self.a, rules: [Self.a: .person, Self.b: .rule], ranked: Self.all)
+        #expect(decide(person) == SortingDecision(project: Self.a, level: .sure, reasons: [.thread, .person]))
+        let mailbox = SortingSignals(thread: Self.a, rules: [Self.a: .domain], mailboxes: [Self.a], ranked: Self.all)
+        #expect(decide(mailbox) == SortingDecision(project: Self.a, level: .sure, reasons: [.thread, .domain, .mailbox]))
+    }
+
     @Test(arguments: [SortingReason.rule, .person, .domain])
     func aRulePersonOrDomainOfOneProjectIsSure(_ kind: SortingReason) {
         let signals = SortingSignals(rules: [Self.b: kind], ranked: [Self.b, Self.a, Self.c])
@@ -212,6 +220,40 @@ struct SortingPolicyTests {
                 #expect(decide(signals, answer).level != .setAside)
             }
         }
+    }
+
+    // MARK: Sorting again
+
+    /// After a change of the projects, the model is asked again only where its answer can
+    /// change. Four candidates, so that one is out of the three the prompt shows.
+    @Test func theModelIsAskedAgainOnlyWhenItsAnswerCanChange() {
+        let open = SortingSignals(ranked: Self.all + [Self.d])
+        let chose = SortingDecision(project: Self.a, level: .likely, reasons: [.model])
+        // The rules decide alone.
+        let sure = SortingSignals(rules: [Self.a: .person], ranked: Self.all + [Self.d])
+        #expect(!SortingPolicy.asksAgain(sure, before: nil, changed: [Self.a]))
+        // Never asked, or waiting.
+        #expect(SortingPolicy.asksAgain(open, before: nil, changed: []))
+        #expect(SortingPolicy.asksAgain(open, before: unsure([.waitingForModel, .noSignal]), changed: []))
+        // A changed candidate among the three the prompt shows, and one out of them.
+        #expect(SortingPolicy.asksAgain(open, before: chose, changed: [Self.b]))
+        #expect(!SortingPolicy.asksAgain(open, before: chose, changed: [Self.d]))
+        // The project the model chose is no longer a choice.
+        #expect(SortingPolicy.asksAgain(open, before: SortingDecision(project: Self.d, level: .likely, reasons: [.model]), changed: []))
+        // A signal that pointed to it is gone.
+        #expect(SortingPolicy.asksAgain(open, before: SortingDecision(project: Self.a, level: .likely, reasons: [.peopleSeen, .model]), changed: []))
+        // The model's none, with no changed candidate among the three.
+        #expect(!SortingPolicy.asksAgain(open, before: unsure([.modelSaidNone, .noSignal]), changed: [Self.d]))
+        #expect(unsure([.modelSaidNone, .noSignal]).restsOnModel)
+        #expect(!unsure([.waitingForModel, .noSignal]).restsOnModel)
+        // Where the prompt the model answered is known, it decides in place of the changed
+        // candidates: the same prompt asks nothing, another one asks, also for the model's
+        // none.
+        #expect(!SortingPolicy.asksAgain(open, before: chose, changed: [Self.b], samePrompt: true))
+        #expect(SortingPolicy.asksAgain(open, before: chose, changed: [Self.d], samePrompt: false))
+        #expect(SortingPolicy.asksAgain(open, before: unsure([.modelSaidNone, .noSignal]), changed: [], samePrompt: false))
+        // A choice that is gone still asks with the same prompt.
+        #expect(SortingPolicy.asksAgain(open, before: SortingDecision(project: Self.d, level: .likely, reasons: [.model]), changed: [], samePrompt: true))
     }
 
     // MARK: The decision

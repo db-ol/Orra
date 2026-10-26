@@ -91,8 +91,9 @@ final class ProjectsWindowModel {
     }
     /// The emails of the chosen list, newest first.
     private(set) var rows: [MailStore.Listed] = []
-    /// The selected email when it is older than the window reads its list down to, read on
-    /// its own. The email view shows it, and the list does not hold it.
+    /// The selected email when it is older than the window reads its list down to, or when
+    /// sorting moved it to another list, read on its own. The email view shows it, and the
+    /// list does not hold it.
     private(set) var aloneEmail: MailStore.Listed?
     /// How many emails the chosen list holds, also those older than `rows`.
     private(set) var total = 0
@@ -213,7 +214,9 @@ final class ProjectsWindowModel {
     /// read, such as an email a source cites, it reads down to that email, at most
     /// `maximumPagesDown` pages. An older one is read alone. When sorting filed the email
     /// Explain Selected Message or a source showed in another list, that list shows with
-    /// it. A list the store could not read shows no mail, and says so.
+    /// it. When sorting moved another selected email to another list, such as after a change
+    /// of the projects, it is read alone, so the email view keeps it until the user chooses
+    /// another email or list. A list the store could not read shows no mail, and says so.
     func reload() async {
         guard let place else {
             rows = []
@@ -238,6 +241,10 @@ final class ProjectsWindowModel {
                 } else if id == followed {
                     await show(id, in: found.place)
                     return
+                } else {
+                    // Sorting moved the email the user reads, which stays in view with its
+                    // new project.
+                    alone = await runtime.listed(id)
                 }
             }
         } catch {

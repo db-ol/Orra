@@ -3634,6 +3634,42 @@ quotes included.
   Projects read and for "Projects could not save this message on this Mac. Try again
   later.", and the one under Data.
 
+Sorting again after a change of the projects, added on 2026-10-25, not verified yet.
+MailStoreTests, SortingServiceTests, SortingPolicyTests and ProjectsRuntimeTests check the
+parts with made up mail and a fake model. Check in a Debug build with the cleanup model on
+the Mac, the window open and the synthetic mail imported, as in the test guide:
+
+- [ ] Delete All Projects Data and read the synthetic mail with no project. Make the five
+  projects one at a time from Suggested Projects, as they are suggested, then edit each to
+  the people, domains, description and folder the synthetic set gives it. Once Sorting
+  mail… is gone, at most 6 of the 105 mails sit in a wrong project.
+- [ ] Delete All Projects Data, make the five projects as the synthetic set gives them,
+  and read the synthetic mail only then. Once Sorting mail… is gone, at most 6 of the 105
+  mails sit in a wrong project, now that the model's guesses no longer count as people
+  seen.
+- [ ] A reply in a thread of a project from a person the project lists, or one you sent
+  to such a person, shows both reasons in its chip: the same thread and the person.
+- [ ] Remove a person from a project. Their mail leaves it at once unless another setting
+  or a thread files it, and the model may file it again as suggested.
+- [ ] Explain an email whose sender is not one of its project's people. Once it has a
+  draft, add the sender to another project. That email stays where it is with its draft,
+  and the sender's other mail moves.
+- [ ] Edit a project, go back to another project at once and read its emails marked
+  Unsure project while Sorting mail… shows. When sorting moves the email you read, it
+  stays in view with its new project in the chip, and its list no longer holds it.
+- [ ] Dictate while sorting runs after a change of the projects: dictation stays as fast
+  as usual.
+
+The opt in SortingAgainEvaluationTests, added on 2026-10-26, runs the first two checks with
+the real model in a Release build, see its comment for the command. It drives
+ProjectsRuntime with the window open, the index of the set's folders and a stand in for
+Mail that holds orra-test.mbox, and never sends an Apple Event. On 2026-10-26 on an M5 Pro
+each run ended at 95 right, 4 wrong and 6 mails of a project in Needs a Project: the five
+projects made first, the projects made one at a time in the order the suggestions came,
+and in the order of round two of the test guide, the calendar project first. Before this
+change the same runs ended at 95, 4 and 6, at 81, 20 and 4, and at 72, 27 and 6, where
+round two saw 76, 23 and 6.
+
 First steps in Projects and the email view on one page, added on 2026-10-26, not verified
 yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
 English and 简体中文, and the toolbar and the email view in 日本語 and Español too.
