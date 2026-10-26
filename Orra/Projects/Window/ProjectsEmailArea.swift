@@ -93,6 +93,7 @@ struct ProjectsEmailArea: View {
                             Divider()
                             Text("Original Email")
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
                             original(emailModel)
                         }
                     } else {
@@ -390,6 +391,7 @@ extension ProjectsEmailArea {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 content()
             }
         }
@@ -430,6 +432,7 @@ extension ProjectsEmailArea {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Warnings")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 ForEach(items, id: \.warning) { item in
                     VStack(alignment: .leading, spacing: 4) {
                         Label {

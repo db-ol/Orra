@@ -37,6 +37,7 @@ extension ProjectsEmailArea {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Draft")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 if emailModel.hasDraft {
                     draft
                 } else if let why = ProjectsWindowText.noDraft(explanation.draft) {
