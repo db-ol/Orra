@@ -106,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         displayMode: CaptionDisplayMode.load(),
         saveDisplayMode: { $0.save() }
     )
-    lazy var captionWindow = CaptionWindow(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
+    lazy var captionWindow = CaptionWindow(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup, turns: turns)
     /// Projects, off until the user turns it on in Settings, and only in builds that show
     /// it. Reading the switch starts nothing.
     let projects = ProjectsSwitch()

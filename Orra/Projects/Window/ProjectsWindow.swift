@@ -83,17 +83,7 @@ final class ProjectsWindow {
         let model = ProjectsWindowModel(runtime: runtime)
         self.model = model
         let view = ProjectsWindowView(runtime: runtime, model: model, openSettings: openSettings)
-        let controller = NSHostingController(rootView: view)
-        controller.sceneBridgingOptions = [.toolbars, .title]
-        let window = NSWindow(contentViewController: controller)
-        window.title = String(localized: "Projects")
-        // The sidebar reaches the top of the window under one toolbar, as in Mail.
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window.toolbarStyle = .unified
-        window.tabbingMode = .disallowed
-        window.isReleasedWhenClosed = false
-        window.setContentSize(Self.defaultSize)
-        window.contentMinSize = Self.minimumSize
+        let window = Self.window(hosting: view)
         if !window.setFrameUsingName(Self.frameName) {
             window.center()
         }
@@ -107,6 +97,31 @@ final class ProjectsWindow {
                 self?.letGo()
             }
         }
+        return window
+    }
+
+    /// The window with `content` in it, at the size it first opens at and with its minimum
+    /// size. `makeWindow()` adds the frame it keeps between launches, which tests leave out,
+    /// as they build it with a view of their own.
+    static func window(hosting content: some View) -> NSWindow {
+        // The minimum size goes to the content too. The controller sets the window's minimum
+        // to that of its content, in place of `contentMinSize` below, and as every column
+        // scrolls, the content's own minimum is far smaller.
+        let controller = NSHostingController(rootView: content.frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height))
+        controller.sceneBridgingOptions = [.toolbars, .title]
+        // Only the minimum size. With the default, content that grows in a scroll view, such
+        // as a long email in the email view, sets the window's height, and the user could not
+        // make it shorter.
+        controller.sizingOptions = [.minSize]
+        let window = NSWindow(contentViewController: controller)
+        window.title = String(localized: "Projects")
+        // The sidebar reaches the top of the window under one toolbar, as in Mail.
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+        window.setContentSize(Self.defaultSize)
+        window.contentMinSize = Self.minimumSize
         return window
     }
 
