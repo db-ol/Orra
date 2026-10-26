@@ -3596,6 +3596,27 @@ quotes included.
   Projects read and for "Projects could not save this message on this Mac. Try again
   later.", and the one under Data.
 
+Sorting again after a change of the projects, added on 2026-10-25, not verified yet.
+MailStoreTests, SortingServiceTests, SortingPolicyTests and ProjectsRuntimeTests check the
+parts with made up mail and a fake model. Check in a Debug build with the cleanup model on
+the Mac, the window open and the synthetic mail imported into orra-test, as in the test
+guide:
+
+- [ ] Delete All Projects Data and read orra-test with no project. Make the five projects
+  one at a time from Suggested Projects, as they are suggested, then edit each to the
+  values of projects.json with its folder. Once Sorting mail… is gone, at most 6 of the
+  105 mails sit in a wrong project.
+- [ ] Remove a person from a project. Their mail leaves it at once unless another setting
+  or a thread files it, and the model may file it again as suggested.
+- [ ] Explain an email whose sender is not one of its project's people. Once it has a
+  draft, add the sender to another project. That email stays where it is with its draft,
+  and the sender's other mail moves.
+- [ ] Edit a project, go back to another project at once and read its emails marked
+  Unsure project while Sorting mail… shows. When sorting moves the email you read, it
+  stays in view with its new project in the chip, and its list no longer holds it.
+- [ ] Dictate while sorting runs after a change of the projects: dictation stays as fast
+  as usual.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is

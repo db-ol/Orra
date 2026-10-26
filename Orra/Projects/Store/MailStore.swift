@@ -13,7 +13,8 @@ import os
 ///   never wait for the store: `sortingLookups` and `sortingSaves` for SortingService, and
 ///   the explain and draft calls for ExplainService and ReviseService.
 /// - A decision is saved in one statement that also checks that the user did not move the
-///   email and that its project still exists. It returns whether it saved.
+///   email, that its project still exists, and that it takes no email with a draft to
+///   another project. It returns whether it saved.
 /// - The counts of the user's moves are kept as SortingService gives them, by rule and
 ///   project, and never faded or reset here. SortingService fades them.
 /// - Every email, count and draft of a project hangs on the project's row in
@@ -92,14 +93,6 @@ nonisolated struct MailStore: Sendable {
         }
     }
 
-    /// Where a read of mail in batches goes on: after the email with this date and row, in
-    /// the order of date and row. It holds the date as the store keeps it, so no email of
-    /// the same date is read twice or left out.
-    nonisolated struct Cursor: Sendable, Equatable {
-        var date: Double
-        var id: Int64
-    }
-
     /// An email in a list of the window.
     nonisolated struct Listed: Sendable, Equatable {
         var messageID: String
@@ -157,9 +150,10 @@ nonisolated struct MailStore: Sendable {
     /// - mail_projects: the projects the list holds, which every row of a project hangs on.
     /// - mail_messages: one row for each email, with where sorting filed it and whether the
     ///   user moved it, whether sorting runs for it again (`waits`: its decision waits for
-    ///   the model, or its thread changed), its reply mark, its text (until Retention removes
-    ///   it), the words that find it as other mail of its project, its latest explanation as
-    ///   JSON, and when its draft last changed.
+    ///   the model, a likely filing waits in its project until the model answers, or its
+    ///   thread changed), its reply mark, its text (until Retention removes it), the words
+    ///   that find it as other mail of its project, its latest explanation as JSON, and when
+    ///   its draft last changed.
     /// - mail_people: the sender, To, Cc and Reply-To of each email, with the address in
     ///   the form of ProjectsAddress, for the people seen in a project and those the user
     ///   wrote to.
@@ -434,13 +428,20 @@ nonisolated struct MailStore: Sendable {
     }
 
     /// For these addresses, in the form of ProjectsAddress, the projects whose mail held one
-    /// of them as sender, To or Cc, with the addresses found in each. Needs a Project and
-    /// Set Aside do not count.
+    /// of them as sender, To or Cc, with the addresses found in each. Only mail that rests on
+    /// the user counts: a move of the user, a filing by a setting of the user, and a thread
+    /// reply in a thread that holds either in the same project. A guess of the model does
+    /// not, and neither does a reply under it, so one guess never pulls the sender's next
+    /// mail after it. Needs a Project and Set Aside do not count.
     func peopleSeen(_ addresses: [String]) async throws -> [UUID: Set<String>] {
         guard !addresses.isEmpty else { return [:] }
         let rows = try await database.run("""
             SELECT DISTINCT m.project, p.key FROM mail_people p JOIN mail_messages m ON m.id = p.message
             WHERE p.key IN (SELECT value FROM json_each(?)) AND p.role IN ('from', 'to', 'cc') AND m.project IS NOT NULL
+                AND (m.moved_by_user = 1 OR (m.level = 'sure' AND EXISTS (
+                    SELECT 1 FROM mail_messages a
+                    WHERE a.thread_root = m.thread_root AND a.project = m.project
+                        AND (a.moved_by_user = 1 OR (a.level = 'sure' AND json_extract(a.reasons, '$[0]') != 'thread')))))
             """, [.text(try Self.json(addresses))])
         var seen: [UUID: Set<String>] = [:]
         for row in rows where row.count == 2 {
@@ -467,8 +468,10 @@ nonisolated struct MailStore: Sendable {
         }
     }
 
-    /// The emails never sorted, whose decision waits for the model, or whose thread an
-    /// earlier message joined later, oldest first. Never one the user moved.
+    /// The emails never sorted, whose decision waits for the model, that wait in their
+    /// project until the model answers, see `markWaiting(_:)`, or whose thread an earlier
+    /// message joined later, oldest first, each with where it is filed. Never one the user
+    /// moved.
     func waiting() async throws -> [SortingService.Email] {
         try await database.transaction { database in
             try Self.rows(where: "moved_by_user = 0 AND (level IS NULL OR waits = 1) ORDER BY date, id", in: database)
@@ -496,7 +499,9 @@ nonisolated struct MailStore: Sendable {
     /// Saves an email's decision and says whether it did. Nothing is saved for an email
     /// the user moved, for a project that no longer exists, or for an email the store does
     /// not hold. The check and the write are one statement. A decision for another project
-    /// drops the email's explanation and draft.
+    /// drops the email's explanation and draft, so none is saved for an email whose
+    /// explanation holds a draft, which the user may have changed. That email stays where it
+    /// is, or in Needs a Project when it was never sorted, and waits for no more sorting.
     func saveDecision(_ decision: SortingDecision, for messageID: String) async throws -> Bool {
         let parameters: [ProjectsDatabase.Value] = [
             .text(messageID),
@@ -509,11 +514,26 @@ nonisolated struct MailStore: Sendable {
             let rows = try database.run("""
                 UPDATE mail_messages SET \(Self.explanationForProject), project = ?2, level = ?3, reasons = ?4, waits = ?5
                 WHERE message_id = ?1 AND moved_by_user = 0 AND (?2 IS NULL OR ?2 IN (SELECT id FROM mail_projects))
+                    AND (project IS ?2 OR explanation_draft = 0)
                 RETURNING id
                 """, parameters)
+            guard !rows.isEmpty else {
+                // So sorting does not ask about an email it may not move again and again.
+                try database.run("""
+                    UPDATE mail_messages SET waits = 0, level = coalesce(level, 'unsure')
+                    WHERE message_id = ?1 AND moved_by_user = 0 AND project IS NOT ?2 AND explanation_draft = 1
+                    """, Array(parameters.prefix(2)))
+                return false
+            }
             try Self.dropDraftsWithoutExplanation(rows, in: database)
-            return !rows.isEmpty
+            return true
         }
+    }
+
+    /// Marks an email to sort again and keeps where it is filed, such as a likely filing
+    /// while the model cannot answer. Nothing changes for an email the user moved.
+    func markWaiting(_ messageID: String) async throws {
+        try await database.run("UPDATE mail_messages SET waits = 1 WHERE message_id = ? AND moved_by_user = 0", [.text(messageID)])
     }
 
     /// The SET of an UPDATE that files an email in the project ?2: the explanation, which
@@ -611,7 +631,8 @@ nonisolated struct MailStore: Sendable {
             decision: { id, decision in await logged("saving a decision", false) { try await saveDecision(decision, for: id) } },
             reply: { id, reply in await logged("saving a reply mark", ()) { try await saveReply(reply, for: id) } },
             move: { id, project in _ = await logged("saving a move", false) { try await move(id, to: project) } },
-            tally: { rule, project, tally in _ = await logged("saving a count of moves", false) { try await saveTally(tally, rule: rule, project: project) } }
+            tally: { rule, project, tally in _ = await logged("saving a count of moves", false) { try await saveTally(tally, rule: rule, project: project) } },
+            wait: { id in await logged("marking an email to sort again", ()) { try await markWaiting(id) } }
         )
     }
 
@@ -984,50 +1005,59 @@ nonisolated struct MailStore: Sendable {
         }
     }
 
-    /// The emails of Needs a Project that sorting may still file, oldest first, at most
-    /// `limit`, after `cursor` and up to `end` with it, with the cursor that reads on after
-    /// them. Sorting reads all of them this way when the projects change. Mail the user
-    /// moved there is left out before the limit, since sorting never files it again.
-    func resortBatch(after cursor: Cursor?, through end: Cursor? = nil, limit: Int) async throws -> (emails: [SortingService.Email], next: Cursor?) {
-        var condition = Self.resortable
-        var values: [ProjectsDatabase.Value] = []
-        if let cursor {
-            condition += " AND (date, id) > (?, ?)"
-            values += [.real(cursor.date), .integer(cursor.id)]
-        }
-        if let end {
-            condition += " AND (date, id) <= (?, ?)"
-            values += [.real(end.date), .integer(end.id)]
-        }
-        values.append(.integer(Int64(max(0, limit))))
-        let query = "SELECT id, date FROM mail_messages WHERE \(condition) ORDER BY date, id LIMIT ?"
-        let parameters = values
+    /// The Message-IDs of the mail that sorting reads again after a change of the projects,
+    /// oldest first, see ProjectsRuntime.
+    /// - Mail never sorted, Needs a Project and the likely filings.
+    /// - A sure or Set Aside filing whose sender, To or Cc is a changed address or is at a
+    ///   changed domain or one under it, or that is in a changed linked mailbox.
+    /// - The sure thread replies in the threads of that mail, so a reply follows the message
+    ///   it answers.
+    ///
+    /// A likely filing whose text Retention removed comes only when the change names it as
+    /// it would name a sure filing, since sorting would judge it by its headers alone. Never
+    /// mail the user moved, mail whose explanation holds a draft, or mail filed by a rule the
+    /// user made, so Remove Rule leaves what the rule filed where it is.
+    func resortIDs(reaching change: SortingService.Change) async throws -> [String] {
+        let parameters: [ProjectsDatabase.Value] = [
+            .text(try Self.json(change.addresses.sorted())),
+            .text(try Self.json(change.domains.sorted())),
+            .text(try Self.json(change.mailboxes.sorted())),
+        ]
+        return try await database.run("""
+            WITH reached AS (
+                SELECT m.id, m.thread_root FROM mail_messages m
+                WHERE m.moved_by_user = 0 AND m.explanation_draft = 0
+                    AND NOT (m.level IS 'sure' AND json_extract(m.reasons, '$[0]') IS 'rule')
+                    AND (m.level IS NULL OR m.level = 'unsure' OR (m.level = 'likely' AND m.text IS NOT NULL)
+                        OR m.mailbox IN (SELECT value FROM json_each(?3))
+                        OR EXISTS (
+                            SELECT 1 FROM mail_people p
+                            WHERE p.message = m.id AND p.role IN ('from', 'to', 'cc') AND p.key IS NOT NULL
+                                AND (p.key IN (SELECT value FROM json_each(?1))
+                                    OR EXISTS (SELECT 1 FROM json_each(?2) d
+                                        WHERE substr(p.key, -length(d.value) - 1) IN ('@' || d.value, '.' || d.value)))))
+            )
+            SELECT m.message_id FROM mail_messages m
+            WHERE m.id IN (SELECT id FROM reached)
+                OR (m.moved_by_user = 0 AND m.explanation_draft = 0 AND m.level = 'sure'
+                    AND json_extract(m.reasons, '$[0]') = 'thread' AND m.thread_root IN (SELECT thread_root FROM reached))
+            ORDER BY m.date, m.id
+            """, parameters).compactMap { $0.first?.text }
+    }
+
+    /// These emails as sorting reads them again, oldest first, each with where it is filed.
+    /// An email the user moved, or whose explanation got a draft, since
+    /// `resortIDs(reaching:)` read it is left out.
+    func resortEmails(_ messageIDs: [String]) async throws -> [SortingService.Email] {
+        guard !messageIDs.isEmpty else { return [] }
+        let ids = try Self.json(messageIDs)
         return try await database.transaction { database in
-            let batch = try database.run(query, parameters)
-            guard let last = batch.last, last.count == 2, let id = last[0].integer, let date = last[1].real else { return ([], nil) }
-            let emails = try Self.rows(
-                where: "id IN (SELECT value FROM json_each(?)) ORDER BY date, id",
-                [.text(try Self.json(batch.compactMap { $0.first?.integer }))],
-                in: database
+            try Self.rows(
+                where: "message_id IN (SELECT value FROM json_each(?)) AND moved_by_user = 0 AND explanation_draft = 0 ORDER BY date, id",
+                [.text(ids)], in: database
             ).map(\.sortingEmail)
-            return (emails, Cursor(date: date, id: id))
         }
     }
-
-    /// The newest email of Needs a Project that sorting may still file and that is older
-    /// than the newest `count` of them, in the order of date and row. Sorting again reads up
-    /// to it with the rules alone. Nil when there are no more than `count`.
-    func resortEnd(beforeNewest count: Int) async throws -> Cursor? {
-        let rows = try await database.run(
-            "SELECT date, id FROM mail_messages WHERE \(Self.resortable) ORDER BY date DESC, id DESC LIMIT 1 OFFSET ?",
-            [.integer(Int64(max(0, count)))])
-        guard let row = rows.first, row.count == 2, let date = row[0].real, let id = row[1].integer else { return nil }
-        return Cursor(date: date, id: id)
-    }
-
-    /// The mail of Needs a Project that sorting may still file, in SQL: never mail the user
-    /// moved there.
-    private static let resortable = "project IS NULL AND (level IS NULL OR level = 'unsure') AND moved_by_user = 0"
 
     /// The condition of a list in SQL, with its parameters.
     private static func condition(of place: Place) -> (sql: String, parameters: [ProjectsDatabase.Value]) {
@@ -1113,7 +1143,8 @@ nonisolated struct MailStore: Sendable {
             SortingService.Email(
                 messageID: messageID, sender: sender.address, recipients: (to + cc).map(\.address),
                 date: date, subject: subject, text: text ?? "", attachmentNames: attachments.map(\.name),
-                mailbox: mailbox, inReplyTo: inReplyTo, references: references, list: list)
+                mailbox: mailbox, inReplyTo: inReplyTo, references: references, list: list,
+                decided: level.map { SortingDecision(project: project, level: $0, reasons: reasons) })
         }
 
         var explainEmail: ExplainService.Email {

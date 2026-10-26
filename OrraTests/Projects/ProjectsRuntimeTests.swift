@@ -529,10 +529,11 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
-    /// Sorting again asks the model only about the newest emails of Needs a Project that
-    /// sorting may still file, a page of the list, and the user's moves take none of those
-    /// places. The rules alone sort the older ones, which stay as they were unless the rules
-    /// file them, also with the window closed, so they never wait for the model.
+    /// Sorting again asks the model only about the newest emails a change reaches, a page of
+    /// the list, and the user's moves take none of those places. The rules alone sort the
+    /// older ones, which stay as they were unless the rules file them, so they never wait
+    /// for the model. With the window closed, the likely filings of the page keep their
+    /// place and wait for the model.
     @Test(.timeLimit(.minutes(1)))
     func sortingAgainAsksTheModelOnlyAboutTheNewestEmails() async throws {
         defer { cleanUp() }
@@ -575,16 +576,16 @@ struct ProjectsRuntimeTests {
         #expect(Set(left.map(\.messageID)) == Set(older + ["moved@kiln.example"]))
         #expect(left.filter { older.contains($0.messageID) }.allSatisfy { $0.reasons == modelSaidNone.reasons })
 
-        // With the window closed, the newest wait for the model and the oldest stays as it
-        // was.
+        // With the window closed, the two likely filings, now the newest the change reaches,
+        // keep their place and wait for the model, and the older ones stay as they were.
         runtime.windowClosed()
         try await runtime.add(Project(name: "Garden"))
         await runtime.untilResorted()
         #expect(model.jobs.value == newest.count)
         let reasons = try Dictionary(uniqueKeysWithValues: await runtime.list(.needsProject).map { ($0.messageID, $0.reasons) })
-        #expect(reasons[older[0]] == modelSaidNone.reasons)
-        #expect(reasons[older[1]]?.contains(.waitingForModel) == true)
-        #expect(reasons[older[2]]?.contains(.waitingForModel) == true)
+        #expect(older.allSatisfy { reasons[$0] == modelSaidNone.reasons })
+        #expect(try await runtime.list(.project(harbor.id)).filter { $0.level == .likely }.map(\.messageID).sorted() == newest)
+        #expect(try await store.waiting().map(\.messageID) == newest)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }
@@ -703,6 +704,244 @@ struct ProjectsRuntimeTests {
         #expect(mail.calls.filter { $0 == "mailboxes" }.count == 2)
         try await runtime.update(Project(id: runtime.projectList[0].id, name: "Harbor", mailboxes: ["Work/Clients/Harbor"]))
         #expect(runtime.missingMailboxes.isEmpty)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    // MARK: Sorting again after a change of the projects
+
+    /// Mail read with no project, a first project that takes it as the model's guess, and
+    /// later the project it belongs to, as in the round two test. The later project takes
+    /// it back, and the guess never counts as people seen in the first.
+    @Test(.timeLimit(.minutes(1)))
+    func aNewProjectTakesBackTheMailTheModelFiledInAnother() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true))
+        let store = try #require(runtime.running?.store)
+        // The user's reply to Kai's first email.
+        var reply = Self.message("r1@studio.example", from: Self.own, day: 0.5)
+        reply.to = [MailStore.Person(address: "kai@kiln.example")]
+        reply.inReplyTo = ["k1@kiln.example"]
+        reply.references = ["k1@kiln.example"]
+        try await store.save([
+            Self.message("k1@kiln.example", from: "kai@kiln.example"), reply,
+            Self.message("k2@kiln.example", from: "kai@kiln.example", day: 1),
+        ], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        _ = try await listed(.needsProject, runtime) { $0.count == 3 && $0.allSatisfy { $0.level != nil } }
+        runtime.windowOpened()
+
+        let alder = Project(name: "Alder")
+        try await runtime.add(alder)
+        await runtime.untilResorted()
+        let guessed = try Dictionary(uniqueKeysWithValues: await runtime.list(.project(alder.id)).map { ($0.messageID, $0) })
+        #expect(guessed["k1@kiln.example"]?.level == .likely)
+        #expect(guessed["r1@studio.example"]?.reasons == [.thread])
+        // Neither the guess of k1 nor the reply under it is people seen of Alder.
+        #expect(guessed["k2@kiln.example"]?.level == .likely)
+        #expect(guessed["k2@kiln.example"]?.reasons == [.model])
+
+        let birch = Project(name: "Birch", people: [Project.Person(name: "Kai Moss", address: "kai@kiln.example")])
+        try await runtime.add(birch)
+        await runtime.untilResorted()
+        let filed = try await runtime.list(.project(birch.id))
+        #expect(Set(filed.map(\.messageID)) == ["k1@kiln.example", "r1@studio.example", "k2@kiln.example"])
+        #expect(filed.allSatisfy { $0.level == .sure && $0.reasons == ($0.messageID == "r1@studio.example" ? [.thread] : [.person]) })
+        #expect(try await runtime.list(.project(alder.id)).isEmpty)
+        // The rules alone took them back.
+        #expect(model.jobs.value == 2)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A person removed from a project takes their mail out of it, unless another setting or
+    /// a thread files it there. The mail waits for the model in Needs a Project, and its own
+    /// filing no longer counts as people seen in the project it left.
+    @Test(.timeLimit(.minutes(1)))
+    func removingAPersonSendsTheirMailBackToNeedsAProject() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        try await runtime.add(Project(name: "Alder"))
+        let birch = Project(name: "Birch", people: [Project.Person(name: "Sam Okafor", address: "sam@post.example")])
+        try await runtime.add(birch)
+        await runtime.untilResorted()
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("s1@post.example", from: "sam@post.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("s1@post.example", in: .project(birch.id), runtime) { $0.level == .sure }
+
+        try await runtime.update(Project(id: birch.id, name: "Birch"))
+        await runtime.untilResorted()
+        #expect(try await runtime.list(.project(birch.id)).isEmpty)
+        let waiting = try #require(try await runtime.list(.needsProject).first(where: { $0.messageID == "s1@post.example" }))
+        #expect(waiting.reasons == [.waitingForModel, .noSignal])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Sorting again never moves mail the user moved, or mail whose explanation holds a
+    /// draft, which the user may have changed.
+    @Test(.timeLimit(.minutes(1)))
+    func sortingAgainKeepsTheUsersMovesAndDrafts() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alder = Project(name: "Alder")
+        try await runtime.add(alder)
+        await runtime.untilResorted()
+        let store = try #require(runtime.running?.store)
+        let ids = ["e1@kiln.example", "e2@kiln.example", "e3@kiln.example"]
+        try await store.save(ids.enumerated().map { day, id in Self.message(id, from: "kai@kiln.example", day: Double(day)) }, ownAddresses: [Self.own], at: Self.today)
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: ids[0]))
+        #expect(try await store.save(MailStoreTests.explanation(ids[0], project: nil), at: Self.today))
+        #expect(try await store.saveDecision(SortingDecision(project: alder.id, level: .likely, reasons: [.model]), for: ids[1]))
+        #expect(try await store.save(MailStoreTests.explanation(ids[1], project: alder.id), at: Self.today))
+        let typed = MailStore.EditedDraft(text: "Hi Kai, the tiles are ready.", editedFrom: "key")
+        #expect(try await store.save(typed, for: ids[1], at: Self.today))
+        #expect(try await store.move(ids[2], to: alder.id))
+
+        try await runtime.add(Project(name: "Birch", people: [Project.Person(name: "Kai Moss", address: "kai@kiln.example")]))
+        await runtime.untilResorted()
+        #expect(await runtime.place(of: ids[0]) == .needsProject)
+        #expect(await runtime.explanation(for: ids[0]) != nil)
+        #expect(await runtime.place(of: ids[1]) == .project(alder.id))
+        #expect(await runtime.editedDraft(of: ids[1]) == typed)
+        let moved = try #require(await runtime.listed(ids[2]))
+        #expect(moved.project == alder.id && moved.movedByUser)
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Sorting again asks the model only where a change can alter its answer, here where a
+    /// project the prompt shows changed. A fifth project, out of the three the prompt shows,
+    /// and a Save with no change ask nothing.
+    @Test(.timeLimit(.minutes(1)))
+    func sortingAgainAsksTheModelOnlyWhereAChangeCanAlterItsAnswer() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true))
+        let alder = Project(name: "Alder")
+        for project in [alder, Project(name: "Birch"), Project(name: "Cedar"), Project(name: "Dogwood")] {
+            try await runtime.add(project)
+        }
+        await runtime.untilResorted()
+        let store = try #require(runtime.running?.store)
+        try await store.save([
+            Self.message("e1@kiln.example", from: "kai@kiln.example"),
+            Self.message("e2@kiln.example", from: "kai@kiln.example", day: 1),
+        ], ownAddresses: [Self.own], at: Self.today)
+        #expect(try await store.saveDecision(SortingDecision(project: alder.id, level: .likely, reasons: [.model]), for: "e1@kiln.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.modelSaidNone, .noSignal]), for: "e2@kiln.example"))
+        runtime.windowOpened()
+
+        try await runtime.add(Project(name: "Elm"))
+        await runtime.untilResorted()
+        #expect(model.jobs.value == 0)
+        try await runtime.update(alder)
+        await runtime.untilResorted()
+        #expect(model.jobs.value == 0)
+        // Its own words change the prompt of both emails.
+        var described = alder
+        described.description = "Tiles for the floor of the hall."
+        try await runtime.update(described)
+        await runtime.untilResorted()
+        #expect(model.jobs.value == 2)
+        #expect(await runtime.place(of: "e2@kiln.example") == .project(alder.id))
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// A change that ends a run under way leaves nothing out: the next run sorts by both
+    /// changes, so it asks again about what the run it ended was asking.
+    @Test(.timeLimit(.minutes(1)))
+    func aChangeThatEndsARunCarriesItsMailToTheNext() async throws {
+        defer { cleanUp() }
+        model.isThere.withLock { $0 = true }
+        let (runtime, projects, _) = try await started(installed: Installed(true))
+        let alder = Project(name: "Alder")
+        for project in [alder, Project(name: "Birch"), Project(name: "Cedar"), Project(name: "Dogwood")] {
+            try await runtime.add(project)
+        }
+        await runtime.untilResorted()
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("e1@kiln.example", from: "kai@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        #expect(try await store.saveDecision(SortingDecision(project: alder.id, level: .likely, reasons: [.model]), for: "e1@kiln.example"))
+        runtime.windowOpened()
+
+        model.blocks.withLock { $0 = true }
+        var described = alder
+        described.description = "Tiles for the floor of the hall."
+        try await runtime.update(described)
+        try await waitUntil { model.jobs.value == 1 }
+        model.blocks.withLock { $0 = false }
+        // A fifth project alone asks nothing, see
+        // sortingAgainAsksTheModelOnlyWhereAChangeCanAlterItsAnswer.
+        try await runtime.add(Project(name: "Elm"))
+        await runtime.untilResorted()
+        #expect(model.ended.value == 1)
+        #expect(model.jobs.value == 2)
+        runtime.windowClosed()
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// Forget Project sorts again the mail the project reached, such as mail that it and
+    /// another project, which list the same person, left to the model.
+    @Test(.timeLimit(.minutes(1)))
+    func forgettingAProjectSortsAgainWhatItReached() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let kai = Project.Person(name: "Kai Moss", address: "kai@kiln.example")
+        let alder = Project(name: "Alder", people: [kai])
+        let birch = Project(name: "Birch", people: [kai])
+        try await runtime.add(alder)
+        try await runtime.add(birch)
+        await runtime.untilResorted()
+        let store = try #require(runtime.running?.store)
+        try await store.save([Self.message("k1@kiln.example", from: "kai@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed("k1@kiln.example", in: .needsProject, runtime) { $0.reasons == [.waitingForModel, .signalsDisagree] }
+
+        try await runtime.forget(birch.id)
+        await runtime.untilResorted()
+        let filed = try await runtime.list(.project(alder.id))
+        #expect(filed.map(\.messageID) == ["k1@kiln.example"])
+        #expect(filed.first?.level == .sure && filed.first?.reasons == [.person])
+        await projects.turnOff(keepingData: true)
+        try await waitUntil { runtime.phase == .off }
+    }
+
+    /// The email the user reads stays in view when sorting moves it to another list, with
+    /// its new project, and the list it left no longer holds it.
+    @Test(.timeLimit(.minutes(1)))
+    func theEmailTheUserReadsStaysInViewWhenSortingMovesIt() async throws {
+        defer { cleanUp() }
+        let (runtime, projects, _) = try await started()
+        let alder = Project(name: "Alder", domains: ["kiln.example"])
+        try await runtime.add(alder)
+        await runtime.untilResorted()
+        let store = try #require(runtime.running?.store)
+        let id = "k1@kiln.example"
+        try await store.save([Self.message(id, from: "kai@kiln.example")], ownAddresses: [Self.own], at: Self.today)
+        runtime.requestSort()
+        try await waitUntilListed(id, in: .project(alder.id), runtime) { $0.level == .sure }
+        let window = ProjectsWindowModel(runtime: runtime)
+        window.place = .project(alder.id)
+        await window.reload()
+        window.selectedMessageID = id
+        #expect(window.selectedEmail?.project == alder.id)
+
+        let birch = Project(name: "Birch", people: [Project.Person(name: "Kai Moss", address: "kai@kiln.example")])
+        try await runtime.add(birch)
+        await runtime.untilResorted()
+        await window.reload()
+        #expect(window.place == .project(alder.id))
+        #expect(window.selectedEmail?.messageID == id)
+        #expect(window.selectedEmail?.project == birch.id)
+        #expect(window.selectedEmail?.level == .sure)
+        #expect(window.rows.isEmpty)
         await projects.turnOff(keepingData: true)
         try await waitUntil { runtime.phase == .off }
     }

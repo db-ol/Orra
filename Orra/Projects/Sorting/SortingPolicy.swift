@@ -72,6 +72,13 @@ nonisolated struct SortingDecision: Sendable, Equatable, Codable {
     var waitsForModel: Bool {
         reasons.contains(.waitingForModel)
     }
+
+    /// Whether the model's answer made the decision: a project it chose, or Needs a Project
+    /// after its none, another choice than the rules, an answer that was none of the
+    /// choices, or a prompt too long for it.
+    var restsOnModel: Bool {
+        reasons.contains { [SortingReason.model, .modelSaidNone, .modelDisagreed, .modelAnswerInvalid, .tooLongForModel].contains($0) }
+    }
 }
 
 /// Rules first, the model as tie breaker (plan section 8, approved 2026-10-19).
@@ -98,6 +105,23 @@ nonisolated enum SortingPolicy {
     /// Whether the decision needs the model's answer.
     static func needsModel(_ signals: SortingSignals) -> Bool {
         decide(signals, model: nil).waitsForModel
+    }
+
+    /// Whether sorting again asks the model about an email decided as `before`, after a
+    /// change of the projects in `changed`: when the rules leave it to the model and the
+    /// model did not make `before`, when a changed project is among the candidates the
+    /// prompt shows, or when the project the model chose is no longer a choice or lost a
+    /// signal that pointed to it. Otherwise the change cannot alter the model's answer, and
+    /// the same prompt asked again could get another one, see ProjectsModelQueue.
+    static func asksAgain(_ signals: SortingSignals, before: SortingDecision?, changed: Set<UUID>) -> Bool {
+        guard needsModel(signals) else { return false }
+        guard let before, before.restsOnModel else { return true }
+        if !changed.isDisjoint(with: signals.topCandidates) {
+            return true
+        }
+        guard let project = before.project else { return false }
+        let had = Set(before.reasons).subtracting([.model])
+        return !choices(signals).contains(project) || !had.isSubset(of: Set(support(project, signals)))
     }
 
     /// The decision for an email. `model` is the model's answer to the SortingPrompt for
@@ -197,6 +221,16 @@ nonisolated enum SortingPolicy {
             return .likely(votes[0])
         default:
             return .open(.signalsDisagree, among: ruled)
+        }
+    }
+
+    /// The projects the model may choose for these signals, empty when the rules decide
+    /// alone.
+    private static func choices(_ signals: SortingSignals) -> [UUID] {
+        switch outcome(signals) {
+        case .decided: []
+        case .likely(let project): [project]
+        case .open(_, let among): among.isEmpty ? signals.topCandidates : signals.topCandidates.filter(among.contains)
         }
     }
 

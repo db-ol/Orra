@@ -16,10 +16,14 @@ import os
 /// 3. SortingPolicy decides from the rules alone.
 /// 4. When the rules leave it to the model and the Projects window is open, the model
 ///    chooses among the top candidates through ProjectsModelQueue, as background work.
-///    With the window closed, the email waits in Needs a Project, and `sortWaiting()` sorts
-///    it again once the window opens.
+///    With the window closed, the email waits in Needs a Project, or a likely filing in its
+///    project, and `sortWaiting()` sorts it again once the window opens.
 /// 5. SortingPolicy decides with the model's answer. The decision and the reply due mark,
 ///    see ReplyRule, are saved.
+///
+/// After a change of the projects, `sortAgain(_:after:rulesOnly:)` sorts again the mail the
+/// change reaches, filed or not, see ProjectsRuntime. It saves a decision only when it
+/// changes, and asks the model only where the change can alter its answer.
 ///
 /// It reads and saves only through closures, so it never waits for the store and tests pass
 /// fakes. The text work runs off the main actor. Batches run one at a time, in the order
@@ -60,6 +64,8 @@ final class SortingService {
         var references: [String] = []
         /// The list headers.
         var list = ListMail()
+        /// Where sorting filed it before, nil for an email never sorted.
+        var decided: SortingDecision? = nil
     }
 
     /// The user, from Mail's accounts or the override of a Debug build.
@@ -76,6 +82,29 @@ final class SortingService {
         var project: UUID?
         /// Whether the user moved it there.
         var movedByUser = false
+    }
+
+    /// What a change of the projects touched, so sorting again reads the mail it can reach
+    /// and asks the model only where it can alter the answer, see ProjectsRuntime.
+    nonisolated struct Change: Sendable, Equatable {
+        /// The projects the change touched.
+        var projects: Set<UUID> = []
+        /// The people and sender rules that a project gained or lost, in the form of
+        /// ProjectsAddress.
+        var addresses: Set<String> = []
+        /// The domains and domain rules that a project gained or lost, trimmed, lowercased
+        /// and without a leading @.
+        var domains: Set<String> = []
+        /// The linked mailboxes that a project gained or lost.
+        var mailboxes: Set<String> = []
+
+        /// This change and `other` as one, as when a newer change ends a run of sorting
+        /// again before it is done.
+        func union(_ other: Change) -> Change {
+            Change(
+                projects: projects.union(other.projects), addresses: addresses.union(other.addresses),
+                domains: domains.union(other.domains), mailboxes: mailboxes.union(other.mailboxes))
+        }
     }
 
     /// Another message of an email's thread, for the reply due mark.
@@ -125,8 +154,9 @@ final class SortingService {
         var thread: (Email) async -> [ThreadMessage]
         /// The full text score of each project for a text, see ChunkSearch.projectScores.
         var scores: @Sendable (String) async -> [UUID: Double]
-        /// The emails without a decision, or whose decision waits for the model, see
-        /// `SortingDecision.waitsForModel`. Never one the user moved.
+        /// The emails without a decision, whose decision waits for the model, see
+        /// `SortingDecision.waitsForModel`, or that `Saves.wait` kept in place, each with
+        /// where it is filed. Never one the user moved.
         var waiting: () async -> [Email]
         /// The moves of one kind to a project, as `Saves.tally` saved them, nil before the
         /// first.
@@ -139,7 +169,8 @@ final class SortingService {
         /// saves nothing for an email the user moved, and checks that in the same write (such
         /// as an UPDATE with WHERE moved_by_user = 0), since the user may move the email while
         /// the model thinks. It also saves nothing for a project that no longer exists, such
-        /// as after Forget Project.
+        /// as after Forget Project, and nothing that takes an email with a draft to another
+        /// project, since the user would lose the draft without being asked.
         var decision: (String, SortingDecision) async -> Bool
         /// An email's reply due mark, by its Message-ID.
         var reply: (String, ReplyRule.Decision) async -> Void
@@ -149,6 +180,10 @@ final class SortingService {
         /// The moves of one kind to a project. The store keeps the tally as given, by the
         /// rule and the project, and never fades or resets it. The service does that.
         var tally: (SortingCandidate.Rule, UUID, Tally) async -> Void
+        /// Keeps an email where it is filed and marks it to sort again, by its Message-ID,
+        /// such as a likely filing while the model cannot answer. The store marks nothing
+        /// for an email the user moved.
+        var wait: (String) async -> Void = { _ in }
     }
 
     /// Moves of the same kind to one project before a rule is offered (plan section 8, a
@@ -222,17 +257,31 @@ final class SortingService {
 
     /// Sorts new emails, oldest first, after the batch under way. Returns once they are
     /// saved, or when the caller's task is cancelled or `stop()` is called. The email under
-    /// way then is not saved. With `rulesOnly`, the model is never asked, and only an email
-    /// the rules file on their own, in a project or in Set Aside, is saved. The others stay
-    /// as they are, such as when Needs a Project is sorted again.
-    func sort(_ emails: [Email], rulesOnly: Bool = false) async {
-        await inTurn { await self.process(emails, rulesOnly: rulesOnly) }
+    /// way then is not saved. A likely filing keeps its place while the model cannot
+    /// answer, and waits for it.
+    func sort(_ emails: [Email]) async {
+        await inTurn { await self.process(emails, pass: .new) }
     }
 
     /// Sorts the emails that wait for the model or were never sorted, such as when the
     /// window opens.
     func sortWaiting() async {
-        await inTurn { await self.process(await self.lookups.waiting()) }
+        await inTurn { await self.process(await self.lookups.waiting(), pass: .new) }
+    }
+
+    /// Sorts again, oldest first and after the batch under way, emails that a change of the
+    /// projects in `changed` reaches, each with where sorting filed it, see ProjectsRuntime.
+    /// An email the rules decide as before is left as it is, with its reply mark.
+    /// - With `rulesOnly` the model is never asked. A decision the rules make on their own,
+    ///   in a project or in Set Aside, is saved, and a filing of that kind the rules no
+    ///   longer make goes to Needs a Project without waiting for the model, so it never
+    ///   votes for its old project while the model decides. The others stay as they are.
+    /// - Without it, the model is asked about an email the rules leave to it only where the
+    ///   change can alter its answer, see `SortingPolicy.asksAgain`, and an answer is saved
+    ///   when it differs. A likely filing keeps its place while the model cannot answer,
+    ///   and waits for it.
+    func sortAgain(_ emails: [Email], after changed: Set<UUID>, rulesOnly: Bool) async {
+        await inTurn { await self.process(emails, pass: .again(changed: changed, rulesOnly: rulesOnly)) }
     }
 
     /// Prepares the projects again before the next email. Call it when the projects, their
@@ -317,6 +366,15 @@ final class SortingService {
         let own: Set<String>
     }
 
+    /// How a batch sorts its emails.
+    private enum Pass {
+        /// New mail or mail that waits: every decision is saved.
+        case new
+        /// Sorting again after a change of the projects in `changed`, see
+        /// `sortAgain(_:after:rulesOnly:)`.
+        case again(changed: Set<UUID>, rulesOnly: Bool)
+    }
+
     /// What the rules found for one email.
     private nonisolated struct Ruled: Sendable {
         var signals: SortingSignals
@@ -332,11 +390,14 @@ final class SortingService {
         var asked = 0
         var modelTime: Duration = .zero
         var waiting = 0
-        /// Decisions the store did not save, since the user moved the email meanwhile or
-        /// its project is gone.
+        /// Decisions the store did not save, since the user moved the email meanwhile, it
+        /// holds a draft, or its project is gone.
         var notSaved = 0
-        /// Emails left as they were, since only the rules sorted them and did not file them.
+        /// Emails sorted again and left as they were, since their decision stayed the same
+        /// or only the model could change it.
         var left = 0
+        /// Likely filings kept in their project until the model answers.
+        var kept = 0
     }
 
     /// Runs `work` after the batch before it, and cancels it with the caller's task or
@@ -359,7 +420,7 @@ final class SortingService {
         batches[number] = nil
     }
 
-    private func process(_ emails: [Email], rulesOnly: Bool = false) async {
+    private func process(_ emails: [Email], pass: Pass) async {
         guard !emails.isEmpty, !Task.isCancelled else { return }
         let started = ContinuousClock.now
         let ordered = emails.enumerated()
@@ -371,15 +432,15 @@ final class SortingService {
             // The projects as they are now, prepared again when they changed meanwhile.
             let setup = await currentSetup()
             guard !Task.isCancelled,
-                  await sortOne(Self.limited(email), setup: setup, rulesOnly: rulesOnly, modelIsThere: &modelIsThere, log: &log) else { break }
+                  await sortOne(Self.limited(email), setup: setup, pass: pass, modelIsThere: &modelIsThere, log: &log) else { break }
         }
         let sorted = log.levels.values.reduce(0, +)
-        Logger.projects.notice("Sorting: \(sorted, privacy: .public) of \(emails.count, privacy: .public) emails in \(Self.seconds(started.duration(to: .now)), privacy: .public): \(log.levels[.sure] ?? 0, privacy: .public) sure, \(log.levels[.likely] ?? 0, privacy: .public) likely, \(log.levels[.unsure] ?? 0, privacy: .public) unsure, \(log.levels[.setAside] ?? 0, privacy: .public) set aside. The model was asked \(log.asked, privacy: .public) times for \(Self.seconds(log.modelTime), privacy: .public), \(log.waiting, privacy: .public) wait for it, \(log.notSaved, privacy: .public) not saved since the user moved them or the project is gone, \(log.left, privacy: .public) left as they were since the rules alone did not file them")
+        Logger.projects.notice("Sorting: \(sorted, privacy: .public) of \(emails.count, privacy: .public) emails in \(Self.seconds(started.duration(to: .now)), privacy: .public): \(log.levels[.sure] ?? 0, privacy: .public) sure, \(log.levels[.likely] ?? 0, privacy: .public) likely, \(log.levels[.unsure] ?? 0, privacy: .public) unsure, \(log.levels[.setAside] ?? 0, privacy: .public) set aside. The model was asked \(log.asked, privacy: .public) times for \(Self.seconds(log.modelTime), privacy: .public), \(log.waiting, privacy: .public) wait for it, \(log.notSaved, privacy: .public) not saved since the user moved them, they hold a draft or the project is gone, \(log.left, privacy: .public) left as they were, \(log.kept, privacy: .public) kept in their project until the model answers")
     }
 
-    /// Sorts one email and saves what it found. False when the caller's task was cancelled
-    /// before the decision was saved.
-    private func sortOne(_ email: Email, setup: Setup, rulesOnly: Bool, modelIsThere: inout Bool, log: inout BatchLog) async -> Bool {
+    /// Sorts one email and saves what it found, as `pass` says. False when the caller's task
+    /// was cancelled before the decision was saved.
+    private func sortOne(_ email: Email, setup: Setup, pass: Pass, modelIsThere: inout Bool, log: inout BatchLog) async -> Bool {
         let parent = await parent(of: email)
         let people = Self.people(of: email, own: setup.own)
         var projects = setup.projects
@@ -388,13 +449,31 @@ final class SortingService {
         let ruled = await Self.rules(
             for: email, parent: parent, thread: thread,
             projects: projects, owner: setup.owner, scores: lookups.scores)
+        let before = email.decided
         var decision = ruled.decision
-        if rulesOnly, decision.level != .sure, decision.level != .setAside {
-            // The rules do not file it, and the model is not asked, so it stays as it is.
-            log.left += 1
-            return true
+        var asks = decision.waitsForModel
+        if case .again(let changed, let rulesOnly) = pass {
+            let files = decision.level == .sure || decision.level == .setAside
+            let filedBefore = before?.level == .sure || before?.level == .setAside
+            if decision == before || (rulesOnly && !files && !filedBefore) {
+                // Nothing changed for it, or only the model could change it.
+                log.left += 1
+                return true
+            }
+            if rulesOnly, !files {
+                // The setting that filed it is gone. It waits for nothing in Needs a Project,
+                // so it never votes for its old project while the model decides.
+                let reasons = decision.reasons.filter { $0 != .waitingForModel }
+                decision.reasons = reasons.isEmpty ? [.noSignal] : reasons
+            }
+            asks = !rulesOnly && decision.waitsForModel && SortingPolicy.asksAgain(ruled.signals, before: before, changed: changed)
+            if decision.waitsForModel, !asks {
+                // The change cannot alter the model's answer.
+                log.left += 1
+                return true
+            }
         }
-        if decision.waitsForModel, modelIsThere, windowIsOpen(), let prompt = ruled.prompt {
+        if asks, modelIsThere, windowIsOpen(), let prompt = ruled.prompt {
             let asked = ContinuousClock.now
             log.asked += 1
             do {
@@ -416,7 +495,17 @@ final class SortingService {
             log.modelTime += asked.duration(to: .now)
         }
         guard !Task.isCancelled else { return false }
-        if await saves.decision(email.messageID, decision) {
+        if decision.waitsForModel, before?.level == .likely {
+            // The model did not answer, so the likely filing keeps its place and waits for it.
+            // A right guess never drops to Needs a Project for a closed window.
+            await saves.wait(email.messageID)
+            log.kept += 1
+            guard case .new = pass else { return true }
+        } else if case .again = pass, decision == before {
+            // The model answered as before.
+            log.left += 1
+            return true
+        } else if await saves.decision(email.messageID, decision) {
             log.levels[decision.level, default: 0] += 1
             if decision.waitsForModel {
                 log.waiting += 1
