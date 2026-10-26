@@ -106,6 +106,10 @@ final class ProjectsWindow {
     static func window(hosting content: some View) -> NSWindow {
         let controller = NSHostingController(rootView: content)
         controller.sceneBridgingOptions = [.toolbars, .title]
+        // Only the minimum size. With the default, content that grows in a scroll view, such
+        // as a long email in the email view, sets the window's height, and the user could not
+        // make it shorter.
+        controller.sizingOptions = [.minSize]
         let window = NSWindow(contentViewController: controller)
         window.title = String(localized: "Projects")
         // The sidebar reaches the top of the window under one toolbar, as in Mail.
