@@ -5,9 +5,10 @@ import Observation
 /// sidebar and whether it could be read, its newest mail a page at a time with the deadline
 /// marks of the explained ones, the selected email, the way back after a source showed
 /// another email, a move or an Explain Again that waits for the user's yes, the rule offered
-/// after moves, the project Settings asks to edit, the explanations under way, the email
-/// view of each email the user opened with the window's one handoff at a time, the line
-/// after Explain Selected Message, and Suggested Projects. ProjectsRuntime does the work.
+/// after moves, the project Settings asks to edit, the explanations under way, whether the
+/// email view shows the explanation, the email view of each email the user opened with the
+/// window's one handoff at a time, the line after Explain Selected Message, and Suggested
+/// Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -134,6 +135,12 @@ final class ProjectsWindowModel {
     /// Counts the times the window let go of its email views, so the email view shown reads
     /// its email again into a new one.
     private(set) var emailViewGeneration = 0
+    /// Whether the email view shows an email's explanation above its draft, with the email
+    /// itself under Original Email, or the email first, after Hide Explanation. One choice for
+    /// every email while the window is open, kept in memory only. Explain and Explain Again
+    /// show the explanation again from their click on, see `explain(_:)`, so an explanation
+    /// that ends later changes nothing on the email shown then.
+    var showsExplanation = true
     /// The email view of each email the user opened while the window is open, so edits to
     /// a draft stay while the user looks at other mail.
     @ObservationIgnored private var emailModels: [String: ProjectsEmailModel] = [:]
@@ -439,6 +446,8 @@ final class ProjectsWindowModel {
     /// Explains an email, on the user's click.
     func explain(_ messageID: String) async {
         guard explaining[messageID] != .explaining else { return }
+        // Explain and Explain Again show what they make, also after Hide Explanation.
+        showsExplanation = true
         explaining[messageID] = .explaining
         do {
             _ = try await runtime.explain(messageID)

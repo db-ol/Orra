@@ -196,6 +196,33 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    /// Hide Explanation is one choice for the window: another email shows the same way, and
+    /// Cancel in Replace your draft? leaves it. Explain and Explain Again show the explanation
+    /// again from the click on, before the model answers. A window opened later shows
+    /// explanations.
+    @Test func hideExplanationLastsUntilTheNextExplain() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let model = ProjectsWindowModel(runtime: runtime)
+        #expect(model.showsExplanation)
+        model.showsExplanation = false
+        await model.show(explained.messageID)
+        #expect(!model.showsExplanation)
+        // Its draft has a version, so Explain Again asks first. Cancel sets the question to nil.
+        await model.requestExplain(explained.messageID)
+        #expect(model.pendingExplain == explained.messageID)
+        model.pendingExplain = nil
+        #expect(!model.showsExplanation)
+        // The window is not open, so the explanation fails at once, after the click showed it.
+        await model.explain(explained.messageID)
+        #expect(model.explaining[explained.messageID] == .failed(.other))
+        #expect(model.showsExplanation)
+        #expect(ProjectsWindowModel(runtime: runtime).showsExplanation)
+        await fixture.stop()
+    }
+
     // MARK: The window
 
     /// What `GrowingView` shows, which a test changes.
@@ -877,11 +904,13 @@ struct ProjectsWindowViewTests {
         await model.show(explained.messageID)
         let emailModel = model.emailModel(for: explained.messageID)
         await emailModel.load()
-        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_500), to: folder.appendingPathComponent("\(language)-projects-email-explained.png"))
-        // The same email itself, one click away from its explanation, and a forward.
-        emailModel.showsOriginal = true
+        // Tall enough for the email itself under Original Email, after the draft.
+        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 2_100), to: folder.appendingPathComponent("\(language)-projects-email-explained.png"))
+        // The same email after Hide Explanation: the email itself first and the draft under
+        // it. The renders after it show the explanation again. Then a forward.
+        model.showsExplanation = false
         try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_200), to: folder.appendingPathComponent("\(language)-projects-email-original.png"))
-        emailModel.showsOriginal = false
+        model.showsExplanation = true
         try await render(ProjectsEmailOriginal(content: Self.forward, attachments: Self.attachments).padding(20), size: NSSize(width: 520, height: 720), to: folder.appendingPathComponent("\(language)-projects-email-forward.png"))
         // A disclosure row folded and open, as every disclosure of the window shows it.
         let disclosures = VStack(alignment: .leading, spacing: 12) {
@@ -906,7 +935,7 @@ struct ProjectsWindowViewTests {
         await narrowEmail.showTranslation(true)
         let narrow = ProjectsEmailArea(runtime: runtime, model: narrowModel, email: explained)
         try await render(narrow, size: NSSize(width: 480, height: 640), to: folder.appendingPathComponent("\(language)-projects-email-narrow.png"))
-        try await render(narrow, size: NSSize(width: 480, height: 1_900), to: folder.appendingPathComponent("\(language)-projects-email-narrow-full.png"))
+        try await render(narrow, size: NSSize(width: 480, height: 2_600), to: folder.appendingPathComponent("\(language)-projects-email-narrow-full.png"))
 
         let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {})
         try await render(window, size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window.png"))
