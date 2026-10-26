@@ -78,6 +78,17 @@ struct ProjectsSetupView: View {
             rules = project.rules
         }
 
+        /// The person with this ID, nil once removed.
+        func person(_ id: UUID) -> Person? {
+            people.first { $0.id == id }
+        }
+
+        /// Changes the person with the same ID. A person removed meanwhile stays removed.
+        mutating func update(_ person: Person) {
+            guard let index = people.firstIndex(where: { $0.id == person.id }) else { return }
+            people[index] = person
+        }
+
         /// The people with an address, each in the form of ProjectsAddress, or nil when one
         /// is not an address.
         var validPeople: [Project.Person]? {
@@ -310,17 +321,21 @@ struct ProjectsSetupView: View {
         }
     }
 
+    /// Each row binds to its person by ID, not by position. A field of a removed row can still
+    /// read and write its text after the removal, and by position that would read past the end
+    /// of the list or change the person who took its place.
     private var peopleSection: some View {
         Section("People") {
-            ForEach($draft.people) { $person in
+            ForEach(draft.people) { person in
+                let row = Binding(get: { draft.person(person.id) ?? person }, set: { draft.update($0) })
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            TextField("Name", text: $person.name, prompt: Text("Name"))
-                            TextField("Email Address", text: $person.address, prompt: Text("Email Address"))
+                            TextField("Name", text: row.name, prompt: Text("Name"))
+                            TextField("Email Address", text: row.address, prompt: Text("Email Address"))
                         }
                         .textFieldStyle(.roundedBorder)
-                        TextField("Role", text: $person.role, prompt: Text("Role, such as their architect"))
+                        TextField("Role", text: row.role, prompt: Text("Role, such as their architect"))
                             .textFieldStyle(.roundedBorder)
                         if let problem = Self.problem(with: person) {
                             Text(verbatim: problem)
