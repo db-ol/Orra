@@ -6,8 +6,8 @@ import Testing
 /// Projects while it is on: nothing starts while it is off, everything stops at off, the
 /// window holds the model and lets it go at close, the scan waits for the confirm, Mail and
 /// the permission, what the scan saves is sorted, the window says what the scan and sorting
-/// do, Explain Selected Message reads only a message in a chosen mailbox (decision 18), and
-/// the Debug keys count only in Debug builds.
+/// do, Explain Message Selected in Mail reads only a message in a chosen mailbox
+/// (decision 18), and the Debug keys count only in Debug builds.
 ///
 /// Each test has preferences of its own and a temporary folder, a fake Mail that never
 /// sends an Apple Event, and a fake model, missing unless a test puts it there. Made up
@@ -981,8 +981,8 @@ struct ProjectsRuntimeTests {
     }
 
     /// The window says why no mail comes in: no mailbox chosen, Mail not open, or Orra not
-    /// allowed to control Mail, each with its way out. A notice of Explain Selected Message
-    /// that says the same shows once.
+    /// allowed to control Mail, each with its way out. A notice of Explain Message Selected
+    /// in Mail that says the same shows once.
     @Test func theWindowSaysWhyNoMailComesIn() async throws {
         defer { cleanUp() }
         let (runtime, projects, choice) = try await started()
@@ -1488,7 +1488,7 @@ struct ProjectsRuntimeTests {
         #expect(model.holds.value == 0)
     }
 
-    // MARK: Explain Selected Message
+    // MARK: Explain Message Selected in Mail
 
     @Test func explainSelectedMessageReadsOnlyAMessageInAChosenMailbox() async throws {
         defer { cleanUp() }
@@ -1646,8 +1646,9 @@ struct ProjectsRuntimeTests {
 
     /// Mail may hold another message with the Message-ID of an email the store holds, such
     /// as one made to look like it, or one a mail program sent with an ID it used before.
-    /// Explain Selected Message shows and explains the email the store holds only when the
-    /// message selected is that email, and keeps no handle of another message for it.
+    /// Explain Message Selected in Mail shows and explains the email the store holds only
+    /// when the message selected is that email, and keeps no handle of another message
+    /// for it.
     @Test(.timeLimit(.minutes(1)))
     func explainSelectedMessageShowsNoOtherEmailWithItsMessageID() async throws {
         defer { cleanUp() }
@@ -1667,8 +1668,8 @@ struct ProjectsRuntimeTests {
         choice.confirm()
         try await Task.sleep(for: .milliseconds(50))
         #expect(!runtime.isScanning)
-        // Mail opens: the scan starts once Explain Selected Message reached Mail, and reads
-        // the email of the inbox, not the message selected.
+        // Mail opens: the scan starts once Explain Message Selected in Mail reached Mail,
+        // and reads the email of the inbox, not the message selected.
         mail.update { $0.isRunning = true }
         #expect(await runtime.messageSelectedInMail() == .otherEmail)
         let kept = MailMessageRef(id: 100, mailbox: .inbox)
@@ -1718,8 +1719,8 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
-    /// An email past the first page of its list opens from a source and from Explain
-    /// Selected Message, in a project and in Set Aside. The window finds its list and its
+    /// An email past the first page of its list opens from a source and from Explain Message
+    /// Selected in Mail, in a project and in Set Aside. The window finds its list and its
     /// place there in the store, and reads the list down to it.
     @Test(.timeLimit(.minutes(1)))
     func anEmailPastTheFirstPageOfItsListOpens() async throws {
@@ -1757,8 +1758,8 @@ struct ProjectsRuntimeTests {
         #expect(window.selectedEmail?.messageID == filed[0])
         #expect(window.rows.count == filed.count)
 
-        // In a new window, which reads the first page of Needs a Project, Explain Selected
-        // Message finds the second oldest of the project selected in Mail.
+        // In a new window, which reads the first page of Needs a Project, Explain Message
+        // Selected in Mail finds the second oldest of the project selected in Mail.
         mail.update {
             $0.isRunning = true
             $0.permission = .allowed
@@ -1803,8 +1804,8 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
-    /// Mail quits and opens again while Explain Selected Message reads the message. The
-    /// email is found, and the handle from the Mail session that ended is not kept.
+    /// Mail quits and opens again while Explain Message Selected in Mail reads the message.
+    /// The email is found, and the handle from the Mail session that ended is not kept.
     @Test(.timeLimit(.minutes(1)))
     func explainSelectedMessageKeepsNoHandleOfAMailSessionThatEnded() async throws {
         defer { cleanUp() }
@@ -1873,8 +1874,8 @@ struct ProjectsRuntimeTests {
         try await waitUntil { runtime.phase == .off }
     }
 
-    /// The store fails to save the message that the scan reads for Explain Selected
-    /// Message, as on a full disk. The window says so, not that Projects has not read it.
+    /// The store fails to save the message that the scan reads for Explain Message Selected
+    /// in Mail, as on a full disk. The window says so, not that Projects has not read it.
     @Test(.timeLimit(.minutes(1)))
     func explainSelectedMessageSaysWhenTheMessageCouldNotBeSaved() async throws {
         defer { cleanUp() }
@@ -1988,8 +1989,8 @@ struct ProjectsRuntimeTests {
         window.selectedMessageID = waiting[0]
         #expect(window.previousEmail == nil)
 
-        // Explain Selected Message finds the email a source showed, after the user chose
-        // another list.
+        // Explain Message Selected in Mail finds the email a source showed, after the user
+        // chose another list.
         await window.show(filed[1])
         #expect(window.previousEmail == waiting[0])
         window.place = .setAside
@@ -2149,7 +2150,8 @@ struct ProjectsRuntimeTests {
     }
 
     /// An email whose text Retention removed, or one too large to read, is not explained,
-    /// also when Explain Selected Message reaches it outside the list the window shows.
+    /// also when Explain Message Selected in Mail reaches it outside the list the window
+    /// shows.
     @Test func explainingNeedsTheEmailsText() async throws {
         defer { cleanUp() }
         let (runtime, projects, _) = try await started()

@@ -3453,7 +3453,7 @@ Projects Data… in its Settings.
   the draft cannot be edited until the new one shows. An email whose draft you did not
   change and that has no versions explains again without asking.
 - [ ] Type into the new draft again, then select that email in Mail and click Explain
-  Selected Message. Orra asks the same first.
+  Message Selected in Mail. Orra asks the same first.
 - [ ] Turn on Live Captions, then click Change Draft. The change waits, the line under it
   says "Paused while Live Captions run." and Cancel Change shows. Copy puts the draft as it
   is on the clipboard, while Open Reply in Mail stays dimmed. Cancel Change ends the change,
@@ -3477,10 +3477,10 @@ TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS.
   1,000 of" and how many it holds, with Load Older Emails. Each click shows 1,000 more,
   and the line goes once every email shows. Another list starts again with 1,000.
 - [ ] Select a test message in Mail past the newest 1,000 of its list and within the
-  newest 5,000, and click Explain Selected Message. The window selects it in its list,
-  which reads down to it and scrolls to it. Do the same for a message past the newest
-  5,000: the email view shows it at once, and the list reads no further and highlights no
-  email.
+  newest 5,000, and click Explain Message Selected in Mail. The window selects it in its
+  list, which reads down to it and scrolls to it. Do the same for a message past the
+  newest 5,000: the email view shows it at once, and the list reads no further and
+  highlights no email.
 - [ ] With the window open, create the project Suggested Projects offers for the domain.
   Every email it counted leaves Needs a Project, also those past the first 1,000. Note how
   long that takes. Dictate while it runs: dictation stays as fast as usual. A message that
@@ -3585,10 +3585,10 @@ Stalled folders, failed saves and expired drafts in Projects, added on 2026-10-2
 verified yet. Check in a Debug build with the synthetic mail imported, as in the test
 guide. ProjectsRuntimeTests holds a folder that never resolves while Projects turns off,
 turns on again or deletes its data, and fails the save of the message that Explain
-Selected Message waits for. MailScanTests fails a save and a lookup of the store in the
-middle of a pass. A full disk can make a save fail, and only the tests make a lookup
-fail. The checks that age the data run sqlite3 while Projects is off, with `<database>`
-standing for
+Message Selected in Mail waits for. MailScanTests fails a save and a lookup of the store
+in the middle of a pass. A full disk can make a save fail, and only the tests make a
+lookup fail. The checks that age the data run sqlite3 while Projects is off, with
+`<database>` standing for
 `"$HOME/Library/Application Support/io.github.db-ol.Orra/Projects/Index/projects.sqlite"`,
 quotes included.
 
@@ -3602,15 +3602,15 @@ quotes included.
   pastes as quickly as with Projects off.
 - [ ] Save an email that Projects read with File > Save As, Format Raw Message Source,
   change its From line in a text editor, and drag the file into a mailbox Projects reads.
-  Select that copy in Mail and click Explain Selected Message. The window says the
-  message looks like an email Projects read, but its sender, recipients or date differ,
-  and it selects nothing and explains nothing. Select the original and click it again:
-  the original shows and is explained, and Open Reply in Mail opens the reply of the
-  original.
+  Select that copy in Mail and click Explain Message Selected in Mail. The window says
+  the message looks like an email Projects read, but its sender, recipients or date
+  differ, and it selects nothing and explains nothing. Select the original and click it
+  again: the original shows and is explained, and Open Reply in Mail opens the reply of
+  the original.
 - [ ] Copy an email Projects read into another mailbox Projects reads, select the copy in
-  Mail and click Explain Selected Message. It shows and explains the email.
+  Mail and click Explain Message Selected in Mail. It shows and explains the email.
 - [ ] Select an email Projects read that has no To line, such as one sent to you in Bcc,
-  and click Explain Selected Message. It shows and explains the email.
+  and click Explain Message Selected in Mail. It shows and explains the email.
 - [ ] Explain an email that gets a draft and turn Projects off with Keep Data. Run
   `sqlite3 <database> "UPDATE mail_messages SET draft_changed = draft_changed - 31 * 86400 WHERE draft_changed IS NOT NULL"`
   and turn Projects on. The email keeps its explanation, the draft area reads "Projects
@@ -3620,7 +3620,7 @@ quotes included.
   `sqlite3 <database> "UPDATE mail_messages SET saved = saved - 91 * 86400 WHERE id = (SELECT MAX(id) FROM mail_messages)"`
   and turn Projects on. That email reads "Projects removed its copy of this email's text
   90 days after reading it. Read the email in Mail.", Explain is dimmed, and Explain
-  Selected Message on it in Mail shows it without explaining it.
+  Message Selected in Mail on it shows it without explaining it.
 - [ ] An email over 16 MB, such as one with large attachments, read after this change,
   reads "Projects did not read this email, as it is too large. Read it in Mail.", and
   Explain is dimmed. Mail read before this change has no such mark, so use Delete All
@@ -3630,9 +3630,9 @@ quotes included.
   change. It keeps the rest of an email, such as its sender and subject, until 180 days
   after it read the newest email of its thread. It removes old data only while it is on."
 - [ ] Check the six new lines in Chinese, Japanese and Spanish: the three of the email
-  view above, the two of Explain Selected Message, for a message that looks like an email
-  Projects read and for "Projects could not save this message on this Mac. Try again
-  later.", and the one under Data.
+  view above, the two of Explain Message Selected in Mail, for a message that looks like
+  an email Projects read and for "Projects could not save this message on this Mac. Try
+  again later.", and the one under Data.
 
 Sorting again after a change of the projects, added on 2026-10-25, not verified yet.
 MailStoreTests, SortingServiceTests, SortingPolicyTests and ProjectsRuntimeTests check the

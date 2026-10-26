@@ -217,8 +217,8 @@ struct ProjectsWindowView: View {
                     }
                 }
                 .onChange(of: model.showCount) {
-                    // The email a source or Explain Selected Message showed, which may be far
-                    // down the list.
+                    // The email a source or Explain Message Selected in Mail showed, which
+                    // may be far down the list.
                     if let id = model.selectedMessageID {
                         scroller.scrollTo(id, anchor: .center)
                     }
@@ -526,8 +526,8 @@ extension ProjectsWindowView {
     }
 
     /// The lines under the list: the lines about mail coming in while the list shows mail,
-    /// Explain Selected Message at work, why the model work waits, and what the last action
-    /// found.
+    /// Explain Message Selected in Mail at work, why the model work waits, and what the last
+    /// action found.
     struct StatusLines: View {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel
