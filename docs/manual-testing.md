@@ -2899,8 +2899,8 @@ it shows starts, stops, counts and failures, never text.
   the menu.
 
 What Live Captions hear and when they wait, added on 2026-10-25, not verified yet.
-MeetingCaptionsTests checks the notes with a fake capture that delivers nothing or whose
-start waits, and with EngineTurns for a dictation. Watch the log with
+MeetingCaptionsTests checks the notes with a fake capture that delivers nothing, or whose
+start waits or fails, and with EngineTurns for a dictation. Watch the log with
 `log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`.
 
 - [ ] Turn Live Captions on with nothing playing. The window says "Captions of what the
@@ -2919,14 +2919,19 @@ start waits, and with EngineTurns for a dictation. Watch the log with
   got the first audio … after they were turned on" and "Meeting captions got the first
   sound …".
 - [ ] With the video playing, start a dictation with the talk key and then one with the
-  translation key, also hands free. From the press until the paste or Escape the window
-  shows "Captions wait while you dictate and catch up when you finish." The note goes
-  after the paste, and the sentences heard meanwhile show, in order.
+  translation key, also hands free. From about a second after the press until the paste
+  or Escape the window shows "Captions wait while you dictate and catch up when you
+  finish." The note goes after the paste, and the sentences heard meanwhile show, in
+  order. With the talk key in Hold, a tap of it shows no note, and in any mode a shortcut
+  with it, such as right Control+C, shows none either. The captions do not move.
 - [ ] Turning captions off logs "Meeting captions stopped after …, with … s of audio, … s
   of it with sound, … sentences cut, … reported, … without text and … dropped". No line
   of the captions category holds text.
 - [ ] In 简体中文, 日本語 and Español the placeholder and the note about a dictation read
   well and wrap in the window at its first size.
+- [ ] Make the window as small as it goes, in English and in Español, with nothing
+  playing. Once the no sound note shows, start a hands free dictation. The notes still
+  read, the first words of the placeholder stay in view, and the list keeps some room.
 
 The Live Captions shortcut, added on 2026-10-19, not verified yet in the running app. It
 is a Carbon hot key, see docs/hotkey-options.md, ⌃ ⌥ ⌘ C unless changed in Settings,
