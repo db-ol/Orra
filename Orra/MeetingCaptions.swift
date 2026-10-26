@@ -248,8 +248,10 @@ final class MeetingCaptions {
 
     private(set) var isOn = false
     private(set) var capture: CaptureState = .off
-    /// True when every sample so far was exactly zero for `silenceHint`, which is what a
-    /// refused permission looks like. Cleared by the first sound.
+    /// True when no sound came for `silenceHint` since captions were turned on: samples
+    /// that were all exactly zero, which is what a refused permission looks like, or no
+    /// samples at all, as while nothing plays or the start still waits. Cleared by the
+    /// first sound.
     private(set) var hearsOnlySilence = false
     /// True after a sentence was dropped since the speech model was not loaded.
     private(set) var speechModelMissing = false
@@ -277,6 +279,8 @@ final class MeetingCaptions {
     @ObservationIgnored private var run = 0
     @ObservationIgnored private var heardSeconds = 0.0
     @ObservationIgnored private var heardSound = false
+    /// Sets `hearsOnlySilence` when no samples came at all, see `start`.
+    @ObservationIgnored private var silenceCheck: Task<Void, Never>?
     /// True once this run called `started`, so a switch to a mode that translates calls it
     /// once, and a switch back does not undo it until captions stop.
     @ObservationIgnored private var wantsModel = false
@@ -289,7 +293,7 @@ final class MeetingCaptions {
     ///     user switches to a mode that translates.
     ///   - stopped: Called when they stop.
     ///   - copyText: Puts a copy on the clipboard. Tests pass a fake.
-    ///   - silenceHint: Seconds of only zeros before the window suggests the permission.
+    ///   - silenceHint: Seconds without sound before the window suggests the permission.
     init(
         source: SystemAudioSource,
         engines: CaptionEngines,
@@ -369,6 +373,13 @@ final class MeetingCaptions {
         showWindow()
         let current = run
         capture = .starting
+        // No samples at all, as while nothing plays or the start waits, suggest the
+        // permission after the same time as samples of only zeros, see receive.
+        silenceCheck = Task { [weak self, silenceHint] in
+            try? await Task.sleep(for: .seconds(silenceHint))
+            guard let self, current == run, !heardSound else { return }
+            suggestPermission()
+        }
         let source = source
         let deliver: @Sendable ([Float]) -> Void = { [weak self] samples in
             DispatchQueue.main.async {
@@ -425,6 +436,8 @@ final class MeetingCaptions {
         }
         pipeline?.stop()
         pipeline = nil
+        silenceCheck?.cancel()
+        silenceCheck = nil
         wantsModel = false
         // Kept for a copy after the meeting. Sentences still waiting to be transcribed
         // are dropped, since transcribing them would keep the GPU busy after the stop.
@@ -446,10 +459,19 @@ final class MeetingCaptions {
                 hearsOnlySilence = false
             } else {
                 heardSeconds += Double(samples.count) / Double(RecordingLimits.sampleRate)
-                hearsOnlySilence = heardSeconds >= silenceHint
+                // Never clears it, since a time without samples may have set it already.
+                if heardSeconds >= silenceHint {
+                    suggestPermission()
+                }
             }
         }
         pipeline.feed(samples)
+    }
+
+    /// No sound came for `silenceHint`, so the window suggests the permission.
+    private func suggestPermission() {
+        guard !hearsOnlySilence else { return }
+        hearsOnlySilence = true
     }
 
     /// The run of the latest start, for tests that feed samples like the capture does.
