@@ -76,6 +76,15 @@
 <td width="50%"><img src="docs/images/readme/zh/meeting.gif" alt="视频会议里，Alex 说英文，“实时字幕”窗口逐句显示原文和中文译文。窗口顶部选的是“双语”和“中文”，旁边是拷贝按钮。然后用户按一下翻译键，说“可以，我周三之前把测试做完”，再按一下，通话里从 Orra Microphone 听到“Sure, I’ll finish testing by Wednesday.”" width="100%"></td>
 </tr>
 <tr>
+<td colspan="2" valign="middle">
+
+### 项目（预览版）
+
+可选功能，需要内存 16 GB 及以上的 Mac。目前是预览版，以后还可能变化。选择 Orra 读取哪些“邮件”邮箱，再添加你的项目和它的文件夹、联系人，或者从 Orra 建议的项目开始，Orra 就会把每封新邮件归入它的项目。点按“解释”，本地模型会列出邮件的要点，注明出自项目文件、附件还是以前的邮件，并列出只有你能决定的问题。接着它用邮件的语言（中文或英文）起草回复，你可以打字修改，也可以用说话键说出修改，再粘贴到“邮件”的回复窗口里。Orra 从不发送、移动或删除邮件，它读取的内容不会离开你的 Mac。
+
+</td>
+</tr>
+<tr>
 <td width="50%" valign="middle">
 
 ### 在 App 里更新
@@ -91,7 +100,7 @@
 
 - **[下载最新版本的 Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**，打开后把 Orra 拖进“应用程序”。旧版本和更新说明在[版本发布页面](https://github.com/db-ol/Orra/releases)。
 - **Orra Microphone**（可选，用于“为对方朗读译文”）：下载已签名并经过公证的 [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg)，打开即可安装。[Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md)（英文）说明了如何移除它，或者自己构建。
-- 需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。可选的本地模型（用来整理和翻译）另需 3.05 GB，“为对方朗读译文”可选的语音合成模型另需约 2 GB。
+- 需要搭载 Apple 芯片、macOS 15.6 或更高版本的 Mac，以及大约 3 GB 的可用空间。可选的本地模型（用来整理、翻译和在“项目”中解释邮件）另需 3.05 GB，“为对方朗读译文”可选的语音合成模型另需约 2 GB。“项目”需要 16 GB 及以上的内存。
 - 使用 Developer ID 签名并经过苹果公证，打开时不会出现安全警告。
 - 不在 Mac App Store 上架，因为 App Store 的沙盒不允许 App 在其他 App 里监听按键或粘贴文字。
 
@@ -99,13 +108,15 @@
 
 ## 隐私
 
-Orra 在你的 Mac 上把语音转成文字，从不把录音或文字发送到任何地方。它没有账号、没有统计，也没有自己的服务器。只有下载你要求的模型，以及在你允许后检查更新时，Orra 才会联网。“从我的修改中学习”“记住我的音色”这类会保存内容的功能，默认都是关闭的。
+Orra 在你的 Mac 上把语音转成文字，从不把录音或文字发送到任何地方。它没有账号、没有统计，也没有自己的服务器。只有下载你要求的模型，以及在你允许后检查更新时，Orra 才会联网。“从我的修改中学习”“记住我的音色”“项目”这类会保存内容的功能，默认都是关闭的。
 
-Orra 保存什么、什么时候联网、怎样删除模型，详见 [docs/privacy.zh-CN.md](docs/privacy.zh-CN.md)。
+“项目”通过你 Mac 上的“邮件” App 读取邮件，并读取你添加的文件夹中的文件，只用你 Mac 上的模型处理。Orra 自己从不连接邮件服务器，“邮件” App 照常收取邮件。
+
+Orra 和“项目”保存什么、Orra 什么时候联网、怎样删除模型，详见 [docs/privacy.zh-CN.md](docs/privacy.zh-CN.md)。
 
 ## 社区与支持
 
-- **报告问题。** 在 Orra 的菜单里选择“报告问题…”，或者直接在 [GitHub 上提交问题](https://github.com/db-ol/Orra/issues/new/choose)。请不要附上你听写的私人内容。
+- **报告问题。** 在 Orra 的菜单里选择“报告问题…”，或者直接在 [GitHub 上提交问题](https://github.com/db-ol/Orra/issues/new/choose)。请不要附上你听写的私人内容。报告“项目”的问题时，还请不要写入邮件正文、姓名和电子邮件地址，也不要附上邮件截图。
 - **疑问和建议。** 欢迎在 [Discussions](https://github.com/db-ol/Orra/discussions) 提问。
 - **微信。** 扫码加入 Orra 微信群。<br>
   <img src="docs/images/wechat-group.png" alt="Orra 微信群二维码" width="160">
