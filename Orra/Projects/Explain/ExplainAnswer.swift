@@ -66,6 +66,9 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
 
     /// The most items the list of `loop` keeps, the most points the prompt asks for.
     static let loopItems = 6
+    /// The fewest words of an item that repeats an earlier one. A shorter item, such as a
+    /// source alone or a sub item like "Status: paid", may stand in a list more than once.
+    static let repeatWords = 3
 
     var warnings: [String] = []
     var points: [Point] = []
@@ -218,14 +221,14 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     }
 
     /// Where the items with the words of an earlier one are, in order. Case, spaces and
-    /// punctuation do not count, source ids do, and each Chinese character is a word. An
-    /// item without letters or digits repeats nothing.
+    /// punctuation do not count, while symbols, the hyphen and source ids do, see
+    /// `words(_:symbols:)`. An item of fewer than `repeatWords` words repeats nothing.
     private static func repeats(in items: [Line]) -> [Int] {
         var seen: Set<[String]> = []
         var repeats: [Int] = []
         for (index, item) in items.enumerated() {
-            let words = Self.words(item.text)
-            if !words.isEmpty, !seen.insert(words).inserted {
+            let words = Self.words(item.text, symbols: true)
+            if words.count >= repeatWords, !seen.insert(words).inserted {
                 repeats.append(index)
             }
         }
@@ -233,8 +236,9 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     }
 
     /// The words of a text, lowercased: runs of letters and digits, with each Chinese
-    /// character a word of its own.
-    private static func words(_ text: String) -> [String] {
+    /// character a word of its own. With `symbols`, each symbol, such as $, € or +, and each
+    /// hyphen is a word too, so $500 and €500 or +5% and -5% differ.
+    private static func words(_ text: String, symbols: Bool = false) -> [String] {
         var words: [String] = []
         var word = ""
         for character in text.precomposedStringWithCompatibilityMapping.lowercased() {
@@ -244,9 +248,12 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
                 words.append(String(character))
             } else if character.isLetter || character.isNumber {
                 word.append(character)
-            } else if !word.isEmpty {
-                words.append(word)
+            } else {
+                if !word.isEmpty { words.append(word) }
                 word = ""
+                if symbols, character.isSymbol || character == "-" {
+                    words.append(String(character))
+                }
             }
         }
         if !word.isEmpty { words.append(word) }
