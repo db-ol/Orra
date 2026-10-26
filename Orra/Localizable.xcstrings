@@ -5856,6 +5856,28 @@
         }
       }
     },
+    "In progress" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En curso"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "進行中"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进行中"
+          }
+        }
+      }
+    },
     "In the Projects window, put the cursor in the box where you say what to change, and use the talk key. Your words go into the box, and when you finish speaking, the draft changes. Turn this off to read your words first and then click Change Draft." : {
       "localizations" : {
         "es-419" : {

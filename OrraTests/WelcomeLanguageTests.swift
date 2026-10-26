@@ -97,6 +97,22 @@ struct WelcomeLanguageTests {
         #expect(image(Text("Done").environment(\.locale, spanish)) == image(Text(verbatim: "Listo")))
     }
 
+    /// VoiceOver reads a step's state after its title, from a key, so the text above shows
+    /// it in the window's language as it shows Done. The welcome window and the Projects
+    /// page of Settings share the step rows.
+    @Test func eachStepSaysItsStateInThePickedLanguage() {
+        #expect(SetupChecklist.Status.done.spokenKey == "Done")
+        #expect(SetupChecklist.Status.inProgress.spokenKey == "In progress")
+        #expect(SetupChecklist.Status.todo.spokenKey == "Not done yet")
+        let state = { (key: String.LocalizationValue, locale: Locale) in
+            String(localized: LocalizedStringResource(key, locale: locale))
+        }
+        #expect(state("In progress", chinese) == "进行中")
+        #expect(state("In progress", japanese) == "進行中")
+        #expect(state("In progress", spanish) == "En curso")
+        #expect(state("Not done yet", chinese) == "尚未完成")
+    }
+
     @Test func closingRestartsOnlyWhenSetupIsCompleteAndTheLanguageWasPickedInTheWindow() {
         #expect(WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "zh-Hans", launched: "en"))
         #expect(WelcomeWindow.restartsOnClose(setupComplete: true, dictating: false, downloading: false, pickedHere: true, otherWindowOpen: false, picked: "en", launched: "zh-Hans"))

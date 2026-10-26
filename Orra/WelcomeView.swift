@@ -316,63 +316,6 @@ private struct LanguageRow: View {
     }
 }
 
-/// One step: its number until it is done, a spinner while it runs, a check mark after.
-private struct SetupStepRow<Detail: View>: View {
-    let number: Int
-    let status: SetupChecklist.Status
-    let title: LocalizedStringKey
-    /// The step the guide talks about, shown with a tint.
-    var isCurrent = false
-    @ViewBuilder let detail: Detail
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            StepBadge(number: number, status: status)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(.headline)
-                detail
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(8)
-        .background(
-            Color.accentColor.opacity(isCurrent ? 0.08 : 0),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-        )
-        .padding(-8)
-        .animation(.easeInOut(duration: 0.25), value: isCurrent)
-    }
-}
-
-private struct StepBadge: View {
-    let number: Int
-    let status: SetupChecklist.Status
-
-    var body: some View {
-        ZStack {
-            switch status {
-            case .done:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.green)
-            case .inProgress:
-                ProgressView()
-                    .controlSize(.small)
-            case .todo:
-                Circle()
-                    .strokeBorder(.secondary, lineWidth: 1.5)
-                Text(number, format: .number)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: 26, height: 26)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(status == .done ? Text("Done") : Text("Not done yet"))
-    }
-}
-
 /// The one download of the speech model and, with cleanup on, the cleanup model: how the
 /// speech model stands, one bar for the bytes of both, the lines, and the button. Cleanup
 /// is turned on or off in Settings, not here.
