@@ -1,7 +1,7 @@
 # Orra engineering guide
 
 Orra is an open source voice input app for macOS. Transcription runs on the user's Mac.
-Projects, an optional module for mail and project folders, is planned and not built yet.
+Projects, an optional module for mail and project folders, ships as a preview.
 Projects code must keep it off by default, read mail only through the Mail app and files
 only in the folders the user adds, and work on them only with the local cleanup model.
 This file is the guide for anyone, human or agent, who changes this repository.
@@ -20,7 +20,7 @@ This file is the guide for anyone, human or agent, who changes this repository.
 
 ## Intended flow
 Hotkey -> Audio Capture -> TranscriptionEngine -> optional RewriteEngine -> Text Injection
-Projects (planned, optional): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window and the clipboard, on the user's click
+Projects (optional, a preview): Mail app (Apple Events) and project folders -> local index -> cleanup model -> Projects window -> Mail's reply window and the clipboard, on the user's click
 
 Keep it simple. Do not add a protocol, layer, or abstraction without a concrete need in the code today.
 

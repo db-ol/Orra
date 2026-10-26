@@ -76,6 +76,15 @@ Novedad de la versión 0.4.0.
 <td width="50%"><img src="docs/images/readme/es/meeting.gif" alt="En una videollamada, Alex habla en inglés y la ventana de Subtítulos en vivo muestra cada oración con su traducción al español. Arriba están elegidos Ambos y Español, junto al botón para copiar. Luego, el usuario presiona la tecla de traducción, dice “Claro, termino las pruebas para el miércoles” y la vuelve a presionar, y en la llamada se escucha “Sure, I’ll finish testing by Wednesday.” desde Orra Microphone." width="100%"></td>
 </tr>
 <tr>
+<td colspan="2" valign="middle">
+
+### Proyectos (vista previa)
+
+Opcional, para una Mac con 16 GB de memoria o más, y una vista previa que todavía puede cambiar. Elige los buzones de Mail que lee Orra y agrega tus proyectos con sus carpetas y personas, o empieza con los proyectos que Orra sugiere, y Orra clasifica cada correo nuevo en su proyecto. Haz clic en Explicar, y el modelo local enumera lo que dice el correo, con sus fuentes en los archivos del proyecto, sus adjuntos y correos anteriores, y las preguntas que solo tú puedes decidir. La explicación aparece en inglés. Luego redacta una respuesta en el idioma del correo, chino o inglés, que cambias escribiendo o con la tecla para hablar y pegas en la ventana de respuesta de Mail. Orra nunca envía, mueve ni elimina correos, y nada de lo que lee sale de tu Mac.
+
+</td>
+</tr>
+<tr>
 <td width="50%" valign="middle">
 
 ### Actualizaciones desde la app
@@ -91,7 +100,7 @@ Orra solo busca una versión nueva después de que se lo permites, y solo la ins
 
 - **[Descarga Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**, la versión más reciente, ábrelo y arrastra Orra a la carpeta Aplicaciones. Las versiones anteriores y las notas de la versión están en [la página de versiones](https://github.com/db-ol/Orra/releases).
 - **Orra Microphone**, opcional, para Leer traducciones a los demás: descarga [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg), firmado y notariado, y ábrelo para instalarlo. [Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md) (en inglés) explica cómo quitarlo o compilarlo por tu cuenta.
-- Requiere una Mac con Apple Chip y macOS 15.6 o posterior, y unos 3 GB de espacio disponible en el disco, más 3.05 GB para el modelo local opcional, que limpia y traduce, y unos 2 GB para el modelo de síntesis de voz opcional de Leer traducciones a los demás.
+- Requiere una Mac con Apple Chip y macOS 15.6 o posterior, y unos 3 GB de espacio disponible en el disco, más 3.05 GB para el modelo local opcional, que limpia, traduce y explica el correo en Proyectos, y unos 2 GB para el modelo de síntesis de voz opcional de Leer traducciones a los demás. Proyectos requiere 16 GB de memoria o más.
 - La app está firmada con un Developer ID y notariada por Apple, así que se abre sin advertencias.
 - No está en la Mac App Store, porque el entorno aislado (sandbox) de la App Store no permite que una app detecte una tecla en otras apps ni pegue texto en ellas.
 
@@ -99,13 +108,15 @@ Al abrir Orra, una ventana de bienvenida te guía para descargar los modelos, pe
 
 ## Privacidad
 
-Orra convierte tu voz en texto en tu Mac y nunca envía tus grabaciones ni su texto a ningún lado. No tiene cuentas, ni estadísticas de uso, ni servidor propio. Solo se conecta a Internet para descargar los modelos que pides y, una vez que lo permites, para buscar actualizaciones. Las funciones que guardan algo, como Aprender de mis correcciones y Recordar mi voz, están desactivadas hasta que las activas.
+Orra convierte tu voz en texto en tu Mac y nunca envía tus grabaciones ni su texto a ningún lado. No tiene cuentas, ni estadísticas de uso, ni servidor propio. Solo se conecta a Internet para descargar los modelos que pides y, una vez que lo permites, para buscar actualizaciones. Las funciones que guardan algo, como Aprender de mis correcciones, Recordar mi voz y Proyectos, están desactivadas hasta que las activas.
 
-[docs/privacy.es.md](docs/privacy.es.md) detalla qué guarda Orra, cuándo se conecta a Internet y cómo eliminar los modelos.
+Proyectos lee el correo a través de la app Mail de tu Mac y los archivos de las carpetas que agregas, y solo los procesa con el modelo de tu Mac. Orra nunca se conecta por su cuenta a un servidor de correo. La app Mail sigue recibiendo tu correo como siempre.
+
+[docs/privacy.es.md](docs/privacy.es.md) detalla qué guardan Orra y Proyectos, cuándo se conecta Orra a Internet y cómo eliminar los modelos.
 
 ## Comunidad y soporte
 
-- **Reporta un problema.** Selecciona Reportar un problema… en el menú de Orra o [abre un issue en GitHub](https://github.com/db-ol/Orra/issues/new/choose). Por favor, no incluyas nada privado que hayas dictado.
+- **Reporta un problema.** Selecciona Reportar un problema… en el menú de Orra o [abre un issue en GitHub](https://github.com/db-ol/Orra/issues/new/choose). Por favor, no incluyas nada privado que hayas dictado. Para un problema en Proyectos, tampoco incluyas el texto de correos, nombres, direcciones de correo ni capturas de pantalla de correos.
 - **Preguntas e ideas.** Pregunta en [Discussions](https://github.com/db-ol/Orra/discussions).
 - **WeChat.** Escanea el código para unirte al grupo de Orra en WeChat.<br>
   <img src="docs/images/wechat-group.png" alt="Código QR del grupo de Orra en WeChat" width="160">

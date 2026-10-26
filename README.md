@@ -76,6 +76,15 @@ New in 0.4.0.
 <td width="50%"><img src="docs/images/readme/en/meeting.gif" alt="In a video call, Alex speaks English and the Live Captions window shows each sentence with its Chinese translation. At its top, Both and Chinese are chosen, next to the Copy button. Then the user presses the translation key, says 可以，我周三之前把测试做完 and presses it again, and the call hears “Sure, I’ll finish testing by Wednesday.” from Orra Microphone." width="100%"></td>
 </tr>
 <tr>
+<td colspan="2" valign="middle">
+
+### Projects (Preview)
+
+Optional, for Macs with 16 GB of memory or more, and a preview that may still change. Choose the Mail mailboxes Orra reads and add your projects with their folders and people, or start from the projects Orra suggests, and Orra sorts each new email into its project. Click Explain, and the local model lists what the email says, with sources in the project's files, its attachments and earlier mail, and the questions only you can decide. Then it drafts a reply in the email's language, Chinese or English, which you change by typing or with the talk key and paste into Mail's reply window. Orra never sends, moves or deletes mail, and nothing it reads leaves your Mac.
+
+</td>
+</tr>
+<tr>
 <td width="50%" valign="middle">
 
 ### Updates inside the app
@@ -91,7 +100,7 @@ Orra checks for a new version only after you allow it, and installs one only whe
 
 - **[Download Orra.dmg](https://github.com/db-ol/Orra/releases/latest/download/Orra.dmg)**, the newest version, open it, and drag Orra to Applications. Older versions and the release notes are on [the releases page](https://github.com/db-ol/Orra/releases).
 - **Orra Microphone**, optional, for Speak Translations to Others: download [OrraMicrophone.pkg](https://github.com/db-ol/Orra/releases/download/v0.4.0/OrraMicrophone.pkg), signed and notarized, and open it to install. [Drivers/OrraMicrophone](Drivers/OrraMicrophone/README.md) explains how to remove it or build it yourself.
-- Needs a Mac with Apple Silicon and macOS 15.6 or later, and about 3 GB of free disk space, plus 3.05 GB for the optional local model, which cleans up and translates, and about 2 GB for the optional voice model of Speak Translations to Others.
+- Needs a Mac with Apple Silicon and macOS 15.6 or later, and about 3 GB of free disk space, plus 3.05 GB for the optional local model, which cleans up, translates and explains mail in Projects, and about 2 GB for the optional voice model of Speak Translations to Others. Projects needs 16 GB of memory or more.
 - Signed with a Developer ID and notarized by Apple, so it opens without a warning.
 - Not in the Mac App Store, because the App Store's sandbox does not let an app notice a key in other apps or paste into them.
 
@@ -99,13 +108,15 @@ When you open Orra, a welcome window walks you through downloading the models, a
 
 ## Privacy
 
-Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own. It goes online only to download the models you ask for and, once you allow it, to check for updates. Features that keep anything, such as Learn from my corrections and Remember my voice, are off until you turn them on.
+Orra turns your speech into text on your Mac and never sends your recordings or their text anywhere. It has no account, no analytics and no server of its own. It goes online only to download the models you ask for and, once you allow it, to check for updates. Features that keep anything, such as Learn from my corrections, Remember my voice and Projects, are off until you turn them on.
 
-[docs/privacy.md](docs/privacy.md) lists what Orra keeps, when it goes online and how to remove the models.
+Projects reads mail through the Mail app on your Mac and the files in the folders you add, and works on them only with the model on your Mac. Orra itself never connects to a mail server. The Mail app keeps fetching your mail as it always does.
+
+[docs/privacy.md](docs/privacy.md) lists what Orra and Projects keep, when Orra goes online and how to remove the models.
 
 ## Community & Support
 
-- **Report a problem.** Choose Report a Problem… in Orra's menu, or [open an issue on GitHub](https://github.com/db-ol/Orra/issues/new/choose). Please leave out anything private you dictated.
+- **Report a problem.** Choose Report a Problem… in Orra's menu, or [open an issue on GitHub](https://github.com/db-ol/Orra/issues/new/choose). Please leave out anything private you dictated. For a problem in Projects, also leave out mail text, names, email addresses and screenshots of mail.
 - **Questions and ideas.** Ask in [Discussions](https://github.com/db-ol/Orra/discussions).
 - **WeChat.** Scan to join the Orra WeChat group.<br>
   <img src="docs/images/wechat-group.png" alt="QR code for the Orra WeChat group" width="160">

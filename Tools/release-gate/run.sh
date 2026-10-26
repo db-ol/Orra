@@ -5,9 +5,9 @@
 #
 #   Tools/release-gate/run.sh [--baseline DIR] [--only corpus,context,cleanup,latency,sets,projects] [--out DIR] [--skip-build]
 #
-# Without --only it runs every suite but projects, which runs only when named until Projects
-# shows in release builds. Exit status: 0 when every suite ran and nothing got worse, 1 when
-# a rule failed or, with or without a baseline, the projects bar, 2 when the build or a suite
+# Without --only it runs every suite, the projects suite too, which needs the variables of
+# docs/release-gate.md. Exit status: 0 when every suite ran and nothing got worse, 1 when a
+# rule failed or, with or without a baseline, the projects bar, 2 when the build or a suite
 # failed to run.
 set -u
 
@@ -21,7 +21,7 @@ lock=${GATE_LOCK:-}
 context_count=${GATE_CONTEXT_COUNT:-100}
 projects_set=${GATE_PROJECTS_SET:-$bench/projects-testset}
 all_suites=(corpus context cleanup latency sets projects)
-default_suites=(corpus context cleanup latency sets)
+default_suites=($all_suites)
 
 baseline=""
 only=${(j:,:)default_suites}

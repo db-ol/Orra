@@ -38,7 +38,7 @@ nonisolated enum ProjectsWindowText {
         }
     }
 
-    /// What Explain Selected Message found, when it shows no email.
+    /// What Explain Message Selected in Mail found, when it shows no email.
     static func selection(_ found: ProjectsRuntime.SelectedMessage) -> String {
         switch found {
         case .found: ""

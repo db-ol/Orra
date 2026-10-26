@@ -360,6 +360,8 @@ final class ReportWindow {
 
 struct ReportView: View {
     let reporter: ProblemReporter
+    /// Whether this build shows Projects, whose reports are asked to leave out mail.
+    var showsProjects = ProjectsAvailability.isVisible
     @State private var title = ""
     @State private var whatHappened = ""
     @State private var attachesReport = true
@@ -375,6 +377,13 @@ struct ReportView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("What happened?")
                 .font(.headline)
+            if showsProjects {
+                // Before the user writes, since the issue is public.
+                Text("For a problem in Projects, describe the steps and leave out mail text, names, email addresses and screenshots of mail.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             TextField("Title (optional)", text: $title)
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $whatHappened)
@@ -401,6 +410,7 @@ struct ReportView: View {
             DisclosureGroup("Show the report", isExpanded: $showsReport) {
                 report
             }
+            .disclosureGroupStyle(RowDisclosureStyle())
             if attachesReport, case .failed = reporter.state {
                 // Outside the report, which is hidden at first, since it keeps Continue on GitHub off.
                 HStack {

@@ -534,20 +534,17 @@ struct ProjectsEmailModelTests {
             forwards: [QuotedHistory.Forward(sender: "Kai Moss <kai@kiln.example>", date: "Mon, Oct 12, 2026 at 9:30 AM", subject: "Lamps", text: "Twelve lamps, delivery in week 47.")],
             quoted: "On Sun, Oct 11, 2026 at 8:00 PM Mei Tan <mei@harbor.example> wrote:\n> How many lamps?"))
 
-        // Explained: the explanation shows, and the email stays one click away.
+        // Explained, and read again as when the email shows again: the email itself stays,
+        // with the draft.
         current = Self.explanation()
         await model.load()
-        #expect(!model.showsOriginal)
-        model.showsOriginal = true
         await model.load()
-        #expect(model.showsOriginal)
         #expect(model.original?.note == "Lin, see Kai's note.")
         #expect(model.text == Self.draft)
 
-        // Explained again: the new explanation shows.
+        // Explained again.
         current = Self.explanation(draft: "Hi Mei,\n\nNoted.\n\nLin")
         await model.load()
-        #expect(!model.showsOriginal)
         #expect(model.original?.forwards.count == 1)
     }
 

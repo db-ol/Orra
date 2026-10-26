@@ -5,14 +5,15 @@ import Observation
 /// sidebar and whether it could be read, its newest mail a page at a time with the deadline
 /// marks of the explained ones, the selected email, the way back after a source showed
 /// another email, a move or an Explain Again that waits for the user's yes, the rule offered
-/// after moves, the project Settings asks to edit, the explanations under way, the email
-/// view of each email the user opened with the window's one handoff at a time, the line
-/// after Explain Selected Message, and Suggested Projects. ProjectsRuntime does the work.
+/// after moves, the project Settings asks to edit, the explanations under way, whether the
+/// email view shows the explanation, the email view of each email the user opened with the
+/// window's one handoff at a time, the line after Explain Message Selected in Mail, and
+/// Suggested Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
     nonisolated enum Notice: Equatable, Sendable {
-        /// What Explain Selected Message found, when it found no email to show.
+        /// What Explain Message Selected in Mail found, when it found no email to show.
         case selection(ProjectsRuntime.SelectedMessage)
         case projectNotSaved
         case projectNotForgotten
@@ -79,8 +80,8 @@ final class ProjectsWindowModel {
     /// The email selected in the list, by its Message-ID.
     var selectedMessageID: String? {
         didSet {
-            // The user chose another email, so the one Explain Selected Message or a source
-            // showed is not followed any more, and the way back ends. The window sets
+            // The user chose another email, so the one Explain Message Selected in Mail or a
+            // source showed is not followed any more, and the way back ends. The window sets
             // `followed` first when it shows an email itself.
             if let selectedMessageID, selectedMessageID != followed {
                 followed = nil
@@ -111,12 +112,12 @@ final class ProjectsWindowModel {
     /// The rule offered after two moves of the same kind, until the user answers.
     var ruleOffer: SortingService.RuleOffer?
     var notice: Notice?
-    /// Whether Explain Selected Message reads Mail now.
+    /// Whether Explain Message Selected in Mail reads Mail now.
     private(set) var isReadingSelection = false
     private(set) var explaining: [String: ExplainState] = [:]
-    /// The email Explain Selected Message showed. When sorting files it in another list,
-    /// that list shows with the email still selected, until the user chooses another email
-    /// or list, or moves it.
+    /// The email Explain Message Selected in Mail showed. When sorting files it in another
+    /// list, that list shows with the email still selected, until the user chooses another
+    /// email or list, or moves it.
     @ObservationIgnored private var followed: String?
     /// Counts the explanations made in the window, by Message-ID, so the email view reads
     /// its explanation again.
@@ -135,6 +136,13 @@ final class ProjectsWindowModel {
     /// Counts the times the window let go of its email views, so the email view shown reads
     /// its email again into a new one.
     private(set) var emailViewGeneration = 0
+    /// Whether the email view shows an email's explanation above its draft, with the email
+    /// itself under Original Email, or the email first, after Hide Explanation. One choice for
+    /// every email while the window is open, kept in memory only. Explain and Explain Again
+    /// show the explanation again as it starts, while its email is shown, see `explain(_:)`.
+    /// An explanation that starts or ends while another email is shown changes nothing on
+    /// that email.
+    var showsExplanation = true
     /// The email view of each email the user opened while the window is open, so edits to
     /// a draft stay while the user looks at other mail.
     @ObservationIgnored private var emailModels: [String: ProjectsEmailModel] = [:]
@@ -203,13 +211,14 @@ final class ProjectsWindowModel {
     }
 
     /// Reads the chosen list again with how many emails it holds. When the selected email,
-    /// or the one Explain Selected Message or a source showed, is older than the emails
-    /// read, such as an email a source cites, it reads down to that email, at most
+    /// or the one Explain Message Selected in Mail or a source showed, is older than the
+    /// emails read, such as an email a source cites, it reads down to that email, at most
     /// `maximumPagesDown` pages. An older one is read alone. When sorting filed the email
-    /// Explain Selected Message or a source showed in another list, that list shows with
-    /// it. When sorting moved another selected email to another list, such as after a change
-    /// of the projects, it is read alone, so the email view keeps it until the user chooses
-    /// another email or list. A list the store could not read shows no mail, and says so.
+    /// Explain Message Selected in Mail or a source showed in another list, that list shows
+    /// with it. When sorting moved another selected email to another list, such as after a
+    /// change of the projects, it is read alone, so the email view keeps it until the user
+    /// chooses another email or list. A list the store could not read shows no mail, and
+    /// says so.
     func reload() async {
         guard let place else {
             rows = []
@@ -446,6 +455,12 @@ final class ProjectsWindowModel {
     /// Explains an email, on the user's click.
     func explain(_ messageID: String) async {
         guard explaining[messageID] != .explaining else { return }
+        // Explain and Explain Again show what they make, also after Hide Explanation. One
+        // that starts while another email is shown, such as after Try Loading Again waited
+        // for the model, leaves that email as the user set it.
+        if messageID == selectedMessageID {
+            showsExplanation = true
+        }
         explaining[messageID] = .explaining
         do {
             _ = try await runtime.explain(messageID)
@@ -485,9 +500,9 @@ final class ProjectsWindowModel {
         await requestExplain(messageID)
     }
 
-    /// Explain Selected Message: finds the message selected in Mail, shows it in its list
-    /// and explains it, or says why not (decision 18). An email with no text to explain is
-    /// only shown, see ProjectsWindowText.noText. It waits a moment for sorting to file a
+    /// Explain Message Selected in Mail: finds the message selected in Mail, shows it in its
+    /// list and explains it, or says why not (decision 18). An email with no text to explain
+    /// is only shown, see ProjectsWindowText.noText. It waits a moment for sorting to file a
     /// message the scan just saved, never for the sorting of other mail, so the user's
     /// explanation goes before the background work. For an email whose draft the user
     /// changed, it asks first, as Explain Again does. Its button stays off until the
