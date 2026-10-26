@@ -217,7 +217,7 @@ struct ProjectsWindowViewTests {
     }
 
     /// Lays the window out a few times with a pause in between, as between events, so SwiftUI
-    /// shows a change of the content and AppKit sizes the window after it.
+    /// takes in a change of the content.
     private func layOut(_ window: NSWindow) async throws {
         for _ in 0..<10 {
             window.layoutIfNeeded()
@@ -228,16 +228,14 @@ struct ProjectsWindowViewTests {
     /// The window keeps the size it opened at, and a shorter one the user gives it, when what
     /// it shows grows far taller than the window, such as a long email in the email view,
     /// which scrolls. The window is made as `show()` makes it, but never ordered front, so no
-    /// window appears.
+    /// window appears. AppKit grows a shown window to the intrinsic height of its content
+    /// view. In a test a window that is never shown keeps its frame even while its content
+    /// asks for more, so the test checks that height too.
     @Test func theWindowKeepsItsSizeWhenItsContentGrows() async throws {
         let content = GrowingContent()
         let window = ProjectsWindow.window(hosting: GrowingView(content: content))
         defer { window.close() }
-        // The hosting view makes its size constraints only while the window otherwise lays
-        // out with Auto Layout, as the Projects window on screen does. Nothing in this window
-        // uses it, so a constraint that always holds stands in.
         let view = try #require(window.contentView)
-        view.widthAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
         func size() -> CGSize {
             window.contentRect(forFrameRect: window.frame).size
         }
@@ -247,7 +245,7 @@ struct ProjectsWindowViewTests {
         content.height = 3_000
         try await layOut(window)
         #expect(size() == ProjectsWindow.defaultSize)
-        // The content gives the window no height of its own to grow to.
+        // The content asks for no height of its own, which the window would grow to.
         #expect(view.intrinsicContentSize.height == NSView.noIntrinsicMetric)
 
         // The user makes the window shorter, above its minimum.
