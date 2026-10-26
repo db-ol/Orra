@@ -252,6 +252,16 @@ nonisolated struct ExplainPrompt: Sendable {
                 noDraft = "No draft"
             }
         }
+
+        /// The heading of a section of the answer.
+        func heading(_ section: ExplainAnswer.Section) -> String {
+            switch section {
+            case .warnings: warnings
+            case .points: points
+            case .questions: questions
+            case .draft: draft
+            }
+        }
     }
 
     // MARK: Parts
