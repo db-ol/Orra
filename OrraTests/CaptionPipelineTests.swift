@@ -428,6 +428,21 @@ struct CaptionPipelineTests {
         #expect((1...5).allSatisfy { final[$0] == CaptionSentence.Translation.none })
         #expect(models.translated.map(\.text) == ["Sentence 6.", "Sentence 7.", "Sentence 8."])
     }
+
+    /// The counts in the log when captions stop: the sentences cut, reported, transcribed
+    /// with no text, and dropped, here since the speech model was not loaded.
+    @Test func thePipelineCountsWhatBecameOfItsSentences() async {
+        let models = FakeCaptionModels(["Hello everyone.", "", "Next slide please."])
+        let pipeline = CaptionPipeline(engines: models.engines()) { _ in }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 3))
+        await pipeline.finish()
+        #expect(pipeline.counts == CaptionPipeline.Counts(cut: 3, reported: 2, empty: 1, dropped: 0))
+        models.speechReady = false
+        let unready = CaptionPipeline(engines: models.engines()) { _ in }
+        unready.feed(FakeCaptionModels.audio(sentences: 1))
+        await unready.finish()
+        #expect(unready.counts == CaptionPipeline.Counts(cut: 1, reported: 0, empty: 0, dropped: 1))
+    }
 }
 
 /// Captions give way to dictation on the shared models, see EngineTurns.
@@ -583,6 +598,7 @@ struct EngineTurnsTests {
         #expect(starts.first ?? 99 < 1)
         #expect(!starts.contains { $0 > 2 && $0 < 10 })
         #expect(starts.last ?? 0 > 48)
+        #expect(pipeline.counts == CaptionPipeline.Counts(cut: 25, reported: 21, empty: 0, dropped: 4))
     }
 
     @Test func turningCaptionsOffCancelsAWaitingCall() async throws {
@@ -606,6 +622,30 @@ struct EngineTurnsTests {
         model.dictationEnded()
         #expect(!turns.isDictating)
         #expect(events == ["handler, dictating: true", "started", "ended"])
+    }
+
+    /// The caption window's note about a dictation waits for the dictation to go on for a
+    /// moment. A tap of the talk key, or a shortcut with it such as right Control+C, ends
+    /// sooner and gets none, also when the next press follows at once.
+    @Test func aTapGetsNoNoteAboutADictation() async throws {
+        let tap = EngineTurns(noteDelay: .milliseconds(100))
+        tap.dictationStarted()
+        tap.dictationEnded()
+        // A press right after a tap waits the whole delay again.
+        let pressAfterTap = EngineTurns(noteDelay: .seconds(60))
+        pressAfterTap.dictationStarted()
+        pressAfterTap.dictationEnded()
+        pressAfterTap.dictationStarted()
+        defer { pressAfterTap.dictationEnded() }
+        // A dictation that starts later, with the tap's delay, gets the note only after the
+        // tap would have.
+        let dictation = EngineTurns(noteDelay: .milliseconds(100))
+        dictation.dictationStarted()
+        try await eventually { dictation.dictationNoteDue }
+        #expect(!tap.dictationNoteDue)
+        #expect(!pressAfterTap.dictationNoteDue)
+        dictation.dictationEnded()
+        #expect(!dictation.dictationNoteDue)
     }
 
     @Test func captionsWaitForADictationAndCatchUpInOrder() async throws {

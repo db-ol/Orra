@@ -23,17 +23,29 @@ import os
 final class EngineTurns {
     /// True from the press of a key until the dictation is over.
     private(set) var isDictating = false
+    /// True once the dictation has gone on for `noteDelay`, until it is over, so the
+    /// caption window says that captions wait. A tap of the talk key, or a shortcut with
+    /// it such as right Control+C, is a dictation for a moment too, and a note at each
+    /// would flash.
+    private(set) var dictationNoteDue = false
     /// The caption call running now, cancelled when a dictation starts.
     @ObservationIgnored private var running: CancellableTask?
     /// Counts dictations, so a caption call can tell it was cancelled for one.
     @ObservationIgnored private var dictations = 0
     /// How often a waiting caption call looks again whether the dictation is over.
     @ObservationIgnored private let pollInterval: Duration
+    /// How long a dictation goes on before `dictationNoteDue`. The app's 1 s is longer
+    /// than a tap of the talk key and the wait for a second press after it, 0.7 s in all,
+    /// see TalkKeyDetector.
+    @ObservationIgnored private let noteDelay: Duration
+    /// Sets `dictationNoteDue` once the dictation has gone on for `noteDelay`.
+    @ObservationIgnored private var noteTimer: Task<Void, Never>?
     /// What runs at each press of a key, see `whenDictationStarts(_:)`.
     @ObservationIgnored private var startHandlers: [() -> Void] = []
 
-    init(pollInterval: Duration = .milliseconds(100)) {
+    init(pollInterval: Duration = .milliseconds(100), noteDelay: Duration = .seconds(1)) {
         self.pollInterval = pollInterval
+        self.noteDelay = noteDelay
     }
 
     /// The talk key or the translation key went down.
@@ -41,6 +53,13 @@ final class EngineTurns {
         isDictating = true
         dictations += 1
         running?.cancel()
+        let dictation = dictations
+        noteTimer?.cancel()
+        noteTimer = Task { [weak self, noteDelay] in
+            try? await Task.sleep(for: noteDelay)
+            guard let self, dictations == dictation, isDictating else { return }
+            dictationNoteDue = true
+        }
         for handler in startHandlers {
             handler()
         }
@@ -57,6 +76,9 @@ final class EngineTurns {
     /// The dictation was pasted or cancelled.
     func dictationEnded() {
         isDictating = false
+        dictationNoteDue = false
+        noteTimer?.cancel()
+        noteTimer = nil
     }
 
     /// Runs a caption call on a model once no dictation is under way. When a dictation
