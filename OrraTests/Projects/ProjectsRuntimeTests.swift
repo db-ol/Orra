@@ -747,7 +747,8 @@ struct ProjectsRuntimeTests {
         await runtime.untilResorted()
         let filed = try await runtime.list(.project(birch.id))
         #expect(Set(filed.map(\.messageID)) == ["k1@kiln.example", "r1@studio.example", "k2@kiln.example"])
-        #expect(filed.allSatisfy { $0.level == .sure && $0.reasons == ($0.messageID == "r1@studio.example" ? [.thread] : [.person]) })
+        // The user wrote r1 to a person Birch lists.
+        #expect(filed.allSatisfy { $0.level == .sure && $0.reasons == ($0.messageID == "r1@studio.example" ? [.thread, .person] : [.person]) })
         #expect(try await runtime.list(.project(alder.id)).isEmpty)
         // The rules alone took them back.
         #expect(model.jobs.value == 2)

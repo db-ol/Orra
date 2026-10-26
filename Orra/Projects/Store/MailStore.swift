@@ -429,10 +429,11 @@ nonisolated struct MailStore: Sendable {
 
     /// For these addresses, in the form of ProjectsAddress, the projects whose mail held one
     /// of them as sender, To or Cc, with the addresses found in each. Only mail that rests on
-    /// the user counts: a move of the user, a filing by a setting of the user, and a thread
-    /// reply in a thread that holds either in the same project. A guess of the model does
-    /// not, and neither does a reply under it, so one guess never pulls the sender's next
-    /// mail after it. Needs a Project and Set Aside do not count.
+    /// the user counts: a move of the user, a filing by a setting of the user, also a thread
+    /// reply that a setting names, and a thread reply in a thread that holds either in the
+    /// same project. A guess of the model does not, and neither does a reply under it that
+    /// no setting names, so one guess never pulls the sender's next mail after it. Needs a
+    /// Project and Set Aside do not count.
     func peopleSeen(_ addresses: [String]) async throws -> [UUID: Set<String>] {
         guard !addresses.isEmpty else { return [:] }
         let rows = try await database.run("""
@@ -441,7 +442,8 @@ nonisolated struct MailStore: Sendable {
                 AND (m.moved_by_user = 1 OR (m.level = 'sure' AND EXISTS (
                     SELECT 1 FROM mail_messages a
                     WHERE a.thread_root = m.thread_root AND a.project = m.project
-                        AND (a.moved_by_user = 1 OR (a.level = 'sure' AND json_extract(a.reasons, '$[0]') != 'thread')))))
+                        AND (a.moved_by_user = 1 OR (a.level = 'sure' AND EXISTS (
+                            SELECT 1 FROM json_each(a.reasons) r WHERE r.value IN ('rule', 'person', 'domain', 'mailbox')))))))
             """, [.text(try Self.json(addresses))])
         var seen: [UUID: Set<String>] = [:]
         for row in rows where row.count == 2 {
@@ -501,7 +503,9 @@ nonisolated struct MailStore: Sendable {
     /// not hold. The check and the write are one statement. A decision for another project
     /// drops the email's explanation and draft, so none is saved for an email whose
     /// explanation holds a draft, which the user may have changed. That email stays where it
-    /// is, or in Needs a Project when it was never sorted, and waits for no more sorting.
+    /// is, or in Needs a Project when it was never sorted, and waits for no more sorting. In
+    /// Needs a Project its reasons no longer say that it waits for the model, and say that
+    /// nothing pointed to a project when no other reason is left.
     func saveDecision(_ decision: SortingDecision, for messageID: String) async throws -> Bool {
         let parameters: [ProjectsDatabase.Value] = [
             .text(messageID),
@@ -518,9 +522,13 @@ nonisolated struct MailStore: Sendable {
                 RETURNING id
                 """, parameters)
             guard !rows.isEmpty else {
-                // So sorting does not ask about an email it may not move again and again.
+                // So sorting does not ask about an email it may not move again and again, and
+                // its chip does not say that it waits.
                 try database.run("""
-                    UPDATE mail_messages SET waits = 0, level = coalesce(level, 'unsure')
+                    UPDATE mail_messages SET waits = 0, level = coalesce(level, 'unsure'),
+                        reasons = CASE WHEN project IS NULL THEN coalesce(nullif(
+                            (SELECT json_group_array(r.value) FROM json_each(mail_messages.reasons) r WHERE r.value != 'waitingForModel'),
+                            '[]'), '["noSignal"]') ELSE reasons END
                     WHERE message_id = ?1 AND moved_by_user = 0 AND project IS NOT ?2 AND explanation_draft = 1
                     """, Array(parameters.prefix(2)))
                 return false
@@ -619,6 +627,7 @@ nonisolated struct MailStore: Sendable {
             thread: { email in await logged("reading a thread", []) { try await thread(of: email) } },
             scores: scores,
             waiting: { await logged("reading waiting emails", []) { try await waiting() } },
+            emails: { ids in await logged("reading emails to sort again", []) { try await resortEmails(ids) } },
             tally: { rule, project in await logged("reading a count of moves", nil) { try await tally(rule, project: project) } }
         )
     }
@@ -1045,6 +1054,29 @@ nonisolated struct MailStore: Sendable {
             """, parameters).compactMap { $0.first?.text }
     }
 
+    /// Of the emails `resortIDs(reaching:)` read, those the model may sort again once the
+    /// rules sorted them, oldest first: the newest `limit` of them that are never sorted, in
+    /// Needs a Project or likely filings, as they are now, with the sure thread replies among
+    /// them in the threads of those, so a reply follows the message it answers. A filing the
+    /// rules settled, in a project or in Set Aside, takes no place, and neither does mail the
+    /// user moved or mail whose explanation got a draft.
+    func resortPage(_ messageIDs: [String], newest limit: Int) async throws -> [String] {
+        guard !messageIDs.isEmpty else { return [] }
+        return try await database.run("""
+            WITH reached AS (
+                SELECT id, date, thread_root, level, reasons FROM mail_messages
+                WHERE message_id IN (SELECT value FROM json_each(?1)) AND moved_by_user = 0 AND explanation_draft = 0
+            ), page AS (
+                SELECT id, thread_root FROM reached WHERE level IS NULL OR level IN ('unsure', 'likely')
+                ORDER BY date DESC, id DESC LIMIT ?2
+            )
+            SELECT m.message_id FROM mail_messages m JOIN reached r ON r.id = m.id
+            WHERE r.id IN (SELECT id FROM page)
+                OR (r.level = 'sure' AND json_extract(r.reasons, '$[0]') = 'thread' AND r.thread_root IN (SELECT thread_root FROM page))
+            ORDER BY m.date, m.id
+            """, [.text(try Self.json(messageIDs)), .integer(Int64(max(0, limit)))]).compactMap { $0.first?.text }
+    }
+
     /// These emails as sorting reads them again, oldest first, each with where it is filed.
     /// An email the user moved, or whose explanation got a draft, since
     /// `resortIDs(reaching:)` read it is left out.
@@ -1132,6 +1164,7 @@ nonisolated struct MailStore: Sendable {
         var firstPoint: String?
         var isTooLarge: Bool
         var hasDraft: Bool
+        var waits: Bool
         /// The To, Cc and Reply-To, by their role.
         var people: [String: [Person]] = [:]
 
@@ -1144,7 +1177,7 @@ nonisolated struct MailStore: Sendable {
                 messageID: messageID, sender: sender.address, recipients: (to + cc).map(\.address),
                 date: date, subject: subject, text: text ?? "", attachmentNames: attachments.map(\.name),
                 mailbox: mailbox, inReplyTo: inReplyTo, references: references, list: list,
-                decided: level.map { SortingDecision(project: project, level: $0, reasons: reasons) })
+                decided: level.map { SortingDecision(project: project, level: $0, reasons: reasons) }, waits: waits)
         }
 
         var explainEmail: ExplainService.Email {
@@ -1180,7 +1213,7 @@ nonisolated struct MailStore: Sendable {
         precedence, attachments, hidden_text, warnings, project, level, reasons, moved_by_user, reply, \
         substr(text, 1, \(textLength)), substr(visible_text, 1, \(textLength)), explanation IS NOT NULL, \
         CASE WHEN json_valid(CAST(explanation AS TEXT)) THEN json_extract(CAST(explanation AS TEXT), '$.points[0].text') END, \
-        too_large, explanation_draft
+        too_large, explanation_draft, waits
         """
     }
 
@@ -1210,7 +1243,7 @@ nonisolated struct MailStore: Sendable {
     }
 
     private static func row(_ values: [ProjectsDatabase.Value]) -> Row? {
-        guard values.count == 26, let id = values[0].integer, let messageID = values[1].text, let date = values[3].real,
+        guard values.count == 27, let id = values[0].integer, let messageID = values[1].text, let date = values[3].real,
               let senderName = values[4].text, let sender = values[5].text, let subject = values[6].text else { return nil }
         return Row(
             id: id,
@@ -1235,7 +1268,8 @@ nonisolated struct MailStore: Sendable {
             isExplained: values[22].integer == 1,
             firstPoint: values[23].text,
             isTooLarge: values[24].integer == 1,
-            hasDraft: values[25].integer == 1
+            hasDraft: values[25].integer == 1,
+            waits: values[26].integer == 1
         )
     }
 

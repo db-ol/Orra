@@ -3599,13 +3599,18 @@ quotes included.
 Sorting again after a change of the projects, added on 2026-10-25, not verified yet.
 MailStoreTests, SortingServiceTests, SortingPolicyTests and ProjectsRuntimeTests check the
 parts with made up mail and a fake model. Check in a Debug build with the cleanup model on
-the Mac, the window open and the synthetic mail imported into orra-test, as in the test
-guide:
+the Mac, the window open and the synthetic mail imported, as in the test guide:
 
-- [ ] Delete All Projects Data and read orra-test with no project. Make the five projects
-  one at a time from Suggested Projects, as they are suggested, then edit each to the
-  people, domains, description and folder the synthetic set gives it. Once Sorting mail…
-  is gone, at most 6 of the 105 mails sit in a wrong project.
+- [ ] Delete All Projects Data and read the synthetic mail with no project. Make the five
+  projects one at a time from Suggested Projects, as they are suggested, then edit each to
+  the people, domains, description and folder the synthetic set gives it. Once Sorting
+  mail… is gone, at most 6 of the 105 mails sit in a wrong project.
+- [ ] Delete All Projects Data, make the five projects as the synthetic set gives them,
+  and read the synthetic mail only then. Once Sorting mail… is gone, at most 6 of the 105
+  mails sit in a wrong project, now that the model's guesses no longer count as people
+  seen.
+- [ ] A reply in a thread of a project from a person the project lists, or one you sent
+  to such a person, shows both reasons in its chip: the same thread and the person.
 - [ ] Remove a person from a project. Their mail leaves it at once unless another setting
   or a thread files it, and the model may file it again as suggested.
 - [ ] Explain an email whose sender is not one of its project's people. Once it has a

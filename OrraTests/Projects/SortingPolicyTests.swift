@@ -33,6 +33,14 @@ struct SortingPolicyTests {
         #expect(decide(signals) == SortingDecision(project: Self.a, level: .sure, reasons: [.thread]))
     }
 
+    /// A setting of the user that names the thread's project too is its second reason.
+    @Test func aThreadKeepsTheSettingsOfItsProjectAsReasons() {
+        let person = SortingSignals(thread: Self.a, rules: [Self.a: .person, Self.b: .rule], ranked: Self.all)
+        #expect(decide(person) == SortingDecision(project: Self.a, level: .sure, reasons: [.thread, .person]))
+        let mailbox = SortingSignals(thread: Self.a, rules: [Self.a: .domain], mailboxes: [Self.a], ranked: Self.all)
+        #expect(decide(mailbox) == SortingDecision(project: Self.a, level: .sure, reasons: [.thread, .domain, .mailbox]))
+    }
+
     @Test(arguments: [SortingReason.rule, .person, .domain])
     func aRulePersonOrDomainOfOneProjectIsSure(_ kind: SortingReason) {
         let signals = SortingSignals(rules: [Self.b: kind], ranked: [Self.b, Self.a, Self.c])
@@ -238,6 +246,14 @@ struct SortingPolicyTests {
         #expect(!SortingPolicy.asksAgain(open, before: unsure([.modelSaidNone, .noSignal]), changed: [Self.d]))
         #expect(unsure([.modelSaidNone, .noSignal]).restsOnModel)
         #expect(!unsure([.waitingForModel, .noSignal]).restsOnModel)
+        // Where the prompt the model answered is known, it decides in place of the changed
+        // candidates: the same prompt asks nothing, another one asks, also for the model's
+        // none.
+        #expect(!SortingPolicy.asksAgain(open, before: chose, changed: [Self.b], samePrompt: true))
+        #expect(SortingPolicy.asksAgain(open, before: chose, changed: [Self.d], samePrompt: false))
+        #expect(SortingPolicy.asksAgain(open, before: unsure([.modelSaidNone, .noSignal]), changed: [], samePrompt: false))
+        // A choice that is gone still asks with the same prompt.
+        #expect(SortingPolicy.asksAgain(open, before: SortingDecision(project: Self.d, level: .likely, reasons: [.model]), changed: [], samePrompt: true))
     }
 
     // MARK: The decision

@@ -312,7 +312,7 @@ final class ProjectsRuntime {
     @ObservationIgnored var referenceLimit = ProjectsRuntime.maximumReferences
     /// The emails a list of the window reads at once, `MailStore.listPage` in the app. When
     /// the projects change, sorting again asks the model only about as many of the newest
-    /// emails the change reaches. Tests set fewer.
+    /// emails the change reaches that the rules left to it. Tests set fewer.
     @ObservationIgnored var listPage = MailStore.listPage
     /// The emails read at once to sort them again with the rules alone, `resortBatch` in
     /// the app. Tests set fewer.
@@ -1022,12 +1022,13 @@ final class ProjectsRuntime {
     /// of it, oldest first, `resortBatchLimit` emails at a time. They save what they file on
     /// their own, and send a filing whose setting is gone to Needs a Project, so the moves
     /// they decide show at once, and no such filing votes for its old project while the
-    /// model decides. Then the newest `listPage` of it is read again for the model,
-    /// `resortModelBatchLimit` emails at a time, so the model work stays within that bound,
-    /// and the model is asked only where the change can alter its answer, see
-    /// `SortingService.sortAgain(_:after:rulesOnly:)`. A newer change ends the run under way,
-    /// and the next run sorts by both, so one runs at a time and a run cut short loses
-    /// nothing.
+    /// model decides. Then the model goes through the newest `listPage` of what the rules
+    /// left to it, see `MailStore.resortPage(_:newest:)`, `resortModelBatchLimit` emails at
+    /// a time, so the model work stays within that bound, and it is asked only where the
+    /// email waits for it or the change can alter its answer, see
+    /// `SortingService.sortAgain(_:after:rulesOnly:)`. Each batch reads its emails when its
+    /// turn comes. A newer change ends the run under way, and the next run sorts by both,
+    /// so one runs at a time and a run cut short loses nothing.
     private func resort(after change: SortingService.Change) {
         guard let running else { return }
         let store = running.store
@@ -1041,15 +1042,18 @@ final class ProjectsRuntime {
         previous?.cancel()
         resortTask = Task { [weak self] in
             await previous?.value
-            guard !Task.isCancelled, let ids = try? await store.resortIDs(reaching: pending) else { return }
-            // The rules alone on all of it, then the model on the newest, read again since
-            // the rules filed some.
-            for (rulesOnly, reached, batch) in [(true, ids[...], rulesBatch), (false, ids.suffix(newest), modelBatch)] {
-                for start in stride(from: reached.startIndex, to: reached.endIndex, by: batch) {
-                    let part = Array(reached[start..<min(start + batch, reached.endIndex)])
-                    guard !Task.isCancelled, let emails = try? await store.resortEmails(part),
-                          !Task.isCancelled, self?.running?.sorting === sorting else { return }
-                    await sorting.sortAgain(emails, after: pending.projects, rulesOnly: rulesOnly)
+            guard !Task.isCancelled, let reached = try? await store.resortIDs(reaching: pending) else { return }
+            var ids = reached
+            for rulesOnly in [true, false] {
+                if !rulesOnly {
+                    // The model on the newest of what the rules left to it, as they left it.
+                    guard !Task.isCancelled, let page = try? await store.resortPage(reached, newest: newest) else { return }
+                    ids = page
+                }
+                let batch = rulesOnly ? rulesBatch : modelBatch
+                for start in stride(from: 0, to: ids.count, by: batch) {
+                    guard !Task.isCancelled, self?.running?.sorting === sorting else { return }
+                    await sorting.sortAgain(Array(ids[start..<min(start + batch, ids.count)]), after: pending.projects, rulesOnly: rulesOnly)
                     // Also when a newer change ended it, since some emails may have moved.
                     self?.mailChanged()
                 }

@@ -23,7 +23,8 @@ import os
 ///
 /// After a change of the projects, `sortAgain(_:after:rulesOnly:)` sorts again the mail the
 /// change reaches, filed or not, see ProjectsRuntime. It saves a decision only when it
-/// changes, and asks the model only where the change can alter its answer.
+/// changes, and asks the model only where the change can alter its answer: where the prompt
+/// is not the one the model answered since sorting started, see `answeredPrompts`.
 ///
 /// It reads and saves only through closures, so it never waits for the store and tests pass
 /// fakes. The text work runs off the main actor. Batches run one at a time, in the order
@@ -66,6 +67,8 @@ final class SortingService {
         var list = ListMail()
         /// Where sorting filed it before, nil for an email never sorted.
         var decided: SortingDecision? = nil
+        /// Whether it waits for sorting to run for it again, see MailStore.waiting().
+        var waits = false
     }
 
     /// The user, from Mail's accounts or the override of a Debug build.
@@ -158,6 +161,9 @@ final class SortingService {
         /// `SortingDecision.waitsForModel`, or that `Saves.wait` kept in place, each with
         /// where it is filed. Never one the user moved.
         var waiting: () async -> [Email]
+        /// These emails, by their Message-IDs, each with where it is filed, for sorting
+        /// again. Never one the user moved or one whose explanation holds a draft.
+        var emails: ([String]) async -> [Email] = { _ in [] }
         /// The moves of one kind to a project, as `Saves.tally` saved them, nil before the
         /// first.
         var tally: (SortingCandidate.Rule, UUID) async -> Tally?
@@ -227,6 +233,12 @@ final class SortingService {
     @ObservationIgnored private var batchCount = 0
     /// The move under way or the last one, which the next one waits for.
     @ObservationIgnored private var lastMove: Task<RuleOffer?, Never>?
+    /// The prompt the model answered for an email's decision, as a hash, by its Message-ID,
+    /// since sorting started. Sorting again asks the model again only where the prompt is
+    /// not this one. After a start of Projects it holds none, and a changed project among
+    /// the candidates of the prompt stands for a change of the prompt, see
+    /// `SortingPolicy.asksAgain`.
+    @ObservationIgnored private var answeredPrompts: [String: Int] = [:]
 
     /// - Parameters:
     ///   - windowIsOpen: whether the Projects window is open. The model is asked only while
@@ -269,19 +281,22 @@ final class SortingService {
         await inTurn { await self.process(await self.lookups.waiting(), pass: .new) }
     }
 
-    /// Sorts again, oldest first and after the batch under way, emails that a change of the
-    /// projects in `changed` reaches, each with where sorting filed it, see ProjectsRuntime.
-    /// An email the rules decide as before is left as it is, with its reply mark.
+    /// Sorts again, oldest first and after the batch under way, the emails of these
+    /// Message-IDs that a change of the projects in `changed` reaches, see ProjectsRuntime.
+    /// It reads them when the batch's turn comes, so it compares each with where it is
+    /// filed then, also after the batch before it. An email the rules decide as before is
+    /// left as it is, with its reply mark.
     /// - With `rulesOnly` the model is never asked. A decision the rules make on their own,
     ///   in a project or in Set Aside, is saved, and a filing of that kind the rules no
     ///   longer make goes to Needs a Project without waiting for the model, so it never
     ///   votes for its old project while the model decides. The others stay as they are.
-    /// - Without it, the model is asked about an email the rules leave to it only where the
-    ///   change can alter its answer, see `SortingPolicy.asksAgain`, and an answer is saved
-    ///   when it differs. A likely filing keeps its place while the model cannot answer,
-    ///   and waits for it.
-    func sortAgain(_ emails: [Email], after changed: Set<UUID>, rulesOnly: Bool) async {
-        await inTurn { await self.process(emails, pass: .again(changed: changed, rulesOnly: rulesOnly)) }
+    /// - Without it, the model is asked about an email the rules leave to it where it
+    ///   waits for the model or where the change can alter its answer, see
+    ///   `SortingPolicy.asksAgain`, and an answer is saved when it differs or the email
+    ///   waits. A likely filing keeps its place while the model cannot answer, and waits
+    ///   for it.
+    func sortAgain(_ messageIDs: [String], after changed: Set<UUID>, rulesOnly: Bool) async {
+        await inTurn { await self.process(await self.lookups.emails(messageIDs), pass: .again(changed: changed, rulesOnly: rulesOnly)) }
     }
 
     /// Prepares the projects again before the next email. Call it when the projects, their
@@ -455,7 +470,9 @@ final class SortingService {
         if case .again(let changed, let rulesOnly) = pass {
             let files = decision.level == .sure || decision.level == .setAside
             let filedBefore = before?.level == .sure || before?.level == .setAside
-            if decision == before || (rulesOnly && !files && !filedBefore) {
+            // In the model pass a decision that waits is the model's to make, also when the
+            // email waited for it before.
+            if (decision == before && (rulesOnly || !decision.waitsForModel)) || (rulesOnly && !files && !filedBefore) {
                 // Nothing changed for it, or only the model could change it.
                 log.left += 1
                 return true
@@ -466,13 +483,17 @@ final class SortingService {
                 let reasons = decision.reasons.filter { $0 != .waitingForModel }
                 decision.reasons = reasons.isEmpty ? [.noSignal] : reasons
             }
-            asks = !rulesOnly && decision.waitsForModel && SortingPolicy.asksAgain(ruled.signals, before: before, changed: changed)
+            let samePrompt = answeredPrompts[email.messageID].flatMap { hash in ruled.prompt.map { $0.text.hashValue == hash } }
+            asks = !rulesOnly && decision.waitsForModel
+                && SortingPolicy.asksAgain(ruled.signals, before: before, changed: changed, samePrompt: samePrompt)
             if decision.waitsForModel, !asks {
                 // The change cannot alter the model's answer.
                 log.left += 1
                 return true
             }
         }
+        // The prompt the model answered, as a hash, nil when it did not answer.
+        var answered: Int?
         if asks, modelIsThere, windowIsOpen(), let prompt = ruled.prompt {
             let asked = ContinuousClock.now
             log.asked += 1
@@ -480,11 +501,13 @@ final class SortingService {
                 let request = ProjectsModelRequest(prompt: prompt.text, maximumTokens: SortingPrompt.maximumTokens, priority: .background)
                 let answer = try await ask(request)
                 decision = SortingPolicy.decide(ruled.signals, model: prompt.answer(SortingPrompt.prefill + answer))
+                answered = prompt.text.hashValue
             } catch RewriteError.promptTooLong {
                 // It never fits, so it goes to Needs a Project rather than wait for ever. The
                 // chip says why, since the model never answered.
                 decision = SortingPolicy.decide(ruled.signals, model: .invalid)
                 decision.reasons = decision.reasons.map { $0 == .modelAnswerInvalid ? .tooLongForModel : $0 }
+                answered = prompt.text.hashValue
             } catch RewriteError.notLoaded {
                 // The model is not on this Mac or not loaded. The rest of the batch waits too.
                 modelIsThere = false
@@ -501,11 +524,16 @@ final class SortingService {
             await saves.wait(email.messageID)
             log.kept += 1
             guard case .new = pass else { return true }
-        } else if case .again = pass, decision == before {
-            // The model answered as before.
+        } else if case .again = pass, decision == before, answered == nil || !email.waits {
+            // The model answered as before, or could not answer. An email that waits is
+            // saved once the model answered, so it waits no longer.
+            if let answered {
+                answeredPrompts[email.messageID] = answered
+            }
             log.left += 1
             return true
         } else if await saves.decision(email.messageID, decision) {
+            answeredPrompts[email.messageID] = answered
             log.levels[decision.level, default: 0] += 1
             if decision.waitsForModel {
                 log.waiting += 1
