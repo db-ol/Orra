@@ -3622,6 +3622,16 @@ the Mac, the window open and the synthetic mail imported, as in the test guide:
 - [ ] Dictate while sorting runs after a change of the projects: dictation stays as fast
   as usual.
 
+The opt in SortingAgainEvaluationTests, added on 2026-10-26, runs the first two checks with
+the real model in a Release build, see its comment for the command. It drives
+ProjectsRuntime with the window open, the index of the set's folders and a stand in for
+Mail that holds orra-test.mbox, and never sends an Apple Event. On 2026-10-26 on an M5 Pro
+each run ended at 95 right, 4 wrong and 6 mails of a project in Needs a Project: the five
+projects made first, the projects made one at a time in the order the suggestions came,
+and in the order of round two of the test guide, the calendar project first. Before this
+change the same runs ended at 95, 4 and 6, at 81, 20 and 4, and at 72, 27 and 6, where
+round two saw 76, 23 and 6.
+
 ## Not implemented
 
 - A longer clipboard restore for remote desktop and virtual machine apps. The delay is
