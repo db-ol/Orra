@@ -10,8 +10,8 @@ extension ProjectsEmailArea {
     ///   explained again, which replaces the draft.
     /// - the answer check, such as "They asked 3 things, your draft answers 2", and the
     ///   people outside the project a reply to all reaches
-    /// - Open Reply in Mail, Reply All and Copy, with the hint to press Command V in Mail.
-    ///   There is no Send button.
+    /// - Open Reply in Mail, Reply All and Copy, with the line above them that says to press
+    ///   Command V in Mail, and the hint again after the handoff. There is no Send button.
     /// - the change box, which makes a new version, and the newest change highlighted, with
     ///   Undo. The talk key's words go straight into it while it has the focus (decision 13),
     ///   see ProjectsWindow.takeDictation(_:). A change under way shows why it waits, if it
@@ -380,6 +380,12 @@ extension ProjectsEmailArea {
 
         @ViewBuilder
         private var handoff: some View {
+            // Said before the click, since Mail comes to the front then and the line after
+            // the handoff may go unseen.
+            Text("Open Reply in Mail puts the draft on the clipboard. Press ⌘V in the reply window, check the recipients and send it yourself.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Group {
                     Button("Open Reply in Mail") {

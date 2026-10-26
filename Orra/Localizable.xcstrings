@@ -9208,6 +9208,28 @@
         }
       }
     },
+    "Open Reply in Mail puts the draft on the clipboard. Press ⌘V in the reply window, check the recipients and send it yourself." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir respuesta en Mail pone el borrador en el portapapeles. Presiona ⌘V en la ventana de respuesta, revisa los destinatarios y envía tú la respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“‘メール’で返信を開く”をクリックすると、下書きがクリップボードに入ります。返信ウインドウで⌘Vを押し、宛先を確認してから自分で送信してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“在‘邮件’中打开回复”会把草稿放到剪贴板上。请在回复窗口中按下 ⌘V，检查收件人后自行发送。"
+          }
+        }
+      }
+    },
     "Open Sound Settings…" : {
       "localizations" : {
         "es-419" : {
