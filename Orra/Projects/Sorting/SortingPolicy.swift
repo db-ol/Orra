@@ -72,12 +72,20 @@ nonisolated struct SortingDecision: Sendable, Equatable, Codable {
     var waitsForModel: Bool {
         reasons.contains(.waitingForModel)
     }
+
+    /// Whether the model's answer made the decision: a project it chose, or Needs a Project
+    /// after its none, another choice than the rules, an answer that was none of the
+    /// choices, or a prompt too long for it.
+    var restsOnModel: Bool {
+        reasons.contains { [SortingReason.model, .modelSaidNone, .modelDisagreed, .modelAnswerInvalid, .tooLongForModel].contains($0) }
+    }
 }
 
 /// Rules first, the model as tie breaker (plan section 8, approved 2026-10-19).
 ///
 /// - A thread (unless the user moved the message it answers) is sure, and the model is not
-///   asked.
+///   asked. A setting of the user that names the same project is a second reason, so the
+///   reply counts as mail the user stands behind, see MailStore.peopleSeen.
 /// - So is the user's own setting that names one project. The most exact kind that matches
 ///   decides: a rule the user made or a linked Mail mailbox, then a person the user listed,
 ///   then a domain. When the kind that decides names several projects, only those
@@ -98,6 +106,31 @@ nonisolated enum SortingPolicy {
     /// Whether the decision needs the model's answer.
     static func needsModel(_ signals: SortingSignals) -> Bool {
         decide(signals, model: nil).waitsForModel
+    }
+
+    /// Whether sorting again asks the model about an email decided as `before`, after a
+    /// change of the projects in `changed`: when the rules leave it to the model and the
+    /// model did not make `before`, when the prompt is not the one the model answered, or
+    /// when the project the model chose is no longer a choice or lost a signal that pointed
+    /// to it. Otherwise the change cannot alter the model's answer, and the same prompt
+    /// asked again could get another one, see ProjectsModelQueue.
+    /// - Parameter samePrompt: whether the prompt is the one the model answered for
+    ///   `before`, nil when that is not known. Then a changed project among the candidates
+    ///   the prompt shows stands for a change of the prompt, and a change that takes a
+    ///   project out of them asks nothing.
+    static func asksAgain(_ signals: SortingSignals, before: SortingDecision?, changed: Set<UUID>, samePrompt: Bool? = nil) -> Bool {
+        guard needsModel(signals) else { return false }
+        guard let before, before.restsOnModel else { return true }
+        if let samePrompt {
+            if !samePrompt {
+                return true
+            }
+        } else if !changed.isDisjoint(with: signals.topCandidates) {
+            return true
+        }
+        guard let project = before.project else { return false }
+        let had = Set(before.reasons).subtracting([.model])
+        return !choices(signals).contains(project) || !had.isSubset(of: Set(support(project, signals)))
     }
 
     /// The decision for an email. `model` is the model's answer to the SortingPrompt for
@@ -121,7 +154,7 @@ nonisolated enum SortingPolicy {
                 return unsure([.modelAnswerInvalid])
             }
         case .open(let why, let among):
-            let choices = among.isEmpty ? top : top.filter(among.contains)
+            let choices = Self.choices(among: among, top: top)
             guard !choices.isEmpty else { return unsure([why]) }
             switch model {
             case nil:
@@ -152,12 +185,11 @@ nonisolated enum SortingPolicy {
     /// The rules in the order of match.py.
     private static func outcome(_ signals: SortingSignals) -> Outcome {
         if let thread = signals.thread, !signals.threadMovedByUser {
-            return .decided(SortingDecision(project: thread, level: .sure, reasons: [.thread]))
+            return .decided(SortingDecision(project: thread, level: .sure, reasons: [.thread] + settings(thread, signals)))
         }
         let ruled = userSettings(signals)
         if ruled.count == 1, let project = ruled.first {
-            let reasons: [SortingReason?] = [signals.rules[project], signals.mailboxes.contains(project) ? .mailbox : nil]
-            return .decided(SortingDecision(project: project, level: .sure, reasons: reasons.compactMap { $0 }))
+            return .decided(SortingDecision(project: project, level: .sure, reasons: settings(project, signals)))
         }
         if ruled.isEmpty, signals.thread == nil, signals.listMail != nil, !signals.hasProjectPeople {
             return .decided(SortingDecision(project: nil, level: .setAside, reasons: [.listMail]))
@@ -198,6 +230,29 @@ nonisolated enum SortingPolicy {
         default:
             return .open(.signalsDisagree, among: ruled)
         }
+    }
+
+    /// The projects the model may choose for these signals, empty when the rules decide
+    /// alone.
+    private static func choices(_ signals: SortingSignals) -> [UUID] {
+        switch outcome(signals) {
+        case .decided: []
+        case .likely(let project): [project]
+        case .open(_, let among): choices(among: among, top: signals.topCandidates)
+        }
+    }
+
+    /// The top candidates the model may choose when no single project has the vote: those
+    /// among `among` when it is not empty.
+    private static func choices(among: Set<UUID>, top: [UUID]) -> [UUID] {
+        among.isEmpty ? top : top.filter(among.contains)
+    }
+
+    /// The user's own settings that name the project, for the chip: a rule, person or
+    /// domain, then a linked mailbox.
+    private static func settings(_ project: UUID, _ signals: SortingSignals) -> [SortingReason] {
+        let reasons: [SortingReason?] = [signals.rules[project], signals.mailboxes.contains(project) ? .mailbox : nil]
+        return reasons.compactMap { $0 }
     }
 
     /// The projects named by the most exact kind of the user's own settings that matches: a

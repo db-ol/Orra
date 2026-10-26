@@ -21,10 +21,12 @@ import os
 ///   of the user runs in a task the runtime keeps, see `userRequest(_:)`, so turning Projects
 ///   off ends it before the files close.
 /// - Mail that waits is sorted after each save of the scan, when the window opens, and when
-///   the cleanup model arrives while the window is open. Mail in Needs a Project is sorted
-///   again when a project is added or changed, when the index of that project finishes, and
-///   when the user accepts a rule, since the mail read before had nothing to go to. A newer
-///   change ends the one under way, whose list is out of date.
+///   the cleanup model arrives while the window is open. When a project is added, changed
+///   or forgotten, when the index of a changed project finishes, and when the user accepts
+///   a rule, the mail the change reaches is sorted again, filed or not, since mail read
+///   before had nothing to go to or went where the projects of then sent it, see
+///   `resort(after:)`. A newer change ends the run under way, and the next run sorts by
+///   both.
 /// - The window lists each batch the scan saves at once, before sorting ends, and says what
 ///   the scan does: a pass that reads the mailboxes back to the days, and what ended the last
 ///   pass, see `ScanState`. Try Again starts the scan again at once, see `readAgain()`.
@@ -242,9 +244,13 @@ final class ProjectsRuntime {
     /// The most Mail handles of messages kept for the window. They hold for one Mail session.
     /// About as many as the emails within the longest days a busy mailbox holds (a guess).
     nonisolated static let maximumReferences = 20_000
-    /// The most emails of Needs a Project read at once to sort them again when a project
-    /// changes. Sorting goes on with the next ones until it sorted them all.
+    /// The most emails read at once to sort them again with the rules alone when the
+    /// projects change. Sorting goes on with the next ones until it sorted them all.
     nonisolated static let resortBatch = 200
+    /// The most emails read at once to sort them again with the model when the projects
+    /// change (a guess). New mail and Explain Selected Message wait for the batch under way,
+    /// see SortingService, so it is small.
+    nonisolated static let resortModelBatch = 20
 
     private(set) var phase: Phase = .off
     /// What runs, nil while Projects is off.
@@ -305,12 +311,15 @@ final class ProjectsRuntime {
     /// The most handles kept, `maximumReferences` in the app. Tests set fewer.
     @ObservationIgnored var referenceLimit = ProjectsRuntime.maximumReferences
     /// The emails a list of the window reads at once, `MailStore.listPage` in the app. When
-    /// the projects change, sorting asks the model only about as many of the newest emails
-    /// of Needs a Project. Tests set fewer.
+    /// the projects change, sorting again asks the model only about as many of the newest
+    /// emails the change reaches that the rules left to it. Tests set fewer.
     @ObservationIgnored var listPage = MailStore.listPage
-    /// The emails of Needs a Project read at once to sort them again, `resortBatch` in the
-    /// app. Tests set fewer.
+    /// The emails read at once to sort them again with the rules alone, `resortBatch` in
+    /// the app. Tests set fewer.
     @ObservationIgnored var resortBatchLimit = ProjectsRuntime.resortBatch
+    /// The emails read at once to sort them again with the model, `resortModelBatch` in the
+    /// app. Tests set fewer.
+    @ObservationIgnored var resortModelBatchLimit = ProjectsRuntime.resortModelBatch
     /// How long Explain Selected Message waits for sorting to file a message, `sortingWait`
     /// in the app. Nil waits until sorting filed it, for tests that check the list the
     /// window then shows, so the speed of a busy test runner does not decide that list.
@@ -321,10 +330,13 @@ final class ProjectsRuntime {
     /// The mailbox choice as last seen, so a change that takes a mailbox away or shortens
     /// the days stops the pass under way.
     @ObservationIgnored private var followedChoice: (mailboxes: Set<MailMailbox>, days: Int)?
-    /// The sorting again of Needs a Project under way, which a newer one ends.
+    /// The sorting again after a change of the projects under way, which a newer one ends.
     @ObservationIgnored private var resortTask: Task<Void, Never>?
-    /// Projects added or changed whose index has not finished since, so Needs a Project is
-    /// sorted again with their file names once it does.
+    /// The changes of the projects since the last run of sorting again that ended, which the
+    /// next run sorts by, so a run that a newer change ends loses nothing.
+    @ObservationIgnored private var pendingChange: SortingService.Change?
+    /// Projects added or changed whose index has not finished since, so the mail they reach
+    /// is sorted again with their file names once it does.
     @ObservationIgnored private var resortAfterIndex: Set<UUID> = []
     /// The requests of the user under way, which stopping ends, see `userRequest(_:)`.
     @ObservationIgnored private var userRequests: [UUID: UserRequest] = [:]
@@ -461,8 +473,8 @@ final class ProjectsRuntime {
     }
 
     /// Prepares sorting again whenever a project's index finishes a sweep, since its file
-    /// names count for sorting. When the project was added or changed since, Needs a Project
-    /// is sorted again too.
+    /// names count for sorting. When the project was added or changed since, the mail it
+    /// reaches is sorted again too.
     private func followIndex(_ index: FolderIndex) {
         let reports = withObservationTracking {
             index.reports
@@ -483,7 +495,7 @@ final class ProjectsRuntime {
         }
         if !indexed.isEmpty {
             resortAfterIndex.subtract(indexed)
-            resortNeedsProject()
+            resort(after: SortingService.Change(projects: indexed))
         }
     }
 
@@ -665,6 +677,7 @@ final class ProjectsRuntime {
         sortAgain = false
         resortTask?.cancel()
         resortTask = nil
+        pendingChange = nil
         resortAfterIndex = []
         running.sorting.stop()
         running.queue.cancelBackground()
@@ -1004,52 +1017,79 @@ final class ProjectsRuntime {
     /// saved, so the message shows in its list and is explained for its project (a guess).
     nonisolated static let sortingWait: Duration = .seconds(2)
 
-    /// Sorts the mail of Needs a Project again, which the user did not move there, after
-    /// a change of the projects: all of it, oldest first, `resortBatchLimit` emails at a
-    /// time. Only the newest `listPage` of it may go to the model. The rules alone sort the
-    /// older emails and file only those they file on their own, in a project or in Set
-    /// Aside, so the others stay as they were and the model work stays within that bound.
-    /// A newer request ends the one under way, whose projects are out of date, so one runs
-    /// at a time.
-    private func resortNeedsProject() {
+    /// Sorts again, after a change of the projects, the mail it reaches, which the user did
+    /// not move, see `MailStore.resortIDs(reaching:)`. First the rules alone go through all
+    /// of it, oldest first, `resortBatchLimit` emails at a time. They save what they file on
+    /// their own, and send a filing whose setting is gone to Needs a Project, so the moves
+    /// they decide show at once, and no such filing votes for its old project while the
+    /// model decides. Then the model goes through the newest `listPage` of what the rules
+    /// left to it, see `MailStore.resortPage(_:newest:)`, `resortModelBatchLimit` emails at
+    /// a time, so the model work stays within that bound, and it is asked only where the
+    /// email waits for it or the change can alter its answer, see
+    /// `SortingService.sortAgain(_:after:rulesOnly:)`. Each batch reads its emails when its
+    /// turn comes. A newer change ends the run under way, and the next run sorts by both,
+    /// so one runs at a time and a run cut short loses nothing.
+    private func resort(after change: SortingService.Change) {
         guard let running else { return }
         let store = running.store
         let sorting = running.sorting
         let newest = listPage
-        let batchLimit = resortBatchLimit
+        let rulesBatch = max(1, resortBatchLimit)
+        let modelBatch = max(1, resortModelBatchLimit)
+        let pending = pendingChange.map { $0.union(change) } ?? change
+        pendingChange = pending
         let previous = resortTask
         previous?.cancel()
         resortTask = Task { [weak self] in
             await previous?.value
-            guard !Task.isCancelled else { return }
-            // The newest of the older emails, nil when there are none.
-            let end: MailStore.Cursor?
-            do {
-                end = try await store.resortEnd(beforeNewest: newest)
-            } catch {
-                return
-            }
-            var cursor: MailStore.Cursor?
-            var rulesOnly = end != nil
-            while !Task.isCancelled {
-                guard let batch = try? await store.resortBatch(after: cursor, through: rulesOnly ? end : nil, limit: batchLimit),
-                      !Task.isCancelled, self?.running?.sorting === sorting else { return }
-                guard let next = batch.next else {
-                    // The older emails are sorted. The newest come next, with the model.
-                    guard rulesOnly else { return }
-                    rulesOnly = false
-                    continue
+            guard !Task.isCancelled, let reached = try? await store.resortIDs(reaching: pending) else { return }
+            var ids = reached
+            for rulesOnly in [true, false] {
+                if !rulesOnly {
+                    // The model on the newest of what the rules left to it, as they left it.
+                    guard !Task.isCancelled, let page = try? await store.resortPage(reached, newest: newest) else { return }
+                    ids = page
                 }
-                await sorting.sort(batch.emails, rulesOnly: rulesOnly)
-                // Also when a newer one ended it, since some emails may have moved.
-                self?.mailChanged()
-                cursor = next
+                let batch = rulesOnly ? rulesBatch : modelBatch
+                for start in stride(from: 0, to: ids.count, by: batch) {
+                    guard !Task.isCancelled, self?.running?.sorting === sorting else { return }
+                    await sorting.sortAgain(Array(ids[start..<min(start + batch, ids.count)]), after: pending.projects, rulesOnly: rulesOnly)
+                    // Also when a newer change ended it, since some emails may have moved.
+                    self?.mailChanged()
+                }
             }
+            guard !Task.isCancelled else { return }
+            self?.pendingChange = nil
         }
     }
 
-    /// Waits until the sorting again of Needs a Project ends, also one that a newer request
-    /// started meanwhile, for tests.
+    /// What a change of a project touched, nil before for a new project and nil after for
+    /// a forgotten one: the project, and the people, domains and linked mailboxes it gained
+    /// or lost, its sender and domain rules among them. Internal for tests.
+    nonisolated static func change(from before: Project?, to after: Project?) -> SortingService.Change {
+        func addresses(_ project: Project?) -> Set<String> {
+            let people = project?.people.map(\.address) ?? []
+            let rules = project?.rules.filter { $0.kind == .sender }.map(\.value) ?? []
+            return Set((people + rules).compactMap(ProjectsAddress.normalized))
+        }
+        func domains(_ project: Project?) -> Set<String> {
+            let rules = project?.rules.filter { $0.kind == .domain }.map(\.value) ?? []
+            return Set(((project?.domains ?? []) + rules).compactMap { domain -> String? in
+                // As SortingSignals compares a domain.
+                let trimmed = SortingText.address(domain)
+                let bare = trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
+                return bare.isEmpty ? nil : bare
+            })
+        }
+        return SortingService.Change(
+            projects: Set([before?.id, after?.id].compactMap { $0 }),
+            addresses: addresses(before).symmetricDifference(addresses(after)),
+            domains: domains(before).symmetricDifference(domains(after)),
+            mailboxes: Set(before?.mailboxes ?? []).symmetricDifference(after?.mailboxes ?? []))
+    }
+
+    /// Waits until the sorting again after a change of the projects ends, also one that a
+    /// newer change started meanwhile, for tests.
     func untilResorted() async {
         while let task = resortTask {
             await task.value
@@ -1112,21 +1152,23 @@ final class ProjectsRuntime {
         return offer
     }
 
-    /// Adds the rule the user accepted to its project, and sorts Needs a Project again.
+    /// Adds the rule the user accepted to its project, and sorts again the mail the rule
+    /// reaches.
     func accept(_ offer: SortingService.RuleOffer) async throws {
         guard let running else { throw Failure.off }
-        guard var project = running.list.project(offer.project) else { throw Failure.unknownProject }
+        guard let before = running.list.project(offer.project) else { throw Failure.unknownProject }
         let rule = Project.Rule(offer.rule)
-        guard !project.rules.contains(rule) else { return }
+        guard !before.rules.contains(rule) else { return }
+        var project = before
         project.rules.append(rule)
         try await running.list.update(project)
         running.sorting.projectsChanged()
-        resortNeedsProject()
+        resort(after: Self.change(from: before, to: project))
     }
 
     /// Removes a rule from its project, for Remove Rule on the project page. Mail read from
-    /// now on is sorted without it. The mail it filed stays where it is, and Needs a
-    /// Project is not sorted again.
+    /// now on is sorted without it. The mail it filed stays where it is, and nothing is
+    /// sorted again.
     func removeRule(_ rule: Project.Rule, from projectID: UUID) async throws {
         guard let running else { throw Failure.off }
         guard var project = running.list.project(projectID) else { throw Failure.unknownProject }
@@ -1138,45 +1180,55 @@ final class ProjectsRuntime {
 
     // MARK: Projects
 
-    /// Adds a project, starts indexing its folders and sorts Needs a Project again.
+    /// Adds a project, starts indexing its folders and sorts again the mail it reaches.
     func add(_ project: Project) async throws {
         guard let running else { throw Failure.off }
+        let before = running.list.project(project.id)
         try await running.list.add(project, mail: running.store)
-        projectChanged(project)
+        projectChanged(project, change: Self.change(from: before, to: project))
     }
 
-    /// Saves a changed project, indexes its folders as they are now and sorts Needs a
-    /// Project again. A linked mailbox it no longer has is not read further. Its rules stay
-    /// as the list has them, since Edit Project does not change rules, so a rule added or
-    /// removed while its sheet was open stays so.
+    /// Saves a changed project, indexes its folders as they are now and sorts again the mail
+    /// the change reaches. A change of the folders alone, or a Save with no change, sorts
+    /// nothing again until the index of the folders finishes. A linked mailbox it no longer
+    /// has is not read further. Its rules stay as the list has them, since Edit Project does
+    /// not change rules, so a rule added or removed while its sheet was open stays so.
     func update(_ project: Project) async throws {
         guard let running else { throw Failure.off }
         var project = project
-        if let saved = running.list.project(project.id) {
-            project.rules = saved.rules
+        let before = running.list.project(project.id)
+        if let before {
+            project.rules = before.rules
         }
         let linked = linkedNames
         try await running.list.update(project)
         if !linkedNames.isSuperset(of: linked) {
             restartScan()
         }
-        projectChanged(project)
+        // Sorting reads the project without its folders.
+        projectChanged(project, change: before?.candidate == project.candidate ? nil : Self.change(from: before, to: project))
     }
 
-    private func projectChanged(_ project: Project) {
+    /// Starts indexing the project's folders as they are now, and sorts again the mail
+    /// `change` reaches, if any.
+    private func projectChanged(_ project: Project, change: SortingService.Change?) {
         running?.sorting.projectsChanged()
         updateMissingMailboxes()
         Task { [weak self] in
             await self?.startIndex(project, resortAfter: true)
         }
-        resortNeedsProject()
+        if let change {
+            resort(after: change)
+        }
         mailChanged()
     }
 
-    /// Forget Project: removes the project with its mail, drafts, counts and index. Its
-    /// linked mailbox is not read further.
+    /// Forget Project: removes the project with its mail, drafts, counts and index, and
+    /// sorts again the mail the change reaches, since the project no longer counts among
+    /// the candidates. Its linked mailbox is not read further.
     func forget(_ project: UUID) async throws {
         guard let running else { throw Failure.off }
+        let before = running.list.project(project)
         let linked = linkedNames
         try await running.list.forget(project, mail: running.store, index: running.index)
         resortAfterIndex.remove(project)
@@ -1185,6 +1237,7 @@ final class ProjectsRuntime {
         }
         running.sorting.projectsChanged()
         updateMissingMailboxes()
+        resort(after: Self.change(from: before, to: nil))
         mailChanged()
     }
 
@@ -1225,11 +1278,11 @@ final class ProjectsRuntime {
         return folders
     }
 
-    /// Starts indexing a project's folders as they are now. With `resortAfter`, Needs a
-    /// Project is sorted again once the sweep that starts here ends. A folder can take long
-    /// to resolve, such as on a share that hangs, so no start or stop of Projects waits for
-    /// this, and a later start waits for the same resolve, see `resolve(_:)`. When the
-    /// project's folders changed meanwhile, or Projects stopped or is turning off, this
+    /// Starts indexing a project's folders as they are now. With `resortAfter`, the mail the
+    /// project reaches is sorted again once the sweep that starts here ends. A folder can
+    /// take long to resolve, such as on a share that hangs, so no start or stop of Projects
+    /// waits for this, and a later start waits for the same resolve, see `resolve(_:)`. When
+    /// the project's folders changed meanwhile, or Projects stopped or is turning off, this
     /// starts nothing, since the start for the change or the next start of Projects counts.
     private func startIndex(_ project: Project, resortAfter: Bool = false) async {
         guard let index = running?.index else { return }
