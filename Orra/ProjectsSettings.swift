@@ -503,7 +503,9 @@ struct ProjectsSettings: View {
                             .fixedSize(horizontal: false, vertical: true)
                         if mail.access == .denied {
                             Spacer()
+                            // The button keeps its whole name, and the line wraps beside it.
                             Button("Open Automation Settings…", action: openAutomationSettings)
+                                .fixedSize()
                         }
                     }
                 }
