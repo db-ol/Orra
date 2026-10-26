@@ -3285,8 +3285,8 @@ release build too, and the other Projects sections below check the details in a 
   Mac goes down. Turning Projects off asks Keep Data or Delete Data. Settings > Projects says
   under Data how long Projects keeps the text of an email with its explanation, a draft and
   the rest of an email: 90, 30 and 180 days.
-- [ ] Report a Problem shows one Projects line with counts only, and asks, above the title,
-  to leave out mail for a problem in Projects.
+- [ ] Report a Problem asks, above the title, to leave out mail for a problem in Projects,
+  and its report shows one Projects line with counts only.
 - [ ] Before the first release that shows Projects: Tools/release-gate/run.sh, which runs
   the projects suite by default since then, passes the projects bar in both content
   languages, and ProjectsLatencyMeasurementTests passes on a 16 GB Mac with Mail and a
