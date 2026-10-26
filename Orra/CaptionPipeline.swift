@@ -173,6 +173,10 @@ final class CaptionPipeline {
     private var isStopped = false
     /// Sentences the segmenter cut so far, which is the number of the one being heard.
     private var cutCount = 0
+    /// What became of the sentences, see `counts`.
+    private var reportedCount = 0
+    private var emptyCount = 0
+    private var droppedCount = 0
     /// True while an interim job waits for the worker.
     private var interimQueued = false
     /// The sentence the last interim text was for, and its audio then.
@@ -218,6 +222,24 @@ final class CaptionPipeline {
     /// files, which feeds faster than real time.
     var waitingSentences: Int {
         waiting
+    }
+
+    /// What became of the sentences so far, for the log when captions stop. The rest of
+    /// those cut failed, or still waited when captions stopped.
+    nonisolated struct Counts: Equatable, Sendable {
+        /// Cut by the segmenter.
+        var cut = 0
+        /// Reported with their text.
+        var reported = 0
+        /// Transcribed with no text, such as a sound that was not speech.
+        var empty = 0
+        /// Dropped since more than `waitingLimit` waited, or since the speech model was
+        /// not loaded.
+        var dropped = 0
+    }
+
+    var counts: Counts {
+        Counts(cut: cutCount, reported: reportedCount, empty: emptyCount, dropped: droppedCount)
     }
 
     /// Takes the next samples of the stream.
@@ -272,6 +294,7 @@ final class CaptionPipeline {
         switch dropped {
         case .sentence(_, let number):
             waiting -= 1
+            droppedCount += 1
             if let line = interimLine, line.number == number {
                 interimLine = nil
                 withdraw(line.id)
@@ -339,6 +362,7 @@ final class CaptionPipeline {
             }
         }
         guard engines.isSpeechReady() else {
+            droppedCount += 1
             speechNotReady()
             return
         }
@@ -356,7 +380,10 @@ final class CaptionPipeline {
         guard !isStopped, !Task.isCancelled else { return }
         let recognitionSeconds = Self.seconds(recognitionStarted.duration(to: .now))
         let text = Self.text(raw, seconds: segment.duration, language: language)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else {
+            emptyCount += 1
+            return
+        }
         // The caption target and the language of the dictation, so a user who reads Spanish
         // sees an English meeting in Spanish and a Spanish one as it was said. The language
         // of the sentence is read once, off the main actor, and not at all while the
@@ -372,6 +399,7 @@ final class CaptionPipeline {
             id = nextID
         }
         reported = true
+        reportedCount += 1
         var sentence = CaptionSentence(
             id: id,
             start: segment.start,

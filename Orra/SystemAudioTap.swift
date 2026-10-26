@@ -137,6 +137,9 @@ nonisolated final class SystemAudioTap: @unchecked Sendable {
             }, "create the IO block")
             let createdProc = proc
             lock.withLock { procID = createdProc }
+            // The start can wait for the permission prompt, and with tap auto start until
+            // an app plays something, so the tap's format is in the log before it too.
+            Logger.captions.notice("System audio capture is starting its device, the tap at \(tapFormat.sampleRate, privacy: .public) Hz with \(tapFormat.channelCount, privacy: .public) channels")
             try Self.check(AudioDeviceStart(device, proc), "start the device")
             Logger.captions.notice("System audio capture started at \(tapFormat.sampleRate, privacy: .public) Hz with \(tapFormat.channelCount, privacy: .public) channels")
         } catch {
