@@ -11,12 +11,14 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
     private let captions: MeetingCaptions
     private let pushToTalk: PushToTalkController
     private let cleanup: TextCleanup
+    private let turns: EngineTurns
     private var panel: NSPanel?
 
-    init(captions: MeetingCaptions, pushToTalk: PushToTalkController, cleanup: TextCleanup) {
+    init(captions: MeetingCaptions, pushToTalk: PushToTalkController, cleanup: TextCleanup, turns: EngineTurns) {
         self.captions = captions
         self.pushToTalk = pushToTalk
         self.cleanup = cleanup
+        self.turns = turns
     }
 
     func show() {
@@ -55,7 +57,7 @@ final class CaptionWindow: NSObject, NSWindowDelegate {
         background.material = .hudWindow
         background.blendingMode = .behindWindow
         background.state = .active
-        let content = NSHostingView(rootView: CaptionView(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup))
+        let content = NSHostingView(rootView: CaptionView(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup, turns: turns))
         content.translatesAutoresizingMaskIntoConstraints = false
         // Only the minimum size. With the default, the scroll view's growing content sets
         // the window's height, and the user could not make it shorter.
@@ -95,6 +97,8 @@ struct CaptionView: View {
     @Bindable var captions: MeetingCaptions
     let pushToTalk: PushToTalkController
     @Bindable var cleanup: TextCleanup
+    /// Whether a dictation holds the captions, see EngineTurns.
+    let turns: EngineTurns
 
     /// What onScrollGeometryChange reports to CaptionFollow.
     private struct ScrollGeometry: Equatable {
@@ -122,11 +126,13 @@ struct CaptionView: View {
                 CaptionTargetMenu(captions: captions, cleanup: cleanup)
                 CaptionCopyButton(captions: captions)
             }
-            CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup)
+            CaptionNotes(captions: captions, pushToTalk: pushToTalk, cleanup: cleanup, turns: turns)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
+                    // Says where captions come from, since a test with one's own voice
+                    // gives none.
                     if captions.store.sentences.isEmpty {
-                        Text("Captions appear here when someone speaks.")
+                        Text("Captions of what the Mac plays, such as a call or a video, appear here. What you say into your microphone is not captioned.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(captions.store.shown) { sentence in
@@ -305,26 +311,18 @@ private struct CaptionSentenceView: View {
     }
 }
 
-/// Why captions are not complete yet: the capture, the speech model, the local model.
-private struct CaptionNotes: View {
+/// Why captions are not complete yet: the capture, the speech model, a dictation, the
+/// local model. Internal for tests.
+struct CaptionNotes: View {
     let captions: MeetingCaptions
     let pushToTalk: PushToTalkController
     let cleanup: TextCleanup
+    let turns: EngineTurns
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            switch captions.capture {
-            case .unavailable(.notConfigured):
-                note("This build of Orra cannot capture the sound the Mac plays yet.")
-            case .unavailable(.failed):
-                note("Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again.")
-            case .off, .starting, .listening:
-                if captions.hearsOnlySilence {
-                    note("No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings.")
-                }
-            }
-            if pushToTalk.modelState != .ready || captions.speechModelMissing {
-                note("The speech model is not ready. Captions start once it is loaded.")
+            ForEach(Self.lines(captions: captions, speechReady: pushToTalk.modelState == .ready, turns: turns), id: \.self) { line in
+                plainNote(line)
             }
             // No translation notes or download until the capture runs. While it starts,
             // captions do not need the model yet, and a download agreed to then would be
@@ -333,6 +331,33 @@ private struct CaptionNotes: View {
                 translationNote
             }
         }
+    }
+
+    /// The notes above those of the local model, in order: the capture, the speech model,
+    /// and a dictation that holds the captions.
+    static func lines(captions: MeetingCaptions, speechReady: Bool, turns: EngineTurns) -> [String] {
+        var lines: [String] = []
+        switch captions.capture {
+        case .unavailable(.notConfigured):
+            lines.append(String(localized: "This build of Orra cannot capture the sound the Mac plays yet."))
+        case .unavailable(.failed):
+            lines.append(String(localized: "Orra could not capture the sound the Mac plays. Turn Live Captions off and on again to try again."))
+        case .off, .starting, .listening:
+            if captions.hearsOnlySilence {
+                lines.append(String(localized: "No sound from the Mac yet. If something is playing, allow Orra under Screen & System Audio Recording in Privacy & Security settings."))
+            }
+        }
+        if !speechReady || captions.speechModelMissing {
+            lines.append(String(localized: "The speech model is not ready. Captions start once it is loaded."))
+        }
+        // From the press of a key until the paste, captions start no model call, see
+        // EngineTurns. Said once the dictation has gone on for a moment, so a tap of the
+        // talk key does not flash it. Not for a capture that failed, which has nothing to
+        // catch up on.
+        if turns.dictationNoteDue, captions.capture == .starting || captions.capture == .listening {
+            lines.append(String(localized: "Captions wait while you dictate and catch up when you finish."))
+        }
+        return lines
     }
 
     @ViewBuilder
@@ -367,13 +392,6 @@ private struct CaptionNotes: View {
         case .checking, .verifying:
             EmptyView()
         }
-    }
-
-    private func note(_ key: LocalizedStringKey) -> some View {
-        Text(key)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func plainNote(_ text: String) -> some View {

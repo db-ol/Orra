@@ -196,6 +196,102 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    // MARK: The window
+
+    /// What `GrowingView` shows, which a test changes.
+    @Observable final class GrowingContent {
+        /// How tall the content of the scroll view is.
+        var height: CGFloat = 200
+        /// Whether a bar shows above the scroll view, as the rule offer above the mail list.
+        var showsBar = false
+    }
+
+    /// A column that scrolls, as the email view does, with content as tall as
+    /// `GrowingContent` says, and the bar above it while `GrowingContent` shows one.
+    private struct GrowingView: View {
+        let content: GrowingContent
+
+        var body: some View {
+            VStack(spacing: 0) {
+                if content.showsBar {
+                    Color.clear
+                        .frame(height: 40)
+                }
+                ScrollView {
+                    Color.clear
+                        .frame(height: content.height)
+                }
+            }
+        }
+    }
+
+    /// Lays the window out a few times with a pause in between, as between events, so SwiftUI
+    /// takes in a change of the content.
+    private func layOut(_ window: NSWindow) async throws {
+        for _ in 0..<10 {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    /// The window keeps the size it opened at, and a shorter one the user gives it, when what
+    /// it shows grows far taller than the window, such as a long email in the email view,
+    /// which scrolls. The window is made as `show()` makes it, but never ordered front, so no
+    /// window appears. AppKit grows a shown window to the intrinsic height of its content
+    /// view. In a test a window that is never shown keeps its frame even while its content
+    /// asks for more, so the test checks that height too.
+    @Test func theWindowKeepsItsSizeWhenItsContentGrows() async throws {
+        let content = GrowingContent()
+        let window = ProjectsWindow.window(hosting: GrowingView(content: content))
+        defer { window.close() }
+        let view = try #require(window.contentView)
+        func size() -> CGSize {
+            window.contentRect(forFrameRect: window.frame).size
+        }
+        try await layOut(window)
+        #expect(size() == ProjectsWindow.defaultSize)
+
+        content.height = 3_000
+        try await layOut(window)
+        #expect(size() == ProjectsWindow.defaultSize)
+        // The content asks for no height of its own, which the window would grow to.
+        #expect(view.intrinsicContentSize.height == NSView.noIntrinsicMetric)
+
+        // The user makes the window shorter, above its minimum.
+        let shorter = CGSize(width: ProjectsWindow.defaultSize.width, height: 500)
+        window.setContentSize(shorter)
+        content.height = 4_000
+        try await layOut(window)
+        #expect(size() == shorter)
+        #expect(!window.isVisible)
+    }
+
+    /// The window keeps its minimum size, while the minimum of what it shows is far smaller,
+    /// since every column scrolls, and changes, such as when Add Rule takes away the bar above
+    /// the list. The hosting controller sets the window's minimum to that of its content. The
+    /// checks ask for at least the minimum, since the one SwiftUI sets takes in the title bar.
+    @Test func theWindowKeepsItsMinimumSize() async throws {
+        let content = GrowingContent()
+        content.showsBar = true
+        let window = ProjectsWindow.window(hosting: GrowingView(content: content))
+        defer { window.close() }
+        try await layOut(window)
+
+        // As after Add Rule: the bar goes, so the content's own minimum changes.
+        content.showsBar = false
+        try await layOut(window)
+        #expect(window.contentMinSize.width >= ProjectsWindow.minimumSize.width)
+        #expect(window.contentMinSize.height >= ProjectsWindow.minimumSize.height)
+
+        // A size below the minimum, which AppKit holds to it as for a resize by the user.
+        window.setContentSize(CGSize(width: 300, height: 200))
+        try await layOut(window)
+        let size = window.contentRect(forFrameRect: window.frame).size
+        #expect(size.width >= ProjectsWindow.minimumSize.width)
+        #expect(size.height >= ProjectsWindow.minimumSize.height)
+        #expect(!window.isVisible)
+    }
+
     // MARK: The talk key
 
     /// Decision 13: the talk key's words go into the change box of the selected email only
@@ -537,6 +633,37 @@ struct ProjectsWindowViewTests {
         #expect(draft.project == nil)
         #expect(draft.checkedDomains == .failure(.notADomain))
         #expect(ProjectsSetupView.problem(with: .notADomain) == "Write each domain like harbor.example.")
+    }
+
+    /// The draft finds and changes a person by ID. A write for a person removed meanwhile
+    /// changes nobody, and a write for a person after a removed one changes only that person.
+    @Test func theSetupChangesPeopleByID() throws {
+        typealias Person = ProjectsSetupView.Draft.Person
+        let mei = Person(name: "Mei Tan", address: "mei@harbor.example")
+        let kai = Person(name: "Kai Moss", address: "kai@kiln.example")
+        let lu = Person(name: "Lu", address: "lu@kiln.example")
+        var draft = ProjectsSetupView.Draft()
+        draft.people = [mei, kai, lu]
+        draft.people.removeAll { $0.id == mei.id }
+
+        var removed = mei
+        removed.role = "their architect"
+        draft.update(removed)
+        #expect(draft.person(mei.id) == nil)
+        #expect(draft.people.map(\.id) == [kai.id, lu.id])
+        #expect(draft.validPeople == [
+            Project.Person(name: "Kai Moss", address: "kai@kiln.example"),
+            Project.Person(name: "Lu", address: "lu@kiln.example"),
+        ])
+
+        var later = try #require(draft.person(lu.id))
+        later.role = "their builder"
+        draft.update(later)
+        #expect(draft.people.map(\.id) == [kai.id, lu.id])
+        #expect(draft.validPeople == [
+            Project.Person(name: "Kai Moss", address: "kai@kiln.example"),
+            Project.Person(name: "Lu", address: "lu@kiln.example", role: "their builder"),
+        ])
     }
 
     /// A domain counts every address at it as one of the project's people, for sorting and

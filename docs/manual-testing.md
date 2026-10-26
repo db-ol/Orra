@@ -2898,6 +2898,41 @@ it shows starts, stops, counts and failures, never text.
   the menu, checked, and clicking it there turns speaking off, after which it leaves
   the menu.
 
+What Live Captions hear and when they wait, added on 2026-10-25, not verified yet.
+MeetingCaptionsTests checks the notes with a fake capture that delivers nothing, or whose
+start waits or fails, and with EngineTurns for a dictation. Watch the log with
+`log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`.
+
+- [ ] Turn Live Captions on with nothing playing. The window says "Captions of what the
+  Mac plays, such as a call or a video, appear here. What you say into your microphone is
+  not captioned." After about 8 s it adds "No sound from the Mac yet. If something is
+  playing, allow Orra under Screen & System Audio Recording in Privacy & Security
+  settings." Speaking into the microphone shows no caption.
+- [ ] The log shows "Meeting captions turned on", then "System audio capture is starting
+  its device, the tap at … Hz with … channels". Note whether "System audio capture
+  started at …" and "Meeting captions started, showing …, after …" follow at once or only
+  once something plays, which tells how the start waits with nothing playing. After about
+  8 s "Meeting captions got no sound for 8.0 s, with 0.0 s of audio, and suggest the
+  permission" shows, or with up to 8 s of audio when the tap delivers zeros.
+- [ ] Play a video with speech. The no sound note goes with the first sound, and captions
+  show within a few seconds of the end of each sentence. The log shows "Meeting captions
+  got the first audio … after they were turned on" and "Meeting captions got the first
+  sound …".
+- [ ] With the video playing, start a dictation with the talk key and then one with the
+  translation key, also hands free. From about a second after the press until the paste
+  or Escape the window shows "Captions wait while you dictate and catch up when you
+  finish." The note goes after the paste, and the sentences heard meanwhile show, in
+  order. With the talk key in Hold, a tap of it shows no note, and in any mode a shortcut
+  with it, such as right Control+C, shows none either. The captions do not move.
+- [ ] Turning captions off logs "Meeting captions stopped after …, with … s of audio, … s
+  of it with sound, … sentences cut, … reported, … without text and … dropped". No line
+  of the captions category holds text.
+- [ ] In 简体中文, 日本語 and Español the placeholder and the note about a dictation read
+  well and wrap in the window at its first size.
+- [ ] Make the window as small as it goes, in English and in Español, with nothing
+  playing. Once the no sound note shows, start a hands free dictation. The notes still
+  read, the first words of the placeholder stay in view, and the list keeps some room.
+
 The Live Captions shortcut, added on 2026-10-19, not verified yet in the running app. It
 is a Carbon hot key, see docs/hotkey-options.md, ⌃ ⌥ ⌘ C unless changed in Settings,
 General, Keys. Watch the log with
@@ -3595,6 +3630,42 @@ quotes included.
   view above, the two of Explain Selected Message, for a message that looks like an email
   Projects read and for "Projects could not save this message on this Mac. Try again
   later.", and the one under Data.
+
+Sorting again after a change of the projects, added on 2026-10-25, not verified yet.
+MailStoreTests, SortingServiceTests, SortingPolicyTests and ProjectsRuntimeTests check the
+parts with made up mail and a fake model. Check in a Debug build with the cleanup model on
+the Mac, the window open and the synthetic mail imported, as in the test guide:
+
+- [ ] Delete All Projects Data and read the synthetic mail with no project. Make the five
+  projects one at a time from Suggested Projects, as they are suggested, then edit each to
+  the people, domains, description and folder the synthetic set gives it. Once Sorting
+  mail… is gone, at most 6 of the 105 mails sit in a wrong project.
+- [ ] Delete All Projects Data, make the five projects as the synthetic set gives them,
+  and read the synthetic mail only then. Once Sorting mail… is gone, at most 6 of the 105
+  mails sit in a wrong project, now that the model's guesses no longer count as people
+  seen.
+- [ ] A reply in a thread of a project from a person the project lists, or one you sent
+  to such a person, shows both reasons in its chip: the same thread and the person.
+- [ ] Remove a person from a project. Their mail leaves it at once unless another setting
+  or a thread files it, and the model may file it again as suggested.
+- [ ] Explain an email whose sender is not one of its project's people. Once it has a
+  draft, add the sender to another project. That email stays where it is with its draft,
+  and the sender's other mail moves.
+- [ ] Edit a project, go back to another project at once and read its emails marked
+  Unsure project while Sorting mail… shows. When sorting moves the email you read, it
+  stays in view with its new project in the chip, and its list no longer holds it.
+- [ ] Dictate while sorting runs after a change of the projects: dictation stays as fast
+  as usual.
+
+The opt in SortingAgainEvaluationTests, added on 2026-10-26, runs the first two checks with
+the real model in a Release build, see its comment for the command. It drives
+ProjectsRuntime with the window open, the index of the set's folders and a stand in for
+Mail that holds orra-test.mbox, and never sends an Apple Event. On 2026-10-26 on an M5 Pro
+each run ended at 95 right, 4 wrong and 6 mails of a project in Needs a Project: the five
+projects made first, the projects made one at a time in the order the suggestions came,
+and in the order of round two of the test guide, the calendar project first. Before this
+change the same runs ended at 95, 4 and 6, at 81, 20 and 4, and at 72, 27 and 6, where
+round two saw 76, 23 and 6.
 
 ## Not implemented
 
