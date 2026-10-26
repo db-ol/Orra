@@ -909,7 +909,7 @@ struct ProjectsWindowViewTests {
         // The same email after Hide Explanation: the email itself first and the draft under
         // it. The renders after it show the explanation again. Then a forward.
         model.showsExplanation = false
-        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_200), to: folder.appendingPathComponent("\(language)-projects-email-original.png"))
+        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_400), to: folder.appendingPathComponent("\(language)-projects-email-original.png"))
         model.showsExplanation = true
         try await render(ProjectsEmailOriginal(content: Self.forward, attachments: Self.attachments).padding(20), size: NSSize(width: 520, height: 720), to: folder.appendingPathComponent("\(language)-projects-email-forward.png"))
         // A disclosure row folded and open, as every disclosure of the window shows it.
@@ -942,7 +942,11 @@ struct ProjectsWindowViewTests {
         let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {})
         try await render(window, size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window.png"))
         try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 480, height: 700), to: folder.appendingPathComponent("\(language)-projects-how-to.png"))
+        // The window at its smallest size: with its title bar and toolbar, and the columns
+        // below the toolbar on their own, since the third column of a window that is never
+        // shown may stay empty in the first.
         try await renderWindow(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), to: folder.appendingPathComponent("\(language)-projects-window-760.png"))
+        try await render(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-columns.png"))
         await fixture.stop()
     }
 
