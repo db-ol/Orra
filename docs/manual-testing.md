@@ -3300,9 +3300,9 @@ release build too, and the other Projects sections below check the details in a 
   languages, and ProjectsLatencyMeasurementTests passes on a 16 GB Mac with Mail and a
   browser open.
 - [ ] The README, the privacy page and the user guide in four languages say what the app
-  does. The site has no Projects section yet, since it describes the latest release. Once
-  this release is published, a pull request of its own adds the section with the new
-  version, as docs/website.md asks.
+  does. The site describes the latest release, so the pull request that adds its Projects
+  section with the new version merges only once this release is published, as
+  docs/website.md asks.
 
 Mail access for Projects, added on 2026-10-19, not verified yet. Projects reads mail in the
 Mail app through three Apple Events, see Orra/Projects/Mail/MailEvents.swift: get and count,
