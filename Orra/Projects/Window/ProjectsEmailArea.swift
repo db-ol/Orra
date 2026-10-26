@@ -176,37 +176,14 @@ struct ProjectsEmailArea: View {
         let state = model.explaining[email.messageID]
         let isChanging = model.emailModel(for: email.messageID).isBusy
         let noText = ProjectsWindowText.noText(email)
-        HStack(spacing: 10) {
-            Group {
-                if email.isExplained {
-                    // Asks first when the new draft would replace one the user changed.
-                    Button("Explain Again") {
-                        Task { await model.requestExplain(email.messageID) }
-                    }
-                } else {
-                    Button("Explain") {
-                        Task { await model.explain(email.messageID) }
-                    }
-                }
+        // One under another in a column too narrow for a row, such as the third column of the
+        // window at its smallest size.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                explainButtons(state: state, isChanging: isChanging, noText: noText)
             }
-            .disabled(state == .explaining || isChanging || noText != nil || runtime.phase != .on)
-            // The window's choice, so the next email shows the same way.
-            if model.emailModel(for: email.messageID).explanation != nil {
-                Button {
-                    model.showsExplanation.toggle()
-                } label: {
-                    if model.showsExplanation {
-                        Text("Hide Explanation")
-                    } else {
-                        Text("Show Explanation")
-                    }
-                }
-            }
-            if state == .explaining {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Explaining…")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                explainButtons(state: state, isChanging: isChanging, noText: noText)
             }
         }
         if case .failed(let failure)? = state {
@@ -238,6 +215,45 @@ struct ProjectsEmailArea: View {
             Text(verbatim: noText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Explain, or Explain Again with Hide Explanation or Show Explanation once the email is
+    /// explained, and Explaining… while the model explains it.
+    @ViewBuilder
+    private func explainButtons(state: ProjectsWindowModel.ExplainState?, isChanging: Bool, noText: String?) -> some View {
+        Group {
+            if email.isExplained {
+                // Asks first when the new draft would replace one the user changed.
+                Button("Explain Again") {
+                    Task { await model.requestExplain(email.messageID) }
+                }
+            } else {
+                Button("Explain") {
+                    Task { await model.explain(email.messageID) }
+                }
+            }
+        }
+        .disabled(state == .explaining || isChanging || noText != nil || runtime.phase != .on)
+        // The window's choice, so the next email shows the same way.
+        if model.emailModel(for: email.messageID).explanation != nil {
+            Button {
+                model.showsExplanation.toggle()
+            } label: {
+                if model.showsExplanation {
+                    Text("Hide Explanation")
+                } else {
+                    Text("Show Explanation")
+                }
+            }
+        }
+        if state == .explaining {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Explaining…")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

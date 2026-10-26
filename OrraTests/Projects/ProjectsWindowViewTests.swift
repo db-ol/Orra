@@ -936,6 +936,17 @@ struct ProjectsWindowViewTests {
         let narrow = ProjectsEmailArea(runtime: runtime, model: narrowModel, email: explained)
         try await render(narrow, size: NSSize(width: 480, height: 640), to: folder.appendingPathComponent("\(language)-projects-email-narrow.png"))
         try await render(narrow, size: NSSize(width: 480, height: 2_600), to: folder.appendingPathComponent("\(language)-projects-email-narrow-full.png"))
+        // The window at its smallest size with the email selected, after a source of another
+        // email showed it, then the email view alone as wide as the third column is then,
+        // with the translation of the draft.
+        let smallest = ProjectsWindowModel(runtime: runtime, emailActions: { Self.translatingActions(runtime) })
+        smallest.selectedMessageID = "earlier@harbor.example"
+        await smallest.show(explained.messageID)
+        let smallestEmail = smallest.emailModel(for: explained.messageID)
+        await smallestEmail.load()
+        await smallestEmail.showTranslation(true)
+        try await render(ProjectsWindowView(runtime: runtime, model: smallest, openSettings: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-email.png"))
+        try await render(ProjectsEmailArea(runtime: runtime, model: smallest, email: explained), size: NSSize(width: 200, height: 3_800), to: folder.appendingPathComponent("\(language)-projects-email-200.png"))
 
         // How to Use Projects shows with nothing selected, without its step about Settings,
         // since the fixture confirmed its mailboxes. Then with that step.
