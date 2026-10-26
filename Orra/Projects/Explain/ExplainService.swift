@@ -84,6 +84,10 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
 /// - builds ExplainPrompt off the main actor, counting with the cleanup model's own
 ///   tokenizer, see ProjectsTokenCounter, and runs it through ProjectsModelQueue as a
 ///   request of the user with at most `ExplainPrompt.maximumTokens` tokens.
+/// - asks the model once more when its answer repeated an item of a list and wrote no
+///   draft, since a small model that repeats a few lines goes on until its limit. The
+///   second prompt goes on from the answer up to the repeat, see
+///   `rest(_:written:countTokens:)`.
 /// - reads the answer with ExplainAnswer, runs OutputChecks on every point and DraftCheck
 ///   on the draft, and saves the Explanation through a closure before it returns it.
 /// - shows the model's warnings, points and questions as `OutputChecks.shown` gives them:
@@ -254,7 +258,12 @@ final class ExplainService {
             let prepared = await Self.prepare(gathered, language: language, timeZone: timeZone, countTokens: countTokens)
             guard prepared.prompt.tokens <= ExplainPrompt.tokenBudget else { throw RewriteError.promptTooLong }
             let modelStarted = ContinuousClock.now
-            let written = try await run(ProjectsModelRequest(prompt: prepared.prompt.text, maximumTokens: ExplainPrompt.maximumTokens, priority: .user))
+            var written = try await run(ProjectsModelRequest(prompt: prepared.prompt.text, maximumTokens: ExplainPrompt.maximumTokens, priority: .user))
+            if let rest = await Self.rest(prepared, written: written, countTokens: countTokens) {
+                let looped = modelStarted.duration(to: .now)
+                written = rest.text + (try await run(rest.request))
+                Logger.projects.notice("The model repeated an item of its \(rest.section.rawValue, privacy: .public) and wrote no draft in \(Self.seconds(looped), privacy: .public), and a second request wrote the rest in \(Self.seconds(modelStarted.duration(to: .now) - looped), privacy: .public)")
+            }
             let modelTime = modelStarted.duration(to: .now)
             let explanation = await Self.finish(prepared, written: written, timeZone: timeZone)
             await save(explanation)
@@ -491,6 +500,39 @@ final class ExplainService {
     }
 
     // MARK: After the model
+
+    /// The second request for an answer that repeated an item of a list and wrote no draft.
+    nonisolated struct Rest: Sendable {
+        /// The list the model repeated.
+        var section: ExplainAnswer.Section
+        /// What comes before the second answer: the first one up to the repeat, and the
+        /// heading of the next section.
+        var text: String
+        var request: ProjectsModelRequest
+    }
+
+    /// The second request when the answer repeated an item of a list and has no draft, as
+    /// when the model repeats a few lines until its limit, or nil. ExplainAnswer ends the
+    /// list before the repeat with at most `ExplainAnswer.loopItems` items, and the second
+    /// prompt is the first one with the answer up to there and the heading of the next
+    /// section, so the model goes on from that heading. The answer goes in as a block, see
+    /// `ExplainPrompt.block`, so a chat template token the model spelled out cannot end its
+    /// turn. The two answers together write at most `ExplainPrompt.maximumTokens`. Nil when
+    /// the second prompt would pass the budget. Off the main actor, since it reads the
+    /// answer and counts the prompt.
+    @concurrent
+    nonisolated static func rest(_ prepared: Prepared, written: String, countTokens: @Sendable (String) -> Int) async -> Rest? {
+        let prompt = prepared.prompt
+        let prefill = ExplainPrompt.prefill(prompt.language)
+        let answer = ExplainAnswer(prefill + written, sources: prompt.sources.keys, rules: prompt.rules)
+        guard let loop = answer.loop, answer.problems.contains(.missing(.draft)),
+              let next = ExplainAnswer.Section.allCases.drop(while: { $0 != loop.section }).dropFirst().first else { return nil }
+        let kept = loop.kept.hasPrefix(prefill) ? String(loop.kept.dropFirst(prefill.count)) : loop.kept
+        let text = ExplainPrompt.block(kept) + "\n\n" + ExplainPrompt.Headings(prompt.language).heading(next) + "\n"
+        let tokens = countTokens(text)
+        guard tokens < ExplainPrompt.maximumTokens, countTokens(prompt.text + text) <= ExplainPrompt.tokenBudget else { return nil }
+        return Rest(section: loop.section, text: text, request: ProjectsModelRequest(prompt: prompt.text + text, maximumTokens: ExplainPrompt.maximumTokens - tokens, priority: .user))
+    }
 
     /// Reads the answer and runs the checks on it. Off the main actor, since the checks
     /// read every source of the prompt.

@@ -42,6 +42,7 @@ struct ExplainAnswerTests {
         #expect(answer.draft == .reply("方艾，\n\n收到，谢谢。[待确认：是否接受加急费用]\n\n白露"))
         #expect(answer.problems.isEmpty)
         #expect(answer.unknownSources.isEmpty)
+        #expect(answer.loop == nil)
     }
 
     @Test func anEnglishAnswerReadsTheSame() {
@@ -70,6 +71,7 @@ struct ExplainAnswerTests {
         #expect(answer.questions.isEmpty)
         #expect(answer.draft == .reply("Hi Iris,\n\nThanks, it should reach me in time.\n\nBai Lu"))
         #expect(answer.problems.isEmpty)
+        #expect(answer.loop == nil)
     }
 
     // MARK: Sources
@@ -217,8 +219,9 @@ struct ExplainAnswerTests {
     }
 
     /// A list that repeats an item ends before it, with at most 6 items, the most points the
-    /// prompt asks for. The sections the model never reached stay missing.
-    @Test func aListThatRepeatsItselfEndsBeforeTheRepeat() {
+    /// prompt asks for. The sections the model never reached stay missing, and `loop` keeps
+    /// the answer up to the last item kept, for a second request to go on from.
+    @Test func aListThatRepeatsItselfEndsBeforeTheRepeat() throws {
         let start = ExplainPrompt.prefill(.en) + """
             - The email asks to approve the proof by Wednesday.
             - The sender wants an answer today.
@@ -243,6 +246,8 @@ struct ExplainAnswerTests {
         #expect(answer.points.last?.text == "The email does not change the quote.")
         #expect(answer.questions.isEmpty)
         #expect(answer.problems == [.missing(.questions), .missing(.draft)])
+        let seventh = try #require(start.range(of: "\n- The email does not mention any new dates."))
+        #expect(answer.loop == ExplainAnswer.Loop(section: .points, kept: String(start[..<seventh.lowerBound])))
     }
 
     /// Chinese counts by character, as the copies of the instructions do.
@@ -260,6 +265,7 @@ struct ExplainAnswerTests {
         #expect(answer.points.count == 4)
         #expect(answer.points.last?.text == "邮件没有提到新的金额。")
         #expect(answer.problems == [.missing(.questions), .missing(.draft)])
+        #expect(answer.loop == ExplainAnswer.Loop(section: .points, kept: start))
     }
 
     /// A question asked again before the draft shows once, as in a06 en, a43 zh and a50 zh
@@ -282,6 +288,7 @@ struct ExplainAnswerTests {
         #expect(answer.questions == ["Whether Wednesday suits Bai Lu.", "Whether to pay the rush fee."])
         #expect(answer.draft == .reply("Hi Iris,"))
         #expect(answer.problems.isEmpty)
+        #expect(answer.loop?.section == .questions)
     }
 
     /// Items that differ in one word or in their sources are no repeats, also in Chinese,
@@ -291,6 +298,7 @@ struct ExplainAnswerTests {
         #expect(answer.points.map(\.text) == ["定金 3,720 元已付。", "定金 3,720 元已付。", "定金 3,720 元未付。", "尾款 3,720 元已付。"])
         #expect(answer.points.map(\.sources) == [["F1"], ["F2"], ["F1"], ["F1"]])
         #expect(answer.problems.isEmpty)
+        #expect(answer.loop == nil)
     }
 
     // MARK: Copies of the instructions

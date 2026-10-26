@@ -12,8 +12,9 @@ import Foundation
 /// missing and repeated sections. A repeated section's second copy is not read, but the
 /// heading written again right after itself, as after the prefill, is not a copy. An item
 /// copied from the prompt's own rules is left out, and so is a lead in copied from them
-/// before a colon, see `Echo`. The answer is data, and nothing here follows it: the
-/// window shows it as plain text only.
+/// before a colon, see `Echo`. A list ends before an item that repeats an earlier one, see
+/// `loop`. The answer is data, and nothing here follows it: the window shows it as plain
+/// text only.
 nonisolated struct ExplainAnswer: Sendable, Equatable {
     nonisolated enum Section: String, Sendable, CaseIterable, Codable {
         case warnings
@@ -46,6 +47,25 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         case unknownSources
     }
 
+    /// Where a list of the answer repeated an item. A small model that repeats a few lines
+    /// goes on with them until its limit, as the English answers of a40 and a48 did in the
+    /// release gate, and then writes no draft.
+    nonisolated struct Loop: Sendable, Equatable {
+        var section: Section
+        /// The answer up to the end of the last item the list keeps, without a reasoning
+        /// block and with "\n" between lines.
+        var kept: String
+    }
+
+    /// A line of a section, or an item of a list, and where it ends in the answer.
+    nonisolated struct Line: Sendable {
+        var text: String
+        var end: String.Index
+    }
+
+    /// The most items a list keeps once an item repeats, the most points the prompt asks for.
+    static let loopItems = 6
+
     var warnings: [String] = []
     var points: [Point] = []
     var questions: [String] = []
@@ -53,6 +73,10 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     /// Source ids the points named that the prompt does not have, each once.
     var unknownSources: [String] = []
     var problems: [Problem] = []
+    /// The first list that repeated an item word for word, or nil. Each list ends before its
+    /// first repeat and then keeps at most `loopItems` items. Case, spaces and punctuation
+    /// do not count, source ids do, and each Chinese character is a word.
+    var loop: Loop?
 
     /// Reads `answer`, which starts with the prompt's prefill. `sources` holds the ids of
     /// the prompt's source table, such as 本邮件, F1 and M1, and `rules` the prompt's own
@@ -60,21 +84,21 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     init(_ answer: String, sources: some Collection<String>, rules: String = "") {
         let known = Set(sources)
         let echo = Echo(rules)
-        var sections: [Section: [String]] = [:]
+        var sections: [Section: [Line]] = [:]
         var current: Section?
         let text = answer
             .replacing(/<think>[\s\S]*?<\/think>/, with: "")
             .replacingOccurrences(of: "\r\n", with: "\n")
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
-            if let heading = Self.heading(line), current != .draft || (heading.hasColon && heading.rest.isEmpty) {
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if let heading = Self.heading(String(line)), current != .draft || (heading.hasColon && heading.rest.isEmpty) {
                 let (section, rest) = (heading.section, heading.rest)
-                if section == current, rest.isEmpty, sections[section]?.allSatisfy({ $0.allSatisfy(\.isWhitespace) }) == true {
+                if section == current, rest.isEmpty, sections[section]?.allSatisfy({ $0.text.allSatisfy(\.isWhitespace) }) == true {
                     // The heading again before anything under it, as after the prefill.
                     continue
                 }
                 if sections[section] == nil {
                     current = section
-                    sections[section] = rest.isEmpty ? [] : [rest]
+                    sections[section] = rest.isEmpty ? [] : [Line(text: rest, end: line.endIndex)]
                     continue
                 }
                 // A heading again on a line of its own: the model began the answer again.
@@ -88,16 +112,28 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
                 }
             }
             if let current {
-                sections[current]?.append(line)
+                sections[current]?.append(Line(text: String(line), end: line.endIndex))
             }
         }
 
         for section in Section.allCases where sections[section] == nil {
             problems.append(.missing(section))
         }
-        warnings = Self.items(sections[.warnings] ?? []).compactMap(echo.withoutCopy)
-        questions = Self.items(sections[.questions] ?? []).compactMap(echo.withoutCopy)
-        for item in Self.items(sections[.points] ?? []).compactMap(echo.withoutCopy) {
+        // The items as written, each list up to its first repeat.
+        var lists: [Section: [String]] = [:]
+        for section in [Section.warnings, .points, .questions] {
+            var items = Self.items(sections[section] ?? [])
+            if let repeated = Self.firstRepeat(in: items) {
+                items = Array(items.prefix(min(repeated, Self.loopItems)))
+                if loop == nil, let last = items.last {
+                    loop = Loop(section: section, kept: String(text[..<last.end]))
+                }
+            }
+            lists[section] = items.map(\.text)
+        }
+        warnings = (lists[.warnings] ?? []).compactMap(echo.withoutCopy)
+        questions = (lists[.questions] ?? []).compactMap(echo.withoutCopy)
+        for item in (lists[.points] ?? []).compactMap(echo.withoutCopy) {
             let (point, unknown) = Self.point(item, known: known)
             for id in unknown where !unknownSources.contains(id) {
                 unknownSources.append(id)
@@ -110,7 +146,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
             problems.append(.unknownSources)
         }
         if let lines = sections[.draft] {
-            draft = Self.draft(lines)
+            draft = Self.draft(lines.map(\.text))
             if draft == .missing {
                 problems.append(.missing(.draft))
             }
@@ -146,23 +182,24 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         options: [.caseInsensitive]
     )
 
-    /// The items of a list section: a bullet or a number starts one, and other lines add
-    /// to the one before. "无" and "None" stand for no items.
-    static func items(_ lines: [String]) -> [String] {
-        var items: [String] = []
+    /// The items of a list section, each with the end of its last line: a bullet or a number
+    /// starts one, and other lines add to the one before. "无" and "None" stand for no items.
+    static func items(_ lines: [Line]) -> [Line] {
+        var items: [Line] = []
         for line in lines {
-            let text = line.trimmingCharacters(in: .whitespaces)
+            let text = line.text.trimmingCharacters(in: .whitespaces)
             guard !text.isEmpty else { continue }
             let range = NSRange(text.startIndex..., in: text)
             if let match = bulletPattern.firstMatch(in: text, range: range), let body = Range(match.range(at: 1), in: text) {
-                items.append(String(text[body]).trimmingCharacters(in: .whitespaces))
+                items.append(Line(text: String(text[body]).trimmingCharacters(in: .whitespaces), end: line.end))
             } else if let last = items.indices.last {
-                items[last] += " " + text
+                items[last].text += " " + text
+                items[last].end = line.end
             } else {
-                items.append(text)
+                items.append(Line(text: text, end: line.end))
             }
         }
-        return items.filter { !$0.isEmpty && !isNothing($0) }
+        return items.filter { !$0.text.isEmpty && !isNothing($0.text) }
     }
 
     private static let bulletPattern = try! NSRegularExpression(pattern: #"^(?:[-•*·・–]|\d{1,2}[.、)]|[（(]\d{1,2}[)）])\s*(.*)$"#)
@@ -171,6 +208,39 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
     private static func isNothing(_ item: String) -> Bool {
         let word = item.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces)).lowercased()
         return ["无", "没有", "暂无", "none", "nothing", "n/a", "na"].contains(word)
+    }
+
+    /// Where the first item with the words of an earlier one is, or nil when none repeats.
+    private static func firstRepeat(in items: [Line]) -> Int? {
+        var seen: Set<[String]> = []
+        for (index, item) in items.enumerated() {
+            let words = Self.words(item.text)
+            if !words.isEmpty, !seen.insert(words).inserted {
+                return index
+            }
+        }
+        return nil
+    }
+
+    /// The words of a text, lowercased: runs of letters and digits, with each Chinese
+    /// character a word of its own.
+    private static func words(_ text: String) -> [String] {
+        var words: [String] = []
+        var word = ""
+        for character in text.precomposedStringWithCompatibilityMapping.lowercased() {
+            if character.isHan {
+                if !word.isEmpty { words.append(word) }
+                word = ""
+                words.append(String(character))
+            } else if character.isLetter || character.isNumber {
+                word.append(character)
+            } else if !word.isEmpty {
+                words.append(word)
+                word = ""
+            }
+        }
+        if !word.isEmpty { words.append(word) }
+        return words
     }
 
     // MARK: Echo
@@ -193,7 +263,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         private let runs: Set<[String]>
 
         init(_ rules: String) {
-            let words = Self.words(rules)
+            let words = ExplainAnswer.words(rules)
             var runs: Set<[String]> = []
             if words.count >= Self.run {
                 for start in 0...(words.count - Self.run) {
@@ -217,7 +287,7 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
         }
 
         private func isCopied(_ text: String) -> Bool {
-            let words = Self.words(text)
+            let words = ExplainAnswer.words(text)
             guard words.count >= Self.least else { return false }
             var copied = Array(repeating: false, count: words.count)
             for start in 0...(words.count - Self.run) where runs.contains(Array(words[start..<(start + Self.run)])) {
@@ -235,27 +305,6 @@ nonisolated struct ExplainAnswer: Sendable, Equatable {
                 let after = item.index(after: index)
                 return !(index > item.startIndex && item[item.index(before: index)].isNumber && after < item.endIndex && item[after].isNumber)
             }
-        }
-
-        /// The words of a text, lowercased: runs of letters and digits, with each Chinese
-        /// character a word of its own.
-        private static func words(_ text: String) -> [String] {
-            var words: [String] = []
-            var word = ""
-            for character in text.precomposedStringWithCompatibilityMapping.lowercased() {
-                if character.isHan {
-                    if !word.isEmpty { words.append(word) }
-                    word = ""
-                    words.append(String(character))
-                } else if character.isLetter || character.isNumber {
-                    word.append(character)
-                } else if !word.isEmpty {
-                    words.append(word)
-                    word = ""
-                }
-            }
-            if !word.isEmpty { words.append(word) }
-            return words
         }
     }
 
