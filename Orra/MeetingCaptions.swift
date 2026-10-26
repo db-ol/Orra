@@ -277,7 +277,12 @@ final class MeetingCaptions {
     @ObservationIgnored private let captureQueue = DispatchQueue(label: "io.github.db-ol.Orra.caption-capture", qos: .userInitiated)
     /// Counts the starts, so samples of an earlier run are ignored.
     @ObservationIgnored private var run = 0
-    @ObservationIgnored private var heardSeconds = 0.0
+    /// When captions were turned on, for the times in the log.
+    @ObservationIgnored private var turnedOn = ContinuousClock.now
+    /// Seconds of audio this run, and of those with sound, so the log tells no audio
+    /// from silence.
+    @ObservationIgnored private var receivedSeconds = 0.0
+    @ObservationIgnored private var soundSeconds = 0.0
     @ObservationIgnored private var heardSound = false
     /// Sets `hearsOnlySilence` when no samples came at all, see `start`.
     @ObservationIgnored private var silenceCheck: Task<Void, Never>?
@@ -353,11 +358,14 @@ final class MeetingCaptions {
     private func start() {
         isOn = true
         run += 1
+        turnedOn = .now
+        Logger.captions.notice("Meeting captions turned on")
         store.startOver()
         follow = CaptionFollow()
         hearsOnlySilence = false
         speechModelMissing = false
-        heardSeconds = 0
+        receivedSeconds = 0
+        soundSeconds = 0
         heardSound = false
         let pipeline = CaptionPipeline(engines: engines, interimInterval: CaptionPipeline.defaultInterimInterval, wantsTranslation: { [weak self] in
             self?.displayMode.translates ?? false
@@ -417,7 +425,9 @@ final class MeetingCaptions {
         wantModelIfTranslating()
         capture = .listening
         let target = CaptionTarget.effective(engines.target(), for: engines.language())
-        Logger.captions.notice("Meeting captions started, showing \(self.displayMode.rawValue, privacy: .public), into \(target.logName, privacy: .public)")
+        // How long the start took tells a start that waited, as for the permission
+        // prompt, from audio that comes late.
+        Logger.captions.notice("Meeting captions started, showing \(self.displayMode.rawValue, privacy: .public), into \(target.logName, privacy: .public), after \(self.turnedOn.duration(to: .now), privacy: .public)")
     }
 
     /// Asks for the local model once per run, when the display mode translates.
@@ -434,6 +444,7 @@ final class MeetingCaptions {
         captureQueue.async {
             source.stop()
         }
+        let sentences = pipeline?.counts ?? CaptionPipeline.Counts()
         pipeline?.stop()
         pipeline = nil
         silenceCheck?.cancel()
@@ -447,31 +458,40 @@ final class MeetingCaptions {
         speechModelMissing = false
         stopped()
         closeWindow()
-        Logger.captions.notice("Meeting captions stopped")
+        // The counts tell no audio from silence, and sound without speech from sentences
+        // that were dropped or still waited, as behind a long dictation.
+        Logger.captions.notice("Meeting captions stopped after \(self.turnedOn.duration(to: .now), privacy: .public), with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, \(self.soundSeconds, format: .fixed(precision: 1), privacy: .public) s of it with sound, \(sentences.cut, privacy: .public) sentences cut, \(sentences.reported, privacy: .public) reported, \(sentences.empty, privacy: .public) without text and \(sentences.dropped, privacy: .public) dropped")
     }
 
     /// Samples from the capture, on the main actor. Internal for tests.
     func receive(_ samples: [Float], run: Int? = nil) {
         guard isOn, run == nil || run == self.run, let pipeline else { return }
-        if !heardSound {
-            if samples.contains(where: { $0 != 0 }) {
+        if receivedSeconds == 0, !samples.isEmpty {
+            Logger.captions.notice("Meeting captions got the first audio \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on")
+        }
+        let seconds = Double(samples.count) / Double(RecordingLimits.sampleRate)
+        receivedSeconds += seconds
+        if samples.contains(where: { $0 != 0 }) {
+            soundSeconds += seconds
+            if !heardSound {
                 heardSound = true
                 hearsOnlySilence = false
-            } else {
-                heardSeconds += Double(samples.count) / Double(RecordingLimits.sampleRate)
-                // Never clears it, since a time without samples may have set it already.
-                if heardSeconds >= silenceHint {
-                    suggestPermission()
-                }
+                Logger.captions.notice("Meeting captions got the first sound \(self.turnedOn.duration(to: .now), privacy: .public) after they were turned on")
             }
+        } else if !heardSound, receivedSeconds >= silenceHint {
+            // Never clears it, since a time without samples may have set it already.
+            suggestPermission()
         }
         pipeline.feed(samples)
     }
 
-    /// No sound came for `silenceHint`, so the window suggests the permission.
+    /// No sound came for `silenceHint`, so the window suggests the permission. The log
+    /// says how much audio came, which tells no samples at all, as while nothing plays,
+    /// from samples of only zeros, as with a refused permission.
     private func suggestPermission() {
         guard !hearsOnlySilence else { return }
         hearsOnlySilence = true
+        Logger.captions.notice("Meeting captions got no sound for \(self.silenceHint, format: .fixed(precision: 1), privacy: .public) s, with \(self.receivedSeconds, format: .fixed(precision: 1), privacy: .public) s of audio, and suggest the permission")
     }
 
     /// The run of the latest start, for tests that feed samples like the capture does.

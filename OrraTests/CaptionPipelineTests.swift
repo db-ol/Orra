@@ -583,6 +583,22 @@ struct EngineTurnsTests {
         #expect(starts.first ?? 99 < 1)
         #expect(!starts.contains { $0 > 2 && $0 < 10 })
         #expect(starts.last ?? 0 > 48)
+        #expect(pipeline.counts == CaptionPipeline.Counts(cut: 25, reported: 21, empty: 0, dropped: 4))
+    }
+
+    /// The counts in the log when captions stop: the sentences cut, reported, transcribed
+    /// with no text, and dropped, here since the speech model was not loaded.
+    @Test func thePipelineCountsWhatBecameOfItsSentences() async {
+        let models = FakeCaptionModels(["Hello everyone.", "", "Next slide please."])
+        let pipeline = CaptionPipeline(engines: models.engines()) { _ in }
+        pipeline.feed(FakeCaptionModels.audio(sentences: 3))
+        await pipeline.finish()
+        #expect(pipeline.counts == CaptionPipeline.Counts(cut: 3, reported: 2, empty: 1, dropped: 0))
+        models.speechReady = false
+        let unready = CaptionPipeline(engines: models.engines()) { _ in }
+        unready.feed(FakeCaptionModels.audio(sentences: 1))
+        await unready.finish()
+        #expect(unready.counts == CaptionPipeline.Counts(cut: 1, reported: 0, empty: 0, dropped: 1))
     }
 
     @Test func turningCaptionsOffCancelsAWaitingCall() async throws {
