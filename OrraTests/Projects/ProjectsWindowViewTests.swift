@@ -198,20 +198,29 @@ struct ProjectsWindowViewTests {
 
     // MARK: The window
 
-    /// How tall the content of `GrowingView` is, which a test changes.
+    /// What `GrowingView` shows, which a test changes.
     @Observable final class GrowingContent {
+        /// How tall the content of the scroll view is.
         var height: CGFloat = 200
+        /// Whether a bar shows above the scroll view, as the rule offer above the mail list.
+        var showsBar = false
     }
 
     /// A column that scrolls, as the email view does, with content as tall as
-    /// `GrowingContent` says.
+    /// `GrowingContent` says, and the bar above it while `GrowingContent` shows one.
     private struct GrowingView: View {
         let content: GrowingContent
 
         var body: some View {
-            ScrollView {
-                Color.clear
-                    .frame(height: content.height)
+            VStack(spacing: 0) {
+                if content.showsBar {
+                    Color.clear
+                        .frame(height: 40)
+                }
+                ScrollView {
+                    Color.clear
+                        .frame(height: content.height)
+                }
             }
         }
     }
@@ -254,6 +263,33 @@ struct ProjectsWindowViewTests {
         content.height = 4_000
         try await layOut(window)
         #expect(size() == shorter)
+        #expect(!window.isVisible)
+    }
+
+    /// The window keeps its minimum size, while the minimum of what it shows is far smaller,
+    /// since every column scrolls, and changes, such as when Add Rule takes away the bar above
+    /// the list. The hosting controller sets the window's minimum to that of its content. The
+    /// checks ask for at least the minimum, since the one SwiftUI sets may take in the title
+    /// bar.
+    @Test func theWindowKeepsItsMinimumSize() async throws {
+        let content = GrowingContent()
+        content.showsBar = true
+        let window = ProjectsWindow.window(hosting: GrowingView(content: content))
+        defer { window.close() }
+        try await layOut(window)
+
+        // As after Add Rule: the bar goes, so the content's own minimum changes.
+        content.showsBar = false
+        try await layOut(window)
+        #expect(window.contentMinSize.width >= ProjectsWindow.minimumSize.width)
+        #expect(window.contentMinSize.height >= ProjectsWindow.minimumSize.height)
+
+        // A size below the minimum, which AppKit holds to it as for a resize by the user.
+        window.setContentSize(CGSize(width: 300, height: 200))
+        try await layOut(window)
+        let size = window.contentRect(forFrameRect: window.frame).size
+        #expect(size.width >= ProjectsWindow.minimumSize.width)
+        #expect(size.height >= ProjectsWindow.minimumSize.height)
         #expect(!window.isVisible)
     }
 
