@@ -86,14 +86,14 @@ struct MeetingCaptionsTests {
         }
     }
 
-    private func makeCaptions(_ models: FakeCaptionModels, source: FakeSource, events: Box, displayMode: CaptionDisplayMode = .translationOnly) -> MeetingCaptions {
+    private func makeCaptions(_ models: FakeCaptionModels, source: FakeSource, events: Box, displayMode: CaptionDisplayMode = .translationOnly, silenceHint: Double = 2) -> MeetingCaptions {
         let captions = MeetingCaptions(
             source: source.source,
             engines: models.engines(),
             started: { events.items.append("started") },
             stopped: { events.items.append("stopped") },
             displayMode: displayMode,
-            silenceHint: 2
+            silenceHint: silenceHint
         )
         captions.showWindow = { events.items.append("show") }
         captions.closeWindow = { events.items.append("close") }
@@ -391,6 +391,62 @@ struct MeetingCaptionsTests {
         #expect(!captions.hearsOnlySilence)
         captions.receive(CaptionAudio.silence(5))
         #expect(!captions.hearsOnlySilence)
+    }
+
+    /// A capture that delivers nothing at all, as while nothing plays, suggests the
+    /// permission after the same time as one that delivers only zeros. Zeros that come
+    /// later keep the note, and the first sound takes it away.
+    @Test func aCaptureThatDeliversNothingSuggestsThePermission() async throws {
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        try await eventually { captions.hearsOnlySilence }
+        captions.receive(CaptionAudio.silence(0.1), run: captions.currentRun)
+        #expect(captions.hearsOnlySilence)
+        captions.receive(CaptionAudio.tone(0.1), run: captions.currentRun)
+        #expect(!captions.hearsOnlySilence)
+        captions.setOn(false)
+    }
+
+    /// A start that still waits, as for the permission prompt or for the first sound the
+    /// Mac plays, suggests the permission after the same time.
+    @Test func aStartThatStillWaitsSuggestsThePermission() async throws {
+        let source = FakeSource()
+        source.holdsStart = true
+        defer { source.releaseStart() }
+        let captions = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        try await eventually { source.calls == ["start"] }
+        try await eventually { captions.hearsOnlySilence }
+        #expect(captions.capture == .starting)
+        captions.setOn(false)
+        #expect(!captions.hearsOnlySilence)
+    }
+
+    /// From the press of a key until the paste, captions start no model call, see
+    /// EngineTurns. The window says that they wait and catch up after the dictation,
+    /// but not for captions that cannot hear anything.
+    @Test func captionsSayTheyWaitWhileADictationRuns() async throws {
+        let turns = EngineTurns()
+        let waits = "Captions wait while you dictate and catch up when you finish."
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box())
+        captions.setOn(true)
+        try await eventually { captions.capture == .listening }
+        #expect(!CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).contains(waits))
+        turns.dictationStarted()
+        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).contains(waits))
+        turns.dictationEnded()
+        #expect(!CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).contains(waits))
+        captions.setOn(false)
+        let source = FakeSource()
+        source.fails = .failed(step: "start the device", status: -1)
+        let failed = makeCaptions(FakeCaptionModels([]), source: source, events: Box())
+        failed.setOn(true)
+        try await eventually { failed.capture == .unavailable(.failed(step: "start the device", status: -1)) }
+        turns.dictationStarted()
+        #expect(!CaptionNotes.lines(captions: failed, speechReady: true, turns: turns).contains(waits))
+        turns.dictationEnded()
+        failed.setOn(false)
     }
 
     @Test func theDisplayModeIsSaved() {
