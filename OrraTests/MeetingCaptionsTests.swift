@@ -441,6 +441,39 @@ struct MeetingCaptionsTests {
         failed.setOn(false)
     }
 
+    /// A sound before the hint keeps the note away, also once the hint has passed with no
+    /// sound since.
+    @Test func aSoundBeforeTheHintSuggestsNoPermission() async throws {
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
+        captions.setOn(true)
+        captions.receive(CaptionAudio.tone(0.1), run: captions.currentRun)
+        // Captions turned on later with the same hint suggest the permission only after
+        // these would have.
+        let probe = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
+        probe.setOn(true)
+        try await eventually { probe.hearsOnlySilence }
+        #expect(!captions.hearsOnlySilence)
+        probe.setOn(false)
+        captions.setOn(false)
+    }
+
+    /// Off and on again starts the hint over. The stop ends the check of the first run at
+    /// once, and that check suggests nothing in the second run.
+    @Test func offAndOnAgainStartsTheSilenceHintOver() async throws {
+        let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 60)
+        captions.setOn(true)
+        captions.setOn(false)
+        captions.setOn(true)
+        // Captions turned on later with a short hint suggest the permission only after the
+        // ended check has run.
+        let probe = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.1)
+        probe.setOn(true)
+        try await eventually { probe.hearsOnlySilence }
+        #expect(!captions.hearsOnlySilence)
+        probe.setOn(false)
+        captions.setOn(false)
+    }
+
     /// From the press of a key until the paste, captions start no model call, see
     /// EngineTurns. Once the dictation has gone on for a moment, the window says that
     /// they wait and catch up after it, but not for captions that cannot hear anything.
