@@ -551,19 +551,29 @@ extension ProjectsEmailArea {
 extension ProjectsEmailArea {
     /// The chips of a point's sources. A file's chip shows its excerpt with its page in a
     /// popover, an attachment's chip the excerpt the model read, this email's chip its text,
-    /// and an earlier email's chip shows that email in the window (decision 20).
+    /// and an earlier email's chip shows that email in the window (decision 20). The chips go
+    /// one under another in a column too narrow for a row.
     struct SourceChips: View {
         let ids: [String]
         let model: ProjectsWindowModel
         let emailModel: ProjectsEmailModel
 
         var body: some View {
-            HStack(spacing: 6) {
-                ForEach(ids, id: \.self) { id in
-                    if let source = emailModel.sources[id] {
-                        SourceChip(source: source, emailText: emailModel.emailText) { messageID in
-                            Task { await model.show(messageID) }
-                        }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    chips
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    chips
+                }
+            }
+        }
+
+        private var chips: some View {
+            ForEach(ids, id: \.self) { id in
+                if let source = emailModel.sources[id] {
+                    SourceChip(source: source, emailText: emailModel.emailText) { messageID in
+                        Task { await model.show(messageID) }
                     }
                 }
             }
