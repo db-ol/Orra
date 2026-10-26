@@ -168,7 +168,11 @@ struct ExplainEvaluationTests {
         let service = ExplainService(
             lookups: lookups,
             run: { request in
-                promptTokens = counter.count(request.prompt)
+                // The explanation's own prompt, not the longer one of a second request
+                // for the rest of an answer that repeated itself.
+                if promptTokens == 0 {
+                    promptTokens = counter.count(request.prompt)
+                }
                 return try await queue.run(request)
             },
             loadTokenCounter: { counter.count },
@@ -198,6 +202,7 @@ struct ExplainEvaluationTests {
             for mail in chosen {
                 var email = Self.email(mail, project: mail.labels.project.flatMap { ids[$0] }, ownText: ownText, in: mails, byMessageID: byMessageID)
                 email.attachments = await Self.attachments(of: mail, files: projectFiles)
+                promptTokens = 0
                 let started = ContinuousClock.now
                 let explanation = try await service.explain(email)
                 let time = started.duration(to: .now)
