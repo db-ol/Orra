@@ -424,17 +424,19 @@ struct MeetingCaptionsTests {
     }
 
     /// From the press of a key until the paste, captions start no model call, see
-    /// EngineTurns. The window says that they wait and catch up after the dictation,
-    /// but not for captions that cannot hear anything.
+    /// EngineTurns. Once the dictation has gone on for a moment, the window says that
+    /// they wait and catch up after it, but not for captions that cannot hear anything.
     @Test func captionsSayTheyWaitWhileADictationRuns() async throws {
-        let turns = EngineTurns()
+        let turns = EngineTurns(noteDelay: .milliseconds(100))
         let waits = "Captions wait while you dictate and catch up when you finish."
         let captions = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box())
         captions.setOn(true)
         try await eventually { captions.capture == .listening }
         #expect(!CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).contains(waits))
         turns.dictationStarted()
-        #expect(CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).contains(waits))
+        // Not at once, since a tap of the talk key holds the captions for a moment too.
+        #expect(!CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).contains(waits))
+        try await eventually { CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).contains(waits) }
         turns.dictationEnded()
         #expect(!CaptionNotes.lines(captions: captions, speechReady: true, turns: turns).contains(waits))
         captions.setOn(false)
@@ -444,6 +446,7 @@ struct MeetingCaptionsTests {
         failed.setOn(true)
         try await eventually { failed.capture == .unavailable(.failed(step: "start the device", status: -1)) }
         turns.dictationStarted()
+        try await eventually { turns.dictationNoteDue }
         #expect(!CaptionNotes.lines(captions: failed, speechReady: true, turns: turns).contains(waits))
         turns.dictationEnded()
         failed.setOn(false)

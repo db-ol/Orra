@@ -624,6 +624,30 @@ struct EngineTurnsTests {
         #expect(events == ["handler, dictating: true", "started", "ended"])
     }
 
+    /// The caption window's note about a dictation waits for the dictation to go on for a
+    /// moment. A tap of the talk key, or a shortcut with it such as right Control+C, ends
+    /// sooner and gets none, also when the next press follows at once.
+    @Test func aTapGetsNoNoteAboutADictation() async throws {
+        let tap = EngineTurns(noteDelay: .milliseconds(100))
+        tap.dictationStarted()
+        tap.dictationEnded()
+        // A press right after a tap waits the whole delay again.
+        let pressAfterTap = EngineTurns(noteDelay: .seconds(60))
+        pressAfterTap.dictationStarted()
+        pressAfterTap.dictationEnded()
+        pressAfterTap.dictationStarted()
+        defer { pressAfterTap.dictationEnded() }
+        // A dictation that starts later, with the tap's delay, gets the note only after the
+        // tap would have.
+        let dictation = EngineTurns(noteDelay: .milliseconds(100))
+        dictation.dictationStarted()
+        try await eventually { dictation.dictationNoteDue }
+        #expect(!tap.dictationNoteDue)
+        #expect(!pressAfterTap.dictationNoteDue)
+        dictation.dictationEnded()
+        #expect(!dictation.dictationNoteDue)
+    }
+
     @Test func captionsWaitForADictationAndCatchUpInOrder() async throws {
         let turns = EngineTurns(pollInterval: .milliseconds(2))
         let models = FakeCaptionModels(["Let's look at the numbers.", "That sounds good."])

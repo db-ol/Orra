@@ -351,8 +351,10 @@ struct CaptionNotes: View {
             lines.append(String(localized: "The speech model is not ready. Captions start once it is loaded."))
         }
         // From the press of a key until the paste, captions start no model call, see
-        // EngineTurns. Not for a capture that failed, which has nothing to catch up on.
-        if turns.isDictating, captions.capture == .starting || captions.capture == .listening {
+        // EngineTurns. Said once the dictation has gone on for a moment, so a tap of the
+        // talk key does not flash it. Not for a capture that failed, which has nothing to
+        // catch up on.
+        if turns.dictationNoteDue, captions.capture == .starting || captions.capture == .listening {
             lines.append(String(localized: "Captions wait while you dictate and catch up when you finish."))
         }
         return lines
