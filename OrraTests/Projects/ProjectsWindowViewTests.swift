@@ -635,6 +635,37 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsSetupView.problem(with: .notADomain) == "Write each domain like harbor.example.")
     }
 
+    /// The draft finds and changes a person by ID. A write for a person removed meanwhile
+    /// changes nobody, and a write for a person after a removed one changes only that person.
+    @Test func theSetupChangesPeopleByID() throws {
+        typealias Person = ProjectsSetupView.Draft.Person
+        let mei = Person(name: "Mei Tan", address: "mei@harbor.example")
+        let kai = Person(name: "Kai Moss", address: "kai@kiln.example")
+        let lu = Person(name: "Lu", address: "lu@kiln.example")
+        var draft = ProjectsSetupView.Draft()
+        draft.people = [mei, kai, lu]
+        draft.people.removeAll { $0.id == mei.id }
+
+        var removed = mei
+        removed.role = "their architect"
+        draft.update(removed)
+        #expect(draft.person(mei.id) == nil)
+        #expect(draft.people.map(\.id) == [kai.id, lu.id])
+        #expect(draft.validPeople == [
+            Project.Person(name: "Kai Moss", address: "kai@kiln.example"),
+            Project.Person(name: "Lu", address: "lu@kiln.example"),
+        ])
+
+        var later = try #require(draft.person(lu.id))
+        later.role = "their builder"
+        draft.update(later)
+        #expect(draft.people.map(\.id) == [kai.id, lu.id])
+        #expect(draft.validPeople == [
+            Project.Person(name: "Kai Moss", address: "kai@kiln.example"),
+            Project.Person(name: "Lu", address: "lu@kiln.example", role: "their builder"),
+        ])
+    }
+
     /// A domain counts every address at it as one of the project's people, for sorting and
     /// for the checks of a reply. So a mail provider that many unrelated people share, or a
     /// domain under one, is refused, as sorting refuses it for a rule. Its people go under
