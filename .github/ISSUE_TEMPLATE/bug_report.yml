@@ -10,6 +10,19 @@ body:
 
         In Orra's menu, choose **Report a Problem…**. You describe the problem in Orra, and Orra opens this page with your text and the version fields filled in. It also writes a diagnostic report to a text file. Drag the file into the box below to attach it. The report contains no dictated text and no audio. Issues are public, so leave out private details.
         在 Orra 的菜单中选择 **报告问题…**。在 Orra 中描述问题后，Orra 会打开这个页面，填好你写的内容和版本信息。它还会把诊断报告写进一个文本文件。把文件拖进下面的输入框即可附上。报告中没有任何听写的文字，也没有录音。问题是公开的，请不要写入隐私信息。
+
+        For a problem in Projects, describe the steps and leave out mail text, names, email addresses and screenshots of mail.
+        报告“项目”的问题时，请描述操作步骤，不要写入邮件正文、姓名、电子邮件地址，也不要附上邮件截图。
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / 功能
+      description: |
+        Where in Orra the problem happened.
+        问题出现在 Orra 的哪个功能中。
+      options:
+        - Projects (Preview) / 项目（预览版）
+        - Another part of Orra / Orra 的其他功能
   - type: textarea
     id: what-happened
     attributes:

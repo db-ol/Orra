@@ -1972,6 +1972,28 @@
         }
       }
     },
+    "Assigning, editing and deleting in Projects change only what it keeps on this Mac, never your mail in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al asignar, editar o eliminar en Proyectos, solo cambia lo que Proyectos guarda en esta Mac, nunca tu correo en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”での割り当て、編集、削除で変わるのは、このMacに保存された“プロジェクト”のデータだけです。“メール”内のメールは変わりません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“项目”里归入、编辑和删除，只会改动它保存在这台 Mac 上的数据，不会改动“邮件” App 里的邮件。"
+          }
+        }
+      }
+    },
     "Attach the diagnostic report" : {
       "localizations" : {
         "es-419" : {
@@ -3220,6 +3242,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld 秒后关闭"
+          }
+        }
+      }
+    },
+    "Collapsed" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contraído"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "折りたたみ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已折叠"
           }
         }
       }
@@ -4750,6 +4794,28 @@
         }
       }
     },
+    "Expanded" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expandido"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展開"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已展开"
+          }
+        }
+      }
+    },
     "Explain" : {
       "localizations" : {
         "es-419" : {
@@ -4794,24 +4860,24 @@
         }
       }
     },
-    "Explain Selected Message" : {
+    "Explain Message Selected in Mail" : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Explicar mensaje seleccionado"
+            "value" : "Explicar mensaje seleccionado en Mail"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "選択したメッセージを説明"
+            "value" : "“メール”で選択したメッセージを説明"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "解释所选邮件"
+            "value" : "解释“邮件”中所选邮件"
           }
         }
       }
@@ -4856,28 +4922,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在解释…"
-          }
-        }
-      }
-    },
-    "Explanation" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Explicación"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "説明"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "解释"
           }
         }
       }
@@ -5055,6 +5099,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要说长一点的内容，可以快速连按两下说话键，松开后继续说。说完再按一下，文字就会粘贴进去。"
+          }
+        }
+      }
+    },
+    "For a problem in Projects, describe the steps and leave out mail text, names, email addresses and screenshots of mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para un problema en Proyectos, describe los pasos y no incluyas el texto de correos, nombres, direcciones de correo ni capturas de pantalla de correos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”の問題を報告するときは、操作の手順を書き、メールの本文、名前、メールアドレス、メールのスクリーンショットは含めないでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告“项目”的问题时，请描述操作步骤，不要写入邮件正文、姓名、电子邮件地址，也不要附上邮件截图。"
           }
         }
       }
@@ -5546,6 +5612,28 @@
         }
       }
     },
+    "Hide Explanation" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar explicación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "説明を非表示"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏解释"
+          }
+        }
+      }
+    },
     "Hold" : {
       "comment" : "A trigger mode: hold the key while speaking",
       "localizations" : {
@@ -5724,6 +5812,28 @@
         }
       }
     },
+    "How to Use Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cómo usar Proyectos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”の使い方"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如何使用“项目”"
+          }
+        }
+      }
+    },
     "Import an Audio File…" : {
       "localizations" : {
         "es-419" : {
@@ -5764,6 +5874,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在“项目”窗口中，把光标放进填写修改要求的框里，然后使用说话键。你说的话会填进这个框，说完后草稿就会修改。关闭此项后，可以先看看这些文字，再点按“修改草稿”。"
+          }
+        }
+      }
+    },
+    "In the toolbar, Explain Message Selected in Mail shows and explains the message you selected in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En la barra de herramientas, Explicar mensaje seleccionado en Mail muestra y explica el mensaje que seleccionaste en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ツールバーの“‘メール’で選択したメッセージを説明”は、“メール”で選択しているメッセージを表示して説明します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具栏中的“解释‘邮件’中所选邮件”会显示并解释你在“邮件”中选中的邮件。"
           }
         }
       }
@@ -7622,6 +7754,28 @@
         }
       }
     },
+    "Make a project from a suggestion under Suggested Projects, or with New Project…, and add its folders. Explanations use the files in them." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crea un proyecto a partir de una sugerencia en Proyectos sugeridos, o con Nuevo proyecto…, y agrega sus carpetas. Las explicaciones usan los archivos que contienen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクトの候補”から、または“新規プロジェクト…”でプロジェクトを作成し、そのフォルダを追加します。説明には、フォルダ内のファイルが使われます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用“建议的项目”中的建议，或用“新建项目…”创建项目，并添加项目的文件夹。解释会用到其中的文件。"
+          }
+        }
+      }
+    },
     "Many unrelated people have addresses at %@. Add each person under People instead." : {
       "localizations" : {
         "es-419" : {
@@ -7864,24 +8018,24 @@
         }
       }
     },
-    "New mail is no longer filed by this rule. Mail it already filed stays where it is." : {
+    "New mail is no longer assigned by this rule. Mail it already assigned stays in the project." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El correo nuevo ya no se archivará con esta regla. El correo ya archivado no cambia."
+            "value" : "Esta regla ya no asignará el correo nuevo. El correo que ya asignó sigue en el proyecto."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "今後のメールにはこのルールが使われなくなります。すでに振り分けられたメールはそのままです。"
+            "value" : "今後のメールは、このルールで割り当てられなくなります。このルールですでに割り当てられたメールは、プロジェクトに残ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "以后的邮件不再按这条规则归入项目。已归入项目的邮件保持不变。"
+            "value" : "以后的邮件不再按这条规则归入项目。这条规则已归入的邮件仍留在项目中。"
           }
         }
       }
@@ -7970,28 +8124,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有发现需要你决定的事。"
-          }
-        }
-      }
-    },
-    "No Email Selected" : {
-      "localizations" : {
-        "es-419" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No hay ningún correo seleccionado"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メールが選択されていません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未选择邮件"
           }
         }
       }
@@ -9032,6 +9164,28 @@
         }
       }
     },
+    "Open Mail. In Projects Settings, allow Mail access, choose the mailboxes and click Start Reading Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre Mail. En la configuración de Proyectos, permite el acceso a Mail, elige los buzones y haz clic en Empezar a leer el correo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”を開きます。“プロジェクト”設定で“メール”へのアクセスを許可し、メールボックスを選んで“メールの読み取りを開始”をクリックします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“邮件”。在“项目”设置中允许访问“邮件”，选择邮箱，然后点按“开始读取邮件”。"
+          }
+        }
+      }
+    },
     "Open Microphone Settings…" : {
       "localizations" : {
         "es-419" : {
@@ -9138,6 +9292,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在“邮件”中打开回复"
+          }
+        }
+      }
+    },
+    "Open Reply in Mail puts the draft on the clipboard. Press ⌘V in the reply window, check the recipients and send it yourself." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir respuesta en Mail pone el borrador en el portapapeles. Presiona ⌘V en la ventana de respuesta, revisa los destinatarios y envía tú la respuesta."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“‘メール’で返信を開く”をクリックすると、下書きがクリップボードに入ります。返信ウインドウで⌘Vを押し、宛先を確認してから自分で送信してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“在‘邮件’中打开回复”会把草稿放到剪贴板上。请在回复窗口中按下 ⌘V，检查收件人后自行发送。"
           }
         }
       }
@@ -13265,6 +13441,28 @@
         }
       }
     },
+    "Select an email and click Explain. If a draft follows, read every line of it and change what you need." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selecciona un correo y haz clic en Explicar. Si aparece un borrador, lee cada línea y cambia lo que necesites."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールを選択して“説明する”をクリックします。下書きが表示されたら、すべての行を読み、必要に応じて変更してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一封邮件，然后点按“解释”。如果下面有草稿，请逐行阅读，按需修改。"
+          }
+        }
+      }
+    },
     "Select words, then choose Remove or press Delete. Right-click a word to remove it." : {
       "localizations" : {
         "es-419" : {
@@ -13464,6 +13662,28 @@
         }
       }
     },
+    "Show Explanation" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar explicación"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "説明を表示"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示解释"
+          }
+        }
+      }
+    },
     "Show in Chinese" : {
       "localizations" : {
         "es-419" : {
@@ -13598,6 +13818,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示最新的 %1$lld 封邮件，共 %2$lld 封。"
+          }
+        }
+      }
+    },
+    "Shows the message you selected in Mail in this window and explains it. It must be in a mailbox Projects reads, within the period it reads." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Muestra en esta ventana el mensaje que seleccionaste en Mail y lo explica. Debe estar en un buzón que lee Proyectos, dentro del período que lee."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”で選択しているメッセージをこのウインドウに表示して説明します。メッセージは、“プロジェクト”が読み取るメールボックスにあり、読み取る期間内である必要があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在这个窗口中显示你在“邮件”中选中的邮件并解释它。这封邮件必须在“项目”读取的邮箱中，并且在读取的时间范围内。"
           }
         }
       }

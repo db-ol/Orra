@@ -180,7 +180,7 @@ final class ProjectsRuntime {
         case modelNotLoaded
     }
 
-    /// What Explain Selected Message found in Mail (decision 18).
+    /// What Explain Message Selected in Mail found there (decision 18).
     nonisolated enum SelectedMessage: Equatable, Sendable {
         /// The message, by its Message-ID, which the store holds.
         case found(String)
@@ -248,8 +248,8 @@ final class ProjectsRuntime {
     /// projects change. Sorting goes on with the next ones until it sorted them all.
     nonisolated static let resortBatch = 200
     /// The most emails read at once to sort them again with the model when the projects
-    /// change (a guess). New mail and Explain Selected Message wait for the batch under way,
-    /// see SortingService, so it is small.
+    /// change (a guess). New mail and Explain Message Selected in Mail wait for the batch
+    /// under way, see SortingService, so it is small.
     nonisolated static let resortModelBatch = 20
 
     private(set) var phase: Phase = .off
@@ -320,9 +320,10 @@ final class ProjectsRuntime {
     /// The emails read at once to sort them again with the model, `resortModelBatch` in the
     /// app. Tests set fewer.
     @ObservationIgnored var resortModelBatchLimit = ProjectsRuntime.resortModelBatch
-    /// How long Explain Selected Message waits for sorting to file a message, `sortingWait`
-    /// in the app. Nil waits until sorting filed it, for tests that check the list the
-    /// window then shows, so the speed of a busy test runner does not decide that list.
+    /// How long Explain Message Selected in Mail waits for sorting to file a message,
+    /// `sortingWait` in the app. Nil waits until sorting filed it, for tests that check the
+    /// list the window then shows, so the speed of a busy test runner does not decide that
+    /// list.
     @ObservationIgnored var sortingWaitLimit: Duration? = ProjectsRuntime.sortingWait
     @ObservationIgnored private var modelWasInstalled = false
     /// Projects whose index is at work, so sorting prepares again when one finishes.
@@ -1013,8 +1014,9 @@ final class ProjectsRuntime {
         }
     }
 
-    /// How long Explain Selected Message waits for sorting to file a message the scan just
-    /// saved, so the message shows in its list and is explained for its project (a guess).
+    /// How long Explain Message Selected in Mail waits for sorting to file a message the
+    /// scan just saved, so the message shows in its list and is explained for its project
+    /// (a guess).
     nonisolated static let sortingWait: Duration = .seconds(2)
 
     /// Sorts again, after a change of the projects, the mail it reaches, which the user did
@@ -1138,7 +1140,7 @@ final class ProjectsRuntime {
         try? await running?.store.position(of: messageID)
     }
 
-    /// Where an email is listed, for Explain Selected Message.
+    /// Where an email is listed, for Explain Message Selected in Mail.
     func place(of messageID: String) async -> MailStore.Place {
         await position(of: messageID)?.place ?? .needsProject
     }
@@ -1345,11 +1347,11 @@ final class ProjectsRuntime {
         }
     }
 
-    /// The mailboxes linked to a project, for the scan and Explain Selected Message. While a
-    /// linked one is not known from the choice or the user's click in the project setup, it
-    /// reads the names of Mail's mailboxes once since Projects started, again only after Mail
-    /// did not answer, and at most every `mailboxListingGap`. It never reads them again for a
-    /// name Mail did not list, which the project page shows.
+    /// The mailboxes linked to a project, for the scan and Explain Message Selected in Mail.
+    /// While a linked one is not known from the choice or the user's click in the project
+    /// setup, it reads the names of Mail's mailboxes once since Projects started, again only
+    /// after Mail did not answer, and at most every `mailboxListingGap`. It never reads them
+    /// again for a name Mail did not list, which the project page shows.
     private func linkedMailboxes() async -> [MailMailbox] {
         guard let running else { return [] }
         let names = linkedNames
@@ -1504,14 +1506,14 @@ final class ProjectsRuntime {
     }
 
     /// Whether a message selected in Mail is the email the store holds with its Message-ID,
-    /// for Explain Selected Message. Its headers are read as the scan read the email's for
-    /// the store, see `MailScan.Message`: the first sender in From, the addresses of
-    /// Reply-To, To and Cc as sets, and the date. A From, To, Cc or Date that the headers
-    /// lack matches, since the scan then took what Mail lists. So the email itself always
-    /// matches, also with an entry not read exactly, and a copy of it in another mailbox
-    /// has the same headers. The subject is left out, since the store keeps it as Mail
-    /// lists it, which may differ from the header in its spaces or its decoding (a guess).
-    /// Open Reply in Mail checks the message again, strictly, see `isSameEmail`.
+    /// for Explain Message Selected in Mail. Its headers are read as the scan read the
+    /// email's for the store, see `MailScan.Message`: the first sender in From, the
+    /// addresses of Reply-To, To and Cc as sets, and the date. A From, To, Cc or Date that
+    /// the headers lack matches, since the scan then took what Mail lists. So the email
+    /// itself always matches, also with an entry not read exactly, and a copy of it in
+    /// another mailbox has the same headers. The subject is left out, since the store keeps
+    /// it as Mail lists it, which may differ from the header in its spaces or its decoding
+    /// (a guess). Open Reply in Mail checks the message again, strictly, see `isSameEmail`.
     @concurrent
     nonisolated static func isSelectedEmail(_ email: ExplainService.Email, headers text: String) async -> Bool {
         let headers = MailHeaders(parsing: text)
@@ -1537,8 +1539,8 @@ final class ProjectsRuntime {
 
     /// Explains an email, saves the explanation and returns it. Only while the window is
     /// open, and only while the store keeps the email's text: the window offers no Explain
-    /// without it, but Explain Selected Message may reach an email its list does not show.
-    /// Throws what ExplainService throws, and CancellationError when Projects stops.
+    /// without it, but Explain Message Selected in Mail may reach an email its list does not
+    /// show. Throws what ExplainService throws, and CancellationError when Projects stops.
     func explain(_ messageID: String) async throws -> Explanation {
         guard let running else { throw Failure.off }
         guard let service = explainService else { throw Failure.windowClosed }
@@ -1705,16 +1707,16 @@ final class ProjectsRuntime {
         )
     }
 
-    // MARK: Explain Selected Message
+    // MARK: Explain Message Selected in Mail
 
-    /// Finds the message selected in Mail, for Explain Selected Message. Reads Mail's
-    /// selection only on that click, and only after the user confirmed a mailbox choice.
-    /// Reads more only of a message in a chosen or linked mailbox (decision 18). A message
-    /// the scan has not read yet makes it read the mailboxes once. Reads nothing more once
-    /// Projects stops or the choice is forgotten, which the user can do while Mail answers.
-    /// Finds the email the store holds with the message's Message-ID only when the message
-    /// is that email, see `isSelectedEmail`, and only then keeps its handle, unless Mail
-    /// quit meanwhile.
+    /// Finds the message selected in Mail, for Explain Message Selected in Mail. Reads
+    /// Mail's selection only on that click, and only after the user confirmed a mailbox
+    /// choice. Reads more only of a message in a chosen or linked mailbox (decision 18). A
+    /// message the scan has not read yet makes it read the mailboxes once. Reads nothing
+    /// more once Projects stops or the choice is forgotten, which the user can do while Mail
+    /// answers. Finds the email the store holds with the message's Message-ID only when the
+    /// message is that email, see `isSelectedEmail`, and only then keeps its handle, unless
+    /// Mail quit meanwhile.
     func messageSelectedInMail() async -> SelectedMessage {
         guard let running else { return .noMailboxChosen }
         guard dependencies.choice.isConfirmed else { return .noMailboxChosen }
@@ -1728,7 +1730,7 @@ final class ProjectsRuntime {
             let chosen = try await isChosen(selected, running)
             guard stillReads(running) else { return .noMailboxChosen }
             guard chosen else {
-                Logger.projects.notice("Explain Selected Message: the message is not in a chosen mailbox")
+                Logger.projects.notice("Explain Message Selected in Mail: the message is not in a chosen mailbox")
                 return .notInChosenMailbox
             }
             // Mail answered, so Orra may control it: the scan starts if it waited for that.
@@ -1749,7 +1751,7 @@ final class ProjectsRuntime {
             // Mail may hold another message with this Message-ID, and the store keeps the
             // one the scan read first.
             guard await Self.isSelectedEmail(email, headers: headers) else {
-                Logger.projects.notice("Explain Selected Message: the message is not the email the store holds with its Message-ID")
+                Logger.projects.notice("Explain Message Selected in Mail: the message is not the email the store holds with its Message-ID")
                 return .otherEmail
             }
             guard stillReads(running) else { return .noMailboxChosen }
@@ -1759,20 +1761,20 @@ final class ProjectsRuntime {
             }
             return .found(messageID)
         } catch let error as MailBridgeError {
-            Logger.projects.notice("Explain Selected Message failed: \(String(describing: error), privacy: .public)")
+            Logger.projects.notice("Explain Message Selected in Mail failed: \(String(describing: error), privacy: .public)")
             switch error {
             case .mailNotRunning: return .mailNotRunning
             case .denied, .notAsked: return .notAllowed
             default: return .failed(error)
             }
         } catch {
-            Logger.projects.error("Explain Selected Message failed: \(Self.logName(error), privacy: .public)")
+            Logger.projects.error("Explain Message Selected in Mail failed: \(Self.logName(error), privacy: .public)")
             return .failed(.failed(code: (error as NSError).code))
         }
     }
 
-    /// Whether Projects still runs as when Explain Selected Message began, with the mailbox
-    /// choice confirmed, so it may ask Mail more.
+    /// Whether Projects still runs as when Explain Message Selected in Mail began, with the
+    /// mailbox choice confirmed, so it may ask Mail more.
     private func stillReads(_ running: Running) -> Bool {
         self.running?.scan === running.scan && dependencies.choice.isConfirmed
     }
@@ -1845,15 +1847,15 @@ final class ProjectsRuntime {
         return (try? await store.explainEmail(messageID)) != nil ? .saved : .stillReading
     }
 
-    /// Whether a pass of the scan that Explain Selected Message started runs, whether one
-    /// ran to its end, and whether that one ended as the store failed.
+    /// Whether a pass of the scan that Explain Message Selected in Mail started runs,
+    /// whether one ran to its end, and whether that one ended as the store failed.
     private final class PassState {
         var isRunning = false
         var isDone = false
         var storeFailed = false
     }
 
-    /// How long Explain Selected Message waits for the scan to read the message.
+    /// How long Explain Message Selected in Mail waits for the scan to read the message.
     nonisolated static let selectionWait: Duration = .seconds(30)
     nonisolated static let selectionPoll: Duration = .milliseconds(250)
 

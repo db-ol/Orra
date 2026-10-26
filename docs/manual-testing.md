@@ -88,7 +88,11 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     row in the Projects window, and the project setup's checks of people and domains.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
     window's parts to PNG files there, once per test language, which CI never does. The
-    sidebar does not draw offscreen, so it is not in them.
+    sidebar does not draw offscreen, so it is not in them. Since 2026-10-26 it also checks
+    that Hide Explanation lasts for the window until the next Explain, and what VoiceOver
+    reads for the state of a disclosure row, and it renders How to Use Projects, and the
+    window at its smallest size with an explained email and that email view 200 points
+    wide.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
     ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
     made up mail and a fake model: the groups, what each would take, the prompt and its
@@ -1284,7 +1288,11 @@ got worse than the baseline or has no result, see docs/release-gate.md.
   for English, Chinese and emoji, since percent encoding makes a Chinese character 9
   characters long and an emoji up to several dozen, and the sign in link adds 2 for
   every %. Without a title, the first line of the text is the title, at most 120
-  characters and 1,000 encoded, also after a Windows line break.
+  characters and 1,000 encoded, also after a Windows line break. Since 2026-10-26 it
+  also checks that the form asks where the problem happened, with Projects (Preview), and
+  asks reports about Projects to leave out mail, and with
+  TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder it renders Report a Problem with its
+  line about Projects there, which CI never does.
 - On 2026-10-10, curl without a GitHub session asked for
   https://github.com/db-ol/Orra/issues/new with template, title, what-happened, version,
   macos and mac filled in, with Chinese text, a newline, a plus and an ampersand. GitHub
@@ -3354,9 +3362,10 @@ mail.
 The way to the Projects window, added on 2026-10-20, not verified yet. Check in a Debug
 build.
 
-- [ ] With Projects on, Settings > Projects starts with Open Projects Window, and the
-  title of the Settings window reads Projects Settings, while the window it opens reads
-  Projects.
+- [ ] With Projects on and the mailboxes confirmed with Start Reading Mail, Settings >
+  Projects starts with Open Projects Window. Before Start Reading Mail the section follows
+  Mailboxes. The title of the Settings window reads Projects Settings, while the window it
+  opens reads Projects.
 - [ ] Start Reading Mail opens the Projects window, and the mail shows there as Projects
   reads it. Turning Projects off with Keep Data and on again opens it too. Turning
   Projects on before any mailbox choice opens nothing, and launching Orra with Projects
@@ -3397,16 +3406,17 @@ Projects Data and Start Reading Mail again first.
   names, the sender's words and signature, each forwarded message under its own header
   block with a bar on its side, and Quoted Text folded. 转发：宋佳关于入职时间 shows the
   forwarded message from 宋佳 with its date.
-- [ ] After Explain, Explanation and Original Email switch between the explanation and
-  the email at any time. The warnings and the draft stay in both, and a line sets the
-  draft apart from the email. Explain Again shows the explanation again.
+- [ ] After Explain, the explanation, Before you reply and the draft come first, and the
+  email follows under Original Email. Hide Explanation, beside Explain Again, puts the
+  email first with the draft under it and a line between them, for every email until the
+  window closes. Show Explanation brings the explanation back, and Explain Again shows it.
 - [ ] The explanation of 转发：宋佳关于入职时间 names the request to move the start to 23
   November and cites this email.
 - [ ] Clicking an address or a web address in the email opens nothing. Text can be
   selected and copied.
 - [ ] An email longer than the view shows ends with The rest of this email is in Mail.
-- [ ] VoiceOver reads Explanation and Original Email as one control, reads each header
-  row of a forwarded message in one stop, and names the Forwarded Message group.
+- [ ] VoiceOver reads Hide Explanation as a button, reads each header row of a forwarded
+  message in one stop, and names the Forwarded Message group.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
 
@@ -3425,12 +3435,12 @@ themselves, and a model answer that stops early, which is hard to make by hand.
 - [ ] In an explanation, a point without a chip shows No source provided under it, and an
   empty Before you reply says No decisions found.
 - [ ] The attachments show once, under Original Email after To and Cc, each with its kind,
-  size and whether Projects read its text. Explanation has no list. When Projects did not
-  read a PDF or a Word file, such as one Mail has not downloaded, What it says ends with
-  "Projects could not read an attachment. See Original Email." An email whose only
-  attachment is an image has no such line, also when Mail has not downloaded the image.
-  An email over 16 MB, which Projects saves without its text, still lists its
-  attachments.
+  size and whether Projects read its text. The explanation above the draft has no list.
+  When Projects did not read a PDF or a Word file, such as one Mail has not downloaded,
+  What it says ends with "Projects could not read an attachment. See Original Email." An
+  email whose only attachment is an image has no such line, also when Mail has not
+  downloaded the image. An email over 16 MB, which Projects saves without its text, still
+  lists its attachments.
 - [ ] Control-click an email in the list: the menu reads Assign to Project, as the help
   tag of the project chip does. After you assign two emails from one sender to one
   project, the offer reads "Always assign mail from … to …?". Assigning an email whose
@@ -3515,7 +3525,7 @@ Projects Data… in its Settings.
   the draft cannot be edited until the new one shows. An email whose draft you did not
   change and that has no versions explains again without asking.
 - [ ] Type into the new draft again, then select that email in Mail and click Explain
-  Selected Message. Orra asks the same first.
+  Message Selected in Mail. Orra asks the same first.
 - [ ] Turn on Live Captions, then click Change Draft. The change waits, the line under it
   says "Paused while Live Captions run." and Cancel Change shows. Copy puts the draft as it
   is on the clipboard, while Open Reply in Mail stays dimmed. Cancel Change ends the change,
@@ -3539,10 +3549,10 @@ TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS.
   1,000 of" and how many it holds, with Load Older Emails. Each click shows 1,000 more,
   and the line goes once every email shows. Another list starts again with 1,000.
 - [ ] Select a test message in Mail past the newest 1,000 of its list and within the
-  newest 5,000, and click Explain Selected Message. The window selects it in its list,
-  which reads down to it and scrolls to it. Do the same for a message past the newest
-  5,000: the email view shows it at once, and the list reads no further and highlights no
-  email.
+  newest 5,000, and click Explain Message Selected in Mail. The window selects it in its
+  list, which reads down to it and scrolls to it. Do the same for a message past the
+  newest 5,000: the email view shows it at once, and the list reads no further and
+  highlights no email.
 - [ ] With the window open, create the project Suggested Projects offers for the domain.
   Every email it counted leaves Needs a Project, also those past the first 1,000. Note how
   long that takes. Dictate while it runs: dictation stays as fast as usual. A message that
@@ -3647,10 +3657,10 @@ Stalled folders, failed saves and expired drafts in Projects, added on 2026-10-2
 verified yet. Check in a Debug build with the synthetic mail imported, as in the test
 guide. ProjectsRuntimeTests holds a folder that never resolves while Projects turns off,
 turns on again or deletes its data, and fails the save of the message that Explain
-Selected Message waits for. MailScanTests fails a save and a lookup of the store in the
-middle of a pass. A full disk can make a save fail, and only the tests make a lookup
-fail. The checks that age the data run sqlite3 while Projects is off, with `<database>`
-standing for
+Message Selected in Mail waits for. MailScanTests fails a save and a lookup of the store
+in the middle of a pass. A full disk can make a save fail, and only the tests make a
+lookup fail. The checks that age the data run sqlite3 while Projects is off, with
+`<database>` standing for
 `"$HOME/Library/Application Support/io.github.db-ol.Orra/Projects/Index/projects.sqlite"`,
 quotes included.
 
@@ -3664,15 +3674,15 @@ quotes included.
   pastes as quickly as with Projects off.
 - [ ] Save an email that Projects read with File > Save As, Format Raw Message Source,
   change its From line in a text editor, and drag the file into a mailbox Projects reads.
-  Select that copy in Mail and click Explain Selected Message. The window says the
-  message looks like an email Projects read, but its sender, recipients or date differ,
-  and it selects nothing and explains nothing. Select the original and click it again:
-  the original shows and is explained, and Open Reply in Mail opens the reply of the
-  original.
+  Select that copy in Mail and click Explain Message Selected in Mail. The window says
+  the message looks like an email Projects read, but its sender, recipients or date
+  differ, and it selects nothing and explains nothing. Select the original and click it
+  again: the original shows and is explained, and Open Reply in Mail opens the reply of
+  the original.
 - [ ] Copy an email Projects read into another mailbox Projects reads, select the copy in
-  Mail and click Explain Selected Message. It shows and explains the email.
+  Mail and click Explain Message Selected in Mail. It shows and explains the email.
 - [ ] Select an email Projects read that has no To line, such as one sent to you in Bcc,
-  and click Explain Selected Message. It shows and explains the email.
+  and click Explain Message Selected in Mail. It shows and explains the email.
 - [ ] Explain an email that gets a draft and turn Projects off with Keep Data. Run
   `sqlite3 <database> "UPDATE mail_messages SET draft_changed = draft_changed - 31 * 86400 WHERE draft_changed IS NOT NULL"`
   and turn Projects on. The email keeps its explanation, the draft area reads "Projects
@@ -3682,7 +3692,7 @@ quotes included.
   `sqlite3 <database> "UPDATE mail_messages SET saved = saved - 91 * 86400 WHERE id = (SELECT MAX(id) FROM mail_messages)"`
   and turn Projects on. That email reads "Projects removed its copy of this email's text
   90 days after reading it. Read the email in Mail.", Explain is dimmed, and Explain
-  Selected Message on it in Mail shows it without explaining it.
+  Message Selected in Mail on it shows it without explaining it.
 - [ ] An email over 16 MB, such as one with large attachments, read after this change,
   reads "Projects did not read this email, as it is too large. Read it in Mail.", and
   Explain is dimmed. Mail read before this change has no such mark, so use Delete All
@@ -3692,9 +3702,9 @@ quotes included.
   change. It keeps the rest of an email, such as its sender and subject, until 180 days
   after it read the newest email of its thread. It removes old data only while it is on."
 - [ ] Check the six new lines in Chinese, Japanese and Spanish: the three of the email
-  view above, the two of Explain Selected Message, for a message that looks like an email
-  Projects read and for "Projects could not save this message on this Mac. Try again
-  later.", and the one under Data.
+  view above, the two of Explain Message Selected in Mail, for a message that looks like
+  an email Projects read and for "Projects could not save this message on this Mac. Try
+  again later.", and the one under Data.
 
 Sorting again after a change of the projects, added on 2026-10-25, not verified yet.
 MailStoreTests, SortingServiceTests, SortingPolicyTests and ProjectsRuntimeTests check the
@@ -3731,6 +3741,48 @@ projects made first, the projects made one at a time in the order the suggestion
 and in the order of round two of the test guide, the calendar project first. Before this
 change the same runs ended at 95, 4 and 6, at 81, 20 and 4, and at 72, 27 and 6, where
 round two saw 76, 23 and 6.
+
+First steps in Projects and the email view on one page, added on 2026-10-26, not verified
+yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
+English and 简体中文, and the toolbar and the email view in 日本語 and Español too.
+
+- [ ] With Projects on and no mailbox confirmed, open the Projects window. The right side
+  shows How to Use Projects, whose first step has Open Projects Settings…, or Settings… in
+  a narrow window, which opens Settings at Projects. After Start Reading Mail that step is
+  gone. New Project… opens New Project. Selecting an email shows it in place of the steps,
+  and they come back on Needs a Project or Set Aside with nothing selected.
+- [ ] The toolbar shows Explain Message Selected in Mail with its envelope, and its help tag
+  says that it shows and explains the message selected in Mail. At the smallest window, 760
+  points wide, note whether the title is cut or moves into the toolbar's overflow menu, in
+  all four languages.
+- [ ] Hide the explanation of an email, then select another explained email: it shows the
+  email first too. Explain, Explain Again and Explain Message Selected in Mail show the
+  explanation again. Cancel in Replace your draft? leaves the choice as it was. Text typed
+  into the draft stays, with the cursor in it, when you hide or show the explanation.
+- [ ] At the smallest window, 760 points wide, select an explained email. Explain Again and
+  Hide Explanation, Open Reply in Mail, Reply All and Copy, Change Draft and Undo Change
+  show their whole names, one under another where a row has no room, in all four
+  languages. Type in the change box, then make the window wider and narrower: the text and
+  the cursor stay in the box.
+- [ ] With VoiceOver, Warnings, What it says, Before you reply, Draft and Original Email are
+  headings, so the headings rotor goes from one part of the email view to the next.
+- [ ] Quoted Text, Taken out before the model read it, the answer check line, Why Files Were
+  Skipped, the mailbox groups in Settings > Projects and Show the report in Report a Problem
+  each open and close with a click anywhere on their row, the words included, show a light
+  highlight under the pointer and open with Space under keyboard navigation. VoiceOver reads
+  each as a button with Collapsed or Expanded. Text inside an open one can be selected.
+- [ ] Settings > Projects says under the switch "Assigning, editing and deleting in Projects
+  change only what it keeps on this Mac, never your mail in Mail." Before Start Reading
+  Mail the section with Open Projects Window follows Mailboxes, and after it the section is
+  at the top. With Mail access denied, Open Automation Settings… shows its whole name
+  beside the line about it, in all four languages.
+- [ ] Remove Rule… asks with "New mail is no longer assigned by this rule. Mail it already
+  assigned stays in the project."
+- [ ] Above Open Reply in Mail a line says to press ⌘V in the reply window, check the
+  recipients and send the reply yourself.
+- [ ] Report a Problem asks, above the title, to leave out mail text, names, email addresses
+  and screenshots of mail for a problem in Projects. The bug report form on GitHub has an
+  Area field with Projects (Preview).
 
 ## Not implemented
 

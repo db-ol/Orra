@@ -7,9 +7,9 @@ import SwiftUI
 /// Quoted Text. The subject, the sender and the date stand in the header of the email view
 /// above it.
 ///
-/// Before the email is explained the view shows it under the header, and after that the
-/// user switches between the explanation and this view at any time, so the email's own text
-/// never goes out of reach.
+/// Before the email is explained the view shows it under the header. After that it follows
+/// the draft under Original Email, or comes first while the explanation is hidden, so the
+/// email's own text never goes out of reach.
 ///
 /// It shows the visible text the scan kept, so text the email hides from its reader is not
 /// here. The warnings above it say that it was there. Plain text only, with
@@ -98,6 +98,7 @@ struct ProjectsEmailOriginal: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
                 }
+                .disclosureGroupStyle(RowDisclosureStyle())
             }
             if content.isCut {
                 Text("The rest of this email is in Mail.")

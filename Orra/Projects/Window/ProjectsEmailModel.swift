@@ -6,9 +6,6 @@ import Observation
 /// user edits it, the translation next to it, the answer check, the change under way and
 /// the handoff to Mail.
 ///
-/// - The view shows the email itself until it is explained, then its explanation. The user
-///   switches between the two at any time with `showsOriginal`, and a new explanation shows
-///   the explanation again.
 /// - The draft is plain text the user may edit. ReviseService saves the versions the model
 ///   makes. The text the user types is saved apart from them once the user pauses typing,
 ///   and at once when the window closes, see `saveText()`, so the window opens again with
@@ -197,9 +194,6 @@ final class ProjectsEmailModel {
     /// The email as Mail shows it, nil until it is read or when the store keeps no text of
     /// it.
     private(set) var original: ProjectsEmailOriginal.Content?
-    /// Whether the view shows the email itself rather than its explanation. Without an
-    /// explanation it always does.
-    var showsOriginal = false
     /// The draft as the editor holds it. What the user types is saved once the user pauses
     /// typing, see `saveText()`.
     var text = "" {
@@ -418,7 +412,6 @@ final class ProjectsEmailModel {
         let changed = !isLoaded || explanation != self.explanation || versions != self.versions
         if explanation != self.explanation {
             self.explanation = explanation
-            showsOriginal = false
         }
         await take(versions)
         isLoaded = true

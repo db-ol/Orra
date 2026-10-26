@@ -196,6 +196,33 @@ struct ProjectsWindowViewTests {
         await fixture.stop()
     }
 
+    /// Hide Explanation is one choice for the window: another email shows the same way, and
+    /// Cancel in Replace your draft? leaves it. Explain and Explain Again show the explanation
+    /// again from the click on, before the model answers. A window opened later shows
+    /// explanations.
+    @Test func hideExplanationLastsUntilTheNextExplain() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let model = ProjectsWindowModel(runtime: runtime)
+        #expect(model.showsExplanation)
+        model.showsExplanation = false
+        await model.show(explained.messageID)
+        #expect(!model.showsExplanation)
+        // Its draft has a version, so Explain Again asks first. Cancel sets the question to nil.
+        await model.requestExplain(explained.messageID)
+        #expect(model.pendingExplain == explained.messageID)
+        model.pendingExplain = nil
+        #expect(!model.showsExplanation)
+        // The window is not open, so the explanation fails at once, after the click showed it.
+        await model.explain(explained.messageID)
+        #expect(model.explaining[explained.messageID] == .failed(.other))
+        #expect(model.showsExplanation)
+        #expect(ProjectsWindowModel(runtime: runtime).showsExplanation)
+        await fixture.stop()
+    }
+
     // MARK: The window
 
     /// What `GrowingView` shows, which a test changes.
@@ -394,6 +421,13 @@ struct ProjectsWindowViewTests {
     @Test func aChangeIsSummedUpForVoiceOver() {
         let segments = ProjectsDraftDiff.segments(from: "Hi Mei, see you Friday.", to: "Dear Mei, see you Monday.")
         #expect(ProjectsWindowText.changeSummary(segments) == "Removed: Hi\nAdded: Dear\nRemoved: Friday\nAdded: Monday")
+    }
+
+    /// VoiceOver reads the header row of a disclosure, such as Quoted Text, as a button with
+    /// whether it is open.
+    @Test func aDisclosureRowSaysWhetherItIsOpen() {
+        #expect(RowDisclosureStyle.state(isExpanded: false) == "Collapsed")
+        #expect(RowDisclosureStyle.state(isExpanded: true) == "Expanded")
     }
 
     // MARK: The email view
@@ -870,12 +904,27 @@ struct ProjectsWindowViewTests {
         await model.show(explained.messageID)
         let emailModel = model.emailModel(for: explained.messageID)
         await emailModel.load()
-        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_500), to: folder.appendingPathComponent("\(language)-projects-email-explained.png"))
-        // The same email itself, one click away from its explanation, and a forward.
-        emailModel.showsOriginal = true
-        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_200), to: folder.appendingPathComponent("\(language)-projects-email-original.png"))
-        emailModel.showsOriginal = false
+        // Tall enough for the email itself under Original Email, after the draft.
+        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 2_100), to: folder.appendingPathComponent("\(language)-projects-email-explained.png"))
+        // The same email after Hide Explanation: the email itself first and the draft under
+        // it. The renders after it show the explanation again. Then a forward.
+        model.showsExplanation = false
+        try await render(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: NSSize(width: 620, height: 1_400), to: folder.appendingPathComponent("\(language)-projects-email-original.png"))
+        model.showsExplanation = true
         try await render(ProjectsEmailOriginal(content: Self.forward, attachments: Self.attachments).padding(20), size: NSSize(width: 520, height: 720), to: folder.appendingPathComponent("\(language)-projects-email-forward.png"))
+        // A disclosure row folded and open, as every disclosure of the window shows it.
+        let disclosures = VStack(alignment: .leading, spacing: 12) {
+            DisclosureGroup("Quoted Text", isExpanded: .constant(false)) {
+                Text(verbatim: Self.forward.quoted)
+            }
+            DisclosureGroup("Quoted Text", isExpanded: .constant(true)) {
+                Text(verbatim: Self.forward.quoted)
+            }
+        }
+        .disclosureGroupStyle(RowDisclosureStyle())
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        try await render(disclosures, size: NSSize(width: 480, height: 200), to: folder.appendingPathComponent("\(language)-projects-disclosures.png"))
 
         // The width of the email column at the window's first size, with the English draft
         // translated for a reader of Chinese, which puts the translation under the draft.
@@ -886,10 +935,31 @@ struct ProjectsWindowViewTests {
         await narrowEmail.showTranslation(true)
         let narrow = ProjectsEmailArea(runtime: runtime, model: narrowModel, email: explained)
         try await render(narrow, size: NSSize(width: 480, height: 640), to: folder.appendingPathComponent("\(language)-projects-email-narrow.png"))
-        try await render(narrow, size: NSSize(width: 480, height: 1_900), to: folder.appendingPathComponent("\(language)-projects-email-narrow-full.png"))
+        try await render(narrow, size: NSSize(width: 480, height: 2_600), to: folder.appendingPathComponent("\(language)-projects-email-narrow-full.png"))
+        // The window at its smallest size with the email selected, after a source of another
+        // email showed it, then the email view alone as wide as the third column is then,
+        // with the translation of the draft.
+        let smallest = ProjectsWindowModel(runtime: runtime, emailActions: { Self.translatingActions(runtime) })
+        smallest.selectedMessageID = "earlier@harbor.example"
+        await smallest.show(explained.messageID)
+        let smallestEmail = smallest.emailModel(for: explained.messageID)
+        await smallestEmail.load()
+        await smallestEmail.showTranslation(true)
+        try await render(ProjectsWindowView(runtime: runtime, model: smallest, openSettings: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-email.png"))
+        try await render(ProjectsEmailArea(runtime: runtime, model: smallest, email: explained), size: NSSize(width: 200, height: 3_800), to: folder.appendingPathComponent("\(language)-projects-email-200.png"))
 
+        // How to Use Projects shows with nothing selected, without its step about Settings,
+        // since the fixture confirmed its mailboxes. Then with that step.
         let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {})
         try await render(window, size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window.png"))
+        try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 480, height: 700), to: folder.appendingPathComponent("\(language)-projects-how-to.png"))
+        // As wide as the third column of the window at its smallest size.
+        try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 200, height: 1_000), to: folder.appendingPathComponent("\(language)-projects-how-to-narrow.png"))
+        // The window at its smallest size: with its title bar and toolbar, and the columns
+        // below the toolbar on their own, since the third column of a window that is never
+        // shown may stay empty in the first.
+        try await renderWindow(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), to: folder.appendingPathComponent("\(language)-projects-window-760.png"))
+        try await render(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-columns.png"))
         await fixture.stop()
     }
 
@@ -1005,6 +1075,24 @@ struct ProjectsWindowViewTests {
         let png = try #require(image.representation(using: .png, properties: [:]))
         try png.write(to: file)
         offscreen.close()
+    }
+
+    /// Renders the window as the app makes it, at its smallest size, with its title bar and
+    /// toolbar, as far as they draw in a window that is never ordered front.
+    private func renderWindow(_ view: some View, to file: URL) async throws {
+        let window = ProjectsWindow.window(hosting: view)
+        defer { window.close() }
+        window.setContentSize(ProjectsWindow.minimumSize)
+        for _ in 0..<20 {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(!window.isVisible)
+        let frame = try #require(window.contentView?.superview)
+        let image = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
+        frame.cacheDisplay(in: frame.bounds, to: image)
+        let png = try #require(image.representation(using: .png, properties: [:]))
+        try png.write(to: file)
     }
 
     /// Projects on with one indexed project, a Mail that never runs and no model.

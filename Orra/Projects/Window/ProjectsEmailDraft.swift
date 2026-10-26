@@ -10,8 +10,8 @@ extension ProjectsEmailArea {
     ///   explained again, which replaces the draft.
     /// - the answer check, such as "They asked 3 things, your draft answers 2", and the
     ///   people outside the project a reply to all reaches
-    /// - Open Reply in Mail, Reply All and Copy, with the hint to press Command V in Mail.
-    ///   There is no Send button.
+    /// - Open Reply in Mail, Reply All and Copy, with the line above them that says to press
+    ///   Command V in Mail, and the hint again after the handoff. There is no Send button.
     /// - the change box, which makes a new version, and the newest change highlighted, with
     ///   Undo. The talk key's words go straight into it while it has the focus (decision 13),
     ///   see ProjectsWindow.takeDictation(_:). A change under way shows why it waits, if it
@@ -37,6 +37,7 @@ extension ProjectsEmailArea {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Draft")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 if emailModel.hasDraft {
                     draft
                 } else if let why = ProjectsWindowText.noDraft(explanation.draft) {
@@ -243,6 +244,7 @@ extension ProjectsEmailArea {
                     } label: {
                         Text(verbatim: ProjectsWindowText.answers(asked: answers.asked, answered: answers.answered))
                     }
+                    .disclosureGroupStyle(RowDisclosureStyle())
                 }
             } else if emailModel.isCheckingAnswers {
                 HStack(spacing: 6) {
@@ -267,20 +269,28 @@ extension ProjectsEmailArea {
 
         // MARK: The change box
 
-        /// The change box with Change Draft, and the change under way with why it waits and
-        /// Cancel Change, or why the last one gave nothing. It tells the email view while it
-        /// has the focus, so the talk key's words go there. It stays open to typing and to
-        /// the talk key while a change runs, so it keeps the focus. Words said meanwhile
-        /// change the draft next, see ProjectsEmailModel.takeDictation(_:revises:).
+        /// The change box with Change Draft, under it in a narrow column, and the change under
+        /// way with why it waits and Cancel Change, or why the last one gave nothing. It tells
+        /// the email view while it has the focus, so the talk key's words go there. It stays
+        /// open to typing and to the talk key while a change runs, so it keeps the focus.
+        /// Words said meanwhile change the draft next, see
+        /// ProjectsEmailModel.takeDictation(_:revises:).
         private struct ChangeBox: View {
             let runtime: ProjectsRuntime
             let emailModel: ProjectsEmailModel
             @FocusState private var isFocused: Bool
+            /// The width of the box, for putting Change Draft beside the field or under it.
+            @State private var width: CGFloat = 0
+
+            /// The narrowest box that holds the field and Change Draft side by side.
+            static let sideBySideWidth: CGFloat = 300
 
             var body: some View {
                 @Bindable var emailModel = emailModel
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    // One layout that changes, so the field keeps its focus at any width.
+                    let layout = width >= Self.sideBySideWidth ? AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                    layout {
                         TextField("Say what to change", text: $emailModel.instruction, axis: .vertical)
                             .lineLimit(1...4)
                             .textFieldStyle(.roundedBorder)
@@ -293,6 +303,7 @@ extension ProjectsEmailArea {
                         }
                         .disabled(emailModel.isBusy || runtime.phase != .on || emailModel.instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
                     if emailModel.changing != nil || emailModel.isUndoing {
                         HStack(spacing: 6) {
                             ProgressView()
@@ -331,14 +342,19 @@ extension ProjectsEmailArea {
         /// The newest version with what it changed highlighted, and Undo.
         private func changes(_ segments: [ProjectsDraftDiff.Segment], version: MailStore.DraftVersion) -> some View {
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Changes in version \(version.number)")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Button("Undo Change") {
-                        emailModel.perform { await $0.undo() }
+                let title = Text("Changes in version \(version.number)")
+                    .font(.subheadline.weight(.semibold))
+                // Undo Change goes under the title in a column too narrow for both.
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        title
+                        Spacer()
+                        undoButton
                     }
-                    .disabled(emailModel.isBusy)
+                    VStack(alignment: .leading, spacing: 6) {
+                        title
+                        undoButton
+                    }
                 }
                 if ProjectsDraftDiff.hasChanges(segments) {
                     // VoiceOver reads what went and what came, which the marks show.
@@ -353,6 +369,13 @@ extension ProjectsEmailArea {
             }
             .padding(8)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+        }
+
+        private var undoButton: some View {
+            Button("Undo Change") {
+                emailModel.perform { await $0.undo() }
+            }
+            .disabled(emailModel.isBusy)
         }
 
         /// The segments as plain text, what came new marked and what went struck through.
@@ -379,32 +402,50 @@ extension ProjectsEmailArea {
 
         @ViewBuilder
         private var handoff: some View {
-            HStack(spacing: 8) {
-                Group {
-                    Button("Open Reply in Mail") {
-                        emailModel.perform { await $0.openReply(all: false) }
-                    }
-                    if emailModel.offersReplyAll {
-                        Button("Reply All") {
-                            emailModel.perform { await $0.openReply(all: true) }
-                        }
-                    }
+            // Said before the click, since Mail comes to the front then and the line after
+            // the handoff may go unseen.
+            Text("Open Reply in Mail puts the draft on the clipboard. Press ⌘V in the reply window, check the recipients and send it yourself.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            // One under another in a column too narrow for a row.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    handoffButtons
                 }
-                .disabled(!emailModel.canHandOff)
-                // A change that waits leaves the draft as it is, which Copy takes.
-                Button("Copy") {
-                    emailModel.copy()
-                }
-                .disabled(!emailModel.canCopy)
-                if emailModel.isHandingOff {
-                    ProgressView()
-                        .controlSize(.small)
+                VStack(alignment: .leading, spacing: 8) {
+                    handoffButtons
                 }
             }
             if let note = emailModel.handoffNote {
                 Text(verbatim: ProjectsWindowText.handoff(note))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+
+        /// Open Reply in Mail, Reply All and Copy, and a spinner while the reply opens.
+        @ViewBuilder
+        private var handoffButtons: some View {
+            Group {
+                Button("Open Reply in Mail") {
+                    emailModel.perform { await $0.openReply(all: false) }
+                }
+                if emailModel.offersReplyAll {
+                    Button("Reply All") {
+                        emailModel.perform { await $0.openReply(all: true) }
+                    }
+                }
+            }
+            .disabled(!emailModel.canHandOff)
+            // A change that waits leaves the draft as it is, which Copy takes.
+            Button("Copy") {
+                emailModel.copy()
+            }
+            .disabled(!emailModel.canCopy)
+            if emailModel.isHandingOff {
+                ProgressView()
+                    .controlSize(.small)
             }
         }
     }
