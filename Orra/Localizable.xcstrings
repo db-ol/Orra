@@ -2347,6 +2347,28 @@
         }
       }
     },
+    "Captions wait while you dictate and catch up when you finish." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los subtítulos esperan mientras dictas y se ponen al día cuando terminas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力中はキャプションを一時停止し、終わるとまとめて表示します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写时字幕会暂停，结束后会补上。"
+          }
+        }
+      }
+    },
     "Cc:" : {
       "localizations" : {
         "es-419" : {

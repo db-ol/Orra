@@ -311,8 +311,8 @@ private struct CaptionSentenceView: View {
     }
 }
 
-/// Why captions are not complete yet: the capture, the speech model, the local model.
-/// Internal for tests.
+/// Why captions are not complete yet: the capture, the speech model, a dictation, the
+/// local model. Internal for tests.
 struct CaptionNotes: View {
     let captions: MeetingCaptions
     let pushToTalk: PushToTalkController
@@ -333,8 +333,8 @@ struct CaptionNotes: View {
         }
     }
 
-    /// The notes above those of the local model, in order: the capture, then the speech
-    /// model.
+    /// The notes above those of the local model, in order: the capture, the speech model,
+    /// and a dictation that holds the captions.
     static func lines(captions: MeetingCaptions, speechReady: Bool, turns: EngineTurns) -> [String] {
         var lines: [String] = []
         switch captions.capture {
@@ -349,6 +349,11 @@ struct CaptionNotes: View {
         }
         if !speechReady || captions.speechModelMissing {
             lines.append(String(localized: "The speech model is not ready. Captions start once it is loaded."))
+        }
+        // From the press of a key until the paste, captions start no model call, see
+        // EngineTurns. Not for a capture that failed, which has nothing to catch up on.
+        if turns.isDictating, captions.capture == .starting || captions.capture == .listening {
+            lines.append(String(localized: "Captions wait while you dictate and catch up when you finish."))
         }
         return lines
     }
