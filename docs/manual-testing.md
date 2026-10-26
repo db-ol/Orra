@@ -88,7 +88,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     row in the Projects window, and the project setup's checks of people and domains.
     With TEST_RUNNER_ORRA_PROJECTS_WINDOW_SNAPSHOTS set to a folder, it renders the
     window's parts to PNG files there, once per test language, which CI never does. The
-    sidebar does not draw offscreen, so it is not in them.
+    sidebar does not draw offscreen, so it is not in them. Since 2026-10-26 it also checks
+    that Hide Explanation lasts for the window until the next Explain, and what VoiceOver
+    reads for the state of a disclosure row, and it renders How to Use Projects.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
     ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
     made up mail and a fake model: the groups, what each would take, the prompt and its
@@ -3332,16 +3334,17 @@ Projects Data and Start Reading Mail again first.
   names, the sender's words and signature, each forwarded message under its own header
   block with a bar on its side, and Quoted Text folded. 转发：宋佳关于入职时间 shows the
   forwarded message from 宋佳 with its date.
-- [ ] After Explain, Explanation and Original Email switch between the explanation and
-  the email at any time. The warnings and the draft stay in both, and a line sets the
-  draft apart from the email. Explain Again shows the explanation again.
+- [ ] After Explain, the explanation, Before you reply and the draft come first, and the
+  email follows under Original Email. Hide Explanation, beside Explain Again, puts the
+  email first with the draft under it and a line between them, for every email until the
+  window closes. Show Explanation brings the explanation back, and Explain Again shows it.
 - [ ] The explanation of 转发：宋佳关于入职时间 names the request to move the start to 23
   November and cites this email.
 - [ ] Clicking an address or a web address in the email opens nothing. Text can be
   selected and copied.
 - [ ] An email longer than the view shows ends with The rest of this email is in Mail.
-- [ ] VoiceOver reads Explanation and Original Email as one control, reads each header
-  row of a forwarded message in one stop, and names the Forwarded Message group.
+- [ ] VoiceOver reads Hide Explanation as a button, reads each header row of a forwarded
+  message in one stop, and names the Forwarded Message group.
 - [ ] Forward one synthetic mail to yourself from Mail and let Projects read it. The
   email view shows it as a forwarded message, and its explanation uses what it says.
 
@@ -3630,6 +3633,40 @@ quotes included.
   view above, the two of Explain Selected Message, for a message that looks like an email
   Projects read and for "Projects could not save this message on this Mac. Try again
   later.", and the one under Data.
+
+First steps in Projects and the email view on one page, added on 2026-10-26, not verified
+yet. Check in a Debug build with the synthetic mail imported, as in the test guide, in
+English and 简体中文, and the toolbar and the email view in 日本語 and Español too.
+
+- [ ] With Projects on and no mailbox confirmed, open the Projects window. The right side
+  shows How to Use Projects, whose first step has Open Projects Settings…, which opens
+  Settings at Projects. After Start Reading Mail that step is gone. New Project… opens New
+  Project. Selecting an email shows it in place of the steps, and they come back on Needs a
+  Project or Set Aside with nothing selected.
+- [ ] The toolbar shows Explain Message Selected in Mail with its envelope, and its help tag
+  says that it shows and explains the message selected in Mail. At the smallest window, 760
+  points wide, note whether the title is cut or moves into the toolbar's overflow menu, in
+  all four languages.
+- [ ] Hide the explanation of an email, then select another explained email: it shows the
+  email first too. Explain, Explain Again and Explain Message Selected in Mail show the
+  explanation again. Cancel in Replace your draft? leaves the choice as it was. Text typed
+  into the draft stays, with the cursor in it, when you hide or show the explanation.
+- [ ] Quoted Text, Taken out before the model read it, the answer check line, Why Files Were
+  Skipped, the mailbox groups in Settings > Projects and Show the report in Report a Problem
+  each open and close with a click anywhere on their row, the words included, show a light
+  highlight under the pointer and open with Space under keyboard navigation. VoiceOver reads
+  each as a button with Collapsed or Expanded. Text inside an open one can be selected.
+- [ ] Settings > Projects says under the switch "Assigning, editing and deleting in Projects
+  change only what it keeps on this Mac, never your mail in Mail." Before Start Reading
+  Mail the section with Open Projects Window follows Mailboxes, and after it the section is
+  at the top.
+- [ ] Remove Rule… asks with "New mail is no longer assigned by this rule. Mail it already
+  assigned stays in the project."
+- [ ] Above Open Reply in Mail a line says to press ⌘V in the reply window, check the
+  recipients and send the reply yourself.
+- [ ] Report a Problem asks, above the title, to leave out mail text, names, email addresses
+  and screenshots of mail for a problem in Projects. The bug report form on GitHub has an
+  Area field with Projects (Preview).
 
 ## Not implemented
 
