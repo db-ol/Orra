@@ -2898,6 +2898,41 @@ it shows starts, stops, counts and failures, never text.
   the menu, checked, and clicking it there turns speaking off, after which it leaves
   the menu.
 
+What Live Captions hear and when they wait, added on 2026-10-25, not verified yet.
+MeetingCaptionsTests checks the notes with a fake capture that delivers nothing, or whose
+start waits or fails, and with EngineTurns for a dictation. Watch the log with
+`log stream --predicate 'subsystem == "io.github.db-ol.Orra" AND category == "captions"'`.
+
+- [ ] Turn Live Captions on with nothing playing. The window says "Captions of what the
+  Mac plays, such as a call or a video, appear here. What you say into your microphone is
+  not captioned." After about 8 s it adds "No sound from the Mac yet. If something is
+  playing, allow Orra under Screen & System Audio Recording in Privacy & Security
+  settings." Speaking into the microphone shows no caption.
+- [ ] The log shows "Meeting captions turned on", then "System audio capture is starting
+  its device, the tap at … Hz with … channels". Note whether "System audio capture
+  started at …" and "Meeting captions started, showing …, after …" follow at once or only
+  once something plays, which tells how the start waits with nothing playing. After about
+  8 s "Meeting captions got no sound for 8.0 s, with 0.0 s of audio, and suggest the
+  permission" shows, or with up to 8 s of audio when the tap delivers zeros.
+- [ ] Play a video with speech. The no sound note goes with the first sound, and captions
+  show within a few seconds of the end of each sentence. The log shows "Meeting captions
+  got the first audio … after they were turned on" and "Meeting captions got the first
+  sound …".
+- [ ] With the video playing, start a dictation with the talk key and then one with the
+  translation key, also hands free. From about a second after the press until the paste
+  or Escape the window shows "Captions wait while you dictate and catch up when you
+  finish." The note goes after the paste, and the sentences heard meanwhile show, in
+  order. With the talk key in Hold, a tap of it shows no note, and in any mode a shortcut
+  with it, such as right Control+C, shows none either. The captions do not move.
+- [ ] Turning captions off logs "Meeting captions stopped after …, with … s of audio, … s
+  of it with sound, … sentences cut, … reported, … without text and … dropped". No line
+  of the captions category holds text.
+- [ ] In 简体中文, 日本語 and Español the placeholder and the note about a dictation read
+  well and wrap in the window at its first size.
+- [ ] Make the window as small as it goes, in English and in Español, with nothing
+  playing. Once the no sound note shows, start a hands free dictation. The notes still
+  read, the first words of the placeholder stay in view, and the list keeps some room.
+
 The Live Captions shortcut, added on 2026-10-19, not verified yet in the running app. It
 is a Carbon hot key, see docs/hotkey-options.md, ⌃ ⌥ ⌘ C unless changed in Settings,
 General, Keys. Watch the log with
