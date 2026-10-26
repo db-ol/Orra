@@ -218,9 +218,10 @@ struct ExplainAnswerTests {
         return (lines + [String(last.prefix(last.count / 2))]).joined(separator: "\n")
     }
 
-    /// A list that repeats an item ends before it, with at most 6 items, the most points the
-    /// prompt asks for. The sections the model never reached stay missing, and `loop` keeps
-    /// the answer up to the last item kept, for a second request to go on from.
+    /// In an answer without a draft, a list that repeats an item ends before it, with at most
+    /// 6 items, the most points the prompt asks for. The sections the model never reached
+    /// stay missing, and `loop` keeps the answer up to the last item kept, for a second
+    /// request to go on from.
     @Test func aListThatRepeatsItselfEndsBeforeTheRepeat() throws {
         let start = ExplainPrompt.prefill(.en) + """
             - The email asks to approve the proof by Wednesday.
@@ -288,7 +289,107 @@ struct ExplainAnswerTests {
         #expect(answer.questions == ["Whether Wednesday suits Bai Lu.", "Whether to pay the rush fee."])
         #expect(answer.draft == .reply("Hi Iris,"))
         #expect(answer.problems.isEmpty)
-        #expect(answer.loop?.section == .questions)
+        #expect(answer.loop == nil)
+    }
+
+    /// An answer with a draft did not repeat until its limit, so each list only leaves out
+    /// the items that repeat an earlier one and keeps those after them, more than 6 too.
+    @Test func anAnswerWithADraftKeepsTheItemsAfterARepeat() {
+        let answer = read(ExplainPrompt.prefill(.en) + """
+            - The email asks for an answer today.
+            - The email asks for an answer today.
+            - The email names a new bank account.
+
+            Points:
+            - The second proof is ready. [this email]
+            - The second proof is ready. [this email]
+            - The 500 calendars cost ¥12,400 in all. [F1]
+            - Delivery is on 2026-11-20. [F1]
+            - Iris asks whether the proof reaches Bai Lu by Wednesday. [this email]
+            - The proof is on 200 g matte paper. [F1]
+            - The quote is the second version. [F1]
+            - The quote has no shipping cost. [F1]
+
+            Before you reply:
+            - Whether to pay the rush fee.
+            - Whether to pay the rush fee.
+            - Whether Wednesday suits Bai Lu.
+
+            Draft reply:
+            Hi Iris,
+            """, Self.englishSources)
+        #expect(answer.warnings == ["The email asks for an answer today.", "The email names a new bank account."])
+        #expect(answer.points.map(\.text) == [
+            "The second proof is ready.",
+            "The 500 calendars cost ¥12,400 in all.",
+            "Delivery is on 2026-11-20.",
+            "Iris asks whether the proof reaches Bai Lu by Wednesday.",
+            "The proof is on 200 g matte paper.",
+            "The quote is the second version.",
+            "The quote has no shipping cost.",
+        ])
+        #expect(answer.questions == ["Whether to pay the rush fee.", "Whether Wednesday suits Bai Lu."])
+        #expect(answer.draft == .reply("Hi Iris,"))
+        #expect(answer.problems.isEmpty)
+        #expect(answer.loop == nil)
+    }
+
+    /// When more than one list repeated an item, the last one is the loop, the list the
+    /// answer ended in. The warnings before it only leave out their repeat.
+    @Test func theLastListThatRepeatsItselfIsTheLoop() {
+        let start = ExplainPrompt.prefill(.en) + """
+            - The email asks for an answer today.
+            - The email asks for an answer today.
+            - The email names a new bank account.
+
+            Points:
+            - The second proof is ready. [this email]
+            - The email does not mention any links. [this email]
+            """
+        let answer = read(Self.repeating(start, [
+            "- The second proof is ready. [this email]",
+            "- The email does not mention any links. [this email]",
+        ], length: 2_000), Self.englishSources)
+        #expect(answer.warnings == ["The email asks for an answer today.", "The email names a new bank account."])
+        #expect(answer.points.map(\.text) == ["The second proof is ready.", "The email does not mention any links."])
+        #expect(answer.problems == [.missing(.questions), .missing(.draft)])
+        #expect(answer.loop == ExplainAnswer.Loop(section: .points, kept: start))
+    }
+
+    /// Items that differ only in a symbol, such as a currency or a sign, are no repeats, and
+    /// a short item, such as a sub item, may stand in a list more than once.
+    @Test func itemsThatDifferInASymbolAndShortItemsAreNoRepeats() {
+        let answer = read(ExplainPrompt.prefill(.en) + """
+            - None
+
+            Points:
+            - The quote is $500. [F1]
+            - The quote is €500. [F1]
+            - The price changes by +5%. [F1]
+            - The price changes by -5%. [F1]
+            - Order A ships on 2026-11-20. [F1]
+              - Status: paid
+            - Order B ships on 2026-11-27. [F1]
+              - Status: paid
+
+            Before you reply:
+            - None
+
+            Draft reply:
+            Hi Iris,
+            """, Self.englishSources)
+        #expect(answer.points.map(\.text) == [
+            "The quote is $500.",
+            "The quote is €500.",
+            "The price changes by +5%.",
+            "The price changes by -5%.",
+            "Order A ships on 2026-11-20.",
+            "Status: paid",
+            "Order B ships on 2026-11-27.",
+            "Status: paid",
+        ])
+        #expect(answer.problems.isEmpty)
+        #expect(answer.loop == nil)
     }
 
     /// Items that differ in one word or in their sources are no repeats, also in Chinese,

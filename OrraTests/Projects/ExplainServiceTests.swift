@@ -625,6 +625,76 @@ struct ExplainServiceTests {
         #expect(second.prompt.hasSuffix("- 邮件没有提到需要打开的链接。[本邮件]\n\n回复前需确认：\n"))
     }
 
+    /// Warnings that repeat until the limit get the rest from the points on.
+    @Test func aLoopInTheWarningsGetsTheRestFromThePoints() async throws {
+        let warnings = ExplainAnswerTests.repeating(
+            "- The email asks to approve the proof by Wednesday.\n- The sender wants an answer today.",
+            ["- The email asks to approve the proof by Wednesday.", "- The sender wants an answer today."],
+            length: 3_000
+        )
+        let rest = "- The second proof is ready. [this email]\n\nBefore you reply:\n" + Fixture.questionsAndDraft
+        let fakes = Fakes(answer: .success(warnings), .success(rest))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 2)
+        let second = try #require(fakes.requestList.dropFirst().first)
+        #expect(second.prompt.hasSuffix("- The sender wants an answer today.\n\nPoints:\n"))
+        #expect(explanation.modelWarnings == ["The email asks to approve the proof by Wednesday.", "The sender wants an answer today."])
+        #expect(explanation.points.map(\.text) == ["The second proof is ready."])
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof."])
+        #expect(explanation.problems.isEmpty)
+    }
+
+    /// Questions that repeat until the limit get the draft.
+    @Test func aLoopInTheQuestionsGetsTheDraft() async throws {
+        let answer = Fixture.firstPoints + "\n\nBefore you reply:\n" + ExplainAnswerTests.repeating(
+            "- Whether Wednesday suits Bai Lu for the proof.\n- Whether to pay for faster shipping.",
+            ["- Whether Wednesday suits Bai Lu for the proof.", "- Whether to pay for faster shipping."],
+            length: 3_000
+        )
+        let draft = "Hi Iris,\n\nThanks for the second proof. [to confirm: whether Wednesday suits me] [to confirm: faster shipping]\n\nBest,\nBai Lu"
+        let fakes = Fakes(answer: .success(answer), .success(draft))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 2)
+        let second = try #require(fakes.requestList.dropFirst().first)
+        #expect(second.prompt.hasSuffix("- Whether to pay for faster shipping.\n\nDraft reply:\n"))
+        #expect(explanation.points.count == 6)
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof.", "Whether to pay for faster shipping."])
+        #expect(explanation.problems.isEmpty)
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.draft?.contains("Thanks for the second proof.") == true)
+    }
+
+    /// A warning written twice, then points that repeat until the limit: the rest goes on
+    /// after the points, the last list that repeated an item, and the warnings only leave
+    /// out their repeat.
+    @Test func theRestGoesOnAfterTheLastListThatRepeatedItself() async throws {
+        let answer = "- The email asks to approve the proof by Wednesday.\n- The sender wants an answer today.\n" + Fixture.loop
+        let fakes = Fakes(answer: .success(answer), .success(Fixture.questionsAndDraft))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 2)
+        let second = try #require(fakes.requestList.dropFirst().first)
+        #expect(second.prompt.hasSuffix("- The email does not mention any new amounts. [this email]\n\nBefore you reply:\n"))
+        #expect(explanation.modelWarnings == ["The email asks to approve the proof by Wednesday.", "The sender wants an answer today."])
+        #expect(explanation.points.count == 6)
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof."])
+        #expect(explanation.problems.isEmpty)
+    }
+
+    /// An email that needs no reply, as the one of a40, gets the rest too, and the reply rule
+    /// still says that no reply is due.
+    @Test func anEmailThatNeedsNoReplyGetsTheRestToo() async throws {
+        let fakes = Fakes(answer: .success(Fixture.loop), .success("- None\n\nDraft reply:\nNo reply needed"))
+        let explanation = try await fakes.service().explain(Fixture.email(from: .init(name: "Bai Lu", address: Fixture.own)))
+        #expect(fakes.requestList.count == 2)
+        #expect(explanation.points.count == 6)
+        #expect(explanation.questions.isEmpty)
+        #expect(explanation.draft == .noReply(.sentByUser))
+        #expect(explanation.problems.isEmpty)
+    }
+
     /// A question asked again before the draft shows once, and the answer is complete, so
     /// nothing is asked again.
     @Test func aQuestionAskedAgainNeedsNoSecondRequest() async throws {
@@ -637,6 +707,24 @@ struct ExplainServiceTests {
         #expect(fakes.requestList.count == 1)
         #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof.", "Whether to pay for faster shipping."])
         #expect(explanation.draftCheck?.questionsForUser == explanation.questions)
+    }
+
+    /// A question asked twice in a row shows once, and the question after it stays, so the
+    /// draft check still finds fewer "to confirm" placeholders than questions.
+    @Test func aQuestionAskedTwiceInARowKeepsTheNextOne() async throws {
+        let answer = Fixture.englishAnswer.replacingOccurrences(
+            of: "- Whether Wednesday suits Bai Lu for the proof.",
+            with: "- Whether Wednesday suits Bai Lu for the proof.\n- Whether Wednesday suits Bai Lu for the proof.\n- Whether to pay for faster shipping."
+        )
+        let fakes = Fakes(answer: .success(answer))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 1)
+        #expect(explanation.questions == ["Whether Wednesday suits Bai Lu for the proof.", "Whether to pay for faster shipping."])
+        guard case .checked(let result) = explanation.draft else {
+            Issue.record("the draft is \(explanation.draft)")
+            return
+        }
+        #expect(result.flags.contains(.decidesQuestion(placeholders: 1, questions: 2)))
     }
 
     /// A second answer that repeats itself too is not asked for again. Its list ends before
@@ -674,6 +762,19 @@ struct ExplainServiceTests {
         await #expect(throws: CancellationError.self) { try await fakes.service().explain(Fixture.email()) }
         #expect(fakes.requestList.count == 2)
         #expect(fakes.savedList.isEmpty)
+    }
+
+    /// A second request that fails, but not by a cancel, leaves the first answer without its
+    /// repeats, which is better than no explanation.
+    @Test func aSecondRequestThatFailsLeavesTheFirstAnswer() async throws {
+        let fakes = Fakes(answer: .success(Fixture.loop), .failure(RewriteError.jobDropped))
+        let explanation = try await fakes.service().explain(Fixture.email())
+        #expect(fakes.requestList.count == 2)
+        #expect(explanation.points.count == 6)
+        #expect(explanation.questions.isEmpty)
+        #expect(explanation.draft == .missing)
+        #expect(explanation.problems == [.missing(.questions), .missing(.draft)])
+        #expect(fakes.savedList == [explanation])
     }
 
     /// A long answer keeps every point, more than the 6 the prompt asks for, when none
