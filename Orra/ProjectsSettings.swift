@@ -8,10 +8,12 @@ import SwiftUI
 /// draft as soon as the dictation ends, and what it keeps on this Mac with a way to delete
 /// it.
 ///
-/// While Projects is on, the page opens with Open Projects Window, and its title is Projects
-/// Settings, so it is not taken for the Projects window itself. The window also opens by
-/// itself once setting up is done here: when the user confirms the mailbox choice, or turns
-/// Projects on with a choice confirmed before. Never at launch.
+/// While Projects is on, the page has Open Projects Window: at the top once Start Reading
+/// Mail confirmed the mailboxes, and after Mailboxes before that, so the steps that remain
+/// come first. Its title is Projects Settings, so it is not taken for the Projects window
+/// itself. The window also opens by itself once setting up is done here: when the user
+/// confirms the mailbox choice, or turns Projects on with a choice confirmed before. Never
+/// at launch.
 ///
 /// The page sits outside Orra/Projects, since it is the one place where Projects may link to
 /// the privacy page and to System Settings. Code in Orra/Projects never opens a URL. The page
@@ -34,12 +36,7 @@ struct ProjectsSettings: View {
 
     var body: some View {
         Form {
-            if projects.isOn, let openWindow {
-                WindowSection(openWindow: openWindow)
-                    // Delete All Projects Data stops Projects and closes the window while
-                    // the switch stays on.
-                    .disabled(projects.isDeleting)
-            }
+            windowSection(first: true)
             Section {
                 Toggle(isOn: Binding(
                     get: { projects.isOn },
@@ -107,6 +104,7 @@ struct ProjectsSettings: View {
                 }
                 MailboxesSection(mail: mail, openWindow: openWindow, editProject: editProject)
             }
+            windowSection(first: false)
             if projects.isOn {
                 Section {
                     Toggle(isOn: Binding(
@@ -227,6 +225,19 @@ struct ProjectsSettings: View {
         }
     }
 
+    /// The Projects window's section: at the top once Start Reading Mail confirmed the
+    /// mailboxes, as on a page without Mail, and after Mailboxes before that, so the steps that
+    /// remain come first.
+    @ViewBuilder
+    private func windowSection(first: Bool) -> some View {
+        if projects.isOn, let openWindow, (mail?.choice.isConfirmed != false) == first {
+            WindowSection(openWindow: openWindow)
+                // Delete All Projects Data stops Projects and closes the window while the switch
+                // stays on.
+                .disabled(projects.isDeleting)
+        }
+    }
+
     /// Turns Projects on, or asks first whether to download the cleanup model when it is
     /// not on this Mac and no download of it was agreed to, see TextCleanup.turnOnProjects.
     private func turnOn() {
@@ -332,8 +343,9 @@ struct ProjectsSettings: View {
         return ModelInstaller.State.size(bytes)
     }
 
-    /// The Projects window's own section at the top of the page while Projects is on, with
-    /// Open Projects Window, since the projects and the mail are in that window, not here.
+    /// The Projects window's own section while Projects is on, with Open Projects Window,
+    /// since the projects and the mail are in that window, not here. See
+    /// `windowSection(first:)` for where it shows.
     private struct WindowSection: View {
         let openWindow: () -> Void
 
