@@ -251,7 +251,7 @@ final class MeetingCaptions {
     /// True when no sound came for `silenceHint` since captions were turned on: samples
     /// that were all exactly zero, which is what a refused permission looks like, or no
     /// samples at all, as while nothing plays or the start still waits. Cleared by the
-    /// first sound.
+    /// first sound, and by a start that failed, whose own note says why.
     private(set) var hearsOnlySilence = false
     /// True after a sentence was dropped since the speech model was not loaded.
     private(set) var speechModelMissing = false
@@ -385,7 +385,7 @@ final class MeetingCaptions {
         // permission after the same time as samples of only zeros, see receive.
         silenceCheck = Task { [weak self, silenceHint] in
             try? await Task.sleep(for: .seconds(silenceHint))
-            guard let self, current == run, !heardSound else { return }
+            guard let self, !Task.isCancelled, current == run, !heardSound else { return }
             suggestPermission()
         }
         let source = source
@@ -418,6 +418,11 @@ final class MeetingCaptions {
         guard isOn, current == run else { return }
         if let problem {
             capture = .unavailable(problem)
+            // The window says that the capture failed, which is why no sound comes, so
+            // neither the window nor the log suggests the permission for this run.
+            silenceCheck?.cancel()
+            silenceCheck = nil
+            hearsOnlySilence = false
             return
         }
         // Only once the capture runs: the local model is not loaded, nor its download

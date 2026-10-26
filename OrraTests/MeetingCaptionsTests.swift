@@ -423,6 +423,24 @@ struct MeetingCaptionsTests {
         #expect(!captions.hearsOnlySilence)
     }
 
+    /// A start that failed has its own note, and nothing suggests the permission after
+    /// it, neither the window nor the log.
+    @Test func aFailedStartSuggestsNoPermission() async throws {
+        let source = FakeSource()
+        source.fails = .failed(step: "start the device", status: -1)
+        let failed = makeCaptions(FakeCaptionModels([]), source: source, events: Box(), silenceHint: 0.2)
+        failed.setOn(true)
+        try await eventually { failed.capture == .unavailable(.failed(step: "start the device", status: -1)) }
+        // Captions that start, turned on later with the same hint, suggest the permission
+        // only after the failed ones would have.
+        let probe = makeCaptions(FakeCaptionModels([]), source: FakeSource(), events: Box(), silenceHint: 0.2)
+        probe.setOn(true)
+        try await eventually { probe.hearsOnlySilence }
+        #expect(!failed.hearsOnlySilence)
+        probe.setOn(false)
+        failed.setOn(false)
+    }
+
     /// From the press of a key until the paste, captions start no model call, see
     /// EngineTurns. Once the dictation has gone on for a moment, the window says that
     /// they wait and catch up after it, but not for captions that cannot hear anything.
