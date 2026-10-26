@@ -100,11 +100,14 @@ final class ProjectsWindow {
         return window
     }
 
-    /// The window with `content` in it, at the size it first opens at. `makeWindow()` adds
-    /// the frame it keeps between launches, which tests leave out, as they build it with a
-    /// view of their own.
+    /// The window with `content` in it, at the size it first opens at and with its minimum
+    /// size. `makeWindow()` adds the frame it keeps between launches, which tests leave out,
+    /// as they build it with a view of their own.
     static func window(hosting content: some View) -> NSWindow {
-        let controller = NSHostingController(rootView: content)
+        // The minimum size goes to the content too. The controller sets the window's minimum
+        // to that of its content, in place of `contentMinSize` below, and as every column
+        // scrolls, the content's own minimum is far smaller.
+        let controller = NSHostingController(rootView: content.frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height))
         controller.sceneBridgingOptions = [.toolbars, .title]
         // Only the minimum size. With the default, content that grows in a scroll view, such
         // as a long email in the email view, sets the window's height, and the user could not

@@ -269,8 +269,7 @@ struct ProjectsWindowViewTests {
     /// The window keeps its minimum size, while the minimum of what it shows is far smaller,
     /// since every column scrolls, and changes, such as when Add Rule takes away the bar above
     /// the list. The hosting controller sets the window's minimum to that of its content. The
-    /// checks ask for at least the minimum, since the one SwiftUI sets may take in the title
-    /// bar.
+    /// checks ask for at least the minimum, since the one SwiftUI sets takes in the title bar.
     @Test func theWindowKeepsItsMinimumSize() async throws {
         let content = GrowingContent()
         content.showsBar = true
