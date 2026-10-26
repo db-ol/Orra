@@ -87,7 +87,8 @@ nonisolated struct Explanation: Sendable, Equatable, Codable {
 /// - asks the model once more when its answer repeated an item of a list and wrote no
 ///   draft, since a small model that repeats a few lines goes on until its limit. The
 ///   second prompt goes on from the answer up to the repeat, see
-///   `rest(_:written:countTokens:)`.
+///   `rest(_:written:countTokens:)`. When the second request fails, the first answer
+///   counts, without its repeats, while a cancel still saves nothing.
 /// - reads the answer with ExplainAnswer, runs OutputChecks on every point and DraftCheck
 ///   on the draft, and saves the Explanation through a closure before it returns it.
 /// - shows the model's warnings, points and questions as `OutputChecks.shown` gives them:
@@ -261,8 +262,14 @@ final class ExplainService {
             var written = try await run(ProjectsModelRequest(prompt: prepared.prompt.text, maximumTokens: ExplainPrompt.maximumTokens, priority: .user))
             if let rest = await Self.rest(prepared, written: written, countTokens: countTokens) {
                 let looped = modelStarted.duration(to: .now)
-                written = rest.text + (try await run(rest.request))
-                Logger.projects.notice("The model repeated an item of its \(rest.section.rawValue, privacy: .public) and wrote no draft in \(Self.seconds(looped), privacy: .public), and a second request wrote the rest in \(Self.seconds(modelStarted.duration(to: .now) - looped), privacy: .public)")
+                do {
+                    written = rest.text + (try await run(rest.request))
+                    Logger.projects.notice("The model repeated an item of its \(rest.section.rawValue, privacy: .public) and wrote no draft in \(Self.seconds(looped), privacy: .public), and a second request wrote the rest in \(Self.seconds(modelStarted.duration(to: .now) - looped), privacy: .public)")
+                } catch let error where !(error is CancellationError) {
+                    // The first answer, without its repeats, is better than none.
+                    try Task.checkCancellation()
+                    Logger.projects.notice("The model repeated an item of its \(rest.section.rawValue, privacy: .public) and wrote no draft in \(Self.seconds(looped), privacy: .public), and a second request for the rest ended by \(Self.logName(error), privacy: .public) after \(Self.seconds(modelStarted.duration(to: .now) - looped), privacy: .public)")
+                }
             }
             let modelTime = modelStarted.duration(to: .now)
             let explanation = await Self.finish(prepared, written: written, timeZone: timeZone)
