@@ -3,14 +3,17 @@ import os
 import SwiftUI
 
 /// Projects, a page of Settings shown only in builds that show Projects: the switch with what
-/// Projects reads, keeps and never does, the model it works with and its download, Mail
-/// access with the mailboxes Projects reads, whether the talk key's words change the draft
-/// as soon as the dictation ends, and what it keeps on this Mac with a way to delete it.
+/// Projects reads, keeps, changes and never does, the model it works with and its download,
+/// Mail access with the mailboxes Projects reads, whether the talk key's words change the
+/// draft as soon as the dictation ends, and what it keeps on this Mac with a way to delete
+/// it.
 ///
-/// While Projects is on, the page opens with Open Projects Window, and its title is Projects
-/// Settings, so it is not taken for the Projects window itself. The window also opens by
-/// itself once setting up is done here: when the user confirms the mailbox choice, or turns
-/// Projects on with a choice confirmed before. Never at launch.
+/// While Projects is on, the page has Open Projects Window: at the top once Start Reading
+/// Mail confirmed the mailboxes, and after Mailboxes before that, so the steps that remain
+/// come first. Its title is Projects Settings, so it is not taken for the Projects window
+/// itself. The window also opens by itself once setting up is done here: when the user
+/// confirms the mailbox choice, or turns Projects on with a choice confirmed before. Never
+/// at launch.
 ///
 /// The page sits outside Orra/Projects, since it is the one place where Projects may link to
 /// the privacy page and to System Settings. Code in Orra/Projects never opens a URL. The page
@@ -33,12 +36,7 @@ struct ProjectsSettings: View {
 
     var body: some View {
         Form {
-            if projects.isOn, let openWindow {
-                WindowSection(openWindow: openWindow)
-                    // Delete All Projects Data stops Projects and closes the window while
-                    // the switch stays on.
-                    .disabled(projects.isDeleting)
-            }
+            windowSection(first: true)
             Section {
                 Toggle(isOn: Binding(
                     get: { projects.isOn },
@@ -70,6 +68,11 @@ struct ProjectsSettings: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // True while the Mail bridge sends only its read requests and reply, which
+                // Tools/ci/check_rules.py holds (rule 10).
+                Text("Assigning, editing and deleting in Projects change only what it keeps on this Mac, never your mail in Mail.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Link("Privacy details", destination: Self.privacyPage(for: AppLanguage.launchLocalization))
             } header: {
                 Text("Sorts your mail into projects and explains each email with the files of its project.")
@@ -101,6 +104,7 @@ struct ProjectsSettings: View {
                 }
                 MailboxesSection(mail: mail, openWindow: openWindow, editProject: editProject)
             }
+            windowSection(first: false)
             if projects.isOn {
                 Section {
                     Toggle(isOn: Binding(
@@ -221,6 +225,19 @@ struct ProjectsSettings: View {
         }
     }
 
+    /// The Projects window's section: at the top once Start Reading Mail confirmed the
+    /// mailboxes, as on a page without Mail, and after Mailboxes before that, so the steps that
+    /// remain come first.
+    @ViewBuilder
+    private func windowSection(first: Bool) -> some View {
+        if projects.isOn, let openWindow, (mail?.choice.isConfirmed != false) == first {
+            WindowSection(openWindow: openWindow)
+                // Delete All Projects Data stops Projects and closes the window while the switch
+                // stays on.
+                .disabled(projects.isDeleting)
+        }
+    }
+
     /// Turns Projects on, or asks first whether to download the cleanup model when it is
     /// not on this Mac and no download of it was agreed to, see TextCleanup.turnOnProjects.
     private func turnOn() {
@@ -326,8 +343,9 @@ struct ProjectsSettings: View {
         return ModelInstaller.State.size(bytes)
     }
 
-    /// The Projects window's own section at the top of the page while Projects is on, with
-    /// Open Projects Window, since the projects and the mail are in that window, not here.
+    /// The Projects window's own section while Projects is on, with Open Projects Window,
+    /// since the projects and the mail are in that window, not here. See
+    /// `windowSection(first:)` for where it shows.
     private struct WindowSection: View {
         let openWindow: () -> Void
 
@@ -485,7 +503,9 @@ struct ProjectsSettings: View {
                             .fixedSize(horizontal: false, vertical: true)
                         if mail.access == .denied {
                             Spacer()
+                            // The button keeps its whole name, and the line wraps beside it.
                             Button("Open Automation Settings…", action: openAutomationSettings)
+                                .fixedSize()
                         }
                     }
                 }
@@ -520,13 +540,12 @@ struct ProjectsSettings: View {
                             set: { expanded[place] = $0 }
                         )) {
                             ForEach(group.mailboxes, id: \.self) { mailbox in
-                                // A disclosure centers its rows otherwise.
                                 row(mailbox, in: place)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         } label: {
                             Text(verbatim: place)
                         }
+                        .disclosureGroupStyle(RowDisclosureStyle())
                     } else {
                         ForEach(group.mailboxes, id: \.self) { row($0, in: nil) }
                     }

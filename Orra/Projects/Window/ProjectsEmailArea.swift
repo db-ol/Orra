@@ -4,12 +4,10 @@ import SwiftUI
 /// (plan section 5, projects-email-view), top to bottom:
 /// - Back to Previous Email, after an earlier email's chip showed this email. It stays
 ///   above the rest, which scrolls, since the chip is often far down.
-/// - the sender, date and subject, the marks, and Explain or Explain Again
+/// - the sender, date and subject, the marks, and Explain or Explain Again, with Hide
+///   Explanation or Show Explanation once the email is explained
 /// - the project chip with its reasons, whose menu assigns the email to another project in
 ///   Orra. The email stays where it is in Mail.
-/// - once the email is explained, the choice between the explanation and the email itself,
-///   see ProjectsEmailOriginal, which also lists the attachments with whether Projects read
-///   their text. Before that the email itself shows under its warnings.
 /// - the warnings, always with those the code found, and what was taken out of the text
 ///   before the model read it
 /// - What it says: the points, each with chips for its sources, or a line that it has
@@ -19,6 +17,12 @@ import SwiftUI
 ///   attachment.
 /// - Before you reply: the questions only the user can answer
 /// - the draft with its tools, see DraftSection
+/// - the email itself under Original Email, see ProjectsEmailOriginal, which also lists the
+///   attachments with whether Projects read their text
+///
+/// Hide Explanation puts the email itself first, under the warnings, and the draft under
+/// it, for every email until the window closes, see ProjectsWindowModel.showsExplanation.
+/// Before the email is explained, the email itself shows under its warnings.
 ///
 /// A section the model's answer does not hold says so, rather than that the model found
 /// nothing, see ProjectsWindowText.noQuestions(_:).
@@ -56,7 +60,7 @@ struct ProjectsEmailArea: View {
     }
 
     var body: some View {
-        @Bindable var emailModel = model.emailModel(for: email.messageID)
+        let emailModel = model.emailModel(for: email.messageID)
         VStack(spacing: 0) {
             if model.previousEmail != nil {
                 backBar
@@ -68,14 +72,12 @@ struct ProjectsEmailArea: View {
                     ProjectChip(runtime: runtime, model: model, email: email)
                     Divider()
                     if let explanation = emailModel.explanation {
-                        Picker("Show", selection: $emailModel.showsOriginal) {
-                            Text("Explanation").tag(false)
-                            Text("Original Email").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
-                        if emailModel.showsOriginal {
+                        // The draft keeps one place between the two parts, so Hide Explanation
+                        // and Show Explanation keep its editor with the text, the selection and
+                        // the focus.
+                        if model.showsExplanation {
+                            ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
+                        } else {
                             let warnings = ExplanationSections.warnings(explanation, listed: email.warnings)
                             if !warnings.isEmpty {
                                 WarningList(items: warnings, model: model, emailModel: emailModel)
@@ -83,12 +85,17 @@ struct ProjectsEmailArea: View {
                             original(emailModel)
                             // The draft is the model's text, so a line sets it apart from the mail's.
                             Divider()
-                        } else {
-                            ExplanationSections(model: model, emailModel: emailModel, email: email, explanation: explanation)
                         }
                         DraftSection(
                             runtime: runtime, emailModel: emailModel, explanation: explanation,
                             isExplaining: model.explaining[email.messageID] == .explaining)
+                        if model.showsExplanation {
+                            Divider()
+                            Text("Original Email")
+                                .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
+                            original(emailModel)
+                        }
                     } else {
                         // Before it is explained: the rule findings, and the email itself.
                         let warnings = ProjectsWarning.allCases.filter(email.warnings.contains).map { ExplanationSections.Item(warning: $0, places: []) }
@@ -170,25 +177,14 @@ struct ProjectsEmailArea: View {
         let state = model.explaining[email.messageID]
         let isChanging = model.emailModel(for: email.messageID).isBusy
         let noText = ProjectsWindowText.noText(email)
-        HStack(spacing: 10) {
-            Group {
-                if email.isExplained {
-                    // Asks first when the new draft would replace one the user changed.
-                    Button("Explain Again") {
-                        Task { await model.requestExplain(email.messageID) }
-                    }
-                } else {
-                    Button("Explain") {
-                        Task { await model.explain(email.messageID) }
-                    }
-                }
+        // One under another in a column too narrow for a row, such as the third column of the
+        // window at its smallest size.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                explainButtons(state: state, isChanging: isChanging, noText: noText)
             }
-            .disabled(state == .explaining || isChanging || noText != nil || runtime.phase != .on)
-            if state == .explaining {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Explaining…")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                explainButtons(state: state, isChanging: isChanging, noText: noText)
             }
         }
         if case .failed(let failure)? = state {
@@ -220,6 +216,45 @@ struct ProjectsEmailArea: View {
             Text(verbatim: noText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Explain, or Explain Again with Hide Explanation or Show Explanation once the email is
+    /// explained, and Explaining… while the model explains it.
+    @ViewBuilder
+    private func explainButtons(state: ProjectsWindowModel.ExplainState?, isChanging: Bool, noText: String?) -> some View {
+        Group {
+            if email.isExplained {
+                // Asks first when the new draft would replace one the user changed.
+                Button("Explain Again") {
+                    Task { await model.requestExplain(email.messageID) }
+                }
+            } else {
+                Button("Explain") {
+                    Task { await model.explain(email.messageID) }
+                }
+            }
+        }
+        .disabled(state == .explaining || isChanging || noText != nil || runtime.phase != .on)
+        // The window's choice, so the next email shows the same way.
+        if model.emailModel(for: email.messageID).explanation != nil {
+            Button {
+                model.showsExplanation.toggle()
+            } label: {
+                if model.showsExplanation {
+                    Text("Hide Explanation")
+                } else {
+                    Text("Show Explanation")
+                }
+            }
+        }
+        if state == .explaining {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Explaining…")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -356,6 +391,7 @@ extension ProjectsEmailArea {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 content()
             }
         }
@@ -396,6 +432,7 @@ extension ProjectsEmailArea {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Warnings")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 ForEach(items, id: \.warning) { item in
                     VStack(alignment: .leading, spacing: 4) {
                         Label {
@@ -491,6 +528,7 @@ extension ProjectsEmailArea {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 4)
             }
+            .disclosureGroupStyle(RowDisclosureStyle())
         }
 
         /// Each finding with its place, the email's first.
@@ -516,19 +554,29 @@ extension ProjectsEmailArea {
 extension ProjectsEmailArea {
     /// The chips of a point's sources. A file's chip shows its excerpt with its page in a
     /// popover, an attachment's chip the excerpt the model read, this email's chip its text,
-    /// and an earlier email's chip shows that email in the window (decision 20).
+    /// and an earlier email's chip shows that email in the window (decision 20). The chips go
+    /// one under another in a column too narrow for a row.
     struct SourceChips: View {
         let ids: [String]
         let model: ProjectsWindowModel
         let emailModel: ProjectsEmailModel
 
         var body: some View {
-            HStack(spacing: 6) {
-                ForEach(ids, id: \.self) { id in
-                    if let source = emailModel.sources[id] {
-                        SourceChip(source: source, emailText: emailModel.emailText) { messageID in
-                            Task { await model.show(messageID) }
-                        }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    chips
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    chips
+                }
+            }
+        }
+
+        private var chips: some View {
+            ForEach(ids, id: \.self) { id in
+                if let source = emailModel.sources[id] {
+                    SourceChip(source: source, emailText: emailModel.emailText) { messageID in
+                        Task { await model.show(messageID) }
                     }
                 }
             }
