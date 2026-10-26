@@ -937,8 +937,12 @@ struct ProjectsWindowViewTests {
         try await render(narrow, size: NSSize(width: 480, height: 640), to: folder.appendingPathComponent("\(language)-projects-email-narrow.png"))
         try await render(narrow, size: NSSize(width: 480, height: 2_600), to: folder.appendingPathComponent("\(language)-projects-email-narrow-full.png"))
 
+        // How to Use Projects shows with nothing selected, without its step about Settings,
+        // since the fixture confirmed its mailboxes. Then with that step.
         let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {})
         try await render(window, size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window.png"))
+        try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 480, height: 700), to: folder.appendingPathComponent("\(language)-projects-how-to.png"))
+        try await renderWindow(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), to: folder.appendingPathComponent("\(language)-projects-window-760.png"))
         await fixture.stop()
     }
 
@@ -1054,6 +1058,24 @@ struct ProjectsWindowViewTests {
         let png = try #require(image.representation(using: .png, properties: [:]))
         try png.write(to: file)
         offscreen.close()
+    }
+
+    /// Renders the window as the app makes it, at its smallest size, with its title bar and
+    /// toolbar, as far as they draw in a window that is never ordered front.
+    private func renderWindow(_ view: some View, to file: URL) async throws {
+        let window = ProjectsWindow.window(hosting: view)
+        defer { window.close() }
+        window.setContentSize(ProjectsWindow.minimumSize)
+        for _ in 0..<20 {
+            window.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(!window.isVisible)
+        let frame = try #require(window.contentView?.superview)
+        let image = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
+        frame.cacheDisplay(in: frame.bounds, to: image)
+        let png = try #require(image.representation(using: .png, properties: [:]))
+        try png.write(to: file)
     }
 
     /// Projects on with one indexed project, a Mail that never runs and no model.

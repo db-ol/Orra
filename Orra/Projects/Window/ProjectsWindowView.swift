@@ -5,7 +5,8 @@ import SwiftUI
 ///
 /// Mail text, names and model output show with `Text(verbatim:)` only: no Markdown, no
 /// links, no images (plan section 2.8). The third column holds the email view,
-/// ProjectsEmailArea, or the project's page.
+/// ProjectsEmailArea, or the project's page, or, while neither shows, How to Use Projects,
+/// see ProjectsHowTo.
 struct ProjectsWindowView: View {
     let runtime: ProjectsRuntime
     @State var model: ProjectsWindowModel
@@ -40,9 +41,11 @@ struct ProjectsWindowView: View {
                 Button {
                     Task { await model.explainSelectedMessage() }
                 } label: {
-                    Label("Explain Selected Message", systemImage: "envelope.badge")
+                    // With its title, since an envelope alone does not say what it explains.
+                    Label("Explain Message Selected in Mail", systemImage: "envelope.badge")
+                        .labelStyle(.titleAndIcon)
                 }
-                .help("Explain Selected Message")
+                .help("Shows the message you selected in Mail in this window and explains it. It must be in a mailbox Projects reads, within the period it reads.")
                 .disabled(runtime.phase != .on || model.isReadingSelection)
             }
         }
@@ -264,7 +267,9 @@ struct ProjectsWindowView: View {
             // away with its project rather than act on the next one.
             .id(project.id)
         } else {
-            ContentUnavailableView("No Email Selected", systemImage: "envelope")
+            ProjectsHowTo(
+                showsSetup: !runtime.choice.isConfirmed, canCreate: runtime.phase == .on,
+                openSettings: openSettings, newProject: { setup = ProjectsSetupView.Draft() })
         }
     }
 }
