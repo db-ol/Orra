@@ -1187,8 +1187,8 @@ final class ProjectsRuntime {
     /// Saves a changed project, indexes its folders as they are now and sorts again the mail
     /// the change reaches. A change of the folders alone, or a Save with no change, sorts
     /// nothing again until the index of the folders finishes. A linked mailbox it no longer
-    /// has is not read further. Its rules stay as the list has them, since Edit Project does not change
-    /// rules, so a rule added or removed while its sheet was open stays so.
+    /// has is not read further. Its rules stay as the list has them, since Edit Project does
+    /// not change rules, so a rule added or removed while its sheet was open stays so.
     func update(_ project: Project) async throws {
         guard let running else { throw Failure.off }
         var project = project
