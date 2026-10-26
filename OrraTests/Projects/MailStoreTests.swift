@@ -201,6 +201,59 @@ struct MailStoreTests {
         await store.close()
     }
 
+    /// Sorting never takes an email with a draft to another project, since the user would
+    /// lose the draft without being asked. A decision for its own project is saved. An email
+    /// that keeps its place for its draft, or that goes to Needs a Project since it was never
+    /// sorted, waits for no more sorting, and its chip no longer says that it waits.
+    @Test func aDecisionNeverTakesAwayADraft() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        let id = "a@test.example"
+        try await store.save([
+            Self.message(id, from: "song.yutong@harborlights.example"),
+            Self.message("new@test.example", from: "song.yutong@harborlights.example", day: 1),
+        ], ownAddresses: [Self.work], at: Self.date(2))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .likely, reasons: [.model]), for: id))
+        let explanation = Self.explanation(id)
+        #expect(try await store.save(explanation, at: Self.date(3)))
+        let version = ReviseService.Version(messageID: id, change: .tone(.warm), check: DraftCheck.Result(draft: "您好！尺寸已确认。", language: .zh))
+        #expect(try await store.save(version, startedAt: Self.date(3), at: Self.date(3)) == 1)
+        let typed = MailStore.EditedDraft(text: "您好，尺寸已确认。", editedFrom: MailStore.draftKey("您好！尺寸已确认。", version: 1, explained: explanation.today))
+        #expect(try await store.save(typed, for: id, at: Self.date(3)))
+        // As after its thread changed.
+        try await store.database.run("UPDATE mail_messages SET waits = 1 WHERE message_id = ?", [.text(id)])
+
+        #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .likely, reasons: [.model]), for: id) == false)
+        #expect(try await store.listed(id)?.project == Self.harbor)
+        #expect(try await store.explanation(for: id) == explanation)
+        #expect(try await store.versions(of: id).map(\.version) == [version])
+        #expect(try await store.editedDraft(of: id) == typed)
+        #expect(try await store.waiting().map(\.messageID) == ["new@test.example"])
+
+        // A decision for its own project keeps the draft.
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: id))
+        let listed = try #require(try await store.listed(id))
+        #expect(listed.project == Self.harbor && listed.level == .sure && listed.reasons == [.person])
+        #expect(try await store.explanation(for: id) == explanation)
+        #expect(try await store.versions(of: id).map(\.version) == [version])
+        #expect(try await store.editedDraft(of: id) == typed)
+
+        // An email explained before sorting filed it, and one explained while it waited for
+        // the model in Needs a Project.
+        try await store.save([Self.message("waits@test.example", from: "song.yutong@harborlights.example", day: 1.5, subject: "Tiles")], ownAddresses: [Self.work], at: Self.date(3))
+        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.waitingForModel, .signalsDisagree]), for: "waits@test.example"))
+        for id in ["new@test.example", "waits@test.example"] {
+            #expect(try await store.save(Self.explanation(id, project: nil), at: Self.date(3)))
+            #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: id) == false)
+        }
+        let new = try #require(try await store.listed("new@test.example"))
+        #expect(new.project == nil && new.level == .unsure && new.reasons == [.noSignal] && new.isExplained)
+        let waits = try #require(try await store.listed("waits@test.example"))
+        #expect(waits.project == nil && waits.level == .unsure && waits.reasons == [.signalsDisagree] && waits.isExplained)
+        #expect(try await store.waiting().isEmpty)
+        await store.close()
+    }
+
     @Test func waitingHoldsUnsortedEmailsAndThoseThatWaitForTheModelButNoMovedOne() async throws {
         defer { cleanUp() }
         let store = try await openStore()
@@ -222,21 +275,68 @@ struct MailStoreTests {
         await store.close()
     }
 
-    @Test func peopleSeenCountOnlyMailFiledInAProject() async throws {
+    /// A likely filing that the model cannot answer about yet waits in its project, with its
+    /// decision and explanation, and comes back with the mail that waits.
+    @Test func aLikelyFilingWaitsInItsPlace() async throws {
+        defer { cleanUp() }
+        let store = try await openStore()
+        try await store.save([
+            Self.message("likely@test.example", from: "kim@quay.example"),
+            Self.message("moved@test.example", from: "kim@quay.example", day: 1),
+        ], ownAddresses: [Self.work], at: Self.date(2))
+        let likely = SortingDecision(project: Self.harbor, level: .likely, reasons: [.peopleSeen, .model])
+        #expect(try await store.saveDecision(likely, for: "likely@test.example"))
+        #expect(try await store.save(Self.explanation("likely@test.example", draft: .missing), at: Self.date(2)))
+        #expect(try await store.move("moved@test.example", to: Self.maple))
+        #expect(try await store.waiting().isEmpty)
+
+        try await store.markWaiting("likely@test.example")
+        try await store.markWaiting("moved@test.example")
+        let waiting = try await store.waiting()
+        #expect(waiting.map(\.messageID) == ["likely@test.example"])
+        #expect(waiting.first?.decided == likely)
+        let listed = try #require(try await store.listed("likely@test.example"))
+        #expect(listed.project == Self.harbor && listed.level == .likely && listed.reasons == likely.reasons && listed.isExplained)
+        #expect(try await store.database.run("SELECT waits FROM mail_messages WHERE message_id = ?", [.text("moved@test.example")]) == [[.integer(0)]])
+        await store.close()
+    }
+
+    /// People seen count only mail that rests on the user: a filing by a setting, also a
+    /// thread reply that a setting names, a thread reply in its thread, and a move of the
+    /// user. A guess of the model does not, nor a reply in a thread whose only filing in
+    /// that project is a guess, nor Set Aside and Needs a Project.
+    @Test func peopleSeenCountOnlyWhatTheUserStandsBehind() async throws {
         defer { cleanUp() }
         let store = try await openStore()
         try await store.save([
             Self.message("a@test.example", from: "Kim <KIM@quay.example>", cc: ["lee@quay.example"]),
-            Self.message("b@test.example", from: "kim@quay.example", day: 1),
-            Self.message("c@test.example", from: "lee@quay.example", day: 2),
-            Self.message("d@test.example", from: "ann@quay.example", day: 3),
-        ], ownAddresses: [Self.work], at: Self.date(4))
+            Self.message("a-reply@test.example", from: "ann@quay.example", day: 1, inReplyTo: ["a@test.example"]),
+            Self.message("b@test.example", from: "kim@quay.example", day: 2),
+            Self.message("b-reply@test.example", from: "joe@quay.example", day: 3, inReplyTo: ["b@test.example"]),
+            Self.message("moved@test.example", from: "max@quay.example", day: 4),
+            Self.message("c@test.example", from: "lee@quay.example", day: 5),
+            Self.message("d@test.example", from: "pat@quay.example", day: 6),
+            Self.message("e@test.example", from: "eve@quay.example", day: 7),
+            Self.message("e-reply@test.example", from: "fay@quay.example", to: [Self.work, "eve@quay.example"], day: 8, inReplyTo: ["e@test.example"]),
+        ], ownAddresses: [Self.work], at: Self.date(9))
         #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.person]), for: "a@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.thread]), for: "a-reply@test.example"))
         #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .likely, reasons: [.model]), for: "b@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread]), for: "b-reply@test.example"))
+        #expect(try await store.move("moved@test.example", to: Self.harbor))
         #expect(try await store.saveDecision(SortingDecision(project: nil, level: .setAside, reasons: [.listMail]), for: "c@test.example"))
         #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: "d@test.example"))
-        let seen = try await store.peopleSeen(["kim@quay.example", "lee@quay.example", "ann@quay.example"])
-        #expect(seen == [Self.maple: ["kim@quay.example", "lee@quay.example"], Self.harbor: ["kim@quay.example"]])
+        // A guess, and a reply under it from a person Harbor lists.
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .likely, reasons: [.model]), for: "e@test.example"))
+        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread, .person]), for: "e-reply@test.example"))
+        let seen = try await store.peopleSeen([
+            "kim@quay.example", "lee@quay.example", "ann@quay.example", "joe@quay.example", "max@quay.example", "pat@quay.example",
+            "eve@quay.example", "fay@quay.example",
+        ])
+        #expect(seen == [
+            Self.maple: ["kim@quay.example", "lee@quay.example", "ann@quay.example"],
+            Self.harbor: ["max@quay.example", "eve@quay.example", "fay@quay.example"],
+        ])
         #expect(try await store.peopleSeen([]).isEmpty)
         await store.close()
     }
@@ -781,10 +881,15 @@ struct MailStoreTests {
         ], ownAddresses: [Self.work], at: Self.date(3))
         var explanation = Self.explanation("moved@test.example")
         explanation.sources["F1"] = .file(TextChunker.Chunk(file: URL(fileURLWithPath: "/tmp/plan.pdf"), page: 1, modified: Self.start, heading: "", text: "The \(secret) sizes."))
+        let draft = explanation.draft
         for id in ["moved@test.example", "sorted@test.example", "stays@test.example"] {
             #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .likely, reasons: [.model]), for: id))
             explanation.messageID = id
+            // Sorting never moves an email with a draft, see aDecisionNeverTakesAwayADraft.
+            let sorted = id == "sorted@test.example"
+            explanation.draft = sorted ? .missing : draft
             #expect(try await store.save(explanation, at: Self.date(4)))
+            guard !sorted else { continue }
             #expect(try await store.save(ReviseService.Version(messageID: id, change: .tone(.warm), check: DraftCheck.Result(draft: "\(secret) draft", language: .en)), startedAt: Self.date(4), at: Self.date(4)) == 1)
             #expect(try await store.save(MailStore.EditedDraft(text: "\(secret) typed", editedFrom: MailStore.draftKey("\(secret) draft", version: 1, explained: explanation.today)), for: id, at: Self.date(4)))
         }
@@ -883,76 +988,118 @@ struct MailStoreTests {
         await store.close()
     }
 
-    /// Sorting again reads all of Needs a Project that sorting may still file, oldest first
-    /// in batches, and never mail the user moved there, also when that mail is the newest.
-    /// A batch filed meanwhile does not change where the next one starts.
-    @Test func sortingAgainReadsNeedsAProjectInBatchesPastTheUsersMoves() async throws {
+    /// Sorting again after a change reads, oldest first, mail never sorted, Needs a Project,
+    /// the likely filings, the filings the change names by a person, domain or mailbox, and
+    /// the sure thread replies in their threads. Never mail the user moved, mail with a
+    /// draft, mail a rule filed, or a filing the change does not name.
+    @Test func sortingAgainReadsTheMailAChangeReaches() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        let waiting = (0..<5).map { "waiting\($0)@test.example" }
-        try await store.save(
-            waiting.enumerated().map { day, id in Self.message(id, from: "kim@quay.example", day: Double(day)) } + [
-                Self.message("same-day@test.example", from: "kim@quay.example", day: 2),
-                Self.message("harbor@test.example", from: "song.yutong@harborlights.example", day: 1),
-                Self.message("news@test.example", from: "news@letters.example", day: 1),
-                Self.message("moved1@test.example", from: "kim@quay.example", day: 6),
-                Self.message("moved2@test.example", from: "kim@quay.example", day: 7),
-            ], ownAddresses: [Self.work], at: Self.date(8))
-        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .unsure, reasons: [.noSignal]), for: waiting[1]))
-        #expect(try await store.saveDecision(SortingDecision(project: Self.harbor, level: .sure, reasons: [.person]), for: "harbor@test.example"))
-        #expect(try await store.saveDecision(SortingDecision(project: nil, level: .setAside, reasons: [.listMail]), for: "news@test.example"))
-        #expect(try await store.move("moved1@test.example", to: nil))
-        #expect(try await store.move("moved2@test.example", to: nil))
-
-        var read: [String] = []
-        var cursor: MailStore.Cursor?
-        while true {
-            let batch = try await store.resortBatch(after: cursor, limit: 2)
-            #expect(batch.emails.count <= 2)
-            guard let next = batch.next else {
-                #expect(batch.emails.isEmpty)
-                break
-            }
-            read += batch.emails.map(\.messageID)
-            // Each email reads as sorting reads it alone. Sorting files the batch in a project
-            // before the next one is read.
-            for email in batch.emails {
-                #expect(email == (try await store.sortingEmail(email.messageID)))
-                #expect(try await store.saveDecision(SortingDecision(project: Self.maple, level: .sure, reasons: [.domain]), for: email.messageID))
-            }
-            cursor = next
+        var linked = Self.message("mailbox@test.example", from: "zoe@else.example", day: 5)
+        linked.mailbox = "Work/Clients/Harbor"
+        try await store.save([
+            // Reached.
+            Self.message("never@test.example", from: "kim@quay.example"),
+            Self.message("unsure@test.example", from: "kim@quay.example", day: 1),
+            Self.message("likely@test.example", from: "kim@quay.example", day: 2),
+            Self.message("cc@test.example", from: "owen@pike-build.example", cc: ["lee@quay.example"], day: 2),
+            Self.message("sub@test.example", from: "tom@mail.kiln.example", day: 3),
+            Self.message("aside@test.example", from: "ann@quay.example", day: 4),
+            linked,
+            Self.message("old@test.example", from: "lee@quay.example", day: 6),
+            Self.message("reply@test.example", from: "song.yutong@harborlights.example", day: 7, inReplyTo: ["likely@test.example"]),
+            // Not reached.
+            Self.message("moved@test.example", from: "kim@quay.example", day: 8),
+            Self.message("draft@test.example", from: "kim@quay.example", day: 9),
+            Self.message("rule@test.example", from: "lee@quay.example", day: 10),
+            Self.message("person@test.example", from: "owen@pike-build.example", day: 11),
+            Self.message("news@test.example", from: "news@letters.example", day: 12),
+            Self.message("stale@test.example", from: "kim@quay.example", day: 13),
+            Self.message("other-reply@test.example", from: "song.yutong@harborlights.example", day: 14, inReplyTo: ["person@test.example"]),
+        ], ownAddresses: [Self.work], at: Self.date(15))
+        let decisions: [(id: String, decision: SortingDecision)] = [
+            ("unsure@test.example", SortingDecision(project: nil, level: .unsure, reasons: [.noSignal])),
+            ("likely@test.example", SortingDecision(project: Self.harbor, level: .likely, reasons: [.model])),
+            ("cc@test.example", SortingDecision(project: Self.maple, level: .sure, reasons: [.person])),
+            ("sub@test.example", SortingDecision(project: Self.maple, level: .sure, reasons: [.domain])),
+            ("aside@test.example", SortingDecision(project: nil, level: .setAside, reasons: [.listMail])),
+            ("mailbox@test.example", SortingDecision(project: Self.harbor, level: .sure, reasons: [.mailbox])),
+            ("old@test.example", SortingDecision(project: Self.harbor, level: .likely, reasons: [.peopleSeen, .model])),
+            ("reply@test.example", SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread])),
+            ("draft@test.example", SortingDecision(project: Self.harbor, level: .likely, reasons: [.model])),
+            ("rule@test.example", SortingDecision(project: Self.harbor, level: .sure, reasons: [.rule])),
+            ("person@test.example", SortingDecision(project: Self.maple, level: .sure, reasons: [.person])),
+            ("news@test.example", SortingDecision(project: nil, level: .setAside, reasons: [.listMail])),
+            ("stale@test.example", SortingDecision(project: Self.maple, level: .likely, reasons: [.model])),
+            ("other-reply@test.example", SortingDecision(project: Self.maple, level: .sure, reasons: [.thread])),
+        ]
+        for (id, decision) in decisions {
+            #expect(try await store.saveDecision(decision, for: id))
         }
+        #expect(try await store.move("moved@test.example", to: Self.harbor))
+        #expect(try await store.save(Self.explanation("draft@test.example"), at: Self.date(15)))
+        // Retention removed the text of two likely filings.
+        try await store.database.run("UPDATE mail_messages SET text = NULL WHERE message_id IN ('old@test.example', 'stale@test.example')")
+
+        let change = SortingService.Change(
+            projects: [Self.harbor], addresses: ["lee@quay.example", "ann@quay.example"],
+            domains: ["kiln.example"], mailboxes: ["Work/Clients/Harbor"])
+        let ids = try await store.resortIDs(reaching: change)
         // The two emails of day 2 come in the order they were saved.
-        #expect(read == [waiting[0], waiting[1], waiting[2], "same-day@test.example", waiting[3], waiting[4]])
+        #expect(ids == [
+            "never@test.example", "unsure@test.example", "likely@test.example", "cc@test.example", "sub@test.example",
+            "aside@test.example", "mailbox@test.example", "old@test.example", "reply@test.example",
+        ])
+        // A change that names no person, domain or mailbox reaches mail never sorted, Needs
+        // a Project, the likely filings with their text and the thread replies under them.
+        #expect(try await store.resortIDs(reaching: SortingService.Change(projects: [Self.maple])) == [
+            "never@test.example", "unsure@test.example", "likely@test.example", "reply@test.example",
+        ])
+
+        // The user moves one and explains another before sorting reads them.
+        #expect(try await store.move("unsure@test.example", to: Self.maple))
+        #expect(try await store.save(Self.explanation("likely@test.example"), at: Self.date(16)))
+        let emails = try await store.resortEmails(ids)
+        #expect(emails.map(\.messageID) == ids.filter { $0 != "unsure@test.example" && $0 != "likely@test.example" })
+        for email in emails {
+            #expect(email == (try await store.sortingEmail(email.messageID)))
+        }
+        #expect(emails.first?.decided == nil)
+        #expect(emails.first(where: { $0.messageID == "cc@test.example" })?.decided == SortingDecision(project: Self.maple, level: .sure, reasons: [.person]))
         await store.close()
     }
 
-    /// Sorting again reads Needs a Project up to the email before its newest emails that
-    /// sorting may still file, and then reads on from there. The user's moves count for
-    /// neither.
-    @Test func sortingAgainReadsTheOlderEmailsUpToTheNewestOnes() async throws {
+    /// The model pass of sorting again reads the newest of the reached emails that the rules
+    /// left to it, as they are after the rules pass: never sorted, in Needs a Project or
+    /// likely, with the sure thread replies in their threads. A filing the rules settled, a
+    /// move of the user and mail with a draft take no place.
+    @Test func theModelReadsTheNewestEmailsTheRulesLeftToIt() async throws {
         defer { cleanUp() }
         let store = try await openStore()
-        let waiting = (0..<4).map { "waiting\($0)@test.example" }
-        try await store.save(
-            waiting.enumerated().map { day, id in Self.message(id, from: "kim@quay.example", day: Double(day)) } + [
-                Self.message("moved1@test.example", from: "kim@quay.example", day: 5),
-                Self.message("moved2@test.example", from: "kim@quay.example", day: 6),
-            ], ownAddresses: [Self.work], at: Self.date(7))
-        #expect(try await store.move("moved1@test.example", to: nil))
-        #expect(try await store.move("moved2@test.example", to: nil))
+        let ids = ["never", "unsure", "likely", "sure", "reply", "aside", "newest", "moved", "draft"].map { $0 + "@test.example" }
+        try await store.save(ids.enumerated().map { day, id in
+            Self.message(id, from: "kim@quay.example", day: Double(day), inReplyTo: id == "reply@test.example" ? ["likely@test.example"] : [])
+        }, ownAddresses: [Self.work], at: Self.date(9))
+        let decisions: [(id: String, decision: SortingDecision)] = [
+            ("unsure@test.example", SortingDecision(project: nil, level: .unsure, reasons: [.modelSaidNone, .noSignal])),
+            ("likely@test.example", SortingDecision(project: Self.harbor, level: .likely, reasons: [.model])),
+            ("sure@test.example", SortingDecision(project: Self.maple, level: .sure, reasons: [.person])),
+            ("reply@test.example", SortingDecision(project: Self.harbor, level: .sure, reasons: [.thread])),
+            ("aside@test.example", SortingDecision(project: nil, level: .setAside, reasons: [.listMail])),
+            ("newest@test.example", SortingDecision(project: nil, level: .unsure, reasons: [.noSignal])),
+            ("draft@test.example", SortingDecision(project: nil, level: .unsure, reasons: [.noSignal])),
+        ]
+        for (id, decision) in decisions {
+            #expect(try await store.saveDecision(decision, for: id))
+        }
+        #expect(try await store.move("moved@test.example", to: nil))
+        #expect(try await store.save(Self.explanation("draft@test.example", project: nil), at: Self.date(9)))
 
-        #expect(try await store.resortEnd(beforeNewest: 4) == nil)
-        #expect(try await store.resortEnd(beforeNewest: 9) == nil)
-        let end = try #require(try await store.resortEnd(beforeNewest: 2))
-        let older = try await store.resortBatch(after: nil, through: end, limit: 9)
-        #expect(older.emails.map(\.messageID) == [waiting[0], waiting[1]])
-        #expect(older.next == end)
-        #expect(try await store.resortBatch(after: older.next, through: end, limit: 9).next == nil)
-        let newest = try await store.resortBatch(after: older.next, limit: 9)
-        #expect(newest.emails.map(\.messageID) == [waiting[2], waiting[3]])
-        let all = try #require(try await store.resortEnd(beforeNewest: 0))
-        #expect(try await store.resortBatch(after: nil, through: all, limit: 9).emails.map(\.messageID) == waiting)
+        #expect(try await store.resortPage(ids, newest: 2) == ["likely@test.example", "reply@test.example", "newest@test.example"])
+        #expect(try await store.resortPage(ids, newest: 9) == [
+            "never@test.example", "unsure@test.example", "likely@test.example", "reply@test.example", "newest@test.example",
+        ])
+        #expect(try await store.resortPage([], newest: 9).isEmpty)
         await store.close()
     }
 
