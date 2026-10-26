@@ -5103,6 +5103,28 @@
         }
       }
     },
+    "For a problem in Projects, describe the steps and leave out mail text, names, email addresses and screenshots of mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Para un problema en Proyectos, describe los pasos y no incluyas el texto de correos, nombres, direcciones de correo ni capturas de pantalla de correos."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”の問題を報告するときは、操作の手順を書き、メールの本文、名前、メールアドレス、メールのスクリーンショットは含めないでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "报告“项目”的问题时，请描述操作步骤，不要写入邮件正文、姓名、电子邮件地址，也不要附上邮件截图。"
+          }
+        }
+      }
+    },
     "For meetings across languages. Read what others say in your language, and let them hear you in theirs, even in your own voice." : {
       "localizations" : {
         "es-419" : {

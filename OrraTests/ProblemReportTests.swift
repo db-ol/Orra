@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import Orra
 
@@ -286,5 +288,49 @@ struct ProblemReportTests {
         for id in ["what-happened", "version", "macos", "mac"] {
             #expect(form.contains("    id: \(id)\n"), "\(id)")
         }
+    }
+
+    /// The form asks where the problem happened, with Projects (Preview), and asks reports
+    /// about Projects to leave out mail, as Report a Problem does in a build that shows
+    /// Projects. The field stays optional, since the link Orra builds does not fill it.
+    @Test func issueFormAsksForProjectsReportsWithoutMail() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(".github/ISSUE_TEMPLATE/bug_report.yml")
+        let form = try String(contentsOf: url, encoding: .utf8)
+        #expect(form.contains("    id: area\n"))
+        #expect(form.contains("Projects (Preview)"))
+        #expect(form.contains("leave out mail text, names, email addresses and screenshots of mail"))
+    }
+
+    /// Renders Report a Problem with the line about Projects into a PNG file, for a look at
+    /// the layout without running the app. Off unless ORRA_SETTINGS_SNAPSHOTS names a
+    /// folder, as for SettingsPageTests.renderEveryTab(). CI never sets it. The report is
+    /// never written, so the view shows it as being made.
+    @MainActor
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] != nil))
+    func renderTheReportWindow() async throws {
+        let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ORRA_SETTINGS_SNAPSHOTS"] ?? NSTemporaryDirectory(), isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let language = Bundle.main.preferredLocalizations.first ?? "en"
+        let models = FileManager.default.temporaryDirectory.appendingPathComponent("ProblemReportTests-\(UUID().uuidString)", isDirectory: true)
+        let view = ReportView(reporter: ProblemReporter(facts: { Self.facts }, modelFolder: models), showsProjects: true)
+        let size = NSSize(width: 580, height: 620)
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        // A window that is never ordered front, so the view appears without showing.
+        let offscreen = NSWindow(contentRect: hosting.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        offscreen.isReleasedWhenClosed = false
+        offscreen.contentView = hosting
+        for _ in 0..<20 {
+            hosting.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let image = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: image)
+        let png = try #require(image.representation(using: .png, properties: [:]))
+        try png.write(to: folder.appendingPathComponent("\(language)-report-window.png"))
+        offscreen.close()
     }
 }
