@@ -3675,10 +3675,10 @@ yet. Check in a Debug build with the synthetic mail imported, as in the test gui
 English and 简体中文, and the toolbar and the email view in 日本語 and Español too.
 
 - [ ] With Projects on and no mailbox confirmed, open the Projects window. The right side
-  shows How to Use Projects, whose first step has Open Projects Settings…, which opens
-  Settings at Projects. After Start Reading Mail that step is gone. New Project… opens New
-  Project. Selecting an email shows it in place of the steps, and they come back on Needs a
-  Project or Set Aside with nothing selected.
+  shows How to Use Projects, whose first step has Open Projects Settings…, or Settings… in
+  a narrow window, which opens Settings at Projects. After Start Reading Mail that step is
+  gone. New Project… opens New Project. Selecting an email shows it in place of the steps,
+  and they come back on Needs a Project or Set Aside with nothing selected.
 - [ ] The toolbar shows Explain Message Selected in Mail with its envelope, and its help tag
   says that it shows and explains the message selected in Mail. At the smallest window, 760
   points wide, note whether the title is cut or moves into the toolbar's overflow menu, in

@@ -23,7 +23,12 @@ struct ProjectsHowTo: View {
                     .accessibilityAddTraits(.isHeader)
                 if showsSetup {
                     step("Open Mail. In Projects Settings, allow Mail access, choose the mailboxes and click Start Reading Mail.", systemImage: "gearshape") {
-                        Button("Open Projects Settings…", action: openSettings)
+                        // The whole name while it fits, the short one of the lines under the
+                        // list in the third column of a narrow window.
+                        ViewThatFits(in: .horizontal) {
+                            Button("Open Projects Settings…", action: openSettings)
+                            Button("Settings…", action: openSettings)
+                        }
                     }
                 }
                 step("Make a project from a suggestion under Suggested Projects, or with New Project…, and add its folders. Explanations use the files in them.", systemImage: "folder.badge.plus") {

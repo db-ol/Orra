@@ -942,6 +942,8 @@ struct ProjectsWindowViewTests {
         let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {})
         try await render(window, size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window.png"))
         try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 480, height: 700), to: folder.appendingPathComponent("\(language)-projects-how-to.png"))
+        // As wide as the third column of the window at its smallest size.
+        try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 200, height: 1_000), to: folder.appendingPathComponent("\(language)-projects-how-to-narrow.png"))
         // The window at its smallest size: with its title bar and toolbar, and the columns
         // below the toolbar on their own, since the third column of a window that is never
         // shown may stay empty in the first.
