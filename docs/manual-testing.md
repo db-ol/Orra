@@ -90,7 +90,9 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     window's parts to PNG files there, once per test language, which CI never does. The
     sidebar does not draw offscreen, so it is not in them. Since 2026-10-26 it also checks
     that Hide Explanation lasts for the window until the next Explain, and what VoiceOver
-    reads for the state of a disclosure row, and it renders How to Use Projects.
+    reads for the state of a disclosure row, and it renders How to Use Projects, and the
+    window at its smallest size with an explained email and that email view 200 points
+    wide.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
     ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
     made up mail and a fake model: the groups, what each would take, the prompt and its
@@ -1286,7 +1288,11 @@ got worse than the baseline or has no result, see docs/release-gate.md.
   for English, Chinese and emoji, since percent encoding makes a Chinese character 9
   characters long and an emoji up to several dozen, and the sign in link adds 2 for
   every %. Without a title, the first line of the text is the title, at most 120
-  characters and 1,000 encoded, also after a Windows line break.
+  characters and 1,000 encoded, also after a Windows line break. Since 2026-10-26 it
+  also checks that the form asks where the problem happened, with Projects (Preview), and
+  asks reports about Projects to leave out mail, and with
+  TEST_RUNNER_ORRA_SETTINGS_SNAPSHOTS set to a folder it renders Report a Problem with its
+  line about Projects there, which CI never does.
 - On 2026-10-10, curl without a GitHub session asked for
   https://github.com/db-ol/Orra/issues/new with template, title, what-happened, version,
   macos and mac filled in, with Chinese text, a newline, a plus and an ampersand. GitHub
@@ -3291,9 +3297,10 @@ mail.
 The way to the Projects window, added on 2026-10-20, not verified yet. Check in a Debug
 build.
 
-- [ ] With Projects on, Settings > Projects starts with Open Projects Window, and the
-  title of the Settings window reads Projects Settings, while the window it opens reads
-  Projects.
+- [ ] With Projects on and the mailboxes confirmed with Start Reading Mail, Settings >
+  Projects starts with Open Projects Window. Before Start Reading Mail the section follows
+  Mailboxes. The title of the Settings window reads Projects Settings, while the window it
+  opens reads Projects.
 - [ ] Start Reading Mail opens the Projects window, and the mail shows there as Projects
   reads it. Turning Projects off with Keep Data and on again opens it too. Turning
   Projects on before any mailbox choice opens nothing, and launching Orra with Projects
@@ -3363,12 +3370,12 @@ themselves, and a model answer that stops early, which is hard to make by hand.
 - [ ] In an explanation, a point without a chip shows No source provided under it, and an
   empty Before you reply says No decisions found.
 - [ ] The attachments show once, under Original Email after To and Cc, each with its kind,
-  size and whether Projects read its text. Explanation has no list. When Projects did not
-  read a PDF or a Word file, such as one Mail has not downloaded, What it says ends with
-  "Projects could not read an attachment. See Original Email." An email whose only
-  attachment is an image has no such line, also when Mail has not downloaded the image.
-  An email over 16 MB, which Projects saves without its text, still lists its
-  attachments.
+  size and whether Projects read its text. The explanation above the draft has no list.
+  When Projects did not read a PDF or a Word file, such as one Mail has not downloaded,
+  What it says ends with "Projects could not read an attachment. See Original Email." An
+  email whose only attachment is an image has no such line, also when Mail has not
+  downloaded the image. An email over 16 MB, which Projects saves without its text, still
+  lists its attachments.
 - [ ] Control-click an email in the list: the menu reads Assign to Project, as the help
   tag of the project chip does. After you assign two emails from one sender to one
   project, the offer reads "Always assign mail from … to …?". Assigning an email whose
@@ -3687,6 +3694,13 @@ English and 简体中文, and the toolbar and the email view in 日本語 and Es
   email first too. Explain, Explain Again and Explain Message Selected in Mail show the
   explanation again. Cancel in Replace your draft? leaves the choice as it was. Text typed
   into the draft stays, with the cursor in it, when you hide or show the explanation.
+- [ ] At the smallest window, 760 points wide, select an explained email. Explain Again and
+  Hide Explanation, Open Reply in Mail, Reply All and Copy, Change Draft and Undo Change
+  show their whole names, one under another where a row has no room, in all four
+  languages. Type in the change box, then make the window wider and narrower: the text and
+  the cursor stay in the box.
+- [ ] With VoiceOver, Warnings, What it says, Before you reply, Draft and Original Email are
+  headings, so the headings rotor goes from one part of the email view to the next.
 - [ ] Quoted Text, Taken out before the model read it, the answer check line, Why Files Were
   Skipped, the mailbox groups in Settings > Projects and Show the report in Report a Problem
   each open and close with a click anywhere on their row, the words included, show a light
@@ -3695,7 +3709,8 @@ English and 简体中文, and the toolbar and the email view in 日本語 and Es
 - [ ] Settings > Projects says under the switch "Assigning, editing and deleting in Projects
   change only what it keeps on this Mac, never your mail in Mail." Before Start Reading
   Mail the section with Open Projects Window follows Mailboxes, and after it the section is
-  at the top.
+  at the top. With Mail access denied, Open Automation Settings… shows its whole name
+  beside the line about it, in all four languages.
 - [ ] Remove Rule… asks with "New mail is no longer assigned by this rule. Mail it already
   assigned stays in the project."
 - [ ] Above Open Reply in Mail a line says to press ⌘V in the reply window, check the
