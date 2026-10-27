@@ -562,7 +562,9 @@ extension ProjectsEmailArea {
     /// The chips of a point's sources. A file's chip shows its excerpt with its page in a
     /// popover, an attachment's chip the excerpt the model read, this email's chip its text,
     /// and an earlier email's chip shows that email in the window (decision 20). The chips go
-    /// one under another in a column too narrow for a row.
+    /// one under another in a column too narrow for a row. A chip keeps one line and is cut
+    /// in the middle, and the chip of another project's file cuts only the file's name, so
+    /// the project's stays whole.
     struct SourceChips: View {
         let ids: [String]
         let model: ProjectsWindowModel
@@ -605,9 +607,21 @@ extension ProjectsEmailArea {
                 }
             } label: {
                 Label {
-                    Text(verbatim: ProjectsWindowText.source(source))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    if let parts = ProjectsWindowText.sourceParts(source) {
+                        // The project's name stays whole, and the file's name gives way.
+                        HStack(spacing: 0) {
+                            Text(verbatim: parts.file)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text(verbatim: parts.project)
+                                .lineLimit(1)
+                                .layoutPriority(1)
+                        }
+                    } else {
+                        Text(verbatim: ProjectsWindowText.source(source))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 } icon: {
                     Image(systemName: icon)
                 }

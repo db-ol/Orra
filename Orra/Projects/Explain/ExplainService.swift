@@ -109,7 +109,8 @@ nonisolated extension ExplainPrompt.Source {
     /// Whether this is an excerpt of a file of another project than `project`, the email's
     /// project or nil: a file whose origin names another project, which the user did not
     /// choose. A file the user chose for the email counts as the email's own, whatever its
-    /// folder. The draft check, the window's note and its chips go by it.
+    /// folder. The draft check, the window's note and Forget Project go by it, while the
+    /// window labels every file whose origin names another project with that project.
     func isOtherProjectFile(emailProject project: UUID?) -> Bool {
         guard case .file(_, let origin?) = self, let other = origin.project, other != project else { return false }
         return origin.reason != .chosen

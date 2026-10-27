@@ -110,8 +110,9 @@ final class ProjectsEmailModel {
         case mail(messageID: String, sender: String?, date: Date?)
         /// The excerpt of a project file the model read.
         case file(TextChunker.Chunk)
-        /// The excerpt of a file of another project than the email's, with that project's
-        /// name, nil once the project is gone, see
+        /// The excerpt of a file in the folders of another project than the email's, with
+        /// that project's name, nil once the project is gone. A file the user chose for the
+        /// email shows its project too, though the draft may use it, see
         /// `ExplainPrompt.Source.isOtherProjectFile(emailProject:)`.
         case otherProjectFile(TextChunker.Chunk, project: String?)
         /// An attachment of the email, with the excerpt of its text the model read.
@@ -463,7 +464,9 @@ final class ProjectsEmailModel {
                 let sender = email.map { $0.sender.name.isEmpty ? $0.sender.address : $0.sender.name }
                 sources[id] = .mail(messageID: messageID, sender: sender, date: email?.date)
             case .file(let chunk, let origin):
-                if source.isOtherProjectFile(emailProject: explanation.project), let project = origin?.project {
+                // Every file of another project's folders shows that project, a file the
+                // user chose for the email too.
+                if let project = origin?.project, project != explanation.project {
                     sources[id] = .otherProjectFile(chunk, project: actions.projectName(project))
                 } else {
                     sources[id] = .file(chunk)

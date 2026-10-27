@@ -468,8 +468,9 @@ struct ProjectsEmailModelTests {
     }
 
     /// An excerpt of another project's file carries that project's name while the list
-    /// holds it, and none once it is gone. A file the user chose for the email, and one of
-    /// the email's own project, stay files of its own.
+    /// holds it, and none once it is gone. A file the user chose for the email from another
+    /// project's folders carries its project too, while the email's own project's files
+    /// stay files of its own.
     @Test func aSourceOfAnotherProjectCarriesItsNameOrNoneOnceItIsGone() async {
         let kiln = UUID()
         let gone = UUID()
@@ -479,15 +480,20 @@ struct ProjectsEmailModelTests {
         explanation.sources["O2"] = .file(plan, origin: ExplainPrompt.FileOrigin(reason: .match, project: gone))
         explanation.sources["F2"] = .file(plan, origin: ExplainPrompt.FileOrigin(reason: .chosen, project: kiln))
         explanation.sources["F3"] = .file(Self.file, origin: ExplainPrompt.FileOrigin(reason: .match, project: explanation.project))
+        explanation.sources["F4"] = .file(Self.file, origin: ExplainPrompt.FileOrigin(reason: .chosen, project: explanation.project))
         explanation.points[0].sources += ["O1", "O2"]
         let model = model(explanation: { explanation }, projectNames: [kiln: "Kiln studio"])
         await model.load()
         #expect(model.sources["O1"] == .otherProjectFile(plan, project: "Kiln studio"))
         #expect(model.sources["O2"] == .otherProjectFile(plan, project: nil))
-        #expect(model.sources["F2"] == .file(plan))
+        #expect(model.sources["F2"] == .otherProjectFile(plan, project: "Kiln studio"))
         #expect(model.sources["F3"] == .file(Self.file))
+        #expect(model.sources["F4"] == .file(Self.file))
         #expect(model.sources["F1"] == .file(Self.file))
         #expect(!ProjectsEmailArea.SourceChip.isGone(.otherProjectFile(plan, project: nil)))
+        // The chosen file is the email's own for the line under the points.
+        explanation.points[0].sources = ["F2"]
+        #expect(!explanation.citesOtherProjectFile)
     }
 
     /// An attachment's chip shows its name, and the excerpt the model read.

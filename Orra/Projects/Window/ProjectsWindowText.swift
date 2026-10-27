@@ -437,10 +437,24 @@ nonisolated enum ProjectsWindowText {
             return String(localized: "\(name), page \(page)")
         case .otherProjectFile(let chunk, let project):
             let file = Self.source(.file(chunk))
-            return String(localized: "\(file) (\(project ?? String(localized: "another project")))")
+            return String(
+                localized: "\(file) (\(project ?? String(localized: "another project")))",
+                comment: "A file of another project with that project, such as floor-plan.pdf, page 1 (Kiln studio)")
         case .attachment(let name, _):
             return name
         }
+    }
+
+    /// The label of another project's file in two parts, the file and then the project in
+    /// its brackets, as `source(_:)` writes them, so the chip can shorten the file's name and
+    /// keep the project's. Nil for any other source, and when a translation puts the file
+    /// elsewhere than first.
+    static func sourceParts(_ source: ProjectsEmailModel.Source) -> (file: String, project: String)? {
+        guard case .otherProjectFile(let chunk, _) = source else { return nil }
+        let file = Self.source(.file(chunk))
+        let whole = Self.source(source)
+        guard whole.hasPrefix(file), whole.count > file.count else { return nil }
+        return (file, String(whole.dropFirst(file.count)))
     }
 
     /// What VoiceOver reads for a source's chip: its text, for an attachment that it is

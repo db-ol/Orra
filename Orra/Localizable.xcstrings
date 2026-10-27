@@ -25,7 +25,7 @@
       }
     },
     "%@ (%@)" : {
-      "comment" : "A talk key with its label on other keyboards, such as ⌥ Right Option (Alt)",
+      "comment" : "A file of another project with that project, such as floor-plan.pdf, page 1 (Kiln studio)\nA talk key with its label on other keyboards, such as ⌥ Right Option (Alt)",
       "localizations" : {
         "es-419" : {
           "stringUnit" : {

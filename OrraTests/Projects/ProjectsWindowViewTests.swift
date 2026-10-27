@@ -485,6 +485,12 @@ struct ProjectsWindowViewTests {
         #expect(ProjectsWindowText.sourceLabel(.otherProjectFile(notes, project: nil)) == "notes.docx, from another project")
         #expect(ProjectsWindowText.otherProject("Kiln studio") == "From the folders of Kiln studio")
         #expect(ProjectsWindowText.otherProject(nil) == "From the folders of another project")
+        // The chip shortens the file's part and keeps the project's.
+        let parts = ProjectsWindowText.sourceParts(.otherProjectFile(plan, project: "Kiln studio"))
+        #expect(parts?.file == "floor-plan.pdf, page 1")
+        #expect(parts?.project == " (Kiln studio)")
+        #expect(ProjectsWindowText.sourceParts(.otherProjectFile(notes, project: nil))?.project == " (another project)")
+        #expect(ProjectsWindowText.sourceParts(.file(plan)) == nil)
     }
 
     /// The line under the points shows only when a point cites another project's file:
