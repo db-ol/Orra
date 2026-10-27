@@ -132,6 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } openSettings: { [dockIcon] in
         SettingsWindow.show(.projects)
         LaunchWindow.openSettings(dockIcon: dockIcon)
+    } openMail: {
+        MailApp.open()
     }
     let audioInputs = AudioInputList.live()
     let openAtLogin = OpenAtLogin.live()

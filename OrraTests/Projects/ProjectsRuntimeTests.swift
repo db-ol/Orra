@@ -989,7 +989,7 @@ struct ProjectsRuntimeTests {
         #expect(problems(runtime) == [Line(text: "Projects reads no mail yet. Choose its mailboxes in Settings.", action: .settings)])
         choice.choose([.inbox])
         choice.confirm()
-        #expect(problems(runtime) == [Line(text: "Mail is not open. Projects reads new mail while Mail runs.")])
+        #expect(problems(runtime) == [Line(text: "Mail is not open. Projects reads new mail while Mail runs.", action: .openMail)])
 
         mail.update {
             $0.isRunning = true

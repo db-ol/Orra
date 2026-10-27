@@ -860,28 +860,29 @@ struct ProjectsWindowViewTests {
             }
             ProjectsWindowView.RuleOfferBar(text: ProjectsWindowText.ruleOffer(.sender("mei@harbor.example"), project: "Harbor"), accept: {}, decline: {})
             ProjectsWindowView.OlderEmailsBar(shown: 2_000, total: 2_345, load: {})
-            ProjectsWindowView.StatusLines(runtime: runtime, model: listModel, openSettings: {})
+            ProjectsWindowView.StatusLines(runtime: runtime, model: listModel, openSettings: {}, openMail: {})
             Spacer()
         }
         try await render(rows, size: NSSize(width: 340, height: 560), to: folder.appendingPathComponent("\(language)-projects-list.png"))
 
         // The lines about mail as they show under a list with mail, then an empty list,
-        // which says that the fixture's Mail is not open.
+        // which says that the fixture's Mail is not open, with Open Mail.
         let mailLines: [ProjectsWindowView.MailLine] = [
             .init(text: ProjectsWindowText.scan(.reading(saved: 240)), isActivity: true),
             .init(text: String(localized: "Sorting mail…"), isActivity: true),
             .init(text: ProjectsWindowText.scan(.mailIsSlow), action: .tryAgain),
             .init(text: ProjectsWindowText.scan(.notAllowed), action: .settings),
             .init(text: ProjectsWindowText.scan(.failed), action: .tryAgain),
+            .init(text: String(localized: "Mail is not open. Projects reads new mail while Mail runs."), action: .openMail),
         ]
         let lines = VStack(alignment: .leading, spacing: 12) {
             ForEach(mailLines, id: \.text) { line in
-                ProjectsWindowView.MailLineView(line: line, alignment: .leading, runtime: runtime, openSettings: {})
+                ProjectsWindowView.MailLineView(line: line, alignment: .leading, runtime: runtime, openSettings: {}, openMail: {})
             }
             .font(.callout)
             .foregroundStyle(.secondary)
             Divider()
-            ProjectsWindowView.EmptyList(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {})
+            ProjectsWindowView.EmptyList(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {})
                 .frame(maxWidth: .infinity, minHeight: 220)
         }
         .padding(10)
@@ -945,21 +946,26 @@ struct ProjectsWindowViewTests {
         let smallestEmail = smallest.emailModel(for: explained.messageID)
         await smallestEmail.load()
         await smallestEmail.showTranslation(true)
-        try await render(ProjectsWindowView(runtime: runtime, model: smallest, openSettings: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-email.png"))
+        try await render(ProjectsWindowView(runtime: runtime, model: smallest, openSettings: {}, openMail: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-email.png"))
         try await render(ProjectsEmailArea(runtime: runtime, model: smallest, email: explained), size: NSSize(width: 200, height: 3_800), to: folder.appendingPathComponent("\(language)-projects-email-200.png"))
 
         // How to Use Projects shows with nothing selected, without its step about Settings,
         // since the fixture confirmed its mailboxes. Then with that step.
-        let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {})
+        let window = ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {})
         try await render(window, size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window.png"))
         try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 480, height: 700), to: folder.appendingPathComponent("\(language)-projects-how-to.png"))
         // As wide as the third column of the window at its smallest size.
         try await render(ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}), size: NSSize(width: 200, height: 1_000), to: folder.appendingPathComponent("\(language)-projects-how-to-narrow.png"))
+        // With Mail closed, the first step has Open Mail too, in a row at the window's first
+        // size and one under the other at its smallest.
+        let closed = ProjectsHowTo(showsSetup: true, canCreate: true, openSettings: {}, newProject: {}, mailIsRunning: false, openMail: {})
+        try await render(closed, size: NSSize(width: 480, height: 700), to: folder.appendingPathComponent("\(language)-projects-how-to-mail-closed.png"))
+        try await render(closed, size: NSSize(width: 200, height: 1_000), to: folder.appendingPathComponent("\(language)-projects-how-to-mail-closed-narrow.png"))
         // The window at its smallest size: with its title bar and toolbar, and the columns
         // below the toolbar on their own, since the third column of a window that is never
         // shown may stay empty in the first.
-        try await renderWindow(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), to: folder.appendingPathComponent("\(language)-projects-window-760.png"))
-        try await render(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-columns.png"))
+        try await renderWindow(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {}), to: folder.appendingPathComponent("\(language)-projects-window-760.png"))
+        try await render(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}, openMail: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-columns.png"))
         await fixture.stop()
     }
 

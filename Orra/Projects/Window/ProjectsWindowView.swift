@@ -12,6 +12,9 @@ struct ProjectsWindowView: View {
     @State var model: ProjectsWindowModel
     /// Opens Settings at the Projects page.
     let openSettings: () -> Void
+    /// Opens the Mail app on the user's click, MailApp.open in the app. Nil leaves out every
+    /// Open Mail button.
+    var openMail: (() -> Void)? = nil
     /// The project being set up, nil while no setup sheet shows.
     @State private var setup: ProjectsSetupView.Draft?
     @State private var forgetting: Project?
@@ -213,7 +216,7 @@ struct ProjectsWindowView: View {
                 }
                 .overlay {
                     if model.rows.isEmpty {
-                        EmptyList(runtime: runtime, model: model, openSettings: openSettings)
+                        EmptyList(runtime: runtime, model: model, openSettings: openSettings, openMail: openMail)
                     }
                 }
                 .onChange(of: model.showCount) {
@@ -229,7 +232,7 @@ struct ProjectsWindowView: View {
                     Task { await model.loadOlderEmails() }
                 }
             }
-            StatusLines(runtime: runtime, model: model, openSettings: openSettings)
+            StatusLines(runtime: runtime, model: model, openSettings: openSettings, openMail: openMail)
         }
     }
 
@@ -269,7 +272,8 @@ struct ProjectsWindowView: View {
         } else {
             ProjectsHowTo(
                 showsSetup: !runtime.choice.isConfirmed, canCreate: runtime.phase == .on,
-                openSettings: openSettings, newProject: { setup = ProjectsSetupView.Draft() })
+                openSettings: openSettings, newProject: { setup = ProjectsSetupView.Draft() },
+                mailIsRunning: runtime.mailIsRunning, openMail: openMail)
         }
     }
 }
@@ -445,6 +449,8 @@ extension ProjectsWindowView {
             case tryAgain
             /// Opens Settings at the Projects page.
             case settings
+            /// Opens the Mail app, on the user's click.
+            case openMail
         }
 
         var text: String
@@ -454,12 +460,13 @@ extension ProjectsWindowView {
     }
 
     /// A line about mail coming in, with a spinner while Projects works on it, and its
-    /// button.
+    /// button. Open Mail shows only with `openMail`.
     struct MailLineView: View {
         let line: MailLine
         let alignment: HorizontalAlignment
         let runtime: ProjectsRuntime
         let openSettings: () -> Void
+        var openMail: (() -> Void)? = nil
 
         var body: some View {
             VStack(alignment: alignment, spacing: 6) {
@@ -477,6 +484,10 @@ extension ProjectsWindowView {
                     }
                 case .settings?:
                     Button("Settings…", action: openSettings)
+                case .openMail?:
+                    if let openMail {
+                        Button("Open Mail", action: openMail)
+                    }
                 case nil:
                     EmptyView()
                 }
@@ -491,6 +502,7 @@ extension ProjectsWindowView {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel
         let openSettings: () -> Void
+        var openMail: (() -> Void)? = nil
 
         var body: some View {
             let lines = StatusLines.mailLines(runtime: runtime)
@@ -506,7 +518,7 @@ extension ProjectsWindowView {
             } else if !lines.isEmpty {
                 VStack(spacing: 16) {
                     ForEach(lines, id: \.text) { line in
-                        MailLineView(line: line, alignment: .center, runtime: runtime, openSettings: openSettings)
+                        MailLineView(line: line, alignment: .center, runtime: runtime, openSettings: openSettings, openMail: openMail)
                     }
                 }
                 .multilineTextAlignment(.center)
@@ -532,6 +544,7 @@ extension ProjectsWindowView {
         let runtime: ProjectsRuntime
         let model: ProjectsWindowModel
         let openSettings: () -> Void
+        var openMail: (() -> Void)? = nil
 
         var body: some View {
             let lines = Self.lines(runtime: runtime, notice: model.notice)
@@ -550,7 +563,7 @@ extension ProjectsWindowView {
                         }
                     }
                     ForEach(mailLines, id: \.text) { line in
-                        MailLineView(line: line, alignment: .leading, runtime: runtime, openSettings: openSettings)
+                        MailLineView(line: line, alignment: .leading, runtime: runtime, openSettings: openSettings, openMail: openMail)
                     }
                     if model.isReadingSelection {
                         HStack(spacing: 8) {
@@ -577,7 +590,8 @@ extension ProjectsWindowView {
         /// What Projects does with mail now, reading or sorting it, then why it reads none
         /// or stopped reading: no mailbox confirmed, Mail not open, Orra not allowed to
         /// control Mail, Mail slow to answer, or mail that could not be read. Try Again goes
-        /// with the last two, where asking Mail again helps.
+        /// with the last two, where asking Mail again helps, and Open Mail with Mail not
+        /// open.
         static func mailLines(runtime: ProjectsRuntime) -> [MailLine] {
             guard runtime.phase == .on else { return [] }
             var lines: [MailLine] = []
@@ -589,7 +603,7 @@ extension ProjectsWindowView {
             if !runtime.choice.isConfirmed {
                 lines.append(MailLine(text: ProjectsWindowText.selection(.noMailboxChosen), action: .settings))
             } else if !runtime.mailIsRunning {
-                lines.append(MailLine(text: String(localized: "Mail is not open. Projects reads new mail while Mail runs.")))
+                lines.append(MailLine(text: String(localized: "Mail is not open. Projects reads new mail while Mail runs."), action: .openMail))
             } else if let state = runtime.scanState {
                 switch state {
                 case .reading: break

@@ -3,8 +3,9 @@ import SwiftUI
 /// The third column of the Projects window while no email is selected and no project's page
 /// shows: how Projects goes from the mailboxes to a reply in Mail, in five steps, with the
 /// buttons for the first two. The step about Settings shows only until Start Reading Mail
-/// confirmed the mailboxes. It shows at every open until an email is selected, so it keeps
-/// no setting of its own. The last line says that Projects changes only its own data.
+/// confirmed the mailboxes, with Open Mail first while Mail is closed. It shows at every
+/// open until an email is selected, so it keeps no setting of its own. The last line says
+/// that Projects changes only its own data.
 struct ProjectsHowTo: View {
     /// Whether the mailboxes wait for Start Reading Mail, which the first step is about.
     let showsSetup: Bool
@@ -14,6 +15,11 @@ struct ProjectsHowTo: View {
     let openSettings: () -> Void
     /// Opens New Project.
     let newProject: () -> Void
+    /// Whether Mail runs, as the runtime last read it. While it does not, the first step
+    /// offers Open Mail.
+    var mailIsRunning = true
+    /// Opens the Mail app on the user's click. Nil leaves out Open Mail.
+    var openMail: (() -> Void)? = nil
 
     var body: some View {
         ScrollView {
@@ -23,12 +29,7 @@ struct ProjectsHowTo: View {
                     .accessibilityAddTraits(.isHeader)
                 if showsSetup {
                     step("Open Mail. In Projects Settings, allow Mail access, choose the mailboxes and click Start Reading Mail.", systemImage: "gearshape") {
-                        // The whole name while it fits, the short one of the lines under the
-                        // list in the third column of a narrow window.
-                        ViewThatFits(in: .horizontal) {
-                            Button("Open Projects Settings…", action: openSettings)
-                            Button("Settings…", action: openSettings)
-                        }
+                        setupButtons
                     }
                 }
                 step("Make a project from a suggestion under Suggested Projects, or with New Project…, and add its folders. Explanations use the files in them.", systemImage: "folder.badge.plus") {
@@ -47,6 +48,39 @@ struct ProjectsHowTo: View {
             .frame(maxWidth: 440, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// Open Projects Settings…, with Open Mail before it while Mail is closed. The whole
+    /// names in a row while they fit, then the short Settings… of the lines under the list,
+    /// and in the third column of a narrow window one under the other.
+    @ViewBuilder private var setupButtons: some View {
+        if let openMail, !mailIsRunning {
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Button("Open Mail", action: openMail)
+                    Button("Open Projects Settings…", action: openSettings)
+                }
+                HStack {
+                    Button("Open Mail", action: openMail)
+                    Button("Settings…", action: openSettings)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("Open Mail", action: openMail)
+                    settingsButton
+                }
+            }
+        } else {
+            settingsButton
+        }
+    }
+
+    /// The whole name while it fits, the short one of the lines under the list in the third
+    /// column of a narrow window.
+    private var settingsButton: some View {
+        ViewThatFits(in: .horizontal) {
+            Button("Open Projects Settings…", action: openSettings)
+            Button("Settings…", action: openSettings)
         }
     }
 
