@@ -16,9 +16,11 @@ import Observation
 ///
 /// A sender that looks spoofed, by a lookalike domain or a name that does not match its
 /// address, gets no files at all: no search, no tick and no file for the handoff. An email
-/// with a warning of `ExplainService.otherProjectWarnings` gets files of its own project
-/// only, and none in no project, as Explain gives it no other project's passage. Mail set
-/// aside gets no search, as it gets no files in Explain either.
+/// whose own checks found a warning of `ExplainService.otherProjectWarnings`, in the email or
+/// its attachments, gets files of its own project only, and none in no project, as Explain
+/// gives it no other project's passage. A finding in a project file, the thread or the
+/// project's other mail is about that text, not the email, see `scopeWarnings(_:listed:)`.
+/// Mail set aside gets no search, as it gets no files in Explain either.
 ///
 /// The ticks live in memory only, for as long as the window keeps the email view: they go
 /// when the window closes, when Forget Project or Projects turning off lets go of the email
@@ -104,7 +106,8 @@ final class ProjectsReplyFiles {
     /// The addresses a reply to all reaches, the user's own left out: those of the facts, or
     /// those of the draft check for an explanation without facts.
     private(set) var recipients: [String] = []
-    /// The warnings of the explanation and of the email's list.
+    /// The warnings about the email itself, from its explanation and its list, see
+    /// `scopeWarnings(_:listed:)`.
     private(set) var warnings: Set<ProjectsWarning> = []
     /// Whether sorting set the email aside.
     private(set) var isSetAside = false
@@ -151,13 +154,28 @@ final class ProjectsReplyFiles {
         Self.scope(warnings: warnings, emailProject: emailProject)
     }
 
+    /// The warnings that say the sender may not be who they claim to be.
+    nonisolated static let spoofWarnings: Set<ProjectsWarning> = [.lookalikeDomain, .senderNameMismatch]
+
     /// Whether the warnings say the sender may not be who they claim to be.
     nonisolated static func looksSpoofed(_ warnings: Set<ProjectsWarning>) -> Bool {
-        !warnings.isDisjoint(with: [.lookalikeDomain, .senderNameMismatch])
+        !warnings.isDisjoint(with: spoofWarnings)
     }
 
-    /// Where the files of a request are looked for, by the warnings of an email's
-    /// explanation and of its list: nowhere for a sender that looks spoofed, the email's
+    /// The warnings about the email itself, which decide where the files of a request are
+    /// looked for: what the checks of the explanation found in the email and its attachments,
+    /// as Explain finds them before its search, see ExplainService.retrievalWarnings, and a
+    /// sender that the list's warnings say may not be who they claim. A finding in a project
+    /// file, a message of the thread or the project's other mail is about that text, not
+    /// about the email, so it keeps no project out. The list holds every kind that any
+    /// explanation of the email found, wherever it was, so only its kinds about the sender
+    /// count. The opt in FileRequestEvaluationTests reads it too.
+    nonisolated static func scopeWarnings(_ found: [ExplainPrompt.Finding], listed: [ProjectsWarning]) -> Set<ProjectsWarning> {
+        Set(found.filter(\.place.isTheEmail).map(\.warning)).union(listed.filter(spoofWarnings.contains))
+    }
+
+    /// Where the files of a request are looked for, by the warnings about the email, see
+    /// `scopeWarnings(_:listed:)`: nowhere for a sender that looks spoofed, the email's
     /// project only for a warning that keeps other projects out, see
     /// ExplainService.otherProjectWarnings, and every project otherwise. The opt in
     /// FileRequestEvaluationTests reads it too.
@@ -236,7 +254,7 @@ final class ProjectsReplyFiles {
         }
         recipients = facts?.replyAll ?? (explanation.draftCheck?.recipients ?? []).map { ProjectsAddress.normalized($0.address) ?? $0.address.lowercased() }
         let listed = await actions.listed(messageID)
-        let warnings = Set(explanation.warningKinds + (listed?.warnings ?? []))
+        let warnings = Self.scopeWarnings(explanation.warnings, listed: listed?.warnings ?? [])
         if warnings != self.warnings {
             self.warnings = warnings
         }

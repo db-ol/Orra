@@ -25,11 +25,12 @@ import Testing
 /// RetrievalEvaluationTests does, its thread from the set's thread ids and Message-ID links,
 /// or for an attack item from its earlier messages, and its project from the labels. It
 /// finds the warnings and whether a reply is due as `ExplainService.prepare` does, the facts
-/// of the reply as `finish` does, where the files are looked for as the email view does, see
-/// ProjectsReplyFiles.scope(warnings:emailProject:), and the files of each request with
-/// RequestedFiles. It needs no model and no Mail, and sends no Apple Event. It writes
-/// file-requests.jsonl, one row a mail, and file-requests.md with the tables and the bar,
-/// and prints counts only.
+/// of the reply as `finish` does, where the files are looked for as the email view does, by
+/// the warnings about the email itself, see ProjectsReplyFiles.scopeWarnings(_:listed:) and
+/// scope(warnings:emailProject:), and the files of each request with RequestedFiles. It
+/// needs no model and no Mail, and sends no Apple Event. It writes file-requests.jsonl, one
+/// row a mail, and file-requests.md with the tables, the bar, the files offered to the
+/// attack items and the files of other projects offered, and prints counts only.
 ///
 /// TEST_RUNNER_ORRA_FILE_REQUESTS_MODE is both, as the app searches and the default, names
 /// or text, which fuse the name lists or the text list alone, or terms, which adds the
@@ -166,8 +167,11 @@ struct FileRequestEvaluationTests {
             let prepared = await ExplainService.prepare(gathered, language: .en, timeZone: Self.timeZone, countTokens: { $0.count })
             let facts = ExplainService.replyFacts(prepared)
             let warnings = Set(prepared.prompt.checks.map(\.warning))
+            // Where the view looks: by the warnings about the email itself, not those of the
+            // thread's messages.
+            let emailWarnings = ProjectsReplyFiles.scopeWarnings(prepared.prompt.checks, listed: [])
             let replyIsDue = if case .reply = prepared.reply { true } else { false }
-            let scope = ProjectsReplyFiles.scope(warnings: warnings, emailProject: project)
+            let scope = ProjectsReplyFiles.scope(warnings: emailWarnings, emailProject: project)
             let requests = replyIsDue ? facts?.requests ?? [] : []
             let terms = savedTerms[mail.id] ?? []
 
@@ -223,7 +227,8 @@ struct FileRequestEvaluationTests {
             rows.append(Row(
                 id: mail.id, source: mail.source.rawValue, language: mail.language, project: mail.project ?? "none",
                 replyIsDue: replyIsDue, senderIsKnown: facts?.senderIsKnown,
-                warnings: ProjectsWarning.allCases.filter(warnings.contains).map(\.rawValue), scope: Self.name(scope),
+                warnings: ProjectsWarning.allCases.filter(warnings.contains).map(\.rawValue),
+                emailWarnings: ProjectsWarning.allCases.filter(emailWarnings.contains).map(\.rawValue), scope: Self.name(scope),
                 requests: found, kindsInWords: Array(Set(inWords.flatMap(Self.kinds(of:)))).sorted(),
                 asks: label?.asks ?? [], expect: label?.expect ?? [],
                 spoofed: (label?.spoofed ?? false) || !Set(mail.attack).isDisjoint(with: ["lookalike_domain", "sender_name_mismatch"]),
@@ -385,7 +390,11 @@ struct FileRequestEvaluationTests {
         var project: String
         var replyIsDue: Bool
         var senderIsKnown: Bool?
+        /// Every warning the checks found, the thread's messages too.
         var warnings: [String]
+        /// The warnings about the email itself, which decide the scope, see
+        /// ProjectsReplyFiles.scopeWarnings(_:listed:).
+        var emailWarnings: [String]
         var scope: String
         var requests: [Found]
         /// The kinds FileRequests finds in the sender's words, a reply due or not.

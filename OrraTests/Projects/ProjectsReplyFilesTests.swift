@@ -400,6 +400,37 @@ struct ProjectsReplyFilesTests {
         #expect(lines.last == "平面图草图.png: Mail did not take it.")
     }
 
+    /// Where the files are looked for follows the warnings about the email itself and its
+    /// attachments. Hidden text in a project file, a line to an assistant in a message of the
+    /// thread and a claim to come from Orra in the project's other mail are about those
+    /// texts and keep no project out, also once the list holds their kinds, as the store
+    /// adds every kind an explanation found to the email's.
+    @Test func onlyTheEmailsOwnWarningsNarrowWhereFilesAreLookedFor() async throws {
+        let elsewhere = [
+            ExplainPrompt.Finding(warning: .hiddenText, place: .file("F1")),
+            ExplainPrompt.Finding(warning: .instructionToAssistant, place: .thread("T1")),
+            ExplainPrompt.Finding(warning: .claimsToBeOrra, place: .projectMail("M1")),
+        ]
+        fakes.update { $0.listed = Self.listed(warnings: [.hiddenText, .instructionToAssistant, .claimsToBeOrra]) }
+        var plainExplanation = Self.explanation()
+        plainExplanation.warnings = elsewhere
+        let plainOne = plainExplanation
+        let plain = model { plainOne }
+        try await loaded(plain)
+        #expect(plain.replyFiles.scope == .everyProject)
+        #expect(fakes.value.searches == [nil])
+        // In an attachment of the email, hidden text keeps other projects out.
+        var attachedExplanation = plainExplanation
+        attachedExplanation.warnings.append(ExplainPrompt.Finding(warning: .hiddenText, place: .attachment("A1")))
+        let attachedOne = attachedExplanation
+        let flagged = model { attachedOne }
+        try await loaded(flagged)
+        #expect(flagged.replyFiles.scope == .ownProject(Self.harbor))
+        #expect(fakes.value.searches == [nil, [Self.harbor]])
+        #expect(ProjectsReplyFiles.scopeWarnings(elsewhere, listed: [.hiddenText, .senderNameMismatch]) == [.senderNameMismatch])
+        #expect(ProjectsReplyFiles.scopeWarnings([ExplainPrompt.Finding(warning: .forwardRequest, place: .email)], listed: []) == [.forwardRequest])
+    }
+
     /// An email Projects wrote no draft for gets Open Reply in Mail once a file is ticked,
     /// and nothing goes on the clipboard.
     @Test func withoutADraftOpenReplyAttachesWithoutTheClipboard() async throws {
