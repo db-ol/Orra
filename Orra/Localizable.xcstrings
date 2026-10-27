@@ -980,6 +980,28 @@
         }
       }
     },
+    "A preview. It works with the Mail app on this Mac." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista previa. Funciona con la app Mail de esta Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビュー版です。このMacの“メール”アプリと連携して動作します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览版，适用于这台 Mac 上的“邮件” App。"
+          }
+        }
+      }
+    },
     "A reply reaches someone who is not one of the project's people." : {
       "localizations" : {
         "es-419" : {
@@ -1376,6 +1398,28 @@
         }
       }
     },
+    "Add the people you exchange mail with on this project. Their mail goes to the project, and a reply to them counts as staying inside the project." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agrega a las personas con las que intercambias correos en este proyecto. Su correo va al proyecto, y una respuesta a ellas se considera dentro del proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このプロジェクトでメールをやり取りする相手を追加します。その人のメールはこのプロジェクトに振り分けられ、その人への返信もプロジェクト内のやり取りとみなされます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加在这个项目中与你有邮件往来的人。他们的邮件会归入这个项目，回复给他们也算在项目之内。"
+          }
+        }
+      }
+    },
     "Added “%@” to Vocabulary" : {
       "localizations" : {
         "es-419" : {
@@ -1548,6 +1592,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允许辅助功能"
+          }
+        }
+      }
+    },
+    "Allow Mail access" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permitir acceso a Mail"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”へのアクセスを許可"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许访问“邮件”"
+          }
+        }
+      }
+    },
+    "Allow Mail access first." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Primero permite el acceso a Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先に“メール”へのアクセスを許可してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先允许访问“邮件”。"
           }
         }
       }
@@ -3007,6 +3095,28 @@
         }
       }
     },
+    "Choose mailboxes and start reading" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir buzones y empezar a leer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メールボックスを選んで読み取りを開始"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择邮箱并开始读取"
+          }
+        }
+      }
+    },
     "Choose Orra Microphone as the microphone in the meeting app. Orra speaks one translation after another, and waits while you dictate." : {
       "localizations" : {
         "es-419" : {
@@ -4368,6 +4478,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下载语音模型（%@）"
+          }
+        }
+      }
+    },
+    "Download the cleanup model" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descargar el modelo de limpieza"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整文モデルをダウンロード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载整理模型"
           }
         }
       }
@@ -6094,6 +6226,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入音频文件…"
+          }
+        }
+      }
+    },
+    "In progress" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En curso"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "進行中"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进行中"
+          }
+        }
+      }
+    },
+    "In the Projects window, click New Project… and add the project's folders, so explanations can use their files. You can also explain an email that has no project." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En la ventana Proyectos, haz clic en Nuevo proyecto… y agrega las carpetas del proyecto, para que las explicaciones usen sus archivos. También puedes explicar un correo que no tiene proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”ウインドウで“新規プロジェクト…”をクリックし、プロジェクトのフォルダを追加すると、説明にそのファイルが使われます。プロジェクトのないメールも説明できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在“项目”窗口中点按“新建项目…”，并添加项目的文件夹，解释时就能用到其中的文件。没有归入项目的邮件也可以解释。"
           }
         }
       }
@@ -7864,6 +8040,28 @@
         }
       }
     },
+    "Mail is open." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail está abierto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”は開いています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“邮件”已打开。"
+          }
+        }
+      }
+    },
     "Mail is slow to answer. Projects tries again later." : {
       "localizations" : {
         "es-419" : {
@@ -8036,6 +8234,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用“建议的项目”中的建议，或用“新建项目…”创建项目，并添加项目的文件夹。解释会用到其中的文件。"
+          }
+        }
+      }
+    },
+    "Make a project with New Project…, and add its folders and the people you exchange mail with. Explanations use the files in its folders. Once Projects has read your mail, it may also suggest projects in the sidebar." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crea un proyecto con Nuevo proyecto… y agrega sus carpetas y las personas con las que intercambias correos. Las explicaciones usan los archivos de sus carpetas. Cuando Proyectos haya leído tu correo, también puede sugerir proyectos en la barra lateral."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“新規プロジェクト…”でプロジェクトを作成し、そのフォルダと、メールをやり取りする相手を追加します。説明には、フォルダ内のファイルが使われます。“プロジェクト”がメールを読み取った後は、サイドバーにプロジェクトの候補が表示されることもあります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用“新建项目…”创建项目，并添加项目的文件夹和与你有邮件往来的人。解释会用到这些文件夹中的文件。“项目”读取你的邮件后，还可能在边栏中建议项目。"
+          }
+        }
+      }
+    },
+    "Make your first project (optional)" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crear tu primer proyecto (opcional)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初のプロジェクトを作成（任意）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建第一个项目（可选）"
           }
         }
       }
@@ -9472,6 +9714,28 @@
         }
       }
     },
+    "Open Mail" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir Mail"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”を開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“邮件”"
+          }
+        }
+      }
+    },
     "Open Mail first." : {
       "localizations" : {
         "es-419" : {
@@ -9494,24 +9758,46 @@
         }
       }
     },
-    "Open Mail first. Orra never opens it." : {
+    "Open Mail first. Orra can check or ask for access only while Mail is open." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Primero abre Mail. Orra nunca lo abre."
+            "value" : "Primero abre Mail. Orra solo puede comprobar o pedir el acceso mientras Mail está abierto."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "先に“メール”を開いてください。Orraがアプリを開くことはありません。"
+            "value" : "先に“メール”を開いてください。Orraがアクセスを確認したり求めたりできるのは、“メール”が開いているときだけです。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请先打开“邮件”。Orra 从不自行打开它。"
+            "value" : "请先打开“邮件”。只有“邮件”打开时，Orra 才能检查或请求访问权限。"
+          }
+        }
+      }
+    },
+    "Open Mail to check access." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre Mail para comprobar el acceso."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクセスを確認するには、“メール”を開いてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“邮件”即可检查访问权限。"
           }
         }
       }
@@ -9714,6 +10000,28 @@
         }
       }
     },
+    "Open the Mail app" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir la app Mail"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“メール”アプリを開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开“邮件” App"
+          }
+        }
+      }
+    },
     "Or drag folders here. Projects reads the files in them and never changes them." : {
       "localizations" : {
         "es-419" : {
@@ -9799,6 +10107,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Orra"
+          }
+        }
+      }
+    },
+    "Orra can read mail in the Mail app." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra puede leer el correo de la app Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraは“メール”アプリのメールを読み取れます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra 可以读取“邮件” App 中的邮件。"
           }
         }
       }
@@ -10419,6 +10749,28 @@
         }
       }
     },
+    "Orra opens Mail only when you click Open Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orra abre Mail solo cuando haces clic en Abrir Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Orraが“メール”を開くのは、“‘メール’を開く”をクリックしたときだけです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只有你点按“打开‘邮件’”时，Orra 才会打开“邮件”。"
+          }
+        }
+      }
+    },
     "Orra opens the folder with the report file. Drag the file into the page on GitHub." : {
       "localizations" : {
         "es-419" : {
@@ -10463,24 +10815,24 @@
         }
       }
     },
-    "Orra reads mail in the Mail app only while Mail is open, and never opens it." : {
+    "Orra reads mail in the Mail app only while Mail is open." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra lee el correo en la app Mail solo mientras está abierta, y nunca la abre."
+            "value" : "Orra lee el correo en la app Mail solo mientras está abierta."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orraは、“メール”アプリが開いている間だけメールを読み取り、アプリを開くことはありません。"
+            "value" : "Orraは、“メール”アプリが開いている間だけメールを読み取ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Orra 只在“邮件” App 打开时读取其中的邮件，从不自行打开它。"
+            "value" : "Orra 只在“邮件” App 打开时读取其中的邮件。"
           }
         }
       }
@@ -12160,24 +12512,46 @@
         }
       }
     },
-    "Projects reads mail only in the mailboxes you choose, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail." : {
+    "Projects reads mail in the Mail app on this Mac, only while Mail is open." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proyectos lee el correo solo en los buzones que elijas, y solo mientras Mail está abierto. Nunca envía, mueve ni elimina correo. A continuación, macOS te pregunta si Orra puede controlar Mail."
+            "value" : "Proyectos lee el correo de la app Mail en esta Mac, solo mientras Mail está abierto."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“プロジェクト”は、選んだメールボックスのメールのみを、“メール”が開いている間だけ読み取ります。メールを送信、移動、削除することはありません。次に、macOSがOrraによる“メール”の制御を許可するかどうかを確認します。"
+            "value" : "“プロジェクト”は、このMacの“メール”アプリにあるメールを、“メール”が開いている間だけ読み取ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“项目”只读取你选择的邮箱中的邮件，而且只在“邮件”打开时读取。它从不发送、移动或删除邮件。接下来 macOS 会询问是否允许 Orra 控制“邮件”。"
+            "value" : "“项目”读取这台 Mac 上“邮件” App 中的邮件，而且只在“邮件”打开时读取。"
+          }
+        }
+      }
+    },
+    "Projects reads mail only in the mailboxes you choose, and only while Mail is open. It never sends, moves or deletes mail. macOS asks next whether Orra may control Mail. Click Allow." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos lee el correo solo en los buzones que elijas, y solo mientras Mail está abierto. Nunca envía, mueve ni elimina correo. A continuación, macOS te pregunta si Orra puede controlar Mail. Haz clic en Permitir."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、選んだメールボックスのメールのみを、“メール”が開いている間だけ読み取ります。メールを送信、移動、削除することはありません。次に、macOSがOrraによる“メール”の制御を許可するかどうかを確認します。“許可”をクリックしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”只读取你选择的邮箱中的邮件，而且只在“邮件”打开时读取。它从不发送、移动或删除邮件。接下来 macOS 会询问是否允许 Orra 控制“邮件”，请点按“允许”。"
           }
         }
       }
@@ -12354,6 +12728,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“项目”使用“整理文字”的本地模型，在这台 Mac 上运行。"
+          }
+        }
+      }
+    },
+    "Projects works with the Mail app on this Mac. Before you turn it on, check that your mail shows in Mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proyectos funciona con la app Mail de esta Mac. Antes de activarlo, asegúrate de que tu correo aparezca en Mail."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”は、このMacの“メール”アプリと連携して動作します。オンにする前に、メールが“メール”に表示されることを確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“项目”适用于这台 Mac 上的“邮件” App。打开之前，请先确认你的邮件能在“邮件”中看到。"
           }
         }
       }
@@ -14035,6 +14431,50 @@
         }
       }
     },
+    "Set Up Projects" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empezar a usar Proyectos"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”を使い始める"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始使用“项目”"
+          }
+        }
+      }
+    },
+    "Set Up Projects…" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configurar Proyectos…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“プロジェクト”を設定…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置“项目”…"
+          }
+        }
+      }
+    },
     "Settings…" : {
       "localizations" : {
         "es-419" : {
@@ -14527,24 +14967,24 @@
         }
       }
     },
-    "Sorts your mail into projects and explains each email with the files of its project." : {
+    "Sorts your mail into projects and explains each email with the files of your projects." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Clasifica tu correo en proyectos y explica cada correo con los archivos de su proyecto."
+            "value" : "Clasifica tu correo en proyectos y explica cada correo con los archivos de tus proyectos."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "メールをプロジェクトごとに振り分け、各メールをそのプロジェクトのファイルと合わせて説明します。"
+            "value" : "メールをプロジェクトごとに振り分け、各メールをプロジェクトのファイルと合わせて説明します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "把你的邮件分到各个项目里，并结合项目里的文件解释每封邮件。"
+            "value" : "把你的邮件分到各个项目里，并结合你各个项目里的文件解释每封邮件。"
           }
         }
       }
@@ -15383,6 +15823,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法载入整理模型。"
+          }
+        }
+      }
+    },
+    "The cleanup model is not on this Mac yet. Download it in Projects Settings to explain mail." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El modelo de limpieza todavía no está en esta Mac. Descárgalo en la configuración de Proyectos para explicar el correo."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacにはまだ整文モデルがありません。メールを説明するには、“プロジェクト”設定でダウンロードしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 上还没有整理模型。请在“项目”设置中下载，才能解释邮件。"
           }
         }
       }
@@ -17583,6 +18045,28 @@
         }
       }
     },
+    "Tick at least one mailbox first." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Primero marca al menos un buzón."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先にメールボックスに1つ以上チェックを入れてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先至少勾选一个邮箱。"
+          }
+        }
+      }
+    },
     "Title (optional)" : {
       "localizations" : {
         "es-419" : {
@@ -18883,6 +19367,28 @@
         }
       }
     },
+    "When macOS asks whether Orra may control Mail, click Allow." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cuando macOS pregunte si Orra puede controlar Mail, haz clic en Permitir."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOSから、Orraによる“メール”の制御を許可するかどうか尋ねられたら、“許可”をクリックしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 询问是否允许 Orra 控制“邮件”时，请点按“允许”。"
+          }
+        }
+      }
+    },
     "When this is on, each time you start a dictation, Orra reads up to 1,000 characters before the cursor in the field you dictate into and the title of its window, never a password field or a password manager. It gives the speech model up to 40 names and rare words from that text along with your vocabulary, never the text itself. The text stays in memory for that dictation only and is never saved or logged. A known risk: when a name on screen sounds like the name you say, Orra may write the name on screen instead. It works in apps that let macOS read their text." : {
       "localizations" : {
         "es-419" : {
@@ -19188,6 +19694,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "之后也可以在“设置”的“听写”中更改。"
+          }
+        }
+      }
+    },
+    "You can do the next steps while it downloads." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puedes seguir con los pasos siguientes mientras se descarga."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロード中も、次の手順に進めます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载期间，你可以继续完成下面的步骤。"
           }
         }
       }

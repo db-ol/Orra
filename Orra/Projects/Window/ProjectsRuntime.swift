@@ -64,6 +64,9 @@ final class ProjectsRuntime {
         var modelEnvironment: (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment
         /// Whether the cleanup model is on this Mac, read where it can be observed.
         var modelIsInstalled: () -> Bool
+        /// Where the cleanup model's download stands while the model is not on this Mac, for
+        /// the line under the mail list, read where it can be observed.
+        var modelDownloadStatus: () -> ModelDownloadStatus
         /// Try Loading Again: looks at the cleanup model's files, hashes included, and loads
         /// the model again, see TextCleanup.retryLoading().
         var retryLoadingModel: @Sendable () async -> Void
@@ -96,6 +99,7 @@ final class ProjectsRuntime {
             whenDictationStarts: @escaping (@escaping () -> Void) -> Void = { _ in },
             modelEnvironment: @escaping (_ memoryPressure: @escaping () -> ProjectsMemoryPressure.Level) -> ProjectsModelEnvironment,
             modelIsInstalled: @escaping () -> Bool,
+            modelDownloadStatus: @escaping () -> ModelDownloadStatus = { .none },
             retryLoadingModel: @escaping @Sendable () async -> Void = {},
             loadTokenCounter: @escaping @Sendable () async throws -> (@Sendable (String) -> Int)?,
             handoff: ReplyHandoff,
@@ -116,6 +120,7 @@ final class ProjectsRuntime {
             self.whenDictationStarts = whenDictationStarts
             self.modelEnvironment = modelEnvironment
             self.modelIsInstalled = modelIsInstalled
+            self.modelDownloadStatus = modelDownloadStatus
             self.retryLoadingModel = retryLoadingModel
             self.loadTokenCounter = loadTokenCounter
             self.handoff = handoff
@@ -220,6 +225,19 @@ final class ProjectsRuntime {
         case notAllowed
         /// Mail could not give some mail, or what the scan read could not be saved.
         case failed
+    }
+
+    /// Where the cleanup model's download stands, for the line under the mail list while the
+    /// model is not on this Mac. The app maps it from the installer of TextCleanup.
+    nonisolated enum ModelDownloadStatus: Equatable, Sendable {
+        /// The model is on this Mac, or Orra still looks for it on disk.
+        case none
+        /// The model downloads, with the bytes so far and in all.
+        case downloading(bytes: Int64, total: Int64)
+        /// Orra checks the files it downloaded.
+        case verifying
+        /// The model is not on this Mac and no download runs, also after one failed.
+        case missing
     }
 
     /// What runs while Projects is on.
