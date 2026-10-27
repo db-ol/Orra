@@ -320,9 +320,10 @@ struct ExplainEvaluationTests {
         await database.close()
         if let failure { throw failure }
 
+        // Every explanation may have failed with chosen files, which leaves no time.
         let sorted = times.sorted()
-        let median = sorted[sorted.count / 2]
-        let p90 = sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.9).rounded(.up)) - 1)]
+        let median = sorted.isEmpty ? .zero : sorted[sorted.count / 2]
+        let p90 = sorted.isEmpty ? .zero : sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.9).rounded(.up)) - 1)]
         let summary = "\(selected.count) mails: reply decision as labeled for \(decisionsRight), draft language as labeled for \(languagesRight) of \(dueReplies) due replies, \(Self.seconds(median)) a mail at the median and \(Self.seconds(p90)) at p90, \(failed) failed."
         try report.write(contentsOf: Data(("\n## Summary\n\n" + summary + "\n").utf8))
         // Counts only.
