@@ -229,7 +229,20 @@ nonisolated enum ProjectsWindowText {
         case .actionClaim: String(localized: "A sentence that claims something was done was taken out. Orra does nothing in Mail for you.")
         case .assistantVoice: String(localized: "A sentence that speaks as an assistant was taken out.")
         case .projectData: String(localized: "Project data was taken out, since the reply reaches someone outside the project.")
+        case .otherProjectData: String(localized: "Data from another project's files was taken out.")
+        case .otherProjectText: String(localized: "A sentence from another project's file was taken out.")
         }
+    }
+
+    /// The line under the points when one cites an excerpt of another project's file.
+    static var otherProjectsNote: String {
+        String(localized: "Some sources are files of other projects. They are for you only, so check that the draft holds nothing from them.")
+    }
+
+    /// Whose folders hold a file of another project, for its excerpt.
+    static func otherProject(_ name: String?) -> String {
+        guard let name else { return String(localized: "From the folders of another project") }
+        return String(localized: "From the folders of \(name)")
     }
 
     /// Why the explanation holds no draft to change.
@@ -422,16 +435,28 @@ nonisolated enum ProjectsWindowText {
             let name = chunk.file.lastPathComponent
             guard let page = chunk.page else { return name }
             return String(localized: "\(name), page \(page)")
+        case .otherProjectFile(let chunk, let project):
+            let file = Self.source(.file(chunk))
+            return String(localized: "\(file) (\(project ?? String(localized: "another project")))")
         case .attachment(let name, _):
             return name
         }
     }
 
-    /// What VoiceOver reads for a source's chip: its text, and for an attachment that it is
-    /// one, since its chip may show the name of a project file too.
+    /// What VoiceOver reads for a source's chip: its text, for an attachment that it is
+    /// one, since its chip may show the name of a project file too, and for another
+    /// project's file the project it is from.
     static func sourceLabel(_ source: ProjectsEmailModel.Source) -> String {
-        guard case .attachment(let name, _) = source else { return Self.source(source) }
-        return String(localized: "Attachment \(name)")
+        switch source {
+        case .attachment(let name, _):
+            return String(localized: "Attachment \(name)")
+        case .otherProjectFile(let chunk, let project?):
+            return String(localized: "\(sourceLabel(.file(chunk))), from the project \(project)")
+        case .otherProjectFile(let chunk, nil):
+            return String(localized: "\(sourceLabel(.file(chunk))), from another project")
+        case .thisEmail, .mail, .file:
+            return Self.source(source)
+        }
     }
 
     /// An attachment's kind as Finder names it, such as PDF document, and its size, in the

@@ -13,8 +13,9 @@ import SwiftUI
 /// - What it says: the points, each with chips for its sources, or a line that it has
 ///   none. A file's chip shows the excerpt with its page inside Orra, an attachment's chip
 ///   the excerpt the model read, and an earlier email's chip shows that email in the window
-///   (decision 20). Nothing opens outside Orra. A line says when Projects could not read an
-///   attachment.
+///   (decision 20). The chip of another project's file names that project in brackets, and
+///   a line under the points says that such files are for the user only. Nothing opens
+///   outside Orra. A line says when Projects could not read an attachment.
 /// - Before you reply: the questions only the user can answer
 /// - the draft with its tools, see DraftSection
 /// - the email itself under Original Email, see ProjectsEmailOriginal, which also lists the
@@ -355,6 +356,12 @@ extension ProjectsEmailArea {
                 ForEach(Array(explanation.points.enumerated()), id: \.offset) { _, point in
                     PointRow(point: point, model: model, emailModel: emailModel)
                 }
+                if explanation.citesOtherProjectFile {
+                    Text(verbatim: ProjectsWindowText.otherProjectsNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let notice = ProjectsWindowText.unreadAttachments(email.attachments) {
                     Text(verbatim: notice)
                         .font(.caption)
@@ -619,6 +626,8 @@ extension ProjectsEmailArea {
             switch source {
             case .thisEmail, .mail: "envelope"
             case .file: "doc.text"
+            // As the project chip shows a project.
+            case .otherProjectFile: "folder"
             case .attachment: "paperclip"
             }
         }
@@ -629,8 +638,9 @@ extension ProjectsEmailArea {
         }
     }
 
-    /// The text behind a chip: a file's excerpt with its page and heading, the excerpt of an
-    /// attachment the model read, or the email's own text.
+    /// The text behind a chip: a file's excerpt with its page and heading, and the project
+    /// of another project's file, the excerpt of an attachment the model read, or the email's
+    /// own text.
     struct Excerpt: View {
         let source: ProjectsEmailModel.Source
         let emailText: String
@@ -639,9 +649,13 @@ extension ProjectsEmailArea {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     switch source {
-                    case .file(let chunk):
+                    case .file(let chunk), .otherProjectFile(let chunk, _):
                         Text(verbatim: chunk.file.lastPathComponent)
                             .font(.headline)
+                        if case .otherProjectFile(_, let project) = source {
+                            Text(verbatim: ProjectsWindowText.otherProject(project))
+                                .foregroundStyle(.secondary)
+                        }
                         if let page = chunk.page {
                             Text("Page \(page)")
                                 .foregroundStyle(.secondary)

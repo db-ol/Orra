@@ -70,6 +70,8 @@ final class ProjectsEmailModel {
         /// What a change changed, worked out off the main actor, ProjectsDraftDiff.highlight
         /// in the app.
         var highlight: (_ before: String, _ after: String) async -> [ProjectsDraftDiff.Segment]
+        /// The name of a project the list holds now, nil for one that is gone.
+        var projectName: (UUID) -> String? = { _ in nil }
 
         /// The actions of the running app.
         static func live(_ runtime: ProjectsRuntime) -> Actions {
@@ -93,7 +95,8 @@ final class ProjectsEmailModel {
                 handoff: runtime.handoff,
                 userLanguage: runtime.userLanguage,
                 now: runtime.dependencies.now,
-                highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) }
+                highlight: { await ProjectsDraftDiff.highlight(from: $0, to: $1) },
+                projectName: { [weak runtime] id in runtime?.projectList.first { $0.id == id }?.name }
             )
         }
     }
@@ -107,6 +110,10 @@ final class ProjectsEmailModel {
         case mail(messageID: String, sender: String?, date: Date?)
         /// The excerpt of a project file the model read.
         case file(TextChunker.Chunk)
+        /// The excerpt of a file of another project than the email's, with that project's
+        /// name, nil once the project is gone, see
+        /// `ExplainPrompt.Source.isOtherProjectFile(emailProject:)`.
+        case otherProjectFile(TextChunker.Chunk, project: String?)
         /// An attachment of the email, with the excerpt of its text the model read.
         case attachment(name: String, excerpt: String)
     }
@@ -455,8 +462,12 @@ final class ProjectsEmailModel {
                 let email = await actions.email(messageID)
                 let sender = email.map { $0.sender.name.isEmpty ? $0.sender.address : $0.sender.name }
                 sources[id] = .mail(messageID: messageID, sender: sender, date: email?.date)
-            case .file(let chunk):
-                sources[id] = .file(chunk)
+            case .file(let chunk, let origin):
+                if source.isOtherProjectFile(emailProject: explanation.project), let project = origin?.project {
+                    sources[id] = .otherProjectFile(chunk, project: actions.projectName(project))
+                } else {
+                    sources[id] = .file(chunk)
+                }
             case .attachment(let name, let excerpt):
                 sources[id] = .attachment(name: name, excerpt: excerpt)
             }

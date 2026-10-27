@@ -434,6 +434,50 @@
         }
       }
     },
+    "%@, from another project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, de otro proyecto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@、別のプロジェクトから"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@，来自另一个项目"
+          }
+        }
+      }
+    },
+    "%@, from the project %@" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, del proyecto %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@、プロジェクト“%2$@”から"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@，来自项目“%2$@”"
+          }
+        }
+      }
+    },
     "%@, page %lld" : {
       "localizations" : {
         "en" : {
@@ -998,6 +1042,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你设定的规则"
+          }
+        }
+      }
+    },
+    "A sentence from another project's file was taken out." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se quitó una oración copiada de un archivo de otro proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別のプロジェクトのファイルから写した文を削除しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已删去一句出自其他项目文件的话。"
           }
         }
       }
@@ -1902,6 +1968,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "另一个磁盘"
+          }
+        }
+      }
+    },
+    "another project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "otro proyecto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別のプロジェクト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "另一个项目"
           }
         }
       }
@@ -3664,6 +3752,28 @@
         }
       }
     },
+    "Data from another project's files was taken out." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se quitaron datos de archivos de otro proyecto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別のプロジェクトのファイルにあるデータを削除しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已删去其他项目文件中的资料。"
+          }
+        }
+      }
+    },
     "Date:" : {
       "localizations" : {
         "es-419" : {
@@ -5320,6 +5430,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "来源：%@"
+          }
+        }
+      }
+    },
+    "From the folders of %@" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De las carpetas de %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”のフォルダから"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自“%@”的文件夹"
+          }
+        }
+      }
+    },
+    "From the folders of another project" : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De las carpetas de otro proyecto"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別のプロジェクトのフォルダから"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自另一个项目的文件夹"
           }
         }
       }
@@ -13955,6 +14109,28 @@
         }
       }
     },
+    "Some sources are files of other projects. They are for you only, so check that the draft holds nothing from them." : {
+      "localizations" : {
+        "es-419" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Algunas fuentes son archivos de otros proyectos. Son solo para ti, así que revisa que el borrador no incluya nada de ellas."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一部の情報源は別のプロジェクトのファイルです。あなたが読むためだけのものなので、下書きにその内容が含まれていないか確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分来源是其他项目的文件，仅供你参考。请确认草稿里没有其中的内容。"
+          }
+        }
+      }
+    },
     "Someone in it wrote in the project before" : {
       "localizations" : {
         "es-419" : {
@@ -16989,24 +17165,24 @@
         }
       }
     },
-    "This removes the project with its index, mail and drafts from Projects. Your mail in Mail and the files in its folders stay as they are." : {
+    "This removes the project with its index, mail and drafts from Projects, and the explanations of other emails that used its files. Your mail in Mail and the files in its folders stay as they are." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Se quitará el proyecto de Proyectos con su índice, su correo y sus borradores. Tu correo en Mail y los archivos de sus carpetas no cambian."
+            "value" : "Se quitará el proyecto de Proyectos con su índice, su correo y sus borradores, y las explicaciones de otros correos que usaron sus archivos. Tu correo en Mail y los archivos de sus carpetas no cambian."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このプロジェクトと、そのインデックス、メール、下書きを“プロジェクト”から削除します。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
+            "value" : "このプロジェクトと、そのインデックス、メール、下書き、およびそのファイルを使ったほかのメールの説明を“プロジェクト”から削除します。“メール”内のメールとフォルダ内のファイルはそのまま残ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这会从“项目”中移除这个项目，以及它的索引、邮件和草稿。“邮件” App 里的邮件和它文件夹里的文件保持不变。"
+            "value" : "这会从“项目”中移除这个项目，以及它的索引、邮件和草稿，还有用到它的文件的其他邮件的解释。“邮件” App 里的邮件和它文件夹里的文件保持不变。"
           }
         }
       }
