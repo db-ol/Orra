@@ -100,11 +100,13 @@ got worse than the baseline or has no result, see docs/release-gate.md.
     it and Orra 0.6.0 reads it, also with a reason a later Orra adds, each file once in the
     order of the prompt with its citation and warnings, the words of the list, that the
     email view reads the folders only when the list asks, and where a file is in the
-    folders of its project, a folder that is not available included. ProjectsRuntimeTests
-    checks the folders' real paths, a bookmark that finds nothing, and that no folder is
-    read once Projects turned off or the project let go of the folder while its bookmark
-    resolved. ExplainPromptTests and ExplainServiceTests check that why a file is in the
-    prompt changes nothing in it.
+    folders of its project, a folder that is not available included, also inside one that
+    is, and that the list reads the folders again for another email. ProjectsRuntimeTests
+    checks the folders' real paths, a bookmark that finds nothing, a renamed folder that
+    is gone, and that no folder is read once Projects turned off or the project let go of
+    the folder while its bookmark resolved or while another folder was read.
+    ExplainPromptTests and ExplainServiceTests check that why a file is in the prompt
+    changes nothing in it.
   - ProjectSuggestionsTests, ProjectSuggestionPromptTests, ProjectSuggestionServiceTests and
     ProjectsSuggestedSectionTests, added on 2026-10-20, cover Suggested Projects with
     made up mail and a fake model: the groups, what each would take, the prompt and its

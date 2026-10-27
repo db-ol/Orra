@@ -297,5 +297,33 @@ struct ProjectsEmailFilesTests {
         let desktop = URL(fileURLWithPath: "/Users/lin/Desktop", isDirectory: true)
         #expect(Files.place(of: desktop.appending(path: "quote.pdf"), in: roots) == .outside(desktop))
         #expect(Files.place(of: desktop.appending(path: "quote.pdf"), in: Files.Roots()) == .outside(desktop))
+
+        // A folder that is not available inside one that is: the deepest counts, whether
+        // it is available or not, and an available one when both are the same folder.
+        let archive = lobby.appending(path: "Archive", directoryHint: .isDirectory)
+        let nested = Files.Roots(folders: [lobby], unavailable: [archive])
+        #expect(Files.place(of: archive.appending(path: "2025/report.pdf"), in: nested) == .unavailable(name: "Archive", path: ["2025"]))
+        #expect(Files.place(of: lobby.appending(path: "notes.md"), in: nested) == .inFolder(name: "Harbor lobby", path: []))
+        #expect(Files.place(of: archive.appending(path: "report.pdf"), in: Files.Roots(folders: [archive], unavailable: [lobby])) == .inFolder(name: "Archive", path: []))
+        #expect(Files.place(of: lobby.appending(path: "notes.md"), in: Files.Roots(folders: [lobby], unavailable: [lobby])) == .inFolder(name: "Harbor lobby", path: []))
+    }
+
+    /// The list reads the folders again for another email, since the view stays when the
+    /// window shows another email whose list is open too, and when the folders of the files'
+    /// projects change, never only because the window drew again.
+    @MainActor @Test func theFoldersAreReadAgainForAnotherEmailAndAfterTheyChanged() {
+        typealias Reload = ProjectsEmailArea.FilesSection.Reload
+        let files = ProjectsEmailFiles.files(in: Self.explanation(sources: [
+            "F1": .file(Self.schedule, origin: ExplainPrompt.FileOrigin(reason: .match, project: Self.project)),
+            "F2": .file(Self.chunk("brief.md"), origin: ExplainPrompt.FileOrigin(reason: .chosen, project: Self.other)),
+        ]))
+        var harbor = Project(id: Self.project, name: "Harbor lobby", folders: [Data("lobby".utf8)])
+        let other = Project(id: Self.other, name: "Gallery fit out", folders: [Data("gallery".utf8)])
+        let first = Reload(messageID: "lamps-2@harbor.example", files: files, projectList: [harbor, other])
+        #expect(first.projects == [Self.project, Self.other].sorted { $0.uuidString < $1.uuidString })
+        #expect(Reload(messageID: "lamps-2@harbor.example", files: files, projectList: [other, harbor]) == first)
+        #expect(Reload(messageID: "lamps-3@harbor.example", files: files, projectList: [harbor, other]) != first)
+        harbor.folders.append(Data("drawings".utf8))
+        #expect(Reload(messageID: "lamps-2@harbor.example", files: files, projectList: [harbor, other]) != first)
     }
 }

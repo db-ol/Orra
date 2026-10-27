@@ -100,15 +100,18 @@ nonisolated enum ProjectsEmailFiles {
         case outside(URL)
     }
 
-    /// Where `file` is in `roots`. Names are compared without case, as FolderWalk compares
-    /// places, and a folder holds only what lies inside it, so /A/Lobby does not hold
-    /// /A/Lobby old/plan.pdf.
+    /// Where `file` is in `roots`: in the deepest folder that holds it, available or not, an
+    /// available one first when both are as deep. Names are compared without case, as
+    /// FolderWalk compares places, and a folder holds only what lies inside it, so /A/Lobby
+    /// does not hold /A/Lobby old/plan.pdf.
     static func place(of file: URL, in roots: Roots) -> Place {
-        if let found = deepest(holding: file, in: roots.folders) {
-            return .inFolder(name: found.folder.lastPathComponent, path: found.path)
-        }
-        if let found = deepest(holding: file, in: roots.unavailable) {
+        let available = deepest(holding: file, in: roots.folders)
+        let unavailable = deepest(holding: file, in: roots.unavailable)
+        if let found = unavailable, found.path.count < available?.path.count ?? .max {
             return .unavailable(name: found.folder.lastPathComponent, path: found.path)
+        }
+        if let found = available {
+            return .inFolder(name: found.folder.lastPathComponent, path: found.path)
         }
         return .outside(file.deletingLastPathComponent())
     }
@@ -151,10 +154,21 @@ extension ProjectsEmailArea {
         let email: MailStore.Listed
         let explanation: Explanation
 
-        /// Reads the folders again when the projects of the files or their folders change.
+        /// Reads the folders again when the projects of the files or their folders change,
+        /// and for another email, since the view stays as it is when the window shows another
+        /// email whose list is open too.
         struct Reload: Hashable {
+            var messageID: String
+            /// The projects of the files, sorted.
             var projects: [UUID]
+            /// The bookmarks of each of those projects' folders.
             var folders: [[Data]]
+
+            init(messageID: String, files: [ProjectsEmailFiles.File], projectList: [Project]) {
+                self.messageID = messageID
+                projects = Array(Set(files.compactMap(\.project))).sorted { $0.uuidString < $1.uuidString }
+                folders = projects.map { id in projectList.first { $0.id == id }?.folders ?? [] }
+            }
         }
 
         var body: some View {
@@ -180,10 +194,7 @@ extension ProjectsEmailArea {
         }
 
         private func content(_ files: [ProjectsEmailFiles.File]) -> some View {
-            let projects = Array(Set(files.compactMap(\.project))).sorted { $0.uuidString < $1.uuidString }
-            let reload = Reload(projects: projects, folders: projects.map { id in
-                runtime.projectList.first { $0.id == id }?.folders ?? []
-            })
+            let reload = Reload(messageID: emailModel.messageID, files: files, projectList: runtime.projectList)
             return VStack(alignment: .leading, spacing: 12) {
                 if files.isEmpty {
                     Text(verbatim: ProjectsWindowText.noProjectFiles(inProject: email.project != nil))
@@ -222,7 +233,7 @@ extension ProjectsEmailArea {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 4)
             .task(id: reload) {
-                await emailModel.loadFolderRoots(for: projects)
+                await emailModel.loadFolderRoots(for: reload.projects)
             }
         }
 
