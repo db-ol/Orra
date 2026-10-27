@@ -19,7 +19,8 @@ import Foundation
 /// - excerpts of files of the user's other projects that the search terms matched, each
 ///   with its project, in <other_files> with the ids O1 and up. They come after the
 ///   project's own excerpts, which are those of the same prompt without them, so the prompt
-///   holds at most `chunkLimit` of each, and the budget trims them before anything else. The
+///   holds at most `chunkLimit` of each and `excerptLimit` in all, and the budget trims them
+///   before anything else. The
 ///   rules then say that they may explain the email to the user and that the draft takes
 ///   nothing from them, and the closing line asks for no draft, which ExplainService writes
 ///   with a second prompt without them, see `Input.draftApart`. A prompt without them reads
@@ -241,6 +242,11 @@ nonisolated struct ExplainPrompt: Sendable {
     /// The excerpts search gives at most, and the ones the newest files fill up to.
     static let chunkLimit = 6
     static let fillUpTo = 3
+    /// The excerpts a prompt holds at most, the project's own and other projects' together:
+    /// the own `chunkLimit` and the `ExplainService.otherProjectChunks` of other projects after
+    /// them. An email in Needs a Project has no own excerpts but those of the files the user
+    /// chose, so other projects fill the places they leave.
+    static let excerptLimit = chunkLimit + ExplainService.otherProjectChunks
     /// The files the user may choose for an email, the share of `chunkLimit` their excerpts
     /// take at most while more than one file is chosen, and the excerpts of one chosen file at
     /// most.
@@ -313,9 +319,13 @@ nonisolated struct ExplainPrompt: Sendable {
 
     /// The excerpts a prompt holds before its budget trims any: the chosen excerpts, then
     /// the project's best up to `chunkLimit` with them, with the newest files of the project
-    /// filling them up to `fillUpTo`, a file once, and then the first `chunkLimit` of other
-    /// projects' excerpts. So the project's own excerpts, the chosen ones among them, are those
-    /// of the prompt without other projects, from which ExplainService writes the draft.
+    /// filling them up to `fillUpTo`, a file once, and then the first of other projects'
+    /// excerpts, at most `chunkLimit` and at most `excerptLimit` with the own ones. So the
+    /// project's own excerpts, the chosen ones among them, are those of the prompt without
+    /// other projects, from which ExplainService writes the draft. ExplainService gives an
+    /// email in a project at most `ExplainService.otherProjectChunks` of other projects, so
+    /// only an email in Needs a Project with chosen files has other projects' excerpts left
+    /// out here.
     static func excerpts(chosen: [TextChunker.Chunk] = [], chunks: [TextChunker.Chunk], newest: [TextChunker.Chunk], others: [OtherChunk]) -> (own: [TextChunker.Chunk], others: [OtherChunk]) {
         let picked = Array(chosen.prefix(chunkLimit))
         var own = picked + Array(chunks.prefix(chunkLimit - picked.count))
@@ -324,7 +334,7 @@ nonisolated struct ExplainPrompt: Sendable {
                 own.append(chunk)
             }
         }
-        return (own, Array(others.prefix(chunkLimit)))
+        return (own, Array(others.prefix(min(chunkLimit, excerptLimit - own.count))))
     }
 
     /// The source id of the email itself: 本邮件 or this email.

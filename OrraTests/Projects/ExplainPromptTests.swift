@@ -1143,13 +1143,15 @@ struct ExplainPromptTests {
 
     /// Other projects' excerpts come after the project's own, which are those of the prompt
     /// without them: the best `chunkLimit`, and the newest files filling them up to three.
+    /// The prompt holds `excerptLimit` excerpts at most, so six own ones leave other
+    /// projects two.
     @Test func otherProjectsExcerptsComeAfterTheProjectsOwn() {
         let eight = (1...8).map { chunk("part-\($0).md", text: "Part \($0).") }
         var full = input(chunks: eight)
         full.otherChunks = (1...8).map { other("kiln-\($0).md", text: "Kiln \($0).") }
         let result = prompt(full)
         #expect(result.sources.keys.filter { $0.hasPrefix("F") }.sorted() == (1...6).map { "F\($0)" })
-        #expect(result.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted() == (1...6).map { "O\($0)" })
+        #expect(result.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted() == ["O1", "O2"])
         #expect(file(result.sources["F6"]) == "part-6.md")
 
         let newest = [chunk("new-1.md", text: "New one."), chunk("new-2.md", text: "New two.")]
@@ -1518,6 +1520,23 @@ struct ExplainPromptTests {
         var bothChinese = chinese
         bothChinese.otherChunks = both.otherChunks
         #expect(user(prompt(bothChinese)).hasPrefix("<project>\n项目：未确定。这封邮件还没有归到任何项目。<files> 里是Bai Lu为它选的文件。<other_files> 里是Bai Lu各个项目中与它相关的文件片段，只作背景。\n</project>"))
+    }
+
+    /// An email in Needs a Project may have six excerpts of other projects. Its chosen
+    /// excerpts come first, and other projects keep the places they leave of `excerptLimit`.
+    @Test func chosenExcerptsLeaveOtherProjectsThePlacesUpToEight() {
+        let others = (1...6).map { other("kiln-\($0).md", text: "Kiln \($0).") }
+        var alone = input(project: nil)
+        alone.otherChunks = others
+        #expect(prompt(alone).sources.keys.filter(ExplainPrompt.isOtherFileSource).count == 6)
+        for (count, left) in [(1, 6), (3, 5), (4, 4), (6, 2)] {
+            var chosen = choosing(input(project: nil), chunks: (1...count).map { chunk("chosen-\($0).md", text: "Chosen \($0).") })
+            chosen.otherChunks = others
+            let result = prompt(chosen)
+            #expect(result.sources.keys.filter { $0.hasPrefix("F") }.count == count)
+            #expect(result.sources.keys.filter(ExplainPrompt.isOtherFileSource).sorted() == (1...left).map { "O\($0)" }, "\(count) chosen")
+        }
+        #expect(ExplainPrompt.excerptLimit == 8)
     }
 
     /// A file of another project is marked by the versions of its own project.
