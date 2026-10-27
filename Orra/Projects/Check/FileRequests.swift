@@ -971,7 +971,7 @@ nonisolated enum FileRequests {
             regex("(?<verb>(?:你|您)们?(?:这边|那边|手上|手里|手边|那里|那儿)?有)" + chineseNotDone + "(?<object>" + chineseClause + "{1,30}?)吗"),
             mustNameADocument: true, gates: [regex("有")]),
         Construction(
-            "想看看 X, 希望收到 X, 她想提前看看 X",
+            "想看看 X, 希望收到 X, 客户想先过目 X",
             regex("(?<frame>(?:我|我们|她|他|她们|他们|客户|对方|老板|领导|候选人|同事|大家|业主|甲方|老师)?(?:很|也|还|都|先|正|一直|特别)?(?:想|希望|想要|期待|盼着|打算)(?:能|可以)?(?:先|提前|尽快|再|早点|早日)?)(?<verb>看看|看一下|看一看|看下|瞧瞧|过目|拿到|收到|看到|拿一份|要一份|参考一下|参考|看(?!过|了))(?<object>" + chineseClause + "{1,30})"),
             mustNameADocument: true, gates: [regex("想|希望|期待|盼|打算")]),
         Construction(
@@ -1354,7 +1354,7 @@ nonisolated enum FileRequests {
     /// The document named last before a pointer: in the same sentence before its
     /// construction, or else in the sentence before. A clause names a document by a word for
     /// a kind or a file name, and so do "if you have", "do you have", "we are missing", "you
-    /// sent", 如果有, 有没有, 我们还缺, 你们之前给过, があれば, が見当たりません, si tienes and nos
+    /// sent", 如果有, 有没有, 我们还缺, 你之前发过, があれば, が見当たりません, si tienes and nos
     /// falta with what follows or precedes them. A clause where the sender attaches, sends or
     /// promises names none, and neither does a phrase that is no file.
     private static func antecedent(before: String, namedBefore: () -> Antecedent?, ownCounts: Bool) -> Antecedent? {

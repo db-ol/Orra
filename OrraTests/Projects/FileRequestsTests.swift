@@ -208,7 +208,7 @@ struct FileRequestsTests {
             ("The movers come at nine. If you could forward the packing list as well, that would help.", "the packing list", [.document]),
         ])
         Self.expectConstruction("a pronoun under a condition: if you have X, could you send it", [
-            ("If you still have the moodboard from March, could you forward it to me?", "the moodboard", [.document]),
+            ("If you have the moodboard for the bakery, please share it with me.", "the moodboard", [.document]),
             ("If you have the signed waiver handy, please send it over.", "the signed waiver", [.document]),
             ("If you kept that waiver from the venue, please send it over.", "that waiver", [.document]),
         ])
@@ -238,6 +238,10 @@ struct FileRequestsTests {
             ("Is there a floor plan of the second floor?", "a floor plan of the second floor", [.floorPlan]),
             ("Do you have the vendor list?", "the vendor list", [.document]),
         ])
+        Self.expectConstruction("have you got X?", [
+            ("Have you got the minutes from Tuesday's meeting?", "the minutes", [.minutes]),
+            ("Have you got a scan of the permit?", "a scan of the permit", [.scan, .certificate]),
+        ])
     }
 
     @Test func chineseAsksForADocumentInEachConstruction() {
@@ -246,7 +250,7 @@ struct FileRequestsTests {
             ("请发一下展位布置说明给我", "展位布置说明", [.document]),
         ])
         Self.expectConstruction("你把 X 发我, with no word that asks", [
-            ("你把那份装修合同发我一下吧", "那份装修合同", [.contract]),
+            ("你把装修合同也转给我们。", "装修合同", [.contract]),
             ("你把面试题目发给我", "面试题目", [.document]),
         ])
         Self.expectConstruction("把 X 发我 at the start of a clause", [
@@ -281,7 +285,11 @@ struct FileRequestsTests {
             ("门店的照片拍好了吗？拍好了麻烦发我几张。", "照片", [.photo]),
             ("如果你手上有活动的海报，麻烦发我一份。", "活动的海报", [.document]),
             ("上次的会议安排，麻烦发我一下。", "上次的会议安排", [.document]),
-            ("你们之前给过一份布展须知吗？麻烦再发我一份。", "布展须知", [.document]),
+            ("上周你提到过一份施工须知，麻烦发我一份。", "施工须知", [.document]),
+        ])
+        Self.expectConstruction("给我一份 X, 能给我 X 吗", [
+            ("能给我一份最新的价目表吗？", "价目表", [.quote]),
+            ("给我们一张现场的照片吧。", "照片", [.photo]),
         ])
     }
 
@@ -357,8 +365,8 @@ struct FileRequestsTests {
             "Please share your feedback about the second draft.",
             "请把你对方案的意见发给我",
             "资料的修改建议麻烦发我一下",
-            "資料についてのご意見をお送りください",
-            "¿Me puedes enviar tus comentarios sobre el texto?",
+            "パンフレットについてのコメントを送ってください",
+            "¿Nos mandas tus observaciones sobre el folleto?",
         ])
     }
 
