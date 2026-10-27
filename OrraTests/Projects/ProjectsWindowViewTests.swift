@@ -957,7 +957,9 @@ struct ProjectsWindowViewTests {
     /// The panes of the comparison stand side by side from 681 points, two panes that keep
     /// 300 points for their content inside their padding and the line between them, and one
     /// above the other in a narrower email view, where the lower one keeps the draft's
-    /// editor whole. The email view itself switches at that width.
+    /// editor whole. The email view itself switches at that width. Where scroll bars take
+    /// room, as with a mouse, Explanation and Draft gets the room of its bar first, so at the
+    /// window's first size its content keeps 300 points beside the bar.
     @Test func thePanesStandSideBySideFromTheirThreshold() async throws {
         typealias Panes = ProjectsEmailArea.Panes
         #expect(Panes.sideBySideWidth == 681)
@@ -974,6 +976,18 @@ struct ProjectsWindowViewTests {
         // At the window's smallest size, under the bar, the lower pane keeps the editor
         // whole.
         #expect(Panes.frames(in: CGRect(x: 0, y: 51, width: 480, height: 369), panes: 3).map(\.height) == [156, 1, 212])
+        // A scroll bar of 17 points, as macOS 26 draws one with a mouse: the email view of
+        // the window's first size gives Explanation and Draft 358 points, 301 for its
+        // content beside the bar, and Original Email 340. At the threshold the bar's room
+        // comes off Original Email, and one above the other it changes nothing.
+        let first = CGRect(x: 0, y: 56, width: 699, height: 532)
+        #expect(Panes.frames(in: first, panes: 3).map(\.width) == [349, 1, 349])
+        #expect(Panes.frames(in: first, panes: 3, scroller: 17) == [
+            CGRect(x: 0, y: 56, width: 340, height: 532), CGRect(x: 340, y: 56, width: 1, height: 532), CGRect(x: 341, y: 56, width: 358, height: 532),
+        ])
+        #expect(Panes.frames(in: room, panes: 3, scroller: 17).map(\.width) == [331, 1, 349])
+        let stacked = CGRect(x: 0, y: 50, width: 680, height: 590)
+        #expect(Panes.frames(in: stacked, panes: 3, scroller: 17) == Panes.frames(in: stacked, panes: 3))
 
         let fixture = try await Fixture()
         defer { fixture.cleanUp() }
@@ -985,7 +999,12 @@ struct ProjectsWindowViewTests {
         await emailModel.load()
         model.compare(explained.messageID)
         #expect(model.isComparing)
-        for (size, expected) in [(NSSize(width: 680, height: 640), Arrangement.stacked), (NSSize(width: 681, height: 640), .sideBySide), (NSSize(width: 480, height: 420), .stacked)] {
+        let sizes: [(NSSize, Arrangement)] = [
+            (NSSize(width: 680, height: 640), .stacked), (NSSize(width: 681, height: 640), .sideBySide), (NSSize(width: 480, height: 420), .stacked),
+            // The email view of the window's first size while comparing.
+            (NSSize(width: 699, height: 588), .sideBySide),
+        ]
+        for (size, expected) in sizes {
             let (window, view) = try await host(ProjectsEmailArea(runtime: runtime, model: model, email: explained), size: size)
             defer { window.close() }
             let editor = try #require(Self.descendants(of: view).compactMap { $0 as? NSTextView }.first { !$0.isFieldEditor && $0.string == emailModel.text })
@@ -995,6 +1014,12 @@ struct ProjectsWindowViewTests {
             #expect(editorScroll.frame.height >= 200, "\(size)")
             let pane = try #require(Self.outerScrollViews(in: view).first { editor.isDescendant(of: $0) })
             #expect(pane.frame.height >= Panes.lowerPaneMinimumHeight, "\(size)")
+            if size.width == 699 {
+                // What the pane shows beside a scroll bar that takes room, where the Mac
+                // draws one, inside its padding.
+                let content = pane.contentView.frame.width - 2 * Panes.padding
+                #expect(content >= Panes.paneContentWidth, "Explanation and Draft holds \(content) points of content, scroll bars of style \(NSScroller.preferredScrollerStyle.rawValue)")
+            }
         }
         await fixture.stop()
     }

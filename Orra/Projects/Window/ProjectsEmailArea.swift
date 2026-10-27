@@ -79,6 +79,9 @@ struct ProjectsEmailArea: View {
     @FocusState private var keyboardFocus: SwitchButton?
     /// Where the focus goes once the layout switched, nil after a click.
     @State private var focusAfterSwitch: FocusMove?
+    /// The room a scroll bar takes beside the content of a pane, which changes when a mouse
+    /// comes or goes.
+    @State private var scroller = Panes.scrollerWidth()
 
     var body: some View {
         let emailModel = model.emailModel(for: email.messageID)
@@ -87,7 +90,7 @@ struct ProjectsEmailArea: View {
         // draft keeps its place, and the editor its text, selection, focus, marked text and
         // undo, as the comparison starts and ends and as its panes go from side by side to
         // one above the other.
-        Panes {
+        Panes(scroller: scroller) {
             if model.previousEmail != nil {
                 bar(backBar)
             }
@@ -172,6 +175,9 @@ struct ProjectsEmailArea: View {
                     voiceOverFocus = move.button
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSScroller.preferredScrollerStyleDidChangeNotification)) { _ in
+            scroller = Panes.scrollerWidth()
         }
     }
 

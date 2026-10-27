@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: Compare with Original
@@ -16,6 +17,10 @@ extension ProjectsEmailArea {
             static let defaultValue = false
         }
 
+        /// The room a vertical scroll bar takes beside the content of a pane that scrolls,
+        /// see `scrollerWidth()`.
+        var scroller: CGFloat = 0
+
         /// The padding around a pane's content, as around the email view's.
         static let padding: CGFloat = 20
         /// The narrowest content of a pane beside the other: the change box keeps Change
@@ -28,6 +33,8 @@ extension ProjectsEmailArea {
         /// sidebar hidden and the list at its ideal 340 points, the email view is 699 points
         /// wide in the window's first size, 1,040 by 640, so the panes stand side by side
         /// there, and 419 at its smallest, 760 by 420, where they stand one above the other.
+        /// Scroll bars that take room change only how the panes share the width, see
+        /// `frames(in:panes:scroller:)`.
         static let sideBySideWidth = 2 * (paneContentWidth + 2 * padding) + 1
         /// The lowest the lower pane gets in a view tall enough for it: the draft's editor at
         /// its smallest, 200 points with a padding of 6 above and below, fits in it whole.
@@ -50,9 +57,16 @@ extension ProjectsEmailArea {
                 top += height
             }
             let room = CGRect(x: bounds.minX, y: top, width: bounds.width, height: max(0, bounds.maxY - top))
-            for (pane, frame) in zip(panes, Self.frames(in: room, panes: panes.count)) {
+            for (pane, frame) in zip(panes, Self.frames(in: room, panes: panes.count, scroller: scroller)) {
                 pane.place(at: frame.origin, proposal: ProposedViewSize(frame.size))
             }
+        }
+
+        /// The room a vertical scroll bar takes from the content of a scroll view now: its
+        /// width where scroll bars always show, as with a mouse, and none where they show
+        /// only while scrolling, as with a trackpad.
+        @MainActor static func scrollerWidth() -> CGFloat {
+            NSScroller.preferredScrollerStyle == .legacy ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
         }
 
         /// Whether the panes of the comparison stand side by side in a view this wide.
@@ -62,13 +76,17 @@ extension ProjectsEmailArea {
 
         /// The frames of the panes in the room under the bars: all of it for the one scroll,
         /// or, for the three views of the comparison, Original Email, the line and
-        /// Explanation and Draft. Side by side they share the width. One above the other
-        /// they share the height, unless the lower pane would get less than
-        /// `lowerPaneMinimumHeight`, which it then gets, as far as the room allows.
-        static func frames(in room: CGRect, panes: Int) -> [CGRect] {
+        /// Explanation and Draft. Side by side they share the width once Explanation and
+        /// Draft, which nearly always scrolls, has the room of its scroll bar, `scroller`.
+        /// Where scroll bars take room, as with a mouse, its content keeps 300 points from
+        /// `sideBySideWidth` and the bar's width together, which the window's first size
+        /// has, and a little less in a narrower view. One above the other they share the
+        /// height, unless the lower pane would get less than `lowerPaneMinimumHeight`, which
+        /// it then gets, as far as the room allows.
+        static func frames(in room: CGRect, panes: Int, scroller: CGFloat = 0) -> [CGRect] {
             guard panes == 3 else { return Array(repeating: room, count: panes) }
             if isSideBySide(width: room.width) {
-                let left = ((room.width - 1) / 2).rounded(.down)
+                let left = ((room.width - 1 - scroller) / 2).rounded(.down)
                 return [
                     CGRect(x: room.minX, y: room.minY, width: left, height: room.height),
                     CGRect(x: room.minX + left, y: room.minY, width: 1, height: room.height),
