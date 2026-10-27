@@ -39,9 +39,10 @@ extension Logger {
 ///   tried is kept with the file's size and date and how it went, so blank, timed out and
 ///   failed pages are not tried again, a restart goes on where it stopped, and a changed
 ///   file starts over. Recognized text is kept like any text, marked as recognized.
-/// - A project holds at most 5,000 documents and images, documents first, and 20,000 more
-///   files by name, and about 200 MB of text. Images the index holds keep their place, and
-///   new ones take the room the documents leave, newest first. The rest are known by name.
+/// - A project lists at most 5,000 documents and 20,000 other files, which are the documents
+///   past the 5,000, the images and the files known by name. Images take the room the
+///   documents leave of the 5,000, those the index holds first, then new ones newest first,
+///   and the rest are known by name. A project holds about 200 MB of text.
 ///   The document that passes the text limit is the last one read whose text the index did
 ///   not hold, and the ones after it are known by name. A file with text in the index is
 ///   read again when it changes, even past the limit, so its old text never stays, and it
@@ -61,11 +62,12 @@ extension Logger {
 final class FolderIndex {
     /// The limits of one project.
     nonisolated struct Limits: Sendable, Equatable {
-        /// Documents and images, documents first. The pages recognition reads in one file
-        /// are the recognizer's limit, see `TextRecognizer.Limits.pagesPerFile`.
+        /// Documents the walk lists, and the images that take the room they leave. The
+        /// pages recognition reads in one file are the recognizer's limit, see
+        /// `TextRecognizer.Limits.pagesPerFile`.
         var files = 5_000
-        /// Files known by name only, besides `files`: documents and images past it, and
-        /// every other kind of file.
+        /// Files the walk lists besides the documents of `files`: documents past it, images,
+        /// whether they take the room of `files` or not, and every other kind of file.
         var names = 20_000
         /// UTF-8 bytes of text.
         var textBytes: Int64 = 200_000_000
@@ -1567,12 +1569,12 @@ final class FolderIndex {
     }
 
     /// A file's name without its extension, with hyphens and underscores as spaces.
-    private nonisolated static func searchableName(_ file: URL) -> String {
+    nonisolated static func searchableName(_ file: URL) -> String {
         searchableText(file.deletingPathExtension().lastPathComponent)
     }
 
     /// A text with hyphens and underscores as spaces, as names and folders are searched.
-    private nonisolated static func searchableText(_ text: String) -> String {
+    nonisolated static func searchableText(_ text: String) -> String {
         text.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ")
     }
 

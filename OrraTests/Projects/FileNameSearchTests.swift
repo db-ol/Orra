@@ -82,6 +82,28 @@ struct FileNameSearchTests {
         await database.close()
     }
 
+    /// A file's whole name, with or without its extension, finds it first, also where the
+    /// trigram list, which sees no number, ranks other files with the same Chinese words and
+    /// a folder named like them first, and they came into the index first.
+    @Test func aWholeNameFindsItsFileFirst() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        try await add("/p/现场玻璃样品/瓷砖现场玻璃1141.png", folder: "现场玻璃样品", project: alpha, skip: "waitsForRecognition", to: database)
+        try await add("/p/现场玻璃样品/现场玻璃样品1142.png", folder: "现场玻璃样品", project: alpha, skip: "waitsForRecognition", to: database)
+        try await add("/p/Harbor Hotel/现场玻璃0380.docx", folder: "Harbor Hotel", project: alpha, to: database)
+        try await add("/p/site-plan-3.dwg", folder: "", project: alpha, skip: "unsupportedFormat", to: database)
+        try await add("/p/site_plan_2.dwg", folder: "", project: alpha, skip: "unsupportedFormat", to: database)
+        for (text, name) in [
+            ("现场玻璃0380", "现场玻璃0380.docx"), ("现场玻璃0380.docx", "现场玻璃0380.docx"), ("site plan 3", "site-plan-3.dwg"),
+            ("site-plan-2.DWG", "site_plan_2.dwg"),
+        ] {
+            #expect(try await names(text, database).first == name, "\(text)")
+        }
+        // A part of a name is no whole name.
+        #expect(try await names("现场玻璃", database).count == 3)
+        await database.close()
+    }
+
     @Test func searchStaysInTheProjectsItIsGiven() async throws {
         defer { cleanUp() }
         let database = try await ProjectsDatabase.open(in: storage)

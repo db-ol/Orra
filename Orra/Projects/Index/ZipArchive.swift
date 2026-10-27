@@ -32,12 +32,22 @@ nonisolated struct ZipArchive: Sendable {
     private let data: Data
     /// Where the central directory starts, so every part lies before it.
     private let directoryStart: Int
+    /// The place of each entry in `entries` by its name compared without case, or -1 for a
+    /// name that is there twice, so a lookup takes the same time however many entries the
+    /// archive has.
+    private let places: [String: Int]
 
     /// The archive in `data`, or unreadable when it breaks one of the rules above.
     init(_ data: Data) throws(FileSkipReason) {
         switch data.withUnsafeBytes({ Self.directory(of: $0.bindMemory(to: UInt8.self)) }) {
         case .success(let directory):
             (entries, directoryStart) = directory
+            var places: [String: Int] = [:]
+            for (place, entry) in entries.enumerated() {
+                let name = Self.folded(entry.name)
+                places[name] = places[name] == nil ? place : -1
+            }
+            self.places = places
             self.data = data
         case .failure(let reason):
             throw reason
@@ -90,8 +100,7 @@ nonisolated struct ZipArchive: Sendable {
     /// Whether the archive holds a part of that name, compared without case, as Office
     /// compares part names.
     func contains(_ name: String) -> Bool {
-        let name = Self.folded(name)
-        return entries.contains { Self.folded($0.name) == name }
+        places[Self.folded(name)] != nil
     }
 
     /// The unpacked bytes of the part of that name, compared without case. Its size is
@@ -99,9 +108,8 @@ nonisolated struct ZipArchive: Sendable {
     /// missing or named twice, whose local header does not match its entry, that unpacks to
     /// another size or whose CRC-32 differs is unreadable.
     func data(of name: String, budget: inout Int64) -> Result<Data, FileSkipReason> {
-        let name = Self.folded(name)
-        let matching = entries.filter { Self.folded($0.name) == name }
-        guard matching.count == 1, let entry = matching.first else { return .failure(.unreadable) }
+        guard let place = places[Self.folded(name)], place >= 0 else { return .failure(.unreadable) }
+        let entry = entries[place]
         guard Int64(entry.size) <= budget else { return .failure(.tooLarge) }
         budget -= Int64(entry.size)
         guard let packed = packedBytes(of: entry) else { return .failure(.unreadable) }

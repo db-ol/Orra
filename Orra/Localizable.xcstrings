@@ -11776,24 +11776,24 @@
         }
       }
     },
-    "Projects reached the most text it keeps for a project. Newer files are left out." : {
+    "Projects reached the most text it keeps for a project. It knows newer files by name only." : {
       "localizations" : {
         "es-419" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Proyectos llegó al máximo de texto que guarda por proyecto. Los archivos más nuevos quedan fuera."
+            "value" : "Proyectos llegó al máximo de texto que guarda por proyecto. De los archivos más nuevos solo conoce el nombre."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“プロジェクト”は1つのプロジェクトに保存できるテキストの上限に達しました。新しいファイルは除外されます。"
+            "value" : "“プロジェクト”は1つのプロジェクトに保存できるテキストの上限に達しました。新しいファイルはファイル名だけを記録します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“项目”已达到每个项目可保存文字的上限，更新的文件会被略去。"
+            "value" : "“项目”已达到每个项目可保存文字的上限，较新的文件只记下文件名。"
           }
         }
       }
