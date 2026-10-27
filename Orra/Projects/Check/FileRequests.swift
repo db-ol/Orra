@@ -862,6 +862,20 @@ nonisolated enum FileRequests {
         return (object, latinObject(after: start, in: sentence, lead: spanishLead, cut: spanishCutAfterDe, keepGoing: spanishKeepGoing))
     }
 
+    /// Whether what follows a verb that carries lo or la names the document that lo or la
+    /// stands for, by a word for its kind or a file name, as "la factura" does in "¿podrías
+    /// enviármela la factura?". The words after de count only after an article or another
+    /// determiner, as in "el borrador del contrato", so "pásalo bien durante la feria del
+    /// catálogo" names nothing.
+    private static func namesTheDocumentAgain(_ object: String, phrase: String) -> Bool {
+        if !kinds(in: object).isEmpty || !fileNames(in: object).isEmpty {
+            return true
+        }
+        guard let first = matchingText(object).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).first,
+              spanishDeterminers.contains(String(first)) else { return false }
+        return !kinds(in: phrase).isEmpty || !fileNames(in: phrase).isEmpty
+    }
+
     private static let spanishKeepGoing: Set<String> = ["copia", "copias", "versión", "version", "versiones", "foto", "fotos", "escaneo", "escaneos", "pdf", "imagen", "imágenes", "imagenes"]
     /// Lo, la, los or las on the verb or right before it, which point back, as in
     /// mándamelo or ¿me lo podrías enviar?
@@ -903,9 +917,11 @@ nonisolated enum FileRequests {
                 let (object, phrase) = spanishObject(after: verb.upperBound, in: sentence)
                 // Lo or la on the verb, before the words that ask or between them and the verb.
                 let cliticOnVerb = ContentChecks.matches([spanishCliticOnVerb], String(sentence[verb]))
-                // A verb that carries lo or la takes no other thing after it, so what follows is
-                // none, as bien in "pásala bien".
-                if cliticOnVerb, !object.isEmpty, !ContentChecks.matches([spanishPointer], object) {
+                // A verb that carries lo or la takes what follows it only when that names the
+                // document again, as colloquial Spanish does in "mándamelo el archivo".
+                // Otherwise what follows is none of it, as bien in "pásala bien".
+                if cliticOnVerb, !object.isEmpty, !ContentChecks.matches([spanishPointer], object),
+                   !namesTheDocumentAgain(object, phrase: phrase) {
                     continue
                 }
                 let clitic = cliticOnVerb

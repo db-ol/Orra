@@ -410,6 +410,29 @@ struct FileRequestsTests {
         ])
     }
 
+    /// Colloquial Spanish names the document again after a verb that carries lo or la, as in
+    /// "mándamelo el archivo", which asks for it. What names no document after such a verb,
+    /// as bien in "pásala bien", asks for nothing, also when a word for a kind comes later.
+    @Test func aVerbThatCarriesLoOrLaTakesTheDocumentNamedAgain() throws {
+        Self.expectConstruction("a verb that carries lo or la, and the document named again by its kind or its file name", [
+            ("Oye, pásamelo el presupuesto cuando lo tengas.", "el presupuesto", [.quote, .budget]),
+            ("¿Puedes mandármela la hoja de cálculo de gastos?", "la hoja de cálculo", [.spreadsheet]),
+            ("Reenvíamelas las capturas del error, porfa.", "las capturas", [.photo]),
+            ("Envíamela la versión final de la propuesta.", "la versión final de la propuesta", [.proposal]),
+            ("Pásamelo rev-0412.pdf, porfa.", "rev-0412.pdf", [.document]),
+        ])
+        let plain = try #require(Self.found("Cuando termines, mándamelo el archivo.").first)
+        #expect(plain.object == "el archivo")
+        #expect(plain.documentKinds == [.document])
+        #expect(!plain.saysWhichFile)
+        Self.expectNone([
+            "¡Pásalo bomba este finde!",
+            "Pásala súper con tu gente.",
+            "Pásala bien en la presentación de mañana.",
+            "Pásalo bien durante la feria del catálogo.",
+        ])
+    }
+
     // MARK: What never counts
 
     @Test func commentsAndFeedbackAreNoFile() {
