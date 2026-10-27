@@ -8,18 +8,24 @@ import SwiftUI
 /// ProjectsEmailArea, or the project's page, or, while neither shows, How to Use Projects,
 /// see ProjectsHowTo.
 ///
-/// Compare with Original hides the sidebar and the list, so the email view takes the whole
-/// window, see ProjectsWindowModel.isComparing. Every end of the comparison shows them again
-/// as they were, and a column the user shows ends it.
+/// While the model compares, see ProjectsWindowModel.isComparing, the window asks its split
+/// view for the detail column alone, so that Compare with Original can show the email view
+/// across the whole window. Every end of the comparison asks for the columns that showed
+/// before, and a column the user shows ends it. A window that is never shown keeps its
+/// columns all the same, so whether a shown one hides both is for a live check.
 struct ProjectsWindowView: View {
     let runtime: ProjectsRuntime
     @State var model: ProjectsWindowModel
     /// Opens Settings at the Projects page.
     let openSettings: () -> Void
+    /// Hears each change of the columns asked of the split view, for tests, since a window
+    /// that is never shown does not apply them and its split view cannot say.
+    var columnsChanged: (NavigationSplitViewVisibility) -> Void = { _ in }
     /// The project being set up, nil while no setup sheet shows.
     @State private var setup: ProjectsSetupView.Draft?
     @State private var forgetting: Project?
-    /// The columns the window shows. Compare with Original hides the sidebar and the list.
+    /// The columns the window asks its split view for, the detail column alone while the
+    /// model compares.
     @State private var columns = NavigationSplitViewVisibility.automatic
     /// The columns before the comparison, which Back to Email List shows again.
     @State private var columnsBeforeComparing = NavigationSplitViewVisibility.automatic
@@ -43,13 +49,7 @@ struct ProjectsWindowView: View {
         .onChange(of: model.isComparing, initial: true) { _, comparing in
             if comparing {
                 columnsBeforeComparing = columns
-                // At once, so the email view never lays out its two panes in the narrow
-                // column first.
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    columns = .detailOnly
-                }
+                showDetailOnly()
             } else {
                 // Every end: Back to Email List, another email or list, the explanation gone.
                 model.endComparing()
@@ -59,10 +59,18 @@ struct ProjectsWindowView: View {
             }
         }
         .onChange(of: columns) { before, shown in
-            // The toolbar's sidebar button or a drag showed a column. The split view also
-            // writes the columns it shows for `.automatic` when it first lays out, which
-            // ends nothing.
-            if model.isComparing, before != .automatic, shown != .detailOnly {
+            columnsChanged(shown)
+            guard model.isComparing, shown != .detailOnly else { return }
+            if before == .automatic {
+                // The split view wrote the columns it shows for its `.automatic` start. That
+                // can come after the comparison asked for the detail column alone, such as
+                // in a window made while its model compares, and ends nothing. Those are
+                // the columns before the comparison, and the detail column alone is asked
+                // for again.
+                columnsBeforeComparing = shown
+                showDetailOnly()
+            } else {
+                // The toolbar's sidebar button or a drag showed a column.
                 model.endComparing()
             }
         }
@@ -279,6 +287,17 @@ struct ProjectsWindowView: View {
     /// names the list.
     static func columnsAfterComparing(_ before: NavigationSplitViewVisibility) -> NavigationSplitViewVisibility {
         before == .detailOnly ? .all : before
+    }
+
+    /// Asks the split view for the detail column alone, without animation, so the column
+    /// takes the window's width at once rather than growing into it. The email view may
+    /// still lay out once in the narrow column before that.
+    private func showDetailOnly() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            columns = .detailOnly
+        }
     }
 
     private var title: String {
