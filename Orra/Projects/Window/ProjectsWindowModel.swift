@@ -434,7 +434,8 @@ final class ProjectsWindowModel {
     }
 
     /// Asks for a project's Edit Project sheet, as Edit Project… beside a linked mailbox in
-    /// Settings does. The window takes the request with `takeProjectToEdit(presenting:)`.
+    /// Settings does, and Edit Project… under an explanation's project files in the email
+    /// view. The window takes the request with `takeProjectToEdit(presenting:)`.
     func edit(_ project: UUID) {
         projectToEdit = project
     }

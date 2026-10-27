@@ -15,6 +15,8 @@ import SwiftUI
 ///   Orra, an attachment's chip the excerpt the model read, and an earlier email's chip
 ///   shows that email in the window (decision 20). Nothing opens outside Orra. A line says
 ///   when Projects could not read an attachment.
+/// - Project Files for This Explanation, folded: each project file the explanation gave the
+///   model, with Edit Project…, see FilesSection
 /// - Before you reply: the questions only the user can answer
 /// - the draft with its tools, see DraftSection
 /// - the email itself under Original Email, see ProjectsEmailOriginal, which also lists the
@@ -318,7 +320,7 @@ extension ProjectsEmailArea {
 // MARK: What the explanation says
 
 extension ProjectsEmailArea {
-    /// The warnings, What it says and Before you reply.
+    /// The warnings, What it says, Project Files for This Explanation and Before you reply.
     struct ExplanationSections: View {
         let model: ProjectsWindowModel
         let emailModel: ProjectsEmailModel
@@ -367,6 +369,7 @@ extension ProjectsEmailArea {
                         .foregroundStyle(.secondary)
                 }
             }
+            FilesSection(model: model, emailModel: emailModel, email: email, explanation: explanation)
             if explanation.reply.draftLanguage != nil || !explanation.questions.isEmpty {
                 section("Before you reply") {
                     if explanation.questions.isEmpty {

@@ -1,9 +1,82 @@
-import Foundation
+import SwiftUI
 
-/// The project files of an explanation, for the email view: where each file is in the
-/// folders of its project now. It reads no file. The folders come from
-/// ProjectsRuntime.folderRoots(of:), and the files from the saved explanation.
+/// The project files of an explanation, for Project Files for This Explanation in the email
+/// view: each project file whose excerpts the saved explanation gave the model, once, with
+/// whether a point cites it, why it was in the prompt, the project whose folders hold it,
+/// the warnings found at it and its saved excerpts, and where it is in the folders of its
+/// project now. It reads no file. The files come from the saved explanation, and the
+/// folders from ProjectsRuntime.folderRoots(of:).
 nonisolated enum ProjectsEmailFiles {
+    /// An excerpt of a file as the explanation saved it, by its source id.
+    nonisolated struct SavedExcerpt: Sendable, Equatable, Identifiable {
+        var id: String
+        var chunk: TextChunker.Chunk
+        /// Whether the hygiene took lines out of it before the model read it.
+        var takenOut: Bool
+    }
+
+    /// A file whose excerpts the explanation gave the model.
+    nonisolated struct File: Sendable, Equatable, Identifiable {
+        var url: URL
+        /// Its excerpts in the order of their source ids.
+        var excerpts: [SavedExcerpt]
+        /// Whether a point under What it says names one of its excerpts as its source. The
+        /// places of warnings are findings of the checks, not citations.
+        var isCited: Bool
+        /// Why it was in the prompt, as its first excerpt says. Nil in an explanation saved
+        /// before Orra 0.6.1, and for a reason this Orra does not know.
+        var reason: ExplainPrompt.FileOrigin.Reason?
+        /// The project whose folders hold it: its origin's, or else the explanation's.
+        var project: UUID?
+        /// What the checks found at its excerpts, each kind once, in the order of
+        /// `ProjectsWarning.allCases`.
+        var warnings: [ProjectsWarning]
+
+        var id: URL { url }
+    }
+
+    /// The files of the explanation's file sources, each once, in the order of their first
+    /// source id, which is the order of the prompt: F1 first, the ids by their number and
+    /// not as text, so F10 follows F9, and ids of another letter after them.
+    static func files(in explanation: Explanation) -> [File] {
+        let excerpts = explanation.sources.compactMap { id, source -> (excerpt: SavedExcerpt, origin: ExplainPrompt.FileOrigin?)? in
+            guard case .file(let chunk, let origin) = source else { return nil }
+            let takenOut = !(explanation.removed[.file(id)] ?? []).isEmpty
+            return (SavedExcerpt(id: id, chunk: chunk, takenOut: takenOut), origin)
+        }
+        .sorted { order($0.excerpt.id) < order($1.excerpt.id) }
+        let cited = Set(explanation.points.flatMap(\.sources))
+        var files: [File] = []
+        var places: [URL: Int] = [:]
+        for (excerpt, origin) in excerpts {
+            if let index = places[excerpt.chunk.file] {
+                files[index].excerpts.append(excerpt)
+                files[index].isCited = files[index].isCited || cited.contains(excerpt.id)
+            } else {
+                places[excerpt.chunk.file] = files.count
+                files.append(File(
+                    url: excerpt.chunk.file, excerpts: [excerpt], isCited: cited.contains(excerpt.id),
+                    reason: origin?.reason, project: origin?.project ?? explanation.project, warnings: []))
+            }
+        }
+        for index in files.indices {
+            let ids = Set(files[index].excerpts.map(\.id))
+            let kinds = Set(explanation.warnings.compactMap { finding -> ProjectsWarning? in
+                guard case .file(let id) = finding.place, ids.contains(id) else { return nil }
+                return finding.warning
+            })
+            files[index].warnings = ProjectsWarning.allCases.filter(kinds.contains)
+        }
+        return files
+    }
+
+    /// The order of source ids: F first, then by letter, then by number.
+    private static func order(_ id: String) -> (Int, String, Int, String) {
+        let letters = String(id.prefix { $0.isLetter })
+        let number = Int(id.dropFirst(letters.count)) ?? .max
+        return (letters == "F" ? 0 : 1, letters, number, id)
+    }
+
     /// A project's folders as they are now, see ProjectsRuntime.folderRoots(of:).
     nonisolated struct Roots: Sendable, Equatable {
         /// The real paths of the folders that are there, in the project's order, since the
@@ -55,5 +128,266 @@ nonisolated enum ProjectsEmailFiles {
             depth = root.count
         }
         return found
+    }
+}
+
+// MARK: The section
+
+extension ProjectsEmailArea {
+    /// Project Files for This Explanation, folded after What it says. Open, it lists each
+    /// project file whose excerpts the explanation gave the model, see ProjectsEmailFiles,
+    /// or says why there is none, then Edit Project…, or Assign to Project for an email in no
+    /// project, and when a project's folders can change, that a change counts from the next
+    /// Explain Again. It starts folded for each email, and stays as the user leaves it while
+    /// the window is open, see ProjectsEmailModel.showsProjectFiles.
+    ///
+    /// It shows the explanation as it was saved and the folders as they are now. The folders
+    /// resolve only while it is open, and again when they change, such as after Edit
+    /// Project…. Names and folders show as plain text, and nothing opens outside Orra.
+    struct FilesSection: View {
+        let model: ProjectsWindowModel
+        let emailModel: ProjectsEmailModel
+        let email: MailStore.Listed
+        let explanation: Explanation
+
+        /// Reads the folders again when the projects of the files or their folders change.
+        struct Reload: Hashable {
+            var projects: [UUID]
+            var folders: [[Data]]
+        }
+
+        var body: some View {
+            let files = ProjectsEmailFiles.files(in: explanation)
+            DisclosureGroup(isExpanded: Binding(get: { emailModel.showsProjectFiles }, set: { emailModel.showsProjectFiles = $0 })) {
+                content(files)
+            } label: {
+                Text(verbatim: ProjectsWindowText.projectFiles(files.count))
+                    .font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            .disclosureGroupStyle(RowDisclosureStyle())
+        }
+
+        private var runtime: ProjectsRuntime {
+            model.runtime
+        }
+
+        /// The email's project, while the list holds it.
+        private var project: Project? {
+            email.project.flatMap { id in runtime.projectList.first { $0.id == id } }
+        }
+
+        private func content(_ files: [ProjectsEmailFiles.File]) -> some View {
+            let projects = Array(Set(files.compactMap(\.project))).sorted { $0.uuidString < $1.uuidString }
+            let reload = Reload(projects: projects, folders: projects.map { id in
+                runtime.projectList.first { $0.id == id }?.folders ?? []
+            })
+            return VStack(alignment: .leading, spacing: 12) {
+                if files.isEmpty {
+                    Text(verbatim: ProjectsWindowText.noProjectFiles(inProject: email.project != nil))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if project?.folders.isEmpty == true {
+                        Text("No folders yet.")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("When it explained this email, Projects gave the model excerpts of these files. Cited in explanation means a point under What it says names one of them as its source.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(files) { file in
+                        FileRow(file: file, place: place(of: file), project: projectLine(file))
+                    }
+                }
+                controls
+                if let project {
+                    Text("Folder changes count from the next Explain Again, once indexing finishes.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if runtime.indexReport(project.id)?.isIndexing == true {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Indexing…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
+            .task(id: reload) {
+                await emailModel.loadFolderRoots(for: projects)
+            }
+        }
+
+        /// Edit Project… for the email's project, or Assign to Project for an email in no
+        /// project. One under another in a column too narrow for a row.
+        @ViewBuilder
+        private var controls: some View {
+            if let project {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        editButton(project)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        editButton(project)
+                    }
+                }
+            } else if email.project == nil {
+                // Its whole name where it fits, and cut in a column too narrow for it, as in
+                // Japanese at the window's smallest size.
+                ViewThatFits(in: .horizontal) {
+                    assignMenu
+                        .fixedSize()
+                    assignMenu
+                }
+            }
+        }
+
+        /// Assign to Project, with the items of the project chip's menu, which ask first when
+        /// the move takes away a draft the user changed.
+        private var assignMenu: some View {
+            Menu("Assign to Project") {
+                ProjectsWindowView.MoveMenuItems(runtime: runtime, model: model, email: email)
+            }
+            .disabled(runtime.phase != .on)
+        }
+
+        /// Opens the project's Edit Project sheet, as Edit Project… in Settings does, see
+        /// ProjectsWindowModel.edit(_:).
+        private func editButton(_ project: Project) -> some View {
+            Button("Edit Project…") {
+                model.edit(project.id)
+            }
+            .disabled(runtime.phase != .on)
+        }
+
+        /// Where a file is now, nil while the folders of its project resolve.
+        private func place(of file: ProjectsEmailFiles.File) -> ProjectsEmailFiles.Place? {
+            guard let project = file.project, let roots = emailModel.folderRoots[project] else { return nil }
+            return ProjectsEmailFiles.place(of: file.url, in: roots)
+        }
+
+        /// The project of a file of another project than the email's, nil for the email's own.
+        private func projectLine(_ file: ProjectsEmailFiles.File) -> String? {
+            guard let id = file.project, id != explanation.project else { return nil }
+            return ProjectsWindowText.otherProject(runtime.projectList.first { $0.id == id }?.name)
+        }
+    }
+
+    /// One file of the list: its name, the folder that holds it, whether a point cites it,
+    /// why it was in the prompt, its project when that is not the email's, and the warnings
+    /// found at it, as one element for VoiceOver, then a chip for each saved excerpt. As the
+    /// attachments under Original Email show, see ProjectsAttachmentList.
+    struct FileRow: View {
+        let file: ProjectsEmailFiles.File
+        /// Where the file is now, nil while the folders resolve.
+        let place: ProjectsEmailFiles.Place?
+        /// The line that names the project of a file of another project.
+        let project: String?
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: file.url.lastPathComponent)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                            .help(Text(verbatim: file.url.path))
+                        Group {
+                            if let place {
+                                Text(verbatim: ProjectsWindowText.folder(place))
+                                    .lineLimit(2)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                                if let note = ProjectsWindowText.placeNote(place) {
+                                    Text(verbatim: note)
+                                }
+                            }
+                            Text(verbatim: ProjectsWindowText.citation(file.isCited))
+                            if let reason = ProjectsWindowText.fileReason(file.reason) {
+                                Text(verbatim: reason)
+                            }
+                            if let project {
+                                Text(verbatim: project)
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        ForEach(file.warnings, id: \.self) { warning in
+                            Label {
+                                Text(verbatim: ProjectsWindowText.warning(warning))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } icon: {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: "doc.text")
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                ExcerptChips(file: file)
+                    .padding(.leading, 26)
+            }
+        }
+    }
+
+    /// The chips of a file's saved excerpts, in a row, or one under another in a column too
+    /// narrow for the row.
+    struct ExcerptChips: View {
+        let file: ProjectsEmailFiles.File
+
+        var body: some View {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    chips
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    chips
+                }
+            }
+        }
+
+        private var chips: some View {
+            ForEach(Array(file.excerpts.enumerated()), id: \.element.id) { index, excerpt in
+                ExcerptChip(excerpt: excerpt, number: file.excerpts.count > 1 ? index + 1 : nil)
+            }
+        }
+    }
+
+    /// A saved excerpt's chip: its page, or Saved Excerpt, which shows the excerpt in the
+    /// popover of a file's source chip.
+    struct ExcerptChip: View {
+        let excerpt: ProjectsEmailFiles.SavedExcerpt
+        /// Its number among the file's excerpts, nil for a file's one excerpt.
+        let number: Int?
+        @State private var showsExcerpt = false
+
+        var body: some View {
+            Button {
+                showsExcerpt = true
+            } label: {
+                Text(verbatim: ProjectsWindowText.excerptChip(excerpt.chunk, number: number))
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .accessibilityLabel(Text(verbatim: ProjectsWindowText.excerptChipLabel(excerpt.chunk, number: number)))
+            .popover(isPresented: $showsExcerpt, arrowEdge: .bottom) {
+                Excerpt(source: .file(excerpt.chunk), emailText: "", takenOut: excerpt.takenOut)
+            }
+        }
     }
 }
