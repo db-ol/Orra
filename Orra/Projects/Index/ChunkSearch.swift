@@ -13,7 +13,9 @@ import NaturalLanguage
 ///   Chinese and English with other words for the same things, see SearchTerms. Each term
 ///   is one phrase: its words in a row in the words table, and a term of three or more
 ///   Chinese characters as a substring in the trigram table. The two lists of the terms
-///   join the fusion with those of the text, so a chunk both find ranks first.
+///   join the fusion with those of the text, so a chunk both find ranks first. Each hit
+///   says which terms match it, each term searched alone in the same way, so a caller can
+///   ask a chunk of another project for more than one term.
 /// - Every term goes into MATCH quoted, with its quotes doubled, so text from a mail or a
 ///   file never reads as FTS5 syntax. The query itself is a bound value, never SQL.
 ///
@@ -52,8 +54,11 @@ nonisolated struct ChunkSearch: Sendable {
         var fileHiddenRuns: Int
         /// The fused rank score, higher is better. Zero for `newest(_:limit:)`.
         var score: Double
-        /// Whether a list of the query's terms holds the chunk.
+        /// Whether a term of the query matches the chunk.
         var matchedTerm = false
+        /// The query's terms that match the chunk, each searched alone as the lists of the
+        /// terms search it, in the order of the query.
+        var matchedTerms: [String] = []
     }
 
     /// The constant of reciprocal rank fusion: a chunk at rank r of a list adds 1 / (60 + r).
@@ -112,14 +117,43 @@ nonisolated struct ChunkSearch: Sendable {
         guard !best.isEmpty else { return [] }
         let rows = try await database.run(Self.hitSQL + " WHERE c.id IN (SELECT value FROM json_each(?))", [.text(Self.json(best.map { String($0.key) }, quoted: false))])
         let hits = Dictionary(rows.compactMap { Self.hit($0, score: 0) }.map { ($0.chunk, $0) }, uniquingKeysWith: { first, _ in first })
+        let termMatches = try await termsMatching(terms, among: best.map(\.key))
         return best.compactMap { chunk, score in
             hits[chunk].map { hit in
                 var hit = hit
                 hit.score = score
-                hit.matchedTerm = matched.contains(chunk)
+                hit.matchedTerms = termMatches[chunk] ?? []
+                // A list of the terms holds a chunk that one term alone matches, but a chunk
+                // past the end of those lists can still match one.
+                hit.matchedTerm = matched.contains(chunk) || !hit.matchedTerms.isEmpty
                 return hit
             }
         }
+    }
+
+    /// The terms that match each of `chunks`, each term alone as the lists of the terms
+    /// search it: as a phrase in the words table, and a term of three or more Chinese
+    /// characters as a substring in the trigram table too. In the order of `terms`. One
+    /// query a table, each term a bound value.
+    private func termsMatching(_ terms: [String], among chunks: [Int64]) async throws -> [Int64: [String]] {
+        guard !terms.isEmpty, !chunks.isEmpty else { return [:] }
+        var found: [Int64: Set<Int>] = [:]
+        let tables: [(table: String, query: ([String]) -> String?)] = [("index_chunk_words", Self.termWordQuery), ("index_chunk_trigrams", Self.termTrigramQuery)]
+        for (table, query) in tables {
+            var parameters: [ProjectsDatabase.Value] = [.text(Self.json(chunks.map(String.init), quoted: false))]
+            var selects: [String] = []
+            for (index, term) in terms.enumerated() {
+                guard let match = query([term]) else { continue }
+                parameters.append(.text(match))
+                selects.append("SELECT rowid, \(index) FROM \(table) WHERE \(table) MATCH ?\(parameters.count) AND rowid IN (SELECT value FROM json_each(?1))")
+            }
+            guard !selects.isEmpty else { continue }
+            for row in try await database.run(selects.joined(separator: " UNION ALL "), parameters) {
+                guard row.count == 2, let chunk = row[0].integer, let index = row[1].integer, terms.indices.contains(Int(index)) else { continue }
+                found[chunk, default: []].insert(Int(index))
+            }
+        }
+        return found.mapValues { $0.sorted().map { terms[$0] } }
     }
 
     /// The chunks one table gives for a MATCH query, best first, in `projects` or in all.

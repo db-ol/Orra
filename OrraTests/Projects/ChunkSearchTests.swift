@@ -288,6 +288,26 @@ struct ChunkSearchTests {
         await database.close()
     }
 
+    /// Each hit says which terms match it, each term alone as the lists of the terms search
+    /// it: a phrase of its words in a row, and a Chinese term of three characters or more as
+    /// a substring.
+    @Test func eachHitSaysWhichTermsMatchIt() async throws {
+        defer { cleanUp() }
+        let database = try await ProjectsDatabase.open(in: storage)
+        let three = try await add(["The floor plan of the lobby, 平面图纸 revision C."], file: "a.md", project: alpha, to: database)
+        let one = try await add(["A plan for the floor tiles of the lobby."], file: "b.md", project: alpha, to: database)
+        let none = try await add(["Opening hours of the lobby."], file: "c.md", project: alpha, to: database)
+        let search = ChunkSearch(database: database)
+        let hits = try await search.search(ChunkSearch.Query(text: "opening hours", terms: ["floor plan", "平面图", "tiles", "hall", "Floor Plan"], projects: [alpha]))
+        let terms = Dictionary(uniqueKeysWithValues: hits.map { ($0.chunk, $0.matchedTerms) })
+        #expect(terms[three[0]] == ["floor plan", "平面图", "Floor Plan"])
+        #expect(terms[one[0]] == ["tiles"])
+        #expect(terms[none[0]] == [])
+        #expect(hits.allSatisfy { $0.matchedTerm == !$0.matchedTerms.isEmpty })
+        #expect(try await search.search(ChunkSearch.Query(text: "lobby", projects: [alpha])).allSatisfy { $0.matchedTerms.isEmpty && !$0.matchedTerm })
+        await database.close()
+    }
+
     @Test func termsOnlyKeepsWhatATermMatched() async throws {
         defer { cleanUp() }
         let database = try await ProjectsDatabase.open(in: storage)
