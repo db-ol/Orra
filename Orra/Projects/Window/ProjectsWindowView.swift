@@ -7,6 +7,10 @@ import SwiftUI
 /// links, no images (plan section 2.8). The third column holds the email view,
 /// ProjectsEmailArea, or the project's page, or, while neither shows, How to Use Projects,
 /// see ProjectsHowTo.
+///
+/// Compare with Original hides the sidebar and the list, so the email view takes the whole
+/// window, see ProjectsWindowModel.isComparing. Every end of the comparison shows them again
+/// as they were, and a column the user shows ends it.
 struct ProjectsWindowView: View {
     let runtime: ProjectsRuntime
     @State var model: ProjectsWindowModel
@@ -15,6 +19,10 @@ struct ProjectsWindowView: View {
     /// The project being set up, nil while no setup sheet shows.
     @State private var setup: ProjectsSetupView.Draft?
     @State private var forgetting: Project?
+    /// The columns the window shows. Compare with Original hides the sidebar and the list.
+    @State private var columns = NavigationSplitViewVisibility.automatic
+    /// The columns before the comparison, which Back to Email List shows again.
+    @State private var columnsBeforeComparing = NavigationSplitViewVisibility.automatic
 
     /// Reads the list again when another list is chosen or the mail changed.
     private struct Reload: Hashable {
@@ -23,7 +31,7 @@ struct ProjectsWindowView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
         } content: {
@@ -31,6 +39,32 @@ struct ProjectsWindowView: View {
                 .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 480)
         } detail: {
             detail
+        }
+        .onChange(of: model.isComparing, initial: true) { _, comparing in
+            if comparing {
+                columnsBeforeComparing = columns
+                // At once, so the email view never lays out its two panes in the narrow
+                // column first.
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    columns = .detailOnly
+                }
+            } else {
+                // Every end: Back to Email List, another email or list, the explanation gone.
+                model.endComparing()
+                if columns == .detailOnly {
+                    columns = Self.columnsAfterComparing(columnsBeforeComparing)
+                }
+            }
+        }
+        .onChange(of: columns) { before, shown in
+            // The toolbar's sidebar button or a drag showed a column. The split view also
+            // writes the columns it shows for `.automatic` when it first lays out, which
+            // ends nothing.
+            if model.isComparing, before != .automatic, shown != .detailOnly {
+                model.endComparing()
+            }
         }
         // The window keeps its name for the Window menu and VoiceOver, and the list chosen
         // shows under it.
@@ -223,6 +257,13 @@ struct ProjectsWindowView: View {
                         scroller.scrollTo(id, anchor: .center)
                     }
                 }
+                .onChange(of: model.isComparing) { _, comparing in
+                    // Back to Email List: the selected row in view, with the least scrolling.
+                    // An email read alone has no row, and the list stays where it was.
+                    if !comparing, let id = model.selectedRow {
+                        scroller.scrollTo(id)
+                    }
+                }
             }
             if model.hasOlderEmails {
                 OlderEmailsBar(shown: model.rows.count, total: model.total) {
@@ -231,6 +272,13 @@ struct ProjectsWindowView: View {
             }
             StatusLines(runtime: runtime, model: model, openSettings: openSettings)
         }
+    }
+
+    /// The columns Back to Email List shows: those before the comparison, so a sidebar the
+    /// user hid stays hidden, and all three when the list was hidden too, since the button
+    /// names the list.
+    static func columnsAfterComparing(_ before: NavigationSplitViewVisibility) -> NavigationSplitViewVisibility {
+        before == .detailOnly ? .all : before
     }
 
     private var title: String {

@@ -319,6 +319,263 @@ struct ProjectsWindowViewTests {
         #expect(!window.isVisible)
     }
 
+    // MARK: Compare with Original
+
+    /// Compare with Original is for the selected email once its email view holds an
+    /// explanation.
+    @Test func compareWithOriginalIsForTheSelectedExplainedEmail() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let id = explained.messageID
+        let model = ProjectsWindowModel(runtime: runtime)
+        #expect(model.comparing == nil)
+        #expect(!model.isComparing)
+        // Not selected.
+        model.compare(id)
+        #expect(model.comparing == nil)
+        // Selected, before its email view read the explanation.
+        await model.show(id)
+        model.compare(id)
+        #expect(model.comparing == nil)
+        let email = model.emailModel(for: id)
+        model.compare(id)
+        #expect(model.comparing == nil)
+        await email.load()
+        model.compare("other@harbor.example")
+        #expect(model.comparing == nil)
+        model.compare(id)
+        #expect(model.comparing == id)
+        #expect(model.isComparing)
+        model.endComparing()
+        #expect(model.comparing == nil)
+        #expect(!model.isComparing)
+        await fixture.stop()
+    }
+
+    /// Another email, another list, the window letting go of its email views, the chip of
+    /// an earlier email and a move each end the comparison. The same email selected again,
+    /// as Explain Message Selected in Mail selects the email it shows already, keeps it.
+    @Test func compareWithOriginalEndsWithAnotherEmailOrList() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let id = explained.messageID
+        let model = ProjectsWindowModel(runtime: runtime)
+        func compare() async {
+            await model.show(id)
+            await model.emailModel(for: id).load()
+            model.compare(id)
+            #expect(model.isComparing)
+        }
+
+        await compare()
+        model.selectedMessageID = id
+        #expect(model.isComparing)
+        model.selectedMessageID = "other@harbor.example"
+        #expect(model.comparing == nil)
+
+        await compare()
+        model.place = .setAside
+        #expect(model.comparing == nil)
+        #expect(!model.isComparing)
+
+        await compare()
+        model.forgetEmails()
+        #expect(model.comparing == nil)
+
+        // The chip of an earlier email shows that email.
+        let earlier = "lamps-1@harbor.example"
+        let store = try #require(runtime.running?.store)
+        try await store.save([MailStore.Message(
+            messageID: earlier, mailbox: nil, date: Self.today.addingTimeInterval(-86_400), sender: MailStore.Person(name: "Mei Tan", address: "mei@harbor.example"),
+            to: [MailStore.Person(address: "me@studio.example")], cc: [], subject: "Lamps", text: "Which lamps do you like?", visibleText: "Which lamps do you like?",
+            attachments: [], warnings: [])], ownAddresses: ["me@studio.example"], at: Self.today)
+        await compare()
+        await model.show(earlier)
+        #expect(model.selectedMessageID == earlier)
+        #expect(model.comparing == nil)
+
+        // A move to Needs a Project, confirmed since the draft has a version, selects the
+        // next email of the list, or none.
+        await compare()
+        await model.requestMove(id, to: nil)
+        let move = try #require(model.pendingMove)
+        #expect(model.isComparing)
+        await model.confirmMove(move)
+        #expect(model.selectedMessageID != id)
+        #expect(model.comparing == nil)
+        await fixture.stop()
+    }
+
+    /// The comparison leaves Hide Explanation as it was, and Explain Again keeps the
+    /// comparison and shows the explanation, as it does without it.
+    @Test func compareWithOriginalLeavesHideExplanationAsItWas() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let id = explained.messageID
+        let model = ProjectsWindowModel(runtime: runtime)
+        model.showsExplanation = false
+        await model.show(id)
+        await model.emailModel(for: id).load()
+        model.compare(id)
+        #expect(model.isComparing)
+        #expect(!model.showsExplanation)
+        model.endComparing()
+        #expect(!model.showsExplanation)
+
+        model.compare(id)
+        // The window is not open, so the explanation fails at once, after the click showed it.
+        await model.explain(id)
+        #expect(model.explaining[id] == .failed(.other))
+        #expect(model.showsExplanation)
+        #expect(model.isComparing)
+        await fixture.stop()
+    }
+
+    /// Back to Email List shows the columns that showed before the comparison, so a sidebar
+    /// the user hid stays hidden, and all three when the list was hidden too.
+    @Test func backToEmailListShowsTheColumnsAsTheyWere() {
+        typealias View = ProjectsWindowView
+        #expect(View.columnsAfterComparing(.automatic) == .automatic)
+        #expect(View.columnsAfterComparing(.all) == .all)
+        #expect(View.columnsAfterComparing(.doubleColumn) == .doubleColumn)
+        #expect(View.columnsAfterComparing(.detailOnly) == .all)
+    }
+
+    /// An email read alone, such as one sorting moved to another list, has no row in the
+    /// list. It can be compared too, and Back to Email List keeps it selected and shown in
+    /// the email view, with no row to scroll to, so the list stays where it was. An email
+    /// of the list has its row.
+    @Test func backToEmailListKeepsAnEmailReadAloneWithoutARow() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let id = explained.messageID
+        let model = ProjectsWindowModel(runtime: runtime)
+        // The email is in its project, and the window shows Needs a Project.
+        #expect(model.place == .needsProject)
+        model.selectedMessageID = id
+        await model.reload()
+        #expect(model.selectedEmail?.messageID == id)
+        #expect(!model.rows.contains { $0.messageID == id })
+        #expect(model.selectedRow == nil)
+        await model.emailModel(for: id).load()
+        model.compare(id)
+        #expect(model.isComparing)
+        model.endComparing()
+        #expect(!model.isComparing)
+        #expect(model.selectedMessageID == id)
+        #expect(model.selectedEmail?.messageID == id)
+        #expect(model.selectedRow == nil)
+
+        await model.show(id)
+        #expect(model.rows.contains { $0.messageID == id })
+        #expect(model.selectedRow == id)
+        await fixture.stop()
+    }
+
+    /// The views inside a view, depth first.
+    private static func descendants(of view: NSView) -> [NSView] {
+        view.subviews.flatMap { [$0] + descendants(of: $0) }
+    }
+
+    /// The nearest split view around a view, and its pane that holds the view.
+    private static func pane(holding view: NSView) -> (split: NSSplitView, pane: NSView)? {
+        var child = view
+        while let parent = child.superview {
+            if let split = parent as? NSSplitView {
+                return (split, child)
+            }
+            child = parent
+        }
+        return nil
+    }
+
+    /// Compare with Original hides the sidebar and the list in the window as the app makes
+    /// it, and Back to Email List shows them again, at the window's first size and at its
+    /// smallest. The draft keeps its editor through both, with its text, selection, focus
+    /// and the marked text of an input method. The window is never ordered front, as in
+    /// `theWindowKeepsItsSizeWhenItsContentGrows()`.
+    @Test func compareWithOriginalHidesTheColumnsAndKeepsTheDraftEditor() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.cleanUp() }
+        let runtime = fixture.runtime
+        let explained = try await Self.explainedEmail(in: runtime)
+        let id = explained.messageID
+        // The smallest widths of the sidebar and the list, see ProjectsWindowView.
+        let columns: CGFloat = 180 + 280
+        for size in [ProjectsWindow.defaultSize, ProjectsWindow.minimumSize] {
+            let model = ProjectsWindowModel(runtime: runtime)
+            await model.show(id)
+            let emailModel = model.emailModel(for: id)
+            await emailModel.load()
+            let window = ProjectsWindow.window(hosting: ProjectsWindowView(runtime: runtime, model: model, openSettings: {}))
+            defer { window.close() }
+            window.setContentSize(size)
+            try await layOut(window)
+            func contentSize() -> CGSize {
+                window.contentRect(forFrameRect: window.frame).size
+            }
+            // At least the size asked for, since the minimum SwiftUI sets takes in the title
+            // bar, see theWindowKeepsItsMinimumSize().
+            let opened = contentSize()
+            #expect(opened.width == size.width && opened.height >= size.height)
+            let content = try #require(window.contentView)
+
+            // The draft's editor, which is not a field editor and holds the draft, in the
+            // narrow third column.
+            let editor = try #require(Self.descendants(of: content).compactMap { $0 as? NSTextView }.first { !$0.isFieldEditor && $0.string == emailModel.text })
+            let (split, pane) = try #require(Self.pane(holding: editor))
+            let others = split.arrangedSubviews.filter { $0 !== pane }
+            #expect(others.count == 2)
+            #expect(pane.frame.width <= size.width - columns)
+            #expect(window.makeFirstResponder(editor))
+            editor.setSelectedRange(NSRange(location: 3, length: 4))
+            editor.setMarkedText("ni", selectedRange: NSRange(location: 2, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+            try await layOut(window)
+            let selected = editor.selectedRange()
+            let marked = editor.markedRange()
+            #expect(marked.length == 2)
+
+            model.compare(id)
+            #expect(model.isComparing)
+            try await layOut(window)
+            // The sidebar and the list are collapsed, hidden or less than a point wide, and
+            // the email view spans the window, but for the dividers.
+            for other in others {
+                #expect(split.isSubviewCollapsed(other) || other.isHidden || other.frame.width < 1, "\(size): a column of \(other.frame.width) points shows")
+            }
+            #expect(abs(pane.frame.width - size.width) <= 4, "\(size): the email view is \(pane.frame.width) points wide")
+            #expect(contentSize() == opened)
+            // The same editor, with the focus, the selection and the marked text.
+            #expect(Self.descendants(of: content).contains { $0 === editor })
+            #expect(window.firstResponder === editor)
+            #expect(editor.selectedRange() == selected)
+            #expect(editor.markedRange() == marked)
+
+            model.endComparing()
+            try await layOut(window)
+            #expect(!model.isComparing)
+            for other in others {
+                #expect(!split.isSubviewCollapsed(other) && !other.isHidden && other.frame.width >= 180)
+            }
+            #expect(pane.frame.width <= size.width - columns)
+            #expect(contentSize() == opened)
+            #expect(Self.descendants(of: content).contains { $0 === editor })
+            #expect(window.firstResponder === editor)
+            #expect(editor.selectedRange() == selected)
+            #expect(editor.markedRange() == marked)
+            #expect(!window.isVisible)
+        }
+        await fixture.stop()
+    }
+
     // MARK: The talk key
 
     /// Decision 13: the talk key's words go into the change box of the selected email only
@@ -960,6 +1217,15 @@ struct ProjectsWindowViewTests {
         // shown may stay empty in the first.
         try await renderWindow(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), to: folder.appendingPathComponent("\(language)-projects-window-760.png"))
         try await render(ProjectsWindowView(runtime: runtime, model: ProjectsWindowModel(runtime: runtime), openSettings: {}), size: ProjectsWindow.minimumSize, to: folder.appendingPathComponent("\(language)-projects-window-760-columns.png"))
+        // The window as the app makes it while Compare with Original shows the explained
+        // email, at its first size and at its smallest.
+        let comparing = ProjectsWindowModel(runtime: runtime)
+        await comparing.show(explained.messageID)
+        await comparing.emailModel(for: explained.messageID).load()
+        comparing.compare(explained.messageID)
+        #expect(comparing.isComparing)
+        try await renderWindow(ProjectsWindowView(runtime: runtime, model: comparing, openSettings: {}), size: ProjectsWindow.defaultSize, to: folder.appendingPathComponent("\(language)-projects-window-compare.png"))
+        try await renderWindow(ProjectsWindowView(runtime: runtime, model: comparing, openSettings: {}), to: folder.appendingPathComponent("\(language)-projects-window-760-compare.png"))
         await fixture.stop()
     }
 
@@ -1077,12 +1343,13 @@ struct ProjectsWindowViewTests {
         offscreen.close()
     }
 
-    /// Renders the window as the app makes it, at its smallest size, with its title bar and
-    /// toolbar, as far as they draw in a window that is never ordered front.
-    private func renderWindow(_ view: some View, to file: URL) async throws {
+    /// Renders the window as the app makes it, at its smallest size unless `size` says
+    /// otherwise, with its title bar and toolbar, as far as they draw in a window that is
+    /// never ordered front.
+    private func renderWindow(_ view: some View, size: CGSize = ProjectsWindow.minimumSize, to file: URL) async throws {
         let window = ProjectsWindow.window(hosting: view)
         defer { window.close() }
-        window.setContentSize(ProjectsWindow.minimumSize)
+        window.setContentSize(size)
         for _ in 0..<20 {
             window.layoutIfNeeded()
             try await Task.sleep(for: .milliseconds(50))

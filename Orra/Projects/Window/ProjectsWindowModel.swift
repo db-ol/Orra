@@ -6,9 +6,10 @@ import Observation
 /// marks of the explained ones, the selected email, the way back after a source showed
 /// another email, a move or an Explain Again that waits for the user's yes, the rule offered
 /// after moves, the project Settings asks to edit, the explanations under way, whether the
-/// email view shows the explanation, the email view of each email the user opened with the
-/// window's one handoff at a time, the line after Explain Message Selected in Mail, and
-/// Suggested Projects. ProjectsRuntime does the work.
+/// email view shows the explanation, the email Compare with Original shows beside its
+/// explanation and draft, the email view of each email the user opened with the window's
+/// one handoff at a time, the line after Explain Message Selected in Mail, and Suggested
+/// Projects. ProjectsRuntime does the work.
 @Observable
 final class ProjectsWindowModel {
     /// A line the window shows after an action of the user.
@@ -80,6 +81,12 @@ final class ProjectsWindowModel {
     /// The email selected in the list, by its Message-ID.
     var selectedMessageID: String? {
         didSet {
+            // Another email, or none, such as after a change of the list, ends the comparison.
+            // The same email again, as Explain Message Selected in Mail selects the email it
+            // shows already, keeps it.
+            if comparing != nil, selectedMessageID != comparing {
+                comparing = nil
+            }
             // The user chose another email, so the one Explain Message Selected in Mail or a
             // source showed is not followed any more, and the way back ends. The window sets
             // `followed` first when it shows an email itself.
@@ -143,6 +150,11 @@ final class ProjectsWindowModel {
     /// An explanation that starts or ends while another email is shown changes nothing on
     /// that email.
     var showsExplanation = true
+    /// The email that Compare with Original shows beside its explanation and draft, with the
+    /// sidebar and the list hidden, by its Message-ID. Nil while the window shows its columns.
+    /// One email, kept in memory only. Choosing another email or list, Back to Email List,
+    /// closing the window and the email losing its explanation end it.
+    private(set) var comparing: String?
     /// The email view of each email the user opened while the window is open, so edits to
     /// a draft stay while the user looks at other mail.
     @ObservationIgnored private var emailModels: [String: ProjectsEmailModel] = [:]
@@ -197,11 +209,43 @@ final class ProjectsWindowModel {
         deadlines = [:]
         deadlinesRead = []
         history = []
+        endComparing()
     }
 
     /// The selected email as the list shows it, or as it was read alone.
     var selectedEmail: MailStore.Listed? {
         selectedMessageID.flatMap { id in rows.first { $0.messageID == id } ?? aloneEmail.flatMap { $0.messageID == id ? $0 : nil } }
+    }
+
+    /// The row of the selected email in the list, which Back to Email List scrolls into
+    /// view. Nil for an email read alone, which has no row, so the list stays where it was
+    /// and shows no row selected, while the email view keeps the email.
+    var selectedRow: String? {
+        guard let id = selectedMessageID, rows.contains(where: { $0.messageID == id }) else { return nil }
+        return id
+    }
+
+    // MARK: Compare with Original
+
+    /// Whether the window compares now: the email Compare with Original showed is selected,
+    /// the window shows it, and its email view holds an explanation.
+    var isComparing: Bool {
+        guard let id = comparing, id == selectedMessageID, selectedEmail != nil else { return false }
+        return emailModels[id]?.explanation != nil
+    }
+
+    /// Compare with Original, on the user's click, for the selected email once it is
+    /// explained.
+    func compare(_ messageID: String) {
+        guard messageID == selectedMessageID, emailModels[messageID]?.explanation != nil, comparing != messageID else { return }
+        comparing = messageID
+    }
+
+    /// Back to Email List, and every other end of the comparison.
+    func endComparing() {
+        if comparing != nil {
+            comparing = nil
+        }
     }
 
     /// Whether the chosen list holds older emails than the window read, for Load Older
