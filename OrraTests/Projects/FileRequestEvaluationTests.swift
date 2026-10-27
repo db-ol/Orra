@@ -136,6 +136,7 @@ struct FileRequestEvaluationTests {
         let files = try await database.run("SELECT count(*) FROM index_files").first?.first?.integer ?? 0
         let names = FileNameSearch(database: database)
         let chunks = ChunkSearch(database: database)
+        let projectNames = Dictionary(uniqueKeysWithValues: projects.map { ($0.id, $0.name) })
         let realRoot = root.resolvingSymlinksInPath().path + "/"
         func relative(_ url: URL) -> String {
             let path = url.path
@@ -197,10 +198,14 @@ struct FileRequestEvaluationTests {
             case .ownProject(let own): (true, [own])
             case .nowhere, .spoofed: (false, nil)
             }
+            // The names of the email's people, which bring in no file of another project, as for
+            // the search terms of Explain.
+            let people = ([email.sender] + email.replyTo + email.to + email.cc).map(\.name)
             func search(_ request: FileRequest) async throws -> [RequestedFile] {
                 guard searchesFiles else { return [] }
                 return try await RequestedFiles.find(
                     request, emailProject: project, scope: searched, names: names, chunks: chunks,
+                    people: people, ownName: RetrievalSet.ownName, projectNames: projectNames,
                     lists: mode.lists, searchTerms: mode == .terms ? terms : [])
             }
             func offered(_ files: [RequestedFile]) -> [Offered] {

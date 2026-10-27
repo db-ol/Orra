@@ -151,6 +151,33 @@ nonisolated struct FileNameSearch: Sendable {
             }
     }
 
+    /// Which of `files`, each by its project and its real path, hold one of `terms` in their
+    /// name or folder, each term a phrase as `search(_:terms:in:limit:)` reads it. A check of
+    /// files found already, so no list length cuts it short. The paths are bound as one JSON
+    /// value made with JSONSerialization, since they need escaping.
+    @concurrent
+    func named(_ files: [ChunkSearch.FileKey], by terms: [String]) async throws -> Set<ChunkSearch.FileKey> {
+        let queries = Self.termQueries(Array(terms.prefix(Self.maximumTerms)))
+        guard !files.isEmpty, queries.words != nil || queries.trigrams != nil else { return [] }
+        let wanted = Set(files)
+        let paths = String(decoding: try JSONSerialization.data(withJSONObject: Set(files.map(\.path)).sorted()), as: UTF8.self)
+        var found: Set<ChunkSearch.FileKey> = []
+        for (table, query) in [("index_file_names", queries.words), ("index_file_name_trigrams", queries.trigrams)] {
+            guard let query else { continue }
+            let rows = try await database.run(
+                "SELECT f.project, f.path FROM \(table) JOIN index_files f ON f.id = \(table).rowid WHERE \(table) MATCH ?1 AND f.path IN (SELECT value FROM json_each(?2))",
+                [.text(query), .text(paths)])
+            for row in rows where row.count == 2 {
+                guard let project = row[0].text.flatMap(UUID.init(uuidString:)), let path = row[1].text else { continue }
+                let key = ChunkSearch.FileKey(project: project, path: path)
+                if wanted.contains(key) {
+                    found.insert(key)
+                }
+            }
+        }
+        return found
+    }
+
     /// The files one name table gives for a MATCH query, best first, in `projects` or in all.
     private func matches(_ table: String, _ query: String, in projects: [UUID]?) async throws -> [Int64] {
         var parameters: [ProjectsDatabase.Value] = [.text(query)]
