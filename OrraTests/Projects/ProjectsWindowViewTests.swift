@@ -1082,8 +1082,9 @@ struct ProjectsWindowViewTests {
     /// Attach to Reply, as every other row of the list does: one whose excerpt the explanation
     /// holds, one the model got by its name only, and one that gave the model nothing. Each
     /// row gets the email view, whose files can be ticked, and each file ticks through the
-    /// same check as any other, which refuses the one that is gone. The rows are read from
-    /// the section, not from the views AppKit draws, which differ between macOS versions.
+    /// same check as any other, which refuses the one that is gone. The rows are those the
+    /// section's body lays out, read from the section, not from the views AppKit draws, which
+    /// differ between macOS versions.
     @Test func everyRowOfTheProjectFilesTakesAttachToReplyAChosenFileToo() async throws {
         let fixture = try await Fixture(files: [("lobby-elevation.dwg", Data("AC1032".utf8))])
         defer { fixture.cleanUp() }
@@ -1099,10 +1100,11 @@ struct ProjectsWindowViewTests {
         await email.loadFolderRoots(for: [harbor])
         #expect(email.replyFiles.offersFiles)
         let plain = try #require(email.explanation)
-        let rows = ProjectsEmailFiles.files(in: plain)
-        #expect(rows.count == 2)
-        let plainSection = ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: plain)
-        #expect(rows.allSatisfy { plainSection.row($0).emailModel === email })
+        let rows = ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: plain).rows()
+        #expect(rows.read.map(\.file) == ProjectsEmailFiles.files(in: plain))
+        #expect(rows.read.count == 2)
+        #expect(rows.missing.isEmpty)
+        #expect(rows.read.allSatisfy { $0.emailModel === email })
 
         // The same explanation, made with three files the user chose.
         let chosen = ExplainPrompt.FileOrigin(reason: .chosen, project: harbor)
@@ -1120,12 +1122,15 @@ struct ProjectsWindowViewTests {
         #expect(try await store.save(explanation, at: Self.today))
         await email.load()
         let saved = try #require(email.explanation)
-        let listed = ProjectsEmailFiles.files(in: saved) + ProjectsEmailFiles.chosenWithoutExcerpts(in: saved)
-        #expect(listed.count == rows.count + 3)
-        #expect(listed.filter { $0.reason == .chosen }.map(\.url) == [schedule, elevation, gone])
-        #expect(listed.last?.missing == .notInIndex)
-        let section = ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: saved)
-        #expect(listed.allSatisfy { section.row($0).emailModel === email })
+        let listed = ProjectsEmailArea.FilesSection(model: model, emailModel: email, email: explained, explanation: saved).rows()
+        #expect(listed.read.map(\.file) == ProjectsEmailFiles.files(in: saved))
+        #expect(listed.missing.map(\.file) == ProjectsEmailFiles.chosenWithoutExcerpts(in: saved))
+        let all = listed.read + listed.missing
+        #expect(all.count == rows.read.count + 3)
+        #expect(all.filter { $0.file.reason == .chosen }.map(\.file.url) == [schedule, elevation, gone])
+        #expect(listed.missing.map(\.file.url) == [gone])
+        #expect(listed.missing.first?.file.missing == .notInIndex)
+        #expect(all.allSatisfy { $0.emailModel === email })
         #expect(email.replyFiles.offersFiles)
 
         await email.replyFiles.setTicked(schedule, true)

@@ -215,11 +215,11 @@ extension ProjectsEmailArea {
         }
 
         var body: some View {
-            let files = ProjectsEmailFiles.files(in: explanation)
+            let rows = self.rows()
             DisclosureGroup(isExpanded: Binding(get: { emailModel.showsProjectFiles }, set: { emailModel.showsProjectFiles = $0 })) {
-                content(files)
+                content(rows)
             } label: {
-                Text(verbatim: ProjectsWindowText.projectFiles(files.count))
+                Text(verbatim: ProjectsWindowText.projectFiles(rows.read.count))
                     .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
@@ -236,11 +236,10 @@ extension ProjectsEmailArea {
             email.project.flatMap { id in runtime.projectList.first { $0.id == id } }
         }
 
-        private func content(_ files: [ProjectsEmailFiles.File]) -> some View {
-            let missing = ProjectsEmailFiles.chosenWithoutExcerpts(in: explanation)
-            let reload = Reload(messageID: emailModel.messageID, files: files + missing, projectList: runtime.projectList)
+        private func content(_ rows: (read: [FileRow], missing: [FileRow])) -> some View {
+            let reload = Reload(messageID: emailModel.messageID, files: (rows.read + rows.missing).map(\.file), projectList: runtime.projectList)
             return VStack(alignment: .leading, spacing: 12) {
-                if files.isEmpty {
+                if rows.read.isEmpty {
                     Text(verbatim: ProjectsWindowText.noProjectFiles(inProject: email.project != nil))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -253,13 +252,13 @@ extension ProjectsEmailArea {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    ForEach(files) { file in
-                        row(file)
+                    ForEach(rows.read, id: \.file.id) { row in
+                        row
                     }
                 }
                 // The files the user chose that gave the model nothing, after those it read.
-                ForEach(missing) { file in
-                    row(file)
+                ForEach(rows.missing, id: \.file.id) { row in
+                    row
                 }
                 controls
                 if let note = emailModel.choiceNote {
@@ -386,9 +385,14 @@ extension ProjectsEmailArea {
             return ProjectsEmailFiles.place(of: file.url, in: roots)
         }
 
-        /// The row of a file of the list, with the email view for Attach to Reply, which every
-        /// row has, those of the files the user chose too.
-        func row(_ file: ProjectsEmailFiles.File) -> FileRow {
+        /// The rows the list shows, in its order: the files whose excerpts the explanation gave
+        /// the model, then the files the user chose that gave it nothing. Each has the email
+        /// view for Attach to Reply, those of the files the user chose too.
+        func rows() -> (read: [FileRow], missing: [FileRow]) {
+            (ProjectsEmailFiles.files(in: explanation).map(row), ProjectsEmailFiles.chosenWithoutExcerpts(in: explanation).map(row))
+        }
+
+        private func row(_ file: ProjectsEmailFiles.File) -> FileRow {
             FileRow(file: file, place: place(of: file), project: projectLine(file), emailModel: emailModel)
         }
 
