@@ -3887,17 +3887,18 @@ to their projects, and the cleanup model on the Mac. This build adds a step to t
 database. A Debug build from before it then says that Projects could not open its data on
 this Mac, until you use Delete All Projects Data… in its Settings.
 
-- [ ] Explain an email of Harbor lobby. Under Project Files for This Explanation, Choose
-  Files for This Email… opens the sheet with Harbor lobby's files first, then the other
-  projects' files under their names. Each row shows the name, the folder, the kind, With
-  text or Name only, and the date. The files of the explanation come first, marked In this
-  explanation.
+- [ ] Explain an email of the PIC 2026 talk. Under Project Files for This Explanation,
+  Choose Files for This Email… opens the sheet with that project's files first, then the
+  other projects' files under their names. Each row shows the name, the folder, the kind,
+  With text or Name only, and the date. The files of the explanation come first, marked In
+  this explanation.
 - [ ] Search “schedule”. Only files with schedule in their name show, in every project.
   Clear the search, and the newest files show again.
-- [ ] Tick a file of another project and a drawing marked Name only, and click Save. The
-  line under Explain Again says it uses the 2 files you chose. Click Explain Again. The 2
-  files come first in Project Files for This Explanation, with the reason Chosen by you,
-  and the line goes.
+- [ ] Copy a drawing or an archive into the project's folder, so a file is marked Name
+  only. Tick a file of another project and that file, and click Save. The line under
+  Explain Again says it uses the 2 files you chose. Click Explain Again. The 2 files come
+  first in Project Files for This Explanation, with the reason Chosen by you, and the line
+  goes.
 - [ ] Type into the draft, open the sheet and click Explain Again. The sheet closes and Orra
   asks Replace your draft? first. Cancel keeps the draft, and the line under Explain Again
   still says it uses the 2 files.
@@ -3905,7 +3906,7 @@ this Mac, until you use Delete All Projects Data… in its Settings.
 - [ ] Drag a file of a project folder from Finder onto the list. It is ticked and scrolls
   into view.
 - [ ] Drag a file from a folder no project holds. The top of the list names it and says
-  Projects reads only the folders you add. Add Its Folder to “Harbor lobby”… opens the open
+  Projects reads only the folders you add. Add Its Folder to the project… opens the open
   panel in that file's folder, with the message about all mail of the project and the
   button Add Folder. Add it. The sheet says Projects is reading the folder, and that the
   file is chosen once it is read. The project's page lists the new folder. The log holds
